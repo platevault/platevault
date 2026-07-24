@@ -7,6 +7,7 @@
 pub mod bus;
 pub mod event;
 pub mod event_bus;
+pub mod pruner;
 pub mod stale_propagator;
 
 pub use bus::EventBus;

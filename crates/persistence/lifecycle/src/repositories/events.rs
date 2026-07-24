@@ -198,13 +198,58 @@ pub async fn min_event_id(pool: &SqlitePool) -> DbResult<Option<i64>> {
     Ok(min_id)
 }
 
+/// Total number of rows in the `events` table.  Used for monitoring and to
+/// decide whether a prune pass is warranted.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+#[allow(dead_code)] // retention pruner will call this; no production caller yet
+pub(crate) async fn count_events(pool: &SqlitePool) -> DbResult<i64> {
+    let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events").fetch_one(pool).await?;
+    Ok(count)
+}
+
+/// Delete events older than `older_than_iso` (exclusive upper-bound on
+/// `emitted_at`).
+///
+/// # Replay-watermark safety
+///
+/// All in-process event-bus subscribers that replay from the durable table
+/// start their cursor at 0 on first lag, then advance it as they process
+/// rows.  There is currently no persistent cursor registry, so the pruner
+/// cannot know the exact per-subscriber watermark.  The caller is expected
+/// to pass an `older_than_iso` that is conservatively far enough in the past
+/// that no live subscriber cursor can still be behind it:
+///
+/// - The default retention window (90 days) exceeds any realistic lag window
+///   on a desktop application, so in practice every subscriber has already
+///   processed events older than the cutoff.
+/// - Hooks are unconditionally idempotent (research.md §6.1), so replaying
+///   a pruned range a second time after a prune is safe — the worst outcome
+///   is a no-op re-dispatch.
+/// - kyo7.100 will add cursor advancement on live events; once that lands the
+///   replay window on a healthy app will shrink further, making the 90-day
+///   floor even more conservative.
+///
+/// Returns the number of rows deleted.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn prune_events_older_than(pool: &SqlitePool, older_than_iso: &str) -> DbResult<u64> {
+    let result = sqlx::query("DELETE FROM events WHERE emitted_at < ?")
+        .bind(older_than_iso)
+        .execute(pool)
+        .await?;
+    Ok(result.rows_affected())
+}
+
 #[cfg(test)]
 mod tests {
     use sqlx::SqlitePool;
 
     use super::{
-        insert_event, list_by_emitted_at_range, list_recent_since, list_since, list_since_by_topic,
-        max_event_id, min_event_id,
+        count_events, insert_event, list_by_emitted_at_range, list_recent_since, list_since,
+        list_since_by_topic, max_event_id, min_event_id, prune_events_older_than,
     };
 
     async fn setup() -> SqlitePool {
@@ -311,5 +356,59 @@ mod tests {
 
         insert_event(&pool, "t.a", "system", "2026-01-01T00:00:00Z", "{}").await.unwrap();
         assert_eq!(min_event_id(&pool).await.expect("min_event_id"), Some(1));
+    }
+
+    #[tokio::test]
+    async fn count_events_empty_is_zero() {
+        let pool = setup().await;
+        assert_eq!(count_events(&pool).await.expect("count"), 0);
+    }
+
+    #[tokio::test]
+    async fn count_events_after_inserts() {
+        let pool = setup().await;
+        for i in 0..5 {
+            insert_event(&pool, "t.a", "system", &format!("2026-01-0{}T00:00:00Z", i + 1), "{}")
+                .await
+                .unwrap();
+        }
+        assert_eq!(count_events(&pool).await.expect("count"), 5);
+    }
+
+    #[tokio::test]
+    async fn prune_removes_older_rows_and_keeps_newer() {
+        let pool = setup().await;
+        // Insert three events on separate days.
+        insert_event(&pool, "t.a", "system", "2026-01-01T00:00:00Z", "{}").await.unwrap();
+        insert_event(&pool, "t.a", "system", "2026-01-02T00:00:00Z", "{}").await.unwrap();
+        insert_event(&pool, "t.a", "system", "2026-01-03T00:00:00Z", "{}").await.unwrap();
+
+        // Prune rows older than 2026-01-03 (exclusive upper bound).
+        let deleted = prune_events_older_than(&pool, "2026-01-03T00:00:00Z").await.expect("prune");
+        assert_eq!(deleted, 2, "two rows are older than the cutoff");
+
+        let remaining = list_since(&pool, 0).await.expect("list_since");
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].emitted_at, "2026-01-03T00:00:00Z");
+    }
+
+    #[tokio::test]
+    async fn prune_all_rows_leaves_empty_table() {
+        let pool = setup().await;
+        insert_event(&pool, "t.a", "system", "2026-01-01T00:00:00Z", "{}").await.unwrap();
+        insert_event(&pool, "t.a", "system", "2026-01-02T00:00:00Z", "{}").await.unwrap();
+
+        let deleted =
+            prune_events_older_than(&pool, "2099-01-01T00:00:00Z").await.expect("prune all");
+        assert_eq!(deleted, 2);
+        assert_eq!(count_events(&pool).await.expect("count"), 0);
+    }
+
+    #[tokio::test]
+    async fn prune_empty_table_is_noop() {
+        let pool = setup().await;
+        let deleted =
+            prune_events_older_than(&pool, "2026-01-01T00:00:00Z").await.expect("prune empty");
+        assert_eq!(deleted, 0);
     }
 }
