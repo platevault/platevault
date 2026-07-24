@@ -98,8 +98,7 @@ pub async fn list_frames(
             }
             let (session_id, frame_type) = frame_map
                 .get(&row.id)
-                .map(|(sid, ft)| (Some(sid.clone()), *ft))
-                .unwrap_or((None, RawFrameType::Light));
+                .map_or((None, RawFrameType::Light), |(sid, ft)| (Some(sid.clone()), *ft));
             frames.push(InventoryFrame {
                 frame_id: row.id,
                 root_id: row.root_id,

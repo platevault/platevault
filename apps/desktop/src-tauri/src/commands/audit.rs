@@ -334,7 +334,7 @@ pub async fn audit_export(
         .map_err(|e| ContractError::internal(format!("flush error: {e}")))?;
     drop(writer);
 
-    let bytes = std::fs::metadata(&tmp_path).map(|m| m.len()).unwrap_or(0);
+    let bytes = std::fs::metadata(&tmp_path).map_or(0, |m| m.len());
 
     std::fs::rename(&tmp_path, dest)
         .map_err(|e| ContractError::internal(format!("rename error: {e}")))?;
