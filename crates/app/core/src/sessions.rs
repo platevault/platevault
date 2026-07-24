@@ -91,9 +91,8 @@ pub async fn list_sessions_paginated(
         .collect();
 
     // 3) Batch-load fingerprints (1 query instead of N).
-    let fp_rows = q_core::get_fingerprints_batch(pool, &session_ids)
-        .await
-        .map_err(|e| e.to_string())?;
+    let fp_rows =
+        q_core::get_fingerprints_batch(pool, &session_ids).await.map_err(|e| e.to_string())?;
     let fingerprints: HashMap<String, Fingerprint> = fp_rows
         .into_iter()
         .map(|r| {

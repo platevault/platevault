@@ -163,10 +163,7 @@ pub async fn settings_get(
                 .await
                 .map_err(app_core::errors::db_to_contract)?;
         let map: serde_json::Map<String, Value> = rows.into_iter().collect();
-        return Ok(SettingsData {
-            scope,
-            values: contracts_core::JsonAny(Value::Object(map)),
-        });
+        return Ok(SettingsData { scope, values: contracts_core::JsonAny(Value::Object(map)) });
     }
 
     let keys = scope_keys(&scope);
@@ -176,10 +173,7 @@ pub async fn settings_get(
         map.insert((*key).to_owned(), val);
     }
 
-    Ok(SettingsData {
-        scope,
-        values: contracts_core::JsonAny(Value::Object(map)),
-    })
+    Ok(SettingsData { scope, values: contracts_core::JsonAny(Value::Object(map)) })
 }
 
 /// `settings.update` — persists settings values for a given scope.

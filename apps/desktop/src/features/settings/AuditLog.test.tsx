@@ -368,10 +368,7 @@ describe('AuditLog', () => {
     fireEvent.click(exportBtn);
 
     await waitFor(() =>
-      expect(mockExport).toHaveBeenCalledWith(
-        '/tmp/audit-export.ndjson',
-        null,
-      ),
+      expect(mockExport).toHaveBeenCalledWith('/tmp/audit-export.ndjson', null),
     );
   });
 

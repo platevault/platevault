@@ -461,9 +461,8 @@ pub async fn list_sessions_joined_paginated(
             .to_owned(),
     };
     // AssertSqlSafe: limit/offset are u32 literals formatted directly — no user strings.
-    let rows = sqlx::query_as::<_, SessionJoinRow>(sqlx::AssertSqlSafe(sql))
-        .fetch_all(pool)
-        .await?;
+    let rows =
+        sqlx::query_as::<_, SessionJoinRow>(sqlx::AssertSqlSafe(sql)).fetch_all(pool).await?;
     Ok(rows)
 }
 
@@ -716,9 +715,7 @@ pub async fn all_acquisition_session_frame_ids(
     pool: &SqlitePool,
 ) -> DbResult<Vec<(String, String)>> {
     let rows: Vec<(String, String)> =
-        sqlx::query_as("SELECT id, frame_ids FROM acquisition_session")
-            .fetch_all(pool)
-            .await?;
+        sqlx::query_as("SELECT id, frame_ids FROM acquisition_session").fetch_all(pool).await?;
     Ok(rows)
 }
 

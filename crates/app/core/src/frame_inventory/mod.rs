@@ -219,10 +219,9 @@ pub(crate) async fn build_frame_session_map(
     let mut map: HashMap<String, (String, RawFrameType)> = HashMap::new();
 
     // Acquisition sessions (light frames).
-    let acq_rows =
-        persistence_core::repositories::q_core::all_acquisition_session_frame_ids(pool)
-            .await
-            .map_err(db_err)?;
+    let acq_rows = persistence_core::repositories::q_core::all_acquisition_session_frame_ids(pool)
+        .await
+        .map_err(db_err)?;
 
     for (session_id, frame_ids_json) in acq_rows {
         let ids: Vec<String> = serde_json::from_str(&frame_ids_json).unwrap_or_default();
@@ -232,10 +231,9 @@ pub(crate) async fn build_frame_session_map(
     }
 
     // Calibration sessions (dark/flat/bias frames).
-    let cal_rows =
-        persistence_core::repositories::q_core::all_calibration_session_frame_ids(pool)
-            .await
-            .map_err(db_err)?;
+    let cal_rows = persistence_core::repositories::q_core::all_calibration_session_frame_ids(pool)
+        .await
+        .map_err(db_err)?;
 
     for (session_id, frame_ids_json, kind) in cal_rows {
         let frame_type = raw_frame_type_from_calibration_kind(&kind);

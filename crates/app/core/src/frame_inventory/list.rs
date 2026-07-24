@@ -13,7 +13,9 @@ use sqlx::SqlitePool;
 
 use app_core_errors::db_err;
 
-use super::{build_frame_session_map, raw_frame_type_from_calibration_kind, rows_by_ids, rows_by_root};
+use super::{
+    build_frame_session_map, raw_frame_type_from_calibration_kind, rows_by_ids, rows_by_root,
+};
 
 fn presence_state(state: &str) -> FramePresenceState {
     match state {
