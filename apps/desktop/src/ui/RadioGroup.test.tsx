@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { useState } from 'react';
 // Convention: use userEvent for user-driven interactions; fireEvent for synthetic/edge cases.
 // See src/test/userEvent.ts for the project setup helper.
