@@ -29,10 +29,17 @@ import {
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { InboxList } from '../InboxList';
 import { FilterToolbar } from '@/components';
-import { useGrouping } from '@/lib/use-grouping';
+import {
+  useGrouping,
+  __resetGroupingRegistryForTest,
+} from '@/lib/use-grouping';
 import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from '../InboxControls';
 import type { InboxListItem } from '@/bindings/index';
 import { assertDefined } from '@/test/assertDefined';
+import { __resetScopeRegistryForTest } from '@/data/persisted-state';
+
+/** localStorage key for the inbox grouping boot cache (new persisted-state key). */
+const GROUPING_PS_LS_KEY = `alm.ps.uiState.${GROUPING_STORAGE_KEY}`;
 
 // ── Harness ───────────────────────────────────────────────────────────────────
 // Mirrors InboxPage's wiring: useGrouping owns the grouping state,
@@ -113,6 +120,9 @@ const items: InboxListItem[] = [
 
 beforeEach(() => {
   localStorage.clear();
+  // Reset module-level registries so tests don't share state.
+  __resetGroupingRegistryForTest();
+  __resetScopeRegistryForTest();
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -233,7 +243,7 @@ describe('InboxList — configurable grouping', () => {
     });
 
     const storedDims = assertDefined(
-      localStorage.getItem(GROUPING_STORAGE_KEY),
+      localStorage.getItem(GROUPING_PS_LS_KEY),
       'GROUPING_STORAGE_KEY entry in localStorage',
     );
     expect(JSON.parse(storedDims)).toEqual(['target', 'frameType']);

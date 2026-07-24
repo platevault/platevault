@@ -49,6 +49,10 @@ interface PersistedStateHandle<T> {
 
 const scopeRegistry = new Map<string, Set<PersistedStateHandle<unknown>>>();
 
+// All result objects, tracked so __resetScopeRegistryForTest can call
+// _resetForTest() on each (clears in-memory value + boot-cache LS key).
+const allInstances = new Set<PersistedStateResult<unknown>>();
+
 function registerHandle<T>(
   scope: string,
   handle: PersistedStateHandle<T>,
@@ -76,22 +80,6 @@ function importTauriCore(): Promise<typeof import('@tauri-apps/api/core')> {
     tauriCorePromise = import('@tauri-apps/api/core');
   }
   return tauriCorePromise;
-}
-
-// ── Debounce helper ───────────────────────────────────────────────────────────
-
-function debounce<T extends unknown[]>(
-  fn: (...args: T) => void,
-  ms: number,
-): (...args: T) => void {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  return (...args: T) => {
-    if (timer !== null) clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = null;
-      fn(...args);
-    }, ms);
-  };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -128,6 +116,19 @@ export interface PersistedStateResult<T> {
    * instead, which issues the batch `settingsGet` and calls this on each key.
    */
   _reconcileFromDbValues(values: Record<string, unknown>): void;
+  /**
+   * Cancel any pending debounced SQLite write. Call from a component's
+   * `useEffect` cleanup to avoid timer leaks on unmount, e.g.:
+   *
+   *   useEffect(() => () => myState.cancelPendingWrite(), []);
+   */
+  cancelPendingWrite(): void;
+  /**
+   * Test-only: reset in-memory value to the constructor default and clear the
+   * boot-cache localStorage key. Allows module-level singletons to start fresh
+   * between tests without re-importing the module.
+   */
+  _resetForTest(): void;
 }
 
 /**
@@ -160,21 +161,31 @@ export function createPersistedState<T>(
 
   // ── Debounced SQLite write ─────────────────────────────────────────────────
 
-  const persistToDb = debounce((value: T) => {
-    void (async () => {
-      try {
-        const { isTauri } = await importTauriCore();
-        if (!isTauri()) return;
-        const [{ commands }, { unwrap }] = await Promise.all([
-          import('@/bindings/index'),
-          import('@/api/ipc'),
-        ]);
-        unwrap(await commands.settingsUpdate(scope, { [key]: value }));
-      } catch {
-        // Best-effort — a DB write failure never blocks or reverts the UI change.
-      }
-    })();
-  }, debounceMs);
+  // Inline debounce (vs. the module-level `debounce()` helper) so we can
+  // expose a cancel function for `_resetForTest()`.
+  let pendingDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function persistToDb(value: T): void {
+    if (pendingDebounceTimer !== null) {
+      clearTimeout(pendingDebounceTimer);
+    }
+    pendingDebounceTimer = setTimeout(() => {
+      pendingDebounceTimer = null;
+      void (async () => {
+        try {
+          const { isTauri } = await importTauriCore();
+          if (!isTauri()) return;
+          const [{ commands }, { unwrap }] = await Promise.all([
+            import('@/bindings/index'),
+            import('@/api/ipc'),
+          ]);
+          unwrap(await commands.settingsUpdate(scope, { [key]: value }));
+        } catch {
+          // Best-effort — a DB write failure never blocks or reverts the UI change.
+        }
+      })();
+    }, debounceMs);
+  }
 
   // ── Handle for the scope registry ─────────────────────────────────────────
 
@@ -206,7 +217,7 @@ export function createPersistedState<T>(
 
   // ── Returned API ──────────────────────────────────────────────────────────
 
-  return {
+  const result: PersistedStateResult<T> = {
     get(): T {
       return current;
     },
@@ -226,7 +237,35 @@ export function createPersistedState<T>(
     _reconcileFromDbValues(values: Record<string, unknown>): void {
       handle.setFromDb(values[key]);
     },
+
+    cancelPendingWrite(): void {
+      if (pendingDebounceTimer !== null) {
+        clearTimeout(pendingDebounceTimer);
+        pendingDebounceTimer = null;
+      }
+    },
+
+    _resetForTest(): void {
+      // Cancel any pending debounce timer to prevent leaked async operations
+      // after test teardown (e.g. the virtualizer-scroll-debounce test).
+      if (pendingDebounceTimer !== null) {
+        clearTimeout(pendingDebounceTimer);
+        pendingDebounceTimer = null;
+      }
+      if (lsKey) {
+        try {
+          window.localStorage.removeItem(lsKey);
+        } catch {
+          /* unavailable — non-fatal */
+        }
+      }
+      current = opts.default;
+      notify();
+    },
   };
+
+  allInstances.add(result as PersistedStateResult<unknown>);
+  return result;
 }
 
 // ── Scope hydration ───────────────────────────────────────────────────────────
@@ -354,10 +393,22 @@ function shallowEqual(a: unknown, b: unknown): boolean {
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
 /**
- * Reset all scope registrations. Test-only — clears the module-level registry
- * so tests don't leak state across `createPersistedState` calls.
+ * Reset all persisted state to defaults and clear all scope registrations.
+ *
+ * Test-only — resets in-memory values + boot-cache localStorage keys for every
+ * `createPersistedState` instance created so far, then clears the scope registry.
+ * Call in `beforeEach`/`afterEach` to prevent module-level singletons from
+ * leaking state between tests.
  */
 export function __resetScopeRegistryForTest(): void {
+  // Reset in-memory values to defaults (but keep the instances in allInstances
+  // so future calls can reset them again — module singletons are created once
+  // and must remain resettable across the full test run).
+  for (const instance of allInstances) {
+    instance._resetForTest();
+  }
+  // Clear the scope registry so hydrateScope can re-register without stale
+  // handles, but don't clear allInstances (see above).
   scopeRegistry.clear();
   // Also reset the memoised Tauri core promise so mock re-imports work.
   tauriCorePromise = null;

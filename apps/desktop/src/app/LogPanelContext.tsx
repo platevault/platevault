@@ -24,31 +24,30 @@ import {
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type { LogLevel, LogEntrySource } from '@/data/logStore';
+import { createPersistedState } from '@/data/persisted-state';
 
 export type LevelFilter = 'all' | LogLevel;
 
-// Persisted directly in localStorage (not routed through the generated
-// AppPreferences contract, which is backed by a Rust struct + settings IPC)
-// — same lightweight pattern useAdaptiveDock.ts uses for its own UI-only
-// persisted state. Journey 16 groups this with sidebar-collapse persistence
-// as a "persistent layout choice" that survives restart (#842).
-const EXPANDED_STORAGE_KEY = 'alm-log-panel-expanded';
+// Durable via SQLite (ui_state scope); localStorage kept as synchronous boot
+// cache so the panel opens in the right state before the first IPC round-trip.
+// Legacy key `alm-log-panel-expanded` is imported automatically on first
+// hydrate if the DB row is absent (one-time migration).
+const logPanelExpandedState = createPersistedState(
+  'ui_state',
+  'uiState.logPanelExpanded',
+  { default: false },
+);
 
-function readStoredExpanded(): boolean {
-  try {
-    return window.localStorage.getItem(EXPANDED_STORAGE_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
+/** Test-only: boot-cache localStorage key for the expanded state. */
+export const LOG_PANEL_EXPANDED_LS_KEY =
+  'alm.ps.uiState.logPanelExpanded' as const;
 
-function writeStoredExpanded(value: boolean): void {
-  try {
-    window.localStorage.setItem(EXPANDED_STORAGE_KEY, String(value));
-  } catch {
-    // Storage full or unavailable; state stays in-memory for this session.
-  }
-}
+/**
+ * Test-only: the persisted-state instance for expanded state.
+ * Lets tests call `.set(true)` to bootstrap state before rendering,
+ * equivalent to seeding the old `alm-log-panel-expanded` localStorage key.
+ */
+export { logPanelExpandedState as _logPanelExpandedStateForTest };
 
 interface LogPanelState {
   expanded: boolean;
@@ -79,7 +78,10 @@ const LogPanelContext = createContext<LogPanelState>({
 });
 
 export function LogPanelProvider({ children }: { children: ReactNode }) {
-  const [expanded, setExpanded] = useState(readStoredExpanded);
+  const [expanded, setExpanded] = useState(() => logPanelExpandedState.get());
+
+  // Cancel the debounced SQLite write on unmount to prevent timer leaks.
+  useEffect(() => () => logPanelExpandedState.cancelPendingWrite(), []);
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
   const [followLogs, setFollowLogsState] = useState(false);
   const [levelFilter, setLevelFilter] = useState<LevelFilter>('all');
@@ -134,7 +136,7 @@ export function LogPanelProvider({ children }: { children: ReactNode }) {
       if (next) {
         setLevelFilter('all');
       }
-      writeStoredExpanded(next);
+      logPanelExpandedState.set(next);
       return next;
     });
   }, []);
