@@ -14,7 +14,9 @@ describe('RouteError', () => {
   });
 
   it('shows the error message', () => {
-    render(<RouteError error={new Error('Something exploded')} reset={() => {}} />);
+    render(
+      <RouteError error={new Error('Something exploded')} reset={() => {}} />,
+    );
     expect(screen.getByText('Something exploded')).toBeInTheDocument();
   });
 
