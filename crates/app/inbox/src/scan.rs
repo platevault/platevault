@@ -936,4 +936,77 @@ mod tests {
         let items = scan_root(&scan_root_dir, &options).unwrap();
         assert_eq!(items.len(), 1, "junction is traversed when explicitly enabled");
     }
+
+    /// Multi-leaf sort-order is deterministic regardless of OS readdir ordering
+    /// and regardless of whether the sequential or parallel code path is used.
+    ///
+    /// Three sibling leaf directories are compared: the expected order is
+    /// ascending by relative path, which is what the sort at the end of
+    /// `scan_root` guarantees.
+    #[test]
+    fn multi_leaf_relative_path_sort_order() {
+        let tmp = tmpdir();
+        for name in &["zz_folder", "aa_folder", "mm_folder"] {
+            let dir = tmp.path().join(name);
+            fs::create_dir_all(&dir).unwrap();
+            write_file(&dir, "frame.fits", b"dummy");
+        }
+
+        let expected = ["aa_folder", "mm_folder", "zz_folder"];
+
+        // Sequential path (production default).
+        let items_seq = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        assert_eq!(items_seq.len(), 3);
+        for (item, exp) in items_seq.iter().zip(expected.iter()) {
+            assert!(
+                item.folder_path.ends_with(exp),
+                "sequential: expected suffix {exp}, got {:?}",
+                item.folder_path
+            );
+        }
+
+        // Parallel path (workers=2 exercises the thread-scope branch).
+        let opts_par = ScanOptions { follow_symlinks: false, workers: Some(2) };
+        let items_par = scan_root(tmp.path(), &opts_par).unwrap();
+        assert_eq!(items_par.len(), 3);
+        for (item, exp) in items_par.iter().zip(expected.iter()) {
+            assert!(
+                item.folder_path.ends_with(exp),
+                "parallel: expected suffix {exp}, got {:?}",
+                item.folder_path
+            );
+        }
+    }
+
+    /// An unreadable / corrupt file in one leaf must not abort the scan;
+    /// the other leaves must still be returned. Exercises the PARALLEL path
+    /// (sequential coverage lives in `no_masters_for_dummy_fits_content`).
+    #[test]
+    fn bad_file_does_not_abort_parallel_scan() {
+        let tmp = tmpdir();
+
+        // Leaf A: good files.
+        let good = tmp.path().join("good");
+        fs::create_dir_all(&good).unwrap();
+        write_file(&good, "frame_001.fits", b"dummy fits");
+        write_file(&good, "frame_002.fits", b"dummy fits");
+
+        // Leaf B: a file whose content is not valid FITS/XISF (unreadable
+        // header) — must not propagate an error that kills the scan.
+        let bad = tmp.path().join("bad");
+        fs::create_dir_all(&bad).unwrap();
+        write_file(&bad, "corrupt.fits", b"this is not a fits header at all");
+
+        let opts = ScanOptions { follow_symlinks: false, workers: Some(2) };
+        let items = scan_root(tmp.path(), &opts).unwrap();
+
+        // Both leaves must appear (bad content is tolerated, not fatal).
+        assert_eq!(items.len(), 2, "corrupt file in one leaf must not drop the other leaf");
+
+        // The corrupt leaf still produces an item (the file is listed), but
+        // master detection silently returns nothing for unreadable headers.
+        let bad_item = items.iter().find(|i| i.folder_path.ends_with("bad")).unwrap();
+        assert_eq!(bad_item.fits_files.len(), 1);
+        assert!(bad_item.masters.is_empty(), "corrupt file must not be reported as a master");
+    }
 }
