@@ -155,7 +155,38 @@ pub fn build_app() -> tauri::App {
         // T060, #762) — the check/download/verify/relaunch flow itself is
         // frontend-driven (`updateSubscription.ts`, #888 staged flow), not
         // triggered from this Rust process.
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin({
+            // PV_E2E_VERSION_OVERRIDE: spoof a lower "current" version so an e2e run
+            // can trigger the "update available" code path against a fixture endpoint
+            // without modifying the real release binary or its embedded version.
+            // Gated behind `dev-tools` at compile time — release binaries ignore the
+            // env var entirely.
+            #[cfg(not(feature = "dev-tools"))]
+            let b = tauri_plugin_updater::Builder::new();
+            #[cfg(feature = "dev-tools")]
+            let mut b = tauri_plugin_updater::Builder::new();
+            #[cfg(feature = "dev-tools")]
+            if let Ok(override_ver) = std::env::var("PV_E2E_VERSION_OVERRIDE") {
+                match override_ver.parse::<semver::Version>() {
+                    Ok(fake_ver) => {
+                        b = b.default_version_comparator(move |_current, remote| {
+                            remote.version > fake_ver
+                        });
+                        tracing::info!(
+                            PV_E2E_VERSION_OVERRIDE = %override_ver,
+                            "updater version override active"
+                        );
+                    }
+                    Err(_) => {
+                        tracing::warn!(
+                            PV_E2E_VERSION_OVERRIDE = %override_ver,
+                            "invalid semver in PV_E2E_VERSION_OVERRIDE — using real version"
+                        );
+                    }
+                }
+            }
+            b.build()
+        })
         .plugin(tauri_plugin_process::init())
         // Spec 051 US7 (T041): diagnostics log file. `skip_logger()` is
         // required here — this app already installs a global `tracing`
