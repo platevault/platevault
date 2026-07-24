@@ -33,7 +33,6 @@ src/components/TwoColDetailLayout.tsx	95	alm/require-root-testid
 src/features/archive/ArchiveDetail.tsx	63	alm/require-root-testid
 src/features/calibration/CalibrationDetail.tsx	9	alm/require-root-testid
 src/features/calibration/CalibrationPage.tsx	188	alm/require-root-testid
-src/features/calibration/MasterDetail.tsx	252	alm/require-root-testid
 src/features/calibration/MastersTable.tsx	396	alm/require-root-testid
 src/features/calibration/MatchCandidatesPanel.tsx	354	alm/require-root-testid
 src/features/calibration/SessionListPopover.tsx	34	alm/require-root-testid
@@ -43,7 +42,6 @@ src/features/inbox/InboxDetail.tsx	345	alm/require-root-testid
 src/features/inbox/InboxNeedsReview.tsx	103	alm/require-root-testid
 src/features/inbox/PlanDestructiveControl.tsx	32	alm/require-root-testid
 src/features/onboarding/ChecklistPopover.tsx	110	alm/require-root-testid
-src/features/onboarding/ChecklistSection.tsx	498	alm/require-root-testid
 src/features/onboarding/FindSpotlight.tsx	167	alm/require-root-testid
 src/features/onboarding/OrientationWalk.tsx	160	alm/require-root-testid
 src/features/onboarding/joyrideAdapter.tsx	209	alm/require-root-testid
@@ -105,7 +103,6 @@ src/features/targets/LinkedItemsList.tsx	37	alm/require-root-testid
 src/features/targets/NotesSection.tsx	41	alm/require-root-testid
 src/features/targets/TargetDetailV2.tsx	163	alm/require-root-testid
 src/features/targets/TargetList.tsx	71	alm/require-root-testid
-src/features/targets/TargetsPage.tsx	559	alm/require-root-testid
 src/features/targets/TargetsTableColumns.tsx	134	alm/require-root-testid
 src/features/targets/TonightPanel.tsx	166	alm/require-root-testid
 src/features/targets/observing-sites/ObservingSites.tsx	282	alm/require-root-testid

@@ -250,7 +250,7 @@ export function TargetsPage() {
   );
 
   return (
-    <div className="pv-targets-page">
+    <div className="pv-targets-page" data-testid="targets-page">
       <AddTargetDialog
         open={addOpen}
         onClose={() => setAddOpen(false)}

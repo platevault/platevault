@@ -17,7 +17,7 @@ import type {
   OnboardingPage,
   OnboardingStateDto,
 } from '@/bindings/index';
-import { isChecklistGroupSettled } from './ChecklistSection';
+import { isChecklistGroupSettled } from './checklist-item-helpers';
 
 export interface ChecklistGroupState {
   /** Items mapped per page (built from state.items). */

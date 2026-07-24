@@ -16,7 +16,8 @@ import { Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { OnboardingItemDto, OnboardingPage } from '@/bindings/index';
 import { setOnboardingItemState } from './store';
-import { ChecklistItemRow, completedChecklistItems } from './ChecklistSection';
+import { ChecklistItemRow } from './ChecklistItemRow';
+import { completedChecklistItems } from './checklist-item-helpers';
 import { itemLabel, pageLabel } from './onboarding-labels';
 
 interface ChecklistGroupProps {

@@ -99,6 +99,7 @@ export function MasterDetail({
 
   if (!master) {
     return (
+      // eslint-disable-next-line alm/require-root-testid -- DetailPane renders data-testid="detail" internally; testid is present in the DOM, not on this JSX node
       <DetailPane>
         <EmptyState
           title={m.calibration_select_master_title()}
