@@ -5,8 +5,8 @@
 
 use super::{
     audit_outcome_matches_state, bounded_safe_string, canonical_json, default_audit_outcome,
-    safe_payload_json, CommandLedgerError, Result, TerminalInput, TerminalState,
-    MAX_OUTBOX_EVENTS, MAX_RESPONSE_BYTES,
+    safe_payload_json, CommandLedgerError, Result, TerminalInput, TerminalState, MAX_OUTBOX_EVENTS,
+    MAX_RESPONSE_BYTES,
 };
 
 /// Validate all invariants required before persisting a terminal result.

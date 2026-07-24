@@ -112,8 +112,15 @@ pub(super) async fn write_audit_and_outbox(
     .execute(&mut **connection)
     .await?;
 
-    write_outbox_events(connection, row.row_id, &input.outbox, outbox_payloads, change_sequence, now)
-        .await?;
+    write_outbox_events(
+        connection,
+        row.row_id,
+        &input.outbox,
+        outbox_payloads,
+        change_sequence,
+        now,
+    )
+    .await?;
 
     Ok(change_sequence)
 }
@@ -137,9 +144,11 @@ async fn write_outbox_events(
         )
         .bind(Uuid::new_v4().to_string())
         .bind(command_row_id)
-        .bind(i64::try_from(ordinal).map_err(|_| {
-            CommandLedgerError::InvalidInput("event ordinal overflow".to_owned())
-        })?)
+        .bind(
+            i64::try_from(ordinal).map_err(|_| {
+                CommandLedgerError::InvalidInput("event ordinal overflow".to_owned())
+            })?,
+        )
         .bind(values[0])
         .bind(values[1])
         .bind(values[2])

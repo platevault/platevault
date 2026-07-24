@@ -223,7 +223,10 @@ async fn plan_source_frames(
     }
 
     // T028: partial calibration coverage detection.
-    detect_partial_calibration_coverage(&session_calibration_types, &mut sessions_without_calibration);
+    detect_partial_calibration_coverage(
+        &session_calibration_types,
+        &mut sessions_without_calibration,
+    );
 
     // FR-019: unresolved sources are skipped and flagged.
     if !unresolved_refs.is_empty() {
@@ -536,7 +539,8 @@ async fn persist_plan(
     let mut mkdir_dirs: BTreeSet<Utf8PathBuf> = BTreeSet::new();
     mkdir_dirs.insert(destination_root.to_path_buf());
     for item in planned {
-        if let Some(parent) = join_portable(destination_root, item.dest_relative.as_str()).parent() {
+        if let Some(parent) = join_portable(destination_root, item.dest_relative.as_str()).parent()
+        {
             mkdir_dirs.insert(parent.to_path_buf());
         }
     }

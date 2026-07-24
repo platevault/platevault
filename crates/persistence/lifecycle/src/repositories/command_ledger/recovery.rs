@@ -10,12 +10,12 @@
 use serde_json::Value;
 use sqlx::FromRow;
 
-use super::{
-    bounded_safe_string, canonical_json, digest_manifest, AuditOutcome, ClaimOutcome,
-    CommandFence, CommandLease, CommandLedgerError, CommandRow, CommandTerminal, Result,
-    TerminalState, MAX_OUTBOX_EVENTS, MAX_RESPONSE_BYTES,
-};
 use super::validate::validate_state_error_consistency;
+use super::{
+    bounded_safe_string, canonical_json, digest_manifest, AuditOutcome, ClaimOutcome, CommandFence,
+    CommandLease, CommandLedgerError, CommandRow, CommandTerminal, Result, TerminalState,
+    MAX_OUTBOX_EVENTS, MAX_RESPONSE_BYTES,
+};
 
 #[derive(Debug, FromRow)]
 pub(super) struct RecoveryOutboxRow {

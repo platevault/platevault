@@ -908,7 +908,6 @@ fn aggregate_json(aggregate: AggregateRef) -> Value {
     )
 }
 
-
 fn safe_payload_json(value: &Value) -> Result<String> {
     if !value.is_object() {
         return Err(CommandLedgerError::InvalidInput("event payload must be an object".to_owned()));
