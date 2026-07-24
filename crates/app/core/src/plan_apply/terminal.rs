@@ -30,9 +30,27 @@ pub(super) async fn handle_completed(
     op_emitter: Option<&OpEventEmitter>,
     counts: TerminalCounts,
 ) {
+    let at = Timestamp::now_iso();
+
+    // GFD-2: Sweep items orphaned `applying` by a mid-run retry whose DB flip
+    // landed but whose re-execution never got picked up before the run
+    // completed (symmetric with the Cancelled path's identical sweep). Without
+    // this, a retry_plan_item call racing with run completion leaves the item
+    // permanently stuck in `applying` with no terminal audit record.
+    // cumulative_counts is called AFTER this sweep so swept items are counted.
+    match apply_repo::cancel_orphaned_applying_items(pool, plan_id).await {
+        Ok(orphaned_ids) => {
+            for item_id in &orphaned_ids {
+                audit_item_cancelled(pool, bus, run_id, plan_id, item_id, "applying", &at).await;
+            }
+        }
+        Err(e) => {
+            tracing::error!(error=%e, "failed to sweep orphaned applying items on completion");
+        }
+    }
+
     let counts = cumulative_counts(pool, plan_id, &counts).await;
     let terminal = counts.terminal_state(false).to_owned();
-    let at = Timestamp::now_iso();
 
     // Origin-specific lifecycle side-effects (only on clean terminals).
     if terminal == "applied" {

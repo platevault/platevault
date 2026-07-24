@@ -1940,3 +1940,76 @@ async fn gf29_skip_plan_item_rejects_when_no_active_run() {
         "skip with no ActiveRun must return run.not_found, not fabricate success"
     );
 }
+
+// ── GFD-2 regression: orphaned-applying sweep on Completed path ───────────────
+
+/// GFD-2 regression (PR #1527 symmetric): handle_completed must sweep items
+/// stuck in `applying` — items whose retry DB flip landed but whose
+/// re-execution never started before run completion. Without the sweep, those
+/// items are permanently stuck in `applying` with no terminal audit record.
+///
+/// Mirrors the Cancelled-path sweep; both now call
+/// `cancel_orphaned_applying_items` before `cumulative_counts` so swept items
+/// are included in the terminal counters.
+#[tokio::test]
+async fn gfd2_completed_path_sweeps_orphaned_applying_items() {
+    let (db, bus) = setup().await;
+    let plan_id = "p-gfd2-completed";
+    let run_id = "run-gfd2-completed";
+
+    insert_approved_plan_with_items(&db, plan_id, 2).await;
+
+    // Drive plan to applying + create a run (the token matches insert_approved helper).
+    apply_repo::cas_approved_to_applying(db.pool(), plan_id, run_id, "test-token", 2, 2)
+        .await
+        .unwrap();
+
+    // item-0 succeeded, item-1 stuck in `applying` (the GFD-2 race window:
+    // retry flip landed but executor never picked it up before completion).
+    sqlx::query("UPDATE plan_items SET item_state = 'succeeded' WHERE id = ?")
+        .bind(format!("{plan_id}-item-0"))
+        .execute(db.pool())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE plan_items SET item_state = 'applying' WHERE id = ?")
+        .bind(format!("{plan_id}-item-1"))
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+    // Call handle_completed — it should sweep item-1 and emit a durable audit row.
+    super::terminal::handle_completed(
+        db.pool(),
+        &bus,
+        plan_id,
+        run_id,
+        "cleanup",
+        None,
+        None,
+        TerminalCounts { succeeded: 1, failed: 0, skipped: 0, cancelled: 0 },
+    )
+    .await;
+
+    // item-1 must now be `cancelled` (swept by GFD-2 path).
+    let item_state: String = sqlx::query_scalar("SELECT item_state FROM plan_items WHERE id = ?")
+        .bind(format!("{plan_id}-item-1"))
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(
+        item_state, "cancelled",
+        "orphaned applying item must be swept to cancelled on Completed path"
+    );
+
+    // A durable audit row for the sweep must exist.
+    let entries = list_audit_entries(
+        db.pool(),
+        &AuditLogFilter { entity_type: Some("filesystem_plan".to_owned()), ..Default::default() },
+    )
+    .await
+    .unwrap();
+    assert!(
+        entries.iter().any(|e| e.trigger == "plan_item.cancelled"),
+        "GFD-2 sweep on Completed path must emit a durable audit row for the swept item"
+    );
+}
