@@ -2779,5 +2779,8 @@
   "onboarding_find_unavailable": "Ainda não há nada para indicar em \"{item}\" — o controle aparecerá quando houver algo nesta página para executar.",
   "onboarding_find_prerequisite_first": "\"{item}\" precisa ser concluído primeiro — veja onde fazer isso.",
   "onboarding_item_dismiss_label": "Dispensar: {item}",
-  "sessions_singular": "sessão"
+  "sessions_singular": "sessão",
+  "route_not_found_heading": "Página não encontrada",
+  "route_not_found_body": "A página que você está procurando não existe.",
+  "route_not_found_home": "Ir para o início"
 }

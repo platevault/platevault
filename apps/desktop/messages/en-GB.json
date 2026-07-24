@@ -2749,5 +2749,8 @@
   "sessions_rawcleanup_generate_btn": "Generate cleanup plan",
   "sessions_rawcleanup_generating": "Generating…",
   "sessions_rawcleanup_review_title": "Review raw sub-frame cleanup plan",
-  "sessions_rawcleanup_select_aria": "Select {path} for cleanup"
+  "sessions_rawcleanup_select_aria": "Select {path} for cleanup",
+  "route_not_found_heading": "Page not found",
+  "route_not_found_body": "The page you are looking for does not exist.",
+  "route_not_found_home": "Go to home"
 }
