@@ -103,7 +103,13 @@ export function LogEntryRow({
       <span className={levelVariants[entry.level]} aria-label={entry.level}>
         {entry.level}
       </span>
-      <span className={eventSource}>{entry.source}</span>
+      <span
+        className={eventSource}
+        data-testid="logpanel-event-source"
+        data-source={entry.source}
+      >
+        {entry.source}
+      </span>
       {contextLabel && (
         <span className={eventContext} title={contextLabel}>
           {contextLabel}
