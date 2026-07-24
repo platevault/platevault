@@ -385,13 +385,7 @@ async fn run_pre_migration_backup(db: &Database, db_path: &std::path::Path, app_
     }
 
     let bak_path = db_path.with_extension(format!("pre-{app_version}.bak"));
-    // VACUUM INTO cannot accept bind parameters in SQLite — the destination
-    // path must appear as a literal in the statement.  Single quotes in the
-    // path are escaped to prevent injection; the statement is wrapped in
-    // `AssertSqlSafe` to satisfy sqlx's dynamic-SQL audit requirement.
-    let bak_str = bak_path.display().to_string().replace('\'', "''");
-    let stmt = sqlx::AssertSqlSafe(format!("VACUUM INTO '{bak_str}'"));
-    if let Err(e) = sqlx::query(stmt).execute(db.pool()).await {
+    if let Err(e) = db.backup_to(&bak_path).await {
         tracing::warn!(
             path = %bak_path.display(),
             // Non-fatal: a full disk must not prevent the app from starting.

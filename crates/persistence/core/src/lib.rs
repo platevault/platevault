@@ -155,6 +155,28 @@ impl Database {
         Ok(applied_count < total)
     }
 
+    /// Copy this database to `dest` using SQLite's `VACUUM INTO` statement.
+    ///
+    /// `VACUUM INTO` writes a consistent, compacted snapshot of the live
+    /// database to a new file without interrupting readers or writers.
+    ///
+    /// `VACUUM INTO` does not accept bind parameters — the destination path
+    /// must appear as a string literal in the statement.  Single quotes inside
+    /// the path are doubled (`'` → `''`) to form a valid SQLite string literal.
+    /// The resulting statement is wrapped in [`sqlx::AssertSqlSafe`] to satisfy
+    /// the sqlx dynamic-SQL audit requirement; the quoting is the audit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbError::Database`] if the statement fails (e.g. destination
+    /// already exists, or disk full).
+    pub async fn backup_to(&self, dest: &std::path::Path) -> DbResult<()> {
+        let dest_str = dest.display().to_string().replace('\'', "''");
+        let stmt = sqlx::AssertSqlSafe(format!("VACUUM INTO '{dest_str}'"));
+        sqlx::query(stmt).execute(&self.pool).await?;
+        Ok(())
+    }
+
     /// Run all pending migrations from the frozen baseline and future append-only files.
     ///
     /// # Errors
