@@ -157,6 +157,18 @@ export function usePlanApplyProgress() {
                   if (runId != null) next.runId = runId;
                   break;
                 }
+                case 'progress': {
+                  // Batch progress tick from the group-commit flush (kyo7.52).
+                  // Carries delta counters for the flush window — add to prev
+                  // rather than replacing so a stale or reordered tick cannot
+                  // regress the display.
+                  const p = event.payload as Record<string, unknown>;
+                  if (typeof p.itemsApplied === 'number')
+                    next.applied = prev.applied + p.itemsApplied;
+                  if (typeof p.itemsFailed === 'number')
+                    next.failed = prev.failed + p.itemsFailed;
+                  break;
+                }
                 case 'item_applied':
                   next.applied = prev.applied + 1;
                   break;

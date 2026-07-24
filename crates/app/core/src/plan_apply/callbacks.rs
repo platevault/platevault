@@ -240,13 +240,50 @@ impl PlanApplyCallbacks {
         // window instead of once per item.
         let _ = self.bus.broadcast_only(TOPIC_PLAN_ITEM_PROGRESS);
 
-        // Live long-op projection: per-item events after the tx (best-effort).
+        // Live long-op projection (spec 042 US16, kyo7.52): one batched
+        // Progress envelope per flush instead of one event per item.
+        // Individual failure emits are preserved — they carry detail the UI
+        // uses to show per-item error messages (rare, far below the item rate).
+        // Plan-level Started / Completed / Paused events are unchanged.
         if let Some(emitter) = self.op_emitter.as_ref() {
+            // Collect window failures for the batch Progress envelope.
+            let window_failures: Vec<serde_json::Value> = items
+                .iter()
+                .filter(|i| i.failure_code.is_some())
+                .map(|i| {
+                    json!({
+                        "itemId": i.item_id,
+                        "code": i.failure_code,
+                        "message": i.failure_message,
+                    })
+                })
+                .collect();
+
+            // Individual failure emits (kept for per-item detail in the UI).
             for item in &items {
                 if let Some(ref op) = item.op_event {
-                    emitter.emit(op.event_type, op.payload.clone());
+                    if op.event_type == OperationEventType::ItemFailed {
+                        emitter.emit(op.event_type, op.payload.clone());
+                    }
                 }
             }
+
+            // One Progress event for the whole flush window.
+            let last_item_id = items
+                .last()
+                .map_or(serde_json::Value::Null, |i| serde_json::Value::String(i.item_id.clone()));
+            emitter.emit(
+                OperationEventType::Progress,
+                json!({
+                    "planId": self.plan_id,
+                    "runId": self.run_id,
+                    "itemsApplied": delta_applied,
+                    "itemsFailed": delta_failed,
+                    "itemsSkipped": delta_skipped,
+                    "lastItemId": last_item_id,
+                    "windowFailures": window_failures,
+                }),
+            );
         }
     }
 }
