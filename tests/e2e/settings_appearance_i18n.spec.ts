@@ -494,9 +494,7 @@ test.describe('Journey 10 · Language switcher (spec 061 US2)', () => {
     await expect(
       page.getByRole('radio', { name: 'Português (Brasil)' }),
     ).toHaveAttribute('aria-checked', 'true');
-    const stored = await page.evaluate(() =>
-      localStorage.getItem('pv.locale'),
-    );
+    const stored = await page.evaluate(() => localStorage.getItem('pv.locale'));
     expect(stored).toBe('pt-BR');
 
     await page.reload();
