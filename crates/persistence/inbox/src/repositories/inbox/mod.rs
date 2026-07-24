@@ -35,10 +35,10 @@ pub use classification::{
 pub use items::{
     delete_sub_item_if_unlinked, delete_sub_item_if_unlinked_conn, get_inbox_item,
     get_source_group_id_for_item, insert_inbox_item, list_inbox_sub_items,
-    list_item_ids_for_source_group, reset_inbox_item_to_unconfirmed, update_inbox_item_scan,
-    update_inbox_item_scan_conn, update_inbox_item_state, update_inbox_item_state_conn,
-    upsert_inbox_sub_item, upsert_inbox_sub_item_conn, InboxItemRow, InsertInboxItem,
-    UpsertInboxSubItem,
+    list_inbox_sub_items_conn, list_item_ids_for_source_group, reset_inbox_item_to_unconfirmed,
+    update_inbox_item_scan, update_inbox_item_scan_conn, update_inbox_item_state,
+    update_inbox_item_state_conn, upsert_inbox_sub_item, upsert_inbox_sub_item_conn, InboxItemRow,
+    InsertInboxItem, UpsertInboxSubItem,
 };
 pub use metadata::{
     delete_breakdown_for_item, delete_breakdown_for_item_conn, delete_breakdown_for_items,

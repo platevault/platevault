@@ -1525,13 +1525,7 @@ pub(crate) async fn materialize_sub_items_tx(
 
     // ── Step 6: orphan cleanup ────────────────────────────────────────────────
     let current_keys: std::collections::HashSet<&str> = groups.keys().map(String::as_str).collect();
-    let existing: Vec<persistence_db::repositories::inbox::InboxItemRow> = sqlx::query_as(
-        "SELECT * FROM inbox_items WHERE source_group_id = ? AND group_key != '' ORDER BY group_key",
-    )
-    .bind(source_group_id)
-    .fetch_all(&mut *conn)
-    .await
-    .unwrap_or_default();
+    let existing = repo::list_inbox_sub_items_conn(conn, source_group_id).await.unwrap_or_default();
     for row in existing {
         if !current_keys.contains(row.group_key.as_str()) {
             repo::delete_sub_item_if_unlinked_conn(conn, &row.id).await.unwrap_or_else(|e| {

@@ -314,6 +314,20 @@ pub async fn list_inbox_sub_items(
     pool: &SqlitePool,
     source_group_id: &str,
 ) -> DbResult<Vec<InboxItemRow>> {
+    list_inbox_sub_items_conn(pool.acquire().await?.as_mut(), source_group_id).await
+}
+
+/// Connection-level variant of [`list_inbox_sub_items`].
+///
+/// Used by [`materialize_sub_items_tx`] to read existing sub-items within the
+/// same transaction so the orphan-cleanup step sees the current write state.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_inbox_sub_items_conn(
+    conn: &mut SqliteConnection,
+    source_group_id: &str,
+) -> DbResult<Vec<InboxItemRow>> {
     let rows = sqlx::query_as::<_, InboxItemRow>(
         "SELECT * FROM inbox_items
          WHERE source_group_id = ?
@@ -321,7 +335,7 @@ pub async fn list_inbox_sub_items(
          ORDER BY group_key",
     )
     .bind(source_group_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
     Ok(rows)
 }
