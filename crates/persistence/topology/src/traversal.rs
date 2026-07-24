@@ -393,7 +393,7 @@ async fn bfs_inner(
                 if cancel.load(Ordering::Relaxed) {
                     let mut s = state.write().await;
                     s.phase = TraversalPhase::Cancelled;
-                    return Err(TraversalError::DbError("cancelled".into()));
+                    return Err(TraversalError::Cancelled);
                 }
             }
         }

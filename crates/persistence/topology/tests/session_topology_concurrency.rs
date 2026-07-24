@@ -772,6 +772,9 @@ async fn traversal_node_ceiling_produces_ceiling_error() {
 }
 
 // ── 8. Traversal cancel ───────────────────────────────────────────────────────
+// Both cancellation paths in traversal.rs (frontier check and 256-edge batch
+// check) must return TraversalError::Cancelled, never DbError("cancelled").
+// Verified statically: `grep 'DbError("cancelled")' src/traversal.rs` is empty.
 
 #[tokio::test]
 async fn traversal_cancel_reaches_terminal_within_one_second() {
