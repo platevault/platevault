@@ -9,6 +9,7 @@
       "src/**/*.jsx",
       "!src/bindings",
       "!src/paraglide",
+      "!src/styles/themes.css.ts",
       "!**/src-archived-2026-05-24",
       "!node_modules",
       "!dist"
