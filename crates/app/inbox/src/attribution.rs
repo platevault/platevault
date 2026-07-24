@@ -1440,7 +1440,7 @@ mod tests {
         // `reopen_completed_project` parses the project id as a `Uuid` (the
         // `TransitionRequest::Project.entity_id` contract field, matching
         // every real project id produced by `domain_core::ids::new_id`).
-        let project_id = uuid::domain_core::ids::new_id();
+        let project_id = new_id();
         seed_project(db.pool(), &project_id, "completed", false).await;
         seed_framing(db.pool(), "framing-completed", &project_id, None, 10.0, 20.0, 0.0).await;
 
