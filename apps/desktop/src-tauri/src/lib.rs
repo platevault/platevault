@@ -374,6 +374,16 @@ fn sqlite_file_path(db_url: &str) -> Option<std::path::PathBuf> {
 /// permission error) is non-fatal: the caller logs a warning and proceeds with
 /// migration rather than bricking startup.
 async fn run_pre_migration_backup(db: &Database, db_path: &std::path::Path, app_version: &str) {
+    // Skip fresh databases (no _sqlx_migrations table) and up-to-date ones.
+    match db.has_pending_migrations().await {
+        Ok(true) => {}
+        Ok(false) => return,
+        Err(e) => {
+            tracing::warn!("could not check for pending migrations before backup: {e}");
+            return;
+        }
+    }
+
     let bak_path = db_path.with_extension(format!("pre-{app_version}.bak"));
     // VACUUM INTO cannot accept bind parameters in SQLite — the destination
     // path must appear as a literal in the statement.  Single quotes in the
@@ -445,17 +455,11 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
 
     // kyo7.28: back up the database before applying migrations to an existing,
     // behind-schema file.  Skip for fresh databases (no migration table yet)
-    // and for in-memory connections.
+    // and for in-memory connections.  run_pre_migration_backup owns the
+    // has_pending_migrations guard; boot just skips the whole call for
+    // in-memory URLs where VACUUM INTO is meaningless.
     if let Some(db_path) = sqlite_file_path(&db_url) {
-        match db.has_pending_migrations().await {
-            Ok(true) => {
-                run_pre_migration_backup(&db, &db_path, env!("CARGO_PKG_VERSION")).await;
-            }
-            Ok(false) => {}
-            Err(e) => {
-                tracing::warn!("could not check for pending migrations before backup: {e}");
-            }
-        }
+        run_pre_migration_backup(&db, &db_path, env!("CARGO_PKG_VERSION")).await;
     }
 
     if let Err(error) = db.migrate().await {
