@@ -4,10 +4,10 @@
     "n": 500,
     "scenario": "scan_root",
     "sqlx_stmts": 0,
-    "wall_ms": 3563,
+    "wall_ms": 1095,
     "workers": null,
     "stmts_budget": 0,
-    "wall_ms_budget": 3563
+    "wall_ms_budget": 1095
   },
   {
     "classified_ok": 10,
@@ -15,8 +15,8 @@
     "n": 500,
     "scenario": "classify_source_groups",
     "sqlx_stmts": 660,
-    "wall_ms": 3248,
+    "wall_ms": 1507,
     "stmts_budget": 660,
-    "wall_ms_budget": 3248
+    "wall_ms_budget": 1507
   }
 ]
