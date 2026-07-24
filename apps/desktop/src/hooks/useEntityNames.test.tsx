@@ -150,7 +150,9 @@ describe('useEntityNames', () => {
     const { result } = renderHook(() => useEntityNames([ref]), { wrapper });
 
     await waitFor(() => {
-      expect(result.current.get(entityNameKey(ref))).toBe('North America Nebula');
+      expect(result.current.get(entityNameKey(ref))).toBe(
+        'North America Nebula',
+      );
     });
     expect(mockTargetGet).toHaveBeenCalledWith({ targetId: 'tgt-1' });
   });
