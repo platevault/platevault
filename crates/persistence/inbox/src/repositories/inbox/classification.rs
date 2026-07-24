@@ -241,14 +241,6 @@ pub async fn insert_evidence_batch(
     Ok(())
 }
 
-/// Delete all evidence rows for an item (used before re-scan).
-///
-/// # Errors
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn delete_evidence_for_item(pool: &SqlitePool, inbox_item_id: &str) -> DbResult<()> {
-    delete_evidence_for_item_conn(pool.acquire().await?.as_mut(), inbox_item_id).await
-}
-
 /// Connection-level variant of [`delete_evidence_for_item`]. See [`insert_plan_conn`] in
 /// `plans.rs` for the pattern.
 ///

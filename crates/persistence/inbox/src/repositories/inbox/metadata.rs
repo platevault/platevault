@@ -133,14 +133,6 @@ pub async fn get_file_metadata(
 
 // ── Breakdown CRUD ────────────────────────────────────────────────────────────
 
-/// Delete all breakdown rows for an item.
-///
-/// # Errors
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn delete_breakdown_for_item(pool: &SqlitePool, inbox_item_id: &str) -> DbResult<()> {
-    delete_breakdown_for_item_conn(pool.acquire().await?.as_mut(), inbox_item_id).await
-}
-
 /// Connection-level variant of [`delete_breakdown_for_item`].
 ///
 /// # Errors
@@ -482,15 +474,6 @@ pub async fn delete_breakdown_for_items(
         q.execute(&mut *conn).await?;
     }
     Ok(())
-}
-
-/// Delete all per-file metadata rows for an item (used before a re-scan so
-/// stale rows do not linger).
-///
-/// # Errors
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn delete_file_metadata_for_item(pool: &SqlitePool, inbox_item_id: &str) -> DbResult<()> {
-    delete_file_metadata_for_item_conn(pool.acquire().await?.as_mut(), inbox_item_id).await
 }
 
 /// Connection-level variant of [`delete_file_metadata_for_item`].

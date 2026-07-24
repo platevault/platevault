@@ -1548,7 +1548,6 @@ pub(crate) async fn materialize_sub_items_tx(
             );
         });
 }
-}
 
 /// Enumerate FITS/XISF files directly inside a folder (non-recursive).
 ///

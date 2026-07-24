@@ -123,20 +123,6 @@ pub async fn update_inbox_item_state_conn(
     Ok(())
 }
 
-/// Update `content_signature` and `file_count` (and `last_scanned_at`).
-///
-/// # Errors
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn update_inbox_item_scan(
-    pool: &SqlitePool,
-    id: &str,
-    content_signature: &str,
-    file_count: i64,
-) -> DbResult<()> {
-    update_inbox_item_scan_conn(pool.acquire().await?.as_mut(), id, content_signature, file_count)
-        .await
-}
-
 /// Connection-level variant of [`update_inbox_item_scan`].
 ///
 /// # Errors
@@ -267,18 +253,6 @@ pub async fn upsert_inbox_sub_item_conn(
     .fetch_one(&mut *conn)
     .await?;
     Ok(persisted_id)
-}
-
-/// Delete a sub-item row by id, but ONLY when it is not linked to a plan.
-///
-/// Used by classify re-materialization to purge stale single-type groups that no
-/// longer have any files (a file moved groups), without disturbing plan-open
-/// items (spec 041 R-11/FR-042; T067 churn regression).
-///
-/// # Errors
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn delete_sub_item_if_unlinked(pool: &SqlitePool, id: &str) -> DbResult<()> {
-    delete_sub_item_if_unlinked_conn(pool.acquire().await?.as_mut(), id).await
 }
 
 /// Connection-level variant of [`delete_sub_item_if_unlinked`].
