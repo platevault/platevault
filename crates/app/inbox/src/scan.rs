@@ -1060,6 +1060,14 @@ mod tests {
     fn unreadable_subdir_produces_warning_not_error() {
         use std::os::unix::fs::PermissionsExt;
 
+        // Defined before any statements so `clippy::items_after_statements` is satisfied.
+        struct RestorePerms(std::path::PathBuf);
+        impl Drop for RestorePerms {
+            fn drop(&mut self) {
+                let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
+            }
+        }
+
         let tmp = tmpdir();
 
         // Readable leaf with real files.
@@ -1074,12 +1082,6 @@ mod tests {
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
 
         // Restore permissions on drop so tempdir cleanup succeeds.
-        struct RestorePerms(std::path::PathBuf);
-        impl Drop for RestorePerms {
-            fn drop(&mut self) {
-                let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
-            }
-        }
         let _restore = RestorePerms(locked.clone());
 
         // Skip when chmod had no effect (running as root bypasses permission bits).

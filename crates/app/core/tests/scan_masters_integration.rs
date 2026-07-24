@@ -81,7 +81,7 @@ fn master_dark_by_stackcnt_produces_individual_master_entry() {
     write_fits(&darks, "dark_001.fits", "DARK", None);
     write_fits(&darks, "dark_002.fits", "DARK", None);
 
-    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
     assert_eq!(items.len(), 1, "one leaf folder");
 
     let item = &items[0];
@@ -116,7 +116,7 @@ fn xisf_only_folder_has_format_xisf() {
     let mut f = fs::File::create(&path).unwrap();
     f.write_all(b"not a real xisf header").unwrap();
 
-    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
     assert_eq!(items.len(), 1);
 
     let item = &items[0];
@@ -135,7 +135,7 @@ fn fits_master_detected_has_format_fits() {
     let tmp = tempfile::tempdir().unwrap();
     write_fits(tmp.path(), "masterDark.fits", "DARK", Some(30));
 
-    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].masters.len(), 1);
     assert_eq!(
@@ -153,7 +153,7 @@ fn non_master_subs_produce_no_masters() {
     write_fits(tmp.path(), "dark_001.fits", "DARK", None);
     write_fits(tmp.path(), "dark_002.fits", "DARK", None);
 
-    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
     assert_eq!(items.len(), 1);
     assert!(items[0].masters.is_empty(), "plain subs must not be detected as masters");
 }
@@ -167,7 +167,7 @@ fn video_folder_produces_no_masters() {
     let mut f = fs::File::create(planetary.join("jupiter.ser")).unwrap();
     f.write_all(b"SER data").unwrap();
 
-    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].lane, Lane::Video);
     assert!(items[0].masters.is_empty(), "video folder must not have masters");
@@ -183,7 +183,7 @@ fn folder_with_only_masters_produces_all_master_entries() {
     write_fits(&cal, "masterDark.fits", "DARK", Some(30));
     write_fits(&cal, "masterFlat.fits", "FLAT", Some(20));
 
-    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].masters.len(), 2, "both files detected as masters");
 }
@@ -196,7 +196,7 @@ fn dummy_content_files_in_fits_lane_produce_no_masters() {
     write_dummy(tmp.path(), "dark_001.fits");
     write_dummy(tmp.path(), "dark_002.fits");
 
-    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
     assert_eq!(items.len(), 1);
     assert!(items[0].masters.is_empty(), "unreadable files must not yield masters");
 }
@@ -215,7 +215,7 @@ fn masters_only_folder_has_no_sub_frames_left_to_classify() {
     write_fits(&masters, "masterDark.fits", "DARK", Some(30));
     write_fits(&masters, "masterFlat.fits", "FLAT", Some(20));
 
-    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
     assert_eq!(items.len(), 1, "one leaf folder");
     let item = &items[0];
     assert_eq!(item.masters.len(), 2, "both files detected as masters");
@@ -239,7 +239,7 @@ fn mixed_master_and_sub_folder_counts_only_the_subs() {
     write_fits(&darks, "dark_001.fits", "DARK", None);
     write_fits(&darks, "dark_002.fits", "DARK", None);
 
-    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+    let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
     let item = &items[0];
     assert_eq!(item.masters.len(), 1);
     assert_eq!(item.fits_files.len(), 3, "masters are a subset of fits_files");

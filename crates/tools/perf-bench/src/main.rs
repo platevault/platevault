@@ -261,7 +261,7 @@ async fn main() {
         n,
         scan_ms,
         &serde_json::json!({
-            "items": scanned.len(),
+            "items": scanned.items.len(),
             "sqlx_stmts": scan_stmts,
             "workers": scan_workers,
         }),
@@ -272,7 +272,7 @@ async fn main() {
     // This mirrors `inbox_scan_folder`'s upsert loop but is NOT timed as its
     // own scenario — it is setup for scenario B.
 
-    for item in &scanned {
+    for item in &scanned.items {
         let sg_id = Uuid::new_v4().to_string();
         upsert_inbox_source_group(
             db.pool(),
