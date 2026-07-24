@@ -134,6 +134,18 @@ pub async fn transition_operation_to_applying(
     Ok(())
 }
 
+/// Payload for [`transition_operation_to_applied`].
+pub struct ApplyOperationResult<'a> {
+    pub operation_row_id: i64,
+    pub expected_state_version: i64,
+    pub result_snapshot_row_id: i64,
+    pub session_count: i64,
+    pub membership_count: i64,
+    pub singleton_group_count: i64,
+    pub blocked_frame_count: i64,
+    pub finished_at: &'a str,
+}
+
 /// Mark an operation as `applied` and link it to its result snapshot.
 ///
 /// The result snapshot must be inserted first. This update sets `state`,
@@ -145,15 +157,9 @@ pub async fn transition_operation_to_applying(
 /// [`DbError::Database`] on SQL errors.
 pub async fn transition_operation_to_applied(
     conn: &mut SqliteConnection,
-    operation_row_id: i64,
-    expected_state_version: i64,
-    result_snapshot_row_id: i64,
-    session_count: i64,
-    membership_count: i64,
-    singleton_group_count: i64,
-    blocked_frame_count: i64,
-    finished_at: &str,
+    params: &ApplyOperationResult<'_>,
 ) -> DbResult<()> {
+    let operation_row_id = params.operation_row_id;
     let result = sqlx::query(
         "UPDATE session_materialization_operation
          SET state = 'applied',
@@ -168,14 +174,14 @@ pub async fn transition_operation_to_applied(
            AND state = 'applying'
            AND state_version = ?",
     )
-    .bind(result_snapshot_row_id)
-    .bind(session_count)
-    .bind(membership_count)
-    .bind(singleton_group_count)
-    .bind(blocked_frame_count)
-    .bind(finished_at)
-    .bind(operation_row_id)
-    .bind(expected_state_version)
+    .bind(params.result_snapshot_row_id)
+    .bind(params.session_count)
+    .bind(params.membership_count)
+    .bind(params.singleton_group_count)
+    .bind(params.blocked_frame_count)
+    .bind(params.finished_at)
+    .bind(params.operation_row_id)
+    .bind(params.expected_state_version)
     .execute(conn)
     .await?;
     if result.rows_affected() != 1 {

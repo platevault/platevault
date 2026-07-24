@@ -3,7 +3,7 @@
 
 //! Integration tests for `persistence_sessions` repository functions.
 //!
-//! All tests use a real in-memory SQLite database with the full migration chain.
+//! All tests use a real in-memory `SQLite` database with the full migration chain.
 //! Fixture helpers insert the minimal rows required to satisfy FK constraints.
 
 use persistence_core::test_support::setup_db;
@@ -18,7 +18,7 @@ use persistence_sessions::{
             get_operation_by_public_id, get_result_snapshot_by_operation_public_id,
             insert_materialization_operation, insert_result_snapshot,
             transition_operation_to_applied, transition_operation_to_applying,
-            transition_operation_to_failed, InsertMaterializationOperation,
+            transition_operation_to_failed, ApplyOperationResult, InsertMaterializationOperation,
             InsertMaterializationResultSnapshot,
         },
         metadata_resolution::{
@@ -294,6 +294,7 @@ async fn watermarked_list_excludes_sessions_created_after_watermark() {
 // ── Default filter excludes superseded ───────────────────────────────────────
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn default_filter_excludes_superseded_sessions() {
     let db = setup_db().await;
     seed_operation_fixtures(db.pool()).await;
@@ -520,6 +521,7 @@ async fn default_filter_excludes_superseded_sessions() {
 // ── Supersession ──────────────────────────────────────────────────────────────
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn supersession_cycle_detection_rejects_cycle() {
     let db = setup_db().await;
     seed_operation_fixtures(db.pool()).await;
@@ -724,6 +726,7 @@ async fn supersession_cycle_detection_rejects_cycle() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn supersession_successor_and_predecessor_list() {
     let db = setup_db().await;
     seed_operation_fixtures(db.pool()).await;
@@ -909,6 +912,7 @@ async fn supersession_successor_and_predecessor_list() {
 // ── Equipment resolution ──────────────────────────────────────────────────────
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn equipment_resolution_insert_and_cas_advance() {
     let db = setup_db().await;
     seed_operation_fixtures(db.pool()).await;
@@ -1108,7 +1112,7 @@ async fn metadata_resolution_insert_and_cas_advance() {
         },
     )
     .await
-    .unwrap_or_else(|_| ()); // may fail if FK enforced on evidence_row_id; accept gracefully
+    .ok(); // evidence_row_id FK may not be satisfied in this test; ignore failure
 
     insert_metadata_resolution_head(&mut tx, session_id, rev1_id).await.unwrap();
     tx.commit().await.unwrap();
@@ -1230,14 +1234,16 @@ async fn materialization_operation_lifecycle_and_result_snapshot() {
 
     transition_operation_to_applied(
         &mut tx3,
-        op_id,
-        1,
-        snapshot_id,
-        2,
-        5,
-        2,
-        1,
-        "2026-07-22T00:00:04.000000Z",
+        &ApplyOperationResult {
+            operation_row_id: op_id,
+            expected_state_version: 1,
+            result_snapshot_row_id: snapshot_id,
+            session_count: 2,
+            membership_count: 5,
+            singleton_group_count: 2,
+            blocked_frame_count: 1,
+            finished_at: "2026-07-22T00:00:04.000000Z",
+        },
     )
     .await
     .unwrap();
