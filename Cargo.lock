@@ -1935,6 +1935,7 @@ dependencies = [
 name = "fs_pathsafe"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "tempfile",
 ]
 
@@ -4115,6 +4116,7 @@ checksum = "17359afc20d7ab31fdb42bb844c8b3bb1dabd7dcf7e68428492da7f16966fcef"
 name = "patterns"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "safe-filename",
  "serde",
  "serde_json",
