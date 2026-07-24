@@ -74,3 +74,26 @@ pub struct AuditListResponse {
     pub entries: Vec<AuditEntry>,
     pub total: u32,
 }
+
+// ── entity.names batch ───────────────────────────────────────────────────────
+
+/// One entity reference for the `entity.names` batch lookup.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct EntityNameRef {
+    pub entity_type: String,
+    pub entity_id: String,
+}
+
+/// Result of the `entity.names` batch lookup: a map from
+/// `"<entityType>:<entityId>"` keys to display names.
+///
+/// Keys with no matching DB row are omitted — the caller uses absence as
+/// the "unknown / still loading" signal.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct EntityNamesResponse {
+    /// Flat `{ "<type>:<id>": "<name>" }` map — camelCase key matches the
+    /// frontend `entityNameKey(ref)` helper.
+    pub names: std::collections::HashMap<String, String>,
+}

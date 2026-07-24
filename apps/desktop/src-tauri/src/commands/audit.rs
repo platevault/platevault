@@ -17,7 +17,9 @@
 //! IPC boundary does not leak the persistence-internal `AuditLogFilter` type.
 
 use app_core::errors::db_err;
-use contracts_core::audit::{AuditActor, AuditEntry, AuditListResponse, AuditOutcome};
+use contracts_core::audit::{
+    AuditActor, AuditEntry, AuditListResponse, AuditOutcome, EntityNameRef, EntityNamesResponse,
+};
 use contracts_core::ContractError;
 use persistence_lifecycle::repositories::audit::{
     count_audit_entries, list_audit_entries, AuditLogFilter, AuditLogRow,
@@ -298,4 +300,27 @@ pub async fn audit_export(
         .map(|e| serde_json::to_string(&e).unwrap_or_default())
         .collect();
     Ok(lines.join("\n"))
+}
+
+// ── entity.names ─────────────────────────────────────────────────────────────
+
+/// `entity.names` — batch display-name lookup for `(entityType, entityId)` refs.
+///
+/// Resolves project, plan, and target refs in three IN-clause DB queries instead
+/// of one IPC round-trip per unseen ref.  Session names are not included —
+/// callers read those from the inventory-sources query that is already in the
+/// session store.
+///
+/// Absent ids (not in the DB) are simply omitted from the response map; the
+/// frontend hook treats absence as "unresolved".
+///
+/// # Errors
+/// Returns `Err(ContractError)` with code `internal.database` on query failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn entity_names(
+    state: State<'_, AppState>,
+    refs: Vec<EntityNameRef>,
+) -> Result<EntityNamesResponse, ContractError> {
+    app_core::entity_names::entity_names(state.repo.pool(), refs).await
 }
