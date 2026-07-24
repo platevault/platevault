@@ -326,25 +326,12 @@ pub async fn confirm(
 
     // 8b. Destination-root resolution (spec 041 US8/FR-027–FR-031).
     //
-    // Default: a file stays under its own root (`item.root_id`) — non-inbox
-    // sources catalogue/move in place. An INBOX source is never a destination,
-    // so its files MUST move into a chosen library root. Candidate roots are
-    // enumerated per frame-type category (see `select_destination_root`); with
-    // one candidate the root is auto-selected, with several the caller's
-    // `req.root_id` must pick one (else a blocking error lists the candidates).
-    let source_kind = first_run_repo::list_sources(pool)
-        .await
-        .map_err(|e| {
-            ContractError::new(
-                ErrorCode::InternalDatabase,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
-        })?
-        .into_iter()
-        .find(|s| s.source_id == item.root_id)
-        .map(|s| s.kind);
+    // Load the full source list once; both the inbox-source check and the
+    // root-path map for FR-031 absolute previews draw from it.
+    let sources = first_run_repo::list_sources(pool).await.map_err(|e| {
+        ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
+    })?;
+    let source_kind = sources.iter().find(|s| s.source_id == item.root_id).map(|s| s.kind);
     let item_is_inbox_source = source_kind == Some(SourceKind::Inbox);
 
     // 8c. Resolve destination paths for each file via its per-type pattern
@@ -548,19 +535,8 @@ pub async fn confirm(
     // Map destination root id → absolute path for the FR-031 absolute preview.
     // (Catalogue actions and non-inbox moves keep their own root; inbox moves
     // use the chosen library root resolved above.)
-    let root_paths: std::collections::HashMap<String, String> = first_run_repo::list_sources(pool)
-        .await
-        .map_err(|e| {
-            ContractError::new(
-                ErrorCode::InternalDatabase,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            )
-        })?
-        .into_iter()
-        .map(|s| (s.source_id, s.path))
-        .collect();
+    let root_paths: std::collections::HashMap<String, String> =
+        sources.into_iter().map(|s| (s.source_id, s.path)).collect();
 
     // 11. Insert plan items — one per classified file, with resolved
     // destinations and per-item destination root (spec 041 US8/FR-027–FR-031).
