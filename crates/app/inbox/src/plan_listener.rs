@@ -52,6 +52,18 @@ use tokio::sync::{broadcast, Mutex};
 /// path removes it — a global Mutex previously serialized ALL plan completions,
 /// blocking unrelated plans (GF-31). The DashMap key is the plan_id; each entry
 /// holds a Mutex guarding that plan's completion path only.
+///
+/// # Bounded growth justification
+///
+/// This map grows by one entry per distinct plan_id that completes while the
+/// app is running. On a desktop client, inbox ingestion plans are created and
+/// completed one at a time; the steady-state count matches the number of plans
+/// applied in a session, not the historical total (entries persist for the
+/// process lifetime, not the DB lifetime). A session processing thousands of
+/// plans is not a realistic desktop workload, so the unbounded map is acceptable
+/// without an eviction path. If multi-session or high-volume use cases emerge,
+/// add eviction after `complete_applied_plan` returns, guarded by a strong-count
+/// check (`Arc::strong_count == 1` confirms no concurrent holder remains).
 static PLAN_COMPLETION_LOCKS: std::sync::OnceLock<dashmap::DashMap<String, Arc<Mutex<()>>>> =
     std::sync::OnceLock::new();
 

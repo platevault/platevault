@@ -637,7 +637,7 @@ async fn finalize_calibration_master_archive_and_restore_invalidate_the_masters_
 
 #[tokio::test]
 async fn cancel_plan_rejects_non_applying() {
-    let (db, _bus) = setup().await;
+    let (db, bus) = setup().await;
     repo::insert_plan(
         db.pool(),
         &repo::InsertPlan {
@@ -654,7 +654,7 @@ async fn cancel_plan_rejects_non_applying() {
     .await
     .unwrap();
 
-    let err = cancel_plan(db.pool(), "p2").await.unwrap_err();
+    let err = cancel_plan(db.pool(), &bus, "p2").await.unwrap_err();
     assert_eq!(err.code, ErrorCode::PlanNotInApply);
 }
 
@@ -1890,7 +1890,7 @@ async fn crash_window_recovery_produces_source_missing_not_double_apply() {
 /// when the executor's ActiveRunGuard has already dropped).
 #[tokio::test]
 async fn gf5_cancel_paused_plan_transitions_db_directly() {
-    let (db, _bus) = setup().await;
+    let (db, bus) = setup().await;
     let plan_id = "p-gf5-cancel-paused";
     insert_approved_plan_with_items(&db, plan_id, 3).await;
 
@@ -1906,7 +1906,7 @@ async fn gf5_cancel_paused_plan_transitions_db_directly() {
     // Crucially, do NOT register an ActiveRun in the process-global registry.
     // This mirrors the real state: executor's ActiveRunGuard dropped on pause.
 
-    let response = cancel_plan(db.pool(), plan_id).await.unwrap();
+    let response = cancel_plan(db.pool(), &bus, plan_id).await.unwrap();
     assert_eq!(response.plan_id, plan_id);
     assert_eq!(response.items_cancelled, 3);
 

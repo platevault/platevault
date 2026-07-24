@@ -1198,7 +1198,10 @@ export function InboxPage() {
   // window between setProgressPlanId and runPlanApply completing was previously
   // unguarded, allowing double-submit of the same plan.
   const planBusy =
-    applyAllLoading || applySelectedLoading || cancelLoading || progressPlanId != null;
+    applyAllLoading ||
+    applySelectedLoading ||
+    cancelLoading ||
+    progressPlanId != null;
 
   // Stage B: plan review overlay open/close state.
   const [planOverlayOpen, setPlanOverlayOpen] = useState(false);

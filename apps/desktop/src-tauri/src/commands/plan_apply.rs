@@ -128,7 +128,7 @@ pub async fn plans_cancel(
     state: State<'_, AppState>,
     plan_id: String,
 ) -> Result<PlanCancelResponse, ContractError> {
-    cancel_plan(state.repo.pool(), &plan_id).await
+    cancel_plan(state.repo.pool(), &state.bus, &plan_id).await
 }
 
 // ── plans.resume ──────────────────────────────────────────────────────────────

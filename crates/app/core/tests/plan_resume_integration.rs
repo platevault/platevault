@@ -538,7 +538,7 @@ async fn cancel_signals_the_executor_restarted_by_resume() {
 
     // No `.await` yield point between resume and cancel — gives the
     // restarted executor task the least possible head start.
-    app_core::plan_apply::cancel_plan(db.pool(), &plan_id)
+    app_core::plan_apply::cancel_plan(db.pool(), &bus, &plan_id)
         .await
         .expect("cancel must find the resumed run's freshly re-registered ActiveRun");
 
