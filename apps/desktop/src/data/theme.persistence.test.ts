@@ -5,7 +5,7 @@
  * theme.persistence.test.ts — theme-settings-db.
  *
  * The settings DB (`general` scope, `theme` key) is the durable source of
- * truth for the theme choice; localStorage (`alm.theme`) is kept only as a
+ * truth for the theme choice; localStorage (`pv.theme`) is kept only as a
  * synchronous boot cache so `initAppearance()` can paint before first render
  * without waiting on IPC (avoiding a flash of the wrong theme). Covers:
  * `setThemeChoice` writing both localStorage and the settings DB, and
@@ -68,7 +68,7 @@ describe('setThemeChoice — write-through to the settings DB', () => {
     setThemeChoice('espresso-dark');
 
     // The localStorage cache write is synchronous — no await needed.
-    expect(localStorage.getItem('alm.theme')).toBe('espresso-dark');
+    expect(localStorage.getItem('pv.theme')).toBe('espresso-dark');
 
     await waitForCall(settingsUpdateMock);
     expect(settingsUpdateMock).toHaveBeenCalledWith('general', {
@@ -82,7 +82,7 @@ describe('setThemeChoice — write-through to the settings DB', () => {
 
     setThemeChoice('warm-clay');
 
-    expect(localStorage.getItem('alm.theme')).toBe('warm-clay');
+    expect(localStorage.getItem('pv.theme')).toBe('warm-clay');
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(settingsUpdateMock).not.toHaveBeenCalled();
   });
@@ -95,7 +95,7 @@ describe('setThemeChoice — write-through to the settings DB', () => {
     expect(() => setThemeChoice('warm-slate')).not.toThrow();
     await waitForCall(settingsUpdateMock);
     // localStorage still reflects the choice even though the DB write failed.
-    expect(localStorage.getItem('alm.theme')).toBe('warm-slate');
+    expect(localStorage.getItem('pv.theme')).toBe('warm-slate');
   });
 });
 
@@ -115,7 +115,7 @@ describe('hydrateThemeFromSettings — reconcile the boot cache from the setting
 
   it('overwrites a stale localStorage cache with the DB value (survives a WebView2 force-kill)', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.theme', 'warm-clay');
+    localStorage.setItem('pv.theme', 'warm-clay');
     settingsGetMock.mockResolvedValue({
       status: 'ok',
       data: { scope: 'general', values: { theme: 'espresso-dark' } },
@@ -124,7 +124,7 @@ describe('hydrateThemeFromSettings — reconcile the boot cache from the setting
     const { hydrateThemeFromSettings } = await import('./theme');
     await hydrateThemeFromSettings();
 
-    expect(localStorage.getItem('alm.theme')).toBe('espresso-dark');
+    expect(localStorage.getItem('pv.theme')).toBe('espresso-dark');
     expect(document.documentElement.getAttribute('data-theme')).toBe(
       'espresso-dark',
     );
@@ -132,7 +132,7 @@ describe('hydrateThemeFromSettings — reconcile the boot cache from the setting
 
   it('leaves the cache untouched when the DB already agrees (no redundant write-back)', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.theme', 'observatory-dark');
+    localStorage.setItem('pv.theme', 'observatory-dark');
     settingsGetMock.mockResolvedValue({
       status: 'ok',
       data: { scope: 'general', values: { theme: 'observatory-dark' } },
@@ -146,7 +146,7 @@ describe('hydrateThemeFromSettings — reconcile the boot cache from the setting
 
   it('ignores a malformed/unknown DB value and keeps the localStorage cache', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.theme', 'warm-slate');
+    localStorage.setItem('pv.theme', 'warm-slate');
     settingsGetMock.mockResolvedValue({
       status: 'ok',
       data: { scope: 'general', values: { theme: 'not-a-real-theme' } },
@@ -162,23 +162,23 @@ describe('hydrateThemeFromSettings — reconcile the boot cache from the setting
 
   it('is a no-op outside Tauri (dev server / vitest)', async () => {
     isTauriMock.mockReturnValue(false);
-    localStorage.setItem('alm.theme', 'warm-clay');
+    localStorage.setItem('pv.theme', 'warm-clay');
 
     const { hydrateThemeFromSettings } = await import('./theme');
     await hydrateThemeFromSettings();
 
     expect(settingsGetMock).not.toHaveBeenCalled();
-    expect(localStorage.getItem('alm.theme')).toBe('warm-clay');
+    expect(localStorage.getItem('pv.theme')).toBe('warm-clay');
   });
 
   it('degrades silently when settings.get rejects — never throws', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.theme', 'warm-clay');
+    localStorage.setItem('pv.theme', 'warm-clay');
     settingsGetMock.mockRejectedValue(new Error('db unavailable'));
 
     const { hydrateThemeFromSettings } = await import('./theme');
     await expect(hydrateThemeFromSettings()).resolves.toBeUndefined();
-    expect(localStorage.getItem('alm.theme')).toBe('warm-clay');
+    expect(localStorage.getItem('pv.theme')).toBe('warm-clay');
   });
 });
 

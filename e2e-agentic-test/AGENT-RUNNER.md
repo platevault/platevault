@@ -35,7 +35,7 @@ Windows repo root holds, each on its own line (no `&&`):
 
 ```
 cd /d C:\dev\astro-plan
-set ALM_DB_URL=sqlite://C:\dev\astro-plan\wizard-test.db?mode=rwc
+set PV_DB_URL=sqlite://C:\dev\astro-plan\wizard-test.db?mode=rwc
 cargo tauri dev --config src-tauri\tauri.dev.conf.json
 ```
 

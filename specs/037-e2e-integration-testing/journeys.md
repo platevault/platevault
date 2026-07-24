@@ -15,7 +15,7 @@ defines what each journey covers, its steps, what it must assert, and status.
   webview; `remote()` session).
 - Runner: `apps/desktop/e2e/wdio/run-all.mjs` (`pnpm test:e2e:wdio`), executed by
   `.github/workflows/e2e.yml` with `VITE_E2E=1`.
-- Round-trip reads: `window.__ALM_E2E__.invoke(<command>)` — a `VITE_E2E`-gated
+- Round-trip reads: `window.__PV_E2E__.invoke(<command>)` — a `VITE_E2E`-gated
   bridge in `main.tsx` (tree-shaken from prod; `withGlobalTauri` is off).
 - Each journey owns its lifecycle: `freshDb()` → fresh first-run state; mutating
   journeys operate only inside disposable temp dirs (FR-016).

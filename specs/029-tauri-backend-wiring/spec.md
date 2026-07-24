@@ -53,17 +53,17 @@ As a developer working on a domain spec (e.g., spec 003 source setup), I can swi
 
 ### User Story 3 - Persistent Database on First Launch (Priority: P1)
 
-As a user launching the app for the first time, the application creates a persistent SQLite database in the platform-appropriate data directory (e.g., `~/.local/share/astro-library-manager/` on Linux, `~/Library/Application Support/` on macOS, `%APPDATA%` on Windows). Subsequent launches reuse the same database. A developer can override the database location via the `ALM_DB_URL` environment variable for testing.
+As a user launching the app for the first time, the application creates a persistent SQLite database in the platform-appropriate data directory (e.g., `~/.local/share/astro-library-manager/` on Linux, `~/Library/Application Support/` on macOS, `%APPDATA%` on Windows). Subsequent launches reuse the same database. A developer can override the database location via the `PV_DB_URL` environment variable for testing.
 
 **Why this priority**: Without persistent storage, no backend spec can store or retrieve real data across app restarts.
 
-**Independent Test**: Launch the app, verify the database file exists at the expected platform path, close and relaunch, verify data persists. Then set `ALM_DB_URL` to a custom path and verify the override works.
+**Independent Test**: Launch the app, verify the database file exists at the expected platform path, close and relaunch, verify data persists. Then set `PV_DB_URL` to a custom path and verify the override works.
 
 **Acceptance Scenarios**:
 
 1. **Given** a first launch with no existing database, **When** the app starts, **Then** a SQLite database file is created at the platform data directory with all migrations applied.
 2. **Given** a database from a previous launch, **When** the app starts again, **Then** it reuses the existing database and applies any new migrations.
-3. **Given** `ALM_DB_URL=sqlite:///tmp/test.db`, **When** the app starts, **Then** it uses the specified path instead of the platform default.
+3. **Given** `PV_DB_URL=sqlite:///tmp/test.db`, **When** the app starts, **Then** it uses the specified path instead of the platform default.
 
 ---
 
@@ -134,7 +134,7 @@ As a frontend developer, I can still run `VITE_USE_MOCKS=true` with `just dev` (
 **Database & Persistence**
 
 - **FR-009**: On startup, the app MUST resolve a persistent on-disk SQLite database path using Tauri's platform data directory API.
-- **FR-010**: The `ALM_DB_URL` environment variable MUST override the default database path when set.
+- **FR-010**: The `PV_DB_URL` environment variable MUST override the default database path when set.
 - **FR-011**: All existing migrations MUST apply successfully on first launch, creating the schema.
 - **FR-012**: The app MUST create the database directory tree if it does not exist.
 

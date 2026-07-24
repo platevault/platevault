@@ -48,7 +48,7 @@
 //! - The app loads its own frontend from the Tauri `devUrl` (`:5173`)
 //!   automatically on launch, so the harness does **not** call
 //!   `driver.goto(...)` after connecting.
-//! - `window.__ALM_E2E__.invoke(...)` (exposed by the frontend when built
+//! - `window.__PV_E2E__.invoke(...)` (exposed by the frontend when built
 //!   with `VITE_E2E=1`, see `apps/desktop/src/main.tsx`) is the real-IPC
 //!   invoke bridge used by [`E2eApp::invoke`].
 //!
@@ -185,7 +185,7 @@ struct InstanceEnv {
     /// `app_config_dir` (and, on Windows, `app_local_data_dir`) under this
     /// instance's isolated root instead of the shared real OS profile.
     vars: Vec<(&'static str, String)>,
-    /// Isolated SQLite file this instance's app connects to (`ALM_DB_URL`).
+    /// Isolated SQLite file this instance's app connects to (`PV_DB_URL`).
     db_path: PathBuf,
     /// Port the `tauri-webdriver` CLI proxy listens on (`--port`); thirtyfour
     /// connects here.
@@ -224,13 +224,13 @@ impl InstanceEnv {
         // these were set, colliding over `simbad-cache.redb` and — fatally —
         // over the WebView2 user-data folder.
         //
-        // `ALM_DATA_DIR` is an explicit override the app itself honours
+        // `PV_DATA_DIR` is an explicit override the app itself honours
         // (`desktop_shell::data_dir`), so isolation no longer depends on the
         // OS agreeing to be redirected. The per-OS vars stay: they still
         // place `app_config_dir` (window-state) under this root on Linux and
-        // macOS, which `ALM_DATA_DIR` does not cover.
+        // macOS, which `PV_DATA_DIR` does not cover.
         let mut vars: Vec<(&'static str, String)> =
-            vec![("ALM_DATA_DIR", appdata.display().to_string())];
+            vec![("PV_DATA_DIR", appdata.display().to_string())];
         vars.extend(if cfg!(target_os = "windows") {
             vec![
                 ("APPDATA", root.path().join("appdata").display().to_string()),
@@ -634,7 +634,7 @@ impl E2eApp {
         // a `HashMap` key order, and the splash window now exists BEFORE
         // `main` does (the app builds `main` only after migrations). Without
         // an explicit switch the session can hold the splash, whose document
-        // has no `__ALM_E2E__` bridge, and every journey would fail in
+        // has no `__PV_E2E__` bridge, and every journey would fail in
         // `wait_bridge_ready` with no indication why.
         if let Err(e) = Self::switch_to_main_window(&driver, deadline).await {
             blocking_session_delete(env.proxy_port);
@@ -795,7 +795,7 @@ impl E2eApp {
         Ok((get(0), get(1)))
     }
 
-    /// Issue a Tauri command through the `window.__ALM_E2E__` bridge.
+    /// Issue a Tauri command through the `window.__PV_E2E__` bridge.
     ///
     /// The bridge is exposed by the desktop app when it is built with
     /// `VITE_E2E=1` (see `apps/desktop/src/main.tsx`). This replaces the old
@@ -811,11 +811,11 @@ impl E2eApp {
             var cmd      = arguments[0];
             var cmdArgs  = arguments[1];
             var callback = arguments[arguments.length - 1];
-            if (!window.__ALM_E2E__ || typeof window.__ALM_E2E__.invoke !== 'function') {
-                callback({ ok: false, error: '__ALM_E2E__ bridge missing (build with VITE_E2E=1)' });
+            if (!window.__PV_E2E__ || typeof window.__PV_E2E__.invoke !== 'function') {
+                callback({ ok: false, error: '__PV_E2E__ bridge missing (build with VITE_E2E=1)' });
                 return;
             }
-            window.__ALM_E2E__.invoke(cmd, cmdArgs).then(function(value) {
+            window.__PV_E2E__.invoke(cmd, cmdArgs).then(function(value) {
                 callback({ ok: true, value: value });
             }).catch(function(err) {
                 // `unwrap()` (`apps/desktop/src/api/ipc.ts`) throws the raw
@@ -1006,7 +1006,7 @@ impl E2eApp {
     /// redirects to `/setup` from an **async** `beforeLoad`:
     /// `checkFirstRunComplete` does a dynamic `import('@/bindings/index')` plus a
     /// `firstrun_state` IPC round-trip, so the redirect lands slightly *after*
-    /// the page's `__ALM_E2E__` bridge becomes ready. Asserting the URL the
+    /// the page's `__PV_E2E__` bridge becomes ready. Asserting the URL the
     /// instant `wait_bridge_ready` returns races that redirect — poll for it.
     pub async fn wait_url_contains(&self, needle: &str, timeout: Duration) -> Result<String> {
         let deadline = Instant::now() + timeout;
@@ -1025,12 +1025,12 @@ impl E2eApp {
         }
     }
 
-    /// `true` once `window.__ALM_E2E__.invoke` exists — a real signal that
+    /// `true` once `window.__PV_E2E__.invoke` exists — a real signal that
     /// `main.tsx` finished its top-level module evaluation for the current
     /// page load (used instead of a blind sleep after `goto_route`).
     pub async fn bridge_ready(&self) -> Result<bool> {
         let script = r"
-            return !!(window.__ALM_E2E__ && typeof window.__ALM_E2E__.invoke === 'function');
+            return !!(window.__PV_E2E__ && typeof window.__PV_E2E__.invoke === 'function');
         ";
         let ret =
             self.driver.execute(script, vec![]).await.context("bridge_ready script failed")?;
@@ -1068,8 +1068,8 @@ impl E2eApp {
                 .map(function (el) { return el.getAttribute('data-testid'); });
             return JSON.stringify({
                 readyState: document.readyState,
-                hasBridge:  !!window.__ALM_E2E__,
-                bridgeKeys: window.__ALM_E2E__ ? Object.keys(window.__ALM_E2E__) : [],
+                hasBridge:  !!window.__PV_E2E__,
+                bridgeKeys: window.__PV_E2E__ ? Object.keys(window.__PV_E2E__) : [],
                 errorBoundary: boundary ? (boundary.innerText || '').slice(0, 300) : null,
                 bodyChars: document.body ? document.body.innerHTML.length : 0,
                 testidCount: document.querySelectorAll('[data-testid]').length,
@@ -1113,7 +1113,7 @@ impl E2eApp {
                 // channel that does not depend on the faulty session, so dump
                 // it here rather than only on a launch failure.
                 return Err(anyhow!(
-                    "window.__ALM_E2E__ bridge never became ready within {timeout:?}; \
+                    "window.__PV_E2E__ bridge never became ready within {timeout:?}; \
                      {cause}; {probed}\n{}",
                     self.proc_log.dump()
                 ));
@@ -1185,7 +1185,7 @@ impl E2eApp {
                 var container = document.querySelector('[data-testid="inbox-virtual-sizer"]');
                 var rows = document.querySelectorAll('[data-testid^="inbox-item-"]');
                 var rect = container ? container.getBoundingClientRect() : null;
-                var e2e = window.__ALM_E2E__;
+                var e2e = window.__PV_E2E__;
                 var queryState = null;
                 if (e2e && e2e.queryClient) {
                     try {
@@ -1276,7 +1276,7 @@ impl E2eApp {
 
     /// Force TanStack Query to invalidate + refetch every query whose key has
     /// `key_json` (a JSON array literal, e.g. `["sessions"]`) as a prefix, via
-    /// the E2E-only `window.__ALM_E2E__.queryClient` bridge
+    /// the E2E-only `window.__PV_E2E__.queryClient` bridge
     /// (`apps/desktop/src/main.tsx`, `VITE_E2E` gate) — the SAME QueryClient
     /// instance the mounted page reads from, not a page reload.
     ///
@@ -1319,9 +1319,9 @@ impl E2eApp {
         let script = format!(
             r#"
             var callback = arguments[arguments.length - 1];
-            var e2e = window.__ALM_E2E__;
+            var e2e = window.__PV_E2E__;
             if (!e2e || !e2e.queryClient) {{
-                callback({{ ok: false, error: '__ALM_E2E__.queryClient bridge missing (build with VITE_E2E=1)' }});
+                callback({{ ok: false, error: '__PV_E2E__.queryClient bridge missing (build with VITE_E2E=1)' }});
                 return;
             }}
             e2e.queryClient.invalidateQueries({{ queryKey: {key_json} }}).then(function () {{
@@ -1674,7 +1674,7 @@ impl E2eApp {
     /// target route's React component subtree has NOT necessarily finished
     /// mounting and painting its controls. `wait_bridge_ready` only proves
     /// `main.tsx` finished top-level module evaluation (the
-    /// `window.__ALM_E2E__` bridge exists) — it says nothing about whether
+    /// `window.__PV_E2E__` bridge exists) — it says nothing about whether
     /// the current route's page component has rendered yet. A single
     /// immediate `driver.find(..)` for a page control (e.g. Inbox's "Rescan
     /// all roots" button) therefore RACES that render and intermittently
@@ -1856,8 +1856,8 @@ impl E2eApp {
         // stretch afterward. `wait_bridge_ready` below then reads that STALE
         // true, `complete_first_run_gate` returns "ready", and the real
         // reload — delayed, not skipped — lands moments later and tears down
-        // `window.__ALM_E2E__` right as the caller's very next `invoke()`
-        // fires (observed as "invoke error: __ALM_E2E__ bridge missing"
+        // `window.__PV_E2E__` right as the caller's very next `invoke()`
+        // fires (observed as "invoke error: __PV_E2E__ bridge missing"
         // immediately after this function returns, only under concurrent
         // nextest execution — never standalone, never on Windows, which
         // serialises this profile for an unrelated reason, see
@@ -1865,9 +1865,9 @@ impl E2eApp {
         // subsequent `true` reading can only come from the NEW document's
         // own `main.tsx` re-assigning it — a real condition, not a race.
         self.driver
-            .execute("delete window.__ALM_E2E__;", vec![])
+            .execute("delete window.__PV_E2E__;", vec![])
             .await
-            .context("failed to clear the pre-refresh __ALM_E2E__ marker")?;
+            .context("failed to clear the pre-refresh __PV_E2E__ marker")?;
 
         // KEEP the reload (#1113 reviewed): this is not a settle step. The
         // preferences module caches its localStorage read in module state, so
@@ -2016,7 +2016,7 @@ impl E2eApp {
     /// Quit menu item's `app.exit(0)` does (`lib.rs`'s `on_menu_event`) —
     /// real-user fidelity, not a synthetic teardown path.
     ///
-    /// Polls for the `__ALM_E2E__` bridge to actually disappear (proof the
+    /// Polls for the `__PV_E2E__` bridge to actually disappear (proof the
     /// window/process tore down) rather than trusting the `close()` promise
     /// resolved before the OS finished reaping the process, then hands off
     /// to [`Self::shutdown`] — by then the app is normally already gone, so
@@ -2313,7 +2313,7 @@ fn check_app_binary() -> Result<()> {
         Err(anyhow!(
             "desktop_shell binary not found at {}.\n\
              Build it with: cargo build -p desktop_shell --features e2e\n\
-             Or point at an existing build with: ALM_E2E_APP_BIN=/path/to/binary",
+             Or point at an existing build with: PV_E2E_APP_BIN=/path/to/binary",
             path.display()
         ))
     }
@@ -2324,10 +2324,10 @@ fn check_app_binary() -> Result<()> {
 /// Mirrors `.github/workflows/e2e.yml`'s "Build desktop_shell with e2e
 /// feature" step (`cargo build -p desktop_shell --features e2e`), which
 /// places the binary at `<workspace_root>/target/debug/desktop_shell[.exe]`.
-/// Override with `ALM_E2E_APP_BIN=/path/to/binary` (documented in
+/// Override with `PV_E2E_APP_BIN=/path/to/binary` (documented in
 /// `quickstart.md`) to point at a different build (e.g. a release profile).
 fn app_binary_path() -> Result<PathBuf> {
-    if let Ok(path) = std::env::var("ALM_E2E_APP_BIN") {
+    if let Ok(path) = std::env::var("PV_E2E_APP_BIN") {
         return Ok(PathBuf::from(path));
     }
 
@@ -2423,7 +2423,7 @@ fn drain_into<R: std::io::Read + Send + 'static>(reader: R, buf: Arc<Mutex<VecDe
 /// `desktop_shell`) does not `env_clear()`, so every env var set here —
 /// `TAURI_WEBDRIVER_PORT` (read by `tauri_plugin_webdriver::init()`,
 /// `apps/desktop/src-tauri/src/lib.rs`) matching `--native-port`,
-/// `ALM_DB_URL`, and the app-data/config dir overrides — propagates
+/// `PV_DB_URL`, and the app-data/config dir overrides — propagates
 /// transitively into the app process, isolating it without touching
 /// `.github/workflows/e2e.yml`.
 ///
@@ -2437,7 +2437,7 @@ fn spawn_tauri_webdriver(env: &InstanceEnv) -> Result<(Child, ProcLog)> {
         .arg("--native-port")
         .arg(env.native_port.to_string())
         .env("TAURI_WEBDRIVER_PORT", env.native_port.to_string())
-        .env("ALM_DB_URL", format!("sqlite://{}?mode=rwc", env.db_path.display()))
+        .env("PV_DB_URL", format!("sqlite://{}?mode=rwc", env.db_path.display()))
         // `env.native_port` is already unique per test process (see
         // `pick_port_pair`), so it doubles as a cheap per-instance marker.
         // Its mere presence tells `apps/desktop/src-tauri/src/lib.rs` to skip
@@ -2448,7 +2448,7 @@ fn spawn_tauri_webdriver(env: &InstanceEnv) -> Result<(Child, ProcLog)> {
         // silently redirected/exited without opening a window (WebDriver then
         // times out). Real users/non-e2e builds never set this, so the guard
         // stays active for them.
-        .env("ALM_E2E_INSTANCE_ID", env.native_port.to_string())
+        .env("PV_E2E_INSTANCE_ID", env.native_port.to_string())
         // OS-trash boundary double for headless CI. The Windows Shell trash
         // (`trash::delete` -> `IFileOperation`) needs an interactive
         // window-station/desktop and blocks indefinitely in the non-interactive
@@ -2459,7 +2459,7 @@ fn spawn_tauri_webdriver(env: &InstanceEnv) -> Result<(Child, ProcLog)> {
         // removal instead (see `fs_executor::ops::trash_op`), matching the
         // FakeSpawner/FakeResolver boundary pattern. Production/live never sets
         // this and always uses real OS trash.
-        .env("ALM_E2E_OS_TRASH_FAKE", "1")
+        .env("PV_E2E_OS_TRASH_FAKE", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     for (key, value) in &env.vars {
@@ -2486,12 +2486,12 @@ fn spawn_tauri_webdriver(env: &InstanceEnv) -> Result<(Child, ProcLog)> {
 
 /// Reset the application database so each test starts from a clean state.
 ///
-/// FR-006: if `ALM_DB_URL` is set and looks like `sqlite://PATH?...`, strip
+/// FR-006: if `PV_DB_URL` is set and looks like `sqlite://PATH?...`, strip
 /// the `sqlite://` prefix and everything from `?` onward, then remove that
 /// file (errors are ignored so a missing file doesn't fail startup).
 ///
 /// The app connects to exactly this instance's isolated `db_path`
-/// ([`InstanceEnv`], passed through as `ALM_DB_URL` by
+/// ([`InstanceEnv`], passed through as `PV_DB_URL` by
 /// [`spawn_tauri_webdriver`]), so no other process/journey can share or race
 /// this file. Without removing it here, state would accumulate ACROSS
 /// sequential launches within the SAME process (`relaunch()`, or a journey
@@ -2577,7 +2577,7 @@ fn reset_webview_storage(vars: &[(&'static str, String)]) {
 /// Issue astro-plan-qmc: `app_config_dir()` uses `dirs →
 /// SHGetKnownFolderPath` on Windows and ignores `APPDATA`, so the old
 /// Windows branch was deleting under a path that never existed — a silent
-/// no-op. The fix in `lib.rs` redirects the plugin's store to `ALM_DATA_DIR`
+/// no-op. The fix in `lib.rs` redirects the plugin's store to `PV_DATA_DIR`
 /// via an absolute `with_filename()` path, so this function now reads that
 /// same env var directly (identical on all platforms — no per-OS branching
 /// needed any more).
@@ -2591,10 +2591,10 @@ fn reset_webview_storage(vars: &[(&'static str, String)]) {
 /// `vars` — see [`reset_webview_storage`]'s doc on why this takes the
 /// instance's env overrides instead of reading the real OS env.
 fn reset_window_state(vars: &[(&'static str, String)]) {
-    // On every platform the app writes `.window-state.json` under ALM_DATA_DIR
+    // On every platform the app writes `.window-state.json` under PV_DATA_DIR
     // when that variable is set (astro-plan-qmc fix in `lib.rs`). Fall back to
     // `app_config_dir` on Linux/macOS where the env vars ARE honoured by the
-    // platform dirs resolver and `ALM_DATA_DIR` is only set for app-data (not
+    // platform dirs resolver and `PV_DATA_DIR` is only set for app-data (not
     // config-dir) isolation.
     let path = if let Some(data_dir) = app_data_dir(vars) {
         data_dir.join(".window-state.json")
@@ -2602,7 +2602,7 @@ fn reset_window_state(vars: &[(&'static str, String)]) {
         cfg_dir.join(".window-state.json")
     } else {
         eprintln!(
-            "[e2e harness] reset_window_state: neither ALM_DATA_DIR nor \
+            "[e2e harness] reset_window_state: neither PV_DATA_DIR nor \
              an app_config_dir override is set — window-state file not reset"
         );
         return;
@@ -2658,7 +2658,7 @@ fn app_config_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
 /// This instance's app-data root — the directory the app actually writes its
 /// SQLite default, `simbad-cache.redb`, and logs into.
 ///
-/// Since #1204 this is simply `ALM_DATA_DIR`, which the app honours directly
+/// Since #1204 this is simply `PV_DATA_DIR`, which the app honours directly
 /// (`desktop_shell::data_dir::resolve`), on every platform. It deliberately
 /// does NOT mirror `tauri::path::PathResolver::app_data_dir`'s per-OS
 /// `dirs::data_dir()/<identifier>` derivation any more: that derivation is
@@ -2666,7 +2666,7 @@ fn app_config_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
 /// and the app disagreed silently — the harness resetting files under the
 /// isolated root while the app read and wrote the real one.
 fn app_data_dir(vars: &[(&'static str, String)]) -> Option<PathBuf> {
-    lookup(vars, "ALM_DATA_DIR").map(PathBuf::from)
+    lookup(vars, "PV_DATA_DIR").map(PathBuf::from)
 }
 
 // ---------------------------------------------------------------------------

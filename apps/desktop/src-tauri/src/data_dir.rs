@@ -1,7 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Explicit app-data-root override (`ALM_DATA_DIR`) — issue #1204.
+//! Explicit app-data-root override (`PV_DATA_DIR`) — issue #1204.
 //!
 //! # Why the platform env vars are not enough
 //!
@@ -24,7 +24,7 @@
 //!
 //! # The override
 //!
-//! [`resolve`] reads `ALM_DATA_DIR`. When set, it is used verbatim as the
+//! [`resolve`] reads `PV_DATA_DIR`. When set, it is used verbatim as the
 //! app-data root instead of `app.path().app_data_dir()`, on every platform —
 //! one mechanism the app itself honours, rather than three platform-specific
 //! ones that only two platforms actually obey.
@@ -58,9 +58,9 @@
 use std::path::PathBuf;
 
 /// Name of the app-data-root override variable. See the module docs.
-pub const DATA_DIR_ENV: &str = "ALM_DATA_DIR";
+pub const DATA_DIR_ENV: &str = "PV_DATA_DIR";
 
-/// The app-data root override, if `ALM_DATA_DIR` is set to a non-empty value.
+/// The app-data root override, if `PV_DATA_DIR` is set to a non-empty value.
 ///
 /// Returns `None` when unset or empty, meaning "use the platform resolver".
 #[must_use]

@@ -75,7 +75,7 @@ export default defineConfig(({ mode, command }) => {
       "import.meta.env.VITE_USE_MOCKS": JSON.stringify(useMocks),
       "import.meta.env.VITE_DEV_TOOLS": JSON.stringify(devTools),
       // Fix-lane round 5 (PR #477): cheap build-staleness marker, dumped by
-      // the real-UI E2E harness (`window.__ALM_E2E__.buildTime`) so a failing
+      // the real-UI E2E harness (`window.__PV_E2E__.buildTime`) so a failing
       // Windows journey can show whether the served dist was actually built
       // from the commit under test, rather than a stale CI cache artifact.
       // Baked in at config-eval time (build wall-clock), not a git SHA — no

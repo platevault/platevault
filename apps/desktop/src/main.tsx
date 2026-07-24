@@ -62,7 +62,7 @@ if (import.meta.env.VITE_DEV_TOOLS === 'true') {
 // Fix-lane round 5 (PR #477, `inbox_ui_mixed_folder_splits_into_single_type_items`
 // Windows-only failure): the same VITE_E2E gate also buffers uncaught
 // errors/rejections into `window.__e2eErrors` and exposes the shared
-// `queryClient` + a build-time marker on `window.__ALM_E2E__`, so a failing
+// `queryClient` + a build-time marker on `window.__PV_E2E__`, so a failing
 // real-UI journey can dump (a) whether the UI's own IPC channel ever errored
 // (vs. the diagnostic invoke, which bypasses the app's normal query path) and
 // (c) whether the served dist is the commit under test. Installed
@@ -81,13 +81,13 @@ if (import.meta.env.VITE_E2E) {
   void import('./api/ipc').then(({ invoke }) => {
     (
       window as Window & {
-        __ALM_E2E__?: {
+        __PV_E2E__?: {
           invoke: typeof invoke;
           queryClient: typeof queryClient;
           buildTime: string;
         };
       }
-    ).__ALM_E2E__ = {
+    ).__PV_E2E__ = {
       invoke,
       queryClient,
       buildTime: String(import.meta.env.VITE_BUILD_TIME ?? 'unknown'),

@@ -62,7 +62,7 @@ pub fn trash_file(
     // identical, and the real OS-trash primitive stays covered by the Layer-1
     // unit tests below and by live use. Only the e2e harness sets this var
     // (`crates/e2e-tests/tests/common/mod.rs`); production/release never does.
-    if std::env::var_os("ALM_E2E_OS_TRASH_FAKE").is_some() {
+    if std::env::var_os("PV_E2E_OS_TRASH_FAKE").is_some() {
         return match std::fs::remove_file(path) {
             Ok(()) => Ok(TrashResult { destination_used: "trash", ..TrashResult::default() }),
             Err(e) => Err((

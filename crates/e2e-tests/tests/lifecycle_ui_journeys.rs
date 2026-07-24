@@ -206,7 +206,7 @@ async fn find_project_name_input_with_reload_retry(app: &E2eApp) -> anyhow::Resu
         .context("document.readyState never settled after the #project-name reload retry")?;
     app.wait_bridge_ready(Duration::from_secs(15))
         .await
-        .context("__ALM_E2E__ bridge never re-armed after the #project-name reload retry")?;
+        .context("__PV_E2E__ bridge never re-armed after the #project-name reload retry")?;
 
     match app.find_waiting(By::Id("project-name"), "the wizard's #project-name input").await {
         Ok(el) => Ok(el),

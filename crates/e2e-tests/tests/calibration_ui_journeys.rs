@@ -182,7 +182,7 @@ async fn calibration_ui_masters_ingest_as_individual_items() -> anyhow::Result<(
     // `setupCompleted` localStorage write visible to the cached preferences
     // module. Calling the bridge-side seed invoke AFTER that refresh (as an
     // earlier revision of this file did) races the reload: CI run
-    // 28808954263 (ubuntu-latest) hit `__ALM_E2E__ bridge missing` on the
+    // 28808954263 (ubuntu-latest) hit `__PV_E2E__ bridge missing` on the
     // seed invoke, then a JS execution error on retry — a classic
     // WebDriver-vs-navigation race, not a build flake (12/14 other bridge-
     // using tests in the same job/build passed). Seeding first keeps the

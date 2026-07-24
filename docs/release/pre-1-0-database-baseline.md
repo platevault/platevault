@@ -9,7 +9,7 @@ inputs.
 Before validating the release, stop the app and remove each development
 database created before the baseline. Remove its `-wal` and `-shm` sidecars as
 well. Launching the app against the same path recreates the file and applies
-`0001` through the embedded migrator. Use `ALM_DB_URL` to make the path
+`0001` through the embedded migrator. Use `PV_DB_URL` to make the path
 explicit in automated checks.
 
 Do not ship a release validation result from a database that was upgraded from

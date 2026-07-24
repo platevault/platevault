@@ -7,7 +7,7 @@
 //! `tests/`:
 //!
 //! - `tests/common/` — the thirtyfour WebDriver harness (tauri-webdriver CLI
-//!   + app lifecycle, the `window.__ALM_E2E__` invoke bridge, fresh-DB reset).
+//!   + app lifecycle, the `window.__PV_E2E__` invoke bridge, fresh-DB reset).
 //! - `tests/journeys.rs` — the high-level user journeys.
 //! - `tests/smoke.rs` — the all-top-level-screens-load smoke.
 //!
@@ -17,4 +17,4 @@
 //! STATUS: scaffold. The journeys are `#[ignore]`d stubs — they compile and
 //! appear in `cargo nextest list`, but their assertions are `todo!()` pending a
 //! stable backend command surface (research D9). The harness itself (driver
-//! launch, capabilities, `__ALM_E2E__` bridge) is wired; see `README.md`.
+//! launch, capabilities, `__PV_E2E__` bridge) is wired; see `README.md`.

@@ -29,7 +29,7 @@ use cached builds (~5s).
 ### Custom database location
 
 ```bash
-ALM_DB_URL=sqlite:///tmp/test-alm.db just tauri-dev
+PV_DB_URL=sqlite:///tmp/test-alm.db just tauri-dev
 ```
 
 ## Verifying the Wiring

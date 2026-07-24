@@ -63,7 +63,7 @@ describe('ThemePicker', () => {
         resolved,
       );
       expect(getThemeChoice()).toBe('system');
-      expect(localStorage.getItem('alm.theme')).toBeNull();
+      expect(localStorage.getItem('pv.theme')).toBeNull();
     });
   }
 
@@ -85,7 +85,7 @@ describe('ThemePicker', () => {
       'observatory-cool',
     );
     expect(getThemeChoice()).toBe('observatory-cool');
-    expect(localStorage.getItem('alm.theme')).toBe('observatory-cool');
+    expect(localStorage.getItem('pv.theme')).toBe('observatory-cool');
     expect(dark).toHaveAttribute('aria-pressed', 'true');
     expect(system).toHaveAttribute('aria-pressed', 'false');
 

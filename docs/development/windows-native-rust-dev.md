@@ -184,12 +184,12 @@ and launch with the dev overlay that enables the MCP bridge:
 ```powershell
 cd C:\dev\astro-plan\apps\desktop
 $env:VITE_USE_MOCKS = 'false'                                        # real backend
-$env:ALM_DB_URL     = 'sqlite://C:\dev\astro-plan\wizard-test.db?mode=rwc'
+$env:PV_DB_URL     = 'sqlite://C:\dev\astro-plan\wizard-test.db?mode=rwc'
 pnpm tauri dev --config src-tauri\tauri.dev.conf.json               # overlay = bridge on
 ```
 
 `scripts\win-native-dev.ps1` launches the same overlay with the real backend;
-add the `ALM_DB_URL` line above when you need a disposable DB. Any `run-dev*.bat`
+add the `PV_DB_URL` line above when you need a disposable DB. Any `run-dev*.bat`
 referenced elsewhere is an optional local convenience wrapper — **not** tracked
 in the repo, so the tracked launcher above is the source of truth. App process is
 `desktop_shell.exe`; Vite on `http://127.0.0.1:5173`.

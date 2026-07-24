@@ -59,7 +59,7 @@ your report rather than assuming you did something wrong.
 4. Launch the dev app (detached, native Windows — never over `/mnt/c`):
    - `powershell.exe -NoProfile -Command "Start-Process -FilePath 'cmd.exe' -ArgumentList '/k','C:\dev\astro-plan\run-dev.bat' -WorkingDirectory 'C:\dev\astro-plan'"`
    - Wait for the window. App process is `desktop_shell.exe`; Vite serves
-     `localhost:5173`. `run-dev.bat` sets `ALM_DB_URL` to the
+     `localhost:5173`. `run-dev.bat` sets `PV_DB_URL` to the
      `wizard-test.db` file above.
 5. Sanity: the app renders (not a blank window). Since the DB is fresh, it
    should land directly on the `/setup` wizard, Welcome/Source-Folders step,

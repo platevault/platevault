@@ -4,7 +4,7 @@
 //! Spec 037 Layer-2 real-UI journeys — Inbox (batch #6 of the coverage-matrix
 //! "Batched plan"): the UI-level gate + reclassify + confirm/apply surface
 //! that `journeys.rs`'s `plan_review_apply_with_audit` proves only through
-//! the `window.__ALM_E2E__.invoke` bridge, never by clicking through the real
+//! the `window.__PV_E2E__.invoke` bridge, never by clicking through the real
 //! Inbox page (`apps/desktop/src/features/inbox/{InboxPage,InboxDetail,
 //! PlanPanel}.tsx`).
 //!

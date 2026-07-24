@@ -135,7 +135,7 @@ test.describe('setup wizard · Theme step', () => {
           theme.id,
         );
         await expect
-          .poll(() => page.evaluate(() => localStorage.getItem('alm.theme')))
+          .poll(() => page.evaluate(() => localStorage.getItem('pv.theme')))
           .toBe(theme.id);
       }
 
@@ -146,7 +146,7 @@ test.describe('setup wizard · Theme step', () => {
         'observatory-cool',
       );
       await expect
-        .poll(() => page.evaluate(() => localStorage.getItem('alm.theme')))
+        .poll(() => page.evaluate(() => localStorage.getItem('pv.theme')))
         .toBe('system');
     });
   }
@@ -178,7 +178,7 @@ test.describe('setup wizard · Theme step', () => {
         systemCase.resolvedTheme,
       );
       await expect
-        .poll(() => page.evaluate(() => localStorage.getItem('alm.theme')))
+        .poll(() => page.evaluate(() => localStorage.getItem('pv.theme')))
         .toBe('system');
     });
   }

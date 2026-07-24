@@ -720,7 +720,7 @@ pub(super) fn spawn_executor_run(params: SpawnExecutorParams) {
 /// of caller have no token in hand and no reason to build a `Channel`:
 ///
 /// - The spec 037 Layer-2 WebDriver test harness, which drives the real
-///   backend via `window.__ALM_E2E__.invoke(...)`. It *could* build a
+///   backend via `window.__PV_E2E__.invoke(...)`. It *could* build a
 ///   `Channel` — one is just `__CHANNEL__:${id}` from
 ///   `__TAURI_INTERNALS__.transformCallback`, and the harness already runs
 ///   arbitrary JS in the real webview — but doing so would mean reaching into

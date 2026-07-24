@@ -78,7 +78,7 @@
 # - The app binary + nextest test archive are built once per OS on dedicated
 #   builder runners, content-keyed-cached (Rust sources + lockfile) so a
 #   docs/frontend-only change skips the Rust build entirely, and consumed by
-#   the shards via artifacts (`ALM_E2E_APP_BIN` + `--archive-file`).
+#   the shards via artifacts (`PV_E2E_APP_BIN` + `--archive-file`).
 # - Every journey still runs on every OS (no OS-splitting of tests); sharding
 #   is `--partition count:N/M` WITHIN each OS for Ubuntu (4 shards). Ubuntu was
 #   the critical path (~11.3m on 2 shards, run 29587590762) with NO single
@@ -180,7 +180,7 @@ env:
   # binary itself creates the file + runs migrations on connect
   # (`apps/desktop/src-tauri/src/main.rs`); the harness's `reset_database()`
   # deletes it before each journey launches the app.
-  ALM_DB_URL: "sqlite://./e2e-test.db?mode=rwc"
+  PV_DB_URL: "sqlite://./e2e-test.db?mode=rwc"
   # Pinned version for the tauri-webdriver CLI binary. Used as the cache key
   # in every shard job (ubuntu, windows, macOS) so a single bump here
   # invalidates the cached binary across all lanes at once.
@@ -754,7 +754,7 @@ jobs:
         env:
           WEBKIT_DISABLE_DMABUF_RENDERER: "1"
           WEBKIT_DISABLE_COMPOSITING_MODE: "1"
-          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+          PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
         # --filter-expr selects exactly the smoke subset by test name. The
         # expression is an OR of exact name matches — no glob, no substring —
         # so a new journey with a similar name does not silently join the smoke
@@ -925,7 +925,7 @@ jobs:
         env:
           WEBKIT_DISABLE_DMABUF_RENDERER: "1"
           WEBKIT_DISABLE_COMPOSITING_MODE: "1"
-          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+          PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
         run: xvfb-run -s "-screen 0 1600x1200x24" -a cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/4
 
   # Copy of real-ui-e2e-ubuntu for Windows (no Linux deps/xvfb/chmod).
@@ -1089,7 +1089,7 @@ jobs:
         if: matrix.shard == 1
         shell: bash
         env:
-          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+          PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
         run: >-
           cargo nextest run
           --archive-file e2e-archive.tar.zst
@@ -1104,7 +1104,7 @@ jobs:
         if: matrix.shard == 2
         shell: bash
         env:
-          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+          PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
         run: >-
           cargo nextest run
           --archive-file e2e-archive.tar.zst
@@ -1119,7 +1119,7 @@ jobs:
         if: matrix.shard == 3
         shell: bash
         env:
-          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+          PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
         run: >-
           cargo nextest run
           --archive-file e2e-archive.tar.zst
@@ -1214,7 +1214,7 @@ jobs:
       - name: Run E2E
         shell: bash
         env:
-          ALM_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
+          PV_E2E_APP_BIN: ${{ github.workspace }}/${{ env.APP_BIN }}
         run: cargo nextest run --archive-file e2e-archive.tar.zst --workspace-remap . --profile e2e --run-ignored all --no-tests=warn --partition hash:${{ matrix.shard }}/2
 
   # ---------------------------------------------------------------------------

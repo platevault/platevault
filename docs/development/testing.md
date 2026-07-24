@@ -33,7 +33,7 @@ integration suites (`crates/app/core/tests/*.rs`) and the Layer-2
 exercised via the in-repo `FakeResolver` test double / bundled seed cache,
 not the network. `crates/targeting/resolver/tests/simbad_live.rs` is the one
 live-network suite in the workspace; it's opt-in (skips by default, set
-`ALM_LIVE_SIMBAD=1` to exercise it against the real SIMBAD TAP endpoint —
+`PV_LIVE_SIMBAD=1` to exercise it against the real SIMBAD TAP endpoint —
 see that file's module doc for SC-004 rationale). Each test gets an
 isolated in-memory/tempdir-backed database with all migrations applied
 (`crates/app/core/tests/support/mod.rs`).

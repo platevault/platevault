@@ -195,7 +195,7 @@ Architectural review surfaced 7 findings. Resolutions integrated below:
 ### Phase 2: Database Path Resolution (backend)
 
 1. **Update `main.rs`** to resolve the database path:
-   - If `ALM_DB_URL` is set, use it (existing behavior)
+   - If `PV_DB_URL` is set, use it (existing behavior)
    - Otherwise, use `Builder::build()` to get the `App` handle, call
      `app.path().app_data_dir()` to get the platform path, construct
      `{data_dir}/alm.db`

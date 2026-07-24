@@ -11,7 +11,7 @@
 //! offline (see `docs/development/testing.md`); a live-network test that
 //! silently runs in every `cargo test --workspace` invocation is a hidden
 //! nondeterminism and CI-network-dependency risk (flagged in the spec-tails
-//! release-hardening audit). Set `ALM_LIVE_SIMBAD=1` to opt in and get real
+//! release-hardening audit). Set `PV_LIVE_SIMBAD=1` to opt in and get real
 //! SC-004 coverage against the live TAP endpoint; unset (the default) skips
 //! with a clear message and always passes. When opted in, each test still
 //! issues only a **single** resolve via [`resolve_or_skip`] and distinguishes
@@ -34,16 +34,16 @@ use targeting_resolver::{AliasKind, ObjectType, ResolveError, ResolvedIdentity, 
 /// Resolve `query` against live SIMBAD with exactly one network request.
 ///
 /// Returns `Some(identity)` to proceed with assertions; returns `None` (after
-/// logging) to **skip** — the default (`ALM_LIVE_SIMBAD` unset, opt-in not
+/// logging) to **skip** — the default (`PV_LIVE_SIMBAD` unset, opt-in not
 /// given), or a transient outage once opted in (the resolver reports
 /// `Network`/`Timeout`/`Disabled`: offline dev, sandboxed CI, or a rate-limit
 /// hiccup). A genuine data failure (`NotFound`/`Ambiguous`/`Parse`) **panics**
 /// even when opted in, so real regressions still fail.
 async fn resolve_or_skip(query: &str, test: &str) -> Option<ResolvedIdentity> {
-    if std::env::var_os("ALM_LIVE_SIMBAD").is_none() {
+    if std::env::var_os("PV_LIVE_SIMBAD").is_none() {
         eprintln!(
-            "SKIP {test}: ALM_LIVE_SIMBAD not set — live SIMBAD (SC-004) is opt-in; \
-             set ALM_LIVE_SIMBAD=1 to exercise it"
+            "SKIP {test}: PV_LIVE_SIMBAD not set — live SIMBAD (SC-004) is opt-in; \
+             set PV_LIVE_SIMBAD=1 to exercise it"
         );
         return None;
     }
@@ -82,7 +82,7 @@ fn has_alias(aliases: &[targeting_resolver::ResolvedAlias], needle: &str) -> boo
 
 /// Live SIMBAD resolution of M 31 (Andromeda Galaxy).
 ///
-/// Opt-in only: skipped unless `ALM_LIVE_SIMBAD=1` is set; skips gracefully
+/// Opt-in only: skipped unless `PV_LIVE_SIMBAD=1` is set; skips gracefully
 /// when SIMBAD is unreachable even then.
 ///
 /// Assertions (tolerances generous; SIMBAD coords are precise but we avoid
@@ -145,7 +145,7 @@ async fn live_resolve_m31_andromeda_galaxy() {
 
 /// Live SIMBAD resolution of NGC 7293 (Helix Nebula).
 ///
-/// Opt-in only: skipped unless `ALM_LIVE_SIMBAD=1` is set; skips gracefully
+/// Opt-in only: skipped unless `PV_LIVE_SIMBAD=1` is set; skips gracefully
 /// when SIMBAD is unreachable even then.
 ///
 /// NGC 7293 is classified as `PN` (planetary nebula) in SIMBAD — one of the

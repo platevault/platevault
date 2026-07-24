@@ -19,7 +19,7 @@ pub mod window;
 ///
 /// The E2E bypass is scoped two ways, and both must hold to skip the guard:
 /// the binary is built with the `e2e` feature (which release builds MUST NOT
-/// enable, mirroring `dev-tools` — see `Cargo.toml`), and `ALM_E2E_INSTANCE_ID`
+/// enable, mirroring `dev-tools` — see `Cargo.toml`), and `PV_E2E_INSTANCE_ID`
 /// is set at runtime. The compile-time half is what keeps a shipped binary
 /// from being talked out of its guard by a stray environment variable.
 pub const fn single_instance_guard_enabled(e2e_instance_id_set: bool) -> bool {
@@ -31,7 +31,7 @@ mod tests {
     use super::single_instance_guard_enabled;
 
     /// The release-leak regression: without the `e2e` feature compiled in, no
-    /// value of `ALM_E2E_INSTANCE_ID` may disable the guard.
+    /// value of `PV_E2E_INSTANCE_ID` may disable the guard.
     #[test]
     #[cfg(not(feature = "e2e"))]
     fn env_var_alone_cannot_disable_the_guard() {

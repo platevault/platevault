@@ -9,7 +9,7 @@
  *   - 018 (settings configuration model): auto-save round-trip, one-setting-
  *     per-line panes, cleanup per-type action overrides.  FR-002/FR-004/FR-006.
  *   - 043 (UI redesign / PlateVault): 4-theme + System appearance system with
- *     `data-theme` on <html>, persisted in `localStorage['alm.theme']`; the
+ *     `data-theme` on <html>, persisted in `localStorage['pv.theme']`; the
  *     page-layout convention (`.pv-page__bar` pinned, content scroll region
  *     `overflow-y:auto` — action bar always visible, only content scrolls).
  *   - 046 (i18n / error-codes): Paraglide baseLocale catalog — every `settings_*`
@@ -27,7 +27,7 @@
  * arg-sensitive settings mocks: `ingestion_settings_update` mutates the
  * module-level `mockIngestionSettings` fixture that `ingestion_settings_get`
  * re-reads (spec 030 P12), and the Cleanup per-type table round-trips through
- * `localStorage['alm.cleanup.type_actions.v2']`.
+ * `localStorage['pv.cleanup.type_actions.v2']`.
  *
  * Mock-mode honesty notes (Layer-2-only flows, NOT asserted here):
  *   - The log panel's truncation marker (`logpanel_history_gap*`) is not
@@ -342,9 +342,9 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
         'data-theme',
         theme.dataTheme,
       );
-      // Choice is persisted in localStorage under `alm.theme`.
+      // Choice is persisted in localStorage under `pv.theme`.
       const stored = await page.evaluate(() =>
-        localStorage.getItem('alm.theme'),
+        localStorage.getItem('pv.theme'),
       );
       expect(stored).toBe(theme.dataTheme);
     }
