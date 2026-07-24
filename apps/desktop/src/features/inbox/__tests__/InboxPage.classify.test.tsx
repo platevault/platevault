@@ -173,11 +173,12 @@ import { InboxDetail } from '../InboxDetail';
 import { InboxList } from '../InboxList';
 import { useInboxConfirm } from '../store';
 
-// Raw source of InboxPage.tsx (compile-time glob, mirrors anchors.test.ts's
-// technique) so the toast-wiring test below reads the REAL `runConfirm`
-// implementation rather than a hand-copied mirror.
+// Raw source of useInboxConfirmFlow.ts (compile-time glob, mirrors
+// anchors.test.ts's technique) so the toast-wiring test below reads the REAL
+// `runConfirm` implementation rather than a hand-copied mirror.
+// PR #1544 moved `runConfirm` from InboxPage.tsx into useInboxConfirmFlow.ts.
 const INBOX_PAGE_SOURCE = Object.values(
-  import.meta.glob('../InboxPage.tsx', { as: 'raw', eager: true }),
+  import.meta.glob('../useInboxConfirmFlow.ts', { as: 'raw', eager: true }),
 )[0] as string;
 
 function queryClientWrapper({ children }: { children: ReactNode }) {
@@ -460,7 +461,8 @@ describe('Confirm payload and toast', () => {
   // InboxPage.reclassifySelection.test.tsx's header comment: "no full-router
   // InboxPage render... per its own comment" — a full page tree here OOMs
   // the test worker). Instead this statically verifies the actual
-  // `runConfirm` success block in InboxPage.tsx: the plan-created toast
+  // `runConfirm` success block in useInboxConfirmFlow.ts (PR #1544 moved it
+  // out of InboxPage.tsx): the plan-created toast
   // fires unconditionally (no `if` between the confirm() call and the
   // addToast() call, and no remaining `registeredAsMaster` gate).
   it('runConfirm always toasts plan-created on success (masters now produce a plan too, no registeredAsMaster gate)', () => {
