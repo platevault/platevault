@@ -48,10 +48,10 @@ async fn measure_full_seed_warm_file_backed() {
     let total = t_parse + t_warm + t_flush;
 
     eprintln!("=== SEED COST MEASUREMENT (file-backed redb, full {entry_count} entries) ===");
-    eprintln!("  JSON parse:  {:>8.1?}", t_parse);
-    eprintln!("  warm_cache:  {:>8.1?}", t_warm);
-    eprintln!("  flush:       {:>8.1?}", t_flush);
-    eprintln!("  TOTAL:       {:>8.1?}", total);
+    eprintln!("  JSON parse:  {t_parse:>8.1?}");
+    eprintln!("  warm_cache:  {t_warm:>8.1?}");
+    eprintln!("  flush:       {t_flush:>8.1?}");
+    eprintln!("  TOTAL:       {total:>8.1?}");
     eprintln!("  loaded rows: {loaded}");
     eprintln!("===");
 
@@ -92,14 +92,14 @@ async fn measure_messier_subset_warm_file_backed() {
     let t_flush = t_flush_start.elapsed();
 
     eprintln!("=== MESSIER SUBSET ({entry_count} entries, file-backed) ===");
-    eprintln!("  warm_cache:  {:>8.1?}", t_warm);
-    eprintln!("  flush:       {:>8.1?}", t_flush);
+    eprintln!("  warm_cache:  {t_warm:>8.1?}");
+    eprintln!("  flush:       {t_flush:>8.1?}");
     eprintln!("  TOTAL:       {:>8.1?}", t_warm + t_flush);
     eprintln!("  loaded rows: {loaded}");
     eprintln!("===");
 }
 
-/// Measure warm_bundled_on_first_run end-to-end (includes JSON parse,
+/// Measure `warm_bundled_on_first_run` end-to-end (includes JSON parse,
 /// sentinel check, warm, sentinel write) — the exact function the app boot
 /// calls.
 #[tokio::test]
@@ -125,10 +125,10 @@ async fn measure_warm_bundled_on_first_run_file_backed() {
     let total = t_warm + t_flush;
 
     eprintln!("=== warm_bundled_on_first_run (file-backed, first run) ===");
-    eprintln!("  warm (incl parse+sentinel): {:>8.1?}", t_warm);
-    eprintln!("  flush:                      {:>8.1?}", t_flush);
-    eprintln!("  TOTAL:                      {:>8.1?}", total);
-    eprintln!("  loaded: {:?}", result);
+    eprintln!("  warm (incl parse+sentinel): {t_warm:>8.1?}");
+    eprintln!("  flush:                      {t_flush:>8.1?}");
+    eprintln!("  TOTAL:                      {total:>8.1?}");
+    eprintln!("  loaded: {result:?}");
     eprintln!("===");
 
     // Second call should be a no-op (sentinel matches).
@@ -137,7 +137,7 @@ async fn measure_warm_bundled_on_first_run_file_backed() {
         .await
         .expect("warm_bundled_on_first_run noop failed");
     let t_noop = t_noop_start.elapsed();
-    eprintln!("  warm (noop, sentinel match): {:>8.1?}", t_noop);
+    eprintln!("  warm (noop, sentinel match): {t_noop:>8.1?}");
     assert!(noop.is_none(), "second call should be a noop");
 }
 
@@ -159,8 +159,8 @@ async fn measure_full_seed_warm_in_memory() {
     let t_warm = t_warm_start.elapsed();
 
     eprintln!("=== SEED WARM IN-MEMORY ({entry_count} entries) ===");
-    eprintln!("  JSON parse:  {:>8.1?}", t_parse);
-    eprintln!("  warm_cache:  {:>8.1?}", t_warm);
+    eprintln!("  JSON parse:  {t_parse:>8.1?}");
+    eprintln!("  warm_cache:  {t_warm:>8.1?}");
     eprintln!("  TOTAL:       {:>8.1?}", t_parse + t_warm);
     eprintln!("  loaded rows: {loaded}");
     eprintln!("===");
