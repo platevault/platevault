@@ -288,36 +288,7 @@ pub async fn classify(
 
     // spec 041 R-4 / T025: re-apply snapshotted overrides to freshly-inserted
     // evidence rows, then mark stale the subset whose file identity changed.
-    for entry in &override_snapshot {
-        if let Err(e) = repo::set_overrides(
-            pool,
-            &req.inbox_item_id,
-            &entry.relative_file_path,
-            entry.manual_override.as_deref(),
-            entry.override_filter.as_deref(),
-            entry.override_exposure_s,
-            entry.override_binning.as_deref(),
-        )
-        .await
-        {
-            tracing::warn!(
-                item = %req.inbox_item_id,
-                file = %entry.relative_file_path,
-                "classify: restoring overrides failed, file reverts to its raw header state: {e}"
-            );
-        }
-        if entry.stale {
-            repo::mark_override_stale(pool, &req.inbox_item_id, &entry.relative_file_path)
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::warn!(
-                        item = %req.inbox_item_id,
-                        file = %entry.relative_file_path,
-                        "classify: marking override stale failed, file shows as fresh: {e}"
-                    );
-                });
-        }
-    }
+    restore_overrides_after_wipe(pool, &req.inbox_item_id, &override_snapshot).await;
 
     // Layer the user's overrides onto the extraction-only records BEFORE the
     // folder tallies and the T066 split consume them (#854 CI race + the
@@ -397,41 +368,10 @@ pub async fn classify(
 
     // spec 041 FR-046 / R-4: detect `inbox_file_overrides` staleness — the
     // generic-property counterpart to the `mark_override_stale` snapshot pass
-    // above (which only covers the fixed evidence columns). Each override row
-    // carries the file identity recorded when it was set; compare it against
-    // the file's current on-disk stat and flag drift. One stat per file
-    // (property rows share identity), so dedupe by path first.
+    // above (which only covers the fixed evidence columns).
     if let Some(sg_id) = item.source_group_id.as_deref() {
-        let mut checked_paths: std::collections::HashSet<&str> = std::collections::HashSet::new();
-        for ov in &group_overrides {
-            let (Some(stored_size), Some(stored_mtime)) =
-                (ov.file_size_bytes, ov.file_mtime.as_deref())
-            else {
-                continue; // no recorded identity yet — nothing to compare against
-            };
-            if !checked_paths.insert(ov.relative_file_path.as_str()) {
-                continue;
-            }
-            let abs = req.root_absolute_path.join(&ov.relative_file_path);
-            if let Ok(md) = std::fs::metadata(&abs) {
-                let cur_size = i64::try_from(md.len()).ok();
-                let cur_mtime = md
-                    .modified()
-                    .ok()
-                    .and_then(|t| time::OffsetDateTime::from(t).format(&Rfc3339).ok());
-                if cur_size != Some(stored_size) || cur_mtime.as_deref() != Some(stored_mtime) {
-                    repo::mark_file_override_stale(pool, sg_id, &ov.relative_file_path)
-                        .await
-                        .unwrap_or_else(|e| {
-                            tracing::warn!(
-                                source_group = %sg_id,
-                                file = %ov.relative_file_path,
-                                "classify: marking file override stale failed, changed file shows as fresh: {e}"
-                            );
-                        });
-                }
-            }
-        }
+        check_generic_override_staleness(pool, sg_id, &group_overrides, &req.root_absolute_path)
+            .await;
     }
 
     // Folder tallies keyed by FrameType (Copy enum) to avoid one String alloc
@@ -697,6 +637,111 @@ pub async fn classify_source_group(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+fn parse_f64(s: Option<&String>) -> Option<f64> {
+    s.and_then(|v| v.trim().parse::<f64>().ok())
+}
+fn parse_i64(s: Option<&String>) -> Option<i64> {
+    s.and_then(|v| {
+        let t = v.trim();
+        t.parse::<i64>().ok().or_else(|| t.strip_suffix(".0").and_then(|i| i.parse::<i64>().ok()))
+    })
+}
+fn parse_i32(s: Option<&String>) -> Option<i32> {
+    s.and_then(|v| {
+        let t = v.trim();
+        t.parse::<i32>().ok().or_else(|| t.strip_suffix(".0").and_then(|i| i.parse::<i32>().ok()))
+    })
+}
+
+/// Re-apply snapshotted overrides to freshly-inserted evidence rows, then mark
+/// stale the subset whose file identity changed (spec 041 R-4 / T025).
+///
+/// Called after the first write transaction (evidence wipe + re-insert) commits,
+/// because `set_overrides` and `mark_override_stale` read the committed rows via
+/// the pool.  Failures are best-effort: logged but not propagated.
+async fn restore_overrides_after_wipe(
+    pool: &SqlitePool,
+    inbox_item_id: &str,
+    override_snapshot: &[OverrideSnapshot],
+) {
+    for entry in override_snapshot {
+        if let Err(e) = repo::set_overrides(
+            pool,
+            inbox_item_id,
+            &entry.relative_file_path,
+            entry.manual_override.as_deref(),
+            entry.override_filter.as_deref(),
+            entry.override_exposure_s,
+            entry.override_binning.as_deref(),
+        )
+        .await
+        {
+            tracing::warn!(
+                item = %inbox_item_id,
+                file = %entry.relative_file_path,
+                "classify: restoring overrides failed, file reverts to its raw header state: {e}"
+            );
+        }
+        if entry.stale {
+            repo::mark_override_stale(pool, inbox_item_id, &entry.relative_file_path)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::warn!(
+                        item = %inbox_item_id,
+                        file = %entry.relative_file_path,
+                        "classify: marking override stale failed, file shows as fresh: {e}"
+                    );
+                });
+        }
+    }
+}
+
+/// Check `inbox_file_overrides` staleness for a source group (spec 041 FR-046
+/// / R-4) — the generic-property counterpart to the `mark_override_stale`
+/// snapshot pass.
+///
+/// Each override row carries the file identity recorded when it was set.
+/// Compares it against the current on-disk stat; if they differ, marks the
+/// override stale.  Deduplicates by path (property rows share identity).
+/// Failures are best-effort.
+async fn check_generic_override_staleness(
+    pool: &SqlitePool,
+    source_group_id: &str,
+    group_overrides: &[persistence_inbox::repositories::inbox::FileOverrideRow],
+    root_absolute_path: &std::path::Path,
+) {
+    let mut checked_paths: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for ov in group_overrides {
+        let (Some(stored_size), Some(stored_mtime)) =
+            (ov.file_size_bytes, ov.file_mtime.as_deref())
+        else {
+            continue; // no recorded identity yet — nothing to compare against
+        };
+        if !checked_paths.insert(ov.relative_file_path.as_str()) {
+            continue;
+        }
+        let abs = root_absolute_path.join(&ov.relative_file_path);
+        if let Ok(md) = std::fs::metadata(&abs) {
+            let cur_size = i64::try_from(md.len()).ok();
+            let cur_mtime = md
+                .modified()
+                .ok()
+                .and_then(|t| time::OffsetDateTime::from(t).format(&Rfc3339).ok());
+            if cur_size != Some(stored_size) || cur_mtime.as_deref() != Some(stored_mtime) {
+                repo::mark_file_override_stale(pool, source_group_id, &ov.relative_file_path)
+                    .await
+                    .unwrap_or_else(|e| {
+                        tracing::warn!(
+                            source_group = %source_group_id,
+                            file = %ov.relative_file_path,
+                            "classify: marking file override stale failed, changed file shows as fresh: {e}"
+                        );
+                    });
+            }
+        }
+    }
+}
+
 /// Per-file classification outcome, shared by `classify()`'s item-keyed
 /// evidence-persist loop and `build_file_records` (spec 058 T012's
 /// `classify_source_group`, which has no `inbox_item_id` to persist evidence
@@ -834,18 +879,6 @@ fn build_file_metadata_upsert<'a>(
     file_size_bytes: Option<i64>,
     file_mtime: Option<&'a str>,
 ) -> UpsertFileMetadata<'a> {
-    fn parse_f64(s: Option<&String>) -> Option<f64> {
-        s.and_then(|v| v.trim().parse::<f64>().ok())
-    }
-    fn parse_i64(s: Option<&String>) -> Option<i64> {
-        s.and_then(|v| {
-            let t = v.trim();
-            t.parse::<i64>()
-                .ok()
-                .or_else(|| t.strip_suffix(".0").and_then(|i| i.parse::<i64>().ok()))
-        })
-    }
-
     if let Some(meta) = raw_meta {
         UpsertFileMetadata {
             inbox_item_id,
@@ -1145,17 +1178,6 @@ pub(crate) fn build_frame_metadata(
     frame_type: FrameType,
     raw: &metadata_core::RawFileMetadata,
 ) -> FrameMetadata {
-    fn parse_f64(s: Option<&String>) -> Option<f64> {
-        s.and_then(|v| v.trim().parse::<f64>().ok())
-    }
-    fn parse_i32(s: Option<&String>) -> Option<i32> {
-        s.and_then(|v| {
-            let t = v.trim();
-            t.parse::<i32>()
-                .ok()
-                .or_else(|| t.strip_suffix(".0").and_then(|i| i.parse::<i32>().ok()))
-        })
-    }
     FrameMetadata {
         frame_type,
         filter: raw.filter.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned),
