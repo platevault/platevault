@@ -763,3 +763,33 @@ jobs:
             exit 0
           fi
           [ "$RESULT" = "success" ] || exit 1
+
+  # Dead-caller ratchet — main-push guard.
+  #
+  # The `integration` job (above) evaluates the dead-caller ratchet only when
+  # the Rust or scripts lane is active. On a main push that touches neither
+  # (docs, workflow edits, spec files) the `integration` job is skipped via
+  # its job-level `if:`, and the ratchet never runs. A dead `pub fn` that
+  # landed via such a merge is then invisible until the next Rust-touching PR,
+  # where it fires on an unrelated author.
+  #
+  # This job closes that window by evaluating the ratchet against main after
+  # every merge, regardless of which paths changed. It is gated to main pushes
+  # only (`github.event_name == 'push'`) so it does not double-run alongside
+  # `integration` on Rust-touching PRs.
+  #
+  # The check is pure grep (no Rust toolchain, no compile) — just checkout +
+  # `just` — so it adds negligible wall-clock time to the post-merge queue.
+  # It is NOT a branch-protection required check; it is a canary that surfaces
+  # accumulated debt on main before it can block a contributor's PR.
+  dead-caller-main:
+    name: Dead-caller ratchet (main)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just
+      - name: Dead-caller ratchet
+        run: just dead-callers
