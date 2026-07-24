@@ -72,8 +72,10 @@ targeting_resolver = { path = "../../targeting/resolver", features = ["test-fixt
 # Enable shared DB test fixtures in tests/support/mod.rs. The test-fixture feature
 # gates the `test_support` modules in both persistence crates; must not be
 # enabled in production builds.
+app_core_inbox = { path = "../inbox" }
 persistence_core = { path = "../../persistence/core", features = ["test-fixture"] }
 persistence_lifecycle = { path = "../../persistence/lifecycle", features = ["test-fixture"] }
+persistence_sessions = { path = "../../persistence/sessions", features = ["test-fixture"] }
 
 [features]
 # Developer-mode surface (spec 021). Release binaries must NOT enable this.
