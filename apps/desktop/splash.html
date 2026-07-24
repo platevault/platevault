@@ -48,12 +48,16 @@
           sans-serif;
         -webkit-font-smoothing: antialiased;
       }
+      /* .pv-fading is added by main.ts on boot-ready; the transition keeps the
+         wordmark visible through the fade so warm-start doesn't hard-cut. */
       .pv-card {
         width: 480px;
         height: 320px;
         border-radius: 16px;
         position: relative;
         overflow: hidden;
+        opacity: 1;
+        transition: opacity 150ms ease-out;
         background:
           radial-gradient(120% 90% at 85% -14%, rgba(217, 138, 61, 0.1), transparent 55%),
           radial-gradient(1px 1px at 6% 12%, rgba(240, 235, 226, 0.75), transparent),
@@ -84,6 +88,9 @@
         box-shadow:
           0 34px 70px -24px rgba(0, 0, 0, 0.72),
           inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      }
+      .pv-fading {
+        opacity: 0;
       }
       .pv-content {
         position: absolute;
