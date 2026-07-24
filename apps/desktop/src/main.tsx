@@ -12,6 +12,7 @@ import { router } from './app/router';
 import { AppErrorBoundary } from './app/AppErrorBoundary';
 import { queryClient } from './data/queryClient';
 import { initAppearance, hydrateThemeFromSettings } from './data/theme';
+import { hydrateScope } from './data/persisted-state';
 import { registerLocaleStrategy, LocaleProvider } from './data/locale';
 
 // Register the `custom-almSettings` strategy before the first render, so the
@@ -33,6 +34,23 @@ initAppearance();
 // synchronous cache has already painted, and this at most swaps the theme
 // once if the two disagree (e.g. localStorage lost to a WebView2 force-kill).
 void hydrateThemeFromSettings();
+
+// Reconcile all ui_state scope keys (log-panel, grouping dims, picker paths)
+// from SQLite. Same fire-and-forget contract: localStorage is authoritative
+// until this resolves; on disagreement the DB value wins (matching theme
+// semantics). All createPersistedState call sites for scope "ui_state" must
+// be imported before this fires — they register their handles at module-eval
+// time, and the dynamic imports below ensure the modules are loaded.
+void (async () => {
+  // Force the modules that register ui_state handles to load before calling
+  // hydrateScope, so their handles are in the registry.
+  await Promise.all([
+    import('./app/LogPanelContext'),
+    import('./shared/native/picker'),
+    import('./lib/use-grouping'),
+  ]);
+  void hydrateScope('ui_state');
+})();
 
 // T075 / SC-002: Install the recording proxy at boot in dev-tools builds.
 // VITE_DEV_TOOLS is statically "false" in release builds, so this branch and

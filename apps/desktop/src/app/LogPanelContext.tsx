@@ -28,10 +28,9 @@ import { createPersistedState } from '@/data/persisted-state';
 
 export type LevelFilter = 'all' | LogLevel;
 
-// Durable via SQLite (ui_state scope); localStorage kept as synchronous boot
-// cache so the panel opens in the right state before the first IPC round-trip.
-// Legacy key `alm-log-panel-expanded` is imported automatically on first
-// hydrate if the DB row is absent (one-time migration).
+// Durable via SQLite (ui_state scope); localStorage (`pv.ps.*` key) kept as
+// synchronous boot cache so the panel opens in the right state before the
+// first IPC round-trip.
 const logPanelExpandedState = createPersistedState(
   'ui_state',
   'uiState.logPanelExpanded',
@@ -40,7 +39,7 @@ const logPanelExpandedState = createPersistedState(
 
 /** Test-only: boot-cache localStorage key for the expanded state. */
 export const LOG_PANEL_EXPANDED_LS_KEY =
-  'alm.ps.uiState.logPanelExpanded' as const;
+  'pv.ps.uiState.logPanelExpanded' as const;
 
 /**
  * Test-only: the persisted-state instance for expanded state.

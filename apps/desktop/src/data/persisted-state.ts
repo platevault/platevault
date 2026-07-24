@@ -22,10 +22,8 @@
  * `hydrateScope(scope)` issues ONE `settingsGet(scope)` call per scope and
  * reconciles in-memory + localStorage from the DB response. `localStorage`
  * stays authoritative until the first successful reconcile (offline-safe).
- * Call it once at boot after Tauri IPC is available.
- *
- * One-time legacy import: if the DB has no value for a key but localStorage
- * has one, `hydrateScope` imports it into SQLite automatically.
+ * Call it once at boot after Tauri IPC is available — wired in `main.tsx`
+ * alongside `hydrateThemeFromSettings`.
  *
  * ## useSyncExternalStore compatibility
  *
@@ -40,11 +38,9 @@
 
 /** Internal handle stored in the scope registry. */
 interface PersistedStateHandle<T> {
-  readonly lsKey: string | null; // null when bootCache:false
   readonly settingsKey: string;
   readonly defaultValue: T;
   setFromDb(value: unknown): void;
-  getForLegacyImport(): unknown; // the current localStorage raw value (pre-parse)
 }
 
 const scopeRegistry = new Map<string, Set<PersistedStateHandle<unknown>>>();
@@ -135,11 +131,14 @@ export interface PersistedStateResult<T> {
  * Create a persisted state atom backed by SQLite (durable) and localStorage
  * (synchronous boot cache).
  *
- * @param scope      Settings scope for the SQLite key (e.g. `"ui_state"`).
- * @param key        Stable settings key within the scope (e.g.
- *                   `"uiState.logPanelExpanded"`).
- * @param opts       Options including the default value, boot-cache flag, and
- *                   debounce window.
+ * Boot-cache localStorage keys use the `pv.ps.` prefix
+ * (e.g. `pv.ps.uiState.logPanelExpanded`).
+ *
+ * @param scope  Settings scope for the SQLite key (e.g. `"ui_state"`).
+ * @param key    Stable settings key within the scope (e.g.
+ *               `"uiState.logPanelExpanded"`).
+ * @param opts   Options including the default value, boot-cache flag, and
+ *               debounce window.
  */
 export function createPersistedState<T>(
   scope: string,
@@ -148,7 +147,7 @@ export function createPersistedState<T>(
 ): PersistedStateResult<T> {
   const bootCache = opts.bootCache !== false;
   const debounceMs = opts.debounceMs ?? 500;
-  const lsKey = bootCache ? `alm.ps.${key}` : null;
+  const lsKey = bootCache ? `pv.ps.${key}` : null;
 
   // ── In-memory state ────────────────────────────────────────────────────────
 
@@ -161,8 +160,7 @@ export function createPersistedState<T>(
 
   // ── Debounced SQLite write ─────────────────────────────────────────────────
 
-  // Inline debounce (vs. the module-level `debounce()` helper) so we can
-  // expose a cancel function for `_resetForTest()`.
+  // Inline debounce so we can cancel it in cancelPendingWrite / _resetForTest.
   let pendingDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   function persistToDb(value: T): void {
@@ -190,7 +188,6 @@ export function createPersistedState<T>(
   // ── Handle for the scope registry ─────────────────────────────────────────
 
   const handle: PersistedStateHandle<T> = {
-    lsKey,
     settingsKey: key,
     defaultValue: opts.default,
 
@@ -200,15 +197,6 @@ export function createPersistedState<T>(
         current = parsed;
         writeBootCache(lsKey, current);
         notify();
-      }
-    },
-
-    getForLegacyImport(): unknown {
-      if (!lsKey) return undefined;
-      try {
-        return window.localStorage.getItem(lsKey) ?? undefined;
-      } catch {
-        return undefined;
       }
     },
   };
@@ -272,12 +260,12 @@ export function createPersistedState<T>(
 
 /**
  * Reconcile all keys registered under `scope` from the SQLite settings DB in
- * ONE `settingsGet` round-trip. Call once per scope at boot after Tauri IPC is
- * available. No-ops outside Tauri or on IPC failure (localStorage stays
- * authoritative until the next successful call).
+ * ONE `settingsGet` round-trip. No-ops outside Tauri or on IPC failure
+ * (localStorage stays authoritative until the next successful call).
  *
- * One-time legacy import: for any key where the DB row is absent but a legacy
- * localStorage value exists, the value is imported into SQLite automatically.
+ * Wired in `main.tsx` alongside `hydrateThemeFromSettings` — NOT called
+ * automatically; callers must ensure the modules that create `createPersistedState`
+ * instances for this scope are imported before calling this function.
  */
 export async function hydrateScope(scope: string): Promise<void> {
   try {
@@ -295,30 +283,10 @@ export async function hydrateScope(scope: string): Promise<void> {
     const data = unwrap(await commands.settingsGet(scope));
     const values = data.values as Record<string, unknown>;
 
-    const legacyImports: Record<string, unknown> = {};
-
     for (const h of handles) {
       const dbValue = values[h.settingsKey];
-
-      if (dbValue === undefined || dbValue === null) {
-        // Key absent from DB — check for a legacy localStorage value to import.
-        const legacy = h.getForLegacyImport();
-        if (legacy !== undefined) {
-          legacyImports[h.settingsKey] = legacy;
-        }
-        // Keep current in-memory value (localStorage already loaded at init).
-        continue;
-      }
-
-      h.setFromDb(dbValue);
-    }
-
-    // Flush legacy imports into SQLite in one write (best-effort).
-    if (Object.keys(legacyImports).length > 0) {
-      try {
-        unwrap(await commands.settingsUpdate(scope, legacyImports));
-      } catch {
-        // Legacy import is best-effort.
+      if (dbValue !== undefined && dbValue !== null) {
+        h.setFromDb(dbValue);
       }
     }
   } catch {
@@ -352,30 +320,17 @@ function writeBootCache<T>(lsKey: string | null, value: T): void {
 
 /**
  * Parse an opaque DB value into `T`; returns `defaultValue` when the DB
- * value is `null`/`undefined` or is unparseable. For primitive types (string,
- * number, boolean) this is a direct cast; for structured types (arrays,
- * objects) JSON round-trip through `JSON.parse(JSON.stringify(...))` ensures
- * a clean parse without trusting the DB shape blindly.
+ * value is `null`/`undefined`. For JSON-compatible types the DB value is
+ * already the parsed form (Tauri deserialized it).
  */
 function safeParse<T>(value: unknown, defaultValue: T): T {
   if (value === undefined || value === null) return defaultValue;
-  try {
-    // For plain JSON-compatible types the DB value IS already the parsed form
-    // (Tauri deserialized the JSON row into a JS value). No extra parse needed;
-    // just cast and let the caller validate if needed.
-    return value as T;
-  } catch {
-    return defaultValue;
-  }
+  return value as T;
 }
 
 /**
- * Shallow equality check used to skip notify() when the hydrated DB value
- * matches what's already in memory, preventing spurious re-renders.
- *
- * For arrays and objects this compares JSON serialisation — adequate for the
- * simple scalar / string-array types used by UI state keys; deep equality
- * isn't needed here.
+ * Shallow equality check to skip notify() when the hydrated DB value matches
+ * in-memory, preventing spurious re-renders. Uses JSON for arrays/objects.
  */
 function shallowEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -401,15 +356,14 @@ function shallowEqual(a: unknown, b: unknown): boolean {
  * leaking state between tests.
  */
 export function __resetScopeRegistryForTest(): void {
-  // Reset in-memory values to defaults (but keep the instances in allInstances
-  // so future calls can reset them again — module singletons are created once
-  // and must remain resettable across the full test run).
+  // Reset in-memory values to defaults (keep instances so future calls reset
+  // them again — module singletons are created once per module lifetime).
   for (const instance of allInstances) {
     instance._resetForTest();
   }
   // Clear the scope registry so hydrateScope can re-register without stale
-  // handles, but don't clear allInstances (see above).
+  // handles. Do NOT clear allInstances (they persist across resets).
   scopeRegistry.clear();
-  // Also reset the memoised Tauri core promise so mock re-imports work.
+  // Reset the memoised Tauri core promise so mock re-imports work.
   tauriCorePromise = null;
 }

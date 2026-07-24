@@ -106,11 +106,11 @@ describe('createPersistedState — set / get / subscribe', () => {
       default: 'hello',
     });
     s.set('world');
-    expect(localStorage.getItem('alm.ps.uiState.test')).toBe('"world"');
+    expect(localStorage.getItem('pv.ps.uiState.test')).toBe('"world"');
   });
 
   it('initialises from localStorage on first get() when a boot cache exists', () => {
-    localStorage.setItem('alm.ps.uiState.test', '"cached"');
+    localStorage.setItem('pv.ps.uiState.test', '"cached"');
     const s = createPersistedState('ui_state', 'uiState.test', {
       default: 'default',
     });
@@ -204,7 +204,7 @@ describe('hydrateScope — reconcile', () => {
     await hydrateScope('ui_state');
 
     expect(s.get()).toBe(true);
-    expect(localStorage.getItem('alm.ps.uiState.y')).toBe('true');
+    expect(localStorage.getItem('pv.ps.uiState.y')).toBe('true');
   });
 
   it('notifies subscribers when DB value wins', async () => {
@@ -284,50 +284,68 @@ describe('hydrateScope — reconcile', () => {
   });
 });
 
-describe('hydrateScope — legacy import', () => {
-  it('imports a legacy localStorage value into SQLite when DB key is absent', async () => {
+describe('hydrateScope — DB key absent', () => {
+  it('keeps the boot-cache value when the DB has no row for the key', async () => {
     isTauriMock.mockReturnValue(true);
-    // DB has no value for this key (null/undefined).
     settingsGetMock.mockResolvedValue({
       status: 'ok',
       data: { scope: 'ui_state', values: {} },
     });
-    settingsUpdateMock.mockResolvedValue({ status: 'ok', data: null });
 
-    // Seed the legacy localStorage key.
-    localStorage.setItem('alm.ps.uiState.legacy', '"legacy-value"');
-
-    createPersistedState('ui_state', 'uiState.legacy', { default: 'default' });
+    localStorage.setItem('pv.ps.uiState.cached', '"cached-value"');
+    const s = createPersistedState('ui_state', 'uiState.cached', {
+      default: 'default',
+    });
     await hydrateScope('ui_state');
 
-    // The legacy raw string from localStorage should have been written to DB.
-    expect(settingsUpdateMock).toHaveBeenCalledWith(
-      'ui_state',
-      expect.objectContaining({ 'uiState.legacy': '"legacy-value"' }),
-    );
+    // Boot-cache read at init time means the value is already 'cached-value'.
+    expect(s.get()).toBe('cached-value');
+    // No write to DB (nothing to import — greenfield, no legacy).
+    expect(settingsUpdateMock).not.toHaveBeenCalled();
   });
+});
 
-  it('does not import when DB already has a value', async () => {
+describe('hydrateScope — boot integration', () => {
+  // Verifies the sequence main.tsx uses: ensure all scope-registered handles
+  // are present BEFORE calling hydrateScope, then DB values reconcile.
+  it('reconciles all registered keys from DB in one round-trip', async () => {
     isTauriMock.mockReturnValue(true);
     settingsGetMock.mockResolvedValue({
       status: 'ok',
-      data: { scope: 'ui_state', values: { 'uiState.present': 'db-value' } },
+      data: {
+        scope: 'ui_state',
+        values: {
+          'uiState.panelOpen': true,
+          'uiState.groupDims': ['target', 'filter'],
+        },
+      },
     });
-    settingsUpdateMock.mockResolvedValue({ status: 'ok', data: null });
 
-    localStorage.setItem('alm.ps.uiState.present', '"legacy-value"');
-    createPersistedState('ui_state', 'uiState.present', { default: 'default' });
+    const panelState = createPersistedState('ui_state', 'uiState.panelOpen', {
+      default: false,
+    });
+    const groupState = createPersistedState('ui_state', 'uiState.groupDims', {
+      default: [] as string[],
+    });
+
+    // Before hydrate: defaults.
+    expect(panelState.get()).toBe(false);
+    expect(groupState.get()).toEqual([]);
+
     await hydrateScope('ui_state');
 
-    // settingsUpdate should NOT have been called for a legacy import
-    // (it may be called later via debounce, but that's a separate flow).
-    expect(settingsUpdateMock).not.toHaveBeenCalled();
+    // After hydrate: DB values win.
+    expect(panelState.get()).toBe(true);
+    expect(groupState.get()).toEqual(['target', 'filter']);
+    // Exactly one round-trip regardless of key count.
+    expect(settingsGetMock).toHaveBeenCalledTimes(1);
+    expect(settingsGetMock).toHaveBeenCalledWith('ui_state');
   });
 });
 
 describe('createPersistedState — bootCache:false', () => {
   it('does not read localStorage on init', () => {
-    localStorage.setItem('alm.ps.uiState.nocache', '"should-be-ignored"');
+    localStorage.setItem('pv.ps.uiState.nocache', '"should-be-ignored"');
     const s = createPersistedState('ui_state', 'uiState.nocache', {
       default: 'default',
       bootCache: false,
@@ -343,6 +361,6 @@ describe('createPersistedState — bootCache:false', () => {
     });
     s.set('new-value');
     // No localStorage write should have happened.
-    expect(localStorage.getItem('alm.ps.uiState.nocache')).toBeNull();
+    expect(localStorage.getItem('pv.ps.uiState.nocache')).toBeNull();
   });
 });

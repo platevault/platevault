@@ -39,7 +39,7 @@ import { assertDefined } from '@/test/assertDefined';
 import { __resetScopeRegistryForTest } from '@/data/persisted-state';
 
 /** localStorage key for the inbox grouping boot cache (new persisted-state key). */
-const GROUPING_PS_LS_KEY = `alm.ps.uiState.${GROUPING_STORAGE_KEY}`;
+const GROUPING_PS_LS_KEY = `pv.ps.uiState.${GROUPING_STORAGE_KEY}`;
 
 // ── Harness ───────────────────────────────────────────────────────────────────
 // Mirrors InboxPage's wiring: useGrouping owns the grouping state,
