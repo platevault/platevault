@@ -707,53 +707,6 @@ pub async fn get_last_item_with_failure_prefix(
     .await?)
 }
 
-// ── Startup sweep ─────────────────────────────────────────────────────────────
-
-/// At startup, flip every plan in state `applying` to `paused` with
-/// `pause_reason = 'crash'`, and mark its open run row as paused.
-///
-/// A plan left in `applying` with no live executor (i.e. after a hard crash)
-/// can never progress: the `active_runs` registry is empty at boot, so
-/// `resume_plan` would immediately fail the live-run check. Flipping these
-/// plans to `paused` makes `resume_plan` available and sets a clear reason in
-/// the audit trail.
-///
-/// Returns the ids of the plans that were transitioned.
-///
-/// # Errors
-///
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn sweep_crashed_applying_plans(pool: &SqlitePool) -> DbResult<Vec<String>> {
-    let mut tx = pool.begin().await?;
-
-    let ids: Vec<String> =
-        sqlx::query_scalar("SELECT id FROM plans WHERE state = 'applying' ORDER BY id ASC")
-            .fetch_all(&mut *tx)
-            .await?;
-
-    if !ids.is_empty() {
-        sqlx::query("UPDATE plans SET state = 'paused' WHERE state = 'applying'")
-            .execute(&mut *tx)
-            .await?;
-
-        // Mark each plan's open run (terminal_state IS NULL or 'paused' covers
-        // in-progress runs; a brand-new 'applying' run has terminal_state = NULL).
-        sqlx::query(
-            "UPDATE plan_apply_runs \
-             SET terminal_state = 'paused', pause_reason = 'crash' \
-             WHERE plan_id IN \
-               (SELECT value FROM json_each(?)) \
-             AND (terminal_state IS NULL OR terminal_state = 'applying')",
-        )
-        .bind(serde_json::to_string(&ids).unwrap_or_default())
-        .execute(&mut *tx)
-        .await?;
-    }
-
-    tx.commit().await?;
-    Ok(ids)
-}
-
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -917,47 +870,6 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].prior_state, "pending");
         assert_eq!(events[0].new_state, "applying");
-    }
-
-    #[tokio::test]
-    async fn sweep_crashed_applying_plans_transitions_to_paused() {
-        let db = Database::in_memory().await.unwrap();
-        db.migrate().await.unwrap();
-        setup_with_approved_plan(&db, "pc1", 2).await;
-
-        // Drive into 'applying' (crash simulation: no executor runs).
-        cas_approved_to_applying(db.pool(), "pc1", "run-c1", "tok", 2, 2).await.unwrap();
-        let plan = plans_repo::get_plan(db.pool(), "pc1", false).await.unwrap();
-        assert_eq!(plan.state, "applying");
-
-        let affected = sweep_crashed_applying_plans(db.pool()).await.unwrap();
-        assert_eq!(affected, vec!["pc1".to_owned()]);
-
-        let plan = plans_repo::get_plan(db.pool(), "pc1", false).await.unwrap();
-        assert_eq!(plan.state, "paused", "crash-applying plan must become paused");
-
-        let run = get_run(db.pool(), "run-c1").await.unwrap();
-        assert_eq!(run.terminal_state, Some("paused".to_owned()));
-        assert_eq!(run.pause_reason, Some("crash".to_owned()));
-    }
-
-    #[tokio::test]
-    async fn sweep_ignores_already_paused_and_terminal_plans() {
-        let db = Database::in_memory().await.unwrap();
-        db.migrate().await.unwrap();
-        // A plan in 'paused' state should not be affected.
-        setup_with_approved_plan(&db, "pp1", 1).await;
-        cas_approved_to_applying(db.pool(), "pp1", "run-pp1", "tok", 1, 1).await.unwrap();
-        pause_run(db.pool(), "pp1", "run-pp1", "item.stale", 0, 1, 0, 0, 0).await.unwrap();
-
-        let affected = sweep_crashed_applying_plans(db.pool()).await.unwrap();
-        assert!(affected.is_empty(), "paused plan must not be swept again");
-
-        let plan = plans_repo::get_plan(db.pool(), "pp1", false).await.unwrap();
-        assert_eq!(plan.state, "paused");
-        // pause_reason stays 'item.stale', not overwritten to 'crash'.
-        let run = get_run(db.pool(), "run-pp1").await.unwrap();
-        assert_eq!(run.pause_reason, Some("item.stale".to_owned()));
     }
 
     #[tokio::test]

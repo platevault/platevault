@@ -7,28 +7,6 @@ use super::{
     SpawnExecutorParams, SqlitePool, Timestamp, Utf8Path, Utf8PathBuf, TOPIC_PLAN_APPLYING_RESUMED,
 };
 
-// ── startup sweep ────────────────────────────────────────────────────────────
-
-/// At boot, flip every plan left in state `applying` with no live executor to
-/// `paused` (with `pause_reason = 'crash'`), making `resume_plan` available.
-///
-/// Called once from the desktop app's `boot()` function, before any webview
-/// command can be invoked. The `active_runs` registry is always empty at
-/// startup, so every `applying` plan qualifies: no live executor will ever
-/// advance them.
-///
-/// Returns the plan ids that were transitioned.
-///
-/// # Errors
-///
-/// Returns [`DbError::Database`] on connection failure (non-fatal at boot —
-/// caller should log and continue).
-pub async fn sweep_crashed_applying_plans(
-    pool: &SqlitePool,
-) -> Result<Vec<String>, persistence_core::DbError> {
-    apply_repo::sweep_crashed_applying_plans(pool).await
-}
-
 // ── cancel_plan ───────────────────────────────────────────────────────────────
 
 /// Cancel an in-flight plan apply (US3, T032).
