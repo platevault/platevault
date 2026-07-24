@@ -10134,7 +10134,7 @@ export type TargetSearchResponse_Serialize = {
  *  Only columns reliably present in `acquisition_session` are surfaced:
  *  - `id` — row UUID.
  *  - `session_key` — the composite grouping key (pipe-delimited
- *    `target|filter|binning|gain|night`, per `sessions::session_key`) —
+ *    `target|filter|binning|gain|night`, per `sessions::SessionKey::new`) —
  *    caller can parse it further if needed.
  *  - `created_at` — RFC 3339 UTC timestamp the row was created.
  *  - `frame_count` — length of the `frame_ids` JSON array (computed via
