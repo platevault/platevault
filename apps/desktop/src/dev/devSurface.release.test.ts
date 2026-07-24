@@ -66,7 +66,7 @@ describe('T072: release build dev surface gate', () => {
     // While an override is installed, a generated command dispatches through it
     // — the bindings route via the IPC switcher, not @tauri-apps/api/core.
     setInvokeOverride(overrideCall);
-    await commands.sessionsList();
+    await commands.sessionsList(null, null);
     expect(seen).toContain('sessions_list');
 
     // Clearing it (release-build state) must stop dispatching through the
@@ -74,7 +74,7 @@ describe('T072: release build dev surface gate', () => {
     // rejects here — the assertion is that it did NOT go through the override.
     setInvokeOverride(null);
     overrideCall.mockClear();
-    await commands.sessionsList().catch(() => {});
+    await commands.sessionsList(null, null).catch(() => {});
     expect(overrideCall).not.toHaveBeenCalled();
   });
 

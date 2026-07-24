@@ -275,17 +275,21 @@ export function AuditLog() {
     setExportError(null);
     setExporting(true);
     try {
-      const ndjson = await auditExport(filters);
-      const blob = new Blob([ndjson], { type: 'application/x-ndjson' });
-      const url = URL.createObjectURL(blob);
+      let filePath: string | null = null;
       try {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `audit-log-export-${Date.now()}.ndjson`;
-        link.click();
-      } finally {
-        URL.revokeObjectURL(url);
+        const { save: showSaveDialog } = await import(
+          '@tauri-apps/plugin-dialog'
+        );
+        filePath = await showSaveDialog({
+          title: 'Export Audit Log',
+          defaultPath: `audit-log-export-${Date.now()}.ndjson`,
+          filters: [{ name: 'NDJSON', extensions: ['ndjson', 'json'] }],
+        });
+      } catch {
+        filePath = null;
       }
+      if (!filePath) return;
+      await auditExport(filePath, filters);
     } catch (err: unknown) {
       setExportError(errMessage(err));
     } finally {

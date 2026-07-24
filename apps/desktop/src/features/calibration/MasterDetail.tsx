@@ -77,25 +77,119 @@ export function MasterDetail({
   agingThresholdDays,
 }: Props) {
   const {
-    detail,
-    matchSessionId,
-    suggestResponse,
-    suggestLoading,
-    suggestError,
-    assigning,
-    archiveReviewPlanId,
-    setArchiveReviewPlanId,
-    inUseConfirmOpen,
-    setInUseConfirmOpen,
-    archivePending,
-    revealTarget,
-    revealActionable,
-    handleAssign,
-    handleReveal,
-    handleArchive,
-    handleConfirmArchiveInUse,
-    handleArchivePlanApplied,
-  } = useMasterDetail(master);
+    response: suggestResponse,
+    loading: suggestLoading,
+    error: suggestError,
+    refresh: refreshSuggest,
+  } = useCalibrationSuggest(matchSessionId);
+  const { assigning, assign } = useCalibrationAssign();
+
+  const handleAssign = async (masterId: string, override: boolean) => {
+    if (!matchSessionId) {
+      return {
+        status: 'error',
+        error: {
+          code: 'no_session',
+          message: m.calibration_compatible_sessions_no_anchor_desc(),
+        },
+      };
+    }
+    const res = await assign(matchSessionId, masterId, override);
+    if (res.status === 'success') refreshSuggest();
+    // Normalize: the real response types `error`/`details` as `| null`, while
+    // the panel's prop type only allows the object or `undefined`.
+    return {
+      status: res.status,
+      error: res.error
+        ? {
+            code: res.error.code,
+            message: res.error.message,
+            details: res.error.details ?? undefined,
+          }
+        : undefined,
+    };
+  };
+
+  // Real `usedBySessionIds`/`compatibleSessions` (populated) come from a
+  // per-master detail fetch; `sessionsList()` cross-references both sets of
+  // ids to human-readable "{target} · {filter} · {night}" labels. Shares the
+  // `queryKeys.sessions.all()` cache entry with the rest of the app (e.g.
+  // `SessionSourcePicker`) rather than a private key.
+  const masterId = master?.id;
+  const masterDetailQuery = useQuery({
+    queryKey: queryKeys.calibration.master(masterId ?? '__none__'),
+    queryFn: async () =>
+      unwrap(await commands.calibrationMastersGet(masterId as string)),
+    enabled: !!masterId,
+  });
+  const sessionsQuery = useQuery({
+    queryKey: queryKeys.sessions.all(),
+    queryFn: async () => unwrap(await commands.sessionsList(null, null)),
+  });
+  // #642: shares the same inventory-sources query SessionsPage's Reveal
+  // action reads (`queryKeys.inventory.all`) — no private fetch.
+  const sourcesQuery = useInventorySources();
+
+  // #886: single-master archive plan generation + review/apply.
+  const generateArchivePlan = useGenerateMasterArchivePlan();
+  const invalidateMaster = useInvalidateCalibrationMaster();
+  const [archiveReviewPlanId, setArchiveReviewPlanId] = useState<string | null>(
+    null,
+  );
+  const [inUseConfirmOpen, setInUseConfirmOpen] = useState(false);
+
+  const detail: DetailState = useMemo(() => {
+    const empty: DetailState = {
+      confirmedNames: [],
+      compatibleNames: [],
+      loading: false,
+      missingFlag: null,
+    };
+    if (!masterId) return empty;
+    if (masterDetailQuery.isFetching || sessionsQuery.isFetching) {
+      return { ...empty, loading: true };
+    }
+    // Mirrors the pre-migration catch-and-swallow: a failed detail or
+    // sessions fetch degrades to the empty state rather than an error banner.
+    if (
+      masterDetailQuery.error ||
+      sessionsQuery.error ||
+      !masterDetailQuery.data
+    ) {
+      return empty;
+    }
+    const masterDetail = masterDetailQuery.data;
+    const idToName = new Map<string, string>();
+    // Defensive: guard against a non-array `sessionsList()` payload (the old
+    // effect's Promise.all().catch() silently swallowed this; a bare `for...of`
+    // here would otherwise throw synchronously during render).
+    const sessionsList = Array.isArray(sessionsQuery.data)
+      ? sessionsQuery.data
+      : [];
+    for (const s of sessionsList) {
+      const k = s.sessionKey;
+      idToName.set(s.id, `${k.target} · ${k.filter} · ${k.night}`);
+    }
+    return {
+      confirmedNames: masterDetail.usedBySessionIds
+        .map((id) => idToName.get(id) ?? id)
+        .filter(Boolean),
+      compatibleNames: masterDetail.compatibleSessions
+        .map((e) => idToName.get(e.sessionId) ?? e.sessionId)
+        .filter(Boolean),
+      loading: false,
+      missingFlag: masterDetail.missingFlag ?? null,
+    };
+  }, [
+    masterId,
+    masterDetailQuery.data,
+    masterDetailQuery.isFetching,
+    masterDetailQuery.error,
+    sessionsQuery.data,
+    sessionsQuery.isFetching,
+    sessionsQuery.error,
+  ]);
+
 
   if (!master) {
     return (

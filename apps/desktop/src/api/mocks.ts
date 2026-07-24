@@ -1539,9 +1539,15 @@ const mockHandlers = {
     } satisfies AuditListResponse_Serialize;
   },
   audit_export: async (_args) => {
-    const args = _args as { filters?: AuditFilterDto | null } | undefined;
+    const args = _args as
+      | { filePath: string; filters?: AuditFilterDto | null }
+      | undefined;
     const filtered = filterMockAuditEntries(args?.filters);
-    return filtered.map((e) => JSON.stringify(e)).join('\n');
+    return {
+      filePath: args?.filePath ?? '/tmp/mock-audit-export.ndjson',
+      count: filtered.length,
+      bytes: 0,
+    };
   },
 
   // ── Archive commands (spec 017 WP-B) ──────────────────────────────────────
