@@ -1,5 +1,6 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
+#![allow(clippy::missing_errors_doc, clippy::type_complexity, clippy::too_many_lines)]
 
 //! Relation proposal reads and state transitions.
 //!
@@ -182,7 +183,7 @@ pub async fn list_proposals(
     .bind(after_created_at)
     .bind(after_created_at)
     .bind(after_public_id)
-    .bind(limit as i64)
+    .bind(i64::from(limit))
     .fetch_all(&mut *conn)
     .await?;
 

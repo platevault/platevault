@@ -1,5 +1,6 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
+#![allow(clippy::missing_errors_doc)]
 
 //! Ephemeral bounded-BFS traversal previews for panel lineage, mosaic lineage,
 //! and accepted mosaic connectivity.
@@ -14,9 +15,11 @@
 //! results are lost; callers then receive `traversal.operation_not_found`.
 //!
 //! Ceiling rules from the spec:
+//!
 //! - Node ceiling: `maxNodes` (1–100,000); sentinel = ceiling + 1.
 //! - Edge ceiling: `maxEdges` (1–2,000,000); sentinel = ceiling + 1.
 //! - Depth ceiling: `maxDepth` (1–4,096); sentinel = depth > ceiling.
+//!
 //! Any ceiling hit produces the typed error and no partial result.
 
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -138,8 +141,18 @@ pub struct TraversalOperation {
 /// few dozen concurrent previews.
 pub type TraversalRegistry = Arc<RwLock<HashMap<Uuid, Arc<TraversalOperation>>>>;
 
+#[must_use]
 pub fn new_registry() -> TraversalRegistry {
     Arc::new(RwLock::new(HashMap::new()))
+}
+
+/// Bundles the query-intent arguments passed through `run_bfs` and `bfs_inner`
+/// to keep both functions below the 8-argument threshold.
+struct BfsParams {
+    start_refs: Vec<EntityRef>,
+    graph: TraversalGraph,
+    direction: TraversalDirection,
+    limits: TraversalLimits,
 }
 
 /// Start an asynchronous BFS traversal and register it.
@@ -185,9 +198,9 @@ pub async fn start_traversal(
 
     // Spawn the BFS task.
     let registry_clone = registry.clone();
+    let params = BfsParams { start_refs, graph, direction, limits };
     tokio::spawn(async move {
-        run_bfs(pool, operation_id, watermark, start_refs, graph, direction, limits, state, cancel)
-            .await;
+        run_bfs(pool, operation_id, watermark, params, state, cancel).await;
         // The operation stays in the registry after completion so callers can
         // retrieve results. Expiry is handled by the caller.
         let _ = registry_clone; // keep alive
@@ -226,10 +239,7 @@ async fn run_bfs(
     pool: SqlitePool,
     operation_id: Uuid,
     watermark: i64,
-    start_refs: Vec<EntityRef>,
-    graph: TraversalGraph,
-    direction: TraversalDirection,
-    limits: TraversalLimits,
+    params: BfsParams,
     state: Arc<RwLock<TraversalState>>,
     cancel: Arc<AtomicBool>,
 ) {
@@ -239,9 +249,7 @@ async fn run_bfs(
         s.phase = TraversalPhase::Running;
     }
 
-    match bfs_inner(pool, watermark, start_refs, graph, direction, limits, state.clone(), cancel)
-        .await
-    {
+    match bfs_inner(pool, watermark, params, state.clone(), cancel).await {
         Ok((nodes, edges)) => {
             let mut s = state.write().await;
             s.visited_node_count = nodes.len() as u64;
@@ -273,17 +281,14 @@ async fn run_bfs(
 /// periodically. Returns the completed node and edge collections on success.
 ///
 /// Cancellation is checked after every 256 expanded edges.
-#[allow(clippy::too_many_arguments)]
 async fn bfs_inner(
     pool: SqlitePool,
     watermark: i64,
-    start_refs: Vec<EntityRef>,
-    graph: TraversalGraph,
-    direction: TraversalDirection,
-    limits: TraversalLimits,
+    params: BfsParams,
     state: Arc<RwLock<TraversalState>>,
     cancel: Arc<AtomicBool>,
 ) -> Result<(Vec<TraversalNode>, Vec<TraversalEdge>), TraversalError> {
+    let BfsParams { start_refs, graph, direction, limits } = params;
     let mut conn = pool.acquire().await.map_err(|e| TraversalError::DbError(e.to_string()))?;
 
     // Visited set: row_id → minimum depth.
@@ -306,8 +311,7 @@ async fn bfs_inner(
 
     while let Some((current_ref, depth)) = frontier.pop_front() {
         if cancel.load(Ordering::Relaxed) {
-            let mut s = state.write().await;
-            s.phase = TraversalPhase::Cancelled;
+            state.write().await.phase = TraversalPhase::Cancelled;
             return Err(TraversalError::Cancelled);
         }
 
@@ -344,11 +348,11 @@ async fn bfs_inner(
 
             // Node ceiling check (ceiling + 1 sentinel: request one more than
             // allowed to detect truncation).
-            if !visited.contains_key(&neighbour.row_id) {
+            if let std::collections::hash_map::Entry::Vacant(e) = visited.entry(neighbour.row_id) {
                 if result_nodes.len() as u64 >= limits.max_nodes {
                     return Err(TraversalError::NodeCeiling { max_nodes: limits.max_nodes });
                 }
-                visited.insert(neighbour.row_id, next_depth);
+                e.insert(next_depth);
                 result_nodes.push(TraversalNode { node_ref: neighbour.clone(), depth: next_depth });
                 frontier.push_back((neighbour, next_depth));
             }
@@ -357,8 +361,7 @@ async fn bfs_inner(
             if edges_since_cancel_check >= 256 {
                 edges_since_cancel_check = 0;
                 if cancel.load(Ordering::Relaxed) {
-                    let mut s = state.write().await;
-                    s.phase = TraversalPhase::Cancelled;
+                    state.write().await.phase = TraversalPhase::Cancelled;
                     return Err(TraversalError::Cancelled);
                 }
             }

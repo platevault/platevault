@@ -1,5 +1,6 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
+#![allow(clippy::missing_errors_doc, clippy::type_complexity, clippy::too_many_lines)]
 
 //! Mosaic heads, revisions, panel pins, edge evidence, lineage, and object
 //! evidence queries.
@@ -196,7 +197,7 @@ pub async fn list_mosaic_revision_panels(
     .bind(mosaic_revision_row_id)
     .bind(after_ordinal)
     .bind(after_ordinal)
-    .bind(limit as i64)
+    .bind(i64::from(limit))
     .fetch_all(&mut *conn)
     .await?;
 
@@ -264,7 +265,7 @@ pub async fn list_mosaic_revision_edges(
     .bind(mosaic_revision_row_id)
     .bind(after_ordinal)
     .bind(after_ordinal)
-    .bind(limit as i64)
+    .bind(i64::from(limit))
     .fetch_all(&mut *conn)
     .await?;
 
@@ -335,7 +336,7 @@ pub async fn list_mosaic_revision_history(
         .bind(mosaic_row_id)
         .bind(after_revision_number)
         .bind(after_revision_number)
-        .bind(limit as i64)
+        .bind(i64::from(limit))
         .fetch_all(&mut *conn)
         .await?;
 
@@ -375,7 +376,7 @@ pub async fn list_mosaic_lineage_predecessors(
          LIMIT ?",
     )
     .bind(successor_mosaic_row_id)
-    .bind(limit as i64)
+    .bind(i64::from(limit))
     .fetch_all(&mut *conn)
     .await?;
 
@@ -407,7 +408,7 @@ pub async fn list_mosaic_lineage_successors(
          LIMIT ?",
     )
     .bind(predecessor_mosaic_row_id)
-    .bind(limit as i64)
+    .bind(i64::from(limit))
     .fetch_all(&mut *conn)
     .await?;
 
@@ -483,7 +484,7 @@ pub async fn upsert_mosaic_revision(
         id
     };
 
-    let new_rev_num = current_revision_number.map(|n| n + 1).unwrap_or(1);
+    let new_rev_num = current_revision_number.map_or(1, |n| n + 1);
 
     sqlx::query(
         "INSERT INTO mosaic_revision
@@ -623,7 +624,7 @@ pub async fn insert_edge_evidence(
     .bind(input.overlap_ppm)
     .bind(input.centre_separation_udeg)
     .bind(input.residual_orientation_udeg)
-    .bind(input.parity_match as i64)
+    .bind(i64::from(input.parity_match))
     .bind(input.evidence_digest)
     .bind(input.config_revision_row_id)
     .bind(input.created_sequence)
@@ -799,10 +800,7 @@ pub async fn validate_mosaic_connectivity(
         return Ok(true);
     }
 
-    let seed = match seed_row_id {
-        Some(s) => s,
-        None => return Ok(false),
-    };
+    let Some(seed) = seed_row_id else { return Ok(false) };
 
     let ceiling = panel_count + 1;
 

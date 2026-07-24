@@ -1,5 +1,11 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::type_complexity,
+    clippy::too_many_lines,
+    clippy::similar_names
+)]
 
 //! Panel group heads, revisions, memberships, and lineage queries.
 //!
@@ -320,7 +326,7 @@ pub async fn list_panel_revision_history(
     .bind(panel_group_row_id)
     .bind(after_revision_number)
     .bind(after_revision_number)
-    .bind(limit as i64)
+    .bind(i64::from(limit))
     .fetch_all(&mut *conn)
     .await?;
 
@@ -381,7 +387,7 @@ pub async fn list_panel_revision_members(
     .bind(panel_revision_row_id)
     .bind(after_ordinal)
     .bind(after_ordinal)
-    .bind(limit as i64)
+    .bind(i64::from(limit))
     .fetch_all(&mut *conn)
     .await?;
 
@@ -411,7 +417,7 @@ pub async fn list_panel_lineage_predecessors(
          LIMIT ?",
     )
     .bind(successor_group_row_id)
-    .bind(limit as i64)
+    .bind(i64::from(limit))
     .fetch_all(&mut *conn)
     .await?;
 
@@ -444,7 +450,7 @@ pub async fn list_panel_lineage_successors(
          LIMIT ?",
     )
     .bind(predecessor_group_row_id)
-    .bind(limit as i64)
+    .bind(i64::from(limit))
     .fetch_all(&mut *conn)
     .await?;
 
@@ -830,12 +836,12 @@ pub async fn list_panel_groups_by_target(
     )
     .bind(canonical_target_row_id)
     .bind(canonical_target_row_id)
-    .bind(active_only as i64)
+    .bind(i64::from(active_only))
     .bind(after_created_at)
     .bind(after_created_at)
     .bind(after_created_at)
     .bind(after_public_id)
-    .bind(limit as i64)
+    .bind(i64::from(limit))
     .fetch_all(&mut *conn)
     .await?;
 

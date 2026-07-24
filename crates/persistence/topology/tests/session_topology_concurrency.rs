@@ -1,5 +1,13 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
+#![allow(
+    clippy::similar_names,
+    clippy::explicit_auto_deref,
+    clippy::items_after_statements,
+    clippy::manual_assert,
+    clippy::cast_possible_wrap,
+    clippy::doc_markdown
+)]
 
 //! Concurrency and CAS tests for the topology persistence layer.
 //!
