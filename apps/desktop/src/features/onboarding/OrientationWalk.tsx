@@ -38,6 +38,7 @@ import {
   isOnboardingSuppressed,
   completeOrientation,
   startOnboardingStateSync,
+  consumeOrientationReplay,
 } from './store';
 import { ORIENTATION_STOPS } from './orientationSteps';
 import type { OnboardingOrientationOutcome } from '@/bindings/index';
@@ -54,15 +55,6 @@ const AC_PREV = 'prev';
 const AC_CLOSE = 'close';
 const AC_SKIP = 'skip';
 const ST_SKIPPED = 'skipped';
-
-// Module-level replay hook (T015): Settings → Advanced calls this to re-run the
-// walk regardless of `orientationDone`. Single mounted walk owns the callback.
-let replayHook: (() => void) | null = null;
-
-/** Re-run the orientation walk from the first stop (FR-005 replay). */
-export function requestOrientationReplay(): void {
-  replayHook?.();
-}
 
 export function OrientationWalk() {
   const navigate = useNavigate();
@@ -86,23 +78,22 @@ export function OrientationWalk() {
     setActive(true);
   }, []);
 
-  // Register the replay hook for the walk's lifetime (T015).
-  useEffect(() => {
-    replayHook = launch;
-    return () => {
-      if (replayHook === launch) replayHook = null;
-    };
-  }, [launch]);
-
-  // Auto-run exactly once per session (FR-001): the backend flag enforces
-  // once-per-install; this ref prevents a re-launch inside the same session
-  // during the brief window before the flag round-trips back.
+  // Auto-run gate (FR-001/FR-004) + replay gate (T015).
+  // Runs once on mount (component is only mounted when the Shell gate says it's
+  // needed). For auto-run, the backend `orientationDone` flag must be false.
+  // For replay, `consumeOrientationReplay` clears the pending signal and returns
+  // true — this path fires even when orientationDone is already true.
   useEffect(() => {
     if (autoLaunchedRef.current || active) return;
     if (!setupCompleted || !onboarding || isOnboardingSuppressed()) return;
-    if (onboarding.flags.orientationDone) return;
-    autoLaunchedRef.current = true;
-    launch();
+    if (consumeOrientationReplay()) {
+      // Replay: ignore orientationDone.
+      autoLaunchedRef.current = true;
+      launch();
+    } else if (!onboarding.flags.orientationDone) {
+      autoLaunchedRef.current = true;
+      launch();
+    }
   }, [setupCompleted, onboarding, active, launch]);
 
   // Navigate to the current stop's real page (FR-002). Absent route = stay.

@@ -20,7 +20,10 @@ import { LogPanelProvider, useLogPanel } from './LogPanelContext';
 import { OperationStatusProvider } from './OperationStatusContext';
 import { PageStatusProvider } from './PageStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
-import { useOnboardingState } from '@/features/onboarding/store';
+import {
+  useOnboardingState,
+  useOrientationReplayPending,
+} from '@/features/onboarding/store';
 import { loadObservingState } from '@/features/targets/observing-sites/site-store';
 import {
   startUpdateSubscription,
@@ -39,16 +42,19 @@ const OrientationWalk = lazy(() =>
 function ShellInner() {
   const prefs = usePreferences();
   const onboarding = useOnboardingState();
+  const replayPending = useOrientationReplayPending();
   const { expanded } = useLogPanel();
   const navigate = useNavigate();
 
-  // Gate: only mount OrientationWalk (and load the joyride chunk) when setup
-  // is done and the orientation walk has not yet been completed. Once
-  // orientationDone flips true, this stays false for the session.
+  // Gate: mount OrientationWalk (loading the joyride chunk) when:
+  //   • first-run is done and orientationDone is false (initial auto-run), OR
+  //   • a replay was requested from Settings → Advanced (replayPending).
+  // The component itself handles the done flag and the replay signal, so this
+  // gate just ensures the lazy chunk loads whenever the walk might need to run.
   const walkReady =
     prefs.setupCompleted &&
     onboarding !== null &&
-    !onboarding.flags.orientationDone;
+    (!onboarding.flags.orientationDone || replayPending);
 
   // Redirect to /setup if first-run setup is not completed
   useEffect(() => {

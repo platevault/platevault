@@ -230,6 +230,49 @@ export function __setOnboardingStateForTest(
   emit();
 }
 
+// ── Replay signal (T015) ──────────────────────────────────────────────────────
+//
+// `requestOrientationReplay` is called from Settings → Advanced. It must live
+// in `store.ts` (not `OrientationWalk.tsx`) so callers don't pull in the
+// joyrideAdapter and react-joyride statically. The signal is a plain boolean
+// consumed and cleared by the OrientationWalk component on mount.
+
+let _replayPending = false;
+const _replaySubs = new Set<() => void>();
+
+function replayEmit(): void {
+  for (const fn of _replaySubs) fn();
+}
+
+/**
+ * Request an orientation walk replay (FR-005 / T015). Idempotent — multiple
+ * calls before the walk mounts collapse to a single run. The OrientationWalk
+ * component clears the signal on mount via `consumeOrientationReplay`.
+ */
+export function requestOrientationReplay(): void {
+  _replayPending = true;
+  replayEmit();
+}
+
+/** Called by OrientationWalk on mount: returns true once and resets. */
+export function consumeOrientationReplay(): boolean {
+  if (!_replayPending) return false;
+  _replayPending = false;
+  return true;
+}
+
+/** React hook: true while a replay is pending (drives Shell's mount gate). */
+export function useOrientationReplayPending(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      _replaySubs.add(fn);
+      return () => _replaySubs.delete(fn);
+    },
+    () => _replayPending,
+    () => _replayPending,
+  );
+}
+
 // ── React hooks ────────────────────────────────────────────────────────────────
 
 /** React hook: the live onboarding projection (or `null` before hydration). */

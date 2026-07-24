@@ -21,7 +21,7 @@ import {
   resetWizardStateWithSources,
   type SourceEntry,
 } from '@/features/setup/sources-store';
-import { requestOrientationReplay } from '@/features/onboarding/OrientationWalk';
+import { requestOrientationReplay } from '@/features/onboarding/store';
 import { restoreOnboarding } from '@/features/onboarding/store';
 import {
   SettingsSection,
