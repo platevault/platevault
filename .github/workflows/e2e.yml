@@ -1068,45 +1068,16 @@ jobs:
         if: matrix.shard == 1
         shell: bash
         run: |
-          SHARD1='\
-            test(=slow_targets_ui_dock_pin_and_width_survive_a_real_restart) | \
-            test(=inbox_ui_missing_path_attribute_banner_blocks_confirm) | \
-            test(=inbox_ui_mixed_folder_splits_into_single_type_items) | \
-            test(=inbox_ui_unsplit_unclassified_folder_badge_is_not_classified) | \
-            test(=settings_ui_theme_applies_live_and_persists_to_settings_db)'
-          SHARD2='\
-            test(=slow_archive_lifecycle_apply_trash_permanent_delete) | \
-            test(=targets_planner_real_astronomy_after_site_creation) | \
-            test(=targets_ui_identity_columns_stay_pinned_while_table_scrolls) | \
-            binary(calibration_ui_journeys) | \
-            binary(lifecycle_ui_journeys) | \
-            binary(source_view_journeys) | \
-            test(=ingestion_sessions_search) | \
-            binary(sessions_journeys) | \
-            test(=plan_review_empty_archive_plan_refuses_apply) | \
-            test(=plan_review_apply_with_audit) | \
-            test(=lifecycle_integrity)'
-          SHARD3='\
-            test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | \
-            binary(smoke) | \
-            test(=targets_ui_add_target_no_duplicate_on_reconfirm) | \
-            binary(inventory_journeys) | \
-            test(=cleanup_plan_review) | \
-            test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | \
-            test(=plan_review_destructive_confirm_gate_and_apply) | \
-            test(=targets_ui_astronomy_columns_disclose_placeholder_without_site) | \
-            binary(onboarding_journey) | \
-            binary(cleanup_protection_gate_journey) | \
-            test(=first_run_resolve_create_project) | \
-            test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | \
-            test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button)'
+          SHARD1='test(=slow_targets_ui_dock_pin_and_width_survive_a_real_restart) | test(=inbox_ui_missing_path_attribute_banner_blocks_confirm) | test(=inbox_ui_mixed_folder_splits_into_single_type_items) | test(=inbox_ui_unsplit_unclassified_folder_badge_is_not_classified) | test(=settings_ui_theme_applies_live_and_persists_to_settings_db)'
+          SHARD2='test(=slow_archive_lifecycle_apply_trash_permanent_delete) | test(=targets_planner_real_astronomy_after_site_creation) | test(=targets_ui_identity_columns_stay_pinned_while_table_scrolls) | binary(calibration_ui_journeys) | binary(lifecycle_ui_journeys) | binary(source_view_journeys) | test(=ingestion_sessions_search) | binary(sessions_journeys) | test(=plan_review_empty_archive_plan_refuses_apply) | test(=plan_review_apply_with_audit) | test(=lifecycle_integrity)'
+          SHARD3='test(=inbox_ui_confirm_does_not_move_then_apply_moves_to_shown_destination) | binary(smoke) | test(=targets_ui_add_target_no_duplicate_on_reconfirm) | binary(inventory_journeys) | test(=cleanup_plan_review) | test(=inbox_ui_catalogue_in_place_zero_moves_byte_identical) | test(=plan_review_destructive_confirm_gate_and_apply) | test(=targets_ui_astronomy_columns_disclose_placeholder_without_site) | binary(onboarding_journey) | binary(cleanup_protection_gate_journey) | test(=first_run_resolve_create_project) | test(=inbox_ui_unclassified_gate_bulk_reclassify_unblocks_confirm) | test(=settings_ui_ingestion_toggle_autosaves_no_global_save_button)'
           TOTAL=$(cargo nextest list \
             --archive-file e2e-archive.tar.zst --workspace-remap . \
-            --run-ignored all --message-format oneline 2>/dev/null | wc -l)
+            --run-ignored all --message-format oneline | wc -l)
           UNION=$(cargo nextest list \
             --archive-file e2e-archive.tar.zst --workspace-remap . \
             --run-ignored all --message-format oneline \
-            -E "${SHARD1} | ${SHARD2} | ${SHARD3}" 2>/dev/null | wc -l)
+            -E "${SHARD1} | ${SHARD2} | ${SHARD3}" | wc -l)
           echo "Total tests: ${TOTAL}, covered by shard union: ${UNION}"
           if [ "${TOTAL}" != "${UNION}" ]; then
             echo "::error::Shard coverage gap: ${TOTAL} tests in archive but only ${UNION} covered by the three shard filters. Add the missing test(s) to an -E expression."
