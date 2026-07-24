@@ -1286,6 +1286,11 @@ struct SubItemSeed {
 /// Used by `classify()` so the sub-item seed writes are included in the same
 /// transaction as the classification and item-state writes.
 /// `materialize_sub_items` (pool-only) is kept for `reclassify.rs`.
+// CCN justified: 6 sequential pipeline stages (partition → upsert → delete-stale →
+// evidence → metadata → breakdown+classification) each contribute ~2-3 branches.
+// No branching alternatives exist — each stage is mandatory and order-dependent.
+// Splitting across functions would require threading conn + source_group_id + seeds
+// through every call, replacing structural clarity with parameter noise.
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub(crate) async fn materialize_sub_items_tx(
     conn: &mut SqliteConnection,
