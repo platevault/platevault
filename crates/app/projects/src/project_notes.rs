@@ -32,6 +32,7 @@ use uuid::Uuid;
 use contracts_core::manifests::{
     ManifestOpError, ProjectNoteUpdateRequest, ProjectNoteUpdateResult,
 };
+use domain_core::project::validate::is_read_only;
 use persistence_plans::repositories::project_notes::{get_note, upsert_note};
 use persistence_plans::repositories::projects::get_project;
 use project_structure::notes::{NotesFileAdapter, RealNotesAdapter};
@@ -107,7 +108,7 @@ pub async fn update_note_with_adapter(
     })?;
 
     // ── Lifecycle guard (R-NotesEdit) ─────────────────────────────────────────
-    if project.lifecycle == "archived" {
+    if is_read_only(&project.lifecycle) {
         return Err(op_error(
             "project.read_only",
             "Notes cannot be edited on an archived project.",

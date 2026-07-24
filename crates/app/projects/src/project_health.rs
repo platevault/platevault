@@ -132,7 +132,9 @@ pub async fn check_project_ready_invariant(
         .await
         .map_err(|e| HealthError::NotFound(format!("project {project_id}: {e}")))?;
 
-    if row.lifecycle != "setup_incomplete" {
+    if domain_core::lifecycle::ProjectState::parse_str(&row.lifecycle)
+        != Some(domain_core::lifecycle::ProjectState::SetupIncomplete)
+    {
         return Ok(None);
     }
 
