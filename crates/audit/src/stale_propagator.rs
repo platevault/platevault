@@ -104,7 +104,7 @@ impl StalePropagator {
         let rows = match rows {
             Ok(r) => r,
             Err(e) => {
-                tracing::error!("stale_propagator: replay query failed: {e}");
+                tracing::error!(error = %e, "stale_propagator: replay query failed");
                 return cursor;
             }
         };
