@@ -142,7 +142,7 @@ export function useMasterDetail(
   });
   const sessionsQuery = useQuery({
     queryKey: queryKeys.sessions.all(),
-    queryFn: async () => unwrap(await commands.sessionsList()),
+    queryFn: async () => unwrap(await commands.sessionsList(null, null)),
   });
   // #642: shares the same inventory-sources query SessionsPage's Reveal
   // action reads (`queryKeys.inventory.all`) — no private fetch.
