@@ -231,7 +231,7 @@ pub async fn classify(
         .map(|w| {
             build_file_metadata_upsert(
                 &req.inbox_item_id,
-                w.fc.raw_meta.as_ref(),
+                w.fc.raw_meta.as_deref(),
                 &w.fc.relative_path,
                 w.file_size_bytes,
                 w.file_mtime.as_deref(),
@@ -240,11 +240,14 @@ pub async fn classify(
         .collect();
 
     // ── T066: per-file records for sub-item grouping ──────────────────────────
-    let mut file_records: Vec<(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)> =
-        file_work
-            .iter()
-            .map(|w| (w.fc.relative_path.clone(), w.fc.frame_type, w.fc.raw_meta.clone()))
-            .collect();
+    let mut file_records: Vec<(
+        String,
+        Option<FrameType>,
+        Option<std::sync::Arc<metadata_core::RawFileMetadata>>,
+    )> = file_work
+        .iter()
+        .map(|w| (w.fc.relative_path.clone(), w.fc.frame_type, w.fc.raw_meta.clone()))
+        .collect();
 
     // ── Open a single write transaction for all load-bearing inserts ──────────
     let mut tx =
@@ -360,7 +363,11 @@ pub async fn classify(
             || overrides_index.contains_key(&(fp, "temperatureC"))
             || overrides_index.contains_key(&(fp, "offset"))
         {
-            let raw = raw_opt.get_or_insert_with(Default::default);
+            // Arc::make_mut clones only when the refcount > 1 (cache still holds
+            // a handle); otherwise it is a no-op pointer cast.
+            let raw = std::sync::Arc::make_mut(raw_opt.get_or_insert_with(|| {
+                std::sync::Arc::new(metadata_core::RawFileMetadata::default())
+            }));
             if let Some(v) = overrides_index.get(&(fp, "exposureS")) {
                 raw.exposure = Some((*v).to_owned());
             }
@@ -427,13 +434,14 @@ pub async fn classify(
         }
     }
 
-    // Folder tallies from the layered (effective) records.
-    let mut frame_type_files: HashMap<String, Vec<String>> = HashMap::new();
+    // Folder tallies keyed by FrameType (Copy enum) to avoid one String alloc
+    // per file.
+    let mut frame_type_files: HashMap<FrameType, Vec<String>> = HashMap::new();
     let mut unclassified_files: Vec<String> = Vec::new();
     for (rel, ft_opt, _) in &file_records {
         match ft_opt {
             Some(ft) => {
-                frame_type_files.entry(ft.as_str().to_owned()).or_default().push(rel.clone());
+                frame_type_files.entry(*ft).or_default().push(rel.clone());
             }
             None => unclassified_files.push(rel.clone()),
         }
@@ -460,7 +468,7 @@ pub async fn classify(
     // reports 'unclassified' — the value its DB result already carried — rather
     // than becoming `unreachable!()`, because a panic is a poor way to discover
     // that an assumption was wrong in a release build.
-    let distinct_types: Vec<&str> = frame_type_files.keys().map(String::as_str).collect();
+    let distinct_types: Vec<&str> = frame_type_files.keys().map(|ft| ft.as_str()).collect();
     let (db_result, api_result, single_frame_type) = match distinct_types.len() {
         1 => ("classified", "single_type", Some(distinct_types[0].to_owned())),
         // Zero readable frame types and two-or-more both mean "not one thing",
@@ -697,7 +705,7 @@ pub async fn classify_source_group(
 pub(crate) struct FileClassification {
     pub relative_path: String,
     pub frame_type: Option<FrameType>,
-    pub raw_meta: Option<metadata_core::RawFileMetadata>,
+    pub raw_meta: Option<std::sync::Arc<metadata_core::RawFileMetadata>>,
     pub evidence_source: EvidenceSource,
     pub raw_value: Option<String>,
     pub is_unclassified: bool,
@@ -795,7 +803,7 @@ pub(crate) fn classify_one_file(
 pub(crate) fn build_file_records(
     file_paths: &[PathBuf],
     root_absolute_path: &Path,
-) -> Vec<(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)> {
+) -> Vec<(String, Option<FrameType>, Option<std::sync::Arc<metadata_core::RawFileMetadata>>)> {
     let norm_table = v1_normalization_table();
     file_paths
         .iter()
@@ -1221,7 +1229,11 @@ pub(crate) async fn materialize_sub_items(
     relative_path: &str,
     lane: &str,
     file_paths: &[PathBuf],
-    file_records: &[(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)],
+    file_records: &[(
+        String,
+        Option<FrameType>,
+        Option<std::sync::Arc<metadata_core::RawFileMetadata>>,
+    )],
 ) {
     let Ok(mut conn) = pool.acquire().await else { return };
     materialize_sub_items_tx(
@@ -1260,18 +1272,26 @@ pub(crate) async fn materialize_sub_items_tx(
     relative_path: &str,
     lane: &str,
     file_paths: &[PathBuf],
-    file_records: &[(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)],
+    file_records: &[(
+        String,
+        Option<FrameType>,
+        Option<std::sync::Arc<metadata_core::RawFileMetadata>>,
+    )],
 ) {
     // Step 1 + 2 + T070 gate: partition files by group_key.
     #[allow(clippy::type_complexity)]
     let mut groups: std::collections::HashMap<
         String,
-        (String, bool, Vec<(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)>),
+        (
+            String,
+            bool,
+            Vec<(String, Option<PathBuf>, Option<std::sync::Arc<metadata_core::RawFileMetadata>>)>,
+        ),
     > = std::collections::HashMap::new();
 
     for (i, (rel, frame_type_opt, raw_meta_opt)) in file_records.iter().enumerate() {
         let abs_path = file_paths.get(i).cloned();
-        let missing = missing_mandatory_for_file(*frame_type_opt, raw_meta_opt.as_ref());
+        let missing = missing_mandatory_for_file(*frame_type_opt, raw_meta_opt.as_deref());
         let needs_review = !missing.is_empty();
         let (group_key, group_label) = if let Some(ft) = *frame_type_opt {
             let meta = raw_meta_opt.as_ref().map_or_else(
@@ -1300,8 +1320,11 @@ pub(crate) async fn materialize_sub_items_tx(
     // Collect all files into a flat Vec so we can build batch payloads with
     // contiguous index ranges.
     #[allow(clippy::type_complexity)]
-    let mut all_files: Vec<(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)> =
-        Vec::new();
+    let mut all_files: Vec<(
+        String,
+        Option<PathBuf>,
+        Option<std::sync::Arc<metadata_core::RawFileMetadata>>,
+    )> = Vec::new();
     // Produce the sub-item seeds in deterministic key order.
     let mut sorted_groups: Vec<(&String, &(String, bool, Vec<_>))> = groups.iter().collect();
     sorted_groups.sort_by_key(|(k, _)| k.as_str());
@@ -1453,7 +1476,7 @@ pub(crate) async fn materialize_sub_items_tx(
             slice.iter().zip(stat_slice.iter()).map(|((rel, _, raw_meta_opt), (sz, mt))| {
                 build_file_metadata_upsert(
                     s.persisted_id.as_str(),
-                    raw_meta_opt.as_ref(),
+                    raw_meta_opt.as_deref(),
                     rel.as_str(),
                     *sz,
                     mt.as_deref(),
@@ -1590,7 +1613,7 @@ fn enumerate_fits_files(folder: &Path) -> Vec<PathBuf> {
 async fn build_breakdown(
     pool: &SqlitePool,
     inbox_item_id: &str,
-    frame_type_files: &HashMap<String, Vec<String>>,
+    frame_type_files: &HashMap<FrameType, Vec<String>>,
     root_absolute_path: &Path,
 ) -> Vec<BreakdownEntry> {
     // Load the active pattern once; if it is unset/invalid every preview is None.
@@ -1602,7 +1625,8 @@ async fn build_breakdown(
 
     let mut entries = Vec::new();
 
-    for (kind, files) in frame_type_files {
+    for (ft, files) in frame_type_files {
+        let kind = ft.as_str();
         let count = files.len();
         let sample: Vec<String> = files.iter().take(10).cloned().collect();
         let sample_json = serde_json::to_string(&sample).unwrap_or_else(|_| "[]".to_owned());
@@ -1639,7 +1663,7 @@ async fn build_breakdown(
         });
 
         entries.push(BreakdownEntry {
-            kind: kind.clone(),
+            kind: kind.to_owned(),
             count,
             destination_preview,
             sample_files: sample,

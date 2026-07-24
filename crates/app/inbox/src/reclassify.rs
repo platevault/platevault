@@ -713,7 +713,7 @@ pub async fn reclassify_v2(
     let mut file_records: Vec<(
         String,
         Option<metadata_core::FrameType>,
-        Option<metadata_core::RawFileMetadata>,
+        Option<std::sync::Arc<metadata_core::RawFileMetadata>>,
     )> = Vec::new();
 
     for item_id in &evidence_item_ids {
@@ -760,26 +760,28 @@ pub async fn reclassify_v2(
             // We use the overrides_index uniformly for all keys to keep the
             // logic simple.
 
-            // Base values from the metadata row (may be None if row absent).
-            let base_filter: Option<String> = meta_map.get(fp).and_then(|m| m.filter.clone());
+            // Bind once — avoids 13 repeated HashMap lookups for the same key.
+            let base_meta = meta_map.get(fp).copied();
+
+            let base_filter: Option<String> = base_meta.and_then(|m| m.filter.clone());
             let base_exposure: Option<String> =
-                meta_map.get(fp).and_then(|m| m.exposure_s.map(|v| v.to_string()));
-            let base_gain: Option<String> = meta_map.get(fp).and_then(|m| m.gain.clone());
-            let base_binning_x: Option<i64> = meta_map.get(fp).and_then(|m| m.binning_x);
-            let base_binning_y: Option<i64> = meta_map.get(fp).and_then(|m| m.binning_y);
-            let base_object: Option<String> = meta_map.get(fp).and_then(|m| m.object.clone());
-            let base_date_obs: Option<String> = meta_map.get(fp).and_then(|m| m.date_obs.clone());
-            let base_instrume: Option<String> = meta_map.get(fp).and_then(|m| m.instrume.clone());
-            let base_telescop: Option<String> = meta_map.get(fp).and_then(|m| m.telescop.clone());
+                base_meta.and_then(|m| m.exposure_s.map(|v| v.to_string()));
+            let base_gain: Option<String> = base_meta.and_then(|m| m.gain.clone());
+            let base_binning_x: Option<i64> = base_meta.and_then(|m| m.binning_x);
+            let base_binning_y: Option<i64> = base_meta.and_then(|m| m.binning_y);
+            let base_object: Option<String> = base_meta.and_then(|m| m.object.clone());
+            let base_date_obs: Option<String> = base_meta.and_then(|m| m.date_obs.clone());
+            let base_instrume: Option<String> = base_meta.and_then(|m| m.instrume.clone());
+            let base_telescop: Option<String> = base_meta.and_then(|m| m.telescop.clone());
             let base_naxis1: Option<String> =
-                meta_map.get(fp).and_then(|m| m.naxis1.map(|v| v.to_string()));
+                base_meta.and_then(|m| m.naxis1.map(|v| v.to_string()));
             let base_naxis2: Option<String> =
-                meta_map.get(fp).and_then(|m| m.naxis2.map(|v| v.to_string()));
+                base_meta.and_then(|m| m.naxis2.map(|v| v.to_string()));
             let base_stack_count: Option<u32> =
-                meta_map.get(fp).and_then(|m| m.stack_count.and_then(|v| u32::try_from(v).ok()));
+                base_meta.and_then(|m| m.stack_count.and_then(|v| u32::try_from(v).ok()));
             // SET-TEMP is the only temperature persisted to inbox_file_metadata
             // (R-18 default dark-grouping source); CCD-TEMP has no base column.
-            let base_set_temp_c: Option<f64> = meta_map.get(fp).and_then(|m| m.temperature_c);
+            let base_set_temp_c: Option<f64> = base_meta.and_then(|m| m.temperature_c);
 
             // Apply overrides on top: generic override table wins.
             // image_typ: manual_override > 'frameType' override > header frame_type.
@@ -849,7 +851,11 @@ pub async fn reclassify_v2(
             // Always pass Some(raw_meta) — even when the metadata row is absent
             // the struct carries the user's overrides and the mandatory-attr gate
             // can evaluate them correctly.
-            file_records.push((ev.relative_file_path.clone(), eff_ft, Some(raw_meta)));
+            file_records.push((
+                ev.relative_file_path.clone(),
+                eff_ft,
+                Some(std::sync::Arc::new(raw_meta)),
+            ));
         }
     }
 
@@ -889,7 +895,7 @@ pub async fn reclassify_v2(
     // deduplicated, deterministically ordered list.
     let needs_review_missing: Vec<String> = file_records
         .iter()
-        .flat_map(|(_, ft, raw)| super::classify::missing_mandatory_for_file(*ft, raw.as_ref()))
+        .flat_map(|(_, ft, raw)| super::classify::missing_mandatory_for_file(*ft, raw.as_deref()))
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect();

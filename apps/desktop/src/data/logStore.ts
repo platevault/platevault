@@ -71,10 +71,16 @@ const listeners = new Set<Listener>();
 // Fast dedup set on entry ids.
 const seenIds = new Set<string>();
 
+let notifyScheduled = false;
 function notify() {
-  for (const listener of listeners) {
-    listener();
-  }
+  if (notifyScheduled) return;
+  notifyScheduled = true;
+  requestAnimationFrame(() => {
+    notifyScheduled = false;
+    for (const listener of listeners) {
+      listener();
+    }
+  });
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -140,4 +146,5 @@ export function resetLogStore(): void {
   state = { entries: [], dropped: 0, truncated: false };
   seenIds.clear();
   listeners.clear();
+  notifyScheduled = false;
 }

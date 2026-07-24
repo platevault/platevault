@@ -205,8 +205,23 @@ fn normalize_text(value: Option<&str>) -> Option<String> {
     if v.is_empty() {
         return None;
     }
-    let collapsed: String = v.split_whitespace().collect::<Vec<_>>().join(" ");
-    Some(collapsed.to_ascii_lowercase())
+    // Single-pass fold: collapse whitespace + lowercase without a Vec intermediate.
+    let mut out = String::with_capacity(v.len());
+    let mut prev_ws = false;
+    for c in v.chars() {
+        if c.is_whitespace() {
+            if !prev_ws {
+                out.push(' ');
+            }
+            prev_ws = true;
+        } else {
+            for lc in c.to_lowercase() {
+                out.push(lc);
+            }
+            prev_ws = false;
+        }
+    }
+    Some(out)
 }
 
 /// Snap a continuous value to the nearest multiple of `size` (FR-036). A
