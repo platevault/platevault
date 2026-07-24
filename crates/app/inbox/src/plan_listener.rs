@@ -38,6 +38,7 @@ use audit::bus::EventBus;
 use audit::event_bus::{
     PlanApplyingCompleted, PlanDiscarded, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_DISCARDED,
 };
+use contracts_core::lifecycle::PlanState;
 use persistence_inbox::repositories::inbox as inbox_repo;
 use persistence_inbox::repositories::q_inbox::{
     self, InsertCalibrationFingerprint, InsertCalibrationSession,
@@ -186,7 +187,7 @@ async fn handle_plan_completed(
     resolve_cache: &ResolveCache,
     payload: &PlanApplyingCompleted,
 ) -> Result<(), String> {
-    if payload.terminal_state == "applied" {
+    if payload.terminal_state == PlanState::Applied.as_str() {
         complete_applied_plan(pool, bus, resolve_cache, &payload.plan_id).await
     } else {
         // partially_applied, failed, cancelled → allow re-split, back to
