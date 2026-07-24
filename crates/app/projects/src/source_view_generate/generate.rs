@@ -151,10 +151,8 @@ async fn plan_source_frames(
     strict: bool,
 ) -> Result<SourcePlanResult, ContractError> {
     let mut planned: Vec<PlannedLink> = Vec::new();
-    let mut warnings: Vec<GenerationWarning> = Vec::new();
     let mut unresolved_refs: Vec<String> = Vec::new();
     let mut sessions_without_calibration: Vec<String> = Vec::new();
-    // T028: track which calibration types each session actually matched.
     let mut session_calibration_types: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
 
     for src in sources {
@@ -166,54 +164,25 @@ async fn plan_source_frames(
             unresolved_refs.push(src.inventory_session_id.clone());
             continue;
         };
-        let q_projects::AcquisitionSessionViewRow {
-            root_id,
-            session_key,
-            frame_ids: frame_ids_json,
-        } = session;
 
-        // Resolve the light-frame destination directory once per session.
-        let mut light_bundle: MetadataBundle = HashMap::new();
-        light_bundle.insert("filter".to_owned(), src.filter_snapshot.clone());
-        light_bundle.insert("exposure".to_owned(), src.exposure_snapshot.clone());
-        light_bundle.insert("date".to_owned(), session_night(&session_key));
-        let light_dir = Utf8PathBuf::from(
-            resolve_pattern_str(layout.light_pattern, &light_bundle)
-                .map_err(|e| layout_resolve_err(&e, &src.inventory_session_id))?
-                .relative_path,
-        );
-
-        let frame_ids = parse_frame_ids(&frame_ids_json);
-        let frames = frames_for_ids(pool, &frame_ids).await;
-
-        let mut any_light_present = false;
-        for frame in &frames {
-            if frame.state == "missing" || frame.state == "rejected" {
-                unresolved_refs.push(frame.id.clone());
-                continue;
-            }
-            any_light_present = true;
-            let basename = Utf8Path::new(&frame.relative_path)
-                .file_name()
-                .unwrap_or(&frame.relative_path)
-                .to_owned();
-            planned.push(PlannedLink {
-                inventory_item_id: frame.id.clone(),
-                source_root_id: root_id.clone(),
-                source_relative_path: frame.relative_path.clone(),
-                dest_relative: join_portable(&light_dir, basename.as_str()),
-            });
-        }
-        if !any_light_present {
+        let any_light = plan_light_frames_for_session(
+            pool,
+            src,
+            &session,
+            layout,
+            &mut planned,
+            &mut unresolved_refs,
+        )
+        .await?;
+        if !any_light {
             continue;
         }
 
-        // Matched calibration (best-effort; not a generation prerequisite — FR-010a).
         plan_calibration_for_session(
             pool,
             src,
             layout,
-            &root_id,
+            &session.root_id,
             &mut planned,
             &mut unresolved_refs,
             &mut sessions_without_calibration,
@@ -222,13 +191,68 @@ async fn plan_source_frames(
         .await?;
     }
 
-    // T028: partial calibration coverage detection.
     detect_partial_calibration_coverage(
         &session_calibration_types,
         &mut sessions_without_calibration,
     );
 
-    // FR-019: unresolved sources are skipped and flagged.
+    let warnings = assemble_source_warnings(strict, unresolved_refs, sessions_without_calibration)?;
+
+    Ok(SourcePlanResult { planned, warnings })
+}
+
+/// Resolve and plan light frames for a single acquisition session.
+/// Returns whether any present light frame was found.
+async fn plan_light_frames_for_session(
+    pool: &SqlitePool,
+    src: &projects_repo::ProjectSourceRow,
+    session: &q_projects::AcquisitionSessionViewRow,
+    layout: &workflow_profiles::SourceViewLayout,
+    planned: &mut Vec<PlannedLink>,
+    unresolved_refs: &mut Vec<String>,
+) -> Result<bool, ContractError> {
+    let mut light_bundle: MetadataBundle = HashMap::new();
+    light_bundle.insert("filter".to_owned(), src.filter_snapshot.clone());
+    light_bundle.insert("exposure".to_owned(), src.exposure_snapshot.clone());
+    light_bundle.insert("date".to_owned(), session_night(&session.session_key));
+    let light_dir = Utf8PathBuf::from(
+        resolve_pattern_str(layout.light_pattern, &light_bundle)
+            .map_err(|e| layout_resolve_err(&e, &src.inventory_session_id))?
+            .relative_path,
+    );
+
+    let frame_ids = parse_frame_ids(&session.frame_ids);
+    let frames = frames_for_ids(pool, &frame_ids).await;
+
+    let mut any_light_present = false;
+    for frame in &frames {
+        if frame.state == "missing" || frame.state == "rejected" {
+            unresolved_refs.push(frame.id.clone());
+            continue;
+        }
+        any_light_present = true;
+        let basename = Utf8Path::new(&frame.relative_path)
+            .file_name()
+            .unwrap_or(&frame.relative_path)
+            .to_owned();
+        planned.push(PlannedLink {
+            inventory_item_id: frame.id.clone(),
+            source_root_id: session.root_id.clone(),
+            source_relative_path: frame.relative_path.clone(),
+            dest_relative: join_portable(&light_dir, basename.as_str()),
+        });
+    }
+    Ok(any_light_present)
+}
+
+/// Assemble warnings from accumulated unresolved refs and calibration gaps.
+fn assemble_source_warnings(
+    strict: bool,
+    unresolved_refs: Vec<String>,
+    sessions_without_calibration: Vec<String>,
+) -> Result<Vec<GenerationWarning>, ContractError> {
+    let mut warnings: Vec<GenerationWarning> = Vec::new();
+
     if !unresolved_refs.is_empty() {
         if strict {
             return Err(ContractError::new(
@@ -262,7 +286,7 @@ async fn plan_source_frames(
         });
     }
 
-    Ok(SourcePlanResult { planned, warnings })
+    Ok(warnings)
 }
 
 /// Plan calibration links for a single source session.
