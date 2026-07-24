@@ -96,7 +96,9 @@ describe('missing-translation fallback (research D5)', () => {
   // Timeout bumped to 120 s: iterates all 2000+ catalogue entries; cold
   // import of the full paraglide bundle (one .js per catalogue key) can
   // exceed 15 s on the CI reference machine when the module cache is cold.
-  it('no pt-BR message renders as a raw key or an empty string', { timeout: 120_000 }, async () => {
+  it('no pt-BR message renders as a raw key or an empty string', {
+    timeout: 120_000,
+  }, async () => {
     const { m } = await import('@/lib/i18n');
 
     const offenders: string[] = [];
@@ -120,7 +122,9 @@ describe('missing-translation fallback (research D5)', () => {
     expect(checked).toBeGreaterThan(1000);
   });
 
-  it('a key present in pt-BR resolves to the translated string', { timeout: 60_000 }, async () => {
+  it('a key present in pt-BR resolves to the translated string', {
+    timeout: 60_000,
+  }, async () => {
     const { m } = await import('@/lib/i18n');
 
     expect(m.common_save({}, { locale: 'pt-BR' })).toBe('Salvar');
