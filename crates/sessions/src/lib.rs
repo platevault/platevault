@@ -11,7 +11,7 @@ pub mod optic_train;
 
 pub use clustering::{
     angular_separation_deg, circular_mean_deg, derive_clustering, fov_diagonal_deg,
-    rotation_circular_distance_deg, Assignment, ClusteringResult, ExistingFraming, NewFramingGroup,
+    rotation_axial_distance_deg, Assignment, ClusteringResult, ExistingFraming, NewFramingGroup,
     SessionGeometry, ToleranceParams, UnassignedReason,
 };
 pub use identity::{

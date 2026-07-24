@@ -190,7 +190,7 @@ dependencies = [
  "sessions",
  "sha2 0.10.9",
  "simbad-resolver",
- "skymath",
+ "skymath 0.6.0",
  "sqlx",
  "target-match",
  "targeting",
@@ -815,7 +815,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
- "skymath",
+ "skymath 0.7.1",
  "time",
 ]
 
@@ -1388,7 +1388,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simbad-resolver",
- "skymath",
+ "skymath 0.6.0",
  "specta",
  "specta-typescript",
  "sqlx",
@@ -1787,7 +1787,7 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9f03c8e9bb8afa98de1186e5237a70d2e907b239a9c1f0d523131402cc0b326"
 dependencies = [
- "skymath",
+ "skymath 0.6.0",
  "thiserror 2.0.19",
  "time",
 ]
@@ -3287,7 +3287,7 @@ name = "metadata_core"
 version = "0.1.0"
 dependencies = [
  "serde",
- "skymath",
+ "skymath 0.6.0",
  "thiserror 2.0.19",
  "toml 0.9.12+spec-1.1.0",
 ]
@@ -5410,7 +5410,7 @@ name = "sessions"
 version = "0.1.0"
 dependencies = [
  "domain_core",
- "skymath",
+ "skymath 0.7.1",
  "thiserror 2.0.19",
  "time",
  "uuid",
@@ -5502,7 +5502,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
- "skymath",
+ "skymath 0.6.0",
  "thiserror 2.0.19",
  "time",
  "tokio",
@@ -5545,6 +5545,16 @@ name = "skymath"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a79e14882fa3b8890da09ab6c285953fc3ad0fa801bdb73bacf1492309091c"
+dependencies = [
+ "thiserror 2.0.19",
+ "time",
+]
+
+[[package]]
+name = "skymath"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fe8c5c80aca9d4212b3b0a5f743d8e9f5c945e221136f346c5b141149e68660"
 dependencies = [
  "thiserror 2.0.19",
  "time",
@@ -6133,7 +6143,7 @@ checksum = "23a0b58f5c23ca0507df3dd8ceb2a382a388acbdec8b8dd323f68dc5490fa796"
 dependencies = [
  "geo",
  "geo-types",
- "skymath",
+ "skymath 0.6.0",
  "thiserror 2.0.19",
 ]
 
@@ -6142,7 +6152,7 @@ name = "targeting"
 version = "0.1.0"
 dependencies = [
  "simbad-resolver",
- "skymath",
+ "skymath 0.6.0",
  "target-match",
  "uuid",
 ]
@@ -6158,7 +6168,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simbad-resolver",
- "skymath",
+ "skymath 0.6.0",
  "sqlx",
  "targeting",
  "tempfile",
@@ -8313,7 +8323,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5946a5236693506e10bf909a69d249b62affc50d0fcc5e37fa08b12ee614e033"
 dependencies = [
  "quick-xml",
- "skymath",
+ "skymath 0.6.0",
  "thiserror 2.0.19",
  "time",
 ]
