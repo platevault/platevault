@@ -57,6 +57,13 @@ dead-callers:
 lifecycle-strings:
     bash scripts/check-lifecycle-strings.sh
 
+# Hot-read ratchet — fail if per-operation hot-read call sites in the inbox /
+# plan-apply / watcher paths exceed the checked-in baseline. Shrink-only:
+# any new site fails CI. After removing a site, regenerate the baseline:
+#   bash scripts/check-hot-read-ratchet.sh --generate
+hot-read:
+    bash scripts/check-hot-read-ratchet.sh
+
 # Periodic hygiene sweeps. NOT CI gates and deliberately so: these surface debt
 # to triage, not per-PR correctness, and a noisy blocking gate gets suppressed.
 # Run them when you want a health read, not on every push.
@@ -139,8 +146,8 @@ check-generated:
     git diff --exit-code specs/*/contracts/*.generated.json apps/desktop/src/bindings/
 
 # Full pre-merge gate: lint + tests + typecheck + generated-artifact drift +
-# DB/dead-caller boundary ratchets.
-check: lint test typecheck check-generated db-boundary dead-callers lifecycle-strings
+# DB/dead-caller/hot-read/lifecycle-strings boundary ratchets.
+check: lint test typecheck check-generated db-boundary dead-callers hot-read lifecycle-strings
 
 # Placeholder fixture check hook.
 fixtures-check:
