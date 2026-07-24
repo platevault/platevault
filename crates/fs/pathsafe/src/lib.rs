@@ -23,6 +23,8 @@ use std::fs::{self, Metadata};
 use std::io;
 use std::path::{Path, PathBuf};
 
+use camino::Utf8Path;
+
 /// Returns `true` when `path` is a symlink or (on Windows) a junction /
 /// reparse-point entry, as reported by `symlink_metadata`.
 ///
@@ -163,6 +165,38 @@ pub fn create_symlink(source: &Path, destination: &Path) -> io::Result<()> {
         let _ = (source, destination);
         Err(io::Error::other("symlink not supported on this platform"))
     }
+}
+
+// ── Wire-path helpers ─────────────────────────────────────────────────────────
+
+/// Convert `path` to a forward-slash UTF-8 string for wire and contract fields.
+///
+/// Uses `camino::Utf8Path` for a lossless conversion when the path is valid
+/// UTF-8, falling back to `to_string_lossy` (which replaces invalid sequences
+/// with U+FFFD) for the rare non-UTF-8 path. The fallback is defensive only;
+/// in production all paths pass the non-UTF-8 skip at the `read_dir` boundary
+/// before reaching this function.
+///
+/// This is the canonical single home for `replace('\\', "/")` on a `Path`
+/// so the wire format (`relative_file_path` contract field) cannot drift
+/// between scan, classify, and confirm (bd `astro-plan-kyo7.88`).
+#[must_use]
+pub fn wire_path(path: &Path) -> String {
+    Utf8Path::from_path(path).map_or_else(
+        || path.to_string_lossy().replace('\\', "/"),
+        |u| u.as_str().replace('\\', "/"),
+    )
+}
+
+/// Compute the forward-slash UTF-8 path of `path` relative to `root`.
+///
+/// Strips the `root` prefix via `strip_prefix`; falls back to `wire_path(path)`
+/// if `path` does not start with `root`. Callers must ensure `path` is a
+/// descendant of `root` — the fallback is purely defensive.
+#[must_use]
+pub fn relative_wire_path(root: &Path, path: &Path) -> String {
+    let rel = path.strip_prefix(root).unwrap_or(path);
+    wire_path(rel)
 }
 
 #[cfg(test)]

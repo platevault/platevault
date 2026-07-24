@@ -27,7 +27,6 @@ use std::path::Path;
 use audit::bus::EventBus;
 use audit::event_bus::Source;
 use sqlx::SqlitePool;
-use uuid::Uuid;
 
 use contracts_core::manifests::{
     ManifestOpError, ProjectNoteUpdateRequest, ProjectNoteUpdateResult,
@@ -44,7 +43,7 @@ const MAX_NOTE_BYTES: usize = 16_384;
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn new_uuid() -> String {
-    Uuid::new_v4().to_string()
+    domain_core::ids::new_id()
 }
 
 fn op_error(code: &str, message: &str) -> ManifestOpError {

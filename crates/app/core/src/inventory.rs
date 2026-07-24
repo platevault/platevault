@@ -377,7 +377,7 @@ fn project_row_to_session(
     });
 
     // No exposure in session_key; would come from the fingerprint/provenance
-    // join in a full implementation (TODO(037)).
+    // join in a full implementation (TODO(astro-plan-kyo7.88)).
     let exposure = None;
 
     let camera = camera_map.get(&row.id).cloned();

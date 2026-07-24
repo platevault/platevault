@@ -76,16 +76,12 @@ use sessions::{ObserverContext, SessionKey};
 use sqlx::SqlitePool;
 use time::format_description::well_known::Iso8601;
 use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
-use uuid::Uuid;
 
-use contracts_core::error_code::ErrorCode;
-use contracts_core::{ContractError, ErrorSeverity};
+use contracts_core::ContractError;
 
 use crate::ingest_resolution::{associate_or_enqueue, AssociateOutcome};
 
-fn db_err(e: impl std::fmt::Display) -> ContractError {
-    ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-}
+use app_core_errors::db_err;
 
 /// Summary of one [`ingest_light_frames`] pass.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -499,8 +495,8 @@ async fn upsert_session(
         let mut frames: BTreeSet<String> =
             serde_json::from_str(&existing.frame_ids).unwrap_or_default();
         frames.insert(image_id.to_owned());
-        let frames_json =
-            serde_json::to_string(&frames.into_iter().collect::<Vec<_>>()).map_err(db_err)?;
+        let frames_json = serde_json::to_string(&frames.into_iter().collect::<Vec<_>>())
+            .map_err(|e| app_core_errors::db_internal_ctx(e, "serialize frame_ids"))?;
 
         // Back-fill the link if it resolved this pass and the row had none.
         match (existing.canonical_target_id.is_none(), canonical_target_id) {
@@ -527,8 +523,9 @@ async fn upsert_session(
         return Ok(existing.id);
     }
 
-    let id = Uuid::new_v4().to_string();
-    let frames_json = serde_json::to_string(&[image_id]).map_err(db_err)?;
+    let id = domain_core::ids::new_id();
+    let frames_json = serde_json::to_string(&[image_id])
+        .map_err(|e| app_core_errors::db_internal_ctx(e, "serialize frame_ids"))?;
     repo::insert_acquisition_session(
         pool,
         &id,
@@ -712,13 +709,10 @@ mod tests {
 
     // ── T075/FR-052: target propagation to linked projects ────────────────────
 
-    use persistence_core::Database;
     use persistence_plans::repositories::projects::InsertProject;
 
-    async fn test_db() -> Database {
-        let db = Database::in_memory().await.unwrap();
-        db.migrate().await.unwrap();
-        db
+    async fn test_db() -> persistence_core::Database {
+        persistence_core::test_support::setup_db().await
     }
 
     /// Insert a minimal `canonical_target` row (same shape used elsewhere in the
@@ -774,7 +768,7 @@ mod tests {
         repo_projects::insert_project_source(
             pool,
             &repo_projects::InsertProjectSource {
-                id: &Uuid::new_v4().to_string(),
+                id: &domain_core::ids::new_id(),
                 project_id,
                 inventory_session_id: session_id,
                 name_snapshot: "",
@@ -984,7 +978,7 @@ mod tests {
             "INSERT INTO ingest_resolution (id, image_id, state, target_id, object_raw, attempts)
              VALUES (?, 'image-1', 'resolved', 'target-1', 'M 31', 1)",
         )
-        .bind(Uuid::new_v4().to_string())
+        .bind(domain_core::ids::new_id())
         .execute(db.pool())
         .await
         .unwrap();

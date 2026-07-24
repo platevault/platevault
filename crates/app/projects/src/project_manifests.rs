@@ -31,7 +31,6 @@
 use audit::bus::EventBus;
 use audit::event_bus::Source;
 use sqlx::SqlitePool;
-use uuid::Uuid;
 
 use contracts_core::manifests::{
     ManifestBodyDto, ManifestDto, ManifestGetResponse, ManifestListRequest, ManifestListResponse,
@@ -51,7 +50,7 @@ use std::path::Path;
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn new_uuid() -> String {
-    Uuid::new_v4().to_string()
+    domain_core::ids::new_id()
 }
 
 fn manifest_op_error(code: &str, message: &str) -> ManifestOpError {

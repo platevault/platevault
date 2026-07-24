@@ -284,14 +284,14 @@ pub async fn search_targets_by_like(
         "SELECT t.id, COALESCE(t.display_alias, t.primary_designation) AS label,
                 (SELECT ta.alias FROM target_alias ta
                  WHERE ta.target_id = t.id
-                   AND ta.normalized LIKE ?
+                   AND ta.normalized LIKE ? ESCAPE '\\'
                  LIMIT 1) AS alias_match
          FROM canonical_target t
-         WHERE LOWER(t.primary_designation) LIKE ?
+         WHERE LOWER(t.primary_designation) LIKE ? ESCAPE '\\'
             OR EXISTS (
                 SELECT 1 FROM target_alias ta2
                 WHERE ta2.target_id = t.id
-                  AND ta2.normalized LIKE ?
+                  AND ta2.normalized LIKE ? ESCAPE '\\'
             )
          ORDER BY t.primary_designation ASC
          LIMIT 10",
@@ -338,7 +338,7 @@ pub async fn search_sessions_by_like(
     let rows = sqlx::query_as::<_, IdLabelRow>(
         "SELECT id, session_key AS label
          FROM acquisition_session
-         WHERE LOWER(session_key) LIKE ?
+         WHERE LOWER(session_key) LIKE ? ESCAPE '\\'
          ORDER BY created_at DESC
          LIMIT 10",
     )
@@ -383,7 +383,7 @@ pub async fn search_projects_by_like(
     let rows = sqlx::query_as::<_, ProjectSearchRow>(
         "SELECT id, name, lifecycle
          FROM projects
-         WHERE LOWER(name) LIKE ?
+         WHERE LOWER(name) LIKE ? ESCAPE '\\'
          ORDER BY name ASC
          LIMIT 10",
     )

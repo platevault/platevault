@@ -543,10 +543,8 @@ pub(crate) mod tests {
         AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,
     };
 
-    pub async fn test_db() -> Database {
-        let db = Database::in_memory().await.unwrap();
-        db.migrate().await.unwrap();
-        db
+    pub async fn test_db() -> persistence_core::Database {
+        persistence_core::test_support::setup_db().await
     }
 
     /// Poll `check` every 25 ms until it returns `Some(T)`, or panic after 2 s.

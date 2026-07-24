@@ -351,10 +351,8 @@ mod tests {
         AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,
     };
 
-    async fn test_db() -> Database {
-        let db = Database::in_memory().await.unwrap();
-        db.migrate().await.unwrap();
-        db
+    async fn test_db() -> persistence_core::Database {
+        persistence_core::test_support::setup_db().await
     }
 
     /// Seed a canonical target into the resolution cache.

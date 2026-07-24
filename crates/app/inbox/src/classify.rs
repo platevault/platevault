@@ -772,10 +772,7 @@ pub(crate) fn classify_one_file(
     // succeeds; the `to_string_lossy` arms are defensive fallbacks only and
     // replace the previous always-lossy conversions.
     let rel = match abs_path.strip_prefix(root_absolute_path) {
-        Ok(p) => Utf8Path::from_path(p).map_or_else(
-            || p.to_string_lossy().replace('\\', "/"),
-            |u| u.as_str().replace('\\', "/"),
-        ),
+        Ok(p) => fs_pathsafe::wire_path(p),
         Err(_) => Utf8Path::from_path(abs_path)
             .map_or_else(|| abs_path.display().to_string(), |u| u.as_str().to_owned()),
     };
@@ -998,7 +995,7 @@ async fn snapshot_overrides(
         // Only re-apply for files that appear in the current scan.
         let in_scan = file_paths.iter().any(|p| {
             p.strip_prefix(root_absolute_path)
-                .is_ok_and(|r| r.to_string_lossy().replace('\\', "/") == ev.relative_file_path)
+                .is_ok_and(|r| fs_pathsafe::wire_path(r) == ev.relative_file_path)
         });
         if !in_scan {
             continue;
@@ -1784,10 +1781,8 @@ mod tests {
     use persistence_inbox::repositories::inbox::InsertInboxItem;
     use std::io::Write;
 
-    async fn test_db() -> Database {
-        let db = Database::in_memory().await.unwrap();
-        db.migrate().await.unwrap();
-        db
+    async fn test_db() -> persistence_core::Database {
+        persistence_core::test_support::setup_db().await
     }
 
     fn write_fits_with_imagetyp(dir: &Path, name: &str, imagetyp: &str) {

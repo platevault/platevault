@@ -293,6 +293,7 @@ name = "app_core_targets"
 version = "0.1.0"
 dependencies = [
  "app_core_cache",
+ "app_core_errors",
  "audit",
  "contracts_core",
  "domain_core",
@@ -1808,6 +1809,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fits_fixtures"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1939,6 +1947,7 @@ dependencies = [
 name = "fs_pathsafe"
 version = "0.1.0"
 dependencies = [
+ "camino",
  "proptest",
  "tempfile",
 ]
@@ -4522,6 +4531,7 @@ dependencies = [
 name = "project_structure"
 version = "0.1.0"
 dependencies = [
+ "domain_core",
  "serde",
  "serde_json",
  "tempfile",

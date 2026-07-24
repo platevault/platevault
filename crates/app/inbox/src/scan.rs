@@ -245,16 +245,10 @@ fn try_detect_master(abs_path: &Path, rel_path: &str, ext: &str) -> Option<Scann
 
 /// Compute the root-relative path as a forward-slash UTF-8 string for the wire.
 ///
-/// `path` is guaranteed UTF-8 here: every descendant of `root` passed the
-/// non-UTF-8 skip at the `read_dir` boundary, so `Utf8Path::from_path` succeeds.
-/// The previous implementation used `to_string_lossy`, which could silently
-/// mangle a path; camino makes the conversion lossless by construction. The
-/// `unwrap_or_else` fallback is defensive only and cannot fire for scanned
-/// descendants.
+/// Delegates to `fs_pathsafe::relative_wire_path` (canonical single home
+/// for the backslash→slash normalization, bd astro-plan-kyo7.88).
 fn relative_utf8(root: &Path, path: &Path) -> String {
-    let rel = path.strip_prefix(root).unwrap_or(path);
-    Utf8Path::from_path(rel)
-        .map_or_else(|| rel.to_string_lossy().replace('\\', "/"), |u| u.as_str().replace('\\', "/"))
+    fs_pathsafe::relative_wire_path(root, path)
 }
 
 // ── scan_root ────────────────────────────────────────────────────────────────
