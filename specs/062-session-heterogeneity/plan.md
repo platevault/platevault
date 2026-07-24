@@ -38,7 +38,7 @@ detected but unreachable in product workflows.
 **Primary Dependencies**: Tauri 2.11, sqlx 0.9 with SQLite, Specta 2 release
 candidate, Tokio 1, React Query 5, React Router 1, Zod 4
 
-**Storage**: Local SQLite in WAL mode through `crates/persistence/db`; normalized
+**Storage**: Local SQLite in WAL mode through `crates/persistence/core`; normalized
 session, equipment, revision, relation, proposal, immutable project-membership,
 command-ledger, audit, outbox, and materialization-extension tables; user-owned
 image files remain in place
@@ -250,10 +250,15 @@ crates/
 ├── sessions/                 # immutable identity, observing night, group domain
 ├── targeting/                # target identity and target-match integration
 ├── calibration/core/         # calibration family/session rules and warnings
-├── persistence/db/
+├── persistence/core/
 │   ├── migrations/           # normalized greenfield schema
-│   ├── src/repositories/     # bounded queries and guarded transactions
-│   └── tests/                # invariants, plans, WAL, CAS, contention, scale
+│   └── src/                  # database pool, WAL, and migration runner
+├── persistence/sessions/
+│   ├── src/repositories/     # immutable session, calibration, and correction repositories
+│   └── tests/                # session integration and CAS tests
+├── persistence/topology/
+│   ├── src/repositories/     # panel, mosaic, proposal, and traversal repositories
+│   └── tests/                # topology invariants, plans, contention, and scale
 ├── contracts/core/           # portable request/response/event/error types
 ├── app/
 │   ├── targets/              # ingestion operation and session materialization
@@ -277,9 +282,10 @@ tests/contract/               # language-neutral schema and compatibility tests
 
 **Structure Decision**: Extend the existing layered Rust workspace and desktop
 feature boundaries. Domain rules stay out of Tauri commands and React;
-persistence stays inside `crates/persistence/db`; portable contracts bridge the
-core and desktop. No new service, graph store, or native image-processing layer
-is introduced.
+schema and infrastructure stay inside `crates/persistence/core`; new domain
+repositories live in `crates/persistence/sessions` and
+`crates/persistence/topology`; portable contracts bridge the core and desktop.
+No new service, graph store, or native image-processing layer is introduced.
 
 ## Dependencies and Delivery Gates
 
