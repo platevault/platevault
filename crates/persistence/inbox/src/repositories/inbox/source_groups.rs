@@ -6,7 +6,7 @@
 
 use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
-use sqlx::{SqliteConnection, SqlitePool};
+use sqlx::{Executor, Sqlite, SqliteConnection, SqlitePool};
 
 use persistence_core::DbResult;
 
@@ -51,12 +51,18 @@ pub struct UpsertSourceGroup<'a> {
 /// INSERT on first scan; on rescan updates `last_scanned_at` and
 /// `content_signature` only — preserves `discovered_at` and `child_count`.
 ///
+/// Accepts any [`sqlx::Executor`] so callers can pass either `&SqlitePool`
+/// (auto-commit) or `&mut Transaction` (batched commit).
+///
 /// # Errors
 /// Returns [`DbError::Database`] on constraint or connection failure.
-pub async fn upsert_inbox_source_group(
-    pool: &SqlitePool,
+pub async fn upsert_inbox_source_group<'e, E>(
+    executor: E,
     group: &UpsertSourceGroup<'_>,
-) -> DbResult<()> {
+) -> DbResult<()>
+where
+    E: Executor<'e, Database = Sqlite>,
+{
     let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO inbox_source_groups
@@ -79,7 +85,7 @@ pub async fn upsert_inbox_source_group(
     .bind(group.format)
     .bind(group.lane)
     .bind(group.file_count)
-    .execute(pool)
+    .execute(executor)
     .await?;
     Ok(())
 }

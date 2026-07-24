@@ -354,6 +354,13 @@ pub async fn inbox_target_recommendations(
 /// `inbox.scan.folder` — recursively scan a root directory, discover leaf
 /// FITS/video folders, upsert `InboxItem`s, and return a summary list.
 ///
+/// The directory walk and per-file I/O (64 KB signature reads + FITS header
+/// parses for master detection) run inside [`tokio::task::spawn_blocking`] so
+/// the scan never occupies a tokio async worker. Per-file work is parallelised
+/// across a bounded thread pool inside `scan_root` (see `crates/app/inbox/src/scan.rs`).
+/// All source-group and master-item upserts are committed in a single
+/// transaction to avoid one autocommit (WAL fsync) per leaf folder.
+///
 /// # Errors
 /// Returns a string error if the root is not accessible.
 #[tauri::command]
@@ -364,7 +371,12 @@ pub async fn inbox_scan_folder(
 ) -> Result<InboxScanFolderResponse, ContractError> {
     let root_path = PathBuf::from(&req.root_absolute_path);
     let opts = resolve_scan_options(&pool).await?;
-    let scanned = scan_root(&root_path, &opts).map_err(ContractError::internal)?;
+
+    // Run the blocking directory walk + per-file I/O off the async executor.
+    let scanned = tokio::task::spawn_blocking(move || scan_root(&root_path, &opts))
+        .await
+        .map_err(|e| ContractError::internal(e.to_string()))?
+        .map_err(ContractError::internal)?;
 
     // Derive the move-vs-catalogue lane for source groups from the root's
     // organization_state (spec 041 R-12, data-model §lane column).
@@ -379,6 +391,10 @@ pub async fn inbox_scan_folder(
     };
 
     let mut items: Vec<InboxItemSummary> = Vec::new();
+
+    // Wrap all upserts in a single transaction: one WAL commit instead of
+    // one per leaf folder (N autocommits → 1).
+    let mut tx = pool.begin().await.map_err(|e| ContractError::internal(e.to_string()))?;
 
     for scanned_item in &scanned {
         // ── Source-group upsert (T065, R-10/R-12) ────────────────────────────
@@ -397,7 +413,7 @@ pub async fn inbox_scan_folder(
 
         let sg_id = Uuid::new_v4().to_string();
         upsert_inbox_source_group(
-            &pool,
+            &mut *tx,
             &UpsertSourceGroup {
                 id: &sg_id,
                 root_id: &req.root_id,
@@ -413,7 +429,8 @@ pub async fn inbox_scan_folder(
         // ── A. Individual rows for detected calibration masters ────────────────
         for master in &scanned_item.masters {
             if let Some(summary) =
-                persist_master_item(&pool, &req.root_id, scanned_item.lane.as_str(), master).await?
+                persist_master_item(&mut tx, &req.root_id, scanned_item.lane.as_str(), master)
+                    .await?
             {
                 items.push(summary);
             }
@@ -437,13 +454,17 @@ pub async fn inbox_scan_folder(
         // confirmable thing. `sub_count` remains the source group's file count.
     }
 
+    tx.commit().await.map_err(|e| ContractError::internal(e.to_string()))?;
+
     Ok(InboxScanFolderResponse { root_id: req.root_id, items })
 }
 
 /// Insert (or reuse) the individual `inbox_items` row for a single detected
 /// calibration master and return its summary, if the row is present.
+///
+/// Operates on `tx` so insert and read-back are within the same transaction.
 async fn persist_master_item(
-    pool: &SqlitePool,
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     root_id: &str,
     lane: &str,
     master: &ScannedMasterFile,
@@ -453,7 +474,7 @@ async fn persist_master_item(
     let format_str = master.format.as_str();
 
     insert_inbox_master_item(
-        pool,
+        &mut **tx,
         &master_item_id,
         root_id,
         &master.relative_path,
@@ -466,8 +487,9 @@ async fn persist_master_item(
     .await
     .map_err(|e| ContractError::internal(e.to_string()))?;
 
-    // Fetch authoritative row (may have existed from a prior scan).
-    let row = get_inbox_master_item_row(pool, root_id, &master.relative_path)
+    // Fetch authoritative row within the same transaction (may have existed
+    // from a prior scan, written by INSERT OR IGNORE above).
+    let row = get_inbox_master_item_row(&mut **tx, root_id, &master.relative_path)
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
