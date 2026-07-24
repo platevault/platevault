@@ -14,6 +14,13 @@ use uuid::Uuid;
 pub const CONTRACT_VERSION: &str = "2.0.0";
 
 // ── State enums — mirror the JSON $defs exactly ───────────────────────────────
+//
+// NOTE: ProjectState and PlanState are semantically identical to
+// `domain_core::lifecycle::{ProjectState, PlanState}`. They are kept as
+// separate definitions here (rather than re-exports) because schemars
+// reflects doc-comments as JSON schema `description` fields, and the domain
+// enum's variant docs would change the generated contract schema. Collapsing
+// these into a single enum is tracked in kyo7.85 (SQL CHECK sync).
 
 #[derive(
     Clone,
