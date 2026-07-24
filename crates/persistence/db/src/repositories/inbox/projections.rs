@@ -19,17 +19,23 @@ use crate::DbResult;
 /// read-side projection still agrees (#711 double-count fix).
 ///
 /// A row is a stale placeholder when it has `group_key = ''`, belongs to a
-/// source group (`source_group_id IS NOT NULL`), and at least one real sibling
-/// sub-item (`group_key != ''`) exists for that same source group.
+/// source group, and **two or more** real siblings (`group_key != ''`) exist
+/// for that source group.  The `>= 2` bound is intentional: a single real
+/// sub-item means an unsplit single-type folder where the placeholder and
+/// sub-item are both legitimate (the placeholder may carry a `plan_open` link
+/// the plan surface must still reach — see
+/// `inbox_plan::tests::list_open_keeps_confirmed_placeholder_with_materialized_sub_item`).
+/// Double-counting only occurs when the folder was genuinely split into two or
+/// more distinct type groups.
 const EXCLUDE_STALE_PLACEHOLDER: &str = "
            AND NOT (
                i.group_key = ''
                AND i.source_group_id IS NOT NULL
-               AND EXISTS (
-                   SELECT 1 FROM inbox_items sib
+               AND (
+                   SELECT COUNT(*) FROM inbox_items sib
                    WHERE sib.source_group_id = i.source_group_id
                      AND sib.group_key != ''
-               )
+               ) >= 2
            )";
 
 /// Per-frame-type aggregate row returned by [`inbox_stats`].

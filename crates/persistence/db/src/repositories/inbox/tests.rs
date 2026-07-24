@@ -1913,7 +1913,8 @@ async fn list_unacknowledged_excludes_stale_placeholder_when_sub_item_exists() {
     .await
     .unwrap();
 
-    // The real materialized sub-item (spec 058: needs-review key is "type=unknown").
+    // Two real materialized sub-items: exclusion requires >= 2 siblings so that
+    // an unsplit single-type folder (placeholder + 1 sub-item) is not affected.
     upsert_inbox_sub_item(
         pool,
         &UpsertInboxSubItem {
@@ -1932,12 +1933,30 @@ async fn list_unacknowledged_excludes_stale_placeholder_when_sub_item_exists() {
     )
     .await
     .unwrap();
+    upsert_inbox_sub_item(
+        pool,
+        &UpsertInboxSubItem {
+            id: "sub-item-light",
+            root_id: &root_id,
+            relative_path: "2025-11-01/needs-review",
+            source_group_id: "sg-711",
+            group_key: "type=light",
+            group_label: "(root) · light",
+            frame_type: Some("light"),
+            content_signature: "sig-light",
+            file_count: 1,
+            lane: "fits",
+            needs_review: false,
+        },
+    )
+    .await
+    .unwrap();
 
     let rows = list_unacknowledged_across_roots(pool, 100).await.unwrap();
     let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
     assert!(
         !ids.contains(&"placeholder-item"),
-        "stale placeholder must be excluded once a real sub-item exists: {ids:?}"
+        "stale placeholder must be excluded once two real sub-items exist: {ids:?}"
     );
     assert!(
         ids.contains(&"sub-item-needs-review"),
@@ -2069,7 +2088,8 @@ async fn list_and_stats_agree_when_stale_placeholder_has_evidence() {
         .unwrap();
     }
 
-    // The real materialized sub-item for the same 2 files.
+    // Two real materialized sub-items for the same folder (lights + darks split).
+    // The >= 2 bound requires both to be present before the placeholder is excluded.
     let sub_id = upsert_inbox_sub_item(
         pool,
         &UpsertInboxSubItem {
@@ -2109,6 +2129,25 @@ async fn list_and_stats_agree_when_stale_placeholder_has_evidence() {
         .await
         .unwrap();
     }
+    // Second sub-item (dark group) to reach the >= 2 sibling threshold.
+    upsert_inbox_sub_item(
+        pool,
+        &UpsertInboxSubItem {
+            id: "sub-2f-dark",
+            root_id: &root_id,
+            relative_path: "2025-11-03/lights-2f",
+            source_group_id: "sg-711c",
+            group_key: "type=dark",
+            group_label: "(root) · dark",
+            frame_type: Some("dark"),
+            content_signature: "sig-2f-dark",
+            file_count: 1,
+            lane: "fits",
+            needs_review: false,
+        },
+    )
+    .await
+    .unwrap();
 
     // 1. List: only the real sub-item, never the stale placeholder.
     let rows = list_unacknowledged_across_roots(pool, 100).await.unwrap();
