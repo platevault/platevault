@@ -215,7 +215,7 @@ export function SessionDetail({
 }: Props) {
   if (!session) {
     return (
-      <DetailPane>
+      <DetailPane data-testid="session-detail">
         <EmptyState
           title={m.sessions_select_title()}
           desc={m.sessions_select_desc()}

@@ -61,7 +61,11 @@ export function EvidenceSeverityPill({
   const icon = severityIcon(severity);
   const variant = severityToPillVariant(severity);
   return (
-    <Pill variant={variant} aria-label={detail ? `${label}: ${detail}` : label}>
+    <Pill
+      variant={variant}
+      aria-label={detail ? `${label}: ${detail}` : label}
+      data-testid="evidence-severity-pill"
+    >
       <span aria-hidden="true">{icon}</span> {label}
       {detail && <span className="pv-pill__detail"> {detail}</span>}
     </Pill>

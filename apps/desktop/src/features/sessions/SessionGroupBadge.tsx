@@ -109,6 +109,7 @@ export function SessionGroupBadge(props: SessionGroupBadgeProps) {
       <PanelGroupBadgeById
         panelGroupId={props.panelGroupId}
         onOpen={props.onOpen}
+        data-testid="session-group-badge"
       />
     );
   }

@@ -106,7 +106,12 @@ export function MosaicDetail({ mosaicId }: MosaicDetailProps) {
 
   if (isLoading) {
     return (
-      <div role="status" aria-live="polite" aria-label={m.mosaic_loading()}>
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label={m.mosaic_loading()}
+        data-testid="mosaic-detail"
+      >
         <Skeleton variant="block" />
       </div>
     );

@@ -434,7 +434,11 @@ export function MatchingSettingsPanel() {
 
   if (isLoading) {
     return (
-      <div role="status" aria-live="polite">
+      <div
+        role="status"
+        aria-live="polite"
+        data-testid="matching-settings-panel"
+      >
         {m.settings_loading()}
       </div>
     );

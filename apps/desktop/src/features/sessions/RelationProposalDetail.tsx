@@ -269,6 +269,7 @@ export function RelationProposalDetail({
         role="status"
         aria-live="polite"
         aria-label={m.proposal_detail_loading()}
+        data-testid="relation-proposal-detail"
       >
         <Skeleton variant="block" />
       </div>

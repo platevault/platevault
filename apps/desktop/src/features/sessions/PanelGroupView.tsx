@@ -24,7 +24,7 @@ export function PanelGroupView({ panelGroupId }: PanelGroupViewProps) {
 
   if (isLoading) {
     return (
-      <div role="status" aria-live="polite">
+      <div role="status" aria-live="polite" data-testid="panel-group-view">
         <Skeleton variant="block" />
       </div>
     );

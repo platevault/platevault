@@ -362,6 +362,7 @@ export function SessionsPage() {
     <ListPageLayout
       topBar={topBar}
       dockId="sessions"
+      data-testid="sessions-page"
       detail={activeDetail}
       onCloseDetail={handleCloseDetail}
       detailLabel={detailAriaLabel}

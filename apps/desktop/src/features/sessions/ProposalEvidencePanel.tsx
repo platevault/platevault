@@ -87,6 +87,7 @@ export function ProposalEvidencePanel({
     <section
       aria-label={m.proposal_evidence_heading()}
       className="pv-evidence-panel"
+      data-testid="proposal-evidence-panel"
     >
       <h3 className="pv-section__heading">{m.proposal_evidence_heading()}</h3>
 

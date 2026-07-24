@@ -162,6 +162,7 @@ export function RelationProposalList({
     <section
       aria-label={m.proposal_list_heading()}
       className="pv-proposal-list-section"
+      data-testid="relation-proposal-list"
     >
       <div className="pv-proposal-list__header">
         <h3 className="pv-section__heading">{m.proposal_list_heading()}</h3>
