@@ -154,7 +154,15 @@ export function ArchiveTable({
 
   return (
     <div className="pv-listtable" data-testid="archive-list">
-      <Table className="pv-densetable" columns={columns} rows={rows} />
+      <Table
+        className="pv-densetable"
+        columns={columns}
+        rows={rows}
+        virtualized
+        estimateRowHeight={36}
+        scrollClassName="pv-listtable__scroll"
+        scrollTestId="archive-virtual-sizer"
+      />
     </div>
   );
 }
