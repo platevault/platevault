@@ -56,9 +56,9 @@ use contracts_core::archive::{
 };
 use contracts_core::error_code::ErrorCode;
 use contracts_core::{ContractError, ErrorSeverity};
-use persistence_db::repositories::artifacts as artifacts_repo;
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::repositories::projects as projects_repo;
+use persistence_plans::repositories::artifacts as artifacts_repo;
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::projects as projects_repo;
 use sqlx::SqlitePool;
 
 use crate::cleanup_generator::DataType;
@@ -287,7 +287,7 @@ pub(crate) async fn generate_restore_generic(
     // `db_err` shadow for the same lookup-by-id NotFound case.
     let archived_plan =
         plans_repo::get_plan(pool, archived_plan_id, false).await.map_err(|e| match e {
-            persistence_db::DbError::NotFound(msg) => {
+            persistence_core::DbError::NotFound(msg) => {
                 ContractError::new(ErrorCode::PlanNotFound, msg, ErrorSeverity::Blocking, false)
             }
             other => db_err(other),
@@ -369,10 +369,10 @@ pub(crate) async fn generate_restore_generic(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
-    use persistence_db::repositories::plans as plans_repo;
-    use persistence_db::repositories::projects::{insert_project, InsertProject};
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_plans::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
+    use persistence_plans::repositories::plans as plans_repo;
+    use persistence_plans::repositories::projects::{insert_project, InsertProject};
 
     async fn setup() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");

@@ -16,7 +16,7 @@ use contracts_core::projects_v2::{
     ProjectChannelsDismissDriftRequest, ProjectChannelsReinferRequest, ProjectCreateRequest,
     ProjectSourceAddRequest, ProjectSourceRemoveRequest, ProjectTool, ProjectUpdateRequest,
 };
-use persistence_db::Database;
+use persistence_core::Database;
 
 async fn setup() -> (SqlitePool, EventBus) {
     let db = Database::in_memory().await.unwrap();
@@ -187,7 +187,7 @@ async fn create_anchors_relative_path_to_registered_project_root() {
 /// consumer resolve the same location regardless of process CWD.
 #[tokio::test]
 async fn create_folder_plan_items_are_absolute_regardless_of_cwd() {
-    use persistence_db::repositories::plans as plans_repo;
+    use persistence_plans::repositories::plans as plans_repo;
 
     let (pool, bus) = setup().await;
     let req = make_create_req("NGC 7000 CWD", ProjectTool::PixInsight);
@@ -342,7 +342,7 @@ async fn add_source_writes_source_change_manifest() {
     };
     add_source(&pool, &bus, &add_req).await.unwrap();
 
-    let (rows, _) = persistence_db::repositories::manifests::list_manifests_for_project(
+    let (rows, _) = persistence_plans::repositories::manifests::list_manifests_for_project(
         &pool,
         &created.project_id,
         None,
@@ -456,7 +456,7 @@ async fn remove_source_writes_source_change_manifest() {
     };
     remove_source(&pool, &bus, &rm_req).await.unwrap();
 
-    let (rows, _) = persistence_db::repositories::manifests::list_manifests_for_project(
+    let (rows, _) = persistence_plans::repositories::manifests::list_manifests_for_project(
         &pool,
         &created.project_id,
         None,
@@ -570,7 +570,7 @@ async fn create_returns_plan_id() {
 
 #[tokio::test]
 async fn create_pixinsight_plan_has_correct_folders() {
-    use persistence_db::repositories::plans as plans_repo;
+    use persistence_plans::repositories::plans as plans_repo;
 
     let (pool, bus) = setup().await;
     let req = make_create_req("NGC 7000 PI", ProjectTool::PixInsight);
@@ -609,7 +609,7 @@ async fn create_pixinsight_plan_has_correct_folders() {
 
 #[tokio::test]
 async fn create_siril_plan_has_five_folders() {
-    use persistence_db::repositories::plans as plans_repo;
+    use persistence_plans::repositories::plans as plans_repo;
 
     let (pool, bus) = setup().await;
     let req = make_create_req("M31 Siril", ProjectTool::Siril);
@@ -733,7 +733,7 @@ async fn get_returns_no_canonical_target_when_unassociated() {
 /// Directly insert a `project_sources` row with real snapshot data
 /// (bypassing `add_source`, which — pending spec 003 Inventory
 /// integration — always writes empty/zero snapshot fields). This mirrors
-/// the fixture shape used in `persistence_db::repositories::projects`
+/// the fixture shape used in `persistence_plans::repositories::projects`
 /// tests and is the only way to exercise the aggregation with non-zero
 /// frames/exposure until spec 003 lands.
 async fn seed_real_source(

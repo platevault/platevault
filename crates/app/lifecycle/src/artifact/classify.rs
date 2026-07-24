@@ -12,7 +12,7 @@ use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
 use workflow_artifacts::{classify, default_artifact_rules, ArtifactKind};
 
-use persistence_db::repositories::artifacts::{self as repo};
+use persistence_plans::repositories::artifacts::{self as repo};
 
 use contracts_core::tools::ArtifactSummary;
 

@@ -41,7 +41,7 @@ use crate::commands::lifecycle::AppState;
 pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, ContractError> {
     tracing::debug!("roots.list");
 
-    let sources = persistence_db::repositories::first_run::list_sources(state.repo.pool())
+    let sources = persistence_lifecycle::repositories::first_run::list_sources(state.repo.pool())
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?;
 
@@ -49,15 +49,16 @@ pub async fn roots_list(state: State<'_, AppState>) -> Result<Vec<LibraryRoot>, 
     // (P6a): every root kind is scanned through `inbox.scan_folder` (setup
     // wizard + Settings "Rescan"), so a root with no source-group rows simply
     // has never been scanned yet.
-    let last_scanned = persistence_db::repositories::inbox::last_scanned_by_root(state.repo.pool())
-        .await
-        .map_err(|e| ContractError::internal(e.to_string()))?;
+    let last_scanned =
+        persistence_inbox::repositories::inbox::last_scanned_by_root(state.repo.pool())
+            .await
+            .map_err(|e| ContractError::internal(e.to_string()))?;
 
     // `active` is derived from `registered_sources.active` (P6b — Data
     // Sources Disable/Enable). Sources absent from the map (should not
     // happen post-migration, but defensive) default to active.
     let active_flags =
-        persistence_db::repositories::first_run::list_active_flags(state.repo.pool())
+        persistence_lifecycle::repositories::first_run::list_active_flags(state.repo.pool())
             .await
             .map_err(|e| ContractError::internal(e.to_string()))?;
 

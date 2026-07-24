@@ -24,8 +24,8 @@ use contracts_core::inbox::{
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use contracts_core::{ContractError, ErrorSeverity};
-use persistence_db::repositories::inbox as inbox_repo;
-use persistence_db::repositories::plans as plans_repo;
+use persistence_inbox::repositories::inbox as inbox_repo;
+use persistence_plans::repositories::plans as plans_repo;
 use sqlx::SqlitePool;
 
 // ── Error helpers ─────────────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ pub async fn get_inbox_plan(
 ) -> Result<InboxPlanView, ContractError> {
     // Verify the inbox item exists.
     inbox_repo::get_inbox_item(pool, inbox_item_id).await.map_err(|e| match e {
-        persistence_db::DbError::NotFound(_) => {
+        persistence_core::DbError::NotFound(_) => {
             db_err_not_found(format!("inbox item {inbox_item_id} not found"))
         }
         other => db_err_internal(other),
@@ -113,7 +113,7 @@ pub async fn get_inbox_plan(
 
     // Load plan header.
     let plan_row = plans_repo::get_plan(pool, &plan_id, false).await.map_err(|e| match e {
-        persistence_db::DbError::NotFound(_) => ContractError::new(
+        persistence_core::DbError::NotFound(_) => ContractError::new(
             ErrorCode::PlanNotFound,
             format!("plan {plan_id} not found"),
             ErrorSeverity::Blocking,
@@ -163,7 +163,7 @@ pub async fn apply_inbox_plan(
 ) -> Result<PlanApplyResponse, ContractError> {
     // Verify the inbox item exists.
     inbox_repo::get_inbox_item(pool, inbox_item_id).await.map_err(|e| match e {
-        persistence_db::DbError::NotFound(_) => {
+        persistence_core::DbError::NotFound(_) => {
             db_err_not_found(format!("inbox item {inbox_item_id} not found"))
         }
         other => db_err_internal(other),
@@ -285,7 +285,7 @@ pub async fn list_open_inbox_plans(
         // Load the plan header; skip defensively when the row is missing.
         let plan_row = match plans_repo::get_plan(pool, &plan_id, false).await {
             Ok(row) => row,
-            Err(persistence_db::DbError::NotFound(_)) => continue,
+            Err(persistence_core::DbError::NotFound(_)) => continue,
             Err(other) => return Err(db_err_internal(other)),
         };
 
@@ -387,7 +387,7 @@ pub async fn cancel_inbox_plan(
 ) -> Result<InboxPlanCancelResponse, ContractError> {
     // Verify the inbox item exists.
     inbox_repo::get_inbox_item(pool, inbox_item_id).await.map_err(|e| match e {
-        persistence_db::DbError::NotFound(_) => {
+        persistence_core::DbError::NotFound(_) => {
             db_err_not_found(format!("inbox item {inbox_item_id} not found"))
         }
         other => db_err_internal(other),
@@ -428,8 +428,8 @@ mod tests {
     use super::*;
     use crate::inbox::confirm::{confirm, ConfirmRequest};
     use audit::bus::EventBus;
-    use persistence_db::repositories::inbox as inbox_repo;
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_inbox::repositories::inbox as inbox_repo;
     use sqlx::SqlitePool;
     use std::io::Write as IoWrite;
     use std::path::PathBuf;

@@ -6,7 +6,7 @@
 //! `IngestionSettings` / `UpdateIngestionSettings` (`contracts_core::ingestion`)
 //! are stored as a single JSON document under one key (`ingestionSettings`) in
 //! the existing spec-018 settings key/value store
-//! (`persistence_db::repositories::settings::{get_raw,set_raw}`) — the same
+//! (`persistence_lifecycle::repositories::settings::{get_raw,set_raw}`) — the same
 //! low-level mechanism `patternsByType` uses for its map (see
 //! `repositories::settings::get_patterns_by_type` / `set_pattern_for`).
 //!
@@ -32,7 +32,7 @@ use serde_json::Value;
 use sqlx::SqlitePool;
 
 use app_core_errors::db_err;
-use persistence_db::repositories::settings as repo;
+use persistence_lifecycle::repositories::settings as repo;
 
 /// Settings key holding the whole `IngestionSettings` document.
 pub const INGESTION_SETTINGS_KEY: &str = "ingestionSettings";
@@ -171,7 +171,7 @@ fn merge_with_defaults(stored: Option<Value>) -> IngestionSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::Database;
+    use persistence_core::Database;
 
     async fn setup() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");

@@ -13,7 +13,9 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::new_id;
 use domain_core::source_view::Materialization;
 use patterns::{resolve_pattern_str, MetadataBundle};
-use persistence_db::repositories::{plans as plans_repo, projects as projects_repo, q_projects};
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::projects as projects_repo;
+use persistence_plans::repositories::q_projects;
 use sqlx::SqlitePool;
 
 use app_core_errors::db_internal_ctx;
@@ -340,7 +342,7 @@ pub async fn generate_source_view(
     // 7. Resolve link kind per item (FR-004/FR-022): capability probed once
     // against the project root (the nearest existing ancestor of the not-yet-
     // created destination tree — they share a volume).
-    let settings = persistence_db::repositories::settings::load_settings(pool)
+    let settings = persistence_lifecycle::repositories::settings::load_settings(pool)
         .await
         .map_err(|e| db_internal_ctx(e, "load settings"))?;
     let intra_default = domain_core::source_view::Materialization::from_str_opt(
@@ -357,7 +359,7 @@ pub async fn generate_source_view(
     let mut resolved_kinds: BTreeMap<usize, Materialization> = BTreeMap::new();
 
     for (idx, item) in planned.iter().enumerate() {
-        let source_root_path = persistence_db::repositories::inventory::get_library_root_path(
+        let source_root_path = persistence_targets::repositories::inventory::get_library_root_path(
             pool,
             &item.source_root_id,
         )

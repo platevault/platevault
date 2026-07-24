@@ -9,7 +9,7 @@ use contracts_core::first_run::{
     FirstRunCompleteResponse, FirstRunRestartResponse, FirstRunStateResponse, SourceKind,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
-use persistence_db::repositories::first_run as repo;
+use persistence_lifecycle::repositories::first_run as repo;
 use sqlx::SqlitePool;
 
 use super::db_to_contract;

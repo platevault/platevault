@@ -5,7 +5,7 @@
 
 use contracts_core::plans::{PlanDetail, PlanListRequest, PlanListResponse};
 use contracts_core::ContractError;
-use persistence_db::repositories::plans as repo;
+use persistence_plans::repositories::plans as repo;
 use sqlx::SqlitePool;
 use time::OffsetDateTime;
 

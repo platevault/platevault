@@ -2,7 +2,7 @@ use app_core_cache::SnapshotCache;
 
 use super::*;
 use audit::EventBus;
-use persistence_db::Database;
+use persistence_core::Database;
 use proptest::prelude::*;
 use rstest::rstest;
 use serde_json::json;

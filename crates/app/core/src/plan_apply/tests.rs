@@ -2,11 +2,11 @@ use super::*;
 use audit::EventBus;
 use fs_executor::failure::{FailureCode, PlanItemFailure};
 use fs_executor::RollbackOutcome;
-use persistence_db::repositories::audit::{
+use persistence_core::Database;
+use persistence_lifecycle::repositories::audit::{
     count_audit_entries, list_audit_entries, AuditLogFilter,
 };
-use persistence_db::repositories::plans as repo;
-use persistence_db::Database;
+use persistence_plans::repositories::plans as repo;
 use uuid::Uuid;
 
 async fn setup() -> (Database, EventBus) {
@@ -313,7 +313,7 @@ async fn apply_plan_streams_operation_events() {
 /// the owning plan id — the legitimate closure of the requires-plan gate.
 #[tokio::test]
 async fn finalize_archive_lifecycle_archives_completed_project() {
-    use persistence_db::repositories::projects as projects_repo;
+    use persistence_plans::repositories::projects as projects_repo;
 
     let (db, bus) = setup().await;
     let project_id = Uuid::new_v4().to_string();
@@ -348,8 +348,8 @@ async fn finalize_archive_lifecycle_archives_completed_project() {
 /// manifest trigger — previously there was no emitter at all for it.
 #[tokio::test]
 async fn finalize_project_create_manifest_writes_created_manifest() {
-    use persistence_db::repositories::manifests::list_manifests_for_project;
-    use persistence_db::repositories::projects as projects_repo;
+    use persistence_plans::repositories::manifests::list_manifests_for_project;
+    use persistence_plans::repositories::projects as projects_repo;
 
     let (db, bus) = setup().await;
     let dir = tempfile::tempdir().unwrap();
@@ -383,7 +383,7 @@ async fn finalize_project_create_manifest_writes_created_manifest() {
 /// the plan link and never errors.
 #[tokio::test]
 async fn finalize_archive_lifecycle_is_idempotent_for_archived_project() {
-    use persistence_db::repositories::projects as projects_repo;
+    use persistence_plans::repositories::projects as projects_repo;
 
     let (db, bus) = setup().await;
     let project_id = Uuid::new_v4().to_string();
@@ -418,7 +418,7 @@ async fn finalize_archive_lifecycle_non_uuid_is_noop() {
     finalize_archive_lifecycle(db.pool(), &bus, "plan-x", "not-a-uuid").await;
     // No panic, no rows.
     let archived =
-        persistence_db::repositories::projects::list_archived_projects(db.pool()).await.unwrap();
+        persistence_plans::repositories::projects::list_archived_projects(db.pool()).await.unwrap();
     assert!(archived.is_empty());
 }
 
@@ -429,7 +429,7 @@ async fn finalize_archive_lifecycle_non_uuid_is_noop() {
 /// into `archived`.
 #[tokio::test]
 async fn finalize_archive_lifecycle_refuses_illegal_source_state() {
-    use persistence_db::repositories::projects as projects_repo;
+    use persistence_plans::repositories::projects as projects_repo;
 
     let (db, bus) = setup().await;
     let project_id = Uuid::new_v4().to_string();
@@ -466,7 +466,7 @@ async fn finalize_archive_lifecycle_refuses_illegal_source_state() {
 /// `clear_archived_via_plan_id`, persistence_db repositories/projects.rs).
 #[tokio::test]
 async fn finalize_restore_lifecycle_restores_archived_project() {
-    use persistence_db::repositories::projects as projects_repo;
+    use persistence_plans::repositories::projects as projects_repo;
 
     let (db, bus) = setup().await;
     let project_id = Uuid::new_v4().to_string();
@@ -505,7 +505,7 @@ async fn finalize_restore_lifecycle_restores_archived_project() {
 /// itself — a project in any other state must be left unchanged.
 #[tokio::test]
 async fn finalize_restore_lifecycle_refuses_non_archived_source_state() {
-    use persistence_db::repositories::projects as projects_repo;
+    use persistence_plans::repositories::projects as projects_repo;
 
     let (db, bus) = setup().await;
     let project_id = Uuid::new_v4().to_string();
@@ -557,7 +557,7 @@ async fn seed_calibration_master(db: &Database, id: &str) {
 
 #[tokio::test]
 async fn finalize_calibration_master_archive_records_flag_and_plan_link() {
-    use persistence_db::repositories::q_calibration;
+    use persistence_calibration::repositories::q_calibration;
 
     let (db, _bus) = setup().await;
     seed_calibration_master(&db, "m-arch-1").await;
@@ -571,7 +571,7 @@ async fn finalize_calibration_master_archive_records_flag_and_plan_link() {
 
 #[tokio::test]
 async fn finalize_calibration_master_restore_clears_flag() {
-    use persistence_db::repositories::q_calibration;
+    use persistence_calibration::repositories::q_calibration;
 
     let (db, _bus) = setup().await;
     seed_calibration_master(&db, "m-rest-1").await;

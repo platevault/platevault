@@ -178,8 +178,8 @@ mod tests {
     use std::time::Duration;
 
     use audit::bus::EventBus;
-    use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository;
     use simbad_resolver::Cache as _;
 
     use super::*;

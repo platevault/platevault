@@ -42,7 +42,8 @@ uuid = { version = "1", features = ["serde", "v4", "v5"] }
 async-trait.workspace = true
 # db-boundary-zero: production dependency (not dev-only) so cache.rs's raw
 # sqlx sites can move into `persistence_db::repositories::q_resolver`.
-persistence_db = { path = "../../persistence/db" }
+persistence_core = { path = "../../persistence/core" }
+persistence_targets = { path = "../../persistence/targets" }
 # Published SIMBAD TAP client + Caldwell map + normalize/fuzzy helpers + the
 # cache-first facade (see crate doc above). Same author/org as this
 # workspace's own CI app.

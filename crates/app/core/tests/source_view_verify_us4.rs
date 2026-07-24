@@ -13,7 +13,8 @@ mod support;
 use app_core_projects::source_view_generate::generate_source_view;
 use app_core_projects::source_view_verify::verify_source_view;
 use contracts_core::source_view_generate::SourceViewGenerateRequest;
-use persistence_db::repositories::{plans as plans_repo, prepared_source_views as views_repo};
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::prepared_source_views as views_repo;
 
 async fn insert_project_at(pool: &sqlx::SqlitePool, id: &str, path: &str) {
     sqlx::query(
@@ -91,7 +92,7 @@ async fn link_project_source(pool: &sqlx::SqlitePool, project_id: &str, session_
 /// fresh project/session/frame fixture, returning the recorded view id and
 /// the on-disk source file path.
 async fn generate_and_apply_view(
-    db: &persistence_db::Database,
+    db: &persistence_core::Database,
     bus: &audit::bus::EventBus,
     project_id: &str,
     src_dir: &std::path::Path,

@@ -9,7 +9,7 @@
 //! IMAGETYP is absent or unmapped.
 //!
 //! This module is pure orchestration: DB reads/writes via
-//! `persistence_db::repositories::inbox`; metadata reads via
+//! `persistence_inbox::repositories::inbox`; metadata reads via
 //! `metadata_fits::FitsExtractor` / `metadata_xisf::XisfExtractor`.
 //!
 //! # Write-failure policy (issue #1101)
@@ -43,10 +43,10 @@ use metadata_core::{
 
 use super::grouping::{group_file, FrameMetadata, GroupingConfig};
 use super::signature::folder_signature;
-use persistence_db::repositories::inbox::{
+use persistence_inbox::repositories::inbox::{
     self as repo, InsertEvidence, UpsertClassification, UpsertInboxSubItem,
 };
-use persistence_db::repositories::q_inbox;
+use persistence_inbox::repositories::q_inbox;
 use sqlx::SqlitePool;
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
@@ -765,7 +765,7 @@ async fn persist_file_metadata(
     rel: &str,
     abs_path: &Path,
     raw_meta: Option<&metadata_core::RawFileMetadata>,
-) -> persistence_db::DbResult<()> {
+) -> persistence_core::DbResult<()> {
     // Parse a trimmed numeric string (e.g. "120.0", "2") to a target number.
     fn parse_f64(s: Option<&String>) -> Option<f64> {
         s.and_then(|v| v.trim().parse::<f64>().ok())
@@ -1360,7 +1360,7 @@ async fn seed_sub_item_cache(
     // spec 058 T008 made needs-review a real column, and this function already
     // receives the caller's authoritative value as a parameter. Re-deriving it
     // from the sentinel string would reintroduce the vocabulary 058 retired.
-    let warn_seed = |op: &'static str, e: persistence_db::DbError| {
+    let warn_seed = |op: &'static str, e: persistence_core::DbError| {
         tracing::warn!(
             sub_item = %sub_id,
             is_needs_review,
@@ -1548,8 +1548,8 @@ async fn build_breakdown(
 /// Build a ClassifyResponse from cached DB rows.
 async fn build_response_from_cache(
     pool: &SqlitePool,
-    item: &persistence_db::repositories::inbox::InboxItemRow,
-    cached: &persistence_db::repositories::inbox::InboxClassificationRow,
+    item: &persistence_inbox::repositories::inbox::InboxItemRow,
+    cached: &persistence_inbox::repositories::inbox::InboxClassificationRow,
 ) -> Result<ClassifyResponse, ContractError> {
     let breakdown_rows = repo::list_breakdown(pool, &item.id).await.unwrap_or_default();
     let evidence_rows = repo::list_evidence(pool, &item.id).await.unwrap_or_default();
@@ -1623,9 +1623,9 @@ async fn build_response_from_cache(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::repositories::inbox as inbox_repo;
-    use persistence_db::repositories::inbox::InsertInboxItem;
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_inbox::repositories::inbox as inbox_repo;
+    use persistence_inbox::repositories::inbox::InsertInboxItem;
     use std::io::Write;
 
     async fn test_db() -> Database {
@@ -1982,7 +1982,7 @@ mod tests {
     /// and carry the parsed header fields (here: OBJECT/FILTER/DATE-OBS).
     #[tokio::test]
     async fn classify_persists_per_file_metadata() {
-        use persistence_db::repositories::inbox as inbox_repo;
+        use persistence_inbox::repositories::inbox as inbox_repo;
 
         let tmp = tempfile::tempdir().unwrap();
         // Reuse the richer FITS writer from the confirm tests to embed headers.
@@ -2111,7 +2111,7 @@ mod tests {
     /// on the freshly-inserted evidence row.
     #[tokio::test]
     async fn classify_rescan_marks_override_stale_on_changed_file() {
-        use persistence_db::repositories::inbox as inbox_repo;
+        use persistence_inbox::repositories::inbox as inbox_repo;
         use std::io::Write;
 
         let tmp = tempfile::tempdir().unwrap();
@@ -2209,7 +2209,7 @@ mod tests {
     /// falsely report staleness).
     #[tokio::test]
     async fn classify_rescan_keeps_override_fresh_when_file_unchanged() {
-        use persistence_db::repositories::inbox as inbox_repo;
+        use persistence_inbox::repositories::inbox as inbox_repo;
 
         let tmp = tempfile::tempdir().unwrap();
         write_fits_with_imagetyp(tmp.path(), "light_001.fits", "Light Frame");
@@ -2283,7 +2283,7 @@ mod tests {
     /// identity has drifted from what was recorded when the override was set.
     #[tokio::test]
     async fn classify_marks_generic_file_override_stale_on_changed_file() {
-        use persistence_db::repositories::inbox as inbox_repo;
+        use persistence_inbox::repositories::inbox as inbox_repo;
         use std::io::Write;
 
         let tmp = tempfile::tempdir().unwrap();

@@ -11,7 +11,7 @@ use contracts_core::plans::PlanApproveResponse;
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::Timestamp;
 use fs_executor::ops::cas_check::snapshot_from_metadata;
-use persistence_db::repositories::plans as repo;
+use persistence_plans::repositories::plans as repo;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 

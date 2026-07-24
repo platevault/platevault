@@ -32,7 +32,7 @@
 //! both:
 //! - the lazy first-activation seed ([`ensure_seeded`], called from
 //!   [`get_state`]): only inserts rows that don't exist yet, via
-//!   `persistence_db::repositories::onboarding::insert_if_missing` — never
+//!   `persistence_lifecycle::repositories::onboarding::insert_if_missing` — never
 //!   re-touches an existing row, so a mere read can never silently
 //!   auto-tick an item (that would bypass the bus subscriber, breaking
 //!   FR-021's backend-authoritative-via-subscriber-only invariant);
@@ -68,8 +68,8 @@ use contracts_core::onboarding::{
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::Timestamp;
-use persistence_db::repositories::onboarding as repo;
-use persistence_db::repositories::onboarding::{OnboardingFlagsRow, UpsertOutcome};
+use persistence_lifecycle::repositories::onboarding as repo;
+use persistence_lifecycle::repositories::onboarding::{OnboardingFlagsRow, UpsertOutcome};
 use sqlx::SqlitePool;
 
 // ── Item registry ─────────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ use sqlx::SqlitePool;
 /// How an AUTOMATIC item's seed/restore target state is derived from real
 /// recorded data (research R4's verified auto-tick inventory). Each variant
 /// dispatches to a dedicated read-only query in
-/// `persistence_db::repositories::onboarding` — raw SQL stays in that crate
+/// `persistence_lifecycle::repositories::onboarding` — raw SQL stays in that crate
 /// per the db-boundary rule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SeedMilestone {
@@ -333,7 +333,7 @@ impl From<OnboardingError> for ContractError {
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn db_err(e: persistence_db::DbError) -> OnboardingError {
+fn db_err(e: persistence_core::DbError) -> OnboardingError {
     OnboardingError::PersistenceUnavailable(e.to_string())
 }
 
@@ -729,7 +729,7 @@ mod tests {
     use contracts_core::onboarding::{OnboardingOrientationOutcome, OnboardingSectionSetRequest};
 
     async fn setup_pool() -> SqlitePool {
-        let db = persistence_db::Database::in_memory().await.expect("in-memory DB");
+        let db = persistence_core::Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         db.pool().clone()
     }

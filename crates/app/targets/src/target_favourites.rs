@@ -5,7 +5,7 @@
 //! use cases (spec 051 US2).
 //!
 //! Thin orchestration over the `target_favourite` repository functions
-//! (`persistence_db::repositories::target_favourites`): promotes the target
+//! (`persistence_targets::repositories::target_favourites`): promotes the target
 //! from the shared redb resolve cache into `canonical_target` if it is not
 //! already durable (spec 052 P1 FR-004 — favouriting is an in-use commit),
 //! then maps repository results to contract DTOs.
@@ -24,7 +24,7 @@ use contracts_core::targets::{
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::Timestamp;
-use persistence_db::repositories::target_favourites;
+use persistence_targets::repositories::target_favourites;
 
 fn db_err(e: impl std::fmt::Display) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
@@ -107,7 +107,7 @@ pub async fn remove(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::Database;
+    use persistence_core::Database;
     use simbad_resolver::{Cache as _, Store};
 
     async fn setup() -> Database {

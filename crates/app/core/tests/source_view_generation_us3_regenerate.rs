@@ -9,7 +9,7 @@
 //! `sourceview.generate` → apply → `finalize_view_generation` path is a valid
 //! input to `prepared_views::regenerate_prepared_view`: same
 //! `PreparedSourceView`/`PreparedSourceViewItem` entities (both read/write the
-//! same `persistence_db::repositories::prepared_source_views` tables), no new
+//! same `persistence_plans::repositories::prepared_source_views` tables), no new
 //! regeneration logic added (FR-012/FR-013).
 //!
 //! Scenario: generate + apply a view for one session's one frame, then remove
@@ -23,7 +23,8 @@ mod support;
 use app_core_projects::prepared_views::regenerate_prepared_view;
 use app_core_projects::source_view_generate::generate_source_view;
 use contracts_core::source_view_generate::SourceViewGenerateRequest;
-use persistence_db::repositories::{plans as plans_repo, prepared_source_views as views_repo};
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::prepared_source_views as views_repo;
 
 async fn insert_project_at(pool: &sqlx::SqlitePool, id: &str, path: &str) {
     sqlx::query(
@@ -109,7 +110,7 @@ async fn regenerate_reflects_removed_selection_with_zero_dangling_links() {
     // intra-drive default to `symlink` so the generated view (both tempdirs
     // share a filesystem, so intra-drive applies) is regeneratable. Unrelated
     // to what this test proves (US1/US2 views are valid regenerate input).
-    persistence_db::repositories::settings::set_raw(
+    persistence_lifecycle::repositories::settings::set_raw(
         db.pool(),
         "sourceViewLinkKindIntraDrive",
         &serde_json::json!("symlink"),

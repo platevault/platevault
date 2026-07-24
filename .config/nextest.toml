@@ -135,9 +135,9 @@ failure-output = "immediate-final"
 [profile.ci.junit]
 path = "junit.xml"
 
-# The persistence_db/app_core/targeting_resolver integration tests previously
+# The persistence_core/app_core/targeting_resolver integration tests previously
 # carried retries=2 to mask two timing-race flake sources:
-#   1. persistence_db/tests/wal_journal_mode.rs: the WAL unblocked-reader test
+#   1. persistence_core/tests/wal_journal_mode.rs: the WAL unblocked-reader test
 #      used a wall-time assertion (elapsed < 300 ms) that Tokio scheduler
 #      latency on loaded CI runners could exceed. Fixed by asserting ordering
 #      (reader_finished_at < writer_released_at) instead of wall time.

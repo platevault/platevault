@@ -21,7 +21,7 @@ use app_core_projects::project_setup;
 use app_core_projects::source_view_generate::generate_source_view;
 use contracts_core::projects_v2::{ProjectCreateRequest, ProjectSourceAddRequest, ProjectTool};
 use contracts_core::source_view_generate::SourceViewGenerateRequest;
-use persistence_db::repositories::plans as plans_repo;
+use persistence_plans::repositories::plans as plans_repo;
 use uuid::Uuid;
 
 /// These tests never set `canonical_target_id`, so `create`'s promotion path
@@ -115,7 +115,7 @@ async fn insert_session(
 }
 
 struct World {
-    db: persistence_db::Database,
+    db: persistence_core::Database,
     bus: audit::bus::EventBus,
     root_dir: tempfile::TempDir,
     projects_dir: tempfile::TempDir,

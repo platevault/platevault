@@ -21,7 +21,7 @@ pub(super) async fn finalize_project_create_manifest(
     project_path: &str,
 ) {
     use contracts_core::manifests::ManifestReason as DtoManifestReason;
-    use persistence_db::repositories::projects as projects_repo;
+    use persistence_plans::repositories::projects as projects_repo;
 
     let project_id = match projects_repo::path_exists(pool, project_path, None).await {
         Ok(Some(id)) => id,
@@ -53,7 +53,7 @@ pub(super) async fn finalize_project_create_manifest(
 /// item rows that already exist for this view id.
 pub(super) async fn finalize_view_generation(pool: &SqlitePool, plan_id: &str, project_id: &str) {
     use domain_core::source_view::Materialization;
-    use persistence_db::repositories::prepared_source_views as views_repo;
+    use persistence_plans::repositories::prepared_source_views as views_repo;
 
     let items = match plans_repo::list_plan_items(pool, plan_id).await {
         Ok(items) => items,
@@ -154,7 +154,7 @@ pub(super) async fn view_id_for_plan(pool: &SqlitePool, plan_id: &str) -> Option
 ///
 /// Best-effort: failures are logged only, never fail the apply (§II).
 pub(super) async fn finalize_view_removal(pool: &SqlitePool, plan_id: &str, terminal: &str) {
-    use persistence_db::repositories::prepared_source_views as views_repo;
+    use persistence_plans::repositories::prepared_source_views as views_repo;
 
     let Some(view_id) = view_id_for_plan(pool, plan_id).await else {
         tracing::warn!(%plan_id, "removal finalize: no linked view id on plan items; skipped");
@@ -191,7 +191,7 @@ pub(super) async fn finalize_view_removal(pool: &SqlitePool, plan_id: &str, term
 ///
 /// Best-effort: failures are logged only, never fail the apply (§II).
 pub(super) async fn finalize_view_regeneration(pool: &SqlitePool, plan_id: &str) {
-    use persistence_db::repositories::prepared_source_views as views_repo;
+    use persistence_plans::repositories::prepared_source_views as views_repo;
 
     let Some(view_id) = view_id_for_plan(pool, plan_id).await else {
         tracing::warn!(%plan_id, "regeneration finalize: no linked view id on plan items; skipped");
@@ -235,8 +235,8 @@ pub(super) async fn finalize_archive_lifecycle(
     use crate::lifecycle::lifecycle_use_case::{transition_lifecycle, TransitionCommand};
     use domain_core::ids::EntityId;
     use domain_core::lifecycle::data_asset::EntityType;
-    use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
-    use persistence_db::repositories::projects as projects_repo;
+    use persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository;
+    use persistence_plans::repositories::projects as projects_repo;
 
     // The lifecycle repo keys entities on their UUID id.
     let uuid = match uuid::Uuid::parse_str(project_id) {
@@ -323,8 +323,8 @@ pub(super) async fn finalize_restore_lifecycle(
     use crate::lifecycle::lifecycle_use_case::{transition_lifecycle, TransitionCommand};
     use domain_core::ids::EntityId;
     use domain_core::lifecycle::data_asset::EntityType;
-    use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
-    use persistence_db::repositories::projects as projects_repo;
+    use persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository;
+    use persistence_plans::repositories::projects as projects_repo;
 
     let uuid = match uuid::Uuid::parse_str(project_id) {
         Ok(u) => u,
@@ -395,7 +395,7 @@ pub(super) async fn finalize_calibration_master_archive(
     plan_id: &str,
     master_id: &str,
 ) {
-    use persistence_db::repositories::q_calibration;
+    use persistence_calibration::repositories::q_calibration;
 
     let archived_at = Timestamp::now_iso();
     match q_calibration::set_master_archived(pool, master_id, plan_id, &archived_at).await {
@@ -426,7 +426,7 @@ pub(super) async fn finalize_calibration_master_archive(
 /// Best-effort: the file is already moved back, so a failure here must NOT
 /// fail the apply. Every failure is logged for an external watchdog (§II).
 pub(super) async fn finalize_calibration_master_restore(pool: &SqlitePool, master_id: &str) {
-    use persistence_db::repositories::q_calibration;
+    use persistence_calibration::repositories::q_calibration;
 
     match q_calibration::clear_master_archived(pool, master_id).await {
         // Same invalidate-after-commit contract as the archive closure above.

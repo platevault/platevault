@@ -12,12 +12,12 @@
 use std::collections::HashMap;
 
 use contracts_core::calibration_match::CalibrationMatchDto;
-use persistence_db::repositories::inventory::{get_session_context_by_ids, SessionContextRow};
+use persistence_targets::repositories::inventory::{get_session_context_by_ids, SessionContextRow};
 use sqlx::SqlitePool;
 
 /// Batch-load session context for a set of session ids and index it by id.
 ///
-/// Always a single query (`persistence_db::repositories::inventory::
+/// Always a single query (`persistence_targets::repositories::inventory::
 /// get_session_context_by_ids`) regardless of how many ids are requested.
 /// Ids that don't resolve (unknown session, or a session with no context)
 /// are simply absent from the returned map — callers must treat a missing

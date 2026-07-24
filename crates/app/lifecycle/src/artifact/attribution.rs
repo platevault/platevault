@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 
 use sqlx::SqlitePool;
 
-use persistence_db::repositories::artifacts::{self as repo};
-use persistence_db::repositories::inventory::list_all_roots;
-use persistence_db::repositories::projects::list_projects;
+use persistence_plans::repositories::artifacts::{self as repo};
+use persistence_plans::repositories::projects::list_projects;
+use persistence_targets::repositories::inventory::list_all_roots;
 use workflow_artifacts::{resolve_project_for_path, ProjectPathRef};
 
 /// Canonicalize `p`, falling back to `p` unchanged when canonicalization

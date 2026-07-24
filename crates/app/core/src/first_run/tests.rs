@@ -34,7 +34,7 @@ fn validate_path_success_for_tmp() {
 
 #[tokio::test]
 async fn check_duplicate_detects_same_kind() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
 
@@ -56,7 +56,7 @@ async fn check_duplicate_detects_same_kind() {
 
 #[tokio::test]
 async fn check_duplicate_detects_different_kind() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
 
@@ -77,7 +77,7 @@ async fn check_duplicate_detects_different_kind() {
 
 #[tokio::test]
 async fn register_source_rejects_nested_child_root() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -110,7 +110,7 @@ async fn register_source_rejects_nested_child_root() {
 
 #[tokio::test]
 async fn register_source_rejects_parent_of_existing_root() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -142,7 +142,7 @@ async fn register_source_rejects_parent_of_existing_root() {
 
 #[tokio::test]
 async fn register_source_batch_rejects_intra_batch_overlap() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -188,7 +188,7 @@ async fn register_source_rejects_windows_case_variant_of_existing_root() {
     if !cfg!(windows) {
         return;
     }
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -224,7 +224,7 @@ async fn register_source_rejects_windows_case_variant_of_existing_root() {
 /// this used to apply to every `DbError` variant.
 #[tokio::test]
 async fn remove_source_not_found_is_blocking_not_fatal() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
 
@@ -237,7 +237,7 @@ async fn remove_source_not_found_is_blocking_not_fatal() {
 /// `Outcome::Applied` `audit_log_entry` row tagged `EntityType::DataSource`.
 #[tokio::test]
 async fn register_source_writes_durable_applied_audit_row() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -270,7 +270,7 @@ async fn register_source_writes_durable_applied_audit_row() {
 /// `Outcome::Refused` row with a reason_code, per FR-130.
 #[tokio::test]
 async fn register_source_refused_duplicate_writes_durable_row() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -301,7 +301,7 @@ async fn register_source_refused_duplicate_writes_durable_row() {
 
 #[tokio::test]
 async fn complete_first_run_rejects_without_sources() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -314,7 +314,7 @@ async fn complete_first_run_rejects_without_sources() {
 
 #[tokio::test]
 async fn remap_root_missing_root_returns_not_found() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
 
@@ -324,7 +324,7 @@ async fn remap_root_missing_root_returns_not_found() {
 
 #[tokio::test]
 async fn remap_root_invalid_new_path_returns_path_not_exists() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
 
@@ -349,7 +349,7 @@ async fn remap_root_with_no_file_records_is_verified_by_path_existence_alone() {
     if !cfg!(unix) {
         return;
     }
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
 
@@ -374,7 +374,7 @@ async fn remap_root_with_no_file_records_is_verified_by_path_existence_alone() {
 /// `EntityType::LibraryRoot`, with a reason_code (FR-130).
 #[tokio::test]
 async fn apply_root_remap_missing_root_returns_not_found() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -395,7 +395,7 @@ async fn apply_root_remap_missing_root_returns_not_found() {
 
 #[tokio::test]
 async fn apply_root_remap_invalid_new_path_returns_path_not_exists() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -432,7 +432,7 @@ async fn apply_root_remap_updates_path_and_publishes_audit_event() {
     if !cfg!(unix) {
         return;
     }
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -468,7 +468,7 @@ async fn apply_root_remap_rejects_when_not_verified() {
     if !cfg!(unix) {
         return;
     }
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -512,7 +512,7 @@ async fn apply_root_remap_rejects_stale_verified_true_claim() {
     if !cfg!(unix) {
         return;
     }
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -569,9 +569,9 @@ async fn apply_root_remap_rejects_stale_verified_true_claim() {
 /// path.
 #[tokio::test]
 async fn remap_root_checks_inbox_items_not_just_file_record() {
-    use persistence_db::repositories::inbox::{insert_inbox_item, InsertInboxItem};
+    use persistence_inbox::repositories::inbox::{insert_inbox_item, InsertInboxItem};
 
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
 
@@ -616,7 +616,7 @@ async fn remap_root_checks_inbox_items_not_just_file_record() {
 
 #[tokio::test]
 async fn set_source_active_missing_root_returns_not_found() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -627,7 +627,7 @@ async fn set_source_active_missing_root_returns_not_found() {
 
 #[tokio::test]
 async fn set_source_active_toggles_and_publishes_audit_event() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -664,7 +664,7 @@ async fn set_source_active_toggles_and_publishes_audit_event() {
 
 #[tokio::test]
 async fn delete_source_missing_root_returns_not_found() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -675,7 +675,7 @@ async fn delete_source_missing_root_returns_not_found() {
 
 #[tokio::test]
 async fn delete_source_without_dependents_succeeds_and_publishes_audit_event() {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());
@@ -705,9 +705,9 @@ async fn delete_source_without_dependents_succeeds_and_publishes_audit_event() {
 
 #[tokio::test]
 async fn delete_source_blocks_when_dependents_exist() {
-    use persistence_db::repositories::inbox::{insert_inbox_item, InsertInboxItem};
+    use persistence_inbox::repositories::inbox::{insert_inbox_item, InsertInboxItem};
 
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     let pool = db.pool().clone();
     let bus = EventBus::with_pool(pool.clone());

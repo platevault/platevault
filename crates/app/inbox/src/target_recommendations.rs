@@ -46,7 +46,7 @@
 #![allow(clippy::doc_markdown)] // RA/Dec, FOV, OBJECT are domain terms
 
 use app_core_errors::db_err;
-use persistence_db::repositories::inbox::{self as repo, InboxPointingRow};
+use persistence_inbox::repositories::inbox::{self as repo, InboxPointingRow};
 use sqlx::SqlitePool;
 
 use contracts_core::cone_search::{ConeSearchConfidence, PointingSource};
@@ -345,8 +345,8 @@ fn cache_err(e: &cache::CacheError) -> ContractError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::repositories::inbox::{InsertInboxItem, UpsertFileMetadata};
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_inbox::repositories::inbox::{InsertInboxItem, UpsertFileMetadata};
     use targeting_resolver::{
         AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,
     };

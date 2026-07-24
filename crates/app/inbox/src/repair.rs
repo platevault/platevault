@@ -13,7 +13,7 @@
 #![allow(clippy::doc_markdown)]
 
 use audit::bus::EventBus;
-use persistence_db::repositories::inbox as inbox_repo;
+use persistence_inbox::repositories::inbox as inbox_repo;
 use sqlx::SqlitePool;
 use targeting_resolver::simbad::ResolveCache;
 
@@ -78,9 +78,9 @@ pub async fn run_repair(
 mod tests {
     use super::*;
     use crate::plan_listener::tests::{setup_master_item_plan, test_db};
-    use persistence_db::repositories::inbox::InsertInboxItem;
-    use persistence_db::repositories::plans;
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_inbox::repositories::inbox::InsertInboxItem;
+    use persistence_plans::repositories::plans;
 
     fn make_bus(db: &Database) -> EventBus {
         EventBus::with_pool(db.pool().clone())

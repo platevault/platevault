@@ -16,8 +16,8 @@
 
 use app_core_cache::ProtectionDefaultsSnapshot;
 use contracts_core::ContractError;
-use persistence_db::repositories::settings as settings_repo;
-use persistence_db::repositories::source_protection as prot_repo;
+use persistence_lifecycle::repositories::settings as settings_repo;
+use persistence_plans::repositories::source_protection as prot_repo;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 

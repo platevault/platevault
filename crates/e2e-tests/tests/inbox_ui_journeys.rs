@@ -665,7 +665,7 @@ async fn classification_cell_labels(app: &E2eApp) -> anyhow::Result<Vec<String>>
 ///   `materialize_sub_items` yields exactly ONE group (the `__needs_review__`
 ///   sentinel). One group is not a split, so the placeholder row survives
 ///   `exclude_split_placeholder!`'s `> 1` bound
-///   (`crates/persistence/db/src/repositories/inbox.rs`) and stays in
+///   (`crates/persistence/inbox/src/repositories/inbox`) and stays in
 ///   `inbox.list`.
 /// - A MIXED folder (2+ types) also stores `"unclassified"`, but it genuinely
 ///   SPLITS, so its placeholder is filtered out of `inbox.list` entirely and

@@ -48,7 +48,7 @@ pub async fn list(pool: &SqlitePool) -> Result<Vec<TargetListItem>, ContractErro
 async fn session_counts_by_target(
     pool: &SqlitePool,
 ) -> Result<std::collections::HashMap<String, u32>, ContractError> {
-    let rows = persistence_db::repositories::q_targets_mgmt::session_counts_by_target(pool)
+    let rows = persistence_targets::repositories::q_targets_mgmt::session_counts_by_target(pool)
         .await
         .map_err(db_err)?;
     Ok(rows

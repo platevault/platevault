@@ -10,7 +10,7 @@
 //! ("classified") and one chosen destination `rootId`.
 //!
 //! Creates a reviewable Plan in `ready_for_review` via
-//! `persistence_db::repositories::plans`. File list comes from
+//! `persistence_plans::repositories::plans`. File list comes from
 //! `InboxClassificationEvidence` rows (not `InboxItem.fileCount` — Ref: A9).
 //!
 //! TOCTOU guard: verifies `content_signature` before creating the plan (Ref: A8).
@@ -52,10 +52,10 @@ use contracts_core::plans::ProvenanceEntry;
 use contracts_core::settings::PatternPart as ContractPatternPart;
 use metadata_core::v1_normalization_table;
 use patterns::{classify_frame, resolve_pattern_str, FrameTypeClass, MetadataBundle, PatternPart};
-use persistence_db::repositories::first_run as first_run_repo;
-use persistence_db::repositories::inbox::{self as inbox_repo};
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::repositories::settings as settings_repo;
+use persistence_inbox::repositories::inbox::{self as inbox_repo};
+use persistence_lifecycle::repositories::first_run as first_run_repo;
+use persistence_lifecycle::repositories::settings as settings_repo;
+use persistence_plans::repositories::plans as plans_repo;
 use serde_json::json;
 use sqlx::SqlitePool;
 use uuid::Uuid;
@@ -240,7 +240,7 @@ pub async fn confirm(
         .map_err(|e| db_internal_ctx(e, "list inbox evidence"))?;
 
     // Only include files that have a frame type (classified or manually overridden)
-    let plan_files: Vec<&persistence_db::repositories::inbox::InboxEvidenceRow> =
+    let plan_files: Vec<&persistence_inbox::repositories::inbox::InboxEvidenceRow> =
         evidence_rows.iter().filter(|ev| effective_frame_type(ev).is_some()).collect();
 
     if plan_files.is_empty() {
@@ -316,11 +316,13 @@ pub async fn confirm(
     // An inbox item shares one root, so this is uniform in practice; the loop
     // below still decides per file so it composes with future mixed-provenance
     // cases (R-8) without special-casing.
-    let org_state =
-        persistence_db::repositories::first_run::get_source_organization_state(pool, &item.root_id)
-            .await
-            .map_err(|e| db_internal_ctx(e, "get source organization state"))?
-            .unwrap_or(OrganizationState::Unorganized);
+    let org_state = persistence_lifecycle::repositories::first_run::get_source_organization_state(
+        pool,
+        &item.root_id,
+    )
+    .await
+    .map_err(|e| db_internal_ctx(e, "get source organization state"))?
+    .unwrap_or(OrganizationState::Unorganized);
 
     // 8b. Destination-root resolution (spec 041 US8/FR-027–FR-031).
     //
@@ -805,7 +807,7 @@ async fn select_destination_root(
 /// `frame_type` (same priority chain as classify's split and the metadata
 /// DTO — the durable middle layer survives evidence rebuilds, #854).
 pub(crate) fn effective_frame_type(
-    ev: &persistence_db::repositories::inbox::InboxEvidenceRow,
+    ev: &persistence_inbox::repositories::inbox::InboxEvidenceRow,
 ) -> Option<&str> {
     ev.manual_override.as_deref().or(ev.override_frame_type.as_deref()).or(ev.frame_type.as_deref())
 }
@@ -818,7 +820,7 @@ pub(crate) fn effective_frame_type(
 /// [`confirm`] and [`crate::attribution::suggest_candidates`] so the
 /// suggest-time and apply-time gates can never disagree.
 pub(crate) fn evidence_is_light(
-    evidence_rows: &[persistence_db::repositories::inbox::InboxEvidenceRow],
+    evidence_rows: &[persistence_inbox::repositories::inbox::InboxEvidenceRow],
 ) -> bool {
     evidence_rows
         .iter()
@@ -994,12 +996,12 @@ pub(crate) fn build_metadata_bundle(
 mod tests {
     use super::*;
     use audit::bus::EventBus;
-    use persistence_db::repositories::equipment as equipment_repo;
-    use persistence_db::repositories::inbox::{
+    use persistence_calibration::repositories::equipment as equipment_repo;
+    use persistence_core::Database;
+    use persistence_inbox::repositories::inbox::{
         InsertEvidence, InsertInboxItem, UpsertClassification, UpsertInboxSubItem,
         UpsertSourceGroup,
     };
-    use persistence_db::Database;
     use std::io::Write;
 
     fn make_bus(db: &Database) -> EventBus {
@@ -1718,7 +1720,7 @@ mod tests {
         }
     }
 
-    fn dest_dir(it: &persistence_db::repositories::plans::PlanItemRow) -> String {
+    fn dest_dir(it: &persistence_plans::repositories::plans::PlanItemRow) -> String {
         std::path::Path::new(&it.to_relative_path)
             .parent()
             .map(|p| p.to_string_lossy().into_owned())
@@ -1776,9 +1778,10 @@ mod tests {
         .await
         .unwrap();
 
-        let items = persistence_db::repositories::plans::list_plan_items(db.pool(), &resp.plan_id)
-            .await
-            .unwrap();
+        let items =
+            persistence_plans::repositories::plans::list_plan_items(db.pool(), &resp.plan_id)
+                .await
+                .unwrap();
         let dirs: std::collections::BTreeSet<String> = items.iter().map(dest_dir).collect();
         assert_eq!(dirs.len(), 1, "single-type folder must yield exactly one action group");
     }
@@ -2883,9 +2886,9 @@ mod tests {
         )
         .await;
 
-        persistence_db::repositories::projects::insert_project(
+        persistence_plans::repositories::projects::insert_project(
             db.pool(),
-            &persistence_db::repositories::projects::InsertProject {
+            &persistence_plans::repositories::projects::InsertProject {
                 id: "proj-attr2",
                 name: "M42 project",
                 tool: "PixInsight",
@@ -2898,9 +2901,9 @@ mod tests {
         )
         .await
         .unwrap();
-        persistence_db::repositories::framing::insert_framing(
+        persistence_targets::repositories::framing::insert_framing(
             db.pool(),
-            &persistence_db::repositories::framing::InsertFraming {
+            &persistence_targets::repositories::framing::InsertFraming {
                 id: "framing-attr2",
                 project_id: "proj-attr2",
                 target_id: None,
@@ -2992,9 +2995,10 @@ mod tests {
         .await
         .unwrap();
 
-        let items = persistence_db::repositories::plans::list_plan_items(db.pool(), &resp.plan_id)
-            .await
-            .unwrap();
+        let items =
+            persistence_plans::repositories::plans::list_plan_items(db.pool(), &resp.plan_id)
+                .await
+                .unwrap();
         dest_dir(items.first().expect("confirm must record a plan item"))
     }
 

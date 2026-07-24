@@ -350,7 +350,7 @@ async fn auto_block_mutation_rejects_completed_state() {
     let project_id = "proj-completed-cas";
     support::insert_project(pool, project_id, "target-completed-cas", "completed").await;
 
-    let stale = persistence_db::repositories::projects::apply_project_auto_block(
+    let stale = persistence_plans::repositories::projects::apply_project_auto_block(
         pool,
         project_id,
         "processing",
@@ -362,14 +362,14 @@ async fn auto_block_mutation_rejects_completed_state() {
     .unwrap();
     assert_eq!(
         stale,
-        persistence_db::repositories::projects::ProjectAutoBlockOutcome::CasLost {
+        persistence_plans::repositories::projects::ProjectAutoBlockOutcome::CasLost {
             current_lifecycle: Some("completed".to_owned()),
             still_blockable: false,
         },
         "completed CAS winner must not request a retry"
     );
 
-    let direct = persistence_db::repositories::projects::apply_project_auto_block(
+    let direct = persistence_plans::repositories::projects::apply_project_auto_block(
         pool,
         project_id,
         "completed",
@@ -379,7 +379,10 @@ async fn auto_block_mutation_rejects_completed_state() {
     )
     .await
     .unwrap();
-    assert_eq!(direct, persistence_db::repositories::projects::ProjectAutoBlockOutcome::Rejected);
+    assert_eq!(
+        direct,
+        persistence_plans::repositories::projects::ProjectAutoBlockOutcome::Rejected
+    );
 
     assert_eq!(project_lifecycle(pool, project_id).await.0, "completed");
     assert_eq!(auto_block_audit_count(pool, project_id).await, 0);

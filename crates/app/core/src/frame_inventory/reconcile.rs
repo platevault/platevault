@@ -41,8 +41,10 @@ async fn emit_calibration_match_flag_for_frame(
     recovered: bool,
 ) {
     let Ok(assignments) =
-        persistence_db::repositories::calibration_assignment::find_by_source_frame(pool, frame_id)
-            .await
+        persistence_calibration::repositories::calibration_assignment::find_by_source_frame(
+            pool, frame_id,
+        )
+        .await
     else {
         return;
     };
@@ -162,7 +164,7 @@ async fn apply_missing_outcome(
     }
     tally.newly_missing += 1;
     let now = iso_now();
-    persistence_db::repositories::q_core::mark_file_record_missing(pool, &row.id)
+    persistence_core::repositories::q_core::mark_file_record_missing(pool, &row.id)
         .await
         .map_err(db_err)?;
 
@@ -209,12 +211,12 @@ async fn drop_frame_from_session_membership(
     let like = format!("%\"{frame_id}\"%");
 
     for (session_id, frame_ids_json) in
-        persistence_db::repositories::q_core::acquisition_sessions_by_frame_like(pool, &like)
+        persistence_core::repositories::q_core::acquisition_sessions_by_frame_like(pool, &like)
             .await
             .map_err(db_err)?
     {
         if let Some(updated) = drop_id_from_frame_ids(&frame_ids_json, frame_id) {
-            persistence_db::repositories::q_core::update_acquisition_session_frame_ids(
+            persistence_core::repositories::q_core::update_acquisition_session_frame_ids(
                 pool,
                 &session_id,
                 &updated,
@@ -225,12 +227,12 @@ async fn drop_frame_from_session_membership(
     }
 
     for (session_id, frame_ids_json) in
-        persistence_db::repositories::q_core::calibration_sessions_by_frame_like(pool, &like)
+        persistence_core::repositories::q_core::calibration_sessions_by_frame_like(pool, &like)
             .await
             .map_err(db_err)?
     {
         if let Some(updated) = drop_id_from_frame_ids(&frame_ids_json, frame_id) {
-            persistence_db::repositories::q_core::update_calibration_session_frame_ids(
+            persistence_core::repositories::q_core::update_calibration_session_frame_ids(
                 pool,
                 &session_id,
                 &updated,
@@ -259,7 +261,7 @@ pub async fn run_reconcile(
     req: &InventoryReconcileRunRequest,
 ) -> Result<InventoryReconcileRunResponse, ContractError> {
     let root_path_str =
-        persistence_db::repositories::inventory::get_library_root_path(pool, &req.root_id)
+        persistence_targets::repositories::inventory::get_library_root_path(pool, &req.root_id)
             .await
             .map_err(db_err)?
             .ok_or_else(|| {

@@ -1,0 +1,209 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! Core persistence primitives: connection pool, migrations, error types.
+//!
+//! Sub-crates (`persistence_inbox`, `persistence_lifecycle`, etc.) depend on
+//! this crate for `Database`, `DbResult`, and the `Repository` marker trait.
+//! The `persistence_db` facade re-exports everything from here for dependents
+//! that have not yet migrated to direct sub-crate dependencies.
+#![allow(clippy::doc_markdown)]
+
+use std::str::FromStr;
+
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
+
+pub mod operation_state;
+/// Reference pattern for sea-query + sqlx 0.9 binding. Compiled only under `cfg(test)`.
+#[cfg(test)]
+mod query_builder_example;
+pub mod repositories;
+mod schema_cache;
+
+pub mod test_support;
+
+pub const CRATE_NAME: &str = "persistence_core";
+
+/// How long a writer waits for the SQLite write lock before `SQLITE_BUSY`.
+///
+/// Matches sqlx's current default; stated here so the value is ours, not a
+/// transitively-inherited one (#1231).
+pub const BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+pub type DbResult<T> = Result<T, DbError>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum DbError {
+    #[error("entity not found: {0}")]
+    NotFound(String),
+    #[error("compare-and-swap failed: {0}")]
+    CasFailed(String),
+    #[error("serialisation error: {0}")]
+    Serialise(#[from] serde_json::Error),
+    #[error("database error: {0}")]
+    Database(#[from] sqlx::Error),
+    #[error("migration error: {0}")]
+    Migration(#[from] sqlx::migrate::MigrateError),
+    #[error("not implemented")]
+    NotImplemented,
+    /// Catalog origin 'user' is not implemented in v1 (A2 — deferred to v1.x).
+    /// Returned by catalog install functions when `origin == CatalogOrigin::User`.
+    #[error("origin 'user' is not implemented in v1 (A2)")]
+    OriginNotImplemented,
+}
+
+impl DbError {
+    /// Convenience constructor for invalid-state / optimistic-lock failures.
+    #[must_use]
+    pub fn invalid_state(msg: impl Into<String>) -> Self {
+        Self::NotFound(msg.into())
+    }
+}
+
+pub trait Repository {
+    fn repository_name(&self) -> &'static str;
+}
+
+/// Production SQLite connection pool.
+///
+/// Callers use `Database::connect` for a file-backed store or
+/// `Database::in_memory` for ephemeral test fixtures. Both run migrations
+/// automatically via [`Database::migrate`].
+pub struct Database {
+    pool: SqlitePool,
+}
+
+impl Database {
+    /// Connect to a file-backed SQLite database.
+    ///
+    /// Explicitly requests WAL journaling (#830) and pins `busy_timeout`
+    /// (#1231). See `persistence_db` module docs for the full rationale.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbError::Database`] if the pool cannot connect to the given URL.
+    pub async fn connect(connection_string: &str) -> DbResult<Self> {
+        let options = SqliteConnectOptions::from_str(connection_string)?
+            .journal_mode(SqliteJournalMode::Wal)
+            .busy_timeout(BUSY_TIMEOUT);
+        let pool = SqlitePoolOptions::new().max_connections(8).connect_with(options).await?;
+        Ok(Self { pool })
+    }
+
+    /// Convenience constructor for in-memory SQLite (test and CI use).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbError::Database`] if the in-memory pool cannot be created.
+    pub async fn in_memory() -> DbResult<Self> {
+        Self::connect("sqlite::memory:").await
+    }
+
+    /// Run all pending migrations from the frozen baseline and future append-only files.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbError::Migration`] if any migration script fails.
+    pub async fn migrate(&self) -> DbResult<()> {
+        self.migrate_uncached().await
+    }
+
+    /// Run the embedded migration set directly.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbError::Migration`] if any migration script fails.
+    pub async fn migrate_uncached(&self) -> DbResult<()> {
+        let mut conn = self.pool.acquire().await?;
+        schema_cache::MIGRATOR.run(&mut *conn).await?;
+        Ok(())
+    }
+
+    /// The embedded migration set, for tests that inspect migration metadata.
+    #[must_use]
+    pub fn migrator() -> &'static sqlx::migrate::Migrator {
+        &schema_cache::MIGRATOR
+    }
+
+    /// Expose the underlying pool for repository constructors.
+    #[must_use]
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+}
+
+/// Describe a migration failure that means "this database file was written by a
+/// different revision of the app", or `None` for any other failure.
+#[must_use]
+pub fn migration_divergence_detail(error: &DbError) -> Option<String> {
+    let DbError::Migration(error) = error else { return None };
+    let detail = match error {
+        sqlx::migrate::MigrateError::VersionMismatch(version) => format!(
+            "migration {version} was already applied to this database, but its script differs from the one in this build"
+        ),
+        sqlx::migrate::MigrateError::VersionMissing(version) => format!(
+            "migration {version} was applied to this database but does not exist in this build"
+        ),
+        sqlx::migrate::MigrateError::VersionNotPresent(version) => format!(
+            "migration {version} is recorded in this database but is absent from this build's migration set"
+        ),
+        _ => return None,
+    };
+    Some(detail)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CRATE_NAME;
+
+    #[test]
+    fn exposes_crate_name() {
+        assert_eq!(CRATE_NAME, "persistence_core");
+    }
+
+    #[test]
+    fn divergence_detail_names_the_offending_migration() {
+        for error in [
+            sqlx::migrate::MigrateError::VersionMismatch(71),
+            sqlx::migrate::MigrateError::VersionMissing(71),
+            sqlx::migrate::MigrateError::VersionNotPresent(71),
+        ] {
+            let detail = super::migration_divergence_detail(&super::DbError::Migration(error))
+                .expect("divergence variant should produce a detail");
+            assert!(detail.contains("71"), "detail should name the version: {detail}");
+        }
+    }
+
+    #[test]
+    fn divergence_detail_ignores_unrelated_failures() {
+        assert!(super::migration_divergence_detail(&super::DbError::NotImplemented).is_none());
+        assert!(super::migration_divergence_detail(&super::DbError::Migration(
+            sqlx::migrate::MigrateError::Dirty(71)
+        ))
+        .is_none());
+    }
+
+    #[tokio::test]
+    async fn real_sqlx_divergence_is_classified() {
+        let db = super::Database::in_memory().await.expect("in-memory connect");
+        db.migrate().await.expect("first migrate");
+
+        sqlx::query("UPDATE _sqlx_migrations SET checksum = X'00' WHERE version = 1")
+            .execute(db.pool())
+            .await
+            .expect("tamper with recorded checksum");
+
+        let error = db.migrate().await.expect_err("divergent history must fail");
+        let detail = super::migration_divergence_detail(&error)
+            .expect("a real sqlx divergence must be classified, not fall through");
+        assert!(detail.contains('1'), "detail should name the version: {detail}");
+    }
+
+    #[tokio::test]
+    async fn database_connect_in_memory_and_migrate() {
+        let db = super::Database::in_memory().await.expect("in-memory connect");
+        db.migrate().await.expect("migrations");
+        let row: (i64,) = sqlx::query_as("SELECT 1").fetch_one(db.pool()).await.unwrap();
+        assert_eq!(row.0, 1);
+    }
+}

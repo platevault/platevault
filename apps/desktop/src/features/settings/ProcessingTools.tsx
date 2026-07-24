@@ -112,12 +112,36 @@ export function ProcessingTools() {
     async (toolId: string, enabled: boolean) => {
       const current = tools.find((t) => t.id === toolId);
       if (!current) return;
-      const updated = await toolUpdate({
-        id: toolId,
-        path: current.executablePath ?? null,
-        enabled,
+      // Clear any stale error from a prior failed toggle before optimistic update.
+      setSaveError((e) => {
+        if (!(toolId in e)) return e;
+        const next = { ...e };
+        delete next[toolId];
+        return next;
       });
-      setTools((prev) => prev.map((t) => (t.id === toolId ? updated : t)));
+      // Optimistic update so the toggle feels instant.
+      setTools((prev) =>
+        prev.map((t) => (t.id === toolId ? { ...t, enabled } : t)),
+      );
+      try {
+        const updated = await toolUpdate({
+          id: toolId,
+          path: current.executablePath ?? null,
+          enabled,
+        });
+        setTools((prev) => prev.map((t) => (t.id === toolId ? updated : t)));
+      } catch (err) {
+        // Revert the optimistic toggle and surface the error inline.
+        setTools((prev) =>
+          prev.map((t) =>
+            t.id === toolId ? { ...t, enabled: current.enabled } : t,
+          ),
+        );
+        setSaveError((e) => ({
+          ...e,
+          [toolId]: err instanceof Error ? err.message : String(err),
+        }));
+      }
     },
     [tools],
   );

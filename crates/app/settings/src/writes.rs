@@ -481,10 +481,11 @@ pub async fn resolve_setting(
     // 1. Per-source override (only for overridable keys).
     if let Some(sid) = source_id {
         if descriptors::is_overridable(key) {
-            if let Some(v) =
-                persistence_db::repositories::settings::get_source_override_raw(pool, sid, key)
-                    .await
-                    .map_err(db_err)?
+            if let Some(v) = persistence_lifecycle::repositories::settings::get_source_override_raw(
+                pool, sid, key,
+            )
+            .await
+            .map_err(db_err)?
             {
                 return Ok(v);
             }

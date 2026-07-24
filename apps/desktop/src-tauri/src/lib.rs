@@ -17,8 +17,8 @@ mod bootstrap;
 use std::sync::Arc;
 
 use audit::bus::EventBus;
-use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
-use persistence_db::Database;
+use persistence_core::Database;
+use persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository;
 use tauri::utils::config::WindowConfig;
 use tauri::webview::WebviewWindowBuilder;
 use tauri::{Emitter, Manager};
@@ -362,7 +362,7 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
         // the recognised "this file predates this build" cases into a named
         // failure that says which migration diverged and what to do about
         // it.
-        if let Some(detail) = persistence_db::migration_divergence_detail(&error) {
+        if let Some(detail) = persistence_core::migration_divergence_detail(&error) {
             let message = format!(
                 "Database schema does not match this build: {detail}.\n\
                  \n\

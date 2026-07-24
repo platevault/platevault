@@ -75,11 +75,6 @@ pub fn settings_bag() -> &'static SnapshotCache<SettingsState> {
     SETTINGS_BAG.get_or_init(SnapshotCache::new)
 }
 
-/// Store a freshly loaded settings-bag snapshot.
-pub fn store_settings_bag(value: Arc<SettingsState>) {
-    settings_bag().store(value);
-}
-
 /// Clear the settings-bag snapshot so the next read reloads from the DB.
 pub fn invalidate_settings_bag() {
     settings_bag().invalidate();
@@ -99,17 +94,5 @@ mod tests {
 
         caches.invalidate_bag();
         assert!(caches.load_bag().is_none());
-    }
-
-    #[test]
-    fn settings_bag_cache_store_load_invalidate_round_trips() {
-        invalidate_settings_bag();
-        assert!(settings_bag().load().is_none());
-
-        store_settings_bag(Arc::new(SettingsState::default()));
-        assert!(settings_bag().load().is_some());
-
-        invalidate_settings_bag();
-        assert!(settings_bag().load().is_none());
     }
 }

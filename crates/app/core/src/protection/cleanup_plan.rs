@@ -6,8 +6,8 @@
 
 use camino::Utf8Path;
 use contracts_core::ContractError;
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::repositories::source_protection as prot_repo;
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::source_protection as prot_repo;
 use sqlx::SqlitePool;
 
 use crate::errors::db_err;

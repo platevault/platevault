@@ -8,7 +8,7 @@ use contracts_core::projects_v2::{
     ChannelDriftDto, ProjectCanonicalTarget, ProjectDetailDto, ProjectSummaryDto, ProjectTool,
 };
 use contracts_core::{ContractError, ErrorSeverity};
-use persistence_db::repositories::projects as repo;
+use persistence_plans::repositories::projects as repo;
 use sqlx::SqlitePool;
 
 use super::{channels_to_dto, db_err, source_to_dto};

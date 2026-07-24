@@ -4,7 +4,7 @@
 //! Calibration matching tolerances use cases (spec 007 / spec 043 P8).
 //!
 //! Bridges the `calibration_tolerances` singleton row (migration 0008 + 0051,
-//! `persistence_db::repositories::calibration_tolerances`) with the
+//! `persistence_calibration::repositories::calibration_tolerances`) with the
 //! `CalibrationTolerances` / `UpdateCalibrationTolerances` contract DTOs used
 //! by the Tauri `calibration.tolerances.get`/`update` commands.
 //!
@@ -14,12 +14,12 @@
 
 use contracts_core::calibration_tolerances::{CalibrationTolerances, UpdateCalibrationTolerances};
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
-use persistence_db::repositories::calibration_tolerances::{
+use persistence_calibration::repositories::calibration_tolerances::{
     self as repo, CalibrationTolerancesRow,
 };
 use sqlx::SqlitePool;
 
-fn db_to_contract(e: persistence_db::DbError) -> ContractError {
+fn db_to_contract(e: persistence_core::DbError) -> ContractError {
     let msg = e.to_string();
     drop(e);
     ContractError::new(ErrorCode::InternalDatabase, msg, ErrorSeverity::Fatal, true)

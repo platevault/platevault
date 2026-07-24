@@ -20,7 +20,9 @@ use contracts_core::lifecycle::{TransitionRequest, TransitionResponse};
 use contracts_core::provenance::{ProvenanceReadRequest, ProvenanceReadResponse};
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_db::repositories::lifecycle::{LedgerFilter, LedgerRow, SqliteLifecycleRepository};
+use persistence_lifecycle::repositories::lifecycle::{
+    LedgerFilter, LedgerRow, SqliteLifecycleRepository,
+};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;

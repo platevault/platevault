@@ -33,7 +33,8 @@ use app_core_cache::SnapshotCache;
 use app_core_settings::migrate::{migrate_v1_to_v2, MigrationSummary};
 use audit::EventBus;
 use domain_core::settings::SettingsState;
-use persistence_db::{repositories::settings as repo, Database};
+use persistence_core::Database;
+use persistence_lifecycle::repositories::settings as repo;
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
 

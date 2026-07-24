@@ -31,7 +31,7 @@ mod support;
 
 use app_core::inventory;
 use contracts_core::inventory::InventorySourceState;
-use persistence_db::repositories::inbox::{get_inbox_item, insert_inbox_item, InsertInboxItem};
+use persistence_inbox::repositories::inbox::{get_inbox_item, insert_inbox_item, InsertInboxItem};
 use uuid::Uuid;
 
 // ── helpers ───────────────────────────────────────────────────────────────────

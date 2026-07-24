@@ -13,7 +13,7 @@ use contracts_core::protection::{
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::{EntityId, Timestamp};
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_db::repositories::plans as plans_repo;
+use persistence_plans::repositories::plans as plans_repo;
 use sqlx::SqlitePool;
 
 use crate::audit_ids::deterministic_entity_id;

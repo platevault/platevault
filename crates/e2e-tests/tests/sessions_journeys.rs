@@ -52,7 +52,7 @@ async fn settle_first_run_redirect(app: &E2eApp) -> anyhow::Result<()> {
 
 /// Registers a disposable `light_frames` root and a disposable `project`
 /// root purely to satisfy `firstrun.complete`'s precondition (one of EACH,
-/// `crates/persistence/db/src/repositories/first_run.rs`), then routes
+/// `crates/persistence/lifecycle/src/repositories/first_run`), then routes
 /// through the real gate. Without this, `Shell.tsx`'s client-side
 /// `setupCompleted` gate bounces every `goto_route` to a Shell-wrapped page
 /// (`/sessions`, `/inbox`) back to `/setup` indefinitely (mirrors the proven

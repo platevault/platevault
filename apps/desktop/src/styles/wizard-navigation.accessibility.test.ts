@@ -1,6 +1,5 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
-// PR #1440: keyboard/zoom accessibility for wizard step navigation.
 
 /// <reference types="node" />
 import { readFileSync } from 'node:fs';

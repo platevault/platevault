@@ -14,7 +14,7 @@ use std::path::Path;
 
 use audit::bus::EventBus;
 use audit::event_bus::{PlanApplyingCompleted, Source, TOPIC_PLAN_APPLYING_COMPLETED};
-use persistence_db::repositories::plans as plans_repo;
+use persistence_plans::repositories::plans as plans_repo;
 use targeting_resolver::cache::upsert_resolved;
 use targeting_resolver::{
     AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,

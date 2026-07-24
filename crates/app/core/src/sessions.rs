@@ -58,7 +58,7 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
     // resolved target name (`primary_designation`) surfaces in the read path.
     // `canonical_target_id` (migration 0046) is the spec-035 link; it coexists
     // with the legacy `target_id` (→ old `target` table, left NULL by ingest).
-    let rows = persistence_db::repositories::q_core::list_sessions_joined(pool)
+    let rows = persistence_core::repositories::q_core::list_sessions_joined(pool)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -88,7 +88,7 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
         // absent — ingested sessions link via canonical_target_id (R10).
         // Shared precedence with q_targets_mgmt::session_counts_by_target — see
         // resolve_session_target_id's doc (reviewer seq=277).
-        let target_ids = persistence_db::repositories::q_core::resolve_session_target_id(
+        let target_ids = persistence_core::repositories::q_core::resolve_session_target_id(
             row.target_id,
             row.canonical_target_id,
         )
@@ -122,7 +122,7 @@ pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>,
 /// # Errors
 /// Returns `Err(String)` on database failure or when the session is absent.
 pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, String> {
-    let row = persistence_db::repositories::q_core::get_session_joined(pool, id)
+    let row = persistence_core::repositories::q_core::get_session_joined(pool, id)
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("session.not_found: {id}"))?;
@@ -146,7 +146,7 @@ pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, S
     let metadata = HashMap::new();
     // Shared precedence with q_targets_mgmt::session_counts_by_target — see
     // resolve_session_target_id's doc (reviewer seq=277).
-    let target_ids = persistence_db::repositories::q_core::resolve_session_target_id(
+    let target_ids = persistence_core::repositories::q_core::resolve_session_target_id(
         row.target_id,
         row.canonical_target_id,
     )
@@ -218,7 +218,7 @@ struct Fingerprint {
 }
 
 async fn load_fingerprint(pool: &SqlitePool, id: &str) -> Result<Option<Fingerprint>, String> {
-    let row = persistence_db::repositories::q_core::get_fingerprint(pool, id)
+    let row = persistence_core::repositories::q_core::get_fingerprint(pool, id)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -308,7 +308,7 @@ async fn active_frame_summary(
     frame_ids_json: &str,
 ) -> Result<(u32, u64), String> {
     let ids: Vec<String> = serde_json::from_str(frame_ids_json).unwrap_or_default();
-    let (count, total) = persistence_db::repositories::q_core::active_frame_summary(pool, &ids)
+    let (count, total) = persistence_core::repositories::q_core::active_frame_summary(pool, &ids)
         .await
         .map_err(|e| e.to_string())?;
     Ok((u32::try_from(count.max(0)).unwrap_or(0), u64::try_from(total.max(0)).unwrap_or(0)))
@@ -327,14 +327,14 @@ async fn active_frame_exposure_seconds(
     frame_ids_json: &str,
 ) -> Result<f64, String> {
     let ids: Vec<String> = serde_json::from_str(frame_ids_json).unwrap_or_default();
-    persistence_db::repositories::q_core::active_frame_exposure_seconds(pool, &ids)
+    persistence_core::repositories::q_core::active_frame_exposure_seconds(pool, &ids)
         .await
         .map_err(|e| e.to_string())
 }
 
 /// Load project ids linked to a session via `project_sources`.
 async fn load_project_ids(pool: &SqlitePool, session_id: &str) -> Result<Vec<String>, String> {
-    Ok(persistence_db::repositories::q_core::project_ids_for_session(pool, session_id)
+    Ok(persistence_core::repositories::q_core::project_ids_for_session(pool, session_id)
         .await
         .unwrap_or_default())
 }
@@ -345,7 +345,7 @@ async fn load_calibration_matches(
     session_id: &str,
 ) -> Result<Vec<SessionCalibrationMatch>, String> {
     let rows =
-        persistence_db::repositories::q_core::calibration_matches_for_session(pool, session_id)
+        persistence_core::repositories::q_core::calibration_matches_for_session(pool, session_id)
             .await
             .unwrap_or_default();
 
@@ -373,7 +373,7 @@ async fn load_history(
     pool: &SqlitePool,
     session_id: &str,
 ) -> Result<Vec<SessionHistoryEntry>, String> {
-    let rows = persistence_db::repositories::q_core::session_history(pool, session_id)
+    let rows = persistence_core::repositories::q_core::session_history(pool, session_id)
         .await
         .unwrap_or_default();
 

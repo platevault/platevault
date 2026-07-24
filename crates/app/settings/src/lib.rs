@@ -33,8 +33,8 @@ use contracts_core::settings::{
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_db::repositories::settings as repo;
-use persistence_db::repositories::source_protection as protection_repo;
+use persistence_lifecycle::repositories::settings as repo;
+use persistence_plans::repositories::source_protection as protection_repo;
 use serde_json::Value;
 use sqlx::SqlitePool;
 
@@ -62,10 +62,9 @@ pub mod root_config;
 
 // ── In-memory settings-bag snapshot cache (F0 foundation) ────────────────────
 //
-// Defines the cache handle + `pub invalidate_settings_bag`/`store_settings_bag`
-// only. Wiring `get_settings` to read through the cache and calling
-// `invalidate_settings_bag` from `update_setting`/`restore_defaults`/
-// `set_source_override` is downstream (W-SETTINGS) work.
+// Defines the per-instance `SettingsCaches` struct and the process-global
+// `settings_bag()`/`invalidate_settings_bag()` shims used by call sites not
+// yet migrated to per-instance caches.
 pub mod caches;
 
 // ── Error mapping ──────────────────────────────────────────────────────────

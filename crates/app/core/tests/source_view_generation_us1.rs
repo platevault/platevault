@@ -16,7 +16,8 @@ mod support;
 
 use app_core_projects::source_view_generate::generate_source_view;
 use contracts_core::source_view_generate::SourceViewGenerateRequest;
-use persistence_db::repositories::{plans as plans_repo, prepared_source_views as views_repo};
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::prepared_source_views as views_repo;
 
 async fn insert_project_at(pool: &sqlx::SqlitePool, id: &str, path: &str) {
     sqlx::query(

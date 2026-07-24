@@ -16,8 +16,8 @@
 use std::collections::HashMap;
 
 use metadata_core;
-use persistence_db::repositories::inbox::{self as inbox_repo};
-use persistence_db::repositories::q_inbox;
+use persistence_inbox::repositories::inbox::{self as inbox_repo};
+use persistence_inbox::repositories::q_inbox;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -210,7 +210,7 @@ pub async fn reclassify(
     // 6. Update persisted classification
     inbox_repo::upsert_classification(
         pool,
-        &persistence_db::repositories::inbox::UpsertClassification {
+        &persistence_inbox::repositories::inbox::UpsertClassification {
             inbox_item_id: &req.inbox_item_id,
             result: &db_result,
             frame_type: single_frame_type.as_deref(),
@@ -243,7 +243,7 @@ pub async fn reclassify(
         if let Some(source_group_id) = item.source_group_id.as_deref() {
             inbox_repo::upsert_inbox_sub_item(
                 pool,
-                &persistence_db::repositories::inbox::UpsertInboxSubItem {
+                &persistence_inbox::repositories::inbox::UpsertInboxSubItem {
                     id: &item.id,
                     root_id: &item.root_id,
                     relative_path: &item.relative_path,
@@ -726,7 +726,7 @@ pub async fn reclassify_v2(
             .map_err(|e| db_internal_ctx(e, "list metadata for re-split"))?;
 
         // Build a map from relative_file_path → metadata row.
-        let meta_map: HashMap<&str, &persistence_db::repositories::inbox::InboxFileMetadataRow> =
+        let meta_map: HashMap<&str, &persistence_inbox::repositories::inbox::InboxFileMetadataRow> =
             metadata_rows.iter().map(|m| (m.relative_file_path.as_str(), m)).collect();
 
         for ev in &evidence {
@@ -931,7 +931,7 @@ async fn mandatory_attrs_present(
     pool: &SqlitePool,
     inbox_item_id: &str,
     ft: metadata_core::FrameType,
-    evidence: &[persistence_db::repositories::inbox::InboxEvidenceRow],
+    evidence: &[persistence_inbox::repositories::inbox::InboxEvidenceRow],
 ) -> bool {
     // R-17/FR-052: a light's `target` is satisfiable by coordinate
     // auto-resolution, not only by an OBJECT header. Resolved once per
@@ -951,7 +951,7 @@ async fn mandatory_attrs_present(
 
     let metadata_rows =
         inbox_repo::list_inbox_file_metadata(pool, inbox_item_id).await.unwrap_or_default();
-    let meta_map: HashMap<&str, &persistence_db::repositories::inbox::InboxFileMetadataRow> =
+    let meta_map: HashMap<&str, &persistence_inbox::repositories::inbox::InboxFileMetadataRow> =
         metadata_rows.iter().map(|m| (m.relative_file_path.as_str(), m)).collect();
 
     evidence.iter().all(|ev| {
@@ -985,10 +985,10 @@ fn parse_binning_y(s: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::repositories::inbox::{
+    use persistence_core::Database;
+    use persistence_inbox::repositories::inbox::{
         InsertEvidence, InsertInboxItem, UpsertClassification,
     };
-    use persistence_db::Database;
 
     async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();
@@ -1006,7 +1006,7 @@ mod tests {
         let sg_id = format!("sg-{item_id}");
         inbox_repo::upsert_inbox_source_group(
             db.pool(),
-            &persistence_db::repositories::inbox::UpsertSourceGroup {
+            &persistence_inbox::repositories::inbox::UpsertSourceGroup {
                 id: &sg_id,
                 root_id: "root-1",
                 relative_path: "inbox_folder",
@@ -1677,7 +1677,7 @@ mod tests {
     use contracts_core::inbox::{
         InboxReclassifyBulk, InboxReclassifyFileOverride, InboxReclassifyV2Request,
     };
-    use persistence_db::repositories::inbox::{upsert_inbox_source_group, UpsertSourceGroup};
+    use persistence_inbox::repositories::inbox::{upsert_inbox_source_group, UpsertSourceGroup};
 
     /// Set up a minimal source group with two evidence files (both unclassified).
     /// Returns (source_group_id, item_id).
@@ -1815,7 +1815,7 @@ mod tests {
 
         inbox_repo::upsert_inbox_file_metadata(
             db.pool(),
-            &persistence_db::repositories::inbox::UpsertFileMetadata {
+            &persistence_inbox::repositories::inbox::UpsertFileMetadata {
                 inbox_item_id: "item-identity",
                 relative_file_path: "inbox_folder/frame_001.fits",
                 file_size_bytes: Some(4_194_304),
@@ -3574,10 +3574,12 @@ mod tests {
 
         seed_and_classify(db.pool(), root.path(), "sg-1202", "item-1202", "root-1202").await;
 
-        let rows =
-            persistence_db::repositories::inbox::list_unacknowledged_across_roots(db.pool(), 500)
-                .await
-                .unwrap();
+        let rows = persistence_inbox::repositories::inbox::list_unacknowledged_across_roots(
+            db.pool(),
+            500,
+        )
+        .await
+        .unwrap();
 
         // Composition, not just count. `!rows.is_empty()` would be satisfied
         // by the placeholder alone — which is exactly the case that makes T020

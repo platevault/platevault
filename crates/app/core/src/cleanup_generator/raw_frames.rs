@@ -12,7 +12,7 @@ use contracts_core::inventory_frame::{
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::new_id;
-use persistence_db::repositories::source_protection as prot_repo;
+use persistence_plans::repositories::source_protection as prot_repo;
 use sqlx::SqlitePool;
 
 use crate::errors::db_err;

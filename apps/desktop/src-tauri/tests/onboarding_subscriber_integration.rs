@@ -20,7 +20,7 @@ use audit::event_bus::Source;
 use contracts_core::onboarding::{
     OnboardingItemState, OnboardingManualState, OnboardingStateSource,
 };
-use persistence_db::Database;
+use persistence_core::Database;
 
 use desktop_shell::commands::onboarding::start_onboarding_subscriber;
 

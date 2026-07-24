@@ -5,7 +5,7 @@
 
 use super::loaders::load_config;
 use super::*;
-use persistence_db::Database;
+use persistence_core::Database;
 
 use crate::caches;
 use crate::caches::cache_test_lock;
@@ -528,16 +528,19 @@ async fn load_config_cache_hit_skips_db_until_invalidated() {
     let first = load_config(db.pool()).await;
     assert!(first.require_same_offset, "fresh DB primes the cache with the default (true)");
 
-    let row = persistence_db::repositories::calibration_tolerances::CalibrationTolerancesRow {
-        temperature_tolerance_c: 5.0,
-        exposure_tolerance_s: 2.0,
-        aging_limit_days: 365,
-        require_same_camera: true,
-        require_same_gain: true,
-        require_same_binning: true,
-        require_same_offset: false,
-    };
-    persistence_db::repositories::calibration_tolerances::update(db.pool(), &row).await.unwrap();
+    let row =
+        persistence_calibration::repositories::calibration_tolerances::CalibrationTolerancesRow {
+            temperature_tolerance_c: 5.0,
+            exposure_tolerance_s: 2.0,
+            aging_limit_days: 365,
+            require_same_camera: true,
+            require_same_gain: true,
+            require_same_binning: true,
+            require_same_offset: false,
+        };
+    persistence_calibration::repositories::calibration_tolerances::update(db.pool(), &row)
+        .await
+        .unwrap();
 
     let cached = load_config(db.pool()).await;
     assert!(cached.require_same_offset, "cache hit must not see the post-priming update");
@@ -611,16 +614,19 @@ async fn load_config_reads_require_same_offset_from_tolerances_table() {
     caches::invalidate_calibration_config();
     let db = test_db().await;
 
-    let row = persistence_db::repositories::calibration_tolerances::CalibrationTolerancesRow {
-        temperature_tolerance_c: 5.0,
-        exposure_tolerance_s: 2.0,
-        aging_limit_days: 365,
-        require_same_camera: true,
-        require_same_gain: true,
-        require_same_binning: true,
-        require_same_offset: false,
-    };
-    persistence_db::repositories::calibration_tolerances::update(db.pool(), &row).await.unwrap();
+    let row =
+        persistence_calibration::repositories::calibration_tolerances::CalibrationTolerancesRow {
+            temperature_tolerance_c: 5.0,
+            exposure_tolerance_s: 2.0,
+            aging_limit_days: 365,
+            require_same_camera: true,
+            require_same_gain: true,
+            require_same_binning: true,
+            require_same_offset: false,
+        };
+    persistence_calibration::repositories::calibration_tolerances::update(db.pool(), &row)
+        .await
+        .unwrap();
 
     let config = load_config(db.pool()).await;
     assert!(!config.require_same_offset, "toggling off must reach MatchingRuleConfig");
