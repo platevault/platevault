@@ -16,6 +16,10 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
+      // Desktop app: alt-tabbing back must not refetch multi-MB target/session
+      // queries. Queries that genuinely need fresh data on focus (e.g. status
+      // health checks) already use refetchInterval and do not need this too.
+      refetchOnWindowFocus: false,
     },
   },
 });

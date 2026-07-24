@@ -9,6 +9,35 @@ use sqlx::SqlitePool;
 
 use persistence_core::DbResult;
 
+/// SQL fragment that excludes stale `group_key = ''` placeholder rows from
+/// unacknowledged-item projections.
+///
+/// `materialize_sub_items` creates real sub-items with non-empty `group_key`
+/// values but its orphan-deletion loop is blind to `group_key = ''` rows
+/// (those are excluded by `list_inbox_sub_items`).  If the purge at classify
+/// time is ever skipped or fails, this belt-and-braces predicate ensures every
+/// read-side projection still agrees (#711 double-count fix).
+///
+/// A row is a stale placeholder when it has `group_key = ''`, belongs to a
+/// source group, and **two or more** real siblings (`group_key != ''`) exist
+/// for that source group.  The `>= 2` bound is intentional: a single real
+/// sub-item means an unsplit single-type folder where the placeholder and
+/// sub-item are both legitimate (the placeholder may carry a `plan_open` link
+/// the plan surface must still reach — see
+/// `inbox_plan::tests::list_open_keeps_confirmed_placeholder_with_materialized_sub_item`).
+/// Double-counting only occurs when the folder was genuinely split into two or
+/// more distinct type groups.
+const EXCLUDE_STALE_PLACEHOLDER: &str = "
+           AND NOT (
+               i.group_key = ''
+               AND i.source_group_id IS NOT NULL
+               AND (
+                   SELECT COUNT(*) FROM inbox_items sib
+                   WHERE sib.source_group_id = i.source_group_id
+                     AND sib.group_key != ''
+               ) >= 2
+           )";
+
 /// Per-frame-type aggregate row returned by [`inbox_stats`].
 #[derive(Clone, Debug)]
 pub struct InboxStatsRow {
@@ -46,7 +75,7 @@ pub async fn inbox_stats(pool: &SqlitePool) -> DbResult<Vec<InboxStatsRow>> {
         image_count: i64,
     }
 
-    let rows = sqlx::query_as::<_, StatsRow>(
+    let sql = format!(
         "SELECT
              COALESCE(ev.manual_override, ev.frame_type)          AS eff_type,
              COUNT(DISTINCT CASE WHEN i.is_master_item = 0
@@ -59,11 +88,11 @@ pub async fn inbox_stats(pool: &SqlitePool) -> DbResult<Vec<InboxStatsRow>> {
          JOIN inbox_classification_evidence ev ON ev.inbox_item_id = i.id
          WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
            AND COALESCE(ev.manual_override, ev.frame_type) IS NOT NULL
+           {EXCLUDE_STALE_PLACEHOLDER}
          GROUP BY eff_type
-         ORDER BY eff_type",
-    )
-    .fetch_all(pool)
-    .await?;
+         ORDER BY eff_type"
+    );
+    let rows = sqlx::query_as::<_, StatsRow>(sqlx::AssertSqlSafe(sql)).fetch_all(pool).await?;
 
     Ok(rows
         .into_iter()
@@ -88,15 +117,15 @@ pub async fn inbox_stats(pool: &SqlitePool) -> DbResult<Vec<InboxStatsRow>> {
 /// # Errors
 /// Returns [`DbError::Database`] on query failure.
 pub async fn count_distinct_inbox_folders(pool: &SqlitePool) -> DbResult<i64> {
-    let (count,): (i64,) = sqlx::query_as(
+    let sql = format!(
         "SELECT COUNT(DISTINCT i.id)
          FROM inbox_items i
          JOIN inbox_classification_evidence ev ON ev.inbox_item_id = i.id
          WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
-           AND COALESCE(ev.manual_override, ev.frame_type) IS NOT NULL",
-    )
-    .fetch_one(pool)
-    .await?;
+           AND COALESCE(ev.manual_override, ev.frame_type) IS NOT NULL
+           {EXCLUDE_STALE_PLACEHOLDER}"
+    );
+    let (count,): (i64,) = sqlx::query_as(sqlx::AssertSqlSafe(sql)).fetch_one(pool).await?;
     Ok(count)
 }
 
@@ -163,7 +192,7 @@ pub async fn list_unacknowledged_across_roots(
     pool: &SqlitePool,
     limit: i64,
 ) -> DbResult<Vec<InboxListRow>> {
-    let rows = sqlx::query_as::<_, InboxListRow>(
+    let sql = format!(
         "SELECT
              i.id,
              i.root_id,
@@ -189,12 +218,14 @@ pub async fn list_unacknowledged_across_roots(
          FROM inbox_items i
          JOIN registered_sources r ON r.id = i.root_id
          WHERE i.state IN ('pending_classification', 'classified', 'plan_open')
+           {EXCLUDE_STALE_PLACEHOLDER}
          ORDER BY r.path, i.relative_path, i.group_key
-         LIMIT ?",
-    )
-    .bind(limit)
-    .fetch_all(pool)
-    .await?;
+         LIMIT ?"
+    );
+    let rows = sqlx::query_as::<_, InboxListRow>(sqlx::AssertSqlSafe(sql))
+        .bind(limit)
+        .fetch_all(pool)
+        .await?;
     Ok(rows)
 }
 

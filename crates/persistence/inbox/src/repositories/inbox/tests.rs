@@ -1862,3 +1862,318 @@ async fn only_file_count_excludes_a_masters_only_folder_058() {
          scan's `sub_frame_count()` is the whole carve-out"
     );
 }
+
+// ── #711 stale-placeholder regression tests ───────────────────────────────────
+//
+// `materialize_sub_items` previously never purged the `group_key = ''`
+// placeholder inserted before classify runs, because `list_inbox_sub_items`
+// excludes that row.  The three tests below pin that the projections never
+// see it once a real sibling sub-item exists.
+
+/// A stale `group_key = ''` placeholder must be absent from
+/// `list_unacknowledged_across_roots` once a real sub-item exists for the
+/// same source group.
+#[tokio::test]
+async fn list_unacknowledged_excludes_stale_placeholder_when_sub_item_exists() {
+    use domain_core::first_run::{
+        OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth, SourceKind,
+    };
+
+    let db = test_db().await;
+    let pool = db.pool();
+
+    let batch_resp = crate::repositories::first_run::register_source_batch(
+        pool,
+        &RegisterSourceBatchRequest {
+            sources: vec![RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox-711".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            }],
+        },
+    )
+    .await
+    .unwrap();
+    let root_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
+
+    sqlx::query(
+        "INSERT INTO inbox_source_groups \
+         (id, root_id, relative_path, discovered_at, last_scanned_at, child_count) \
+         VALUES ('sg-711', ?, '2025-11-01/needs-review', \
+                 '2025-11-01T00:00:00Z', '2025-11-01T00:00:00Z', 1)",
+    )
+    .bind(&root_id)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    // Stale placeholder: group_key='' left un-purged by materialize_sub_items.
+    sqlx::query(
+        "INSERT INTO inbox_items \
+         (id, root_id, relative_path, source_group_id, group_key, \
+          discovered_at, last_scanned_at, content_signature, state, lane) \
+         VALUES ('placeholder-item', ?, '2025-11-01/needs-review', 'sg-711', '', \
+                 '2025-11-01T00:00:00Z', '2025-11-01T00:00:00Z', 'sig-shared', \
+                 'classified', 'fits')",
+    )
+    .bind(&root_id)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    // Two real materialized sub-items: exclusion requires >= 2 siblings so that
+    // an unsplit single-type folder (placeholder + 1 sub-item) is not affected.
+    upsert_inbox_sub_item(
+        pool,
+        &UpsertInboxSubItem {
+            id: "sub-item-needs-review",
+            root_id: &root_id,
+            relative_path: "2025-11-01/needs-review",
+            source_group_id: "sg-711",
+            group_key: "type=unknown",
+            group_label: "(root) · needs review",
+            frame_type: None,
+            content_signature: "sig-shared",
+            file_count: 1,
+            lane: "fits",
+            needs_review: true,
+        },
+    )
+    .await
+    .unwrap();
+    upsert_inbox_sub_item(
+        pool,
+        &UpsertInboxSubItem {
+            id: "sub-item-light",
+            root_id: &root_id,
+            relative_path: "2025-11-01/needs-review",
+            source_group_id: "sg-711",
+            group_key: "type=light",
+            group_label: "(root) · light",
+            frame_type: Some("light"),
+            content_signature: "sig-light",
+            file_count: 1,
+            lane: "fits",
+            needs_review: false,
+        },
+    )
+    .await
+    .unwrap();
+
+    let rows = list_unacknowledged_across_roots(pool, 100).await.unwrap();
+    let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
+    assert!(
+        !ids.contains(&"placeholder-item"),
+        "stale placeholder must be excluded once two real sub-items exist: {ids:?}"
+    );
+    assert!(
+        ids.contains(&"sub-item-needs-review"),
+        "the real materialized sub-item must still be listed: {ids:?}"
+    );
+}
+
+/// A standalone `group_key = ''` item with no `source_group_id` (a freshly
+/// scanned, not-yet-classified folder) must NOT be filtered — the #711
+/// exclusion only applies when a real sibling sub-item exists.
+#[tokio::test]
+async fn list_unacknowledged_keeps_unclassified_item_with_no_siblings() {
+    use domain_core::first_run::{
+        OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth, SourceKind,
+    };
+
+    let db = test_db().await;
+    let pool = db.pool();
+
+    let batch_resp = crate::repositories::first_run::register_source_batch(
+        pool,
+        &RegisterSourceBatchRequest {
+            sources: vec![RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox-711b".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            }],
+        },
+    )
+    .await
+    .unwrap();
+    let root_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
+
+    insert_inbox_item(
+        pool,
+        &InsertInboxItem {
+            id: "fresh-item",
+            root_id: &root_id,
+            relative_path: "2025-11-02/lights",
+            file_count: 3,
+            content_signature: Some("sig-fresh"),
+            lane: "fits",
+        },
+    )
+    .await
+    .unwrap();
+
+    let rows = list_unacknowledged_across_roots(pool, 100).await.unwrap();
+    assert!(rows.iter().any(|r| r.id == "fresh-item"));
+}
+
+/// #711 follow-up: `inbox_stats`, `count_distinct_inbox_folders`, and
+/// `list_unacknowledged_across_roots` must all agree on exactly one real
+/// folder when a stale placeholder that carries its own evidence rows is
+/// present alongside its materialized sibling.
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // linear fixture setup for 2 rows × 2 evidence each
+async fn list_and_stats_agree_when_stale_placeholder_has_evidence() {
+    use domain_core::first_run::{
+        OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth, SourceKind,
+    };
+
+    let db = test_db().await;
+    let pool = db.pool();
+
+    let batch_resp = crate::repositories::first_run::register_source_batch(
+        pool,
+        &RegisterSourceBatchRequest {
+            sources: vec![RegisterSourceRequest {
+                kind: SourceKind::Inbox,
+                path: "/astro/inbox-711c".to_owned(),
+                kind_subtype: None,
+                scan_depth: ScanDepth::Recursive,
+                organization_state: OrganizationState::Unorganized,
+            }],
+        },
+    )
+    .await
+    .unwrap();
+    let root_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
+
+    sqlx::query(
+        "INSERT INTO inbox_source_groups \
+         (id, root_id, relative_path, discovered_at, last_scanned_at, child_count) \
+         VALUES ('sg-711c', ?, '2025-11-03/lights-2f', \
+                 '2025-11-03T00:00:00Z', '2025-11-03T00:00:00Z', 1)",
+    )
+    .bind(&root_id)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    // Stale placeholder that still carries evidence rows from the original
+    // classify pass — it satisfies the evidence JOIN in inbox_stats.
+    sqlx::query(
+        "INSERT INTO inbox_items \
+         (id, root_id, relative_path, source_group_id, group_key, \
+          discovered_at, last_scanned_at, content_signature, file_count, state, lane) \
+         VALUES ('placeholder-2f', ?, '2025-11-03/lights-2f', 'sg-711c', '', \
+                 '2025-11-03T00:00:00Z', '2025-11-03T00:00:00Z', 'sig-2f', 2, \
+                 'classified', 'fits')",
+    )
+    .bind(&root_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    for (ev_id, path) in [
+        ("ev-placeholder-2f-a", "lights-2f/frame_001.fits"),
+        ("ev-placeholder-2f-b", "lights-2f/frame_002.fits"),
+    ] {
+        insert_evidence(
+            pool,
+            &InsertEvidence {
+                id: ev_id,
+                inbox_item_id: "placeholder-2f",
+                relative_file_path: path,
+                frame_type: Some("light"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Light Frame"),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    // Two real materialized sub-items for the same folder (lights + darks split).
+    // The >= 2 bound requires both to be present before the placeholder is excluded.
+    let sub_id = upsert_inbox_sub_item(
+        pool,
+        &UpsertInboxSubItem {
+            id: "sub-2f",
+            root_id: &root_id,
+            relative_path: "2025-11-03/lights-2f",
+            source_group_id: "sg-711c",
+            group_key: "type=light",
+            group_label: "(root) · light",
+            frame_type: Some("light"),
+            content_signature: "sig-2f",
+            file_count: 2,
+            lane: "fits",
+            needs_review: false,
+        },
+    )
+    .await
+    .unwrap();
+    for (ev_id, path) in
+        [("ev-sub-2f-a", "lights-2f/frame_001.fits"), ("ev-sub-2f-b", "lights-2f/frame_002.fits")]
+    {
+        insert_evidence(
+            pool,
+            &InsertEvidence {
+                id: ev_id,
+                inbox_item_id: &sub_id,
+                relative_file_path: path,
+                frame_type: Some("light"),
+                evidence_source: "imagetyp_header",
+                raw_value: Some("Light Frame"),
+                unclassified: false,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    // Second sub-item (dark group) to reach the >= 2 sibling threshold.
+    upsert_inbox_sub_item(
+        pool,
+        &UpsertInboxSubItem {
+            id: "sub-2f-dark",
+            root_id: &root_id,
+            relative_path: "2025-11-03/lights-2f",
+            source_group_id: "sg-711c",
+            group_key: "type=dark",
+            group_label: "(root) · dark",
+            frame_type: Some("dark"),
+            content_signature: "sig-2f-dark",
+            file_count: 1,
+            lane: "fits",
+            needs_review: false,
+        },
+    )
+    .await
+    .unwrap();
+
+    // 1. List: only the real sub-item, never the stale placeholder.
+    let rows = list_unacknowledged_across_roots(pool, 100).await.unwrap();
+    let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
+    assert!(!ids.contains(&"placeholder-2f"), "list must exclude the stale placeholder: {ids:?}");
+    assert!(ids.contains(&"sub-2f"), "list must include the real sub-item: {ids:?}");
+
+    // 2. count_distinct_inbox_folders: exactly 1, not 2.
+    let distinct = count_distinct_inbox_folders(pool).await.unwrap();
+    assert_eq!(distinct, 1, "stale placeholder must not inflate the distinct-folder count");
+
+    // 3. inbox_stats: 'light' folder_count is 1, not 2.
+    let stats = inbox_stats(pool).await.unwrap();
+    let light = stats.iter().find(|r| r.frame_type == "light").expect("light row present");
+    assert_eq!(
+        light.folder_count, 1,
+        "stale placeholder must not inflate inbox_stats' per-type folder_count"
+    );
+}
