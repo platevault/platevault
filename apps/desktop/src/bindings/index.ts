@@ -1367,6 +1367,8 @@ export const commands = {
 	 * 
 	 *  Roots are fetched from `registered_sources`; each root's `online` flag is
 	 *  set by testing whether its path is currently accessible on the filesystem.
+	 *  Probes run concurrently with a per-root timeout so an offline NAS/SMB root
+	 *  cannot block a tokio worker for the full OS stat timeout.
 	 *  `inbox_count` reflects the real number of unacknowledged inbox items
 	 *  (`pending_classification` or `classified`) across all registered sources.
 	 * 

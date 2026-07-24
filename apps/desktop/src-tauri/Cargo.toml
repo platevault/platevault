@@ -63,6 +63,7 @@ tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }
+futures-util = { workspace = true }
 
 [dev-dependencies]
 # The `test` feature gates the `tauri::test` module (mock runtime, IPC
