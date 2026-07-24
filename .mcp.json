@@ -32,13 +32,6 @@
         "repomix",
         "--mcp"
       ]
-    },
-    "gitnexus": {
-      "type": "stdio",
-      "command": "gitnexus",
-      "args": [
-        "mcp"
-      ]
     }
   }
 }
