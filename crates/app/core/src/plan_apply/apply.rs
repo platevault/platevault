@@ -1,16 +1,11 @@
 use super::{
-    apply_repo, audit_item_cancelled, bus_err, check_overlap_and_register, compute_plan_path_set,
-    db_err, deterministic_entity_id, execute_plan, finalize_archive_lifecycle,
-    finalize_calibration_master_archive, finalize_calibration_master_restore,
-    finalize_project_create_manifest, finalize_restore_lifecycle, finalize_view_generation,
-    finalize_view_regeneration, finalize_view_removal, item_row_to_executor_item, json, new_id,
-    plans_repo, resolve_root_path, verify_approval_token, ActiveRun, ActiveRunGuard, ApplyOutcome,
-    AuditLogEntry, CancellationToken, ContractError, EntityType, ErrorCode, ErrorSeverity,
-    EventBus, ExecutorItem, HashMap, OpEventEmitter, OperationEventSink, OperationEventType,
-    OperationId, OperationStatus, Outcome, PlanApplyCallbacks, PlanApplyResponse,
-    PlanApplyingCompleted, PlanApplyingPaused, PlanApplyingStarted, RetryQueue, Severity, SkipSet,
-    Source, SqlitePool, TerminalCounts, Timestamp, Utf8PathBuf, TOPIC_PLAN_APPLYING_COMPLETED,
-    TOPIC_PLAN_APPLYING_PAUSED, TOPIC_PLAN_APPLYING_STARTED,
+    apply_repo, bus_err, check_overlap_and_register, compute_plan_path_set, db_err, execute_plan,
+    item_row_to_executor_item, json, new_id, plans_repo, resolve_root_path, verify_approval_token,
+    ActiveRun, ActiveRunGuard, ApplyOutcome, CancellationToken, ContractError, ErrorCode,
+    ErrorSeverity, EventBus, ExecutorItem, HashMap, OpEventEmitter, OperationEventSink,
+    OperationEventType, OperationId, OperationStatus, PlanApplyCallbacks, PlanApplyResponse,
+    PlanApplyingStarted, RetryQueue, SkipSet, Source, SqlitePool, TerminalCounts, Timestamp,
+    Utf8PathBuf, TOPIC_PLAN_APPLYING_STARTED,
 };
 
 // ── apply_plan ────────────────────────────────────────────────────────────────
@@ -319,414 +314,43 @@ pub(super) fn spawn_executor_run(params: SpawnExecutorParams) {
         // before the outcome branches below read cumulative plan counters.
         callbacks.flush().await;
 
-        // Compute terminal state and persist.
+        // Compute terminal state and persist via per-outcome handlers.
         match outcome {
             ApplyOutcome::Completed(counts) => {
-                let at = Timestamp::now_iso();
-
-                // GFD-2: Sweep items orphaned `applying` by a mid-run retry
-                // whose DB flip landed but whose re-execution never got picked
-                // up before the run completed (symmetric with the Cancelled
-                // path's identical sweep). Without this, a retry_plan_item call
-                // racing with run completion leaves the item permanently stuck
-                // in `applying` with no terminal audit record.
-                match apply_repo::cancel_orphaned_applying_items(&pool, &plan_id).await {
-                    Ok(orphaned_ids) => {
-                        for item_id in &orphaned_ids {
-                            audit_item_cancelled(
-                                &pool, &bus, &run_id, &plan_id, item_id, "applying", &at,
-                            )
-                            .await;
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!(error=%e, "failed to sweep orphaned applying items on completion");
-                    }
-                }
-
-                // `counts` covers only the items processed in THIS segment.
-                // After a resume (issue #575), that undercounts a prior
-                // pre-pause phase — use the plan's cumulative counters
-                // instead (see `cumulative_counts`). Fetched AFTER the orphan
-                // sweep above so swept items are included.
-                let counts = cumulative_counts(&pool, &plan_id, &counts).await;
-                let terminal = counts.terminal_state(false).to_owned();
-
-                // Spec 017 C5: on a fully-applied archive plan, drive the owning
-                // project into `archived` (the legitimate requires-plan closure).
-                // Only a clean `applied` terminal qualifies — a partial/failed
-                // apply leaves the project where it is.
-                if terminal == "applied" && plan_origin == "archive" {
-                    if let Some(project_id) = plan_project_id.as_deref() {
-                        finalize_archive_lifecycle(&pool, &bus, &plan_id, project_id).await;
-                    }
-                }
-
-                // #885: on a fully-applied restore (un-archive) plan, drive the
-                // owning project back out of `archived`. Only a clean `applied`
-                // terminal qualifies — a partial/failed apply leaves files only
-                // partly moved back, so the project must stay `archived` until a
-                // retry plan finishes the job (mirrors the archive closure guard).
-                if terminal == "applied" && plan_origin == "restore" {
-                    if let Some(project_id) = plan_project_id.as_deref() {
-                        finalize_restore_lifecycle(&pool, &bus, project_id).await;
-                    }
-                }
-
-                // #886: on a fully-applied calibration-master archive/restore
-                // plan, close the master's archived flag the same way the
-                // project archive/restore closures do above — only a clean
-                // `applied` terminal qualifies (a partial apply leaves the
-                // file only partly moved).
-                if terminal == "applied" && plan_origin == "calibration_master_archive" {
-                    if let Some(master_id) = plan_project_id.as_deref() {
-                        finalize_calibration_master_archive(&pool, &plan_id, master_id).await;
-                    }
-                }
-                if terminal == "applied" && plan_origin == "calibration_master_restore" {
-                    if let Some(master_id) = plan_project_id.as_deref() {
-                        finalize_calibration_master_restore(&pool, master_id).await;
-                    }
-                }
-
-                // #665: on a fully-applied project_create plan, fire the
-                // Created manifest trigger — see finalize_project_create_manifest
-                // for why origin_path is the project's PATH here, not its id.
-                if terminal == "applied" && plan_origin == "project" {
-                    if let Some(project_path) = plan_project_id.as_deref() {
-                        finalize_project_create_manifest(&pool, &bus, project_path).await;
-                    }
-                }
-
-                // Spec 049: on a successful (or partially-applied) generation
-                // plan apply, write the first-materialization
-                // `PreparedSourceView` (state `current`) from the succeeded
-                // link items. Failed/skipped items are simply omitted — a
-                // single missing source never blocks recording the rest of
-                // the view (FR-019).
-                if (terminal == "applied" || terminal == "partially_applied")
-                    && plan_origin == "prepared_view_generation"
-                {
-                    if let Some(project_id) = plan_project_id.as_deref() {
-                        finalize_view_generation(&pool, &plan_id, project_id).await;
-                    }
-                }
-
-                // Spec 026 T017/T018: on a (fully or partially) applied
-                // view-removal/regeneration plan, update the PreparedSourceView
-                // state to match reality — see `finalize_view_removal`/
-                // `finalize_view_regeneration` for why removal gets an explicit
-                // terminal write while regeneration rides the staleness sweep.
-                if terminal == "applied" || terminal == "partially_applied" {
-                    match plan_origin.as_str() {
-                        "prepared_view_removal" => {
-                            finalize_view_removal(&pool, &plan_id, &terminal).await;
-                        }
-                        "prepared_view_regeneration" => {
-                            finalize_view_regeneration(&pool, &plan_id).await;
-                        }
-                        _ => {}
-                    }
-                }
-
-                let _ = apply_repo::complete_run(
+                super::terminal::handle_completed(
                     &pool,
+                    &bus,
                     &plan_id,
                     &run_id,
-                    &terminal,
-                    counts.succeeded,
-                    counts.failed,
-                    counts.skipped,
-                    counts.cancelled,
+                    &plan_origin,
+                    plan_project_id.as_deref(),
+                    op_emitter.as_ref(),
+                    counts,
                 )
                 .await;
-
-                let _ = apply_repo::append_event(
-                    &pool,
-                    &new_id(),
-                    &run_id,
-                    &plan_id,
-                    None,
-                    "applying",
-                    &terminal,
-                    &at,
-                    None,
-                    None,
-                )
-                .await;
-
-                let _ = bus
-                    .publish(
-                        TOPIC_PLAN_APPLYING_COMPLETED,
-                        Source::System,
-                        PlanApplyingCompleted {
-                            plan_id: plan_id.clone(),
-                            run_id: run_id.clone(),
-                            terminal_state: terminal.clone(),
-                            items_applied: counts.succeeded,
-                            items_failed: counts.failed,
-                            items_skipped: counts.skipped,
-                            items_cancelled: counts.cancelled,
-                            at: at.clone(),
-                        },
-                    )
-                    .await;
-
-                // Long-op terminal event (spec 042 US16). `terminal` is
-                // "completed" unless any item failed, in which case it is
-                // "failed" — map that onto Completed/Failed event + status.
-                if let Some(emitter) = op_emitter.as_ref() {
-                    let failed_run = terminal == "failed";
-                    let (event_type, status) = if failed_run {
-                        (OperationEventType::Failed, OperationStatus::Failed)
-                    } else {
-                        (OperationEventType::Completed, OperationStatus::Completed)
-                    };
-                    let handle = emitter.handle(status);
-                    emitter.emit(
-                        event_type,
-                        json!({
-                            "handle": handle,
-                            "planId": plan_id,
-                            "runId": run_id,
-                            "terminalState": terminal,
-                            "itemsApplied": counts.succeeded,
-                            "itemsFailed": counts.failed,
-                            "itemsSkipped": counts.skipped,
-                            "itemsCancelled": counts.cancelled,
-                            "at": at,
-                        }),
-                    );
-                }
             }
-
             ApplyOutcome::Cancelled(counts) => {
-                let at = Timestamp::now_iso();
-
-                // Batch-cancel remaining pending items (T021: emit per-item audit row for EACH).
-                match apply_repo::list_pending_items(&pool, &plan_id).await {
-                    Ok(pending_ids) => {
-                        let _ = apply_repo::batch_cancel_pending_items(&pool, &plan_id).await;
-                        for item_id in &pending_ids {
-                            audit_item_cancelled(
-                                &pool, &bus, &run_id, &plan_id, item_id, "pending", &at,
-                            )
-                            .await;
-                        }
-                    }
-                    Err(e) => {
-                        // #750: `list_pending_items` failing here is assumed
-                        // transient (DB contention), not permanent — retry
-                        // once before degrading to a bulk-only cancel, so the
-                        // common case still gets full per-item audit rows.
-                        tracing::error!(error=%e, "failed to list pending items for per-item cancel audit; retrying once");
-                        match apply_repo::list_pending_items(&pool, &plan_id).await {
-                            Ok(pending_ids) => {
-                                let _ =
-                                    apply_repo::batch_cancel_pending_items(&pool, &plan_id).await;
-                                for item_id in &pending_ids {
-                                    audit_item_cancelled(
-                                        &pool, &bus, &run_id, &plan_id, item_id, "pending", &at,
-                                    )
-                                    .await;
-                                }
-                            }
-                            Err(e2) => {
-                                tracing::error!(error=%e2, "list_pending_items failed twice; falling back to a single aggregate cancel audit row");
-                                let cancelled_count =
-                                    apply_repo::batch_cancel_pending_items(&pool, &plan_id)
-                                        .await
-                                        .unwrap_or(0);
-                                // Degraded but non-silent: one aggregate durable
-                                // row instead of per-item rows, since item ids
-                                // are unavailable without changing
-                                // `batch_cancel_pending_items`'s return type
-                                // (persistence_db, out of this fix's scope).
-                                let entry = AuditLogEntry::new(
-                                    EntityType::FilesystemPlan,
-                                    deterministic_entity_id("plan_apply.bulk_cancel", &plan_id),
-                                    "plan.bulk_cancel_degraded",
-                                    "user",
-                                    Outcome::Refused,
-                                    Severity::Workflow,
-                                    domain_core::ids::EntityId::new(),
-                                )
-                                .with_reason_code("list_pending_items_unavailable")
-                                .with_payload(json!({
-                                    "planId": plan_id,
-                                    "runId": run_id,
-                                    "cancelledCount": cancelled_count,
-                                }));
-                                if let Err(e3) = bus
-                                    .write_audit(
-                                        entry,
-                                        TOPIC_PLAN_APPLYING_COMPLETED,
-                                        Source::System,
-                                        json!({"planId": plan_id, "cancelledCount": cancelled_count}),
-                                    )
-                                    .await
-                                {
-                                    tracing::error!(error=%e3, "durable fallback audit write failed for degraded bulk cancel");
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Sweep items orphaned `applying` by a mid-run retry whose
-                // DB flip (`retry_plan_item`) landed but whose re-execution
-                // never got picked up by the executor's retry-drain before
-                // cancellation was observed (review fix, #742 follow-up).
-                // `batch_cancel_pending_items` above only targets `pending`
-                // and would otherwise leave these permanently stuck with no
-                // terminal audit record.
-                match apply_repo::cancel_orphaned_applying_items(&pool, &plan_id).await {
-                    Ok(orphaned_ids) => {
-                        for item_id in &orphaned_ids {
-                            audit_item_cancelled(
-                                &pool, &bus, &run_id, &plan_id, item_id, "applying", &at,
-                            )
-                            .await;
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!(error=%e, "failed to sweep orphaned applying items for cancel audit");
-                    }
-                }
-
-                // Fetch cumulative counters (see `cumulative_counts`) AFTER
-                // the batch-cancel above so the just-cancelled items are
-                // included.
-                let counts = cumulative_counts(&pool, &plan_id, &counts).await;
-
-                let _ = apply_repo::complete_run(
+                super::terminal::handle_cancelled(
                     &pool,
+                    &bus,
                     &plan_id,
                     &run_id,
-                    "cancelled",
-                    counts.succeeded,
-                    counts.failed,
-                    counts.skipped,
-                    counts.cancelled,
+                    op_emitter.as_ref(),
+                    counts,
                 )
                 .await;
-
-                let _ = apply_repo::append_event(
-                    &pool,
-                    &new_id(),
-                    &run_id,
-                    &plan_id,
-                    None,
-                    "applying",
-                    "cancelled",
-                    &at,
-                    None,
-                    None,
-                )
-                .await;
-
-                let _ = bus
-                    .publish(
-                        TOPIC_PLAN_APPLYING_COMPLETED,
-                        Source::System,
-                        PlanApplyingCompleted {
-                            plan_id: plan_id.clone(),
-                            run_id: run_id.clone(),
-                            terminal_state: "cancelled".to_owned(),
-                            items_applied: counts.succeeded,
-                            items_failed: counts.failed,
-                            items_skipped: counts.skipped,
-                            items_cancelled: counts.cancelled,
-                            at: at.clone(),
-                        },
-                    )
-                    .await;
-
-                // Long-op terminal event for a cancelled run (spec 042 US16).
-                if let Some(emitter) = op_emitter.as_ref() {
-                    let handle = emitter.handle(OperationStatus::Cancelled);
-                    emitter.emit(
-                        OperationEventType::Completed,
-                        json!({
-                            "handle": handle,
-                            "planId": plan_id,
-                            "runId": run_id,
-                            "terminalState": "cancelled",
-                            "itemsApplied": counts.succeeded,
-                            "itemsFailed": counts.failed,
-                            "itemsSkipped": counts.skipped,
-                            "itemsCancelled": counts.cancelled,
-                            "at": at,
-                        }),
-                    );
-                }
             }
-
             ApplyOutcome::Paused { reason, counts } => {
-                let at = Timestamp::now_iso();
-                // See `cumulative_counts`: covers a prior pre-pause phase
-                // too, so a second pause after a resume doesn't regress the
-                // plan's counters.
-                let counts = cumulative_counts(&pool, &plan_id, &counts).await;
-
-                let _ = apply_repo::pause_run(
+                super::terminal::handle_paused(
                     &pool,
+                    &bus,
                     &plan_id,
                     &run_id,
                     &reason,
-                    counts.succeeded,
-                    counts.failed,
-                    counts.skipped,
-                    counts.cancelled,
-                    // items_pending: total - all resolved
-                    counts.succeeded + counts.failed + counts.skipped + counts.cancelled,
+                    op_emitter.as_ref(),
+                    counts,
                 )
                 .await;
-
-                let _ = apply_repo::append_event(
-                    &pool,
-                    &new_id(),
-                    &run_id,
-                    &plan_id,
-                    None,
-                    "applying",
-                    "paused",
-                    &at,
-                    None,
-                    None,
-                )
-                .await;
-
-                // Long-op non-terminal pause projection (spec 042 US16). The
-                // run is not terminal — the UI keeps the handle and waits for a
-                // resume to continue streaming. Status reflects "running" since
-                // the op is still alive (paused), not Completed/Failed.
-                if let Some(emitter) = op_emitter.as_ref() {
-                    let handle = emitter.handle(OperationStatus::Running);
-                    emitter.emit(
-                        OperationEventType::Warning,
-                        json!({
-                            "handle": handle,
-                            "planId": plan_id,
-                            "runId": run_id,
-                            "pauseReason": reason,
-                            "at": at,
-                        }),
-                    );
-                }
-
-                let _ = bus
-                    .publish(
-                        TOPIC_PLAN_APPLYING_PAUSED,
-                        Source::System,
-                        PlanApplyingPaused {
-                            plan_id: plan_id.clone(),
-                            run_id: run_id.clone(),
-                            pause_reason: reason,
-                            at,
-                        },
-                    )
-                    .await;
             }
         }
     });

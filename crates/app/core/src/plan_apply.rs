@@ -191,6 +191,7 @@ mod callbacks;
 mod finalizers;
 mod lifecycle;
 mod paths;
+mod terminal;
 
 #[cfg(test)]
 mod tests;
