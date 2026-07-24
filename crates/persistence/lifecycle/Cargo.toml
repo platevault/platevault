@@ -19,15 +19,29 @@ sqlx.workspace = true
 thiserror.workspace = true
 time.workspace = true
 uuid.workspace = true
+# async-trait is required by test_support::NoopPublisher which implements
+# audit_types::EventPublisher (an #[async_trait] trait). Optional so it is
+# only compiled when the `test-fixture` feature is active.
+async-trait = { workspace = true, optional = true }
 
 [dev-dependencies]
 audit = { path = "../../audit" }
 domain_core = { path = "../../domain/core" }
-persistence_core = { path = "../core", features = [] }
+persistence_core = { path = "../core", features = ["test-fixture"] }
 persistence_inbox = { path = "../inbox" }
 tempfile.workspace = true
 tokio.workspace = true
 uuid.workspace = true
+# Self-reference activates the test-fixture feature when building integration
+# tests in the `tests/` directory (those are separate compilation units that
+# depend on this crate as a regular dep and therefore would not see
+# cfg(feature)-gated items without the feature being explicitly activated).
+persistence_lifecycle = { path = ".", features = ["test-fixture"] }
+
+[features]
+# Enables `test_support` helpers for crates that depend on persistence_lifecycle
+# in their dev-dependencies. Must NOT be enabled in production builds.
+test-fixture = ["persistence_core/test-fixture", "dep:async-trait"]
 
 [lints]
 workspace = true

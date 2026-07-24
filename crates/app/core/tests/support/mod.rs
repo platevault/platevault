@@ -7,20 +7,25 @@
 //! Real SQLite + real migrations + a wired `SqliteLifecycleRepository` and
 //! `EventBus`, mirroring the established pattern in `transition_apply.rs`.
 //! Layer-1 tests use this instead of re-declaring `setup()` per file.
+//!
+//! DB provisioning and low-level row helpers delegate to
+//! `persistence_lifecycle::test_support`; app-layer concerns (project-root
+//! registration via the sanctioned first_run_repo API) remain here.
 #![allow(dead_code)]
 
 use std::future::Future;
 use std::time::Duration;
 
 use audit::bus::EventBus;
+use domain_core::first_run::{OrganizationState, RegisterSourceRequest, ScanDepth, SourceKind};
 use persistence_core::Database;
+use persistence_lifecycle::repositories::first_run as first_run_repo;
 use persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository;
 
 /// Provision an isolated in-memory SQLite DB with all migrations applied and a
 /// repository/event-bus wired to it. Real backend, no mocks.
 pub async fn setup() -> (Database, SqliteLifecycleRepository, EventBus) {
-    let db = Database::in_memory().await.expect("in-memory db");
-    db.migrate().await.expect("migrations");
+    let db = persistence_core::test_support::setup_db().await;
     let bus = EventBus::with_pool(db.pool().clone());
     let repo = SqliteLifecycleRepository::new(db.pool().clone(), bus.clone());
     (db, repo, bus)
@@ -38,48 +43,38 @@ pub const TEST_PROJECT_ROOT: &str = "C:/library/projects-root";
 pub const TEST_PROJECT_ROOT: &str = "/library/projects-root";
 
 /// Register a project-kind source so relative project request paths have an
-/// anchor (mirrors the first-run wizard registering a project folder).
+/// anchor (mirrors the first-run wizard registering a project folder). Goes
+/// through the sanctioned `first_run` repository API rather than raw SQL so
+/// column additions to `registered_sources` are automatically handled.
 pub async fn register_project_root(pool: &sqlx::SqlitePool, path: &str) {
-    sqlx::query(
-        "INSERT INTO registered_sources \
-         (id, kind, path, scan_depth, created_at, created_via, organization_state) \
-         VALUES (?, 'project', ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run', 'organized')",
+    first_run_repo::register_source(
+        pool,
+        &RegisterSourceRequest {
+            kind: SourceKind::Project,
+            path: path.to_owned(),
+            kind_subtype: None,
+            scan_depth: ScanDepth::Recursive,
+            organization_state: OrganizationState::Organized,
+        },
     )
-    .bind(uuid::Uuid::new_v4().to_string())
-    .bind(path)
-    .execute(pool)
     .await
-    .unwrap();
+    .expect("register_project_root failed");
 }
 
-/// Seed a minimal `target` row.
+/// Seed a minimal `target` row into the legacy `target` table.
+///
+/// Delegates to `persistence_lifecycle::test_support::insert_target`.
 pub async fn insert_target(pool: &sqlx::SqlitePool, id: &str) {
-    sqlx::query(
-        "INSERT INTO target (id, primary_designation, created_at) \
-         VALUES (?, ?, '2026-05-01T00:00:00Z')",
-    )
-    .bind(id)
-    .bind(format!("T-{id}"))
-    .execute(pool)
-    .await
-    .unwrap();
+    persistence_lifecycle::test_support::insert_target(pool, id).await;
 }
 
-/// Seed a minimal `project` row in a given lifecycle state.
+/// Seed a minimal `project` row in the given lifecycle state.
+///
+/// Delegates to `persistence_lifecycle::test_support::insert_project`.
+/// The `_target` parameter is accepted for call-site compatibility but unused
+/// (the `projects` table has no mandatory FK to `target`).
 pub async fn insert_project(pool: &sqlx::SqlitePool, id: &str, _target: &str, state: &str) {
-    // Since migration 0036, the canonical lifecycle is `projects.lifecycle`.
-    // The legacy `project.state` column no longer exists; seed into `projects`
-    // so that `transition_use_case` (which reads/writes `projects.lifecycle`)
-    // can find and transition this row.
-    sqlx::query(
-        "INSERT INTO projects (id, name, tool, lifecycle, path, created_at, updated_at) \
-         VALUES (?, 'P', 'PixInsight', ?, '/tmp/p', '2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z')",
-    )
-    .bind(id)
-    .bind(state)
-    .execute(pool)
-    .await
-    .unwrap();
+    persistence_lifecycle::test_support::insert_project(pool, id, state).await;
 }
 
 // ── Observable-condition poll helpers ─────────────────────────────────────────

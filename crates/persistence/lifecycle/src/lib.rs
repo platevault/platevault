@@ -5,3 +5,6 @@
 #![allow(clippy::doc_markdown)]
 
 pub mod repositories;
+
+#[cfg(any(test, feature = "test-fixture"))]
+pub mod test_support;
