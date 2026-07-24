@@ -518,7 +518,7 @@ pub async fn confirm(
     let promoted =
         app_core_targets::target_resolve::promote_by_id(pool, redb_cache, id, &req.frameset_id)
             .await
-            .map_err(std::convert::identity)?;
+            ?;
     if !promoted {
         return Err(ContractError::new(
             ErrorCode::CandidateInvalid,
