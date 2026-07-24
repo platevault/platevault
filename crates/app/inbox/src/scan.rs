@@ -180,6 +180,16 @@ impl Lane {
 pub struct ScanOptions {
     /// Follow symlinks/junctions. Default `false` per constitution §I.
     pub follow_symlinks: bool,
+    /// Number of worker threads for per-file I/O during a scan.
+    ///
+    /// `None` (the default) uses the sequential path — one thread, no spawn
+    /// overhead. Measured to be at SSD parity vs the multi-threaded variants
+    /// (see `crates/tools/perf-bench`).
+    ///
+    /// `Some(N)` where N > 1 enables the parallel path capped at
+    /// [`MAX_SCAN_WORKERS`]. Intended for rotational HDD libraries where
+    /// per-file seek latency amortises across threads.
+    pub workers: Option<usize>,
 }
 
 // ── FITS / XISF extensions ────────────────────────────────────────────────────
@@ -249,6 +259,23 @@ fn relative_utf8(root: &Path, path: &Path) -> String {
 
 // ── scan_root ────────────────────────────────────────────────────────────────
 
+/// Maximum worker threads for per-leaf I/O during a scan.
+///
+/// Scan is I/O-bound (64 KB reads + FITS header parse). Staying at or below
+/// 8 avoids thrashing a rotational HDD while still saturating an SSD.
+const MAX_SCAN_WORKERS: usize = 8;
+
+/// Leaf-folder inventory collected by the pure directory walk (phase 1).
+///
+/// Holds only paths — no per-file I/O yet. The expensive work (signature
+/// reads, master-detection header parses) is deferred to the parallel phase.
+struct LeafDir {
+    dir_path: PathBuf,
+    fits_files: Vec<PathBuf>,
+    xisf_files: Vec<PathBuf>,
+    video_files: Vec<PathBuf>,
+}
+
 /// Recursively scan `root` and return one `ScannedInboxItem` per leaf folder
 /// that directly contains FITS/XISF or video files.
 ///
@@ -258,24 +285,149 @@ fn relative_utf8(root: &Path, path: &Path) -> String {
 /// Intermediate folders are not items. Symlinks are not followed unless
 /// `options.follow_symlinks = true`.
 ///
+/// Two-phase design: phase 1 is a fast sequential `readdir` walk that builds
+/// a list of leaf directories (no per-file I/O). Phase 2 processes each leaf
+/// — 64 KB signature reads + FITS header parses for master detection — using
+/// either the sequential path (`options.workers == None` or `Some(1)`) or a
+/// bounded parallel pool (`options.workers == Some(N > 1)`).
+///
+/// The default is sequential. On SSD the read channel saturates at one
+/// reader and extra threads contend rather than help. Set `workers` to a
+/// value > 1 for rotational HDD libraries where parallelism amortises seek
+/// latency.
+///
+/// Results are sorted by `relative_path` for deterministic output regardless
+/// of OS `readdir` order.
+///
 /// # Errors
 ///
 /// Returns an error string if `root` is not a directory or cannot be read.
+///
+/// # Panics
+///
+/// Panics only if a scan worker thread panics due to an internal bug
+/// (e.g. a logic error in [`process_leaf`]). Per-file I/O failures
+/// (unreadable files, parse errors) are silently skipped and do not panic.
 pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<Vec<ScannedInboxItem>, String> {
     if !root.is_dir() {
         return Err(format!("scan root is not a directory: {}", root.display()));
     }
 
-    let mut items = Vec::new();
-    scan_dir(root, root, options, &mut items)?;
+    // Phase 1: collect leaf dirs via fast directory walk (no per-file I/O).
+    let mut leaf_dirs: Vec<LeafDir> = Vec::new();
+    collect_leaf_dirs(root, options, &mut leaf_dirs)?;
+
+    if leaf_dirs.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Phase 2: process per-file I/O.
+    //
+    // Default is sequential (worker_count == 1): no thread spawn overhead,
+    // SSD-friendly (a single reader saturates the read channel; extra threads
+    // contend rather than help), and correct for all measured configurations.
+    //
+    // Set options.workers to Some(N > 1) to enable the parallel path. Useful
+    // on rotational HDDs where per-file seek latency (~10 ms) amortises well
+    // across multiple threads. The parallel path caps at MAX_SCAN_WORKERS.
+    let worker_count = options.workers.unwrap_or(1).clamp(1, MAX_SCAN_WORKERS);
+
+    let mut items: Vec<ScannedInboxItem> = Vec::with_capacity(leaf_dirs.len());
+
+    if worker_count == 1 {
+        // Sequential path: no thread spawn, no join overhead.
+        items.extend(leaf_dirs.iter().map(|leaf| process_leaf(root, leaf)));
+    } else {
+        // Parallel path: ceiling-divide leaf dirs across workers.
+        let chunk_size = leaf_dirs.len().div_ceil(worker_count).max(1);
+
+        std::thread::scope(|s| {
+            let handles: Vec<_> = leaf_dirs
+                .chunks(chunk_size)
+                .map(|chunk| {
+                    s.spawn(|| {
+                        chunk.iter().map(|leaf| process_leaf(root, leaf)).collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+
+            for handle in handles {
+                // Worker panics only on internal bugs; per-file I/O errors are
+                // handled inside process_leaf (bad file → skipped, not fatal).
+                items.extend(handle.join().expect("scan worker panicked"));
+            }
+        });
+    }
+
+    // Sort by relative_path for deterministic output.
+    items.sort_unstable_by(|a, b| a.relative_path.cmp(&b.relative_path));
+
     Ok(items)
 }
 
-fn scan_dir(
-    root: &Path,
+/// Compute the [`ScannedInboxItem`] for one leaf directory.
+///
+/// This is the I/O-heavy step: reads up to 64 KB per file for the content
+/// signature and parses FITS/XISF headers for master detection.
+///
+/// Per-file failures (unreadable file, parse error) are silently skipped —
+/// callers rely on partial results rather than an all-or-nothing scan.
+fn process_leaf(root: &Path, leaf: &LeafDir) -> ScannedInboxItem {
+    let relative_path = relative_utf8(root, &leaf.dir_path);
+    let all_image_files: Vec<&PathBuf> =
+        leaf.fits_files.iter().chain(leaf.xisf_files.iter()).collect();
+
+    let (lane, content_signature) = if all_image_files.is_empty() {
+        let sig_refs: Vec<&Path> = leaf.video_files.iter().map(PathBuf::as_path).collect();
+        (Lane::Video, compute_content_signature(&sig_refs))
+    } else {
+        let sig_refs: Vec<&Path> = all_image_files.iter().map(|p| p.as_path()).collect();
+        (Lane::Fits, compute_content_signature(&sig_refs))
+    };
+
+    let format = folder_format(&leaf.fits_files, &leaf.xisf_files, &leaf.video_files);
+
+    // Master detection: FITS-lane folders only.
+    let masters: Vec<ScannedMasterFile> = if lane == Lane::Fits {
+        all_image_files
+            .iter()
+            .filter_map(|abs_path| {
+                let ext = abs_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                let rel = relative_utf8(root, abs_path);
+                try_detect_master(abs_path, &rel, &ext)
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+
+    ScannedInboxItem {
+        folder_path: leaf.dir_path.clone(),
+        relative_path,
+        fits_files: leaf.fits_files.clone(),
+        xisf_files: leaf.xisf_files.clone(),
+        video_files: leaf.video_files.clone(),
+        content_signature,
+        lane,
+        format,
+        masters,
+    }
+}
+
+/// Phase 1: recurse into `dir`, classify entries as subdirs or image/video
+/// files, and push a [`LeafDir`] for any folder that directly contains
+/// FITS/XISF or video files.
+///
+/// No per-file I/O beyond `readdir` + `file_type`; content and header reads
+/// are deferred to [`process_leaf`].
+fn collect_leaf_dirs(
     dir: &Path,
     options: &ScanOptions,
-    items: &mut Vec<ScannedInboxItem>,
+    leaf_dirs: &mut Vec<LeafDir>,
 ) -> Result<(), String> {
     let read_dir = std::fs::read_dir(dir)
         .map_err(|e| format!("cannot read directory {}: {e}", dir.display()))?;
@@ -327,58 +479,13 @@ fn scan_dir(
         }
     }
 
-    let all_image_files: Vec<&PathBuf> = fits_files.iter().chain(xisf_files.iter()).collect();
-
-    if !all_image_files.is_empty() || !video_files.is_empty() {
-        // This is a leaf with content — make it an InboxItem.
-        let relative_path = relative_utf8(root, dir);
-
-        let (lane, sig_files) = if all_image_files.is_empty() {
-            let sig_refs: Vec<&Path> = video_files.iter().map(PathBuf::as_path).collect();
-            (Lane::Video, compute_content_signature(&sig_refs))
-        } else {
-            let sig_refs: Vec<&Path> = all_image_files.iter().map(|p| p.as_path()).collect();
-            (Lane::Fits, compute_content_signature(&sig_refs))
-        };
-
-        let format = folder_format(&fits_files, &xisf_files, &video_files);
-
-        // Run master detection for FITS-lane folders only.
-        // Performance: we only open files that have calibration-like metadata;
-        // detection returns None quickly for unreadable or non-calib files.
-        let masters: Vec<ScannedMasterFile> = if lane == Lane::Fits {
-            all_image_files
-                .iter()
-                .filter_map(|abs_path| {
-                    let ext = abs_path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .unwrap_or("")
-                        .to_ascii_lowercase();
-                    let rel = relative_utf8(root, abs_path);
-                    try_detect_master(abs_path, &rel, &ext)
-                })
-                .collect()
-        } else {
-            vec![]
-        };
-
-        items.push(ScannedInboxItem {
-            folder_path: dir.to_owned(),
-            relative_path,
-            fits_files,
-            xisf_files,
-            video_files,
-            content_signature: sig_files,
-            lane,
-            format,
-            masters,
-        });
+    if !fits_files.is_empty() || !xisf_files.is_empty() || !video_files.is_empty() {
+        leaf_dirs.push(LeafDir { dir_path: dir.to_owned(), fits_files, xisf_files, video_files });
     }
 
     // Always recurse into subdirs regardless of whether this dir has files.
     for subdir in subdirs {
-        scan_dir(root, &subdir, options, items)?;
+        collect_leaf_dirs(&subdir, options, leaf_dirs)?;
     }
 
     Ok(())
@@ -772,7 +879,7 @@ mod tests {
         fs::create_dir_all(&scan_root_dir).unwrap();
         symlink(&real_target, scan_root_dir.join("linked")).unwrap();
 
-        let options = ScanOptions { follow_symlinks: true };
+        let options = ScanOptions { follow_symlinks: true, workers: None };
         let items = scan_root(&scan_root_dir, &options).unwrap();
         assert_eq!(items.len(), 1, "symlinked subdir is traversed when explicitly enabled");
     }
@@ -825,8 +932,81 @@ mod tests {
         fs::create_dir_all(&scan_root_dir).unwrap();
         make_junction(&scan_root_dir.join("junction_to_target"), &real_target);
 
-        let options = ScanOptions { follow_symlinks: true };
+        let options = ScanOptions { follow_symlinks: true, workers: None };
         let items = scan_root(&scan_root_dir, &options).unwrap();
         assert_eq!(items.len(), 1, "junction is traversed when explicitly enabled");
+    }
+
+    /// Multi-leaf sort-order is deterministic regardless of OS readdir ordering
+    /// and regardless of whether the sequential or parallel code path is used.
+    ///
+    /// Three sibling leaf directories are compared: the expected order is
+    /// ascending by relative path, which is what the sort at the end of
+    /// `scan_root` guarantees.
+    #[test]
+    fn multi_leaf_relative_path_sort_order() {
+        let tmp = tmpdir();
+        for name in &["zz_folder", "aa_folder", "mm_folder"] {
+            let dir = tmp.path().join(name);
+            fs::create_dir_all(&dir).unwrap();
+            write_file(&dir, "frame.fits", b"dummy");
+        }
+
+        let expected = ["aa_folder", "mm_folder", "zz_folder"];
+
+        // Sequential path (production default).
+        let items_seq = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        assert_eq!(items_seq.len(), 3);
+        for (item, exp) in items_seq.iter().zip(expected.iter()) {
+            assert!(
+                item.folder_path.ends_with(exp),
+                "sequential: expected suffix {exp}, got {:?}",
+                item.folder_path
+            );
+        }
+
+        // Parallel path (workers=2 exercises the thread-scope branch).
+        let opts_par = ScanOptions { follow_symlinks: false, workers: Some(2) };
+        let items_par = scan_root(tmp.path(), &opts_par).unwrap();
+        assert_eq!(items_par.len(), 3);
+        for (item, exp) in items_par.iter().zip(expected.iter()) {
+            assert!(
+                item.folder_path.ends_with(exp),
+                "parallel: expected suffix {exp}, got {:?}",
+                item.folder_path
+            );
+        }
+    }
+
+    /// An unreadable / corrupt file in one leaf must not abort the scan;
+    /// the other leaves must still be returned. Exercises the PARALLEL path
+    /// (sequential coverage lives in `no_masters_for_dummy_fits_content`).
+    #[test]
+    fn bad_file_does_not_abort_parallel_scan() {
+        let tmp = tmpdir();
+
+        // Leaf A: good files.
+        let good = tmp.path().join("good");
+        fs::create_dir_all(&good).unwrap();
+        write_file(&good, "frame_001.fits", b"dummy fits");
+        write_file(&good, "frame_002.fits", b"dummy fits");
+
+        // Leaf B: a file whose content is not valid FITS/XISF (unreadable
+        // header) — must not propagate an error that kills the scan.
+        let bad = tmp.path().join("bad");
+        fs::create_dir_all(&bad).unwrap();
+        write_file(&bad, "corrupt.fits", b"this is not a fits header at all");
+
+        let opts = ScanOptions { follow_symlinks: false, workers: Some(2) };
+        let items = scan_root(tmp.path(), &opts).unwrap();
+
+        // Both leaves must appear (bad content is tolerated, not fatal).
+        assert_eq!(items.len(), 2, "corrupt file in one leaf must not drop the other leaf");
+
+        // The corrupt leaf still produces an item (the file is listed), but
+        // master detection silently returns nothing for unreadable headers.
+        let bad_item = items.iter().find(|i| i.folder_path.ends_with("bad")).unwrap();
+        assert_eq!(bad_item.fits_files.len(), 1);
+        assert!(bad_item.masters.is_empty(), "corrupt file must not be reported as a master");
     }
 }

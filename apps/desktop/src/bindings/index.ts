@@ -1462,6 +1462,13 @@ export const commands = {
 	 *  `inbox.scan.folder` — recursively scan a root directory, discover leaf
 	 *  FITS/video folders, upsert `InboxItem`s, and return a summary list.
 	 * 
+	 *  The directory walk and per-file I/O (64 KB signature reads + FITS header
+	 *  parses for master detection) run inside [`tokio::task::spawn_blocking`] so
+	 *  the scan never occupies a tokio async worker. Per-file work is parallelised
+	 *  across a bounded thread pool inside `scan_root` (see `crates/app/inbox/src/scan.rs`).
+	 *  All source-group and master-item upserts are committed in a single
+	 *  transaction to avoid one autocommit (WAL fsync) per leaf folder.
+	 * 
 	 *  # Errors
 	 *  Returns a string error if the root is not accessible.
 	 */

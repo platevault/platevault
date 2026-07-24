@@ -8,7 +8,7 @@
 //! ingest-resolution drain in `lib.rs`. Free functions only, mirroring the
 //! `inventory`/`targets` repository idiom (no repo struct/trait).
 
-use sqlx::SqlitePool;
+use sqlx::{Executor, Sqlite, SqlitePool};
 
 use persistence_core::DbResult;
 
@@ -17,11 +17,14 @@ use persistence_core::DbResult;
 /// Insert (or reuse, via `INSERT OR IGNORE`) the individual `inbox_items` row
 /// for a single detected calibration master.
 ///
+/// Accepts any [`sqlx::Executor`] so callers can pass either `&SqlitePool`
+/// (auto-commit) or `&mut Transaction` (batched commit).
+///
 /// # Errors
 /// Returns [`crate::DbError::Database`] on query failure.
 #[allow(clippy::too_many_arguments)]
-pub async fn insert_inbox_master_item(
-    pool: &SqlitePool,
+pub async fn insert_inbox_master_item<'e, E>(
+    executor: E,
     id: &str,
     root_id: &str,
     relative_path: &str,
@@ -30,7 +33,10 @@ pub async fn insert_inbox_master_item(
     frame_type: &str,
     filter: Option<&str>,
     exposure_s: Option<f64>,
-) -> DbResult<()> {
+) -> DbResult<()>
+where
+    E: Executor<'e, Database = Sqlite>,
+{
     sqlx::query(
         "INSERT OR IGNORE INTO inbox_items
             (id, root_id, relative_path, file_count, discovered_at, last_scanned_at,
@@ -47,7 +53,7 @@ pub async fn insert_inbox_master_item(
     .bind(frame_type)
     .bind(filter)
     .bind(exposure_s)
-    .execute(pool)
+    .execute(executor)
     .await?;
     Ok(())
 }
@@ -70,13 +76,19 @@ pub struct InboxMasterItemRow {
 /// Fetch the authoritative `inbox_items` row for an individual master file
 /// (may have existed from a prior scan).
 ///
+/// Accepts any [`sqlx::Executor`] so callers can read within the same
+/// transaction that wrote the row.
+///
 /// # Errors
 /// Returns [`crate::DbError::Database`] on query failure.
-pub async fn get_inbox_master_item_row(
-    pool: &SqlitePool,
+pub async fn get_inbox_master_item_row<'e, E>(
+    executor: E,
     root_id: &str,
     relative_path: &str,
-) -> DbResult<Option<InboxMasterItemRow>> {
+) -> DbResult<Option<InboxMasterItemRow>>
+where
+    E: Executor<'e, Database = Sqlite>,
+{
     let row = sqlx::query_as::<_, InboxMasterItemRow>(
         "SELECT id, state, file_count, lane, content_signature,
                 is_master_item, master_frame_type, master_filter, master_exposure_s
@@ -84,7 +96,7 @@ pub async fn get_inbox_master_item_row(
     )
     .bind(root_id)
     .bind(relative_path)
-    .fetch_optional(pool)
+    .fetch_optional(executor)
     .await?;
     Ok(row)
 }
