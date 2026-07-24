@@ -282,15 +282,15 @@ jobs:
           path: apps/desktop/dist
           key: e2e-dist-${{ hashFiles('pnpm-lock.yaml', 'apps/desktop/package.json', 'apps/desktop/index.html', 'apps/desktop/vite.config.*', 'apps/desktop/tsconfig*.json', 'apps/desktop/src/**', 'apps/desktop/public/**', 'packages/**') }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: steps.dist-cache.outputs.cache-hit != 'true'
         with:
-          version: 10.33.0
+          version: 11.17.0
 
       - uses: actions/setup-node@v4
         if: steps.dist-cache.outputs.cache-hit != 'true'
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install JS deps
@@ -721,13 +721,13 @@ jobs:
       - name: Install tauri-webdriver CLI
         run: cargo binstall tauri-webdriver --locked --no-confirm
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: 11.17.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install JS deps
@@ -870,13 +870,13 @@ jobs:
         if: steps.twd-cache.outputs.cache-hit != 'true'
         run: cargo binstall tauri-webdriver@${{ env.TAURI_WEBDRIVER_VERSION }} --locked --no-confirm
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: 11.17.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       # Only needed for `vite preview` (SPA fallback for deep links); the
@@ -1031,13 +1031,13 @@ jobs:
         if: steps.twd-cache.outputs.cache-hit != 'true'
         run: cargo binstall tauri-webdriver@${{ env.TAURI_WEBDRIVER_VERSION }} --locked --no-confirm
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: 11.17.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install JS deps
@@ -1182,13 +1182,13 @@ jobs:
         if: steps.twd-cache.outputs.cache-hit != 'true'
         run: cargo binstall tauri-webdriver@${{ env.TAURI_WEBDRIVER_VERSION }} --locked --no-confirm
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: 11.17.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install JS deps

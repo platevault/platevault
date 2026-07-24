@@ -3,7 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "description": "Local-first desktop application for astrophotography library and project lifecycle management.",
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=11"
+  },
   "scripts": {
     "build": "cargo build --workspace && pnpm -r --if-present build",
     "test": "cargo test --workspace && pnpm -r --if-present test",

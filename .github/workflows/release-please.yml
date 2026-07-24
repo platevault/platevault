@@ -98,13 +98,13 @@ jobs:
         with:
           shared-key: "release-${{ matrix.os }}"
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: 11.17.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install JS dependencies
