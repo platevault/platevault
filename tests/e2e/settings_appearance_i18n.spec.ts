@@ -9,7 +9,7 @@
  *   - 018 (settings configuration model): auto-save round-trip, one-setting-
  *     per-line panes, cleanup per-type action overrides.  FR-002/FR-004/FR-006.
  *   - 043 (UI redesign / PlateVault): 4-theme + System appearance system with
- *     `data-theme` on <html>, persisted in `localStorage['alm.theme']`; the
+ *     `data-theme` on <html>, persisted in `localStorage['pv.theme']`; the
  *     page-layout convention (`.pv-page__bar` pinned, content scroll region
  *     `overflow-y:auto` — action bar always visible, only content scrolls).
  *   - 046 (i18n / error-codes): Paraglide baseLocale catalog — every `settings_*`
@@ -27,7 +27,7 @@
  * arg-sensitive settings mocks: `ingestion_settings_update` mutates the
  * module-level `mockIngestionSettings` fixture that `ingestion_settings_get`
  * re-reads (spec 030 P12), and the Cleanup per-type table round-trips through
- * `localStorage['alm.cleanup.type_actions.v2']`.
+ * `localStorage['pv.cleanup.type_actions.v2']`.
  *
  * Mock-mode honesty notes (Layer-2-only flows, NOT asserted here):
  *   - The log panel's truncation marker (`logpanel_history_gap*`) is not
@@ -40,7 +40,7 @@
  *     `apps/desktop/src/api/mocks.ts`), so a real settings-DB round-trip for
  *     `locale` cannot be proven here; that is what the Rust Layer-1 test
  *     (`crates/app/core/tests/`, spec 061 T004) is for. What this file CAN
- *     and does prove is the frontend half: the `localStorage['alm.locale']`
+ *     and does prove is the frontend half: the `localStorage['pv.locale']`
  *     mirror survives a real `page.reload()`, and the UI re-hydrates from
  *     that stored value rather than merely accepting a command that returned
  *     `Ok` (research D8) — the same honest split already used by the
@@ -342,9 +342,9 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
         'data-theme',
         theme.dataTheme,
       );
-      // Choice is persisted in localStorage under `alm.theme`.
+      // Choice is persisted in localStorage under `pv.theme`.
       const stored = await page.evaluate(() =>
-        localStorage.getItem('alm.theme'),
+        localStorage.getItem('pv.theme'),
       );
       expect(stored).toBe(theme.dataTheme);
     }
@@ -494,9 +494,7 @@ test.describe('Journey 10 · Language switcher (spec 061 US2)', () => {
     await expect(
       page.getByRole('radio', { name: 'Português (Brasil)' }),
     ).toHaveAttribute('aria-checked', 'true');
-    const stored = await page.evaluate(() =>
-      localStorage.getItem('alm.locale'),
-    );
+    const stored = await page.evaluate(() => localStorage.getItem('pv.locale'));
     expect(stored).toBe('pt-BR');
 
     await page.reload();
@@ -504,7 +502,7 @@ test.describe('Journey 10 · Language switcher (spec 061 US2)', () => {
     // The persisted mirror value — not a fresh default — drives the
     // re-hydrated selection.
     const storedAfter = await page.evaluate(() =>
-      localStorage.getItem('alm.locale'),
+      localStorage.getItem('pv.locale'),
     );
     expect(storedAfter).toBe('pt-BR');
     await expect(

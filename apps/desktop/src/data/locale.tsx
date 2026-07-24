@@ -9,7 +9,7 @@
 // `"custom-almSettings"` link via `defineCustomClientStrategy` and everything
 // that sits on top of it:
 //
-//   - `getLocale()`  → localStorage mirror (`alm.locale`), SYNCHRONOUS — the
+//   - `getLocale()`  → localStorage mirror (`pv.locale`), SYNCHRONOUS — the
 //     Paraglide runtime requires a synchronous `getLocale` from client
 //     strategies (research D3).
 //   - `setLocale()`  → settings DB (`general` scope, `locale` key, spec 018)
@@ -57,7 +57,7 @@ import {
 export type { Locale };
 export { BASE_LOCALE, SHIPPED_LOCALES };
 
-const LOCALE_KEY = 'alm.locale';
+const LOCALE_KEY = 'pv.locale';
 const SETTINGS_SCOPE = 'general';
 const SETTINGS_KEY = 'locale';
 const STRATEGY_NAME = 'custom-almSettings';
@@ -103,13 +103,56 @@ function importIpc(): Promise<typeof import('@/api/ipc')> {
   return ipcPromise;
 }
 
+/**
+ * In-memory fallback for the locale mirror.
+ *
+ * When localStorage is unavailable (SecurityError in a sandboxed iframe,
+ * storage blocked by the browser, or a throwing stub in tests), the
+ * custom-almSettings strategy would return undefined and Paraglide would
+ * fall through to preferredLanguage/baseLocale — diverging from the React
+ * state and document.lang already set by changeLocale. This variable is
+ * set synchronously by setLocaleMirror before the localStorage write is
+ * attempted, so getLocaleMirror always returns the last user-selected locale
+ * even when storage is entirely unavailable. The selection survives the
+ * session but not a restart (no durable write occurred).
+ */
+let inMemoryLocale: string | undefined;
+
+/**
+ * True when the most recent localStorage.setItem(LOCALE_KEY, …) threw. Gates
+ * the readable-but-empty fallback path in getLocaleMirror: only a broken
+ * WRITE justifies shadowing an empty (authoritative) storage state.
+ */
+let localeWriteFailed = false;
+
 /** Synchronous mirror read, validated against the shipped locale set. */
 function getLocaleMirror(): Locale | undefined {
   try {
     const v = localStorage.getItem(LOCALE_KEY);
-    return v && isLocale(v) ? v : undefined;
-  } catch {
+    if (v && isLocale(v)) {
+      // Durable storage is authoritative; drop the in-memory shadow so it
+      // can never mask a later authoritative state.
+      inMemoryLocale = undefined;
+      return v;
+    }
+    // localStorage is READABLE and empty. Two cases:
+    // - the last setItem FAILED (write-broken storage): the in-memory value
+    //   is the user's live selection — serve it so Paraglide stays coherent
+    //   with the React state (the original tlw.14 bug).
+    // - the last setItem SUCCEEDED (or never ran): empty storage is
+    //   authoritative — a cleared storage (user reset, test isolation via
+    //   localStorage.clear()) must win over a stale in-memory value.
+    if (localeWriteFailed && inMemoryLocale && isLocale(inMemoryLocale)) {
+      return inMemoryLocale;
+    }
+    inMemoryLocale = undefined;
     return undefined;
+  } catch {
+    // localStorage entirely unavailable — serve the in-memory value so the
+    // Paraglide strategy and React state stay coherent for the session.
+    return inMemoryLocale && isLocale(inMemoryLocale)
+      ? inMemoryLocale
+      : undefined;
   }
 }
 
@@ -149,10 +192,16 @@ function persistLocaleToSettings(locale: string): void {
  * write is still in flight.
  */
 function setLocaleMirror(newLocale: string): void {
+  // Always update in-memory first so getLocaleMirror() returns the new value
+  // immediately, even if the localStorage write below throws.
+  inMemoryLocale = newLocale;
   try {
     localStorage.setItem(LOCALE_KEY, newLocale);
+    localeWriteFailed = false;
   } catch {
-    /* localStorage may be unavailable */
+    /* localStorage may be unavailable — in-memory fallback is sufficient for
+       the session; the selection will not survive a restart */
+    localeWriteFailed = true;
   }
   persistLocaleToSettings(newLocale);
 }

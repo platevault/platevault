@@ -4,22 +4,22 @@
 //! Artifact filesystem watcher service (spec 012, FR-009, spec 033 T028).
 //!
 //! Watches registered library-root paths for new or modified files.  Uses
-//! plain `notify 7` (already a workspace dep) and forwards every raw
-//! Create/Modify/Remove event downstream, undebounced, via a
-//! `tokio::sync::mpsc` channel.
+//! `notify 8` and forwards every raw Create/Modify/Remove event downstream,
+//! undebounced, via a `tokio::sync::mpsc` channel.
 //!
 //! ## Debounce strategy (deviation from D10)
 //!
-//! D10 specified `notify-debouncer-full 0.7.x`, but that crate requires
-//! `notify 8.x` while the rest of the workspace uses `notify 7`.  Adding
-//! `notify 8` as a second version would cause a duplicate-type conflict in
-//! `WatcherService` (which already uses `notify 7`).  The fallback described
-//! in D10 ("acceptable fallback — noted") is used here instead: this crate
-//! does NOT debounce — it stays a thin raw-event source. The stable-size
-//! debounce (default 2s, spec 012 edge case) is pure logic in
-//! `workflow_artifacts::watcher::check_stability`/`FileSnapshot`, applied by
-//! the consumer (`apps/desktop/src-tauri/src/watcher.rs`'s per-project
-//! forward task) against a `HashMap<PathBuf, FileSnapshot>` it owns.
+//! D10 specified `notify-debouncer-full 0.7.x`.  `notify-debouncer-full` is
+//! now a direct dep alongside `notify 8`, satisfying that design intent.
+//! However, wiring the debouncer into the event pipeline touches the same
+//! watcher files being refactored on branch `fix/watcher-robustness-cluster`
+//! (bead kyo7.74); to avoid a merge conflict, debouncer adoption is deferred
+//! to that branch.  This crate therefore stays a thin raw-event source for
+//! now.  The stable-size debounce (default 2s, spec 012 edge case) is pure
+//! logic in `workflow_artifacts::watcher::check_stability`/`FileSnapshot`,
+//! applied by the consumer (`apps/desktop/src-tauri/src/watcher.rs`'s
+//! per-project forward task) against a `HashMap<PathBuf, FileSnapshot>` it
+//! owns.
 
 use std::sync::Arc;
 

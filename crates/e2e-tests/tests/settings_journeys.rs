@@ -215,14 +215,14 @@ async fn settings_ui_theme_applies_live_and_persists_to_settings_db() -> anyhow:
     // live apply.
     let stored: serde_json::Value = app
         .driver
-        .execute("return window.localStorage.getItem('alm.theme')", vec![])
+        .execute("return window.localStorage.getItem('pv.theme')", vec![])
         .await
-        .context("failed to read localStorage['alm.theme']")?
+        .context("failed to read localStorage['pv.theme']")?
         .convert()
-        .context("failed to deserialise localStorage['alm.theme']")?;
+        .context("failed to deserialise localStorage['pv.theme']")?;
     anyhow::ensure!(
         stored == serde_json::json!("observatory-dark"),
-        "expected localStorage['alm.theme']=\"observatory-dark\" to be written on click, got {stored:?}"
+        "expected localStorage['pv.theme']=\"observatory-dark\" to be written on click, got {stored:?}"
     );
 
     // The settings DB write-through (theme-settings-db) is fire-and-forget,

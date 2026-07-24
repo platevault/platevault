@@ -107,7 +107,7 @@ test.describe('setup wizard · Language step (spec 061 US1)', () => {
             .__noReloadMarker,
       ),
     ).toBe(true);
-    expect(await page.evaluate(() => localStorage.getItem('alm.locale'))).toBe(
+    expect(await page.evaluate(() => localStorage.getItem('pv.locale'))).toBe(
       'pt-BR',
     );
     await expect(page.getByText('Escolha seu idioma preferido')).toBeVisible();
@@ -182,7 +182,7 @@ test.describe('setup wizard · Language step (spec 061 US1)', () => {
     // Setup completes and the main app opens (US1 acceptance scenario 3) —
     // the language choice is still in effect.
     await expect(page).toHaveURL(/#\/inbox/, { timeout: 10_000 });
-    expect(await page.evaluate(() => localStorage.getItem('alm.locale'))).toBe(
+    expect(await page.evaluate(() => localStorage.getItem('pv.locale'))).toBe(
       'pt-BR',
     );
   });

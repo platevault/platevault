@@ -12,6 +12,7 @@ import { router } from './app/router';
 import { AppErrorBoundary } from './app/AppErrorBoundary';
 import { queryClient } from './data/queryClient';
 import { initAppearance, hydrateThemeFromSettings } from './data/theme';
+import { hydrateScope } from './data/persisted-state';
 import { registerLocaleStrategy, LocaleProvider } from './data/locale';
 
 // Register the `custom-almSettings` strategy before the first render, so the
@@ -33,6 +34,14 @@ initAppearance();
 // synchronous cache has already painted, and this at most swaps the theme
 // once if the two disagree (e.g. localStorage lost to a WebView2 force-kill).
 void hydrateThemeFromSettings();
+
+// Reconcile ui_state scope keys (log-panel, grouping dims, picker paths) from
+// SQLite. Same fire-and-forget contract as `hydrateThemeFromSettings`: DB is
+// the durable source of truth; localStorage is authoritative until this call
+// resolves. Handles that register AFTER this call (lazy picker/grouping state
+// created on first user interaction) reconcile immediately from the cached DB
+// map inside `createPersistedState` — no second IPC round-trip.
+void hydrateScope('ui_state');
 
 // T075 / SC-002: Install the recording proxy at boot in dev-tools builds.
 // VITE_DEV_TOOLS is statically "false" in release builds, so this branch and

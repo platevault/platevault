@@ -50,7 +50,7 @@ const SYSTEM_RESOLUTION_CASES = [
 function seedThemeStep(page: Page, locale: keyof typeof LOCALES): void {
   page.addInitScript((selectedLocale) => {
     window.localStorage.removeItem('alm-preferences');
-    window.localStorage.setItem('alm.locale', selectedLocale);
+    window.localStorage.setItem('pv.locale', selectedLocale);
     window.localStorage.setItem(
       'alm-setup-wizard-state',
       JSON.stringify({ version: 2, currentStep: 1 }),
@@ -135,7 +135,7 @@ test.describe('setup wizard · Theme step', () => {
           theme.id,
         );
         await expect
-          .poll(() => page.evaluate(() => localStorage.getItem('alm.theme')))
+          .poll(() => page.evaluate(() => localStorage.getItem('pv.theme')))
           .toBe(theme.id);
       }
 
@@ -146,7 +146,7 @@ test.describe('setup wizard · Theme step', () => {
         'observatory-cool',
       );
       await expect
-        .poll(() => page.evaluate(() => localStorage.getItem('alm.theme')))
+        .poll(() => page.evaluate(() => localStorage.getItem('pv.theme')))
         .toBe('system');
     });
   }
@@ -178,7 +178,7 @@ test.describe('setup wizard · Theme step', () => {
         systemCase.resolvedTheme,
       );
       await expect
-        .poll(() => page.evaluate(() => localStorage.getItem('alm.theme')))
+        .poll(() => page.evaluate(() => localStorage.getItem('pv.theme')))
         .toBe('system');
     });
   }

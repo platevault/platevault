@@ -5,10 +5,13 @@
 //! (astro-plan-l3y0).
 //!
 //! Renders the marker via `project_structure::render_marker` and writes it to
-//! the plan item's destination path. Idempotent when a file with identical
-//! content already exists (safe re-apply/retry); any other pre-existing entry
-//! is a `conflict.destination_exists` failure — constitution §II: never
-//! overwrite silently.
+//! the plan item's destination path atomically: content lands in a temp file
+//! in the same directory and is renamed into place, so an interrupted write
+//! never leaves a truncated marker that poisons the idempotency check on the
+//! next retry with `ConflictDestinationExists` (GF-27). Idempotent when a file
+//! with identical content already exists (safe re-apply/retry); any other
+//! pre-existing entry is a `conflict.destination_exists` failure — constitution
+//! §II: never overwrite silently.
 
 use camino::Utf8Path;
 
@@ -59,8 +62,20 @@ pub fn write_marker(destination: &Utf8Path, project_id: &str) -> Result<(), Plan
         })?;
     }
 
-    std::fs::write(destination, content.as_bytes())
-        .map_err(|e| PlanItemFailure::from_io(&e, &format!("write marker {destination}")))
+    // Write to a temp file in the same directory and rename into place so that
+    // a crash or interrupt never leaves a truncated marker at the destination
+    // path (GF-27): a partial file at the final path fails the idempotency
+    // check above and returns ConflictDestinationExists on every retry.
+    let dest_dir = destination.parent().unwrap_or_else(|| camino::Utf8Path::new("."));
+    let tmp = tempfile::Builder::new().prefix(".astroplan-marker-").tempfile_in(dest_dir).map_err(
+        |e| PlanItemFailure::from_io(&e, &format!("create temp file for marker {destination}")),
+    )?;
+    std::fs::write(tmp.path(), content.as_bytes()).map_err(|e| {
+        PlanItemFailure::from_io(&e, &format!("write temp marker for {destination}"))
+    })?;
+    tmp.persist(destination).map(|_| ()).map_err(|e| {
+        PlanItemFailure::from_io(&e.error, &format!("persist marker to {destination}"))
+    })
 }
 
 #[cfg(test)]
@@ -130,5 +145,53 @@ mod tests {
         let failure = write_marker(&dest, "").expect_err("empty project id must be refused");
         assert_eq!(failure.code, FailureCode::PathInvalid);
         assert!(!dest.exists());
+    }
+
+    // ── retry-poison regression (GF-27) ──────────────────────────────────────
+
+    /// Manually placed truncated content at the destination path must return
+    /// `ConflictDestinationExists`, not silently overwrite it. This is the
+    /// pre-fix poison scenario: a non-atomic write leaves a partial file at
+    /// the final path, which the idempotency check catches as a mismatch and
+    /// permanently blocks the operation. With the new atomic temp+rename
+    /// implementation the partial file can only land at the temp path (which
+    /// is discarded), so the destination path is never occupied by a partial
+    /// write — but we keep this test to verify the constitution §II guard
+    /// still fires for any externally-placed mismatch.
+    #[test]
+    fn truncated_marker_at_dest_returns_conflict_not_overwrite() {
+        let (_guard, root) = utf8_tempdir();
+        let dest = root.join(".astro-plan-project.json");
+        // Simulate a partial/truncated file planted at the destination.
+        std::fs::write(&dest, b"{\"partial\":").unwrap();
+
+        let failure = write_marker(&dest, "proj-abc")
+            .expect_err("truncated/partial content must be a conflict");
+        assert_eq!(failure.code, FailureCode::ConflictDestinationExists);
+        // Never overwrote the partial file.
+        let on_disk = std::fs::read_to_string(&dest).unwrap();
+        assert_eq!(on_disk, "{\"partial\":", "original truncated content must be untouched");
+    }
+
+    /// After a write-level failure, the destination path must remain absent —
+    /// no partial temp file leaks to the final path. Uses a read-only
+    /// directory to force the `tempfile_in` call to fail.
+    #[cfg(unix)]
+    #[test]
+    fn write_failure_leaves_dest_absent() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (_guard, root) = utf8_tempdir();
+        let dest = root.join(".astro-plan-project.json");
+        // Make the directory read-only so tempfile_in cannot create a temp entry.
+        std::fs::set_permissions(&*root, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+        let result = write_marker(&dest, "proj-xyz");
+
+        // Restore permissions before any assertion so the TempDir cleanup succeeds.
+        std::fs::set_permissions(&*root, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        assert!(result.is_err(), "write must fail when directory is read-only");
+        assert!(!dest.exists(), "destination must remain absent after a failed write");
     }
 }

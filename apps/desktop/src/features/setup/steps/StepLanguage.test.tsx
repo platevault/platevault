@@ -89,7 +89,7 @@ describe('StepLanguage', () => {
     // changeLocale writes the localStorage mirror synchronously (research D3)
     // — the persistence spec 061 depends on for the choice to survive a
     // subsequent hydration read.
-    expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
+    expect(localStorage.getItem('pv.locale')).toBe('pt-BR');
   });
 
   it('every option is a real focusable button, so Tab reaches all of them', () => {
