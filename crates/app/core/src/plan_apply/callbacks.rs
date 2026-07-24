@@ -122,7 +122,7 @@ impl PlanApplyCallbacks {
         let mut delta_applied: i64 = 0;
         let mut delta_failed: i64 = 0;
         let mut delta_skipped: i64 = 0;
-        let mut owned_states: Vec<(String, String, Option<String>)> =
+        let mut owned_states: Vec<(String, String, Option<String>, bool)> =
             Vec::with_capacity(items.len());
         for item in &items {
             match item.new_state.as_str() {
@@ -134,14 +134,16 @@ impl PlanApplyCallbacks {
                 item.item_id.clone(),
                 item.new_state.clone(),
                 item.failure_reason.clone(),
+                item.new_state == "stale",
             ));
         }
         let batch_states: Vec<apply_repo::BatchItemState<'_>> = owned_states
             .iter()
-            .map(|(id, state, reason)| apply_repo::BatchItemState {
+            .map(|(id, state, reason, is_stale)| apply_repo::BatchItemState {
                 item_id: id.as_str(),
                 new_state: state.as_str(),
                 failure_reason: reason.as_deref(),
+                is_stale: *is_stale,
             })
             .collect();
 
@@ -268,7 +270,10 @@ impl PlanApplyCallbacks {
                 }
             }
 
-            // One Progress event for the whole flush window.
+            // One Progress event for the whole flush window. `itemsFailed` is
+            // intentionally 0: individual ItemFailed emits above already
+            // increment the UI counter, so including a non-zero delta here
+            // would double-count failures (kyo7.52 finding 2).
             let last_item_id = items
                 .last()
                 .map_or(serde_json::Value::Null, |i| serde_json::Value::String(i.item_id.clone()));
@@ -278,7 +283,7 @@ impl PlanApplyCallbacks {
                     "planId": self.plan_id,
                     "runId": self.run_id,
                     "itemsApplied": delta_applied,
-                    "itemsFailed": delta_failed,
+                    "itemsFailed": 0,
                     "itemsSkipped": delta_skipped,
                     "lastItemId": last_item_id,
                     "windowFailures": window_failures,

@@ -159,14 +159,12 @@ export function usePlanApplyProgress() {
                 }
                 case 'progress': {
                   // Batch progress tick from the group-commit flush (kyo7.52).
-                  // Carries delta counters for the flush window — add to prev
-                  // rather than replacing so a stale or reordered tick cannot
-                  // regress the display.
+                  // Only itemsApplied is carried here — failures are counted
+                  // by individual item_failed emits to avoid double-counting
+                  // (itemsFailed is always 0 in the Progress envelope).
                   const p = event.payload as Record<string, unknown>;
                   if (typeof p.itemsApplied === 'number')
                     next.applied = prev.applied + p.itemsApplied;
-                  if (typeof p.itemsFailed === 'number')
-                    next.failed = prev.failed + p.itemsFailed;
                   break;
                 }
                 case 'item_applied':

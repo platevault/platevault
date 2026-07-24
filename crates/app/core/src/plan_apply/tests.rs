@@ -1654,3 +1654,205 @@ async fn group_commit_produces_correct_row_count_and_counters() {
         expected_applied + expected_failed
     );
 }
+
+/// Flush-on-timeout: items accumulated for longer than 250 ms trigger a flush
+/// at the next item boundary even when the 100-item count threshold is not met.
+#[tokio::test]
+async fn group_commit_flush_on_timeout() {
+    let (db, bus) = setup().await;
+    let plan_id = "gc-timeout";
+    let run_id = "gc-timeout-run";
+    insert_approved_plan_with_items(&db, plan_id, 5).await;
+    apply_repo::cas_approved_to_applying(db.pool(), plan_id, run_id, "test-token", 5, 5)
+        .await
+        .unwrap();
+
+    let callbacks = PlanApplyCallbacks::new(
+        db.pool().clone(),
+        bus,
+        plan_id.to_owned(),
+        run_id.to_owned(),
+        None,
+    );
+
+    // Emit one item — well below the 100-item threshold.
+    callbacks
+        .on_item_progress(ItemProgressEvent {
+            item_id: format!("{plan_id}-item-0"),
+            prior_state: "pending".to_owned(),
+            new_state: "succeeded".to_owned(),
+            at: domain_core::ids::Timestamp::now_iso(),
+            failure: None,
+            rollback_attempted: false,
+            rollback_outcome: RollbackOutcome::NotApplicable,
+            rollback_message: None,
+            audit_reason: None,
+        })
+        .await;
+
+    // Before the 250 ms window expires the row must not be in the DB yet.
+    let count_before: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM plan_apply_events WHERE plan_id = ?")
+            .bind(plan_id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+    assert_eq!(count_before, 0, "row must be buffered, not yet flushed");
+
+    // Advance past the 250 ms window.
+    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+
+    // A second item triggers the boundary check — the 250 ms elapsed flag
+    // causes the buffer to flush (the second item is then also flushed).
+    callbacks
+        .on_item_progress(ItemProgressEvent {
+            item_id: format!("{plan_id}-item-1"),
+            prior_state: "pending".to_owned(),
+            new_state: "succeeded".to_owned(),
+            at: domain_core::ids::Timestamp::now_iso(),
+            failure: None,
+            rollback_attempted: false,
+            rollback_outcome: RollbackOutcome::NotApplicable,
+            rollback_message: None,
+            audit_reason: None,
+        })
+        .await;
+
+    let count_after: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM plan_apply_events WHERE plan_id = ?")
+            .bind(plan_id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+    assert_eq!(count_after, 2, "both items must be flushed after the 250 ms window expires");
+}
+
+/// Crash-window recovery: items from a lost flush window (simulated by
+/// executing the fs op but not flushing) re-execute on resume and land as
+/// `source.missing` terminal failures (CAS gate refuses them), never
+/// double-applying the mutation.
+///
+/// This validates the crash-safety claim in the batching design: fs ops for
+/// items in the lost window already ran; re-execution hits the
+/// `check_cas`/destination-exists gates and produces a reviewable failure
+/// rather than a silent duplicate mutation.
+#[tokio::test]
+async fn crash_window_recovery_produces_source_missing_not_double_apply() {
+    use std::fs;
+    use tempfile::TempDir;
+
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("light.fits");
+    let dst = tmp.path().join("archive").join("light.fits");
+    fs::write(&src, "fits-data").unwrap();
+
+    let (db, bus) = setup().await;
+    // Register a root so item_row_to_executor_item resolves the path.
+    let root_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO registered_sources \
+         (id, kind, path, scan_depth, created_at, created_via, organization_state) \
+         VALUES (?, 'light_frames', ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run', 'organized')",
+    )
+    .bind(&root_id)
+    .bind(tmp.path().to_str().unwrap())
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    // Insert a plan item that moves src → archive/light.fits.
+    let plan_id = "crash-recovery";
+    let run_id = "crash-recovery-run";
+    repo::insert_plan(
+        db.pool(),
+        &repo::InsertPlan {
+            id: plan_id,
+            title: "Crash recovery test",
+            origin: "cleanup",
+            origin_path: None,
+            plan_type: "cleanup",
+            destructive_destination: "archive",
+            parent_plan_id: None,
+            total_bytes_required: 0,
+        },
+    )
+    .await
+    .unwrap();
+    repo::insert_plan_item(
+        db.pool(),
+        &repo::InsertPlanItem {
+            id: &format!("{plan_id}-item-0"),
+            plan_id,
+            item_index: 1,
+            name: "light.fits",
+            action: "move",
+            from_root_id: Some(&root_id),
+            from_relative_path: "light.fits",
+            to_root_id: Some(&root_id),
+            to_relative_path: "archive/light.fits",
+            reason: "test",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        },
+    )
+    .await
+    .unwrap();
+    repo::update_plan_state(db.pool(), plan_id, "ready_for_review").await.unwrap();
+    repo::set_approved(db.pool(), plan_id, "2026-06-01T00:00:00Z", "test-token").await.unwrap();
+
+    // Simulate the crash-window scenario: the fs op ran (rename succeeded)
+    // but the flush tx never committed — move the file manually to represent
+    // a mutation that happened in a lost flush window.
+    fs::create_dir_all(dst.parent().unwrap()).unwrap();
+    fs::rename(&src, &dst).unwrap();
+    assert!(!src.exists(), "source must be gone after simulated move");
+    assert!(dst.exists(), "destination must exist after simulated move");
+
+    // Apply the plan — the executor runs the move on a missing source. The
+    // check_cas gate returns SourceMissing → terminal failed, no double-apply.
+    let resp = apply_plan(db.pool(), &bus, plan_id, "test-token", None).await.unwrap();
+    let _ = run_id; // not used after removing the manual CAS
+    assert_eq!(resp.new_state, "applying");
+
+    // Wait for the background executor to complete.
+    for _ in 0..50 {
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let state: String = sqlx::query_scalar("SELECT state FROM plans WHERE id = ?")
+            .bind(plan_id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        if state != "applying" {
+            break;
+        }
+    }
+
+    // The plan must be terminal (failed or partially_applied, not applying).
+    let final_state: String = sqlx::query_scalar("SELECT state FROM plans WHERE id = ?")
+        .bind(plan_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert!(
+        matches!(final_state.as_str(), "failed" | "partially_applied"),
+        "plan must be terminal after re-apply of already-moved item; got {final_state}"
+    );
+
+    // The item must be in a failed state (not succeeded — it didn't move again).
+    let item_state: String = sqlx::query_scalar("SELECT item_state FROM plan_items WHERE id = ?")
+        .bind(format!("{plan_id}-item-0"))
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(
+        item_state, "failed",
+        "re-applied item must be failed (source.missing), not succeeded"
+    );
+
+    // The destination must not have been touched a second time.
+    assert!(dst.exists(), "destination file must still exist — no double-apply");
+}

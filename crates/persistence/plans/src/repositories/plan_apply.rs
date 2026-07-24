@@ -718,6 +718,10 @@ pub struct BatchItemState<'a> {
     pub new_state: &'a str,
     /// Failure reason text, if any.
     pub failure_reason: Option<&'a str>,
+    /// Whether this is a CAS stale failure (sets `item_stale = 1`).
+    /// Required so `get_last_stale_item` (used by `revalidate_pause_condition`)
+    /// can find the triggering item after a flush-batched stale transition.
+    pub is_stale: bool,
 }
 
 /// Persist a batch of item terminal-state transitions in one transaction
@@ -746,14 +750,24 @@ pub async fn batch_flush_item_states(
     }
 
     for item in states {
-        // Refused items have no distinct item_state — persist as 'failed'.
-        let db_state = if item.new_state == "refused" { "failed" } else { item.new_state };
-        sqlx::query("UPDATE plan_items SET item_state = ?, failure_reason = ? WHERE id = ?")
-            .bind(db_state)
-            .bind(item.failure_reason)
-            .bind(item.item_id)
-            .execute(&mut *conn)
-            .await?;
+        // 'refused' and 'stale' have no distinct item_state CHECK values —
+        // both persist as 'failed'; item_stale=1 distinguishes stale items.
+        let db_state =
+            if matches!(item.new_state, "refused" | "stale") { "failed" } else { item.new_state };
+        // item_stale=1 is load-bearing: get_last_stale_item (used by
+        // revalidate_pause_condition for "item.stale" pauses) queries
+        // WHERE item_stale=1; omitting this flag makes stale-paused plans
+        // skip source re-validation on resume.
+        let stale_flag = i64::from(item.is_stale);
+        sqlx::query(
+            "UPDATE plan_items SET item_state = ?, failure_reason = ?, item_stale = ? WHERE id = ?",
+        )
+        .bind(db_state)
+        .bind(item.failure_reason)
+        .bind(stale_flag)
+        .bind(item.item_id)
+        .execute(&mut *conn)
+        .await?;
     }
 
     // One aggregated counter statement for the whole batch.
@@ -1097,5 +1111,59 @@ mod tests {
 
         let run = get_run(db.pool(), "run-6").await.unwrap();
         assert_eq!(run.terminal_state, Some("applied".to_owned()));
+    }
+
+    /// batch_flush_item_states must set item_stale=1 for stale items so
+    /// get_last_stale_item can find them (required by revalidate_pause_condition).
+    #[tokio::test]
+    async fn batch_flush_sets_item_stale_flag() {
+        let db = Database::in_memory().await.unwrap();
+        db.migrate().await.unwrap();
+        setup_with_approved_plan(&db, "ps1", 2).await;
+        cas_approved_to_applying(db.pool(), "ps1", "run-ps1", "tok", 2, 2).await.unwrap();
+
+        let mut conn = db.pool().acquire().await.unwrap();
+        batch_flush_item_states(
+            &mut conn,
+            "ps1",
+            &[
+                BatchItemState {
+                    item_id: "ps1-item-0",
+                    new_state: "stale",
+                    failure_reason: Some("item.stale: source changed"),
+                    is_stale: true,
+                },
+                BatchItemState {
+                    item_id: "ps1-item-1",
+                    new_state: "failed",
+                    failure_reason: Some("other error"),
+                    is_stale: false,
+                },
+            ],
+            0,
+            2,
+            0,
+        )
+        .await
+        .unwrap();
+
+        let stale_flag: i64 =
+            sqlx::query_scalar("SELECT item_stale FROM plan_items WHERE id = 'ps1-item-0'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(stale_flag, 1, "stale item must have item_stale=1");
+
+        let non_stale_flag: i64 =
+            sqlx::query_scalar("SELECT item_stale FROM plan_items WHERE id = 'ps1-item-1'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(non_stale_flag, 0, "non-stale item must keep item_stale=0");
+
+        // Verify get_last_stale_item finds the stale item.
+        let found = get_last_stale_item(db.pool(), "ps1").await.unwrap();
+        assert!(found.is_some(), "get_last_stale_item must find the stale item");
+        assert_eq!(found.unwrap().id, "ps1-item-0");
     }
 }
