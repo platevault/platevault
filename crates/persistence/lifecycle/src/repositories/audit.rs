@@ -22,8 +22,9 @@
 use std::fmt::Write as _;
 
 use audit_types::AuditLogEntry;
-use sqlx::{SqliteConnection, SqlitePool};
+use sqlx::SqlitePool;
 
+use persistence_core::repositories::audit_writes;
 use persistence_core::DbResult;
 
 /// One row from `audit_log_entry`, as stored (no enum parsing — that is a
@@ -205,7 +206,7 @@ pub async fn count_audit_entries(pool: &SqlitePool, filter: &AuditLogFilter) -> 
 /// `request_id` UUIDs and the RFC3339 `at` timestamp.
 ///
 /// # Errors
-/// Returns [`DbError`](crate::DbError) if the insert fails.
+/// Returns [`DbError`](persistence_core::DbError) if the insert fails.
 pub async fn insert_project_auto_transition(
     pool: &SqlitePool,
     project_id: &str,
@@ -213,90 +214,18 @@ pub async fn insert_project_auto_transition(
     to_state: &str,
     trigger: &str,
 ) -> DbResult<()> {
-    let mut conn = pool.acquire().await?;
-    insert_project_auto_transition_conn(&mut conn, project_id, from_state, to_state, trigger).await
+    audit_writes::insert_project_auto_transition(pool, project_id, from_state, to_state, trigger)
+        .await
 }
 
-pub(crate) async fn insert_project_auto_transition_conn(
-    conn: &mut SqliteConnection,
-    project_id: &str,
-    from_state: &str,
-    to_state: &str,
-    trigger: &str,
-) -> DbResult<()> {
-    use time::format_description::well_known::Rfc3339;
-    use uuid::Uuid;
-
-    let audit_id = Uuid::new_v4().to_string();
-    let request_id = Uuid::new_v4().to_string();
-    let at = time::OffsetDateTime::now_utc()
-        .format(&Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
-
-    sqlx::query(
-        "INSERT INTO audit_log_entry \
-         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
-          outcome, severity, request_id, at, payload) \
-         VALUES (?, 'project', ?, ?, ?, ?, 'system', 'applied', 'workflow', ?, ?, NULL)",
-    )
-    .bind(&audit_id)
-    .bind(project_id)
-    .bind(from_state)
-    .bind(to_state)
-    .bind(trigger)
-    .bind(&request_id)
-    .bind(&at)
-    .execute(conn)
-    .await?;
-
-    Ok(())
-}
-
-/// Insert a generalized `audit_log_entry` row from an `AuditLogEntry` (T120,
-/// spec 030 FR-131/FR-133).
+/// Insert a generalized `audit_log_entry` row from an `AuditLogEntry`.
 ///
-/// The single durable-write half of `EventBus::write_audit` (`crates::audit`
-/// crate, T121) — the load-bearing half per constitution §II: callers MUST
-/// propagate an `Err` here as a command failure, unlike the bus emit, which
-/// is best-effort. Distinct from `record_transition`/`record_refused_transition`
-/// (`crate::repositories::lifecycle`): this is a plain append with no
-/// accompanying CAS state-column update, for audit-worthy mutations that
-/// have no lifecycle state (settings, protection, equipment) as well as any
-/// other mutation that does not need the CAS coupling.
+/// Delegates to [`persistence_core::repositories::audit_writes::insert_audit_entry`].
 ///
 /// # Errors
-/// Returns [`DbError`](crate::DbError) if the insert fails.
+/// Returns [`DbError`](persistence_core::DbError) if the insert fails.
 pub async fn insert_audit_entry(pool: &SqlitePool, entry: &AuditLogEntry) -> DbResult<()> {
-    let at_str = entry
-        .at
-        .as_offset_date_time()
-        .format(&time::format_description::well_known::Rfc3339)
-        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
-    let payload_str = entry.payload.as_ref().map(std::string::ToString::to_string);
-
-    sqlx::query(
-        "INSERT INTO audit_log_entry \
-         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
-          outcome, severity, request_id, at, payload, reason_code) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(entry.audit_id.as_uuid().to_string())
-    .bind(entry.entity_type.as_str())
-    .bind(entry.entity_id.to_string())
-    .bind(&entry.from_state)
-    .bind(&entry.to_state)
-    .bind(&entry.trigger)
-    .bind(&entry.actor)
-    .bind(entry.outcome.as_str())
-    .bind(entry.severity.as_str())
-    .bind(entry.request_id.to_string())
-    .bind(&at_str)
-    .bind(&payload_str)
-    .bind(&entry.reason_code)
-    .execute(pool)
-    .await?;
-
-    Ok(())
+    audit_writes::insert_audit_entry(pool, entry).await
 }
 
 #[cfg(test)]

@@ -485,7 +485,7 @@ mod tests {
 
     async fn setup() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        sqlx::migrate!("../../../crates/persistence/db/migrations").run(&pool).await.unwrap();
+        sqlx::migrate!("../../../crates/persistence/core/migrations").run(&pool).await.unwrap();
         pool
     }
 

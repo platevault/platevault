@@ -211,10 +211,11 @@ pub async fn session_counts_by_target(pool: &SqlitePool) -> DbResult<Vec<(String
 /// (`target.resolved` / `target.user_override`), entity type
 /// `canonical_target`.
 ///
-/// # Errors
+/// Delegates to [`persistence_core::repositories::audit_writes::insert_resolution_audit`].
 ///
-/// Returns [`DbError::Database`] on query failure.
-#[allow(clippy::too_many_arguments)] // mirrors the columns of a fixed audit-row shape
+/// # Errors
+/// Returns [`persistence_core::DbError`] on query failure.
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_resolution_audit(
     pool: &SqlitePool,
     audit_id: &str,
@@ -225,22 +226,10 @@ pub async fn insert_resolution_audit(
     at: &str,
     payload: &str,
 ) -> DbResult<()> {
-    sqlx::query(
-        "INSERT INTO audit_log_entry \
-         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
-          outcome, severity, request_id, at, payload) \
-         VALUES (?, 'canonical_target', ?, NULL, NULL, ?, ?, 'applied', 'workflow', ?, ?, ?)",
+    persistence_core::repositories::audit_writes::insert_resolution_audit(
+        pool, audit_id, target_id, trigger, actor, request_id, at, payload,
     )
-    .bind(audit_id)
-    .bind(target_id)
-    .bind(trigger)
-    .bind(actor)
-    .bind(request_id)
-    .bind(at)
-    .bind(payload)
-    .execute(pool)
-    .await?;
-    Ok(())
+    .await
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

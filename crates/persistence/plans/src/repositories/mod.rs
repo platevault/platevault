@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 pub mod artifacts;
-pub(crate) mod audit_helpers;
 pub mod manifests;
 pub mod plan_apply;
 pub mod plans;

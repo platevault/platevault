@@ -27,7 +27,9 @@ pub mod test_support {
 /// Transitional repositories module that re-exports every sub-crate's
 /// repository surface, preserving `persistence_db::repositories::*` paths.
 pub mod repositories {
-    // persistence_core (cross-domain queries)
+    // persistence_core (cross-domain queries + audit write primitives)
+    /// Transitional re-export (bead astro-plan-gl58).
+    pub use persistence_core::repositories::audit_writes;
     /// Transitional re-export (bead astro-plan-gl58).
     pub use persistence_core::repositories::q_core;
 
@@ -59,19 +61,21 @@ pub mod repositories {
     /// Transitional re-export (bead astro-plan-gl58).
     pub use persistence_lifecycle::repositories::settings;
 
+    // persistence_calibration
+    /// Transitional re-export (bead astro-plan-gl58).
+    pub use persistence_calibration::repositories::calibration_assignment;
+    /// Transitional re-export (bead astro-plan-gl58).
+    pub use persistence_calibration::repositories::calibration_tolerances;
+    /// Transitional re-export (bead astro-plan-gl58).
+    pub use persistence_calibration::repositories::equipment;
+    /// Transitional re-export (bead astro-plan-gl58).
+    pub use persistence_calibration::repositories::q_calibration;
+
     // persistence_targets
-    /// Transitional re-export (bead astro-plan-gl58).
-    pub use persistence_targets::repositories::calibration_assignment;
-    /// Transitional re-export (bead astro-plan-gl58).
-    pub use persistence_targets::repositories::calibration_tolerances;
-    /// Transitional re-export (bead astro-plan-gl58).
-    pub use persistence_targets::repositories::equipment;
     /// Transitional re-export (bead astro-plan-gl58).
     pub use persistence_targets::repositories::framing;
     /// Transitional re-export (bead astro-plan-gl58).
     pub use persistence_targets::repositories::inventory;
-    /// Transitional re-export (bead astro-plan-gl58).
-    pub use persistence_targets::repositories::q_calibration;
     /// Transitional re-export (bead astro-plan-gl58).
     pub use persistence_targets::repositories::q_resolver;
     /// Transitional re-export (bead astro-plan-gl58).

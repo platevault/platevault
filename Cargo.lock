@@ -4226,9 +4226,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "persistence_calibration"
+version = "0.1.0"
+dependencies = [
+ "domain_core",
+ "persistence_core",
+ "serde",
+ "serde_json",
+ "sessions",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "persistence_core"
 version = "0.1.0"
 dependencies = [
+ "audit_types",
  "sea-query",
  "serde",
  "serde_json",
@@ -4237,12 +4255,14 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
 name = "persistence_db"
 version = "0.1.0"
 dependencies = [
+ "persistence_calibration",
  "persistence_core",
  "persistence_inbox",
  "persistence_lifecycle",

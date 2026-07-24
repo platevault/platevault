@@ -8,6 +8,7 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+persistence_calibration = { path = "../calibration" }
 persistence_core = { path = "../core" }
 persistence_inbox = { path = "../inbox" }
 persistence_lifecycle = { path = "../lifecycle" }

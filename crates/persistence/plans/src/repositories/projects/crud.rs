@@ -503,7 +503,7 @@ pub async fn apply_project_auto_block(
         return Ok(ProjectAutoBlockOutcome::CasLost { current_lifecycle, still_blockable });
     }
 
-    crate::repositories::audit_helpers::insert_project_auto_transition_conn(
+    persistence_core::repositories::audit_writes::insert_project_auto_transition_conn(
         &mut tx,
         id,
         expected_from_state,

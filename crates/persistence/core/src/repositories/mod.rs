@@ -3,4 +3,5 @@
 
 //! Cross-domain infrastructure queries.
 
+pub mod audit_writes;
 pub mod q_core;
