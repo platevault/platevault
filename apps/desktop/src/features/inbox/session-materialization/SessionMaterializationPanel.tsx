@@ -201,10 +201,16 @@ export function SessionMaterializationPanel({
     return map;
   }, [resolutionResults]);
 
+  // Fail-safe: any in-flight resolution query means we don't yet have full
+  // data — treat as blocked until all queries settle.
+  const anyResolutionLoading = resolutionResults.some((r) => r.isLoading);
+
   // Determine whether approval is blocked:
+  //  - sessions query still loading → blocked (no data yet)
+  //  - any site-resolution query still loading → blocked (no data yet)
   //  - plan is stale or refused → blocked
-  //  - any proposed session has warning codes that are contradictory → blocked
-  //  - plan has unresolved site resolutions → blocked
+  //  - any proposed session has contradictory warning codes → blocked
+  //  - any site resolution is not resolved (or not yet loaded) → blocked
   const planIsTerminallyBlocked =
     plan?.state === 'stale' || plan?.state === 'refused';
 
@@ -212,18 +218,20 @@ export function SessionMaterializationPanel({
     (s) => classifyWarnings(s.warningCodes).contradictory,
   );
 
-  // The plan has unresolved resolutions when acquisitionSiteResolutionCount
-  // is non-zero and any resolution loaded shows needs_review or conflict.
-  // For sessions we check the loaded resolution map; if a resolution is not
-  // yet loaded we treat it as needs_review (fail-safe, never approve blind).
+  // If a resolution is absent from the map (not yet loaded) treat it as
+  // unresolved — fail-safe, never approve blind.
   const hasUnresolvedSite = sessions.some((s) => {
     const res = resolutionMap.get(s.acquisitionSiteResolutionId);
-    if (!res) return true; // not loaded yet — treat as unresolved
+    if (!res) return true;
     return res.state !== 'resolved';
   });
 
   const approveBlocked =
-    planIsTerminallyBlocked || hasContradictorySession || hasUnresolvedSite;
+    sessionsLoading ||
+    anyResolutionLoading ||
+    planIsTerminallyBlocked ||
+    hasContradictorySession ||
+    hasUnresolvedSite;
 
   const isActive = flowState.phase !== 'idle';
   const showResult =
@@ -380,7 +388,10 @@ function buildSessionRow(
   return {
     kind: session.frameKind,
     frames: String(session.proposedFrameCount),
-    night: session.warningCodes.includes('missing_date_obs') ? '—' : '…',
+    night: session.warningCodes.includes('missing_date_obs')
+      ? '—'
+      : (resolutionMap.get(session.acquisitionSiteResolutionId)
+          ?.derivedObservingNight ?? '…'),
     site: (
       <SiteBadge
         resolutionId={session.acquisitionSiteResolutionId}

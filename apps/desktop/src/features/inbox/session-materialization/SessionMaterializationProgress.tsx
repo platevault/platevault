@@ -36,6 +36,8 @@ export function SessionMaterializationProgress({
   const total = progress?.totalSessionCount ?? 0;
   const cancelSafe = progress?.cancelSafe ?? false;
 
+  const isApproving = phase === 'approving';
+
   const progressText =
     total > 0
       ? m.session_mat_progress_label({
@@ -44,7 +46,9 @@ export function SessionMaterializationProgress({
         })
       : isCancelling
         ? m.session_mat_cancelling_label()
-        : m.session_mat_applying_label();
+        : isApproving
+          ? m.session_mat_approving_label()
+          : m.session_mat_applying_label();
 
   return (
     <div

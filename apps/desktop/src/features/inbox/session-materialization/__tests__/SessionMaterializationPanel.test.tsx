@@ -167,6 +167,27 @@ describe('SessionMaterializationPanel', () => {
     expect(screen.getByTestId('session-mat-loading')).toBeInTheDocument();
   });
 
+  it('blocks approve while sessions query is in-flight (fail-safe)', async () => {
+    // Arrange: sessions query never resolves — plan header resolves immediately.
+    mockListProposedSessions.mockImplementation(() => new Promise(() => {}));
+    render(
+      <Wrapper>
+        <SessionMaterializationPanel planId="plan-1" />
+      </Wrapper>,
+    );
+    // Wait for the panel (plan loaded) but sessions still in-flight.
+    await waitFor(() =>
+      expect(screen.getByTestId('session-mat-panel')).toBeInTheDocument(),
+    );
+    // Approve must be absent (open plan guard) OR disabled.
+    // The panel only renders the approve button for state=open plans, so
+    // once the heading is present we assert the button is disabled.
+    await waitFor(() =>
+      expect(screen.getByTestId('session-mat-approve-btn')).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('session-mat-approve-btn')).toBeDisabled();
+  });
+
   it('renders the sessions table with kind/frames columns', async () => {
     render(
       <Wrapper>
@@ -181,6 +202,29 @@ describe('SessionMaterializationPanel', () => {
     });
     expect(screen.getByText('light')).toBeInTheDocument();
     expect(screen.getByText('5')).toBeInTheDocument();
+  });
+
+  it('shows derivedObservingNight from site resolution in the night column', async () => {
+    mockQueryAcquisitionSiteResolution.mockResolvedValue({
+      resolutionId: 'res-1',
+      revision: 1,
+      state: 'resolved',
+      decision: 'accepted_candidate',
+      conflictCodes: [],
+      evidenceRefs: [],
+      derivedObservingNight: '2026-07-20',
+    });
+    render(
+      <Wrapper>
+        <SessionMaterializationPanel planId="plan-1" />
+      </Wrapper>,
+    );
+    await waitFor(() => {
+      const table = screen.getByTestId('session-mat-sessions-table');
+      const rows = table.querySelectorAll('tbody tr');
+      expect(rows.length).toBeGreaterThan(0);
+    });
+    expect(screen.getByText('2026-07-20')).toBeInTheDocument();
   });
 
   it('shows missing-metadata pill when session has a missing warning code', async () => {
