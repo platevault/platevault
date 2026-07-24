@@ -1,0 +1,4018 @@
+{
+  "version": 1,
+  "generated_at": "2026-07-14T08:05:52.025066447Z",
+  "source": "SIMBAD TAP (CDS, https://simbad.cds.unistra.fr) \u2014 spec 035 seed-builder (e2e-stripped subset)",
+  "entries": [
+    {
+      "simbad_oid": 795871,
+      "primary_designation": "M 1",
+      "common_name": "CRAB NEB",
+      "object_type": "supernova_remnant",
+      "ra_deg": 83.6324,
+      "dec_deg": 22.0174,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 1",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 833",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 184.62-05.65",
+          "kind": "designation"
+        },
+        {
+          "alias": "CRAB NEB",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Crab",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Crab Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Tau A",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Taurus A",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 1952",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2623868,
+      "primary_designation": "M 10",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 254.28770833333337,
+      "dec_deg": -4.100305555555555,
+      "v_mag": 4.98,
+      "aliases": [
+        {
+          "alias": "M 10",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1654-040",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6254",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1934257,
+      "primary_designation": "M 100",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 185.72887499732997,
+      "dec_deg": 15.822304516100004,
+      "v_mag": 9.35,
+      "aliases": [
+        {
+          "alias": "M 100",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4321",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 529086,
+      "primary_designation": "M 101",
+      "common_name": "Pinwheel",
+      "object_type": "galaxy",
+      "ra_deg": 210.80242916666668,
+      "dec_deg": 54.34875,
+      "v_mag": 7.86,
+      "aliases": [
+        {
+          "alias": "M 101",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 26",
+          "kind": "designation"
+        },
+        {
+          "alias": "Pinwheel",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 5457",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 457084,
+      "primary_designation": "M 102",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 226.62317083333332,
+      "dec_deg": 55.76330833333333,
+      "v_mag": 9.89,
+      "aliases": [
+        {
+          "alias": "M 102",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 5866",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 168578,
+      "primary_designation": "M 103",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 23.339166666666667,
+      "dec_deg": 60.65888888888889,
+      "v_mag": 7.4,
+      "aliases": [
+        {
+          "alias": "M 103",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 0129+604",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 581",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 609478,
+      "primary_designation": "M 106",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 184.7400833333333,
+      "dec_deg": 47.30371944444444,
+      "v_mag": 8.41,
+      "aliases": [
+        {
+          "alias": "M 106",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4258",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2579729,
+      "primary_designation": "M 107",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 248.13275,
+      "dec_deg": -13.05377777777778,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 107",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1629-129",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6171",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 534268,
+      "primary_designation": "M 108",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 167.87902916666664,
+      "dec_deg": 55.67412222222222,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 108",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 3556",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 569485,
+      "primary_designation": "M 109",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 179.39984644985,
+      "dec_deg": 53.37472391176001,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 109",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 3992",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1575545,
+      "primary_designation": "M 110",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 10.09190514583,
+      "dec_deg": 41.68541867226,
+      "v_mag": 8.07,
+      "aliases": [
+        {
+          "alias": "M 110",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 205",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2637140,
+      "primary_designation": "M 12",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 251.80908333333338,
+      "dec_deg": -1.9485277777777774,
+      "v_mag": 6.07,
+      "aliases": [
+        {
+          "alias": "M 12",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1644-018",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6218",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2894585,
+      "primary_designation": "M 13",
+      "common_name": "Hercules Globular Cluster",
+      "object_type": "globular_cluster",
+      "ra_deg": 250.42347499999994,
+      "dec_deg": 36.46131944444445,
+      "v_mag": 5.8,
+      "aliases": [
+        {
+          "alias": "M 13",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1639+365",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6205",
+          "kind": "designation"
+        },
+        {
+          "alias": "Hercules Globular Cluster",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2624973,
+      "primary_designation": "M 14",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 264.40062500000005,
+      "dec_deg": -3.245916666666667,
+      "v_mag": 5.73,
+      "aliases": [
+        {
+          "alias": "M 14",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1735-032",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6402",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1444421,
+      "primary_designation": "M 15",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 322.49304166666667,
+      "dec_deg": 12.166999999999998,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 15",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 2127+119",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 7078",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2585552,
+      "primary_designation": "M 16",
+      "common_name": "Eagle Nebula",
+      "object_type": "open_cluster",
+      "ra_deg": 274.688,
+      "dec_deg": -13.792,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 16",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1816-138",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 016.96+00.78",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 67",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6611",
+          "kind": "designation"
+        },
+        {
+          "alias": "IC 4703",
+          "kind": "designation"
+        },
+        {
+          "alias": "Eagle Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Star Queen",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2551124,
+      "primary_designation": "M 18",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 274.9875,
+      "dec_deg": -17.088333333333335,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 18",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1817-171",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6613",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2490322,
+      "primary_designation": "M 19",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 255.65704166666666,
+      "dec_deg": -26.267944444444442,
+      "v_mag": 5.57,
+      "aliases": [
+        {
+          "alias": "M 19",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1659-262",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6273",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1361420,
+      "primary_designation": "M 2",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 323.36258333333336,
+      "dec_deg": -0.8232499999999998,
+      "v_mag": 6.25,
+      "aliases": [
+        {
+          "alias": "M 2",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 2130-010",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 7089",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2517890,
+      "primary_designation": "M 20",
+      "common_name": "Trifid Nebula",
+      "object_type": "open_cluster",
+      "ra_deg": 270.675,
+      "dec_deg": -22.971666666666664,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 20",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1759-230",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 006.99-00.17",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 27",
+          "kind": "designation"
+        },
+        {
+          "alias": "Trifid Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 6514",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2535882,
+      "primary_designation": "M 21",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 271.0358333333333,
+      "dec_deg": -22.505,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 21",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1801-225",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6531",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2522962,
+      "primary_designation": "M 22",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 279.09975000000003,
+      "dec_deg": -23.90475,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 22",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1833-239",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6656",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2548469,
+      "primary_designation": "M 23",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 269.2370833333333,
+      "dec_deg": -18.98694444444445,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 23",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1753-190",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6494",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 5375405,
+      "primary_designation": "M 24",
+      "common_name": "Small Sgr Star Cloud",
+      "object_type": "open_cluster",
+      "ra_deg": 274.2,
+      "dec_deg": -18.55,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 24",
+          "kind": "designation"
+        },
+        {
+          "alias": "IC 4715",
+          "kind": "designation"
+        },
+        {
+          "alias": "Small Sgr Star Cloud",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2601047,
+      "primary_designation": "M 26",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 281.31708333333336,
+      "dec_deg": -9.386111111111113,
+      "v_mag": 8.87,
+      "aliases": [
+        {
+          "alias": "M 26",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1842-094",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6694",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2808552,
+      "primary_designation": "M 27",
+      "common_name": "Diabolo Nebula",
+      "object_type": "planetary_nebula",
+      "ra_deg": 299.90151327087,
+      "dec_deg": 22.721197794319995,
+      "v_mag": 14.089,
+      "aliases": [
+        {
+          "alias": "M 27",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6853",
+          "kind": "designation"
+        },
+        {
+          "alias": "Diabolo Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Dumbbell Nebula",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2520602,
+      "primary_designation": "M 28",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 276.1370416666666,
+      "dec_deg": -24.869833333333332,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 28",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1821-249",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6626",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2956537,
+      "primary_designation": "M 29",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 305.94166666666666,
+      "dec_deg": 38.486666666666665,
+      "v_mag": 6.6,
+      "aliases": [
+        {
+          "alias": "M 29",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 2022+383",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6913",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2194447,
+      "primary_designation": "M 3",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 205.5484166666666,
+      "dec_deg": 28.37727777777778,
+      "v_mag": 6.39,
+      "aliases": [
+        {
+          "alias": "M 3",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1339+286",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 5272",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1252437,
+      "primary_designation": "M 30",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 325.0921666666667,
+      "dec_deg": -23.17986111111111,
+      "v_mag": 7.1,
+      "aliases": [
+        {
+          "alias": "M 30",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 2137-234",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 7099",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1575544,
+      "primary_designation": "M 31",
+      "common_name": "Andromeda",
+      "object_type": "galaxy",
+      "ra_deg": 10.684708333333333,
+      "dec_deg": 41.268750000000004,
+      "v_mag": 3.44,
+      "aliases": [
+        {
+          "alias": "M 31",
+          "kind": "designation"
+        },
+        {
+          "alias": "Andromeda",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Andromeda Galaxy",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 224",
+          "kind": "designation"
+        },
+        {
+          "alias": "And Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Andromeda Nebula",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1569144,
+      "primary_designation": "M 32",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 10.67427,
+      "dec_deg": 40.86517,
+      "v_mag": 8.08,
+      "aliases": [
+        {
+          "alias": "M 32",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 168",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 221",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1522778,
+      "primary_designation": "M 33",
+      "common_name": "Triangulum Galaxy",
+      "object_type": "galaxy",
+      "ra_deg": 23.46206906218,
+      "dec_deg": 30.660175111980003,
+      "v_mag": 5.72,
+      "aliases": [
+        {
+          "alias": "M 33",
+          "kind": "designation"
+        },
+        {
+          "alias": "Triangulum Galaxy",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Triangulum Pinwheel",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 598",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 792981,
+      "primary_designation": "M 36",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 84.08416666666666,
+      "dec_deg": 34.135,
+      "v_mag": 6.0,
+      "aliases": [
+        {
+          "alias": "M 36",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 0532+341",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 1960",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 836902,
+      "primary_designation": "M 37",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 88.07416666666667,
+      "dec_deg": 32.54499999999999,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 37",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 0549+325",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 2099",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 792827,
+      "primary_designation": "M 38",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 82.16708333333332,
+      "dec_deg": 35.823888888888895,
+      "v_mag": 6.4,
+      "aliases": [
+        {
+          "alias": "M 38",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 0525+358",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 1912",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2406698,
+      "primary_designation": "M 4",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 245.89675000000003,
+      "dec_deg": -26.525750000000002,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 4",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1620-264",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6121",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 930616,
+      "primary_designation": "M 41",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 101.49916666666667,
+      "dec_deg": -20.716111111111108,
+      "v_mag": 4.5,
+      "aliases": [
+        {
+          "alias": "M 41",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 0644-206",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 2287",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 810146,
+      "primary_designation": "M 42",
+      "common_name": "Great Orion Nebula",
+      "object_type": "emission_nebula",
+      "ra_deg": 83.8201,
+      "dec_deg": -5.3876,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 42",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 209.13-19.35",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 974",
+          "kind": "designation"
+        },
+        {
+          "alias": "Great Orion Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Ori Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Orion Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 1976",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 800918,
+      "primary_designation": "M 43",
+      "common_name": "Mairan's Nebula",
+      "object_type": "emission_nebula",
+      "ra_deg": 83.87916666666666,
+      "dec_deg": -5.27,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 43",
+          "kind": "designation"
+        },
+        {
+          "alias": "Mairan's Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 1982",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1938908,
+      "primary_designation": "M 49",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 187.4449,
+      "dec_deg": 8.0004,
+      "v_mag": 12.17,
+      "aliases": [
+        {
+          "alias": "M 49",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 134",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4472",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2648987,
+      "primary_designation": "M 5",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 229.63841666666673,
+      "dec_deg": 2.081027777777778,
+      "v_mag": 5.95,
+      "aliases": [
+        {
+          "alias": "M 5",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1516+022",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 5904",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 587337,
+      "primary_designation": "M 51",
+      "common_name": "Whirlpool",
+      "object_type": "galaxy",
+      "ra_deg": 202.469575,
+      "dec_deg": 47.19525833333333,
+      "v_mag": 8.36,
+      "aliases": [
+        {
+          "alias": "M 51",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 85A",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 85",
+          "kind": "designation"
+        },
+        {
+          "alias": "Whirlpool",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 5194",
+          "kind": "designation"
+        },
+        {
+          "alias": "Question Mark Galaxy",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Whirlpool Galaxy",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 127762,
+      "primary_designation": "M 52",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 351.195,
+      "dec_deg": 61.589999999999996,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 52",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 2322+613",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 7654",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2104991,
+      "primary_designation": "M 53",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 198.2302083333333,
+      "dec_deg": 18.168166666666668,
+      "v_mag": 7.79,
+      "aliases": [
+        {
+          "alias": "M 53",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1310+184",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 5024",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2395133,
+      "primary_designation": "M 54",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 283.763875,
+      "dec_deg": -30.47986111111111,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 54",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1851-305",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6715",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2397114,
+      "primary_designation": "M 55",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 294.9987916666667,
+      "dec_deg": -30.96475,
+      "v_mag": 6.49,
+      "aliases": [
+        {
+          "alias": "M 55",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1936-310",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6809",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2846095,
+      "primary_designation": "M 56",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 289.14820833333334,
+      "dec_deg": 30.183472222222214,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 56",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1914+300",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6779",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2868878,
+      "primary_designation": "M 57",
+      "common_name": "Ring Nebula",
+      "object_type": "planetary_nebula",
+      "ra_deg": 283.39623652463,
+      "dec_deg": 33.029134246539996,
+      "v_mag": 15.769,
+      "aliases": [
+        {
+          "alias": "M 57",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6720",
+          "kind": "designation"
+        },
+        {
+          "alias": "Ring Nebula",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1961786,
+      "primary_designation": "M 58",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 189.43165612500002,
+      "dec_deg": 11.818090000000002,
+      "v_mag": 9.66,
+      "aliases": [
+        {
+          "alias": "M 58",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4579",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1962013,
+      "primary_designation": "M 59",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 190.50940890631998,
+      "dec_deg": 11.64691930771,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 59",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4621",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1961356,
+      "primary_designation": "M 60",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 190.91654510497253,
+      "dec_deg": 11.552691159463055,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 60",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4649",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1913628,
+      "primary_designation": "M 61",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 185.47886774286997,
+      "dec_deg": 4.47377704644,
+      "v_mag": 9.65,
+      "aliases": [
+        {
+          "alias": "M 61",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4303",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2379975,
+      "primary_designation": "M 62",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 255.30249999999995,
+      "dec_deg": -30.112361111111106,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 62",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1658-300",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6266",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2049151,
+      "primary_designation": "M 64",
+      "common_name": "Black Eye Galaxy",
+      "object_type": "galaxy",
+      "ra_deg": 194.18206666666663,
+      "dec_deg": 21.682658333333332,
+      "v_mag": 8.52,
+      "aliases": [
+        {
+          "alias": "M 64",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4826",
+          "kind": "designation"
+        },
+        {
+          "alias": "Black Eye Galaxy",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Evil Eye Galaxy",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1804897,
+      "primary_designation": "M 65",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 169.73295193949,
+      "dec_deg": 13.092305751019998,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 65",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 317B",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 3623",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1805061,
+      "primary_designation": "M 66",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 170.0626,
+      "dec_deg": 12.9915,
+      "v_mag": 8.92,
+      "aliases": [
+        {
+          "alias": "M 66",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 16",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 317A",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 3627",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1972667,
+      "primary_designation": "M 68",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 189.8665833333333,
+      "dec_deg": -26.74405555555555,
+      "v_mag": 7.96,
+      "aliases": [
+        {
+          "alias": "M 68",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1236-264",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4590",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2393171,
+      "primary_designation": "M 69",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 277.84625,
+      "dec_deg": -32.34808333333334,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 69",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1828-323",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6637",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2393969,
+      "primary_designation": "M 70",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 280.80316666666664,
+      "dec_deg": -32.292111111111105,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 70",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1840-323",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6681",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2774099,
+      "primary_designation": "M 71",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 298.44370833333335,
+      "dec_deg": 18.779194444444443,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 71",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1951+186",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6838",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2558019,
+      "primary_designation": "M 72",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 313.36541666666665,
+      "dec_deg": -12.537305555555555,
+      "v_mag": 8.96,
+      "aliases": [
+        {
+          "alias": "M 72",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 2050-127",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6981",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1465340,
+      "primary_designation": "M 74",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 24.173938015259996,
+      "dec_deg": 15.783640975640001,
+      "v_mag": 9.46,
+      "aliases": [
+        {
+          "alias": "M 74",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 628",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2526455,
+      "primary_designation": "M 75",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 301.52017083333334,
+      "dec_deg": -21.922261111111112,
+      "v_mag": 8.26,
+      "aliases": [
+        {
+          "alias": "M 75",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 2003-220",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6864",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 84066,
+      "primary_designation": "M 76",
+      "common_name": "Barbell Nebula",
+      "object_type": "planetary_nebula",
+      "ra_deg": 25.58189905342,
+      "dec_deg": 51.57542638057,
+      "v_mag": 17.48,
+      "aliases": [
+        {
+          "alias": "M 76",
+          "kind": "designation"
+        },
+        {
+          "alias": "Barbell Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Cork Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 651",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 650",
+          "kind": "designation"
+        },
+        {
+          "alias": "Little Dumbbell Nebula",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1378180,
+      "primary_designation": "M 77",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 40.66962152891999,
+      "dec_deg": -0.01329435839,
+      "v_mag": 8.87,
+      "aliases": [
+        {
+          "alias": "M 77",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 37",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 1068",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 825922,
+      "primary_designation": "M 78",
+      "common_name": null,
+      "object_type": "reflection_nebula",
+      "ra_deg": 86.69083333333333,
+      "dec_deg": 0.07916666666666666,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 78",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 2068",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 789303,
+      "primary_designation": "M 79",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 81.04412500000002,
+      "dec_deg": -24.52425,
+      "v_mag": 8.16,
+      "aliases": [
+        {
+          "alias": "M 79",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 0522-245",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 1904",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2516412,
+      "primary_designation": "M 8",
+      "common_name": "Lagoon",
+      "object_type": "open_cluster",
+      "ra_deg": 270.90416666666664,
+      "dec_deg": -24.386666666666667,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 8",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 006.06-01.23",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 25",
+          "kind": "designation"
+        },
+        {
+          "alias": "Lagoon",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Lagoon Nebula",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2509710,
+      "primary_designation": "M 80",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 244.26004166666672,
+      "dec_deg": -22.976083333333328,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 80",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1614-228",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6093",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 434630,
+      "primary_designation": "M 81",
+      "common_name": "M 81*",
+      "object_type": "galaxy",
+      "ra_deg": 148.88821939854,
+      "dec_deg": 69.06529514038,
+      "v_mag": 6.94,
+      "aliases": [
+        {
+          "alias": "M 81",
+          "kind": "designation"
+        },
+        {
+          "alias": "M 81*",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 3031",
+          "kind": "designation"
+        },
+        {
+          "alias": "Bode's Galaxy",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 433918,
+      "primary_designation": "M 82",
+      "common_name": "UMa A",
+      "object_type": "galaxy",
+      "ra_deg": 148.96845833333333,
+      "dec_deg": 69.67970277777778,
+      "v_mag": 8.41,
+      "aliases": [
+        {
+          "alias": "M 82",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 337",
+          "kind": "designation"
+        },
+        {
+          "alias": "UMa A",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 3034",
+          "kind": "designation"
+        },
+        {
+          "alias": "Cigar Galaxy",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2177129,
+      "primary_designation": "M 83",
+      "common_name": "Southern Pinwheel Galaxy",
+      "object_type": "galaxy",
+      "ra_deg": 204.25383,
+      "dec_deg": -29.865761111111112,
+      "v_mag": 7.52,
+      "aliases": [
+        {
+          "alias": "M 83",
+          "kind": "designation"
+        },
+        {
+          "alias": "Southern Pinwheel Galaxy",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 5236",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1936425,
+      "primary_designation": "M 84",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 186.2655972083333,
+      "dec_deg": 12.886983138888887,
+      "v_mag": 10.49,
+      "aliases": [
+        {
+          "alias": "M 84",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4374",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1933477,
+      "primary_designation": "M 85",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 186.35022083333328,
+      "dec_deg": 18.191080555555555,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "M 85",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4382",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1934764,
+      "primary_designation": "M 86",
+      "common_name": "FAUST V051",
+      "object_type": "galaxy",
+      "ra_deg": 186.54922499999998,
+      "dec_deg": 12.945969444444444,
+      "v_mag": 8.9,
+      "aliases": [
+        {
+          "alias": "M 86",
+          "kind": "designation"
+        },
+        {
+          "alias": "FAUST V051",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 4406",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1937204,
+      "primary_designation": "M 87",
+      "common_name": "M 87*",
+      "object_type": "galaxy",
+      "ra_deg": 187.70593076725,
+      "dec_deg": 12.391123246083334,
+      "v_mag": 8.63,
+      "aliases": [
+        {
+          "alias": "M 87",
+          "kind": "designation"
+        },
+        {
+          "alias": "M 87*",
+          "kind": "common_name"
+        },
+        {
+          "alias": "APG 152",
+          "kind": "designation"
+        },
+        {
+          "alias": "SMOKING GUN",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Vir A",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Virgo A",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 4486",
+          "kind": "designation"
+        },
+        {
+          "alias": "Virgo Galaxy",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1934356,
+      "primary_designation": "M 88",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 187.99646877602,
+      "dec_deg": 14.420319158839998,
+      "v_mag": 13.18,
+      "aliases": [
+        {
+          "alias": "M 88",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4501",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1962096,
+      "primary_designation": "M 89",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 188.9158638892917,
+      "dec_deg": 12.556341907138888,
+      "v_mag": 9.75,
+      "aliases": [
+        {
+          "alias": "M 89",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4552",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2546940,
+      "primary_designation": "M 9",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 259.79908333333333,
+      "dec_deg": -18.51625,
+      "v_mag": 8.42,
+      "aliases": [
+        {
+          "alias": "M 9",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1716-184",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6333",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1961913,
+      "primary_designation": "M 90",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 189.20750409994997,
+      "dec_deg": 13.162923281399998,
+      "v_mag": 9.54,
+      "aliases": [
+        {
+          "alias": "M 90",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 76",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4569",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2946389,
+      "primary_designation": "M 92",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 259.2807916666667,
+      "dec_deg": 43.13594444444444,
+      "v_mag": 6.52,
+      "aliases": [
+        {
+          "alias": "M 92",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1715+432",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6341",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1976412,
+      "primary_designation": "M 94",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 192.72114082143,
+      "dec_deg": 41.12025024573,
+      "v_mag": 8.24,
+      "aliases": [
+        {
+          "alias": "M 94",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 4736",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1750499,
+      "primary_designation": "M 95",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 160.99054728575,
+      "dec_deg": 11.703694775369998,
+      "v_mag": 9.73,
+      "aliases": [
+        {
+          "alias": "M 95",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 3351",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1749772,
+      "primary_designation": "M 96",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 161.6906,
+      "dec_deg": 11.819938888888887,
+      "v_mag": 9.25,
+      "aliases": [
+        {
+          "alias": "M 96",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 3368",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 552802,
+      "primary_designation": "M 97",
+      "common_name": "Owl Nebula",
+      "object_type": "planetary_nebula",
+      "ra_deg": 168.69880122825,
+      "dec_deg": 55.01902300891,
+      "v_mag": 15.777,
+      "aliases": [
+        {
+          "alias": "M 97",
+          "kind": "designation"
+        },
+        {
+          "alias": "Owl Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 3587",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1910773,
+      "primary_designation": "M 99",
+      "common_name": "Coma Pinwheel",
+      "object_type": "galaxy",
+      "ra_deg": 184.7067708333333,
+      "dec_deg": 14.416488888888884,
+      "v_mag": 9.87,
+      "aliases": [
+        {
+          "alias": "M 99",
+          "kind": "designation"
+        },
+        {
+          "alias": "Coma Pinwheel",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 4254",
+          "kind": "designation"
+        },
+        {
+          "alias": "Virgo Cluster Pinwheel",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1397108,
+      "primary_designation": "NGC 1019",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 39.61423220066,
+      "dec_deg": 1.9077103429800002,
+      "v_mag": 14.95,
+      "aliases": [
+        {
+          "alias": "NGC 1019",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 225030,
+      "primary_designation": "NGC 1027",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 40.677083333333336,
+      "dec_deg": 61.61611111111112,
+      "v_mag": 6.7,
+      "aliases": [
+        {
+          "alias": "NGC 1027",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 0238+613",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 225330,
+      "primary_designation": "NGC 1027 5",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 40.7955431776,
+      "dec_deg": 61.59932228600999,
+      "v_mag": 11.13,
+      "aliases": [
+        {
+          "alias": "NGC 1027 5",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3280200,
+      "primary_designation": "NGC 104",
+      "common_name": "47 Tuc Cluster",
+      "object_type": "globular_cluster",
+      "ra_deg": 6.022329166666666,
+      "dec_deg": -72.08144444444444,
+      "v_mag": 4.09,
+      "aliases": [
+        {
+          "alias": "NGC 104",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 0021-723",
+          "kind": "designation"
+        },
+        {
+          "alias": "Cl Melotte 1",
+          "kind": "designation"
+        },
+        {
+          "alias": "47 Tuc Cluster",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3890301,
+      "primary_designation": "NGC 1333 13A",
+      "common_name": null,
+      "object_type": "dark_nebula",
+      "ra_deg": 52.26083333333334,
+      "dec_deg": 31.265833333333333,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 1333 13A",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 645189,
+      "primary_designation": "NGC 1360",
+      "common_name": null,
+      "object_type": "planetary_nebula",
+      "ra_deg": 53.31102855331001,
+      "dec_deg": -25.87166045775,
+      "v_mag": 11.16,
+      "aliases": [
+        {
+          "alias": "NGC 1360",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3133776,
+      "primary_designation": "NGC 1714",
+      "common_name": null,
+      "object_type": "emission_nebula",
+      "ra_deg": 73.03500000000001,
+      "dec_deg": -66.92305555555556,
+      "v_mag": 11.61,
+      "aliases": [
+        {
+          "alias": "NGC 1714",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 708350,
+      "primary_designation": "NGC 1554",
+      "common_name": "Struve's nebula",
+      "object_type": "reflection_nebula",
+      "ra_deg": 65.5,
+      "dec_deg": 19.6,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 1554",
+          "kind": "designation"
+        },
+        {
+          "alias": "Struve's nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "LBN 817",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 176.18-20.82",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3106059,
+      "primary_designation": "NGC 2029",
+      "common_name": null,
+      "object_type": "supernova_remnant",
+      "ra_deg": 83.81458333333332,
+      "dec_deg": -67.56777777777778,
+      "v_mag": 12.29,
+      "aliases": [
+        {
+          "alias": "NGC 2029",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2296655,
+      "primary_designation": "NGC 5745",
+      "common_name": null,
+      "object_type": "galaxy_cluster",
+      "ra_deg": 221.25792083333332,
+      "dec_deg": -13.947205555555556,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 5745",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1295325,
+      "primary_designation": "NGC 7807",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 0.11089721492000001,
+      "dec_deg": -18.84182445985,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 7807",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1278197,
+      "primary_designation": "NGC 172",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 9.306900008389999,
+      "dec_deg": -22.58713909341,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 172",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1198819,
+      "primary_designation": "NGC 300",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 13.722694015959998,
+      "dec_deg": -37.68421344511,
+      "v_mag": 8.13,
+      "aliases": [
+        {
+          "alias": "NGC 300",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1415838,
+      "primary_designation": "NGC 490",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 20.5119690965,
+      "dec_deg": 5.36716382887,
+      "v_mag": 14.48,
+      "aliases": [
+        {
+          "alias": "NGC 490",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1485311,
+      "primary_designation": "NGC 691",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 27.673786536389997,
+      "dec_deg": 21.759970445709996,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 691",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1348700,
+      "primary_designation": "NGC 883",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 34.77164543094,
+      "dec_deg": -6.79098149026,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 883",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 28442,
+      "primary_designation": "NGC 1039 375",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 40.6908619548,
+      "dec_deg": 42.57282848188999,
+      "v_mag": 12.272,
+      "aliases": [
+        {
+          "alias": "NGC 1039 375",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 634489,
+      "primary_designation": "NGC 1284",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 49.4396192286,
+      "dec_deg": -10.28910523013,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 1284",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 684427,
+      "primary_designation": "NGC 1461",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 57.113044621789996,
+      "dec_deg": -16.39284689425,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 1461",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 735804,
+      "primary_designation": "NGC 1654",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 71.45200959896,
+      "dec_deg": -2.08382107826,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 1654",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 774875,
+      "primary_designation": "NGC 1827",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 77.5191125,
+      "dec_deg": -36.96024166666667,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 1827",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3110808,
+      "primary_designation": "NGC 2053",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 84.42333333333335,
+      "dec_deg": -67.41366666666669,
+      "v_mag": 12.18,
+      "aliases": [
+        {
+          "alias": "NGC 2053",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3554614,
+      "primary_designation": "NGC 2204 4210",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 93.82850073817,
+      "dec_deg": -18.70383317813,
+      "v_mag": 13.821,
+      "aliases": [
+        {
+          "alias": "NGC 2204 4210",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 967565,
+      "primary_designation": "NGC 2385",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 112.116775,
+      "dec_deg": 33.837763888888894,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 2385",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1041447,
+      "primary_designation": "NGC 2545",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 123.55898074599,
+      "dec_deg": 21.35545386373,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 2545",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 509572,
+      "primary_designation": "NGC 2694",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 134.24691534015,
+      "dec_deg": 51.33195423859,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 2694",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1643247,
+      "primary_designation": "NGC 2928",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 144.29206482135,
+      "dec_deg": 16.977208312730003,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 2928",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1701131,
+      "primary_designation": "NGC 3138",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 152.31930102997,
+      "dec_deg": -11.95677829001,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 3138",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1739132,
+      "primary_designation": "NGC 3331",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 160.03734248407,
+      "dec_deg": -23.82043322755,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 3331",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1783746,
+      "primary_designation": "NGC 3552",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 167.67852179529,
+      "dec_deg": 28.693131329659998,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 3552",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1825319,
+      "primary_designation": "NGC 3767",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 174.31480906597,
+      "dec_deg": 16.87713674873,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 3767",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1860352,
+      "primary_designation": "NGC 3995",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 179.43374079166665,
+      "dec_deg": 32.29406697222222,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 3995",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1919740,
+      "primary_designation": "NGC 4225",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 184.15984646222998,
+      "dec_deg": -12.32765482554,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 4225",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1928784,
+      "primary_designation": "NGC 4448",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 187.06428333333332,
+      "dec_deg": 28.6203,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 4448",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1974531,
+      "primary_designation": "NGC 4645B",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 190.87991999999997,
+      "dec_deg": -41.36253000000001,
+      "v_mag": 12.99,
+      "aliases": [
+        {
+          "alias": "NGC 4645B",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2027481,
+      "primary_designation": "NGC 4850",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 194.59097437106996,
+      "dec_deg": 27.96778466909,
+      "v_mag": 14.03,
+      "aliases": [
+        {
+          "alias": "NGC 4850",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2104278,
+      "primary_designation": "NGC 866 0",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 199.31977874805997,
+      "dec_deg": 20.69098854658,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 866 0",
+          "kind": "designation"
+        },
+        {
+          "alias": "IC 866",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2185253,
+      "primary_designation": "NGC 5274",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 205.59715289531,
+      "dec_deg": 29.847847642289995,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 5274",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 378294,
+      "primary_designation": "NGC 5547",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 212.4396958333333,
+      "dec_deg": 78.601075,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 5547",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 545087,
+      "primary_designation": "NGC 5717",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 219.65709227636998,
+      "dec_deg": 46.66309484125,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 5717",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 497330,
+      "primary_designation": "NGC 5932",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 231.70088321466,
+      "dec_deg": 48.61498132077,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 5932",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2915269,
+      "primary_designation": "NGC 6137",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 245.76299777078998,
+      "dec_deg": 37.92237517413,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 6137",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2511410,
+      "primary_designation": "NGC 6325",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 259.4969583333334,
+      "dec_deg": -23.76602777777778,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 6325",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1714-237",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 314347,
+      "primary_designation": "NGC 6598",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 272.23342900465,
+      "dec_deg": 69.06796589983,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 6598",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2614399,
+      "primary_designation": "NGC 6705 495",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 282.8436708333333,
+      "dec_deg": -6.238205555555555,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 6705 495",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3514636,
+      "primary_designation": "NGC 6878A",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 303.40001822875,
+      "dec_deg": -44.81614825945001,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 6878A",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 4550888,
+      "primary_designation": "NGC 7082 174",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 322.28093474526,
+      "dec_deg": 47.16468357383,
+      "v_mag": 10.92,
+      "aliases": [
+        {
+          "alias": "NGC 7082 174",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 98521,
+      "primary_designation": "NGC 7245",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 333.81208333333336,
+      "dec_deg": 54.336111111111116,
+      "v_mag": 9.2,
+      "aliases": [
+        {
+          "alias": "NGC 7245",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 2213+540",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1430427,
+      "primary_designation": "NGC 7414",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 343.85176189091,
+      "dec_deg": 13.248276594819998,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 7414",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1412494,
+      "primary_designation": "NGC 7619",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 350.0605166666666,
+      "dec_deg": 8.20628611111111,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NGC 7619",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 131436,
+      "primary_designation": "IC 10",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 5.07223,
+      "dec_deg": 59.3037911111111,
+      "v_mag": 9.5,
+      "aliases": [
+        {
+          "alias": "IC 10",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 119.04-03.37",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 591",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 209813,
+      "primary_designation": "IC 1795 136",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 36.975695900000005,
+      "dec_deg": 62.283098700000004,
+      "v_mag": 12.083,
+      "aliases": [
+        {
+          "alias": "IC 1795 136",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1514859,
+      "primary_designation": "IC 132",
+      "common_name": null,
+      "object_type": "emission_nebula",
+      "ra_deg": 23.31583333333333,
+      "dec_deg": 30.945833333333333,
+      "v_mag": 14.82,
+      "aliases": [
+        {
+          "alias": "IC 132",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3303378,
+      "primary_designation": "IC 4499",
+      "common_name": null,
+      "object_type": "globular_cluster",
+      "ra_deg": 225.07737500000002,
+      "dec_deg": -82.21377777777779,
+      "v_mag": 8.56,
+      "aliases": [
+        {
+          "alias": "IC 4499",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 1452-820",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2537203,
+      "primary_designation": "IC 1284",
+      "common_name": null,
+      "object_type": "dark_nebula",
+      "ra_deg": 274.41508333333337,
+      "dec_deg": -19.672027777777778,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 1284",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2338608,
+      "primary_designation": "IC 1297",
+      "common_name": null,
+      "object_type": "planetary_nebula",
+      "ra_deg": 289.347697995,
+      "dec_deg": -39.61284824052,
+      "v_mag": 10.89,
+      "aliases": [
+        {
+          "alias": "IC 1297",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 90115,
+      "primary_designation": "IC 1311",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 302.69708333333335,
+      "dec_deg": 41.176944444444445,
+      "v_mag": 13.1,
+      "aliases": [
+        {
+          "alias": "IC 1311",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 2008+410",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1399080,
+      "primary_designation": "IC 1365",
+      "common_name": "ZW II 108 Group",
+      "object_type": "galaxy_cluster",
+      "ra_deg": 318.5153992,
+      "dec_deg": 2.5707132,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 1365",
+          "kind": "designation"
+        },
+        {
+          "alias": "ZW II 108 Group",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 5535642,
+      "primary_designation": "IC 2177",
+      "common_name": null,
+      "object_type": "reflection_nebula",
+      "ra_deg": 106.10416666666667,
+      "dec_deg": -10.455,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 2177",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 1027",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 223.68-01.86",
+          "kind": "designation"
+        },
+        {
+          "alias": "VDB 93",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 870083,
+      "primary_designation": "IC 443",
+      "common_name": "Jellyfish Nebula",
+      "object_type": "supernova_remnant",
+      "ra_deg": 94.25,
+      "dec_deg": 22.5699996948,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 443",
+          "kind": "designation"
+        },
+        {
+          "alias": "Jellyfish Nebula",
+          "kind": "common_name"
+        },
+        {
+          "alias": "LBN 844",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 189.13+02.97",
+          "kind": "designation"
+        },
+        {
+          "alias": "Gem A",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1511761,
+      "primary_designation": "IC 5370",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 0.03814843208,
+      "dec_deg": 32.73847053066,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 5370",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1372336,
+      "primary_designation": "IC 1640",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 17.963734689810003,
+      "dec_deg": -0.6303610131100001,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 1640",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1437803,
+      "primary_designation": "IC 1771",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 30.566062040929992,
+      "dec_deg": 9.968587325710002,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 1771",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 620642,
+      "primary_designation": "IC 1894",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 47.60612510911999,
+      "dec_deg": 19.60661825118,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 1894",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 281212,
+      "primary_designation": "IC 356",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 61.94536232896001,
+      "dec_deg": 69.81242103478,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 356",
+          "kind": "designation"
+        },
+        {
+          "alias": "APG 213",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 959909,
+      "primary_designation": "IC 468",
+      "common_name": null,
+      "object_type": "emission_nebula",
+      "ra_deg": 109.5,
+      "dec_deg": -13.1,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 468",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 1040",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 227.63-00.08",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1630053,
+      "primary_designation": "IC 2472",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 141.64046981173,
+      "dec_deg": 21.38501282433,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 2472",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1775603,
+      "primary_designation": "IC 654",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 163.45994208718,
+      "dec_deg": -11.72563376671,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 654",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1826254,
+      "primary_designation": "IC 2934",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 173.58144583333333,
+      "dec_deg": 13.321994444444444,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 2934",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1910945,
+      "primary_designation": "IC 3147",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 184.82163730317998,
+      "dec_deg": 12.01617422758,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 3147",
+          "kind": "designation"
+        },
+        {
+          "alias": "IC 3147A",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1933764,
+      "primary_designation": "IC 3442",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 187.83409846090998,
+      "dec_deg": 14.11518587877,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 3442",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1990511,
+      "primary_designation": "IC 3744",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 191.42303351145,
+      "dec_deg": 19.50055061421,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 3744",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 6102491,
+      "primary_designation": "IC 4098",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 195.51593177684998,
+      "dec_deg": 37.98091623293,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 4098",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2161535,
+      "primary_designation": "IC 905",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 205.01218639749996,
+      "dec_deg": 23.14298411807,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 905",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 516816,
+      "primary_designation": "IC 1029",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 218.11359849291998,
+      "dec_deg": 49.90462899187,
+      "v_mag": 12.65,
+      "aliases": [
+        {
+          "alias": "IC 1029",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 376754,
+      "primary_designation": "IC 1187",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 239.79250140838002,
+      "dec_deg": 70.5570325024,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 1187",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3416813,
+      "primary_designation": "IC 4713",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 277.49719087333995,
+      "dec_deg": -67.22442629476,
+      "v_mag": 14.04,
+      "aliases": [
+        {
+          "alias": "IC 4713",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3434578,
+      "primary_designation": "IC 4901",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 298.59816761944,
+      "dec_deg": -58.71360829052,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 4901",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1281416,
+      "primary_designation": "IC 1356",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 315.72083464129,
+      "dec_deg": -15.811557642480002,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 1356",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3351749,
+      "primary_designation": "IC 5213",
+      "common_name": null,
+      "object_type": "galaxy",
+      "ra_deg": 336.26987661774,
+      "dec_deg": -60.47659732169,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "IC 5213",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 759357,
+      "primary_designation": "* 103 Tau",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 77.02759314779,
+      "dec_deg": 24.265174608780004,
+      "v_mag": 5.5,
+      "aliases": [
+        {
+          "alias": "* 103 Tau",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 1750 2316",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3372869,
+      "primary_designation": "2MASS J13272898-4722472",
+      "common_name": null,
+      "object_type": "planetary_nebula",
+      "ra_deg": 201.87078907271996,
+      "dec_deg": -47.379805583890004,
+      "v_mag": 13.16,
+      "aliases": [
+        {
+          "alias": "2MASS J13272898-4722472",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 5139 5701",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3253618,
+      "primary_designation": "NAME SMC",
+      "common_name": "SMC",
+      "object_type": "galaxy",
+      "ra_deg": 13.158333333333333,
+      "dec_deg": -72.80027777777778,
+      "v_mag": 2.2,
+      "aliases": [
+        {
+          "alias": "NAME SMC",
+          "kind": "designation"
+        },
+        {
+          "alias": "SMC",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 292",
+          "kind": "designation"
+        },
+        {
+          "alias": "Nubecula Minor",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Small Magellanic Cloud",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2688497,
+      "primary_designation": "AGAL G040.121+01.500",
+      "common_name": null,
+      "object_type": "emission_nebula",
+      "ra_deg": 284.80899999999997,
+      "dec_deg": 7.081,
+      "v_mag": 12.74,
+      "aliases": [
+        {
+          "alias": "AGAL G040.121+01.500",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3118935,
+      "primary_designation": "BRHT 49b",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 79.82083333333333,
+      "dec_deg": -69.78833333333333,
+      "v_mag": 13.21,
+      "aliases": [
+        {
+          "alias": "BRHT 49b",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 1921W",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 155383,
+      "primary_designation": "LDN 1053",
+      "common_name": null,
+      "object_type": "dark_nebula",
+      "ra_deg": 314.84208333333333,
+      "dec_deg": 55.62972222222222,
+      "v_mag": 13.75,
+      "aliases": [
+        {
+          "alias": "LDN 1053",
+          "kind": "designation"
+        },
+        {
+          "alias": "Barnard 357",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 164199,
+      "primary_designation": "CTB 1",
+      "common_name": null,
+      "object_type": "supernova_remnant",
+      "ra_deg": 359.8041666666667,
+      "dec_deg": 62.43666666666666,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "CTB 1",
+          "kind": "designation"
+        },
+        {
+          "alias": "PN A66 85",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3240860,
+      "primary_designation": "Ced 112",
+      "common_name": null,
+      "object_type": "reflection_nebula",
+      "ra_deg": 167.46833333333336,
+      "dec_deg": -76.61583333333333,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "Ced 112",
+          "kind": "designation"
+        },
+        {
+          "alias": "IC 2631",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 5242915,
+      "primary_designation": "ClG J1236+1240",
+      "common_name": null,
+      "object_type": "galaxy_cluster",
+      "ra_deg": 189.11916666666664,
+      "dec_deg": 12.405833333333334,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "ClG J1236+1240",
+          "kind": "designation"
+        },
+        {
+          "alias": "IC 3574",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1186182,
+      "primary_designation": "NAME Fornax H3",
+      "common_name": "For 3",
+      "object_type": "globular_cluster",
+      "ra_deg": 39.95066666666666,
+      "dec_deg": -34.25794444444444,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NAME Fornax H3",
+          "kind": "designation"
+        },
+        {
+          "alias": "C 0237-345",
+          "kind": "designation"
+        },
+        {
+          "alias": "For 3",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Fornax 3",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Fornax C3",
+          "kind": "common_name"
+        },
+        {
+          "alias": "NGC 1049",
+          "kind": "designation"
+        },
+        {
+          "alias": "Cluster 3 in Fornax",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Fornax Dwarf Cluster 3",
+          "kind": "common_name"
+        },
+        {
+          "alias": "Fornax H3",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 11631221,
+      "primary_designation": "BD+66 1669A",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 0.12195996920541666,
+      "dec_deg": 67.21678671153694,
+      "v_mag": 10.72,
+      "aliases": [
+        {
+          "alias": "BD+66 1669A",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 7822 12",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 207140,
+      "primary_designation": "BD+60 485",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 37.41070647799,
+      "dec_deg": 61.12787571051,
+      "v_mag": 9.44,
+      "aliases": [
+        {
+          "alias": "BD+60 485",
+          "kind": "designation"
+        },
+        {
+          "alias": "IC 1805 24",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 180114,
+      "primary_designation": "Cl Melotte 20 521",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 50.599560000000004,
+      "dec_deg": 51.66553899999999,
+      "v_mag": 11.727,
+      "aliases": [
+        {
+          "alias": "Cl Melotte 20 521",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 661344,
+      "primary_designation": "Cl Melotte 22 322",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 56.0810751209,
+      "dec_deg": 24.260813727899997,
+      "v_mag": 12.18,
+      "aliases": [
+        {
+          "alias": "Cl Melotte 22 322",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 245184,
+      "primary_designation": "Cl Waterloo 1",
+      "common_name": null,
+      "object_type": "open_cluster",
+      "ra_deg": 64.68208333333334,
+      "dec_deg": 52.863055555555555,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "Cl Waterloo 1",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 719700,
+      "primary_designation": "HD 29608",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 70.10609459801,
+      "dec_deg": 16.51368452653,
+      "v_mag": 9.475,
+      "aliases": [
+        {
+          "alias": "HD 29608",
+          "kind": "designation"
+        },
+        {
+          "alias": "Cl Melotte 25 185",
+          "kind": "designation"
+        },
+        {
+          "alias": "Cl Melotte 25 312",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 797818,
+      "primary_designation": "PN K 1-7",
+      "common_name": null,
+      "object_type": "planetary_nebula",
+      "ra_deg": 82.939575,
+      "dec_deg": 6.933772222222222,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "PN K 1-7",
+          "kind": "designation"
+        },
+        {
+          "alias": "PN A66 10",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 6223327,
+      "primary_designation": "NAME LW426w",
+      "common_name": "LW426w",
+      "object_type": "open_cluster",
+      "ra_deg": 93.22083333333333,
+      "dec_deg": -68.25972222222222,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "NAME LW426w",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 2214w",
+          "kind": "designation"
+        },
+        {
+          "alias": "LW426w",
+          "kind": "common_name"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 963192,
+      "primary_designation": "CD-25 4255",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 108.62784396203,
+      "dec_deg": -25.80320859007,
+      "v_mag": 9.984,
+      "aliases": [
+        {
+          "alias": "CD-25 4255",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 2354 248",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 1045887,
+      "primary_designation": "BD-05 2403",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 123.15212868804,
+      "dec_deg": -5.66399989597,
+      "v_mag": 9.74,
+      "aliases": [
+        {
+          "alias": "BD-05 2403",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 2548 773",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3220415,
+      "primary_designation": "V* GV Car",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 166.3870313697,
+      "dec_deg": -58.73051114889,
+      "v_mag": 8.91,
+      "aliases": [
+        {
+          "alias": "V* GV Car",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 3532 98",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 3406938,
+      "primary_designation": "CD-47 8903",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 211.8970416666667,
+      "dec_deg": -48.38402777777778,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "CD-47 8903",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 5460 31",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2315161,
+      "primary_designation": "HD 152219",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 253.48169921219,
+      "dec_deg": -41.88097122313,
+      "v_mag": 7.569,
+      "aliases": [
+        {
+          "alias": "HD 152219",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6231 254",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2511500,
+      "primary_designation": "LDN 55",
+      "common_name": null,
+      "object_type": "dark_nebula",
+      "ra_deg": 260.75,
+      "dec_deg": -23.883333333333333,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "LDN 55",
+          "kind": "designation"
+        },
+        {
+          "alias": "Barnard 69",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2581956,
+      "primary_designation": "[DB2002b] G14.54+7.05",
+      "common_name": null,
+      "object_type": "dark_nebula",
+      "ra_deg": 267.875,
+      "dec_deg": -12.866666666666667,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "[DB2002b] G14.54+7.05",
+          "kind": "designation"
+        },
+        {
+          "alias": "Barnard 285",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2550680,
+      "primary_designation": "HD 168463",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 275.1261089527,
+      "dec_deg": -17.10202186126,
+      "v_mag": 9.635,
+      "aliases": [
+        {
+          "alias": "HD 168463",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6613 74",
+          "kind": "designation"
+        },
+        {
+          "alias": "VDB 121g",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2628022,
+      "primary_designation": "V* FN Sct",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 282.69468193025,
+      "dec_deg": -5.202198370869999,
+      "v_mag": 12.17,
+      "aliases": [
+        {
+          "alias": "V* FN Sct",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6704 2",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 6878754,
+      "primary_designation": "Cl* NGC 6811 SAN 110",
+      "common_name": null,
+      "object_type": "double_star",
+      "ra_deg": 294.2675486395258,
+      "dec_deg": 46.30214867620667,
+      "v_mag": 11.499,
+      "aliases": [
+        {
+          "alias": "Cl* NGC 6811 SAN 110",
+          "kind": "designation"
+        },
+        {
+          "alias": "NGC 6811 68",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 2907504,
+      "primary_designation": "LBN 071.62-05.50",
+      "common_name": null,
+      "object_type": "emission_nebula",
+      "ra_deg": 307.925,
+      "dec_deg": 30.600000000000005,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "LBN 071.62-05.50",
+          "kind": "designation"
+        },
+        {
+          "alias": "LBN 169",
+          "kind": "designation"
+        }
+      ]
+    },
+    {
+      "simbad_oid": 120013,
+      "primary_designation": "Barnard 162",
+      "common_name": null,
+      "object_type": "dark_nebula",
+      "ra_deg": 325.3,
+      "dec_deg": 56.31666666666667,
+      "v_mag": null,
+      "aliases": [
+        {
+          "alias": "Barnard 162",
+          "kind": "designation"
+        }
+      ]
+    }
+  ]
+}

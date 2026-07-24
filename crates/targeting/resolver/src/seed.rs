@@ -202,6 +202,23 @@ pub fn bundled() -> Result<SeedAsset, SeedError> {
     SeedAsset::from_json(RAW)
 }
 
+/// Stripped E2E seed (~200 entries vs ~13k in the full seed) compiled from
+/// `assets/seed/seed-e2e.json`. Contains all Messier objects plus a
+/// coordinate/type-diverse NGC/IC/other subset that covers every E2E test
+/// scenario without the ~2.5s warm cost of the full 13k-row seed.
+///
+/// Used by the E2E pre-warm harness (`crates/e2e-tests`) to build a cache
+/// file once per shard job, then copy it into each instance's appdata.
+///
+/// # Errors
+///
+/// Returns [`SeedError::Parse`] if the embedded asset is malformed.
+pub fn bundled_e2e() -> Result<SeedAsset, SeedError> {
+    const RAW: &[u8] =
+        include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../assets/seed/seed-e2e.json"));
+    SeedAsset::from_json(RAW)
+}
+
 /// Whether the redb cache is empty (first run — spec 052 P1 D2/T012).
 ///
 /// An empty cache means neither the bundled seed nor any durable
@@ -606,6 +623,35 @@ mod tests {
         // Spot-check a Messier object is present.
         let has_m31 = asset.entries.iter().any(|e| e.primary_designation == "M 31");
         assert!(has_m31, "seed must include M 31");
+    }
+
+    #[test]
+    fn bundled_e2e_asset_covers_all_test_scenarios() {
+        let asset = bundled_e2e().expect("e2e seed asset must parse");
+        assert!(asset.version >= 1);
+        // Must exceed the bundled_asset_loads_and_covers threshold.
+        assert!(
+            asset.entries.len() >= 110,
+            "e2e seed must have >= 110 entries for unit test compatibility, got {}",
+            asset.entries.len()
+        );
+        // All E2E-required targets present.
+        for required in ["M 1", "M 31", "M 33", "M 42"] {
+            assert!(
+                asset.entries.iter().any(|e| e.primary_designation == required),
+                "e2e seed must include {required}"
+            );
+        }
+        // v_mag coverage must exceed the 20% threshold from
+        // `bundled_asset_has_v_mag_coverage`.
+        let with_v_mag = asset.entries.iter().filter(|e| e.v_mag.is_some()).count();
+        #[allow(clippy::cast_precision_loss)]
+        let coverage = with_v_mag as f64 / asset.entries.len() as f64;
+        assert!(
+            coverage > 0.20,
+            "e2e seed v_mag coverage {:.1}% is below the 20% threshold",
+            coverage * 100.0
+        );
     }
 
     /// Regression guard for #696: the committed asset shipped for a long

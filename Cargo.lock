@@ -1599,6 +1599,8 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
+ "simbad-resolver",
+ "targeting_resolver",
  "tempfile",
  "thirtyfour",
  "tokio",

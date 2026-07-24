@@ -25,3 +25,7 @@ tempfile = { workspace = true }
 # lifecycle::TransitionRequest), unlike most other request ids (plain
 # String) — a hand-crafted non-hex placeholder fails IPC deserialization.
 uuid = { workspace = true }
+# Pre-warm the resolve cache once per shard to eliminate the 13k-row seed
+# load from every individual E2E app boot (bead astro-plan-v84u).
+targeting_resolver = { path = "../targeting/resolver" }
+simbad-resolver = "0.4.0"
