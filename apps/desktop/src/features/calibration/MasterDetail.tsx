@@ -56,7 +56,6 @@ import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
 import { SessionListPopover } from './SessionListPopover';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
-import { useMasterDetail } from './useMasterDetail';
 import { MasterArchiveFlow } from './MasterArchiveFlow';
 import { buildMasterTitle, buildFingerprintProps } from './master-detail-model';
 
@@ -128,11 +127,11 @@ export function MasterDetail({
   });
   // #642: shares the same inventory-sources query SessionsPage's Reveal
   // action reads (`queryKeys.inventory.all`) — no private fetch.
-  const sourcesQuery = useInventorySources();
+  const _sourcesQuery = useInventorySources();
 
   // #886: single-master archive plan generation + review/apply.
-  const generateArchivePlan = useGenerateMasterArchivePlan();
-  const invalidateMaster = useInvalidateCalibrationMaster();
+  const _generateArchivePlan = useGenerateMasterArchivePlan();
+  const _invalidateMaster = useInvalidateCalibrationMaster();
   const [archiveReviewPlanId, setArchiveReviewPlanId] = useState<string | null>(
     null,
   );
@@ -189,7 +188,6 @@ export function MasterDetail({
     sessionsQuery.isFetching,
     sessionsQuery.error,
   ]);
-
 
   if (!master) {
     return (
