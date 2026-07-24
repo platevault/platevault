@@ -230,47 +230,75 @@ export function __setOnboardingStateForTest(
   emit();
 }
 
-// ── Replay signal (T015) ──────────────────────────────────────────────────────
+// ── Walk-active gate + replay signal (T015) ───────────────────────────────────
 //
-// `requestOrientationReplay` is called from Settings → Advanced. It must live
-// in `store.ts` (not `OrientationWalk.tsx`) so callers don't pull in the
-// joyrideAdapter and react-joyride statically. The signal is a plain boolean
-// consumed and cleared by the OrientationWalk component on mount.
+// Shell gate: `setupCompleted && (!orientationDone || walkActive)`.
+// This keeps the lazy OrientationWalk chunk unloaded for users who have
+// already completed the walk AND have not requested a replay — the common
+// steady-state after first run.
+//
+// _walkActive is set BEFORE OrientationWalk mounts (by requestOrientationReplay
+// for the replay path, or by setWalkActive inside OrientationWalk on auto-run
+// start) and cleared only when the walk finishes/skips. This prevents the
+// consume-unmount race: clearing _replayPending does not collapse the Shell
+// gate because _walkActive holds it open for the full walk lifetime.
 
 let _replayPending = false;
-const _replaySubs = new Set<() => void>();
+let _walkActive = false;
+const _walkSubs = new Set<() => void>();
 
-function replayEmit(): void {
-  for (const fn of _replaySubs) fn();
+function walkEmit(): void {
+  for (const fn of _walkSubs) fn();
 }
 
 /**
- * Request an orientation walk replay (FR-005 / T015). Idempotent — multiple
- * calls before the walk mounts collapse to a single run. The OrientationWalk
- * component clears the signal on mount via `consumeOrientationReplay`.
+ * Request an orientation walk replay (FR-005 / T015). Sets _walkActive so the
+ * Shell gate opens immediately (before mount), and _replayPending so the walk
+ * component knows to skip the orientationDone check.
  */
 export function requestOrientationReplay(): void {
   _replayPending = true;
-  replayEmit();
+  _walkActive = true;
+  walkEmit();
 }
 
-/** Called by OrientationWalk on mount: returns true once and resets. */
+/**
+ * Signal that the walk has started (auto-run or replay). Called by
+ * OrientationWalk's launch path so the Shell gate stays open for the full
+ * duration even after the replay request is consumed.
+ */
+export function setWalkActive(active: boolean): void {
+  if (_walkActive === active) return;
+  _walkActive = active;
+  walkEmit();
+}
+
+/** Consume the one-shot replay request. Returns true and resets if pending. */
 export function consumeOrientationReplay(): boolean {
   if (!_replayPending) return false;
   _replayPending = false;
+  // Do NOT emit: _walkActive is already true and must stay true.
   return true;
 }
 
-/** React hook: true while a replay is pending (drives Shell's mount gate). */
-export function useOrientationReplayPending(): boolean {
+/**
+ * React hook: composite gate value for Shell — true when a walk is running or
+ * a replay has been requested. Drives `!orientationDone || walkActive` in Shell.
+ */
+export function useWalkActive(): boolean {
   return useSyncExternalStore(
     (fn) => {
-      _replaySubs.add(fn);
-      return () => _replaySubs.delete(fn);
+      _walkSubs.add(fn);
+      return () => _walkSubs.delete(fn);
     },
-    () => _replayPending,
-    () => _replayPending,
+    () => _walkActive,
+    () => _walkActive,
   );
+}
+
+/** @internal Plain getter for tests — avoids calling a hook outside React. */
+export function isWalkActive(): boolean {
+  return _walkActive;
 }
 
 // ── React hooks ────────────────────────────────────────────────────────────────

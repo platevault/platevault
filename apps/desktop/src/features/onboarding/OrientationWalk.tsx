@@ -39,7 +39,7 @@ import {
   completeOrientation,
   startOnboardingStateSync,
   consumeOrientationReplay,
-  useOrientationReplayPending,
+  setWalkActive,
 } from './store';
 import { ORIENTATION_STOPS } from './orientationSteps';
 import type { OnboardingOrientationOutcome } from '@/bindings/index';
@@ -61,10 +61,6 @@ export function OrientationWalk() {
   const navigate = useNavigate();
   const [setupCompleted] = usePreference('setupCompleted');
   const onboarding = useOnboardingState();
-  // Subscribe to the replay signal so this effect re-runs when the Settings →
-  // Advanced button fires requestOrientationReplay (T015). The component is
-  // always mounted once setup completes, so there is no mount-timing race.
-  const replayPending = useOrientationReplayPending();
 
   const [active, setActive] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
@@ -81,25 +77,28 @@ export function OrientationWalk() {
     finishedRef.current = false;
     setStepIndex(0);
     setActive(true);
+    // Keep the Shell gate open for the full walk lifetime.
+    setWalkActive(true);
   }, []);
 
   // Auto-run (FR-001/FR-004) + replay (T015).
-  // For replay: when replayPending becomes true, consumeOrientationReplay()
-  // clears it (preventing a second fire) and launches. The walk is always
-  // mounted once setup completes so consume runs inside a stable component —
-  // there is no Shell-level unmount race.
+  // consumeOrientationReplay() returns true when the Settings replay button
+  // was pressed; it clears _replayPending but does NOT emit to _walkSubs, so
+  // the Shell gate (_walkActive) stays open and OrientationWalk is not
+  // unmounted between this effect and the next render that calls launch().
   useEffect(() => {
     if (active) return;
     if (!setupCompleted || !onboarding || isOnboardingSuppressed()) return;
-    if (replayPending && consumeOrientationReplay()) {
-      // Replay path: ignore orientationDone, allow re-launch after a finish.
+    if (consumeOrientationReplay()) {
+      // Replay path: _walkActive already true (set by requestOrientationReplay
+      // before mount). Ignore orientationDone; allow re-launch after a finish.
       autoLaunchedRef.current = true;
       launch();
     } else if (!autoLaunchedRef.current && !onboarding.flags.orientationDone) {
       autoLaunchedRef.current = true;
       launch();
     }
-  }, [setupCompleted, onboarding, active, replayPending, launch]);
+  }, [setupCompleted, onboarding, active, launch]);
 
   // Navigate to the current stop's real page (FR-002). Absent route = stay.
   useEffect(() => {
@@ -112,6 +111,9 @@ export function OrientationWalk() {
     if (finishedRef.current) return;
     finishedRef.current = true;
     setActive(false);
+    // Release the Shell gate after the walk ends so done-users unload the chunk
+    // on next remount (e.g. StrictMode) and future sessions skip the load.
+    setWalkActive(false);
     void completeOrientation(outcome).catch((err) => {
       console.warn('[onboarding] orientation complete failed:', err);
     });

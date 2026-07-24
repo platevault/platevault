@@ -20,16 +20,17 @@ import { LogPanelProvider, useLogPanel } from './LogPanelContext';
 import { OperationStatusProvider } from './OperationStatusContext';
 import { PageStatusProvider } from './PageStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
+import { useOnboardingState, useWalkActive } from '@/features/onboarding/store';
 import { loadObservingState } from '@/features/targets/observing-sites/site-store';
 import {
   startUpdateSubscription,
   stopUpdateSubscription,
 } from '@/data/updateSubscription';
 
-// react-joyride is large (~100 kB gz). Load it only after first-run setup
-// completes — it is never needed before that point. Once loaded the component
-// stays mounted for the session so OrientationWalk's internal auto-run and
-// replay logic are never cut off by an unmount (see store.ts replayPending).
+// react-joyride is large (~100 kB gz). The lazy chunk loads only when
+// walkReady is true — i.e. never for users who finished the walk and haven't
+// requested a replay. walkActive holds the gate open for the full walk
+// lifetime so consuming the replay request flag can't collapse it mid-mount.
 const OrientationWalk = lazy(() =>
   import('@/features/onboarding/OrientationWalk').then((m) => ({
     default: m.OrientationWalk,
@@ -38,13 +39,20 @@ const OrientationWalk = lazy(() =>
 
 function ShellInner() {
   const prefs = usePreferences();
+  const onboarding = useOnboardingState();
+  const walkActive = useWalkActive();
   const { expanded } = useLogPanel();
   const navigate = useNavigate();
 
-  // Mount OrientationWalk (triggering the joyride lazy-chunk load) as soon as
-  // setup is complete. The component owns all run/skip/replay decisions; the
-  // Shell gate only prevents an unnecessary chunk load during the setup flow.
-  const walkReady = prefs.setupCompleted;
+  // Gate: mount (and load) OrientationWalk when setup is done AND either:
+  //   • orientationDone is false — first-run auto-run path, OR
+  //   • walkActive is true — a replay was requested or the walk is running.
+  // Users with orientationDone=true and no pending/active walk never load the
+  // joyride chunk. walkActive is set by requestOrientationReplay BEFORE mount
+  // so the gate stays open through the entire walk, surviving consume().
+  const walkReady =
+    prefs.setupCompleted &&
+    (onboarding === null || !onboarding.flags.orientationDone || walkActive);
 
   // Redirect to /setup if first-run setup is not completed
   useEffect(() => {

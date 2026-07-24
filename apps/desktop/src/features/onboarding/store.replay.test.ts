@@ -2,41 +2,41 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Regression test for the replay-signal consume-unmount race (T015).
+ * Unit tests for the orientation-walk gate signals (T015).
  *
- * Root cause: when consumeOrientationReplay() cleared _replayPending and
- * called replayEmit(), Shell's useOrientationReplayPending() hook re-evaluated
- * to false and unmounted OrientationWalk before setActive(true) committed —
- * causing the tooltip to never appear. Fix: OrientationWalk is always mounted
- * once setupCompleted; consumeOrientationReplay is called inside a stable
- * mounted component, not from Shell's gate.
+ * Shell gate invariant: `setupCompleted && (!orientationDone || walkActive)`.
+ * walkActive is set BEFORE OrientationWalk mounts (by requestOrientationReplay)
+ * and cleared only when the walk finishes/skips (by setWalkActive(false)).
+ * This prevents the consume-unmount race: consuming _replayPending does not
+ * emit to _walkSubs, so the gate never collapses mid-walk.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   requestOrientationReplay,
   consumeOrientationReplay,
+  setWalkActive,
+  isWalkActive,
 } from './store';
 
-// Each test gets a clean slate via re-import; reset via consume.
+// Reset walkActive between tests via setWalkActive(false).
 beforeEach(() => {
-  // Drain any pending signal left by a prior test.
-  consumeOrientationReplay();
+  consumeOrientationReplay(); // drain any leftover pending signal
+  setWalkActive(false); // reset walkActive to its idle state
 });
 
-describe('orientationReplay signal (T015)', () => {
-  it('is false by default', () => {
+describe('consumeOrientationReplay — one-shot semantics (T015)', () => {
+  it('returns false when no replay was requested', () => {
     expect(consumeOrientationReplay()).toBe(false);
   });
 
   it('returns true exactly once after requestOrientationReplay', () => {
     requestOrientationReplay();
     expect(consumeOrientationReplay()).toBe(true);
-    // Second consume must return false — signal is cleared after first consume.
     expect(consumeOrientationReplay()).toBe(false);
   });
 
-  it('idempotent: multiple requests before consume still fire only once', () => {
+  it('idempotent: multiple requests before consume collapse to one', () => {
     requestOrientationReplay();
     requestOrientationReplay();
     expect(consumeOrientationReplay()).toBe(true);
@@ -48,5 +48,28 @@ describe('orientationReplay signal (T015)', () => {
     consumeOrientationReplay();
     requestOrientationReplay();
     expect(consumeOrientationReplay()).toBe(true);
+  });
+});
+
+describe('walkActive gate — Shell does not collapse mid-walk (T015)', () => {
+  it('walkActive is false by default (no walk running, no request)', () => {
+    // Shell gate: !orientationDone || walkActive — done users never load chunk.
+    expect(isWalkActive()).toBe(false);
+  });
+
+  it('requestOrientationReplay sets walkActive BEFORE consume (gate stays open)', () => {
+    requestOrientationReplay();
+    // Gate is open because walkActive=true — even after consume clears pending.
+    expect(isWalkActive()).toBe(true);
+    consumeOrientationReplay(); // simulates OrientationWalk mounting
+    // walkActive must still be true — the mount cannot be collapsed here.
+    expect(isWalkActive()).toBe(true);
+  });
+
+  it('setWalkActive(false) collapses the gate after the walk ends', () => {
+    requestOrientationReplay();
+    consumeOrientationReplay();
+    setWalkActive(false); // simulates finish() or skip()
+    expect(isWalkActive()).toBe(false);
   });
 });
