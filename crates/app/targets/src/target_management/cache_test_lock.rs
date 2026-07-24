@@ -19,7 +19,7 @@
 //! round-trip unit tests, which manipulate these same statics directly and
 //! are not `async`.
 
-use persistence_db::Database;
+use persistence_core::Database;
 
 static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 

@@ -8,7 +8,9 @@
 //! pass-through; richer filtering logic (e.g. confidence-aware sorting) will
 //! land here when US1 acceptance tests demand it.
 
-use persistence_db::repositories::lifecycle::{LedgerFilter, LedgerRow, LifecycleRepository};
+use persistence_lifecycle::repositories::lifecycle::{
+    LedgerFilter, LedgerRow, LifecycleRepository,
+};
 
 use crate::lifecycle_use_case::LifecycleError;
 

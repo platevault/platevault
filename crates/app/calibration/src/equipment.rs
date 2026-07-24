@@ -18,15 +18,15 @@ use contracts_core::equipment::{
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_db::repositories::equipment as repo;
-use persistence_db::repositories::q_calibration;
+use persistence_calibration::repositories::equipment as repo;
+use persistence_calibration::repositories::q_calibration;
 use sqlx::SqlitePool;
 
 use crate::audit_ids::audit_entity_id;
 
 // ── Error mapping ──────────────────────────────────────────────────────────
 
-fn db_to_contract(e: persistence_db::DbError) -> ContractError {
+fn db_to_contract(e: persistence_core::DbError) -> ContractError {
     let msg = e.to_string();
     drop(e);
     if msg.contains("not found") {
@@ -150,7 +150,7 @@ async fn delete_equipment(
     bus: &EventBus,
     action: &str,
     id: &str,
-    result: Result<(), persistence_db::DbError>,
+    result: Result<(), persistence_core::DbError>,
 ) -> Result<(), ContractError> {
     match result {
         Ok(()) => {
@@ -796,7 +796,7 @@ pub async fn find_or_create_filter_by_name(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::Database;
+    use persistence_core::Database;
 
     async fn setup() -> (Database, EventBus) {
         let db = Database::in_memory().await.expect("in-memory DB");

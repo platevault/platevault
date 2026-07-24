@@ -22,7 +22,12 @@ Primary paths:
 - `crates/metadata/xisf/`: XISF metadata extraction adapter boundary.
 - `crates/metadata/video/`: planetary/lunar video metadata adapter boundary.
 - `crates/audit/`: audit event model.
-- `crates/persistence/db/`: persistence/repository boundary.
+- `crates/persistence/core/`: Database, pool, WAL, migrations, shared audit-write primitives.
+- `crates/persistence/calibration/`: calibration equipment, assignments, tolerances, calibration queries.
+- `crates/persistence/inbox/`: inbox items, classification, metadata, source groups.
+- `crates/persistence/lifecycle/`: lifecycle transitions, provenance, settings, onboarding, audit events, first-run.
+- `crates/persistence/plans/`: plans, plan-apply, projects, artifacts, manifests, source views.
+- `crates/persistence/targets/`: targets, framing, inventory, resolver queries, target-management queries.
 - `crates/contracts/core/`: Rust contract DTO boundary.
 - `crates/app/core/`: application use-case orchestration boundary.
 - `packages/contracts/`: language-neutral schemas and generated TypeScript

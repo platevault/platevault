@@ -63,22 +63,24 @@ pub async fn run_reconcile(
     bus: &audit::bus::EventBus,
     req: &InventoryReconcileRunRequest,
 ) -> Result<InventoryReconcileRunResponse, ContractError> {
-    let retry_pending = persistence_db::repositories::projects::begin_source_missing_health_check(
-        pool,
-        &req.root_id,
-    )
-    .await
-    .map_err(db_err)?;
+    let retry_pending =
+        persistence_plans::repositories::projects::begin_source_missing_health_check(
+            pool,
+            &req.root_id,
+        )
+        .await
+        .map_err(db_err)?;
 
     let response = match reconcile::run_reconcile(pool, bus, req).await {
         Ok(response) => response,
         Err(error) => {
             if !retry_pending {
-                let _ = persistence_db::repositories::projects::clear_source_missing_health_check(
-                    pool,
-                    &req.root_id,
-                )
-                .await;
+                let _ =
+                    persistence_plans::repositories::projects::clear_source_missing_health_check(
+                        pool,
+                        &req.root_id,
+                    )
+                    .await;
             }
             return Err(error);
         }
@@ -104,11 +106,12 @@ pub async fn run_reconcile(
         }
     }
 
-    if let Err(error) = persistence_db::repositories::projects::clear_source_missing_health_check(
-        pool,
-        &req.root_id,
-    )
-    .await
+    if let Err(error) =
+        persistence_plans::repositories::projects::clear_source_missing_health_check(
+            pool,
+            &req.root_id,
+        )
+        .await
     {
         tracing::warn!(%error, "failed to clear project source-missing health retry");
     }
@@ -142,7 +145,7 @@ fn raw_frame_type_from_calibration_kind(kind: &str) -> RawFrameType {
     }
 }
 
-fn frame_row_from_repo_row(r: persistence_db::repositories::q_core::FileRecordRow) -> FrameRow {
+fn frame_row_from_repo_row(r: persistence_core::repositories::q_core::FileRecordRow) -> FrameRow {
     FrameRow {
         id: r.id,
         root_id: r.root_id,
@@ -156,14 +159,14 @@ pub(crate) async fn rows_by_ids(
     pool: &SqlitePool,
     ids: &[String],
 ) -> Result<Vec<FrameRow>, ContractError> {
-    let rows = persistence_db::repositories::q_core::file_records_by_ids(pool, ids)
+    let rows = persistence_core::repositories::q_core::file_records_by_ids(pool, ids)
         .await
         .map_err(db_err)?;
     Ok(rows.into_iter().map(frame_row_from_repo_row).collect())
 }
 
 async fn rows_by_root(pool: &SqlitePool, root_id: &str) -> Result<Vec<FrameRow>, ContractError> {
-    let rows = persistence_db::repositories::q_core::file_records_by_root(pool, root_id)
+    let rows = persistence_core::repositories::q_core::file_records_by_root(pool, root_id)
         .await
         .map_err(db_err)?;
     Ok(rows.into_iter().map(frame_row_from_repo_row).collect())
@@ -183,15 +186,17 @@ pub(crate) async fn owning_session_frame_type(
     let like = format!("%\"{frame_id}\"%");
 
     if let Some(session_id) =
-        persistence_db::repositories::q_core::find_acquisition_session_id_by_frame_like(pool, &like)
-            .await
-            .map_err(db_err)?
+        persistence_core::repositories::q_core::find_acquisition_session_id_by_frame_like(
+            pool, &like,
+        )
+        .await
+        .map_err(db_err)?
     {
         return Ok((Some(session_id), RawFrameType::Light));
     }
 
     if let Some((session_id, kind)) =
-        persistence_db::repositories::q_core::find_calibration_session_by_frame_like(pool, &like)
+        persistence_core::repositories::q_core::find_calibration_session_by_frame_like(pool, &like)
             .await
             .map_err(db_err)?
     {

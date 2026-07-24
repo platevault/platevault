@@ -36,7 +36,7 @@ use std::time::Duration;
 use app_core_cache::DebounceCache;
 use audit::bus::EventBus;
 use audit::event_bus::{LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
-use persistence_db::repositories::projects as repo;
+use persistence_plans::repositories::projects as repo;
 use sqlx::SqlitePool;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ impl DebounceKey {
 #[derive(Debug, thiserror::Error)]
 pub enum HealthError {
     #[error("persistence error: {0}")]
-    Persistence(#[from] persistence_db::DbError),
+    Persistence(#[from] persistence_core::DbError),
     #[error("project not found: {0}")]
     NotFound(String),
 }
@@ -429,8 +429,8 @@ async fn write_auto_transition_audit(
     from_state: &str,
     to_state: &str,
     trigger: &str,
-) -> persistence_db::DbResult<()> {
-    persistence_db::repositories::audit::insert_project_auto_transition(
+) -> persistence_core::DbResult<()> {
+    persistence_lifecycle::repositories::audit::insert_project_auto_transition(
         pool, project_id, from_state, to_state, trigger,
     )
     .await
@@ -442,7 +442,7 @@ async fn write_auto_transition_audit(
 mod tests {
     use audit::bus::EventBus;
     use contracts_core::projects_v2::{ProjectCreateRequest, ProjectSourceAddRequest};
-    use persistence_db::Database;
+    use persistence_core::Database;
     use sqlx::SqlitePool;
     use uuid::Uuid;
 
@@ -520,7 +520,7 @@ mod tests {
         )
         .await
         .unwrap();
-        persistence_db::repositories::projects::update_project_lifecycle(
+        persistence_plans::repositories::projects::update_project_lifecycle(
             &pool,
             &created.project_id,
             "setup_incomplete",
@@ -541,7 +541,7 @@ mod tests {
                 .await
                 .unwrap();
 
-        persistence_db::repositories::projects::update_project_lifecycle(
+        persistence_plans::repositories::projects::update_project_lifecycle(
             &pool,
             &created.project_id,
             "ready",
@@ -570,7 +570,7 @@ mod tests {
         assert!(first.is_some(), "first block signal should be applied");
 
         // Reset lifecycle so a real write would succeed if debounce weren't active.
-        persistence_db::repositories::projects::update_project_lifecycle(
+        persistence_plans::repositories::projects::update_project_lifecycle(
             &pool,
             &created.project_id,
             "setup_incomplete",
@@ -603,7 +603,7 @@ mod tests {
         debounce.invalidate(&DebounceKey::new(&created.project_id, "source_missing"));
 
         // Reset lifecycle so the transition can succeed again.
-        persistence_db::repositories::projects::update_project_lifecycle(
+        persistence_plans::repositories::projects::update_project_lifecycle(
             &pool,
             &created.project_id,
             "setup_incomplete",
@@ -634,9 +634,10 @@ mod tests {
             .unwrap();
         assert!(first.is_some());
 
-        let row = persistence_db::repositories::projects::get_project(&pool, &created.project_id)
-            .await
-            .unwrap();
+        let row =
+            persistence_plans::repositories::projects::get_project(&pool, &created.project_id)
+                .await
+                .unwrap();
         assert_eq!(row.lifecycle, "blocked", "project should be blocked after first signal");
 
         // Second signal immediately — suppressed by debounce.
@@ -646,9 +647,10 @@ mod tests {
         assert!(second.is_none(), "second rapid signal must be debounced");
 
         // Verify: lifecycle unchanged (still blocked, no second write occurred).
-        let row2 = persistence_db::repositories::projects::get_project(&pool, &created.project_id)
-            .await
-            .unwrap();
+        let row2 =
+            persistence_plans::repositories::projects::get_project(&pool, &created.project_id)
+                .await
+                .unwrap();
         assert_eq!(row2.lifecycle, "blocked", "lifecycle unchanged — no double-write");
     }
 }

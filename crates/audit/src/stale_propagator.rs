@@ -103,10 +103,10 @@ pub fn resolve_project_dependents_hook(pool: SqlitePool) -> PropagatorFn {
         // dispatch loop that drives every other registered hook.
         tokio::spawn(async move {
             // DB-boundary: the actual UPDATE statements live in
-            // `persistence_db::repositories::lifecycle` (check-db-boundary.sh
+            // `persistence_lifecycle::repositories::lifecycle` (check-db-boundary.sh
             // forbids raw SQL outside crates/persistence/db).
             if let Err(err) =
-                persistence_db::repositories::lifecycle::mark_project_dependents_stale(
+                persistence_lifecycle::repositories::lifecycle::mark_project_dependents_stale(
                     &pool,
                     &project_id,
                 )
@@ -184,8 +184,8 @@ mod tests {
 
     /// Real migrated DB — `resolve_project_dependents_hook` needs the actual
     /// `processing_artifact`/`prepared_source_view` tables (migration 0002).
-    async fn migrated_test_bus() -> (persistence_db::Database, EventBus) {
-        let db = persistence_db::Database::in_memory().await.expect("in-memory db");
+    async fn migrated_test_bus() -> (persistence_core::Database, EventBus) {
+        let db = persistence_core::Database::in_memory().await.expect("in-memory db");
         db.migrate().await.expect("migrate");
         let bus = EventBus::with_pool(db.pool().clone());
         (db, bus)

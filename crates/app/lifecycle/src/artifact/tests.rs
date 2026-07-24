@@ -3,10 +3,10 @@
 
 use super::*;
 use domain_core::ids::Timestamp;
-use persistence_db::repositories::artifacts as repo;
+use persistence_plans::repositories::artifacts as repo;
 
 async fn make_pool() -> SqlitePool {
-    let db = persistence_db::Database::in_memory().await.unwrap();
+    let db = persistence_core::Database::in_memory().await.unwrap();
     db.migrate().await.unwrap();
     db.pool().clone()
 }

@@ -15,15 +15,15 @@
 //!   items default to per-file evidence).
 //!
 //! Pure orchestration: all DB access goes through
-//! `persistence_db::repositories::inbox`.
+//! `persistence_inbox::repositories::inbox`.
 #![allow(clippy::doc_markdown)]
 
 use std::collections::HashMap;
 
 use app_core_errors::db_err;
 use patterns::{resolve_pattern_str, MetadataBundle};
-use persistence_db::repositories::inbox::{self as repo};
-use persistence_db::repositories::settings as settings_repo;
+use persistence_inbox::repositories::inbox::{self as repo};
+use persistence_lifecycle::repositories::settings as settings_repo;
 use sqlx::SqlitePool;
 
 use contracts_core::error_code::ErrorCode;
@@ -283,10 +283,10 @@ fn parse_binning(s: &str) -> Option<(i32, i32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::repositories::inbox::{
+    use persistence_core::Database;
+    use persistence_inbox::repositories::inbox::{
         InsertEvidence, InsertInboxItem, UpsertFileMetadata,
     };
-    use persistence_db::Database;
 
     async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();

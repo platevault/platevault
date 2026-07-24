@@ -30,7 +30,7 @@ use domain_core::lifecycle::{
     action_review_requirement::action_critical_fields, data_source, inventory,
     plan as plan_lifecycle, plan_requirement::requires_plan, prepared_source, project, projection,
 };
-use persistence_db::repositories::lifecycle::{
+use persistence_lifecycle::repositories::lifecycle::{
     LifecycleRepository, TransitionRequest as RepoTransitionRequest,
 };
 use serde::Serialize;
@@ -645,7 +645,7 @@ fn state_str<T: Serialize>(state: &T) -> String {
 mod tests {
     use super::*;
     use contracts_core::lifecycle::{ProjectState, ProjectTransitionRequest};
-    use persistence_db::repositories::lifecycle::InMemoryLifecycleRepository;
+    use persistence_lifecycle::repositories::lifecycle::InMemoryLifecycleRepository;
 
     async fn test_bus() -> EventBus {
         let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();

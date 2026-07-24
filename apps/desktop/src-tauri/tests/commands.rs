@@ -19,8 +19,8 @@ use contracts_core::lifecycle::{
     ProjectState, ProjectTransitionRequest, TransitionActor, TransitionRequest,
 };
 use contracts_core::provenance::{AssetType, ProvenanceReadRequest};
-use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
-use persistence_db::Database;
+use persistence_core::Database;
+use persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository;
 use tauri::Manager;
 
 use desktop_shell::commands::audit::{audit_export, audit_list};
@@ -324,9 +324,9 @@ fn _plans_apply_compiles_check() {
 async fn plans_retry_requires_terminal_parent() {
     let state = make_plans_state().await;
     // Insert a draft plan (non-terminal).
-    persistence_db::repositories::plans::insert_plan(
+    persistence_plans::repositories::plans::insert_plan(
         state.repo.pool(),
-        &persistence_db::repositories::plans::InsertPlan {
+        &persistence_plans::repositories::plans::InsertPlan {
             id: "parent-draft",
             title: "Draft plan",
             origin: "cleanup",
@@ -562,7 +562,7 @@ async fn roots_remap_apply_via_use_case() {
         .await
         .expect("apply_root_remap failed");
 
-    let (_, path) = persistence_db::repositories::first_run::get_source_kind_and_path(
+    let (_, path) = persistence_lifecycle::repositories::first_run::get_source_kind_and_path(
         db.pool(),
         &resp.source_id,
     )
@@ -609,7 +609,7 @@ async fn sources_set_active_via_use_case() {
         .await
         .expect("set_source_active failed");
 
-    let flags = persistence_db::repositories::first_run::list_active_flags(db.pool())
+    let flags = persistence_lifecycle::repositories::first_run::list_active_flags(db.pool())
         .await
         .expect("list_active_flags failed");
     assert_eq!(flags.get(&resp.source_id), Some(&false));
@@ -617,7 +617,7 @@ async fn sources_set_active_via_use_case() {
 
 #[tokio::test]
 async fn roots_delete_via_use_case_blocks_on_dependents() {
-    use persistence_db::repositories::inbox::{insert_inbox_item, InsertInboxItem};
+    use persistence_inbox::repositories::inbox::{insert_inbox_item, InsertInboxItem};
 
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
@@ -659,7 +659,7 @@ async fn roots_delete_via_use_case_blocks_on_dependents() {
     assert_eq!(err.code, ErrorCode::RootHasDependents);
 
     // Root registration must still exist — no cascade, no partial delete.
-    let sources = persistence_db::repositories::first_run::list_sources(db.pool())
+    let sources = persistence_lifecycle::repositories::first_run::list_sources(db.pool())
         .await
         .expect("list_sources failed");
     assert!(sources.iter().any(|s| s.source_id == resp.source_id));
@@ -691,7 +691,7 @@ async fn roots_delete_via_use_case_succeeds_without_dependents() {
         .await
         .expect("delete_source failed");
 
-    let sources = persistence_db::repositories::first_run::list_sources(db.pool())
+    let sources = persistence_lifecycle::repositories::first_run::list_sources(db.pool())
         .await
         .expect("list_sources failed");
     assert!(sources.iter().all(|s| s.source_id != resp.source_id));
@@ -745,7 +745,7 @@ async fn settings_scope_roundtrip_via_usecase() {
     // logLevel=debug, and a subsequent get of the "advanced" scope returns the
     // updated value. This simulates the stable transport (T015).
     use contracts_core::settings::{SettingsUpdateRequest, SettingsUpdateStatus};
-    use persistence_db::repositories::settings as repo;
+    use persistence_lifecycle::repositories::settings as repo;
 
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
@@ -974,7 +974,7 @@ async fn lifecycle_transition_apply_writes_lifecycle_transition_manifest() {
             .expect("command must not error");
     assert_eq!(response.status, contracts_core::lifecycle::TransitionStatus::Success);
 
-    let (rows, _) = persistence_db::repositories::manifests::list_manifests_for_project(
+    let (rows, _) = persistence_plans::repositories::manifests::list_manifests_for_project(
         state.repo.pool(),
         &project_id.to_string(),
         None,
@@ -998,7 +998,7 @@ async fn lifecycle_ledger_list() {
     let bus = EventBus::with_pool(pool.clone());
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
 
-    let filter = persistence_db::repositories::lifecycle::LedgerFilter::default();
+    let filter = persistence_lifecycle::repositories::lifecycle::LedgerFilter::default();
 
     let result = app_core::ledger_use_case::list_assets_ledger(repo.as_ref(), filter).await;
     assert!(result.is_ok(), "ledger_list failed: {result:?}");

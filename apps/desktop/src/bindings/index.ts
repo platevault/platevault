@@ -594,7 +594,7 @@ export const commands = {
 	 *  This stub is retained for UI compatibility until spec 025 folder-plan
 	 *  integration is wired into `project_setup::create`. The real flow will
 	 *  build on `domain_core::lifecycle::plan::FilesystemPlan` +
-	 *  `persistence_db::repositories::plans` and return a live `PlanDetail`.
+	 *  `persistence_plans::repositories::plans` and return a live `PlanDetail`.
 	 * 
 	 *  # Errors
 	 * 
@@ -1367,6 +1367,8 @@ export const commands = {
 	 * 
 	 *  Roots are fetched from `registered_sources`; each root's `online` flag is
 	 *  set by testing whether its path is currently accessible on the filesystem.
+	 *  Probes run concurrently with a per-root timeout so an offline NAS/SMB root
+	 *  cannot block a tokio worker for the full OS stat timeout.
 	 *  `inbox_count` reflects the real number of unacknowledged inbox items
 	 *  (`pending_classification` or `classified`) across all registered sources.
 	 * 

@@ -5,10 +5,10 @@
 //!
 //! Returns aggregate per-frame-type counts across all unacknowledged inbox
 //! items. Thin orchestration: all SQL lives in
-//! `persistence_db::repositories::inbox::inbox_stats`.
+//! `persistence_inbox::repositories::inbox::inbox_stats`.
 #![allow(clippy::doc_markdown)]
 
-use persistence_db::repositories::inbox as repo;
+use persistence_inbox::repositories::inbox as repo;
 use sqlx::SqlitePool;
 
 use app_core_errors::db_internal_ctx;
@@ -62,8 +62,8 @@ pub async fn inbox_stats(pool: &SqlitePool) -> Result<InboxStatsResponse, Contra
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::repositories::inbox::{InsertEvidence, InsertInboxItem};
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_inbox::repositories::inbox::{InsertEvidence, InsertInboxItem};
 
     async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();

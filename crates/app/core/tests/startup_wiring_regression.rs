@@ -40,7 +40,7 @@
 use app_core::inbox::plan_listener::start_inbox_plan_listener;
 use audit::bus::EventBus;
 use audit::event_bus::{PlanApplyingCompleted, Source, TOPIC_PLAN_APPLYING_COMPLETED};
-use persistence_db::Database;
+use persistence_core::Database;
 use uuid::Uuid;
 
 mod support;

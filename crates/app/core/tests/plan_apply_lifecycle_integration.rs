@@ -14,7 +14,7 @@
 
 mod support;
 
-use persistence_db::repositories::plans as plans_repo;
+use persistence_plans::repositories::plans as plans_repo;
 use uuid::Uuid;
 
 /// Insert a draft plan with `item_count` move items, each pointing at its own

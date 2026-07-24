@@ -10,7 +10,7 @@ path = "src/lib.rs"
 [dependencies]
 audit = { path = "../../audit" }
 contracts_core = { path = "../../contracts/core" }
-persistence_db = { path = "../../persistence/db" }
+persistence_core = { path = "../../persistence/core" }
 anyhow = { workspace = true }
 sqlx.workspace = true
 

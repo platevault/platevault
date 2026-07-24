@@ -43,8 +43,8 @@ fn empty_cache() -> simbad_resolver::RedbCache {
 /// paths used below anchor portably on every platform (see
 /// [`support::TEST_PROJECT_ROOT`] for why leading-slash paths are not used).
 async fn setup() -> (
-    persistence_db::Database,
-    persistence_db::repositories::lifecycle::SqliteLifecycleRepository,
+    persistence_core::Database,
+    persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository,
     audit::bus::EventBus,
 ) {
     let (db, repo, bus) = support::setup().await;
@@ -179,7 +179,7 @@ async fn note_add_update_read_round_trip() {
     assert!(!add_result.updated_at.is_empty(), "updated_at must be populated");
 
     // 2. Read back via persistence layer to confirm the row exists.
-    let note_row = persistence_db::repositories::project_notes::get_note(db.pool(), project_id)
+    let note_row = persistence_plans::repositories::project_notes::get_note(db.pool(), project_id)
         .await
         .expect("get_note query must not fail")
         .expect("note row must exist after upsert");
@@ -196,10 +196,11 @@ async fn note_add_update_read_round_trip() {
     assert_eq!(update_result.project_id, *project_id);
 
     // 4. Read back again — must show the updated content, NOT the original.
-    let updated_row = persistence_db::repositories::project_notes::get_note(db.pool(), project_id)
-        .await
-        .expect("get_note after update must not fail")
-        .expect("note row must exist after update");
+    let updated_row =
+        persistence_plans::repositories::project_notes::get_note(db.pool(), project_id)
+            .await
+            .expect("get_note after update must not fail")
+            .expect("note row must exist after update");
     assert_eq!(
         updated_row.content, "Revised notes: added Ha filter session details.",
         "content must reflect the latest update"

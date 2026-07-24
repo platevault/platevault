@@ -33,13 +33,14 @@ pub async fn note_get(
     req: &TargetNoteGetRequest,
 ) -> Result<TargetNoteGetResult, ContractError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
-    let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
-        .await
-        .map_err(db_err)?;
+    let exists =
+        persistence_targets::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
+            .await
+            .map_err(db_err)?;
     if !exists {
         return Err(not_found(&req.target_id));
     }
-    let notes = persistence_db::repositories::targets::get_target_notes(pool, &req.target_id)
+    let notes = persistence_targets::repositories::targets::get_target_notes(pool, &req.target_id)
         .await
         .map_err(db_err)?;
     Ok(TargetNoteGetResult { notes })
@@ -65,9 +66,10 @@ pub async fn note_update(
     req: &TargetNoteUpdateRequest,
 ) -> Result<TargetNoteUpdateResult, ContractError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
-    let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
-        .await
-        .map_err(db_err)?;
+    let exists =
+        persistence_targets::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
+            .await
+            .map_err(db_err)?;
     if !exists {
         return Err(not_found(&req.target_id));
     }
@@ -84,7 +86,7 @@ pub async fn note_update(
     }
     let stored: Option<&str> = if trimmed.is_empty() { None } else { Some(trimmed) };
     let updated =
-        persistence_db::repositories::targets::set_target_notes(pool, &req.target_id, stored)
+        persistence_targets::repositories::targets::set_target_notes(pool, &req.target_id, stored)
             .await
             .map_err(db_err)?;
     if !updated {

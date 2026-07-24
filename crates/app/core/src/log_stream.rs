@@ -37,7 +37,7 @@ pub const LOG_BUFFER_SIZE: usize = 500;
 #[derive(Debug, thiserror::Error)]
 pub enum LogError {
     #[error("database error: {0}")]
-    Database(#[from] persistence_db::DbError),
+    Database(#[from] persistence_core::DbError),
     #[error("serialisation error: {0}")]
     Serialise(#[from] serde_json::Error),
     #[error("{code}: {message}")]
@@ -193,9 +193,10 @@ pub async fn recent_entries(
 
     // Fetch the most recent N rows ordered by event_id descending, then
     // reverse for oldest-first output.
-    let rows = persistence_db::repositories::events::list_recent_since(pool, since_id, limit)
-        .await
-        .map_err(LogError::from)?;
+    let rows =
+        persistence_lifecycle::repositories::events::list_recent_since(pool, since_id, limit)
+            .await
+            .map_err(LogError::from)?;
 
     let mut entries: Vec<LogEntry> = rows
         .into_iter()
@@ -246,8 +247,9 @@ async fn retention_gap(
         return Ok((false, None));
     };
 
-    let oldest_retained =
-        persistence_db::repositories::events::min_event_id(pool).await.map_err(LogError::from)?;
+    let oldest_retained = persistence_lifecycle::repositories::events::min_event_id(pool)
+        .await
+        .map_err(LogError::from)?;
 
     match oldest_retained {
         Some(min_id) if min_id > cursor_id + 1 => Ok((true, Some(min_id - cursor_id - 1))),
@@ -297,7 +299,7 @@ pub async fn export_entries(
         });
     }
 
-    let rows = persistence_db::repositories::events::list_by_emitted_at_range(
+    let rows = persistence_lifecycle::repositories::events::list_by_emitted_at_range(
         pool,
         options.since.as_deref(),
         options.until.as_deref(),

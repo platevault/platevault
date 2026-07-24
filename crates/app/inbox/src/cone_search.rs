@@ -27,7 +27,7 @@ use contracts_core::cone_search::{
 use contracts_core::error_code::ErrorCode;
 use contracts_core::targets::TargetObjectType;
 use contracts_core::{ContractError, ErrorSeverity};
-use persistence_db::repositories::inbox::{self as repo, InboxPointingRow};
+use persistence_inbox::repositories::inbox::{self as repo, InboxPointingRow};
 use target_match::{rank, Constraint, SkyObject};
 use targeting::coords;
 use targeting::{Angle, Equatorial};
@@ -554,8 +554,8 @@ pub async fn confirm(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::repositories::inbox::{InsertInboxItem, UpsertFileMetadata};
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_inbox::repositories::inbox::{InsertInboxItem, UpsertFileMetadata};
     use targeting_resolver::simbad::{ResolveCache, SimbadConfig};
 
     async fn test_db() -> Database {

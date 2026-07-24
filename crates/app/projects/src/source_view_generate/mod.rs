@@ -114,7 +114,7 @@ struct FrameRow {
 /// sessions are single-root by construction in this codebase (see
 /// `inventory::SessionProjectionRow`).
 async fn frames_for_ids(pool: &sqlx::SqlitePool, ids: &[String]) -> Vec<FrameRow> {
-    use persistence_db::repositories::q_projects;
+    use persistence_plans::repositories::q_projects;
 
     let mut out = Vec::with_capacity(ids.len());
     for id in ids {

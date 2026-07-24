@@ -24,8 +24,8 @@
 use app_core::artifact::complete_run;
 use app_core::project_manifests::spawn_workflow_run_subscriber;
 use audit::bus::EventBus;
-use persistence_db::repositories::manifests::list_manifests_for_project;
-use persistence_db::Database;
+use persistence_core::Database;
+use persistence_plans::repositories::manifests::list_manifests_for_project;
 
 async fn insert_project_row(pool: &sqlx::SqlitePool, id: &str, path: &str) {
     sqlx::query(

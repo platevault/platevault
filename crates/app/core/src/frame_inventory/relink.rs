@@ -72,7 +72,7 @@ pub async fn relink_frame(
     })?;
 
     let root_path_str =
-        persistence_db::repositories::inventory::get_library_root_path(pool, &row.root_id)
+        persistence_targets::repositories::inventory::get_library_root_path(pool, &row.root_id)
             .await
             .map_err(db_err)?
             .ok_or_else(|| {
@@ -98,7 +98,7 @@ pub async fn relink_frame(
         .map_err(|e| internal(format!("hashing candidate {}: {e}", req.candidate_relative_path)))?;
 
     let existing_hash =
-        persistence_db::repositories::q_core::get_file_record_content_hash(pool, &req.frame_id)
+        persistence_core::repositories::q_core::get_file_record_content_hash(pool, &req.frame_id)
             .await
             .map_err(db_err)?;
 
@@ -114,7 +114,7 @@ pub async fn relink_frame(
     }
 
     let now = iso_now();
-    persistence_db::repositories::q_core::relink_file_record(
+    persistence_core::repositories::q_core::relink_file_record(
         pool,
         &req.frame_id,
         &req.candidate_relative_path,

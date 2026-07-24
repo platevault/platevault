@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 use calibration_core::{suggest as domain_suggest, SessionInfo};
 use contracts_core::equipment::Camera;
-use persistence_db::repositories::calibration_assignment as assign_repo;
-use persistence_db::repositories::equipment as equipment_repo;
-use persistence_db::repositories::q_calibration;
+use persistence_calibration::repositories::calibration_assignment as assign_repo;
+use persistence_calibration::repositories::equipment as equipment_repo;
+use persistence_calibration::repositories::q_calibration;
 use sqlx::SqlitePool;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;

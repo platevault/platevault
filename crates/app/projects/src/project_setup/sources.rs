@@ -15,7 +15,7 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::{new_id, Timestamp};
 use domain_core::project::channels::{merge_channels, Channel};
 use domain_core::project::validate::is_source_remove_locked;
-use persistence_db::repositories::projects as repo;
+use persistence_plans::repositories::projects as repo;
 use sqlx::SqlitePool;
 
 use app_core_errors::bus_err;

@@ -14,7 +14,7 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::{new_id, Timestamp};
 use domain_core::project::channels::reinfer_channels as domain_reinfer;
 use domain_core::project::validate::is_read_only;
-use persistence_db::repositories::projects as repo;
+use persistence_plans::repositories::projects as repo;
 use sqlx::SqlitePool;
 
 use app_core_errors::bus_err;

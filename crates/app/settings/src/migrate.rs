@@ -38,7 +38,7 @@
 use audit::bus::EventBus;
 use audit::event_bus::{SettingsMigration, Source, TOPIC_SETTINGS_MIGRATION};
 use domain_core::ids::Timestamp;
-use persistence_db::repositories::settings as repo;
+use persistence_lifecycle::repositories::settings as repo;
 use sqlx::SqlitePool;
 
 use crate::descriptors;
@@ -81,7 +81,7 @@ pub struct MigrationSummary {
 #[derive(Debug, thiserror::Error)]
 pub enum MigrateError {
     #[error("database error during settings migration: {0}")]
-    Db(#[from] persistence_db::DbError),
+    Db(#[from] persistence_core::DbError),
     #[error("audit bus error during settings migration: {0}")]
     Bus(#[from] audit::bus::BusError),
 }

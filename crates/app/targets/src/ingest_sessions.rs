@@ -65,11 +65,12 @@ use std::path::Path;
 
 use audit::EventBus;
 use metadata_core::RawFileMetadata;
-use persistence_db::repositories::framing as framing_repo;
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::repositories::projects as repo_projects;
-use persistence_db::repositories::q_targets_ingest as repo;
-use persistence_db::repositories::{first_run, inventory};
+use persistence_lifecycle::repositories::first_run;
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::projects as repo_projects;
+use persistence_targets::repositories::framing as framing_repo;
+use persistence_targets::repositories::inventory;
+use persistence_targets::repositories::q_targets_ingest as repo;
 use sessions::{session_key, ObserverContext};
 use sqlx::SqlitePool;
 use time::format_description::well_known::Iso8601;
@@ -710,8 +711,8 @@ mod tests {
 
     // ── T075/FR-052: target propagation to linked projects ────────────────────
 
-    use persistence_db::repositories::projects::InsertProject;
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_plans::repositories::projects::InsertProject;
 
     async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();
@@ -866,7 +867,7 @@ mod tests {
     /// space) rather than a clear error.
     ///
     /// Registers the root through the REAL `roots.register` repo path
-    /// (`persistence_db::repositories::first_run::register_source`) — a
+    /// (`persistence_lifecycle::repositories::first_run::register_source`) — a
     /// `registered_sources` row, NOT a hand-seeded `library_root` row — and
     /// mirrors it via the same `ensure_library_root` (R9) call the real
     /// `ingest_light_frame` pipeline makes, so this test exercises the actual
@@ -884,10 +885,12 @@ mod tests {
             scan_depth: domain_core::first_run::ScanDepth::Recursive,
             organization_state: domain_core::first_run::OrganizationState::Organized,
         };
-        let registered =
-            persistence_db::repositories::first_run::register_source(db.pool(), &register_req)
-                .await
-                .unwrap();
+        let registered = persistence_lifecycle::repositories::first_run::register_source(
+            db.pool(),
+            &register_req,
+        )
+        .await
+        .unwrap();
 
         // R9: the same mirroring `ingest_light_frame` performs before ever
         // calling `upsert_session` — real users hit this via the applied

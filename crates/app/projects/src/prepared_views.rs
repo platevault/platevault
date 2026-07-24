@@ -35,18 +35,18 @@ use contracts_core::prepared_views::{
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::new_id;
 use domain_core::lifecycle::prepared_source::ALLOWED_PROJECT_STATES_FOR_VIEW_OPS;
-use persistence_db::repositories::{
-    plans as plans_repo, prepared_source_views as views_repo, projects as projects_repo,
-};
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::prepared_source_views as views_repo;
+use persistence_plans::repositories::projects as projects_repo;
 use sqlx::SqlitePool;
 
 use app_core_errors::db_internal_ctx;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn db_err(e: persistence_db::DbError) -> ContractError {
+fn db_err(e: persistence_core::DbError) -> ContractError {
     match e {
-        persistence_db::DbError::NotFound(msg) => {
+        persistence_core::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::ViewNotFound, msg, ErrorSeverity::Blocking, false)
         }
         other => app_core_errors::db_err(other),
@@ -76,9 +76,9 @@ fn compute_archive_destination(plan_id: &str, item_id: &str, from_relative_path:
     format!("{parent}/.astro-plan-archive/{plan_id}/{item_id}-{file_name}")
 }
 
-pub(crate) fn project_db_err(e: persistence_db::DbError) -> ContractError {
+pub(crate) fn project_db_err(e: persistence_core::DbError) -> ContractError {
     match e {
-        persistence_db::DbError::NotFound(msg) => {
+        persistence_core::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::ProjectNotFound, msg, ErrorSeverity::Blocking, false)
         }
         other => ContractError::new(
@@ -431,8 +431,8 @@ pub async fn regenerate_prepared_view(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::repositories::prepared_source_views as views_repo;
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_plans::repositories::prepared_source_views as views_repo;
 
     async fn setup() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");

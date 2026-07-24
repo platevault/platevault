@@ -30,7 +30,7 @@ use contracts_core::plans::{
     PlanOrigin, PlanSummary, PlanType,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
-use persistence_db::repositories::plans as repo;
+use persistence_plans::repositories::plans as repo;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 
@@ -78,9 +78,9 @@ pub const PERMANENT_DELETE_CONFIRM_TEXT: &str = "DELETE";
 
 // ── Error helpers ─────────────────────────────────────────────────────────────
 
-fn db_err(e: persistence_db::DbError) -> ContractError {
+fn db_err(e: persistence_core::DbError) -> ContractError {
     match e {
-        persistence_db::DbError::NotFound(msg) => {
+        persistence_core::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::PlanNotFound, msg, ErrorSeverity::Blocking, false)
         }
         other => crate::errors::db_err(other),
