@@ -21,8 +21,8 @@
 use app_core_projects::source_view_generate::generate_source_view;
 use camino::Utf8PathBuf;
 use contracts_core::source_view_generate::SourceViewGenerateRequest;
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::Database;
+use persistence_core::Database;
+use persistence_plans::repositories::plans as plans_repo;
 
 async fn setup() -> Database {
     let db = Database::in_memory().await.expect("in-memory DB");

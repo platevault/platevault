@@ -33,7 +33,11 @@ skymath = "0.6.0"
 contracts_core = { path = "../../../crates/contracts/core" }
 domain_core = { path = "../../../crates/domain/core" }
 fs_inventory = { path = "../../../crates/fs/inventory" }
-persistence_db = { path = "../../../crates/persistence/db" }
+persistence_core = { path = "../../../crates/persistence/core" }
+persistence_inbox = { path = "../../../crates/persistence/inbox" }
+persistence_lifecycle = { path = "../../../crates/persistence/lifecycle" }
+persistence_plans = { path = "../../../crates/persistence/plans" }
+persistence_targets = { path = "../../../crates/persistence/targets" }
 workflow_artifacts = { path = "../../../crates/workflow/artifacts" }
 serde = { workspace = true }
 serde_json.workspace = true

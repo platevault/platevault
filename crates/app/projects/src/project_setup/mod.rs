@@ -41,8 +41,8 @@
 use contracts_core::projects_v2::ProjectChannelDto;
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity, FieldError};
 use domain_core::project::channels::{infer_channels, Channel};
-use persistence_db::repositories::projects as repo;
-use persistence_db::repositories::q_core;
+use persistence_core::repositories::q_core;
+use persistence_plans::repositories::projects as repo;
 use sqlx::SqlitePool;
 
 use crate::project_health;
@@ -92,9 +92,9 @@ fn field_error(field: &str, error_code: ErrorCode, message: impl Into<String>) -
     FieldError { field: field.to_owned(), code, message: message.into() }
 }
 
-fn db_err(e: persistence_db::DbError) -> ContractError {
+fn db_err(e: persistence_core::DbError) -> ContractError {
     match e {
-        persistence_db::DbError::NotFound(msg) => {
+        persistence_core::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::ProjectNotFound, msg, ErrorSeverity::Blocking, false)
         }
         other => app_core_errors::db_err(other),
@@ -147,7 +147,7 @@ pub(super) async fn source_snapshot(
     let (frames, _bytes) = q_core::active_frame_summary(pool, &frame_ids).await.map_err(db_err)?;
     let exposures = q_core::active_frame_exposures(pool, &frame_ids).await.map_err(db_err)?;
     let exposure = match exposures.as_slice() {
-        [only] => persistence_db::repositories::inbox::format_exposure_label(*only),
+        [only] => persistence_inbox::repositories::inbox::format_exposure_label(*only),
         _ => String::new(),
     };
 
@@ -164,7 +164,7 @@ pub(super) async fn source_snapshot(
 
 /// Parse an `exposure_snapshot` string (e.g. `"300s"`, `"1.5s"`) into whole
 /// seconds (D5: parse at read time; the write path / stored format is
-/// unchanged — see `persistence_db::repositories::inbox::format_exposure_label`
+/// unchanged — see `persistence_inbox::repositories::inbox::format_exposure_label`
 /// for the writer this mirrors).
 ///
 /// Never panics: missing, empty, or unparseable values (e.g. `"Mixed"` from
@@ -279,7 +279,7 @@ async fn persist_channels(
     pool: &SqlitePool,
     project_id: &str,
     channels: &[Channel],
-) -> Result<(), persistence_db::DbError> {
+) -> Result<(), persistence_core::DbError> {
     let pairs: Vec<(String, String)> =
         channels.iter().map(|c| (c.label.clone(), c.source.clone())).collect();
     let refs: Vec<(&str, &str)> = pairs.iter().map(|(l, s)| (l.as_str(), s.as_str())).collect();
@@ -298,13 +298,13 @@ async fn maybe_auto_ready(
     bus: &audit::bus::EventBus,
     project_id: &str,
     current_lifecycle: &str,
-) -> Result<Option<String>, persistence_db::DbError> {
+) -> Result<Option<String>, persistence_core::DbError> {
     if current_lifecycle != "setup_incomplete" {
         return Ok(None);
     }
     project_health::check_project_ready_invariant(pool, bus, project_id)
         .await
-        .map_err(|e| persistence_db::DbError::NotFound(e.to_string()))
+        .map_err(|e| persistence_core::DbError::NotFound(e.to_string()))
 }
 
 /// Attempt the `ready → setup_incomplete` regression when all sources removed.
@@ -312,7 +312,7 @@ async fn maybe_regress_to_incomplete(
     pool: &SqlitePool,
     project_id: &str,
     current_lifecycle: &str,
-) -> Result<Option<String>, persistence_db::DbError> {
+) -> Result<Option<String>, persistence_core::DbError> {
     if current_lifecycle != "ready" {
         return Ok(None);
     }

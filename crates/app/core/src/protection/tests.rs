@@ -15,9 +15,9 @@ use contracts_core::protection::{
     PlanProtectionCheckRequest, ProtectionLevel, SourceProtectionGetRequest,
     SourceProtectionSetRequest,
 };
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::repositories::plans::InsertPlan;
-use persistence_db::Database;
+use persistence_core::Database;
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::plans::InsertPlan;
 
 async fn setup() -> (Database, EventBus, std::sync::MutexGuard<'static, ()>) {
     // See `PROTECTION_DEFAULTS_TEST_LOCK` for why this lock (not just the
@@ -50,7 +50,7 @@ async fn insert_plan_with_items(db: &Database, plan_id: &str, protection: &str) 
 
     plans_repo::insert_plan_item(
         db.pool(),
-        &persistence_db::repositories::plans::InsertPlanItem {
+        &persistence_plans::repositories::plans::InsertPlanItem {
             id: "item-1",
             plan_id,
             item_index: 1,
@@ -296,7 +296,7 @@ async fn delete_action_on_protected_item_gets_rewritten_action() {
     .unwrap();
     plans_repo::insert_plan_item(
         db.pool(),
-        &persistence_db::repositories::plans::InsertPlanItem {
+        &persistence_plans::repositories::plans::InsertPlanItem {
             id: "item-del-1",
             plan_id: "plan-del",
             item_index: 1,
@@ -427,7 +427,7 @@ async fn t041_set_global_default_persists_and_emits_event() {
     .unwrap();
 
     // Verify persistence: read back the stored value.
-    let stored = persistence_db::repositories::source_protection::get_protection_default(
+    let stored = persistence_plans::repositories::source_protection::get_protection_default(
         db.pool(),
         "global",
         "defaultProtection",

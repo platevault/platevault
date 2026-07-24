@@ -34,7 +34,7 @@
 use audit::event_bus::{TargetResolveBatchCompleted, TargetResolved};
 use audit::{EventBus, Source};
 use domain_core::ids::Timestamp;
-use persistence_db::repositories::q_targets_ingest as repo;
+use persistence_targets::repositories::q_targets_ingest as repo;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -335,8 +335,9 @@ pub async fn drain_and_backfill_once(
 ) {
     use targeting_resolver::simbad::{SimbadConfig, SimbadResolver, DEFAULT_TAP_ENDPOINT};
 
-    let settings =
-        persistence_db::repositories::q_desktop::get_resolver_settings(pool).await.unwrap_or(None);
+    let settings = persistence_targets::repositories::q_desktop::get_resolver_settings(pool)
+        .await
+        .unwrap_or(None);
     let (online_enabled, endpoint, timeout_secs) = settings.map_or_else(
         || (true, DEFAULT_TAP_ENDPOINT.to_owned(), 10),
         |r| (r.online_enabled != 0, r.simbad_endpoint, r.request_timeout_secs),
@@ -401,7 +402,7 @@ async fn emit_resolved(bus: &EventBus, target: &CachedTarget, query: Option<&str
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::Database;
+    use persistence_core::Database;
     use targeting_resolver::cache::upsert_resolved;
     use targeting_resolver::{
         AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource as Src,
@@ -563,7 +564,7 @@ mod tests {
         let summary = resolve_pending(db.pool(), &resolver, Some(&bus), true, 50).await.unwrap();
         assert_eq!(summary.considered, 0);
 
-        let events = persistence_db::repositories::events::list_since_by_topic(
+        let events = persistence_lifecycle::repositories::events::list_since_by_topic(
             db.pool(),
             0,
             audit::event_bus::TOPIC_TARGET_RESOLVE_BATCH_COMPLETED,
@@ -586,7 +587,7 @@ mod tests {
         let summary = resolve_pending(db.pool(), &resolver, Some(&bus), true, 50).await.unwrap();
         assert_eq!(summary.considered, 1);
 
-        let events = persistence_db::repositories::events::list_since_by_topic(
+        let events = persistence_lifecycle::repositories::events::list_since_by_topic(
             db.pool(),
             0,
             audit::event_bus::TOPIC_TARGET_RESOLVE_BATCH_COMPLETED,

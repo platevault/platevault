@@ -18,7 +18,7 @@ use contracts_core::provenance::{
 };
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::provenance::ProvenanceTag;
-use persistence_db::repositories::provenance::load_provenance;
+use persistence_lifecycle::repositories::provenance::load_provenance;
 
 /// Map a contract `AssetType` to the `entity_type` string stored on
 /// `provenance_history_archive` rows.

@@ -66,7 +66,7 @@ async fn write_audit(
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
     let payload = serde_json::json!({ "query": query }).to_string();
 
-    let result = persistence_db::repositories::q_targets_mgmt::insert_resolution_audit(
+    let result = persistence_targets::repositories::q_targets_mgmt::insert_resolution_audit(
         pool, &audit_id, target_id, trigger, actor, request_id, &at, &payload,
     )
     .await;
@@ -402,7 +402,7 @@ async fn apply_override(
 mod tests {
     use super::*;
     use contracts_core::targets::TargetSource;
-    use persistence_db::Database;
+    use persistence_core::Database;
     use simbad_resolver::{Cache as _, Store};
     use targeting_resolver::cache::upsert_resolved;
     use targeting_resolver::{

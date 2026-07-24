@@ -21,7 +21,7 @@ use time::OffsetDateTime;
 use contracts_core::error_code::ErrorCode;
 use contracts_core::{ContractError, ErrorSeverity};
 
-use persistence_db::repositories::q_targets_ingest as repo;
+use persistence_targets::repositories::q_targets_ingest as repo;
 
 fn db_err(e: impl std::fmt::Display) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
@@ -73,7 +73,7 @@ pub async fn upsert_frame_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::Database;
+    use persistence_core::Database;
 
     async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();

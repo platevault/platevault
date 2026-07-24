@@ -46,8 +46,8 @@ use camino::Utf8Path;
 use contracts_core::archive::{ArchiveEntry, GenerateArchivePlanResult, GenerateRestorePlanResult};
 use contracts_core::error_code::ErrorCode;
 use contracts_core::{ContractError, ErrorSeverity};
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::repositories::q_calibration;
+use persistence_calibration::repositories::q_calibration;
+use persistence_plans::repositories::plans as plans_repo;
 use sqlx::SqlitePool;
 
 use crate::archive_generator::generate_restore_generic;
@@ -242,7 +242,7 @@ pub async fn list_archived(pool: &SqlitePool) -> Result<Vec<ArchiveEntry>, Contr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::Database;
+    use persistence_core::Database;
 
     async fn setup() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");

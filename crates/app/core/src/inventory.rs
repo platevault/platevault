@@ -34,12 +34,12 @@ use contracts_core::inventory::{
     SessionNotesUpdateRequest, SessionNotesUpdateResult,
 };
 use contracts_core::sessions::SessionCalibrationMatch;
-use persistence_db::repositories::inventory::{
+use persistence_core::repositories::q_core::file_records_by_ids;
+use persistence_targets::repositories::inventory::{
     list_calibration_matches_for_sessions, list_project_links_for_sessions,
     list_roots_with_sessions, list_session_cameras, list_sessions_for_root, set_session_notes,
     InventoryFilters, SessionCalibrationLinkRow, SessionProjectionRow,
 };
-use persistence_db::repositories::q_core::file_records_by_ids;
 use sqlx::SqlitePool;
 
 /// Maximum UTF-8 byte length for a session note (mirrors
@@ -560,8 +560,8 @@ mod tests {
 
     // ── list() session_key wiring + notes + calibration matches ──────────────
 
-    async fn setup() -> persistence_db::Database {
-        let db = persistence_db::Database::in_memory().await.expect("in-memory DB");
+    async fn setup() -> persistence_core::Database {
+        let db = persistence_core::Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         db
     }

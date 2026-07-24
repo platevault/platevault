@@ -5,7 +5,7 @@
 //!
 //! These were spec-029 stubs (hardcoded fixture, filters/pagination ignored).
 //! They now read the durable `audit_log_entry` table (migration
-//! `0002_lifecycle.sql`) via `persistence_db::repositories::audit`, which is
+//! `0002_lifecycle.sql`) via `persistence_lifecycle::repositories::audit`, which is
 //! written by lifecycle transitions (`repositories::lifecycle`), target
 //! resolution (`targets::target_resolve`), and system-driven project
 //! transitions (`projects::project_health`).
@@ -19,7 +19,7 @@
 use app_core::errors::db_err;
 use contracts_core::audit::{AuditActor, AuditEntry, AuditListResponse, AuditOutcome};
 use contracts_core::ContractError;
-use persistence_db::repositories::audit::{
+use persistence_lifecycle::repositories::audit::{
     count_audit_entries, list_audit_entries, AuditLogFilter, AuditLogRow,
 };
 use serde::{Deserialize, Serialize};

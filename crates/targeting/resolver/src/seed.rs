@@ -857,7 +857,7 @@ mod tests {
     /// from a prior app version) is copied into a freshly-opened redb cache.
     #[tokio::test]
     async fn warm_from_canonical_target_backfills_durable_rows() {
-        let db = persistence_db::Database::in_memory().await.expect("in-memory DB");
+        let db = persistence_core::Database::in_memory().await.expect("in-memory DB");
         db.migrate().await.expect("migrations");
         let identity = crate::ResolvedIdentity {
             simbad_oid: Some(1_575_544),

@@ -5,7 +5,7 @@
 //!
 //! Values are persisted through `app_core::settings::ingestion` — a thin
 //! use-case wrapper over the existing spec-018 settings key/value store
-//! (`persistence_db::repositories::settings::{get_raw,set_raw}`). See that
+//! (`persistence_lifecycle::repositories::settings::{get_raw,set_raw}`). See that
 //! module's doc comment for why a new table was not needed.
 //!
 //! NOTE (consumer check, P12): no scan/watch/ingest pipeline code reads these

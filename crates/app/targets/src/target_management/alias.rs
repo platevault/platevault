@@ -34,7 +34,7 @@ pub async fn alias_add(
 
     // Verify the target exists.
     let exists =
-        persistence_db::repositories::q_targets_mgmt::target_exists(pool, &uuid.to_string())
+        persistence_targets::repositories::q_targets_mgmt::target_exists(pool, &uuid.to_string())
             .await
             .map_err(db_err)?;
     if !exists {
@@ -57,12 +57,13 @@ pub async fn alias_add(
     let target_id_str = uuid.to_string();
     let normalized = simbad_resolver::normalize::normalize(&req.alias);
     if !normalized.is_empty() {
-        let owner = persistence_db::repositories::q_resolver::select_target_id_by_normalized_alias(
-            pool,
-            &normalized,
-        )
-        .await
-        .map_err(db_err)?;
+        let owner =
+            persistence_targets::repositories::q_resolver::select_target_id_by_normalized_alias(
+                pool,
+                &normalized,
+            )
+            .await
+            .map_err(db_err)?;
         if let Some(owner_id) = owner {
             if owner_id != target_id_str {
                 return Err(ContractError::new(
@@ -114,7 +115,7 @@ pub async fn alias_remove(
 ) -> Result<TargetAliasRemoveResult, ContractError> {
     // First check whether the alias exists at all (to distinguish "not found"
     // from "not removable").
-    let row = persistence_db::repositories::q_targets_mgmt::get_alias_kind(
+    let row = persistence_targets::repositories::q_targets_mgmt::get_alias_kind(
         pool,
         &req.alias_id,
         &req.target_id,

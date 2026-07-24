@@ -1,0 +1,33 @@
+[package]
+name = "persistence_lifecycle"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+audit_types = { path = "../../audit-types" }
+domain_core = { path = "../../domain/core" }
+patterns = { path = "../../patterns" }
+persistence_core = { path = "../core" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+audit = { path = "../../audit" }
+domain_core = { path = "../../domain/core" }
+persistence_core = { path = "../core", features = [] }
+persistence_inbox = { path = "../inbox" }
+tempfile.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

@@ -309,7 +309,7 @@ async fn run_attach_reconciliation(
     tool_id: &str,
     ext_refs: &[&str],
 ) -> Result<(), String> {
-    let known_rows = persistence_db::repositories::artifacts::list_artifacts_for_project(
+    let known_rows = persistence_plans::repositories::artifacts::list_artifacts_for_project(
         pool,
         project_id,
         &["present"],
@@ -340,7 +340,7 @@ async fn run_attach_reconciliation(
             }
             workflow_artifacts::ReconcileOutcome::Seen => {
                 if let Err(e) =
-                    persistence_db::repositories::artifacts::touch_artifact(pool, &row.id).await
+                    persistence_plans::repositories::artifacts::touch_artifact(pool, &row.id).await
                 {
                     tracing::warn!("artifact watcher: touch_artifact failed for {}: {e}", row.path);
                 }
@@ -414,7 +414,7 @@ pub async fn attach_project_watcher(
     }
 
     // ── All slow work runs without holding the registry lock ───────────────
-    let project = persistence_db::repositories::projects::get_project(pool, project_id)
+    let project = persistence_plans::repositories::projects::get_project(pool, project_id)
         .await
         .map_err(|e| format!("{e}"))?;
 

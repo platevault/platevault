@@ -26,7 +26,7 @@ use contracts_core::first_run::SourceKind;
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_db::repositories::first_run as repo;
+use persistence_lifecycle::repositories::first_run as repo;
 use sqlx::SqlitePool;
 
 use crate::audit_ids::deterministic_entity_id;
@@ -207,7 +207,7 @@ async fn check_overlap(
     Ok(())
 }
 
-fn db_to_contract(e: persistence_db::DbError) -> ContractError {
+fn db_to_contract(e: persistence_core::DbError) -> ContractError {
     let msg = e.to_string();
     if msg.contains("UNIQUE constraint failed") {
         // Same code as `check_duplicate`'s same-kind branch above — keep

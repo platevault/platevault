@@ -18,12 +18,12 @@ use camino::Utf8Path;
 use contracts_core::source_view_verify::{BrokenItem, BrokenItemState, SourceViewVerifyResponse};
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::lifecycle::prepared_source::ItemObservedState;
-use persistence_db::repositories::prepared_source_views as views_repo;
+use persistence_plans::repositories::prepared_source_views as views_repo;
 use sqlx::SqlitePool;
 
-fn db_err(e: persistence_db::DbError) -> ContractError {
+fn db_err(e: persistence_core::DbError) -> ContractError {
     match e {
-        persistence_db::DbError::NotFound(msg) => {
+        persistence_core::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::ViewNotFound, msg, ErrorSeverity::Blocking, false)
         }
         other => app_core_errors::db_err(other),
@@ -46,7 +46,7 @@ pub(crate) struct SourceResolution {
 }
 
 pub(crate) async fn resolve_source(pool: &SqlitePool, inventory_item_id: &str) -> SourceResolution {
-    use persistence_db::repositories::inventory;
+    use persistence_targets::repositories::inventory;
 
     let Ok(Some(record)) = inventory::get_file_record_lookup(pool, inventory_item_id).await else {
         return SourceResolution { abs_path: None, source_gone: true };
@@ -284,7 +284,7 @@ pub async fn sweep_view_staleness(pool: &SqlitePool, view_id: &str) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::Database;
+    use persistence_core::Database;
 
     async fn setup() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");

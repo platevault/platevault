@@ -9,7 +9,7 @@ use contracts_core::projects_v2::{ProjectUpdateRequest, ProjectUpdateResult};
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::new_id;
 use domain_core::project::validate::{is_read_only, is_tool_locked, validate_name};
-use persistence_db::repositories::projects as repo;
+use persistence_plans::repositories::projects as repo;
 use sqlx::SqlitePool;
 
 use app_core_errors::bus_err;

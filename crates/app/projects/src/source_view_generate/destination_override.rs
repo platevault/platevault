@@ -26,7 +26,7 @@ pub async fn get_destination_override(
     pool: &SqlitePool,
     project_id: &str,
 ) -> Result<Option<String>, ContractError> {
-    let raw = persistence_db::repositories::settings::get_raw(
+    let raw = persistence_lifecycle::repositories::settings::get_raw(
         pool,
         &destination_override_key(project_id),
     )
@@ -49,7 +49,7 @@ pub async fn set_destination_override(
     let key = destination_override_key(project_id);
     match destination {
         Some(dest) => {
-            persistence_db::repositories::settings::set_raw(
+            persistence_lifecycle::repositories::settings::set_raw(
                 pool,
                 &key,
                 &serde_json::Value::String(dest.to_owned()),
@@ -58,7 +58,7 @@ pub async fn set_destination_override(
             .map_err(|e| db_internal_ctx(e, "write source view destination override"))?;
         }
         None => {
-            persistence_db::repositories::settings::delete_key(pool, &key)
+            persistence_lifecycle::repositories::settings::delete_key(pool, &key)
                 .await
                 .map_err(|e| db_internal_ctx(e, "clear source view destination override"))?;
         }

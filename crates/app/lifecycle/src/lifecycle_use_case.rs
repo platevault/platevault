@@ -24,7 +24,7 @@ use audit::bus::EventBus;
 use audit::event_bus::{LifecycleTransitionApplied, Source, TOPIC_LIFECYCLE_TRANSITION_APPLIED};
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_db::repositories::lifecycle::{
+use persistence_lifecycle::repositories::lifecycle::{
     LifecycleRepository, TransitionRecord, TransitionRequest,
 };
 
@@ -36,7 +36,7 @@ pub enum LifecycleError {
     #[error("entity not found: {entity_id}")]
     NotFound { entity_id: EntityId },
     #[error("persistence error: {0}")]
-    Persistence(#[from] persistence_db::DbError),
+    Persistence(#[from] persistence_core::DbError),
 }
 
 /// Inputs for the `transition_lifecycle` use case.
@@ -119,7 +119,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::repositories::lifecycle::InMemoryLifecycleRepository;
+    use persistence_lifecycle::repositories::lifecycle::InMemoryLifecycleRepository;
 
     async fn test_bus() -> EventBus {
         let pool =

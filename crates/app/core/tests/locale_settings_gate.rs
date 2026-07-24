@@ -22,7 +22,7 @@ use app_core::settings;
 use audit::bus::EventBus;
 use contracts_core::settings::{SettingsUpdateRequest, SettingsUpdateStatus};
 use contracts_core::JsonAny;
-use persistence_db::Database;
+use persistence_core::Database;
 
 #[tokio::test]
 async fn locale_survives_close_and_reopen() {

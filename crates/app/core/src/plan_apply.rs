@@ -51,11 +51,11 @@ use fs_executor::run::{
     execute_plan, ApplyOutcome, CancellationToken, ExecutorCallbacks, ExecutorItem,
     ExecutorItemAction, ItemProgressEvent, RetryQueue, SkipSet, TerminalCounts,
 };
-use persistence_db::repositories::first_run as first_run_repo;
-use persistence_db::repositories::inventory as inventory_repo;
-use persistence_db::repositories::plan_apply as apply_repo;
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::DbError;
+use persistence_core::DbError;
+use persistence_lifecycle::repositories::first_run as first_run_repo;
+use persistence_plans::repositories::plan_apply as apply_repo;
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_targets::repositories::inventory as inventory_repo;
 use serde_json::json;
 use sqlx::SqlitePool;
 use std::collections::HashMap;

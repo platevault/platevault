@@ -42,12 +42,12 @@ use contracts_core::inbox::{
 use contracts_core::plan_apply::PlanApplyResponse;
 use contracts_core::ContractError;
 use domain_core::first_run::OrganizationState;
-use persistence_db::repositories::first_run::get_source_organization_state;
-use persistence_db::repositories::inbox::{
+use persistence_inbox::repositories::inbox::{
     grouping_keys_for_items, list_unacknowledged_across_roots, list_unclassified_source_groups,
     upsert_inbox_source_group, UpsertSourceGroup,
 };
-use persistence_db::repositories::q_desktop::{
+use persistence_lifecycle::repositories::first_run::get_source_organization_state;
+use persistence_targets::repositories::q_desktop::{
     get_inbox_master_item_row, insert_inbox_master_item,
 };
 use sqlx::SqlitePool;

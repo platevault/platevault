@@ -42,9 +42,9 @@ use std::time::Instant;
 use app_core_inbox::classify::classify_source_group;
 use app_core_inbox::scan::{scan_root, ScanOptions};
 use domain_core::first_run::{OrganizationState, RegisterSourceRequest, ScanDepth, SourceKind};
-use persistence_db::repositories::first_run::register_source;
-use persistence_db::repositories::inbox::{upsert_inbox_source_group, UpsertSourceGroup};
-use persistence_db::Database;
+use persistence_core::Database;
+use persistence_inbox::repositories::inbox::{upsert_inbox_source_group, UpsertSourceGroup};
+use persistence_lifecycle::repositories::first_run::register_source;
 use tracing_subscriber::prelude::*;
 use uuid::Uuid;
 
@@ -278,10 +278,12 @@ async fn main() {
     // spec-058 `classify_source_group` path (folder-level, no pre-existing
     // inbox_item_id required).
 
-    let groups =
-        persistence_db::repositories::inbox::list_unclassified_source_groups(db.pool(), i64::MAX)
-            .await
-            .expect("list_unclassified_source_groups");
+    let groups = persistence_inbox::repositories::inbox::list_unclassified_source_groups(
+        db.pool(),
+        i64::MAX,
+    )
+    .await
+    .expect("list_unclassified_source_groups");
 
     counter.store(0, Ordering::Relaxed);
     let t0 = Instant::now();

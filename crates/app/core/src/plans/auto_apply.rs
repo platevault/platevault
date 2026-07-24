@@ -5,7 +5,7 @@
 
 use audit::bus::EventBus;
 use contracts_core::ContractError;
-use persistence_db::repositories::plans as repo;
+use persistence_plans::repositories::plans as repo;
 use sqlx::SqlitePool;
 
 use super::db_err;

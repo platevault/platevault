@@ -30,7 +30,7 @@ async fn frame_ids_for_session(
     session_id: &str,
 ) -> Result<Option<(Vec<String>, RawFrameType)>, ContractError> {
     if let Some(frame_ids_json) =
-        persistence_db::repositories::q_core::get_acquisition_session_frame_ids(pool, session_id)
+        persistence_core::repositories::q_core::get_acquisition_session_frame_ids(pool, session_id)
             .await
             .map_err(db_err)?
     {
@@ -39,7 +39,7 @@ async fn frame_ids_for_session(
     }
 
     if let Some((frame_ids_json, kind)) =
-        persistence_db::repositories::q_core::get_calibration_session_frame_ids_and_kind(
+        persistence_core::repositories::q_core::get_calibration_session_frame_ids_and_kind(
             pool, session_id,
         )
         .await

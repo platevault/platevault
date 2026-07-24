@@ -10,7 +10,7 @@ use contracts_core::roots::{RemapSample, RemapVerification};
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_db::repositories::first_run as repo;
+use persistence_lifecycle::repositories::first_run as repo;
 use sqlx::SqlitePool;
 
 use crate::audit_ids::deterministic_entity_id;

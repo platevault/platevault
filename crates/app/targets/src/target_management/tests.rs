@@ -10,7 +10,7 @@ use contracts_core::targets::{
     TargetNoteGetRequest, TargetNoteUpdateRequest, TargetProjectsListRequest,
     TargetSessionsListRequest,
 };
-use persistence_db::Database;
+use persistence_core::Database;
 use targeting_resolver::cache::upsert_resolved;
 use targeting_resolver::ObjectType;
 use targeting_resolver::{AliasKind as CacheKind, ResolvedAlias, ResolvedIdentity, TargetSource};

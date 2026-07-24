@@ -23,7 +23,7 @@
 //!
 //! Classification uses `workflow_artifacts::classify` (pure; no DB or I/O).
 //! Attribution uses `workflow_artifacts::attribute` (pure timestamp math).
-//! Persistence is delegated to `persistence_db::repositories::artifacts`.
+//! Persistence is delegated to `persistence_plans::repositories::artifacts`.
 //! Audit events are emitted via `audit::bus::EventBus`.
 //!
 //! Constitution III: this module never opens, processes, or modifies observed files.
@@ -39,8 +39,8 @@
 use sqlx::SqlitePool;
 use time::OffsetDateTime;
 
-use persistence_db::repositories::artifacts::ArtifactRow;
-use persistence_db::repositories::tool_launches as tl_repo;
+use persistence_plans::repositories::artifacts::ArtifactRow;
+use persistence_plans::repositories::tool_launches as tl_repo;
 
 use contracts_core::tools::ArtifactSummary;
 use workflow_artifacts::LaunchRef;

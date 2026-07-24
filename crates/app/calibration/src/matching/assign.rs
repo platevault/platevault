@@ -16,7 +16,9 @@ use contracts_core::calibration_match::{
 };
 use domain_core::ids::{EntityId, Timestamp};
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_db::repositories::calibration_assignment::{self as assign_repo, UpsertParams};
+use persistence_calibration::repositories::calibration_assignment::{
+    self as assign_repo, UpsertParams,
+};
 use sqlx::SqlitePool;
 use uuid::Uuid;
 

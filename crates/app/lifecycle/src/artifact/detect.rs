@@ -13,7 +13,7 @@ use domain_core::ids::{new_id, Timestamp};
 use sqlx::SqlitePool;
 use workflow_artifacts::{attribute, classify, default_artifact_rules, DEFAULT_ATTRIBUTION_WINDOW};
 
-use persistence_db::repositories::artifacts::{self as repo, InsertArtifact};
+use persistence_plans::repositories::artifacts::{self as repo, InsertArtifact};
 
 use super::{load_launch_refs, parse_dt};
 

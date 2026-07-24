@@ -29,8 +29,8 @@ use contracts_core::framing::{
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::{new_id, EntityId};
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_db::repositories::framing as framing_repo;
-use persistence_db::repositories::projects as projects_repo;
+use persistence_plans::repositories::projects as projects_repo;
+use persistence_targets::repositories::framing as framing_repo;
 use sqlx::SqlitePool;
 
 use crate::errors::bus_err;
@@ -40,18 +40,18 @@ use crate::errors::bus_err;
 /// Local `DbError` → `ContractError` mapper: routes a missing framing to the
 /// domain-specific `framing.not_found` code, matching
 /// `project_setup.rs::db_err`'s precedent for `project.not_found`.
-fn db_err(e: persistence_db::DbError) -> ContractError {
+fn db_err(e: persistence_core::DbError) -> ContractError {
     match e {
-        persistence_db::DbError::NotFound(msg) => {
+        persistence_core::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::FramingNotFound, msg, ErrorSeverity::Blocking, false)
         }
         other => crate::errors::db_err(other),
     }
 }
 
-fn project_not_found_err(e: persistence_db::DbError) -> ContractError {
+fn project_not_found_err(e: persistence_core::DbError) -> ContractError {
     match e {
-        persistence_db::DbError::NotFound(msg) => {
+        persistence_core::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::ProjectNotFound, msg, ErrorSeverity::Blocking, false)
         }
         other => crate::errors::db_err(other),
@@ -476,8 +476,8 @@ pub async fn reassign(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::repositories::framing::InsertFraming;
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_targets::repositories::framing::InsertFraming;
 
     async fn setup() -> (Database, EventBus) {
         let db = Database::in_memory().await.expect("in-memory DB");
@@ -597,7 +597,7 @@ mod tests {
         // The merged-away framing row is gone.
         assert!(matches!(
             framing_repo::get_framing(db.pool(), "framing-b").await.unwrap_err(),
-            persistence_db::DbError::NotFound(_)
+            persistence_core::DbError::NotFound(_)
         ));
 
         // Durable audit row exists.

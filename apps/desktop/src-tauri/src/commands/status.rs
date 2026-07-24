@@ -14,11 +14,11 @@ use tokio::time::timeout;
 
 use crate::commands::lifecycle::AppState;
 use contracts_core::ContractError;
-use persistence_db::repositories::q_desktop::{
+use persistence_targets::repositories::q_desktop::{
     count_acquisition_sessions, count_calibration_masters, count_projects,
     count_unacknowledged_inbox_items,
 };
-use persistence_db::repositories::target_favourites::count_favourites;
+use persistence_targets::repositories::target_favourites::count_favourites;
 
 /// Maximum time to wait for a single root-path existence probe.
 ///
@@ -45,7 +45,7 @@ pub async fn status_summary(state: State<'_, AppState>) -> Result<StatusSummary,
 
     let pool = state.repo.pool();
 
-    let sources = persistence_db::repositories::first_run::list_sources(pool)
+    let sources = persistence_lifecycle::repositories::first_run::list_sources(pool)
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?;
 

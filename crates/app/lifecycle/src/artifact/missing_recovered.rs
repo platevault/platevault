@@ -12,7 +12,7 @@ use audit::event_bus::{
 use domain_core::ids::Timestamp;
 use sqlx::SqlitePool;
 
-use persistence_db::repositories::artifacts::{self as repo};
+use persistence_plans::repositories::artifacts::{self as repo};
 
 /// Mark a `missing` artifact as user-resolved.
 ///
@@ -129,7 +129,7 @@ async fn emit_calibration_match_flag_for_artifact(
     recovered: bool,
 ) {
     let Ok(assignments) =
-        persistence_db::repositories::calibration_assignment::find_by_source_artifact(
+        persistence_calibration::repositories::calibration_assignment::find_by_source_artifact(
             pool,
             artifact_id,
         )

@@ -11,7 +11,7 @@
 //! platform-absolute paths with [`abs`].
 
 use domain_core::first_run::{OrganizationState, RegisterSourceRequest, ScanDepth, SourceKind};
-use persistence_db::repositories::first_run as first_run_repo;
+use persistence_lifecycle::repositories::first_run as first_run_repo;
 use sqlx::SqlitePool;
 
 /// Platform-absolute path of the project folder registered by test setups.
