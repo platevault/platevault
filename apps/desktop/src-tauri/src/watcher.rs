@@ -11,6 +11,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -73,6 +74,15 @@ pub async fn start_watcher(
                             serde_json::json!({ "kind": "modified", "path": path })
                         }
                         InboxFileEvent::NeedsRescan { reason } => {
+                            // Design note: the inbox watcher forwards NeedsRescan to
+                            // the frontend rather than running a backend rescan here.
+                            // Inbox folders hold unprocessed drops; there is no per-path
+                            // DB state to reconcile server-side. Recovery is a watcher
+                            // restart (re-calling `start_watcher` / `inbox.watcher.start`
+                            // from the frontend), which re-enumerates the current dir
+                            // set — the correct shape for inbox. This is an intentional
+                            // asymmetry with the artifact watcher (which does have DB
+                            // state to reconcile and owns its own backend recovery).
                             serde_json::json!({ "kind": "needsRescan", "reason": reason })
                         }
                     };
@@ -380,6 +390,7 @@ async fn run_attach_reconciliation(
 /// triggers reconciliation on error/overflow signals, and sweeps stale launches.
 fn spawn_artifact_forward_task(
     mut rx: tokio::sync::mpsc::Receiver<ArtifactFileEvent>,
+    overflow_flag: Arc<AtomicBool>,
     pool: SqlitePool,
     bus: EventBus,
     project_id: String,
@@ -403,12 +414,11 @@ fn spawn_artifact_forward_task(
                         );
                         break;
                     };
-                    // Items (a)/(c): NeedsRescan or Overflow signals mean
-                    // events were lost — run a full reconciliation pass.
-                    if matches!(evt.kind, ArtifactEventKind::NeedsRescan | ArtifactEventKind::Overflow) {
+                    // Item (a): NeedsRescan means the OS watcher hit an error —
+                    // run a full reconciliation pass to recover consistency.
+                    if matches!(evt.kind, ArtifactEventKind::NeedsRescan) {
                         tracing::warn!(
-                            "artifact watcher: {:?} for project {project_id}, triggering reconciliation",
-                            evt.kind
+                            "artifact watcher: NeedsRescan for project {project_id}, triggering reconciliation"
                         );
                         pending.clear();
                         let ext_refs: Vec<&str> = extensions.iter().map(String::as_str).collect();
@@ -416,8 +426,7 @@ fn spawn_artifact_forward_task(
                             &pool, &bus, &project_id, &project_root, &tool_id, &ext_refs,
                         ).await {
                             tracing::warn!(
-                                "artifact watcher: reconciliation after {:?} failed for {project_id}: {e}",
-                                evt.kind
+                                "artifact watcher: reconciliation after NeedsRescan failed for {project_id}: {e}"
                             );
                         }
                         continue;
@@ -425,6 +434,24 @@ fn spawn_artifact_forward_task(
                     record_raw_event(&evt, &extensions, &mut pending);
                 }
                 _ = debounce_tick.tick() => {
+                    // Item (c): poll the atomic overflow flag (set by the notify
+                    // callback when the channel was full). An AtomicBool::store
+                    // cannot itself be dropped the way a try_send sentinel can.
+                    if overflow_flag.swap(false, Ordering::AcqRel) {
+                        tracing::warn!(
+                            "artifact watcher: overflow for project {project_id}, triggering reconciliation"
+                        );
+                        pending.clear();
+                        let ext_refs: Vec<&str> = extensions.iter().map(String::as_str).collect();
+                        if let Err(e) = run_attach_reconciliation(
+                            &pool, &bus, &project_id, &project_root, &tool_id, &ext_refs,
+                        ).await {
+                            tracing::warn!(
+                                "artifact watcher: reconciliation after overflow failed for {project_id}: {e}"
+                            );
+                        }
+                        continue;
+                    }
                     sweep_pending_artifacts(&pool, &bus, &project_id, &tool_id, &mut pending).await;
                 }
                 _ = launch_sweep_tick.tick() => {
@@ -522,6 +549,7 @@ pub async fn attach_project_watcher(
 
     let forward_task = spawn_artifact_forward_task(
         rx,
+        Arc::clone(&guard.overflow_flag),
         pool.clone(),
         bus.clone(),
         project_id.to_owned(),
@@ -589,7 +617,15 @@ pub async fn reattach_unavailable_projects(
             }
         }
         // Only attempt attach for paths that now exist (drive just mounted).
-        if !std::path::Path::new(&project.path).is_dir() {
+        // spawn_blocking: is_dir() can stall the async runtime when the path
+        // is on a slow/stale NFS or SMB mount — exactly the environment this
+        // sweep targets.
+        let path_str = project.path.clone();
+        let is_available =
+            tokio::task::spawn_blocking(move || std::path::Path::new(&path_str).is_dir())
+                .await
+                .unwrap_or(false);
+        if !is_available {
             continue;
         }
         match attach_project_watcher(pool, bus, registry, &project.id).await {

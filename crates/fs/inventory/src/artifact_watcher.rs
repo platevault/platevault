@@ -21,6 +21,7 @@
 //! the consumer (`apps/desktop/src-tauri/src/watcher.rs`'s per-project
 //! forward task) against a `HashMap<PathBuf, FileSnapshot>` it owns.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
@@ -47,9 +48,6 @@ pub enum ArtifactEventKind {
     /// The OS watcher encountered an error — consumer should trigger a reconcile
     /// pass to recover any missed events (item a: error-callback deafness fix).
     NeedsRescan,
-    /// The event channel overflowed — at least one event was dropped. Consumer
-    /// must trigger a full reconciliation pass (item c: 256-channel overflow).
-    Overflow,
 }
 
 impl From<SimpleEventKind> for ArtifactEventKind {
@@ -65,9 +63,17 @@ impl From<SimpleEventKind> for ArtifactEventKind {
 /// RAII guard that keeps the watcher alive.
 ///
 /// Drop this to stop watching and close the channel.
+///
+/// `overflow_flag` is set to `true` by the notify callback whenever the mpsc
+/// channel is full and at least one event was dropped. The forward task polls
+/// this flag instead of relying on an in-band sentinel event — an
+/// `AtomicBool::store` cannot itself be lost the way a `try_send` can.
 pub struct WatcherGuard {
     _watcher: RecommendedWatcher,
     _tx: Arc<mpsc::Sender<ArtifactFileEvent>>,
+    /// Set to `true` when the channel overflowed; cleared by the consumer
+    /// after it triggers reconciliation.
+    pub overflow_flag: Arc<AtomicBool>,
 }
 
 /// Start the filesystem watcher over `paths`.
@@ -95,6 +101,11 @@ pub fn start_artifact_watcher(
     let (tx, rx) = mpsc::channel::<ArtifactFileEvent>(channel_capacity);
     let tx = Arc::new(tx);
     let handler_tx = Arc::clone(&tx);
+    // Item (c): atomic flag set on overflow — cannot itself be dropped the
+    // way an in-band try_send sentinel can. The forward task polls and clears
+    // it on each loop iteration.
+    let overflow_flag = Arc::new(AtomicBool::new(false));
+    let callback_overflow = Arc::clone(&overflow_flag);
 
     let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
         match res {
@@ -123,19 +134,13 @@ pub fn start_artifact_watcher(
                     if utf8.is_dir() {
                         continue;
                     }
-                    // Item (c): on channel overflow (Full), send an Overflow
-                    // sentinel so the consumer knows events were lost and must
-                    // reconcile. The sentinel itself may also fail if the channel
-                    // is truly saturated — the consumer's periodic sweep will
-                    // eventually catch up regardless.
                     if let Err(mpsc::error::TrySendError::Full(_)) =
                         handler_tx.try_send(ArtifactFileEvent { path: utf8, kind })
                     {
+                        // Store beats try_send: an AtomicBool::store cannot be
+                        // dropped if the channel is full.
                         tracing::warn!("artifact watcher: channel full, events dropped");
-                        let _ = handler_tx.try_send(ArtifactFileEvent {
-                            path: Utf8PathBuf::new(),
-                            kind: ArtifactEventKind::Overflow,
-                        });
+                        callback_overflow.store(true, Ordering::Release);
                         return;
                     }
                 }
@@ -155,7 +160,7 @@ pub fn start_artifact_watcher(
         );
     }
 
-    let guard = WatcherGuard { _watcher: watcher, _tx: tx };
+    let guard = WatcherGuard { _watcher: watcher, _tx: tx, overflow_flag };
     Ok((rx, guard))
 }
 
