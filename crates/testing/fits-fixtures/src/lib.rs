@@ -188,6 +188,6 @@ mod tests {
         let bytes = std::fs::read(&path).unwrap();
         assert_eq!(bytes.len(), 2880);
         // END should be at slot 3.
-        assert!(bytes[3 * 80..3 * 80 + 3] == *b"END");
+        assert_eq!(bytes[3 * 80..3 * 80 + 3], *b"END");
     }
 }
