@@ -48,5 +48,5 @@ approval_mode = "approve"
 approval_mode = "approve"
 
 [mcp_servers.gitnexus]
-command = "npx"
-args = ["-y", "gitnexus@latest", "mcp"]
+command = "gitnexus"
+args = ["mcp"]
