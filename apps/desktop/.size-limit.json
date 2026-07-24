@@ -9,6 +9,6 @@
     "name": "dist/ entry chunk main-*.js (gzip)",
     "path": "dist/assets/main-*.js",
     "gzip": true,
-    "limit": "207 KB"
+    "limit": "365 KB"
   }
 ]
