@@ -70,7 +70,6 @@ pub async fn upsert_frame_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_core::Database;
 
     async fn test_db() -> persistence_core::Database {
         persistence_core::test_support::setup_db().await

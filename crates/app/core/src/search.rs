@@ -230,7 +230,6 @@ async fn recent_projects(pool: &SqlitePool) -> Result<Vec<SearchResult>, String>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_core::Database;
 
     async fn test_db() -> persistence_core::Database {
         persistence_core::test_support::setup_db().await

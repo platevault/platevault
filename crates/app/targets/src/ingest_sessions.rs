@@ -709,7 +709,6 @@ mod tests {
 
     // ── T075/FR-052: target propagation to linked projects ────────────────────
 
-    use persistence_core::Database;
     use persistence_plans::repositories::projects::InsertProject;
 
     async fn test_db() -> persistence_core::Database {

@@ -62,7 +62,6 @@ pub async fn inbox_stats(pool: &SqlitePool) -> Result<InboxStatsResponse, Contra
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_core::Database;
     use persistence_inbox::repositories::inbox::{InsertEvidence, InsertInboxItem};
 
     async fn test_db() -> persistence_core::Database {

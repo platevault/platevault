@@ -160,7 +160,6 @@ pub async fn set_root_config(
 mod tests {
     use super::*;
     use contracts_core::inventory_frame::DetectionConfigUpdate;
-    use persistence_core::Database;
 
     async fn test_db() -> persistence_core::Database {
         persistence_core::test_support::setup_db().await

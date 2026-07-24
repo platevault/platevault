@@ -48,8 +48,6 @@ use persistence_plans::repositories::tool_launches as tl_repo;
 use persistence_targets::repositories::inventory as inv_repo;
 use project_structure::resolve_working_folder;
 use sqlx::SqlitePool;
-#[cfg(test)]
-use uuid::Uuid;
 use workflow_profiles::{
     args::{render, RenderContext},
     discover::discover_all,

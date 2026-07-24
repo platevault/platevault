@@ -283,7 +283,6 @@ fn parse_binning(s: &str) -> Option<(i32, i32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_core::Database;
     use persistence_inbox::repositories::inbox::{
         InsertEvidence, InsertInboxItem, UpsertFileMetadata,
     };
