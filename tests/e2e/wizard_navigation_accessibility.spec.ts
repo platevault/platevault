@@ -109,7 +109,9 @@ test.describe('wizard navigation accessibility', () => {
       const geometry = await bar.evaluate((element) => {
         const barRect = element.getBoundingClientRect();
         const cardGeometry = Array.from(
-          element.querySelectorAll<HTMLElement>('[data-testid="wizard-steps-card"]'),
+          element.querySelectorAll<HTMLElement>(
+            '[data-testid="wizard-steps-card"]',
+          ),
         ).map((card) => {
           const rect = card.getBoundingClientRect();
           const style = getComputedStyle(card);
@@ -212,9 +214,9 @@ test.describe('wizard navigation accessibility', () => {
     expect(overflowAffordance.horizontalOverflow).toBe(true);
     expect(overflowAffordance.scrollbarColor).not.toBe('auto');
     expect(overflowAffordance.hintVisible).toBe(true);
-    await expect(page.locator('[data-testid="wizard-steps-overflow-hint"]')).toHaveText(
-      '↔',
-    );
+    await expect(
+      page.locator('[data-testid="wizard-steps-overflow-hint"]'),
+    ).toHaveText('↔');
     await page.screenshot({
       path: testInfo.outputPath('en-GB-reflow-320-step-1.png'),
       fullPage: true,

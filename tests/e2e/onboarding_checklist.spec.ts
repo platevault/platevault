@@ -232,7 +232,9 @@ test.describe('onboarding getting-started checklist (spec 056 US2)', () => {
     const toggle = page.locator('[data-testid="onb-checklist-section-toggle"]');
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.locator('[data-testid="onb-checklist-groups"]')).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid="onb-checklist-groups"]'),
+    ).toHaveCount(0);
 
     // SPA navigation keeps the persisted collapse (mock flag round-trips).
     // Clicking outside the portalled panel also dismisses the flyout, so it

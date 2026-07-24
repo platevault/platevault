@@ -88,7 +88,9 @@ function seedObservingSite(page: Page): void {
 
 /** Locate a target row by its designation text (only 2 seed rows exist). */
 function targetRow(page: Page, designation: string) {
-  return page.locator('[data-testid="targets-table-row"]', { hasText: designation });
+  return page.locator('[data-testid="targets-table-row"]', {
+    hasText: designation,
+  });
 }
 
 // Column order in TargetsTable (see COLUMNS; sparkline + visible columns
@@ -145,7 +147,9 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
     //   - lunar / opposition cells render "—" (no `.pv-targets-cell--lunardist`
     //     span is emitted when the value is unknown);
     //   - max altitude degrades to 0°.
-    await expect(page.locator('[data-testid="targets-cell-lunardist"]')).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid="targets-cell-lunardist"]'),
+    ).toHaveCount(0);
     await expect(m31.locator('td').nth(COL.opposition)).toHaveText('—');
     await expect(m31.locator('td').nth(COL.maxAlt)).toHaveText('0°');
   });
@@ -191,9 +195,9 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
 
     // The gated-off prompt + banner are gone now a site exists.
     await expect(page.getByTestId('planner-site-prompt')).toHaveCount(0);
-    await expect(page.locator('[data-testid="targets-table-no-site-banner"]')).toHaveCount(
-      0,
-    );
+    await expect(
+      page.locator('[data-testid="targets-table-no-site-banner"]'),
+    ).toHaveCount(0);
 
     // ── 044: real per-site altitude — M 31 (dec +41) culminates high from a
     //    +52° site, so max altitude tonight is a large non-zero value (was 0°
@@ -208,7 +212,9 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
     //    for a coordinate-bearing target) renders as a degree value, not "—". ──
     const lunar = m31.locator('td').nth(COL.lunarDist);
     await expect(lunar).toHaveText(/\d{1,3}°/);
-    await expect(lunar.locator('[data-testid="targets-cell-lunardist"]')).toBeVisible();
+    await expect(
+      lunar.locator('[data-testid="targets-cell-lunardist"]'),
+    ).toBeVisible();
 
     // ── 047 US4: real next-opposition date + relative "in N days/months". ─────
     const opposition = m31.locator('td').nth(COL.opposition);
@@ -216,7 +222,9 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
     await expect(opposition).not.toHaveText('—');
 
     // ── 047 US3: moon-driven filter guidance pills render in the Filters cell. ─
-    await expect(m31.locator('[data-testid="guidance-cell-trigger"]')).toBeVisible();
+    await expect(
+      m31.locator('[data-testid="guidance-cell-trigger"]'),
+    ).toBeVisible();
 
     // ── 044: imaging-time column present; renders an honest value ("2h10m"-
     //    style when the target clears the threshold tonight, else "—" with a
@@ -528,7 +536,9 @@ test.describe('Planner observability iteration (spec 044 Phase 10, 2026-07-15)',
     // never a bare 0 or an unexplained "—" (SC-015).
     const imgTime = m31.locator('td').nth(COL.imagingTime);
     await expect(imgTime).toContainText('☀');
-    await expect(imgTime.locator('[data-testid="imgtime-glyph-warn"]')).toBeVisible();
+    await expect(
+      imgTime.locator('[data-testid="imgtime-glyph-warn"]'),
+    ).toBeVisible();
 
     // Detail: the same zero is stated as a sentence (FR-029)…
     await m31.click();
@@ -539,7 +549,9 @@ test.describe('Planner observability iteration (spec 044 Phase 10, 2026-07-15)',
     // plot is shaded non-dark (exactly one full-width twilight rect —
     // pre-iteration the shading was omitted entirely and a green usable fill
     // contradicted the 0-hour stat, which was the #817 report).
-    await expect(page.locator('[data-testid="planner-graph-twilight"]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-testid="planner-graph-twilight"]'),
+    ).toHaveCount(1);
   });
 
   /**
@@ -673,7 +685,9 @@ test.describe('Design-review follow-ups (2026-07-11): #614 dead CTA, #618 header
     const topBar = page.locator('[data-testid="topbar"]');
     await expect(topBar.getByTestId('moon-summary')).toHaveCount(0);
     await expect(
-      page.locator('[data-testid="targets-table-wrap"]').getByTestId('moon-summary'),
+      page
+        .locator('[data-testid="targets-table-wrap"]')
+        .getByTestId('moon-summary'),
     ).toBeVisible();
 
     // "Add target" is the pinned bar's one primary CTA.

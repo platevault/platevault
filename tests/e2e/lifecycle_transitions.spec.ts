@@ -118,7 +118,9 @@ test.describe('lifecycle transitions · write-side seam (spec 008 / design-v4)',
         .filter({ hasText: 'NGC 7000 Narrowband' }),
     ).toBeVisible({ timeout: 8_000 });
     await expect(
-      page.locator('[data-kind="projects-table-row"]').filter({ hasText: 'M31 LRGB' }),
+      page
+        .locator('[data-kind="projects-table-row"]')
+        .filter({ hasText: 'M31 LRGB' }),
     ).toBeVisible();
     await expect(
       page

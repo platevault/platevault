@@ -82,7 +82,9 @@ test.describe('lifecycle detail · sessions page + provenance UI (spec 006 / spe
     ).not.toBeVisible();
 
     // The flat sessions table renders its rows.
-    await expect(page.locator('[data-kind="sessions-table-row"]').first()).toBeVisible({
+    await expect(
+      page.locator('[data-kind="sessions-table-row"]').first(),
+    ).toBeVisible({
       timeout: 8_000,
     });
 

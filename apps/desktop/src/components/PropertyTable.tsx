@@ -200,6 +200,7 @@ export function PropertyTable({
                 'pv-property-table__cell pv-property-table__cell--value' +
                 (prop.mono ? ' pv-mono' : '')
               }
+              data-testid="property-table-cell-value"
               role="cell"
             >
               {isEditing ? (

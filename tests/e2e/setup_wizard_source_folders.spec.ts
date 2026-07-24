@@ -63,7 +63,9 @@ async function expectSourceControlsContained(root: Locator): Promise<void> {
     );
   expect(overflowing).toEqual([]);
 
-  for (const group of await root.locator('[data-testid^="source-group-"]').all()) {
+  for (const group of await root
+    .locator('[data-testid^="source-group-"]')
+    .all()) {
     const groupBox = assertDefined(
       await group.boundingBox(),
       'source group bounding box',
@@ -161,7 +163,9 @@ test.describe('setup wizard · source-folder primitives at 320 CSS px', () => {
       await page.keyboard.press('Tab');
       await expect(addByPath).toBeFocused();
 
-      await expectSourceControlsContained(page.locator('[data-testid="step-sources"]'));
+      await expectSourceControlsContained(
+        page.locator('[data-testid="step-sources"]'),
+      );
     });
   }
 });
@@ -188,6 +192,8 @@ test.describe('setup wizard · source-folder primitives at 200% zoom', () => {
         }),
     );
 
-    await expectSourceControlsContained(page.locator('[data-testid="step-sources"]'));
+    await expectSourceControlsContained(
+      page.locator('[data-testid="step-sources"]'),
+    );
   });
 });

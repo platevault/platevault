@@ -110,7 +110,9 @@ test.describe('project lifecycle · detail surfaces (Journey 5)', () => {
     await expect(outputs.getByText('No accepted outputs yet')).toBeVisible();
 
     // ── Per-channel integration time (Ha 1h 48m, OIII 1h 16m) ────────────────
-    const channels = page.locator('[data-testid="project-detail-channels-section"]');
+    const channels = page.locator(
+      '[data-testid="project-detail-channels-section"]',
+    );
     await expect(channels).toBeVisible();
     await expect(channels.getByText('1h 48m')).toBeVisible();
     await expect(channels.getByText('1h 16m')).toBeVisible();
@@ -142,9 +144,11 @@ test.describe('project lifecycle · detail surfaces (Journey 5)', () => {
     // The Add-sources toggle reveals the shared SessionSourcePicker (filtered to
     // sessions not already linked to this project).
     await editPane.getByRole('button', { name: 'Add sources' }).click();
-    await expect(editPane.locator('[data-testid="source-picker"]')).toBeVisible({
-      timeout: 5_000,
-    });
+    await expect(editPane.locator('[data-testid="source-picker"]')).toBeVisible(
+      {
+        timeout: 5_000,
+      },
+    );
     await expect(
       page.getByTestId('app-error-boundary-fallback'),
     ).not.toBeVisible();
@@ -248,7 +252,9 @@ test.describe('projects list · multiselect state filter (#721 009 SC-004 / 033 
         .filter({ hasText: 'Cave Nebula attempt' }),
     ).toBeVisible();
     await expect(
-      page.locator('[data-kind="projects-table-row"]').filter({ hasText: 'M31 LRGB' }),
+      page
+        .locator('[data-kind="projects-table-row"]')
+        .filter({ hasText: 'M31 LRGB' }),
     ).not.toBeVisible();
   });
 
@@ -259,7 +265,9 @@ test.describe('projects list · multiselect state filter (#721 009 SC-004 / 033 
     await page.goto('/#/projects?lifecycle=ready,prepared');
 
     await expect(
-      page.locator('[data-kind="projects-table-row"]').filter({ hasText: 'M31 LRGB' }),
+      page
+        .locator('[data-kind="projects-table-row"]')
+        .filter({ hasText: 'M31 LRGB' }),
     ).toBeVisible({ timeout: 8_000 });
     await expect(
       page

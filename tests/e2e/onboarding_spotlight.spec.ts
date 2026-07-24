@@ -218,9 +218,9 @@ test.describe('onboarding find-it spotlight (spec 056 US4)', () => {
     // title still names the row the user actually asked about.
     const tooltip = page.locator('[data-testid="onboarding-tooltip"]');
     await expect(tooltip).toContainText('is required first');
-    await expect(tooltip.locator('[data-testid="onboarding-tooltip-title"]')).toHaveText(
-      'Add a favourite target',
-    );
+    await expect(
+      tooltip.locator('[data-testid="onboarding-tooltip-title"]'),
+    ).toHaveText('Add a favourite target');
   });
 
   test('every registry item offers find; review masters spotlights its first row', async ({

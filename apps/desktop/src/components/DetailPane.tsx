@@ -17,7 +17,7 @@ export function DetailPane({ children, fill }: DetailPaneProps) {
   return (
     <div
       className={`pv-detail${fill ? ' pv-detail--fill' : ''}`}
-      data-testid={fill ? 'detail-fill' : 'detail'}
+      data-testid="detail"
     >
       {children}
     </div>

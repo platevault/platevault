@@ -413,7 +413,9 @@ test.describe('Journey 10 · Language switcher (spec 061 US2)', () => {
     // this group's only control) — `getByText(exact)` would match both, so
     // scope to the group heading specifically.
     await expect(
-      page.locator('[data-testid="settings-group-title"]', { hasText: 'Language' }),
+      page.locator('[data-testid="settings-group-title"]', {
+        hasText: 'Language',
+      }),
     ).toBeVisible();
 
     // FR-007: flag + native name both render as visible text.
@@ -527,7 +529,9 @@ test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
   ): Promise<void> {
     await page.setViewportSize({ width: 1100, height });
 
-    const bar = page.locator('[data-testid="page-bar"]').first();
+    const bar = page
+      .locator('[data-testid="page-bar"], [data-testid="topbar"]')
+      .first();
     await expect(bar).toBeVisible();
     const barBoxBefore = assertDefined(
       await bar.boundingBox(),
@@ -567,7 +571,9 @@ test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
     ).toBeVisible();
     // The top action bar carries the page title.
     await expect(
-      page.locator('[data-testid="page-bar"]').getByText('Settings', { exact: true }),
+      page
+        .locator('[data-testid="page-bar"]')
+        .getByText('Settings', { exact: true }),
     ).toBeVisible();
 
     await assertBarPinnedWhileContentScrolls(page, 720);
@@ -586,7 +592,9 @@ test.describe('Journey 10 · i18n catalog (spec 046)', () => {
 
     // Known keys must resolve to their English strings, not literal keys.
     await expect(
-      page.locator('[data-testid="page-bar"]').getByText('Settings', { exact: true }),
+      page
+        .locator('[data-testid="page-bar"]')
+        .getByText('Settings', { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Data Sources', exact: true }),
@@ -681,9 +689,9 @@ test.describe('Journey 10 · Bottom log viewer (spec 019)', () => {
 
     // Truncation marker is NOT reachable in mock mode (documented above):
     // assert its honest absence rather than fabricating a truncated buffer.
-    await expect(page.locator('[data-testid="logpanel-truncation-marker"]')).toHaveCount(
-      0,
-    );
+    await expect(
+      page.locator('[data-testid="logpanel-truncation-marker"]'),
+    ).toHaveCount(0);
 
     // Level filter behaves: selecting "Error" hides non-error entries.
     await logRegion.getByRole('button', { name: 'Error', exact: true }).click();
@@ -720,7 +728,9 @@ test.describe('Journey 10 · Whole-app zoom envelope pins (spec 055 FR-006)', ()
     page: Page,
   ): Promise<void> {
     await expect(page.locator('[data-testid="sidebar"]')).toBeVisible();
-    await expect(page.locator('[data-testid="page-bar"]').first()).toBeVisible();
+    await expect(
+      page.locator('[data-testid="page-bar"], [data-testid="topbar"]').first(),
+    ).toBeVisible();
     await expect(page.locator('[data-testid="frame-main"]')).toBeVisible();
 
     const overflow = await page.evaluate(() => {

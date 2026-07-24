@@ -7,6 +7,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 import alm from './eslint-rules/no-user-string.js';
 import noVacuousWaitFor from './eslint-rules/no-vacuous-waitfor.js';
+import requireRootTestid from './eslint-rules/require-root-testid.js';
 
 // ESLint is the SECOND lint layer, after Biome (`pnpm lint` runs
 // `biome check` first). Biome owns the syntactic layer (core JS recommended +
@@ -52,7 +53,13 @@ export default tseslint.config(
   // wave without turning the whole tree red at once.
   {
     plugins: {
-      alm: { rules: { ...alm.rules, ...noVacuousWaitFor.rules } },
+      alm: {
+        rules: {
+          ...alm.rules,
+          ...noVacuousWaitFor.rules,
+          ...requireRootTestid.rules,
+        },
+      },
     },
   },
   {
@@ -73,6 +80,11 @@ export default tseslint.config(
       // JS-side pluralization ('s'/'es' suffix ternaries) bakes English plural
       // rules into code; use inlang plural variant messages instead (spec 046 #7).
       'alm/no-js-plural': 'error',
+      // Exported React components must have data-testid on their root JSX element
+      // so e2e tests can locate them without coupling to CSS class names.
+      // Existing violations are baselined in scripts/eslint-alm-baseline.txt;
+      // new violations (not in the baseline) fail the build immediately.
+      'alm/require-root-testid': 'error',
     },
   },
 

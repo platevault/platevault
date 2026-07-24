@@ -111,7 +111,9 @@ test.describe('Spec 055 Phase 2 · font-size dial (T014, SC-003/SC-004)', () => 
     await page.goto('/#/sessions');
     await page.waitForLoadState('networkidle');
 
-    const groupLabel = page.locator('[data-testid="sidebar-group-label"]').first();
+    const groupLabel = page
+      .locator('[data-testid="sidebar-group-label"]')
+      .first();
     await expect(groupLabel).toBeVisible();
 
     const defaultPx = await groupLabel.evaluate(

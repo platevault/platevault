@@ -402,6 +402,7 @@ function AddFolderButton({
         <Btn
           size="sm"
           variant="primary"
+          data-testid="btn-primary"
           onClick={handleChoose}
           disabled={loading}
           aria-label={m.setup_sources_add_folder_aria({

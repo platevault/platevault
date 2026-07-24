@@ -47,7 +47,9 @@ test.describe('Sessions list — Type filter defaults to acquisition (#652)', ()
     seedSetupComplete(page);
     await page.goto('/#/sessions');
 
-    await expect(page.locator('[data-kind="sessions-table-row"]').first()).toBeVisible({
+    await expect(
+      page.locator('[data-kind="sessions-table-row"]').first(),
+    ).toBeVisible({
       timeout: 8_000,
     });
 
