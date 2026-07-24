@@ -251,7 +251,7 @@ pub async fn upsert_inbox_file_metadata(
 /// # Errors
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn upsert_inbox_file_metadata_conn(
-    pool: &mut SqliteConnection,
+    conn: &mut SqliteConnection,
     m: &UpsertFileMetadata<'_>,
 ) -> DbResult<()> {
     let id = uuid::Uuid::new_v4().to_string();
@@ -327,7 +327,7 @@ pub async fn upsert_inbox_file_metadata_conn(
     .bind(m.wcs_ra_deg)
     .bind(m.wcs_dec_deg)
     .bind(m.wcs_rotation_deg)
-    .execute(&mut *pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
