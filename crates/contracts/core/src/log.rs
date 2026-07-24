@@ -38,6 +38,25 @@ pub enum LogEntrySource {
     Tool,
 }
 
+/// Prefix-to-source mapping table for [`LogEntrySource::from_topic`].
+const TOPIC_PREFIX_TABLE: &[(&str, LogEntrySource)] = &[
+    ("catalog.", LogEntrySource::Catalog),
+    ("plan.", LogEntrySource::Plan),
+    ("archive.", LogEntrySource::Plan),
+    ("workflow.", LogEntrySource::Workflow),
+    ("artifact.", LogEntrySource::Workflow),
+    ("lifecycle.", LogEntrySource::Lifecycle),
+    ("inventory.", LogEntrySource::Inventory),
+    ("settings.", LogEntrySource::Settings),
+    ("project.", LogEntrySource::Project),
+    ("target.", LogEntrySource::Target),
+    ("tool.", LogEntrySource::Tool),
+    ("audit.", LogEntrySource::Audit),
+    ("native.", LogEntrySource::Audit),
+    ("first_run.", LogEntrySource::Audit),
+    ("protection.", LogEntrySource::Audit),
+];
+
 impl LogEntrySource {
     /// Derive the source tag from an event-bus topic string.
     ///
@@ -45,33 +64,10 @@ impl LogEntrySource {
     /// should fall back to `LogEntrySource::Audit`.
     #[must_use]
     pub fn from_topic(topic: &str) -> Option<Self> {
-        if topic.starts_with("catalog.") {
-            Some(Self::Catalog)
-        } else if topic.starts_with("plan.") || topic.starts_with("archive.") {
-            Some(Self::Plan)
-        } else if topic.starts_with("workflow.") || topic.starts_with("artifact.") {
-            Some(Self::Workflow)
-        } else if topic.starts_with("lifecycle.") {
-            Some(Self::Lifecycle)
-        } else if topic.starts_with("inventory.") {
-            Some(Self::Inventory)
-        } else if topic.starts_with("settings.") {
-            Some(Self::Settings)
-        } else if topic.starts_with("project.") {
-            Some(Self::Project)
-        } else if topic.starts_with("target.") {
-            Some(Self::Target)
-        } else if topic.starts_with("tool.") {
-            Some(Self::Tool)
-        } else if topic.starts_with("audit.")
-            || topic.starts_with("native.")
-            || topic.starts_with("first_run.")
-            || topic.starts_with("protection.")
-        {
-            Some(Self::Audit)
-        } else {
-            None
-        }
+        TOPIC_PREFIX_TABLE
+            .iter()
+            .find(|(prefix, _)| topic.starts_with(prefix))
+            .map(|(_, source)| *source)
     }
 }
 
@@ -103,27 +99,25 @@ impl LogLevel {
     /// Defaults to `Info` for unknown topics.
     #[must_use]
     pub fn from_topic_and_payload(topic: &str, payload: &serde_json::Value) -> Self {
-        // Error-indicator suffixes (dot-separated topic segments, not file extensions).
-        #[allow(clippy::case_sensitive_file_extension_comparisons)]
-        let is_error_topic =
-            topic.ends_with(".failed") || topic.ends_with(".error") || topic.ends_with(".denied");
-        if is_error_topic {
-            return Self::Error;
-        }
-        // Warn-indicator suffixes.
-        #[allow(clippy::case_sensitive_file_extension_comparisons)]
-        let is_warn_topic = topic.ends_with(".warn")
-            || topic.ends_with(".repair")
-            || topic.ends_with(".missing")
-            || topic.ends_with(".stale")
-            || topic.ends_with(".lagged")
-            || topic.ends_with(".invalid");
-        if is_warn_topic {
-            return Self::Warn;
-        }
-        // Debug-indicator suffixes.
-        if topic.ends_with(".progress") || topic.ends_with(".snapshot") {
-            return Self::Debug;
+        /// Suffix-to-level mapping; first match wins.
+        const SUFFIX_LEVEL_TABLE: &[(&str, LogLevel)] = &[
+            (".failed", LogLevel::Error),
+            (".error", LogLevel::Error),
+            (".denied", LogLevel::Error),
+            (".warn", LogLevel::Warn),
+            (".repair", LogLevel::Warn),
+            (".missing", LogLevel::Warn),
+            (".stale", LogLevel::Warn),
+            (".lagged", LogLevel::Warn),
+            (".invalid", LogLevel::Warn),
+            (".progress", LogLevel::Debug),
+            (".snapshot", LogLevel::Debug),
+        ];
+
+        for &(suffix, level) in SUFFIX_LEVEL_TABLE {
+            if topic.ends_with(suffix) {
+                return level;
+            }
         }
         // Check payload for explicit level fields.
         if let Some(level_str) = payload.get("level").and_then(|v| v.as_str()) {
@@ -244,6 +238,23 @@ fn extract_request_id(payload: &serde_json::Value) -> Option<String> {
     None
 }
 
+/// Well-known payload id fields: (`snake_case`, `camelCase`, `entity_type`).
+const ENTITY_ID_FIELDS: &[(&str, &str, &str)] = &[
+    ("plan_id", "planId", "plan"),
+    ("project_id", "projectId", "project"),
+    ("artifact_id", "artifactId", "artifact"),
+    ("catalog_id", "catalogId", "catalog"),
+];
+
+/// Topic-prefix to entity-type inference table.
+const ENTITY_TOPIC_PREFIXES: &[(&str, &str)] = &[
+    ("plan.", "plan"),
+    ("archive.", "plan"),
+    ("catalog.", "catalog"),
+    ("artifact.", "artifact"),
+    ("workflow.", "artifact"),
+];
+
 fn extract_entity(topic: &str, payload: &serde_json::Value) -> (Option<String>, Option<String>) {
     // Try explicit entity_type / entity_id first.
     let et = payload
@@ -261,36 +272,18 @@ fn extract_entity(topic: &str, payload: &serde_json::Value) -> (Option<String>, 
     }
 
     // Try well-known id fields.
-    let plan_id = payload.get("plan_id").or_else(|| payload.get("planId")).and_then(|v| v.as_str());
-    if let Some(id) = plan_id {
-        return (Some("plan".to_owned()), Some(id.to_owned()));
-    }
-    let project_id =
-        payload.get("project_id").or_else(|| payload.get("projectId")).and_then(|v| v.as_str());
-    if let Some(id) = project_id {
-        return (Some("project".to_owned()), Some(id.to_owned()));
-    }
-    let artifact_id =
-        payload.get("artifact_id").or_else(|| payload.get("artifactId")).and_then(|v| v.as_str());
-    if let Some(id) = artifact_id {
-        return (Some("artifact".to_owned()), Some(id.to_owned()));
-    }
-    let catalog_id =
-        payload.get("catalog_id").or_else(|| payload.get("catalogId")).and_then(|v| v.as_str());
-    if let Some(id) = catalog_id {
-        return (Some("catalog".to_owned()), Some(id.to_owned()));
+    for &(snake, camel, entity_type) in ENTITY_ID_FIELDS {
+        let id = payload.get(snake).or_else(|| payload.get(camel)).and_then(|v| v.as_str());
+        if let Some(id) = id {
+            return (Some(entity_type.to_owned()), Some(id.to_owned()));
+        }
     }
 
     // Fall back to topic-based inference.
-    let entity_type = if topic.starts_with("plan.") || topic.starts_with("archive.") {
-        Some("plan".to_owned())
-    } else if topic.starts_with("catalog.") {
-        Some("catalog".to_owned())
-    } else if topic.starts_with("artifact.") || topic.starts_with("workflow.") {
-        Some("artifact".to_owned())
-    } else {
-        None
-    };
+    let entity_type = ENTITY_TOPIC_PREFIXES
+        .iter()
+        .find(|(prefix, _)| topic.starts_with(prefix))
+        .map(|(_, et)| (*et).to_owned());
     (entity_type, None)
 }
 

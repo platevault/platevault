@@ -199,6 +199,217 @@ async fn signal_tool_unconfigured_block(
     }
 }
 
+/// Shorthand for building an early-exit error `ToolLaunchResponse`.
+fn error_response(code: &str, message: String) -> ToolLaunchResponse {
+    ToolLaunchResponse {
+        status: ToolLaunchStatus::Error,
+        launch_id: None,
+        pid: None,
+        launched_at: None,
+        working_dir: None,
+        audit_id: None,
+        prior_instance_alive: false,
+        error: Some(ToolLaunchError { code: code.to_owned(), message }),
+    }
+}
+
+/// Resolved tool configuration (steps 1-2 of the launch pipeline).
+struct ResolvedToolConfig {
+    project: persistence_plans::repositories::projects::ProjectRow,
+    profile: workflow_profiles::ToolProfile,
+    executable_path: String,
+}
+
+/// Load project and validate tool configuration (profile exists, enabled, path set).
+///
+/// Returns `Err(ToolLaunchResponse)` for user-facing validation failures.
+async fn resolve_tool_config(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    req: &ToolLaunchRequest,
+) -> Result<ResolvedToolConfig, ToolLaunchResponse> {
+    let project = proj_repo::get_project(pool, &req.project_id)
+        .await
+        .map_err(|e| error_response("project.not_found", format!("{e}")))?;
+
+    let Some(profile) = seed::find(&req.tool_id) else {
+        return Err(error_response(
+            "tool.not_configured",
+            format!("No tool profile found for '{}'", req.tool_id),
+        ));
+    };
+
+    let enabled = read_bool_setting(pool, &key_enabled(&req.tool_id), true).await;
+    if !enabled {
+        signal_tool_unconfigured_block(pool, bus, &req.project_id, &req.tool_id).await;
+        return Err(error_response(
+            "tool.not_configured",
+            format!("Tool '{}' is disabled in settings", req.tool_id),
+        ));
+    }
+
+    let executable_path = read_string_setting(pool, &key_executable_path(&req.tool_id)).await;
+    let Some(executable_path) = executable_path.filter(|s| !s.trim().is_empty()) else {
+        signal_tool_unconfigured_block(pool, bus, &req.project_id, &req.tool_id).await;
+        return Err(error_response(
+            "tool.not_configured",
+            format!("No executable path configured for tool '{}'", req.tool_id),
+        ));
+    };
+
+    Ok(ResolvedToolConfig { project, profile, executable_path })
+}
+
+/// Resolve working directory and verify library-root containment (steps 3-4).
+///
+/// Returns the canonical working-directory string, or `Err(ToolLaunchResponse)`
+/// when the resolved path falls outside all registered library roots.
+async fn resolve_and_check_working_dir(
+    pool: &SqlitePool,
+    project_path: &str,
+    project_id: &str,
+) -> Result<String, ToolLaunchResponse> {
+    let project_root = std::path::PathBuf::from(project_path);
+    let active_source_view = resolve_active_source_view_folder(pool, project_id).await;
+    let working_dir_path = resolve_working_folder(&project_root, active_source_view.as_deref());
+
+    let canonical_cwd =
+        working_dir_path.canonicalize().unwrap_or_else(|_| working_dir_path.clone());
+    let all_roots = inv_repo::list_all_roots(pool)
+        .await
+        .map_err(|e| error_response("db.error", format!("{e}")))?;
+    let registered = first_run_repo::list_sources(pool)
+        .await
+        .map_err(|e| error_response("db.error", format!("{e}")))?;
+    let root_paths: Vec<std::path::PathBuf> = all_roots
+        .iter()
+        .map(|r| r.current_path.as_str())
+        .chain(registered.iter().map(|s| s.path.as_str()))
+        .map(|raw| {
+            let p = std::path::PathBuf::from(raw);
+            p.canonicalize().unwrap_or(p)
+        })
+        .collect();
+    let root_refs: Vec<&std::path::Path> =
+        root_paths.iter().map(std::path::PathBuf::as_path).collect();
+
+    if let Err(code) = verify_cwd_containment(&canonical_cwd, &root_refs) {
+        return Err(error_response(
+            code,
+            format!(
+                "Working directory '{}' is outside all registered library roots",
+                canonical_cwd.display()
+            ),
+        ));
+    }
+
+    Ok(canonical_cwd.to_string_lossy().into_owned())
+}
+
+/// Spawn the process, persist the launch row, and emit the audit event (steps 7-9).
+#[allow(clippy::too_many_arguments)]
+async fn spawn_and_record(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    spawner: &dyn ProcessSpawner,
+    req: &ToolLaunchRequest,
+    executable_path: &str,
+    argv: Vec<String>,
+    args_hash: String,
+    working_dir_str: &str,
+    bundle_id: Option<String>,
+) -> Result<ToolLaunchResponse, String> {
+    let spawn_req = SpawnRequest {
+        executable: executable_path.to_owned(),
+        args: argv,
+        working_dir: working_dir_str.to_owned(),
+        bundle_id,
+    };
+
+    let launch_id = new_id();
+    let audit_id = new_id();
+    let launched_at = Timestamp::now_iso();
+
+    let (outcome, pid, error_response_opt) = match spawner.spawn(spawn_req) {
+        Ok(result) => ("spawned", result.pid, None),
+        Err(LaunchError::MacOsQuarantine) => (
+            "spawn_failed",
+            None,
+            Some(ToolLaunchError {
+                code: "macos.quarantine.detected".to_owned(),
+                message:
+                    "macOS quarantined this app. Run `xattr -dr com.apple.quarantine <path>` and retry."
+                        .to_owned(),
+            }),
+        ),
+        Err(LaunchError::SpawnFailed(msg)) => (
+            "spawn_failed",
+            None,
+            Some(ToolLaunchError {
+                code: "launch.failed".to_owned(),
+                message: format!("OS error: {msg}"),
+            }),
+        ),
+    };
+
+    let _ = tl_repo::insert_tool_launch(
+        pool,
+        &tl_repo::InsertToolLaunch {
+            id: &launch_id,
+            project_id: &req.project_id,
+            tool_id: &req.tool_id,
+            pid,
+            working_dir: Some(working_dir_str),
+            args_hash: Some(&args_hash),
+            outcome,
+            audit_id: &audit_id,
+        },
+    )
+    .await
+    .map_err(|e| format!("{e}"))?;
+
+    let _ = bus
+        .publish(
+            TOPIC_TOOL_LAUNCH,
+            Source::User,
+            ToolLaunchEvent {
+                launch_id: launch_id.clone(),
+                project_id: req.project_id.clone(),
+                tool_id: req.tool_id.clone(),
+                working_dir: Some(working_dir_str.to_owned()),
+                args_hash: Some(args_hash),
+                outcome: outcome.to_owned(),
+                at: launched_at.clone(),
+            },
+        )
+        .await
+        .map_err(|e| format!("audit bus: {e}"));
+
+    if let Some(err) = error_response_opt {
+        return Ok(ToolLaunchResponse {
+            status: ToolLaunchStatus::Error,
+            launch_id: Some(launch_id),
+            pid: None,
+            launched_at: Some(launched_at),
+            working_dir: Some(working_dir_str.to_owned()),
+            audit_id: Some(audit_id),
+            prior_instance_alive: false,
+            error: Some(err),
+        });
+    }
+
+    Ok(ToolLaunchResponse {
+        status: ToolLaunchStatus::Success,
+        launch_id: Some(launch_id),
+        pid,
+        launched_at: Some(launched_at),
+        working_dir: Some(working_dir_str.to_owned()),
+        audit_id: Some(audit_id),
+        prior_instance_alive: false,
+        error: None,
+    })
+}
+
 // ── launch ────────────────────────────────────────────────────────────────────
 
 /// Launch the configured processing tool for the given project.
@@ -224,115 +435,18 @@ pub async fn launch(
     spawner: &dyn ProcessSpawner,
     req: ToolLaunchRequest,
 ) -> Result<ToolLaunchResponse, String> {
-    // ── Step 1: load project ──────────────────────────────────────────────────
-    let project =
-        proj_repo::get_project(pool, &req.project_id).await.map_err(|e| format!("{e}"))?;
-
-    // ── Step 2: load seed profile + settings ─────────────────────────────────
-    let Some(profile) = seed::find(&req.tool_id) else {
-        return Ok(ToolLaunchResponse {
-            status: ToolLaunchStatus::Error,
-            launch_id: None,
-            pid: None,
-            launched_at: None,
-            working_dir: None,
-            audit_id: None,
-            prior_instance_alive: false,
-            error: Some(ToolLaunchError {
-                code: "tool.not_configured".to_owned(),
-                message: format!("No tool profile found for '{}'", req.tool_id),
-            }),
-        });
+    // ── Steps 1-2: resolve tool configuration ────────────────────────────────
+    let config = match resolve_tool_config(pool, bus, &req).await {
+        Ok(c) => c,
+        Err(resp) => return Ok(resp),
     };
 
-    let enabled = read_bool_setting(pool, &key_enabled(&req.tool_id), true).await;
-    if !enabled {
-        signal_tool_unconfigured_block(pool, bus, &req.project_id, &req.tool_id).await;
-        return Ok(ToolLaunchResponse {
-            status: ToolLaunchStatus::Error,
-            launch_id: None,
-            pid: None,
-            launched_at: None,
-            working_dir: None,
-            audit_id: None,
-            prior_instance_alive: false,
-            error: Some(ToolLaunchError {
-                code: "tool.not_configured".to_owned(),
-                message: format!("Tool '{}' is disabled in settings", req.tool_id),
-            }),
-        });
-    }
-
-    let executable_path = read_string_setting(pool, &key_executable_path(&req.tool_id)).await;
-    let Some(executable_path) = executable_path.filter(|s| !s.trim().is_empty()) else {
-        signal_tool_unconfigured_block(pool, bus, &req.project_id, &req.tool_id).await;
-        return Ok(ToolLaunchResponse {
-            status: ToolLaunchStatus::Error,
-            launch_id: None,
-            pid: None,
-            launched_at: None,
-            working_dir: None,
-            audit_id: None,
-            prior_instance_alive: false,
-            error: Some(ToolLaunchError {
-                code: "tool.not_configured".to_owned(),
-                message: format!("No executable path configured for tool '{}'", req.tool_id),
-            }),
-        });
-    };
-
-    // ── Step 3: resolve working directory ────────────────────────────────────
-    // `project.path` is the project root. Prefer the project's active
-    // generated source-view folder when one exists (spec 049 restored real
-    // generation, #726); fall back to the project root otherwise.
-    let project_root = std::path::PathBuf::from(&project.path);
-    let active_source_view = resolve_active_source_view_folder(pool, &req.project_id).await;
-    let working_dir_path = resolve_working_folder(&project_root, active_source_view.as_deref());
-
-    // ── Step 4: canonicalize cwd + library-root containment check ────────────
-    let canonical_cwd =
-        working_dir_path.canonicalize().unwrap_or_else(|_| working_dir_path.clone());
-    let all_roots = inv_repo::list_all_roots(pool).await.map_err(|e| format!("{e}"))?;
-    // Roots added through the setup wizard live in `registered_sources` (the
-    // gen-3 source model) and are only mirrored into the legacy `library_root`
-    // table on ingest. Include them so launching from a project anchored under
-    // the registered project folder passes containment (same fallback as
-    // plan_apply root resolution).
-    let registered = first_run_repo::list_sources(pool).await.map_err(|e| format!("{e}"))?;
-    // Canonicalize roots the same way as `canonical_cwd` so containment compares
-    // like-for-like (e.g. macOS `/var` -> `/private/var`, symlinked roots).
-    let root_paths: Vec<std::path::PathBuf> = all_roots
-        .iter()
-        .map(|r| r.current_path.as_str())
-        .chain(registered.iter().map(|s| s.path.as_str()))
-        .map(|raw| {
-            let p = std::path::PathBuf::from(raw);
-            p.canonicalize().unwrap_or(p)
-        })
-        .collect();
-    let root_refs: Vec<&std::path::Path> =
-        root_paths.iter().map(std::path::PathBuf::as_path).collect();
-
-    if let Err(code) = verify_cwd_containment(&canonical_cwd, &root_refs) {
-        return Ok(ToolLaunchResponse {
-            status: ToolLaunchStatus::Error,
-            launch_id: None,
-            pid: None,
-            launched_at: None,
-            working_dir: None,
-            audit_id: None,
-            prior_instance_alive: false,
-            error: Some(ToolLaunchError {
-                code: code.to_owned(),
-                message: format!(
-                    "Working directory '{}' is outside all registered library roots",
-                    canonical_cwd.display()
-                ),
-            }),
-        });
-    }
-
-    let working_dir_str = canonical_cwd.to_string_lossy().into_owned();
+    // ── Steps 3-4: resolve working directory + containment ───────────────────
+    let working_dir_str =
+        match resolve_and_check_working_dir(pool, &config.project.path, &req.project_id).await {
+            Ok(dir) => dir,
+            Err(resp) => return Ok(resp),
+        };
 
     // ── Step 5: re-launch guard ───────────────────────────────────────────────
     if !req.force {
@@ -359,111 +473,35 @@ pub async fn launch(
 
     // ── Step 6: render args template ──────────────────────────────────────────
     let ctx = RenderContext {
-        folder: if profile.supports_open_folder { Some(working_dir_str.as_str()) } else { None },
+        folder: if config.profile.supports_open_folder {
+            Some(working_dir_str.as_str())
+        } else {
+            None
+        },
         file: None,
     };
-    let argv = render(&profile.args_template, &ctx);
-    let args_hash = compute_args_hash(&executable_path, &argv);
+    let argv = render(&config.profile.args_template, &ctx);
+    let args_hash = compute_args_hash(&config.executable_path, &argv);
 
     // bundle_id from Settings (override) or seeded default
     let bundle_id_key = format!("tools.{}.bundle_id", req.tool_id);
     let bundle_id = read_string_setting(pool, &bundle_id_key)
         .await
-        .or_else(|| profile.bundle_id.map(ToOwned::to_owned));
+        .or_else(|| config.profile.bundle_id.map(ToOwned::to_owned));
 
-    // ── Step 7: spawn ─────────────────────────────────────────────────────────
-    let spawn_req = SpawnRequest {
-        executable: executable_path.clone(),
-        args: argv.clone(),
-        working_dir: working_dir_str.clone(),
-        bundle_id: bundle_id.clone(),
-    };
-
-    let launch_id = new_id();
-    let audit_id = new_id();
-    let launched_at = Timestamp::now_iso();
-
-    let (outcome, pid, error_response) = match spawner.spawn(spawn_req) {
-        Ok(result) => ("spawned", result.pid, None),
-        Err(LaunchError::MacOsQuarantine) => (
-            "spawn_failed",
-            None,
-            Some(ToolLaunchError {
-                code: "macos.quarantine.detected".to_owned(),
-                message:
-                    "macOS quarantined this app. Run `xattr -dr com.apple.quarantine <path>` and retry."
-                        .to_owned(),
-            }),
-        ),
-        Err(LaunchError::SpawnFailed(msg)) => (
-            "spawn_failed",
-            None,
-            Some(ToolLaunchError {
-                code: "launch.failed".to_owned(),
-                message: format!("OS error: {msg}"),
-            }),
-        ),
-    };
-
-    // ── Step 8: persist tool_launches row ────────────────────────────────────
-    let _ = tl_repo::insert_tool_launch(
+    // ── Steps 7-9: spawn, persist, emit audit ────────────────────────────────
+    spawn_and_record(
         pool,
-        &tl_repo::InsertToolLaunch {
-            id: &launch_id,
-            project_id: &req.project_id,
-            tool_id: &req.tool_id,
-            pid,
-            working_dir: Some(&working_dir_str),
-            args_hash: Some(&args_hash),
-            outcome,
-            audit_id: &audit_id,
-        },
+        bus,
+        spawner,
+        &req,
+        &config.executable_path,
+        argv,
+        args_hash,
+        &working_dir_str,
+        bundle_id,
     )
     .await
-    .map_err(|e| format!("{e}"))?;
-
-    // ── Step 9: emit audit event ──────────────────────────────────────────────
-    let _ = bus
-        .publish(
-            TOPIC_TOOL_LAUNCH,
-            Source::User,
-            ToolLaunchEvent {
-                launch_id: launch_id.clone(),
-                project_id: req.project_id.clone(),
-                tool_id: req.tool_id.clone(),
-                working_dir: Some(working_dir_str.clone()),
-                args_hash: Some(args_hash.clone()),
-                outcome: outcome.to_owned(),
-                at: launched_at.clone(),
-            },
-        )
-        .await
-        .map_err(|e| format!("audit bus: {e}"));
-
-    // Return response
-    if let Some(err) = error_response {
-        return Ok(ToolLaunchResponse {
-            status: ToolLaunchStatus::Error,
-            launch_id: Some(launch_id),
-            pid: None,
-            launched_at: Some(launched_at),
-            working_dir: Some(working_dir_str),
-            audit_id: Some(audit_id),
-            prior_instance_alive: false,
-            error: Some(err),
-        });
-    }
-
-    Ok(ToolLaunchResponse {
-        status: ToolLaunchStatus::Success,
-        launch_id: Some(launch_id),
-        pid,
-        launched_at: Some(launched_at),
-        working_dir: Some(working_dir_str),
-        audit_id: Some(audit_id),
-        prior_instance_alive: false,
-        error: None,
-    })
 }
 
 // ── list_profiles ─────────────────────────────────────────────────────────────

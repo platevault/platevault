@@ -239,73 +239,42 @@ impl MatchingSettings {
     /// # Panics
     ///
     /// Panics only if the fixed set of validation rules produces more than 500 issues.
-    #[allow(clippy::too_many_lines)]
     pub fn validate(&self) -> SettingsValidation {
-        let mut issues = Vec::new();
-        check_range(
-            &mut issues,
-            "sameSession.coverageMinPercent",
+        /// (`field_path`, value index, min, max, optional warning boundary + direction)
+        const RANGE_CHECKS: &[(&str, usize, f64, f64, Option<(f64, bool)>)] = &[
+            ("sameSession.coverageMinPercent", 0, 90.0, 99.5, Some((93.0, false))),
+            ("sameSession.centerSeparationMaxPercent", 1, 0.5, 5.0, Some((3.0, true))),
+            ("sameSession.rotationMaxDeg", 2, 0.25, 3.0, Some((2.0, true))),
+            ("sibling.coverageMinPercent", 3, 80.0, 95.0, Some((85.0, false))),
+            ("sibling.centerSeparationMaxPercent", 4, 2.0, 15.0, Some((10.0, true))),
+            ("sibling.rotationMaxDeg", 5, 1.0, 15.0, Some((10.0, true))),
+            ("mosaic.overlapMinPercent", 6, 1.0, 20.0, Some((3.0, false))),
+            ("mosaic.overlapMaxPercent", 7, 20.0, 60.0, Some((50.0, true))),
+            ("darkThermal.moderateDeg", 8, 0.1, 2.0, Some((1.0, true))),
+            ("darkThermal.severeDeg", 9, 0.5, 5.0, Some((3.0, true))),
+            ("flatOrientation.normalThroughDeg", 10, 0.5, 5.0, Some((3.0, true))),
+            ("flatOrientation.redAboveDeg", 11, 0.5, 15.0, Some((8.0, true))),
+        ];
+
+        let values: [FiniteDecimal; 12] = [
             self.same_session.coverage_min_percent,
-            90.0,
-            99.5,
-            Some((93.0, false)),
-        );
-        check_range(
-            &mut issues,
-            "sameSession.centerSeparationMaxPercent",
             self.same_session.center_separation_max_percent,
-            0.5,
-            5.0,
-            Some((3.0, true)),
-        );
-        check_range(
-            &mut issues,
-            "sameSession.rotationMaxDeg",
             self.same_session.rotation_max_deg,
-            0.25,
-            3.0,
-            Some((2.0, true)),
-        );
-        check_range(
-            &mut issues,
-            "sibling.coverageMinPercent",
             self.sibling.coverage_min_percent,
-            80.0,
-            95.0,
-            Some((85.0, false)),
-        );
-        check_range(
-            &mut issues,
-            "sibling.centerSeparationMaxPercent",
             self.sibling.center_separation_max_percent,
-            2.0,
-            15.0,
-            Some((10.0, true)),
-        );
-        check_range(
-            &mut issues,
-            "sibling.rotationMaxDeg",
             self.sibling.rotation_max_deg,
-            1.0,
-            15.0,
-            Some((10.0, true)),
-        );
-        check_range(
-            &mut issues,
-            "mosaic.overlapMinPercent",
             self.mosaic.overlap_min_percent,
-            1.0,
-            20.0,
-            Some((3.0, false)),
-        );
-        check_range(
-            &mut issues,
-            "mosaic.overlapMaxPercent",
             self.mosaic.overlap_max_percent,
-            20.0,
-            60.0,
-            Some((50.0, true)),
-        );
+            self.dark_thermal.moderate_deg,
+            self.dark_thermal.severe_deg,
+            self.flat_orientation.normal_through_deg,
+            self.flat_orientation.red_above_deg,
+        ];
+
+        let mut issues = Vec::new();
+        for &(field, idx, min, max, warning) in RANGE_CHECKS {
+            check_range(&mut issues, field, values[idx], min, max, warning);
+        }
         if (self.mosaic.residual_sky_rotation_cap_deg.get() - 90.0).abs() > f64::EPSILON {
             issues.push(issue(
                 "settings.fixed_rule_changed",
@@ -313,38 +282,6 @@ impl MatchingSettings {
                 "mosaic.residualSkyRotationCapDeg",
             ));
         }
-        check_range(
-            &mut issues,
-            "darkThermal.moderateDeg",
-            self.dark_thermal.moderate_deg,
-            0.1,
-            2.0,
-            Some((1.0, true)),
-        );
-        check_range(
-            &mut issues,
-            "darkThermal.severeDeg",
-            self.dark_thermal.severe_deg,
-            0.5,
-            5.0,
-            Some((3.0, true)),
-        );
-        check_range(
-            &mut issues,
-            "flatOrientation.normalThroughDeg",
-            self.flat_orientation.normal_through_deg,
-            0.5,
-            5.0,
-            Some((3.0, true)),
-        );
-        check_range(
-            &mut issues,
-            "flatOrientation.redAboveDeg",
-            self.flat_orientation.red_above_deg,
-            0.5,
-            15.0,
-            Some((8.0, true)),
-        );
         if !(7..=365).contains(&self.flat_age.red_after_nights) {
             issues.push(issue(
                 "settings.out_of_bounds",
