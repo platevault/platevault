@@ -162,12 +162,11 @@ fn prewarmed_cache() -> &'static PrewarmedCache {
     })
 }
 
-/// Per-process isolated E2E instance environment: an ephemeral proxy/native
-/// port pair for `tauri-webdriver`/`tauri-plugin-webdriver`, plus an isolated
+/// Per-process isolated E2E instance environment: an isolated
 /// app-data/app-config/DB root — so concurrent `cargo-nextest` PROCESSES
 /// (`test-threads > 1`; nextest gives each `#[test]` its own OS process, so
 /// there is no in-process races to guard, only cross-process port/file
-/// collisions) never share a WebDriver port, SQLite file, or webview profile.
+/// collisions) never share a SQLite file or webview profile.
 ///
 /// Lazily allocated once per process and reused for every
 /// [`E2eApp::launch`]/[`E2eApp::relaunch`] call in that test: `relaunch()`
@@ -175,6 +174,11 @@ fn prewarmed_cache() -> &'static PrewarmedCache {
 /// surviving across a launch -> shutdown -> relaunch sequence within one
 /// journey (that's the whole point of the webview-storage-preserving
 /// restart), so this must NOT be re-picked per `launch_with` call.
+///
+/// Ports are intentionally NOT stored here; they are picked fresh on every
+/// [`E2eApp::launch_with`] call (see [`pick_port_pair`]) so that a relaunch
+/// never reuses a port that was freed by the preceding shutdown and may have
+/// been grabbed by another process in the interim.
 struct InstanceEnv {
     /// Kept alive for the process lifetime so the paths derived from it stay
     /// valid; never read directly.
@@ -187,12 +191,6 @@ struct InstanceEnv {
     vars: Vec<(&'static str, String)>,
     /// Isolated SQLite file this instance's app connects to (`PV_DB_URL`).
     db_path: PathBuf,
-    /// Port the `tauri-webdriver` CLI proxy listens on (`--port`); thirtyfour
-    /// connects here.
-    proxy_port: u16,
-    /// Port `tauri-plugin-webdriver` binds inside the app (`--native-port`,
-    /// `TAURI_WEBDRIVER_PORT`).
-    native_port: u16,
 }
 
 impl InstanceEnv {
@@ -269,8 +267,7 @@ impl InstanceEnv {
                 ("XDG_CONFIG_HOME", root.path().join("xdg-config").display().to_string()),
             ]
         });
-        let (proxy_port, native_port) = pick_port_pair()?;
-        Ok(Self { _root: root, vars, db_path, proxy_port, native_port })
+        Ok(Self { _root: root, vars, db_path })
     }
 }
 
@@ -289,12 +286,13 @@ fn instance_env() -> &'static InstanceEnv {
 /// Bind two ephemeral (`:0`) TCP ports on loopback and return them, dropping
 /// the listeners immediately so `tauri-webdriver` can bind them itself.
 ///
-/// This has an inherent, accepted bind-race window between the listener drop
-/// here and `tauri-webdriver`'s own bind a moment later (the standard
-/// "ask the OS for a free port, then let someone else use it" pattern used by
-/// e.g. the `portpicker` crate) — acceptable for a CI test harness where a
-/// concurrently-running desktop_shell can be relied on not to be racing for
-/// literally the same ephemeral port in the same instant.
+/// This has an inherent bind-race window between the listener drop here and
+/// `tauri-webdriver`'s own bind a moment later (the standard "ask the OS for
+/// a free port, then let someone else use it" pattern used by e.g. the
+/// `portpicker` crate). The residual TOCTOU risk is mitigated by calling this
+/// fresh on every [`E2eApp::launch_with`] attempt (never reusing a port that
+/// was held by a now-dead process) and by the outer port-rebind retry loop in
+/// `launch_with` that re-picks on a detected early `tauri-webdriver` exit.
 fn pick_port_pair() -> Result<(u16, u16)> {
     let a = std::net::TcpListener::bind("127.0.0.1:0")
         .context("failed to bind an ephemeral port for the tauri-webdriver proxy")?;
@@ -436,6 +434,12 @@ impl InvokeOutcome {
 pub struct E2eApp {
     pub driver: WebDriver,
     driver_proc: Option<Child>,
+    /// Proxy port this instance's `tauri-webdriver` CLI is listening on.
+    /// Stored here (rather than read from the `InstanceEnv` singleton) because
+    /// ports are re-picked on every [`E2eApp::launch_with`] call — the singleton
+    /// no longer owns ports, so `Drop` and `shutdown` must use the port that was
+    /// actually bound for this session.
+    proxy_port: u16,
     /// Retained past launch so failures *after* a successful launch can still
     /// read it (#1204). [`drain_into`] threads keep filling these buffers for
     /// the session's lifetime, so this stays current rather than frozen at
@@ -537,112 +541,182 @@ impl E2eApp {
         }
         reset_window_state(&env.vars);
 
-        let (mut driver_proc, proc_log) = spawn_tauri_webdriver(env).with_context(|| {
-            format!("failed to spawn the tauri-webdriver CLI on port {}", env.proxy_port)
-        })?;
-        let webdriver_url = format!("http://127.0.0.1:{}", env.proxy_port);
-
         let app_binary = app_binary_path()?;
-        let deadline = Instant::now() + LAUNCH_TIMEOUT;
-        let mut launched = false;
 
-        let driver = loop {
-            let mut caps = Capabilities::new();
-            if !launched {
-                // Only the launching attempt may carry tauri:options: the CLI
-                // treats ANY present `application` value (even "") as "kill
-                // the current app and relaunch". Retries must omit the key so
-                // the POST is forwarded to the already-booting instance.
-                if let Err(e) = caps
-                    .set("tauri:options", json!({ "application": app_binary.to_string_lossy() }))
-                {
-                    kill_driver_proc(&mut driver_proc);
-                    return Err(e)
-                        .context("failed to set the tauri:options.application capability");
-                }
-            }
+        // Port-rebind retry: pick fresh ports on every attempt so a relaunch
+        // never reuses a port that was freed by the preceding shutdown and
+        // grabbed by another process in the TOCTOU window between
+        // `pick_port_pair`'s listener drop and `tauri-webdriver`'s own bind.
+        //
+        // Up to PORT_REBIND_ATTEMPTS are made; each picks a brand-new port
+        // pair. An early `tauri-webdriver` exit (detected via `try_wait`) is
+        // the tell-tale sign that the CLI failed to bind its port — on that
+        // signal we kill the process, re-pick, and retry immediately rather
+        // than burning the full LAUNCH_TIMEOUT.
+        const PORT_REBIND_ATTEMPTS: u32 = 3;
+        let mut last_err: Option<anyhow::Error> = None;
 
-            match WebDriver::new(&webdriver_url, caps).await {
-                Ok(driver) => break driver,
-                Err(e) => {
-                    // Any typed WebDriver response means the CLI handled the
-                    // POST — and therefore already spawned the app process.
-                    // Only a transport-level RequestFailed means it didn't.
-                    use thirtyfour::error::WebDriverErrorInner;
-                    if !matches!(e.as_inner(), WebDriverErrorInner::RequestFailed(_)) {
-                        launched = true;
+        for attempt in 1..=PORT_REBIND_ATTEMPTS {
+            let (proxy_port, native_port) = pick_port_pair().with_context(|| {
+                format!("failed to pick ephemeral port pair on attempt {attempt}")
+            })?;
+            let webdriver_url = format!("http://127.0.0.1:{proxy_port}");
+
+            let (mut driver_proc, proc_log) = spawn_tauri_webdriver(env, proxy_port, native_port)
+                .with_context(|| {
+                format!(
+                    "failed to spawn the tauri-webdriver CLI on port {proxy_port} \
+                         (attempt {attempt})"
+                )
+            })?;
+
+            let deadline = Instant::now() + LAUNCH_TIMEOUT;
+            let mut launched = false;
+
+            let session_result: Result<WebDriver> = loop {
+                // Check whether `tauri-webdriver` exited early — this is the
+                // port-bind-failure signal. The CLI exits immediately if it
+                // cannot bind `proxy_port` (e.g. another process stole the port
+                // in the TOCTOU gap). Detecting this early avoids waiting the
+                // full LAUNCH_TIMEOUT before re-picking.
+                match driver_proc.try_wait() {
+                    Ok(Some(status)) => {
+                        break Err(anyhow::anyhow!(
+                            "tauri-webdriver exited early with {status} on attempt {attempt} \
+                             (proxy_port={proxy_port}, native_port={native_port}); \
+                             likely port-bind failure — will retry with fresh ports\n{}",
+                            proc_log.dump()
+                        ));
                     }
-                    if Instant::now() >= deadline {
-                        // Ask the CLI to kill the app it launched (any
-                        // DELETE /session/{id} triggers that), then kill the
-                        // CLI itself — otherwise the leaked pair holds this
-                        // instance's ports and poisons every later launch
-                        // sharing this process (exactly what CI's TRY-2 "can
-                        // not listen to address" failure was, back when ports
-                        // were fixed at 4444/4445).
-                        blocking_session_delete(env.proxy_port);
+                    Ok(None) => {} // still running, proceed
+                    Err(e) => {
+                        // `try_wait` failing is unusual but non-fatal here; log
+                        // and continue — we will discover the exit via the
+                        // WebDriver error path below.
+                        let _ = e;
+                    }
+                }
+
+                let mut caps = Capabilities::new();
+                if !launched {
+                    // Only the launching attempt may carry tauri:options: the
+                    // CLI treats ANY present `application` value (even "") as
+                    // "kill the current app and relaunch". Retries must omit
+                    // the key so the POST is forwarded to the already-booting
+                    // instance.
+                    if let Err(e) = caps.set(
+                        "tauri:options",
+                        json!({ "application": app_binary.to_string_lossy() }),
+                    ) {
                         kill_driver_proc(&mut driver_proc);
-                        return Err(e).with_context(|| {
-                            format!(
+                        return Err(e)
+                            .context("failed to set the tauri:options.application capability");
+                    }
+                }
+
+                match WebDriver::new(&webdriver_url, caps).await {
+                    Ok(driver) => break Ok(driver),
+                    Err(e) => {
+                        // Any typed WebDriver response means the CLI handled
+                        // the POST — and therefore already spawned the app
+                        // process. Only a transport-level RequestFailed means
+                        // it didn't.
+                        use thirtyfour::error::WebDriverErrorInner;
+                        if !matches!(e.as_inner(), WebDriverErrorInner::RequestFailed(_)) {
+                            launched = true;
+                        }
+                        if Instant::now() >= deadline {
+                            // Ask the CLI to kill the app it launched (any
+                            // DELETE /session/{id} triggers that), then kill
+                            // the CLI itself — otherwise the leaked pair holds
+                            // this instance's ports and poisons every later
+                            // launch sharing this process (exactly what CI's
+                            // TRY-2 "can not listen to address" failure was,
+                            // back when ports were fixed at 4444/4445).
+                            blocking_session_delete(proxy_port);
+                            kill_driver_proc(&mut driver_proc);
+                            break Err(anyhow::Error::new(e).context(format!(
                                 "WebDriver session not created within {LAUNCH_TIMEOUT:?} \
-                                 against {webdriver_url} — is `tauri-webdriver` \
-                                 running, and was {} built with `--features e2e`?\n{}",
+                                 against {webdriver_url} (attempt {attempt}) — is \
+                                 `tauri-webdriver` running, and was {} built with \
+                                 `--features e2e`?\n{}",
                                 app_binary.display(),
                                 proc_log.dump()
-                            )
-                        });
+                            )));
+                        }
+                        tokio::time::sleep(Duration::from_millis(1000)).await;
                     }
-                    tokio::time::sleep(Duration::from_millis(1000)).await;
                 }
+            };
+
+            let driver = match session_result {
+                Ok(d) => d,
+                Err(e) => {
+                    // Kill any still-running CLI before re-picking ports.
+                    blocking_session_delete(proxy_port);
+                    kill_driver_proc(&mut driver_proc);
+                    last_err = Some(e);
+                    if attempt < PORT_REBIND_ATTEMPTS {
+                        // Brief pause so the OS reclaims the port before the
+                        // next pick.
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                    }
+                    continue;
+                }
+            };
+
+            // Set the script timeout EXPLICITLY (#1205). Until this call
+            // existed, every `execute_async` inherited whatever default the
+            // driver happened to use (W3C says 30s) — never a deliberate
+            // choice. A legitimate IPC invoke on a loaded Windows runner can
+            // exceed 30s, which surfaces as a bare "Script execution timed out"
+            // with no indication of which command was in flight.
+            //
+            // This does NOT hide a genuine hang: `invoke` names the command in
+            // its error context, so a script that never calls back still fails
+            // — it just fails at a budget we chose, naming the culprit, instead
+            // of at an undocumented default anonymously.
+            // Argument order is (script, page_load, implicit) — NOT the
+            // page-load-first order the name ordering might suggest. Passing
+            // these reversed silently swaps the two budgets and still compiles,
+            // so keep the labels below when editing.
+            let timeouts = TimeoutConfiguration::new(
+                /* script */ Some(SCRIPT_TIMEOUT),
+                /* page_load */ Some(SCRIPT_TIMEOUT_PAGE_LOAD),
+                // Implicit wait stays ZERO: every wait in this harness is an
+                // explicit poll loop, and thirtyfour's own default notes that
+                // ElementQuery requires zero. A non-zero implicit wait would
+                // silently stack on top of those and inflate every negative
+                // assertion.
+                /* implicit */
+                Some(Duration::from_secs(0)),
+            );
+            if let Err(e) = driver.update_timeouts(timeouts).await {
+                blocking_session_delete(proxy_port);
+                kill_driver_proc(&mut driver_proc);
+                return Err(e).context("failed to set explicit WebDriver timeouts");
             }
-        };
 
-        // Set the script timeout EXPLICITLY (#1205). Until this call existed,
-        // every `execute_async` inherited whatever default the driver happened
-        // to use (W3C says 30s) — never a deliberate choice. A legitimate IPC
-        // invoke on a loaded Windows runner can exceed 30s, which surfaces as a
-        // bare "Script execution timed out" with no indication of which command
-        // was in flight.
-        //
-        // This does NOT hide a genuine hang: `invoke` names the command in its
-        // error context, so a script that never calls back still fails — it just
-        // fails at a budget we chose, naming the culprit, instead of at an
-        // undocumented default anonymously.
-        // Argument order is (script, page_load, implicit) — NOT the
-        // page-load-first order the name ordering might suggest. Passing these
-        // reversed silently swaps the two budgets and still compiles, so keep
-        // the labels below when editing.
-        let timeouts = TimeoutConfiguration::new(
-            /* script */ Some(SCRIPT_TIMEOUT),
-            /* page_load */ Some(SCRIPT_TIMEOUT_PAGE_LOAD),
-            // Implicit wait stays ZERO: every wait in this harness is an
-            // explicit poll loop, and thirtyfour's own default notes that
-            // ElementQuery requires zero. A non-zero implicit wait would
-            // silently stack on top of those and inflate every negative
-            // assertion.
-            /* implicit */
-            Some(Duration::from_secs(0)),
-        );
-        if let Err(e) = driver.update_timeouts(timeouts).await {
-            blocking_session_delete(env.proxy_port);
-            kill_driver_proc(&mut driver_proc);
-            return Err(e).context("failed to set explicit WebDriver timeouts");
+            // The plugin binds a new session to
+            // `webview_windows().keys().first()`
+            // (`tauri-plugin-webdriver-0.2.1/src/server/handlers/session.rs:24`)
+            // — a `HashMap` key order, and the splash window now exists BEFORE
+            // `main` does (the app builds `main` only after migrations). Without
+            // an explicit switch the session can hold the splash, whose document
+            // has no `__PV_E2E__` bridge, and every journey would fail in
+            // `wait_bridge_ready` with no indication why.
+            if let Err(e) = Self::switch_to_main_window(&driver, deadline).await {
+                blocking_session_delete(proxy_port);
+                kill_driver_proc(&mut driver_proc);
+                return Err(e).context(proc_log.dump());
+            }
+
+            return Ok(Self { driver, driver_proc: Some(driver_proc), proxy_port, proc_log });
         }
 
-        // The plugin binds a new session to `webview_windows().keys().first()`
-        // (`tauri-plugin-webdriver-0.2.1/src/server/handlers/session.rs:24`) —
-        // a `HashMap` key order, and the splash window now exists BEFORE
-        // `main` does (the app builds `main` only after migrations). Without
-        // an explicit switch the session can hold the splash, whose document
-        // has no `__PV_E2E__` bridge, and every journey would fail in
-        // `wait_bridge_ready` with no indication why.
-        if let Err(e) = Self::switch_to_main_window(&driver, deadline).await {
-            blocking_session_delete(env.proxy_port);
-            kill_driver_proc(&mut driver_proc);
-            return Err(e).context(proc_log.dump());
-        }
-
-        Ok(Self { driver, driver_proc: Some(driver_proc), proc_log })
+        Err(last_err.unwrap_or_else(|| {
+            anyhow::anyhow!("launch failed after {PORT_REBIND_ATTEMPTS} port-rebind attempts")
+        }))
     }
 
     /// Bind the session to the `main` window, waiting for the app to create it.
@@ -2222,7 +2296,7 @@ impl Drop for E2eApp {
     /// regardless of the session id being real.
     fn drop(&mut self) {
         if let Some(mut child) = self.driver_proc.take() {
-            blocking_session_delete(instance_env().proxy_port);
+            blocking_session_delete(self.proxy_port);
             kill_driver_proc(&mut child);
         }
     }
@@ -2413,7 +2487,12 @@ fn drain_into<R: std::io::Read + Send + 'static>(reader: R, buf: Arc<Mutex<VecDe
 }
 
 /// Spawn the `tauri-webdriver` CLI proxy as a background child process,
-/// bound to this instance's isolated ports/DB/app-data root ([`InstanceEnv`]).
+/// bound to the supplied ports and to this instance's isolated DB/app-data
+/// root ([`InstanceEnv`]).
+///
+/// Ports are passed explicitly rather than read from `env` because they are
+/// re-picked on every [`E2eApp::launch_with`] call — `env` holds only the
+/// stable per-process app-data root, not the ports.
 ///
 /// Mirrors `.github/workflows/e2e.yml`: the CLI is installed once
 /// (`cargo install tauri-webdriver --locked`) and this harness starts it per
@@ -2430,25 +2509,30 @@ fn drain_into<R: std::io::Read + Send + 'static>(reader: R, buf: Arc<Mutex<VecDe
 /// stdout/stderr are piped (not inherited) and drained into a [`ProcLog`] so
 /// a launch failure can print what the CLI (and transitively, the app it
 /// launched) actually did — see [`ProcLog`]'s docs.
-fn spawn_tauri_webdriver(env: &InstanceEnv) -> Result<(Child, ProcLog)> {
+fn spawn_tauri_webdriver(
+    env: &InstanceEnv,
+    proxy_port: u16,
+    native_port: u16,
+) -> Result<(Child, ProcLog)> {
     let mut cmd = Command::new("tauri-webdriver");
     cmd.arg("--port")
-        .arg(env.proxy_port.to_string())
+        .arg(proxy_port.to_string())
         .arg("--native-port")
-        .arg(env.native_port.to_string())
-        .env("TAURI_WEBDRIVER_PORT", env.native_port.to_string())
+        .arg(native_port.to_string())
+        .env("TAURI_WEBDRIVER_PORT", native_port.to_string())
         .env("PV_DB_URL", format!("sqlite://{}?mode=rwc", env.db_path.display()))
-        // `env.native_port` is already unique per test process (see
-        // `pick_port_pair`), so it doubles as a cheap per-instance marker.
-        // Its mere presence tells `apps/desktop/src-tauri/src/lib.rs` to skip
-        // the single-instance plugin entirely (see that file's plugin
-        // registration): the plugin enforces one identifier-derived identity
-        // with a per-instance override only on Linux, so concurrently-launched
-        // `desktop_shell` instances otherwise collide and the loser is
-        // silently redirected/exited without opening a window (WebDriver then
-        // times out). Real users/non-e2e builds never set this, so the guard
+        // `native_port` is unique per launch attempt (re-picked by
+        // `pick_port_pair` in `launch_with`), so it doubles as a cheap
+        // per-instance marker. Its mere presence tells
+        // `apps/desktop/src-tauri/src/lib.rs` to skip the single-instance
+        // plugin entirely (see that file's plugin registration): the plugin
+        // enforces one identifier-derived identity with a per-instance
+        // override only on Linux, so concurrently-launched `desktop_shell`
+        // instances otherwise collide and the loser is silently
+        // redirected/exited without opening a window (WebDriver then times
+        // out). Real users/non-e2e builds never set this, so the guard
         // stays active for them.
-        .env("PV_E2E_INSTANCE_ID", env.native_port.to_string())
+        .env("PV_E2E_INSTANCE_ID", native_port.to_string())
         // OS-trash boundary double for headless CI. The Windows Shell trash
         // (`trash::delete` -> `IFileOperation`) needs an interactive
         // window-station/desktop and blocks indefinitely in the non-interactive
