@@ -53,6 +53,10 @@ path = "envelope_specta_schemars_agreement.rs"
 name = "project_tool_enum_parity"
 path = "project_tool_enum_parity.rs"
 
+[[test]]
+name = "plan_state_sql_parity"
+path = "plan_state_sql_parity.rs"
+
 [dev-dependencies]
 audit_types = { path = "../../crates/audit-types" }
 contracts_core = { path = "../../crates/contracts/core" }

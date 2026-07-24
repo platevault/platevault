@@ -54,20 +54,6 @@ pub use discard::discard_plan;
 pub use read::{get_plan, list_plans};
 pub use retry::retry_plan;
 
-// ── State helpers ─────────────────────────────────────────────────────────────
-
-/// Returns true for terminal plan states (retry creates a NEW plan from these).
-fn is_terminal(state: PlanState) -> bool {
-    matches!(
-        state,
-        PlanState::Applied
-            | PlanState::PartiallyApplied
-            | PlanState::Failed
-            | PlanState::Cancelled
-            | PlanState::Discarded
-    )
-}
-
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /// Default age cutoff for plan list (R-Ret-1). Overridable via spec 018 setting.

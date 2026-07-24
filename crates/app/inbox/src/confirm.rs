@@ -48,6 +48,7 @@ use contracts_core::first_run::{OrganizationState, SourceKind};
 use contracts_core::framing::{
     AttributionAppliedDto, ChosenAttributionDto, IngestionAttributionCandidateDto,
 };
+use contracts_core::lifecycle::PlanState;
 use contracts_core::plans::ProvenanceEntry;
 use contracts_core::settings::PatternPart as ContractPatternPart;
 use metadata_core::v1_normalization_table;
@@ -323,7 +324,7 @@ pub async fn confirm(
             .await?;
 
     // 12. Transition plan to ready_for_review
-    plans_repo::update_plan_state(pool, &plan_id, "ready_for_review")
+    plans_repo::update_plan_state(pool, &plan_id, PlanState::ReadyForReview.as_str())
         .await
         .map_err(|e| db_internal_ctx(e, "transition plan to ready_for_review"))?;
 
@@ -357,7 +358,7 @@ pub async fn confirm(
 
     Ok(ConfirmResponse {
         plan_id,
-        plan_state: "ready_for_review".to_owned(),
+        plan_state: PlanState::ReadyForReview.as_str().to_owned(),
         items_total,
         // spec 041 US4: masters no longer register at confirm; registration is
         // relocated to plan-apply completion. Always false now.
