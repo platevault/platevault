@@ -72,8 +72,21 @@ const { MockMap, MockMarker, MockTileLayer } = vi.hoisted(() => {
   }
 
   class MockTileLayer {
+    static instances: MockTileLayer[] = [];
+    listeners: Record<string, Array<(...args: unknown[]) => void>> = {};
+    constructor() {
+      MockTileLayer.instances.push(this);
+    }
+    on(event: string, cb: (...args: unknown[]) => void) {
+      this.listeners[event] ??= [];
+      this.listeners[event].push(cb);
+      return this;
+    }
     addTo() {
       return this;
+    }
+    emit(event: string, ...args: unknown[]) {
+      for (const cb of this.listeners[event] ?? []) cb(...args);
     }
   }
 
@@ -105,6 +118,7 @@ import { SiteLocationPicker } from './SiteLocationPicker';
 beforeEach(() => {
   MockMap.instances.length = 0;
   MockMap.shouldThrowOnConstruct = false;
+  MockTileLayer.instances.length = 0;
 });
 
 describe('SiteLocationPicker', () => {
@@ -204,5 +218,60 @@ describe('SiteLocationPicker', () => {
 
     expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
     expect(screen.getByText(/map unavailable/i)).toBeInTheDocument();
+  });
+
+  it('degrades gracefully when tiles fail to load (offline / provider outage)', () => {
+    // Remote observatory sites are often offline — three consecutive tileerror
+    // events cross the threshold and trigger the unavailable notice.
+    render(
+      <SiteLocationPicker
+        latitudeDeg={null}
+        longitudeDeg={null}
+        onPick={vi.fn()}
+      />,
+    );
+
+    const tiles = MockTileLayer.instances[0];
+    expect(tiles).toBeDefined();
+
+    act(() => {
+      tiles.emit('tileerror', {});
+      tiles.emit('tileerror', {});
+    });
+    // Below threshold — map still visible.
+    expect(screen.getByTestId('site-location-map')).toBeInTheDocument();
+    expect(screen.queryByText(/map unavailable/i)).not.toBeInTheDocument();
+
+    act(() => {
+      tiles.emit('tileerror', {});
+    });
+    // At threshold — degrade to unavailable notice.
+    expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
+    expect(screen.getByText(/map unavailable/i)).toBeInTheDocument();
+  });
+
+  it('does not degrade when a tileload resets the error count', () => {
+    render(
+      <SiteLocationPicker
+        latitudeDeg={null}
+        longitudeDeg={null}
+        onPick={vi.fn()}
+      />,
+    );
+
+    const tiles = MockTileLayer.instances[0];
+
+    act(() => {
+      tiles.emit('tileerror', {});
+      tiles.emit('tileerror', {});
+      // A successful load resets the counter.
+      tiles.emit('tileload', {});
+      // Two more errors — still below threshold (count restarted at 0).
+      tiles.emit('tileerror', {});
+      tiles.emit('tileerror', {});
+    });
+
+    expect(screen.getByTestId('site-location-map')).toBeInTheDocument();
+    expect(screen.queryByText(/map unavailable/i)).not.toBeInTheDocument();
   });
 });

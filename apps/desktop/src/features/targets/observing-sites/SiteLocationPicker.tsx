@@ -113,7 +113,23 @@ export function SiteLocationPicker({
       return;
     }
 
-    L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION }).addTo(map);
+    // Count consecutive tile failures. A single edge-tile miss is normal (OSM
+    // tiles for low-zoom ocean areas are often missing); 3+ consecutive errors
+    // indicate offline or provider outage — degrade to the unavailable notice
+    // so the user knows to enter coordinates manually. Resets on any success.
+    let tileErrorCount = 0;
+    const TILE_ERROR_THRESHOLD = 3;
+    const tiles = L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION });
+    tiles.on('tileerror', () => {
+      tileErrorCount += 1;
+      if (tileErrorCount >= TILE_ERROR_THRESHOLD) {
+        setUnavailable(true);
+      }
+    });
+    tiles.on('tileload', () => {
+      tileErrorCount = 0;
+    });
+    tiles.addTo(map);
 
     if (
       latitudeDeg != null &&
