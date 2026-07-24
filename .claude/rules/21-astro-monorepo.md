@@ -8,28 +8,62 @@ Primary paths:
 
 - `apps/desktop/`: Tauri + React desktop shell.
 - `crates/domain/core/`: pure domain types and invariants.
-- `crates/targeting/`: target catalog, aliases, observing-plan references.
+- `crates/targeting/`: target identity, query normalization, coordinate
+  resolution, and skymath re-exports.
+- `crates/targeting/resolver/`: SIMBAD-backed target resolution with bundled
+  seed index and local SQLite cache.
 - `crates/sessions/`: acquisition and calibration session concepts.
 - `crates/calibration/core/`: calibration matching and reuse policy model.
+- `crates/calibration/master-detect/`: heuristic detection of calibration
+  master files (STACKCNT/NCOMBINE headers, tool-specific patterns).
 - `crates/workflow/profiles/`: processing tool/workflow profile model.
+- `crates/workflow/artifacts/`: workflow artifact observation — rule-driven
+  classifier, debounce watcher, reconciler, and tool-launch attribution.
 - `crates/project/structure/`: app-owned project envelope rules.
 - `crates/patterns/`: shared token-pattern parser and resolver (consumed by
   Inbox confirm pipeline, archive plans, and project source views).
 - `crates/fs/inventory/`: filesystem scan records and root/path model.
-- `crates/fs/planner/`: reviewable filesystem plan model.
+- `crates/fs/executor/`: filesystem plan apply executor — per-item operation
+  loop, failure taxonomy, rollback hooks, cancellation, and pause/resume.
+- `crates/fs/pathsafe/`: reparse-aware symlink/junction detection and safe
+  directory walkers shared by `fs_inventory` and `fs_executor`.
 - `crates/metadata/core/`: shared extracted metadata model.
 - `crates/metadata/fits/`: FITS metadata extraction adapter boundary.
 - `crates/metadata/xisf/`: XISF metadata extraction adapter boundary.
 - `crates/metadata/video/`: planetary/lunar video metadata adapter boundary.
-- `crates/audit/`: audit event model.
-- `crates/persistence/core/`: Database, pool, WAL, migrations, shared audit-write primitives.
-- `crates/persistence/calibration/`: calibration equipment, assignments, tolerances, calibration queries.
-- `crates/persistence/inbox/`: inbox items, classification, metadata, source groups.
-- `crates/persistence/lifecycle/`: lifecycle transitions, provenance, settings, onboarding, audit events, first-run.
-- `crates/persistence/plans/`: plans, plan-apply, projects, artifacts, manifests, source views.
-- `crates/persistence/targets/`: targets, framing, inventory, resolver queries, target-management queries.
+- `crates/audit-types/`: pure audit event, envelope, and publisher-seam types —
+  no SQL, no runtime. Split from `audit` to break the `persistence_db`
+  dependency cycle; `audit` re-exports everything here.
+- `crates/audit/`: audit event bus and `EventBus` runtime wiring.
+- `crates/safe-filename/`: cross-platform path-segment sanitizer (bidi/homoglyph
+  aware, Windows reserved names rejected on all platforms).
+- `crates/persistence/core/`: Database, pool, WAL, migrations, shared
+  audit-write primitives.
+- `crates/persistence/calibration/`: calibration equipment, assignments,
+  tolerances, calibration queries.
+- `crates/persistence/inbox/`: inbox items, classification, metadata, source
+  groups.
+- `crates/persistence/lifecycle/`: lifecycle transitions, provenance, settings,
+  onboarding, audit events, first-run.
+- `crates/persistence/plans/`: plans, plan-apply, projects, artifacts, manifests,
+  source views.
+- `crates/persistence/targets/`: targets, framing, inventory, resolver queries,
+  target-management queries.
 - `crates/contracts/core/`: Rust contract DTO boundary.
-- `crates/app/core/`: application use-case orchestration boundary.
+- `crates/app/core/`: application use-case orchestration (Tauri command
+  handlers and cross-domain coordinator).
+- `crates/app/cache/`: shared in-process `moka`-backed cache primitives for
+  app-layer debouncing and memoization.
+- `crates/app/calibration/`: calibration matching and equipment use cases.
+- `crates/app/errors/`: canonical DB-to-contract error conversion helpers.
+- `crates/app/inbox/`: inbox use cases (mixed-folder split, content signatures).
+- `crates/app/lifecycle/`: lifecycle transition, ledger, provenance, and
+  artifact use cases.
+- `crates/app/projects/`: project create/update, health, manifests, notes, and
+  prepared-view use cases.
+- `crates/app/settings/`: settings read/write use cases.
+- `crates/app/targets/`: target catalog, resolution, search, and
+  ingest-resolution use cases.
 - `packages/contracts/`: language-neutral schemas and generated TypeScript
   surface.
 - `docs/` and `docs/research/`: project documentation and technology/domain
