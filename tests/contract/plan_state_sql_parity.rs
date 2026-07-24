@@ -48,7 +48,7 @@ fn sql_plan_state_check() -> BTreeSet<String> {
     inner.split(',').map(|s| s.trim().trim_matches('\'').to_owned()).collect()
 }
 
-/// All PlanState variants serialised to their serde snake_case string.
+/// All `PlanState` variants serialised to their serde `snake_case` string.
 fn plan_state_serde_values() -> BTreeSet<String> {
     // Exhaustive via PlanState::ALL — adding a variant without updating ALL
     // will fail the compile-time check in domain_core, not silently omit it.
