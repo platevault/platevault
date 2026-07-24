@@ -12,48 +12,12 @@
 
 #![allow(clippy::doc_markdown)]
 
-use audit::bus::EventBus;
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_core::{Database, DbError};
-use persistence_lifecycle::repositories::lifecycle::{
-    LifecycleRepository, SqliteLifecycleRepository, TransitionRequest,
-};
+use persistence_core::DbError;
+use persistence_lifecycle::repositories::lifecycle::{LifecycleRepository, TransitionRequest};
+use persistence_lifecycle::test_support as support;
 use uuid::Uuid;
-
-async fn setup() -> (Database, SqliteLifecycleRepository) {
-    let db = Database::in_memory().await.expect("in-memory connect");
-    db.migrate().await.expect("migrations");
-    let repo =
-        SqliteLifecycleRepository::new(db.pool().clone(), EventBus::new(db.pool().clone(), 16));
-    (db, repo)
-}
-
-async fn insert_target(pool: &sqlx::SqlitePool, id: &str) {
-    sqlx::query(
-        "INSERT INTO target (id, primary_designation, created_at) \
-         VALUES (?, ?, '2026-05-01T00:00:00Z')",
-    )
-    .bind(id)
-    .bind(format!("DES-{id}"))
-    .execute(pool)
-    .await
-    .unwrap();
-}
-
-/// Insert a project into the canonical `projects` table used by lifecycle transitions.
-async fn insert_project(pool: &sqlx::SqlitePool, id: &str, _target: &str, state: &str) {
-    sqlx::query(
-        "INSERT INTO projects \
-         (id, name, tool, lifecycle, path, created_at, updated_at) \
-         VALUES (?, 'P', 'PixInsight', ?, 'projects/P', '2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z')",
-    )
-    .bind(id)
-    .bind(state)
-    .execute(pool)
-    .await
-    .unwrap();
-}
 
 async fn audit_row_count(pool: &sqlx::SqlitePool, entity_id: &str) -> i64 {
     let (n,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audit_log_entry WHERE entity_id = ?")
@@ -76,11 +40,11 @@ async fn project_state(pool: &sqlx::SqlitePool, id: &str) -> String {
 
 #[tokio::test]
 async fn successful_transition_writes_audit_and_entity_together() {
-    let (db, repo) = setup().await;
+    let (db, repo) = support::setup().await;
     let target_id = Uuid::new_v4().to_string();
     let project_id = Uuid::new_v4().to_string();
-    insert_target(db.pool(), &target_id).await;
-    insert_project(db.pool(), &project_id, &target_id, "ready").await;
+    support::insert_target(db.pool(), &target_id).await;
+    support::insert_project(db.pool(), &project_id, "ready").await;
 
     let entity_id = EntityId::from_uuid(Uuid::parse_str(&project_id).unwrap());
     let record = repo
@@ -104,12 +68,12 @@ async fn successful_transition_writes_audit_and_entity_together() {
 
 #[tokio::test]
 async fn refused_transition_rolls_back_both_sides() {
-    let (db, repo) = setup().await;
+    let (db, repo) = support::setup().await;
     let target_id = Uuid::new_v4().to_string();
     let project_id = Uuid::new_v4().to_string();
-    insert_target(db.pool(), &target_id).await;
+    support::insert_target(db.pool(), &target_id).await;
     // Stored state is `ready`; caller claims `prepared` — CAS must fail.
-    insert_project(db.pool(), &project_id, &target_id, "ready").await;
+    support::insert_project(db.pool(), &project_id, "ready").await;
 
     let entity_id = EntityId::from_uuid(Uuid::parse_str(&project_id).unwrap());
     let result = repo
@@ -133,11 +97,11 @@ async fn refused_transition_rolls_back_both_sides() {
 
 #[tokio::test]
 async fn noop_transition_writes_nothing() {
-    let (db, repo) = setup().await;
+    let (db, repo) = support::setup().await;
     let target_id = Uuid::new_v4().to_string();
     let project_id = Uuid::new_v4().to_string();
-    insert_target(db.pool(), &target_id).await;
-    insert_project(db.pool(), &project_id, &target_id, "ready").await;
+    support::insert_target(db.pool(), &target_id).await;
+    support::insert_project(db.pool(), &project_id, "ready").await;
 
     let entity_id = EntityId::from_uuid(Uuid::parse_str(&project_id).unwrap());
     // Noop: from == to.
@@ -163,11 +127,11 @@ async fn noop_transition_writes_nothing() {
 
 #[tokio::test]
 async fn audit_carries_full_envelope_columns() {
-    let (db, repo) = setup().await;
+    let (db, repo) = support::setup().await;
     let target_id = Uuid::new_v4().to_string();
     let project_id = Uuid::new_v4().to_string();
-    insert_target(db.pool(), &target_id).await;
-    insert_project(db.pool(), &project_id, &target_id, "ready").await;
+    support::insert_target(db.pool(), &target_id).await;
+    support::insert_project(db.pool(), &project_id, "ready").await;
 
     let entity_id = EntityId::from_uuid(Uuid::parse_str(&project_id).unwrap());
     let request_id = EntityId::new();

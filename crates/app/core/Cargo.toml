@@ -69,6 +69,11 @@ targeting = { path = "../../targeting" }
 # `test-fixture` feature; enable it for offline target.resolve use-case tests.
 # (spec 042 / T250: moved from `targeting` to `targeting_resolver`.)
 targeting_resolver = { path = "../../targeting/resolver", features = ["test-fixture"] }
+# Enable shared DB test fixtures in tests/support/mod.rs. The test-fixture feature
+# gates the `test_support` modules in both persistence crates; must not be
+# enabled in production builds.
+persistence_core = { path = "../../persistence/core", features = ["test-fixture"] }
+persistence_lifecycle = { path = "../../persistence/lifecycle", features = ["test-fixture"] }
 
 [features]
 # Developer-mode surface (spec 021). Release binaries must NOT enable this.

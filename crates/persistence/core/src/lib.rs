@@ -20,6 +20,7 @@ mod query_builder_example;
 pub mod repositories;
 mod schema_cache;
 
+#[cfg(any(test, feature = "test-fixture"))]
 pub mod test_support;
 
 pub const CRATE_NAME: &str = "persistence_core";

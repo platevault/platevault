@@ -8,49 +8,13 @@
 //!   * History pagination: inline retention bounded at 10 newest entries; the
 //!     `history_truncated` flag is set when more entries exist in the archive.
 
-use audit::bus::EventBus;
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
 use domain_core::lifecycle::provenance::ProvenanceTag;
-use persistence_core::Database;
-use persistence_lifecycle::repositories::lifecycle::{
-    LifecycleRepository, SqliteLifecycleRepository,
-};
+use persistence_lifecycle::repositories::lifecycle::LifecycleRepository;
 use persistence_lifecycle::repositories::provenance::{load_provenance, INLINE_HISTORY_LIMIT};
+use persistence_lifecycle::test_support as support;
 use uuid::Uuid;
-
-async fn setup() -> (Database, SqliteLifecycleRepository) {
-    let db = Database::in_memory().await.expect("in-memory connect");
-    db.migrate().await.expect("migrations");
-    let repo =
-        SqliteLifecycleRepository::new(db.pool().clone(), EventBus::new(db.pool().clone(), 16));
-    (db, repo)
-}
-
-async fn insert_target(pool: &sqlx::SqlitePool, id: &str) {
-    sqlx::query(
-        "INSERT INTO target (id, primary_designation, created_at) \
-         VALUES (?, ?, '2026-05-01T00:00:00Z')",
-    )
-    .bind(id)
-    .bind(format!("DES-{id}"))
-    .execute(pool)
-    .await
-    .unwrap();
-}
-
-/// Insert a project into the canonical `projects` table used by provenance hydration.
-async fn insert_project(pool: &sqlx::SqlitePool, id: &str, _target_id: &str) {
-    sqlx::query(
-        "INSERT INTO projects \
-         (id, name, tool, lifecycle, path, created_at, updated_at) \
-         VALUES (?, 'P', 'PixInsight', 'ready', 'projects/P', '2026-05-01T00:00:00Z', '2026-05-01T00:00:00Z')",
-    )
-    .bind(id)
-    .execute(pool)
-    .await
-    .unwrap();
-}
 
 #[allow(clippy::too_many_arguments)]
 async fn insert_prov_row(
@@ -84,7 +48,7 @@ async fn insert_prov_row(
 
 #[tokio::test]
 async fn priority_resolution_reviewed_wins_over_inferred_and_observed() {
-    let (db, _repo) = setup().await;
+    let (db, _repo) = support::setup().await;
     let pool = db.pool();
 
     let asset_id = Uuid::new_v4().to_string();
@@ -140,7 +104,7 @@ async fn priority_resolution_reviewed_wins_over_inferred_and_observed() {
 
 #[tokio::test]
 async fn priority_resolution_skips_superseded_entries() {
-    let (db, _repo) = setup().await;
+    let (db, _repo) = support::setup().await;
     let pool = db.pool();
 
     let asset_id = Uuid::new_v4().to_string();
@@ -179,7 +143,7 @@ async fn priority_resolution_skips_superseded_entries() {
 
 #[tokio::test]
 async fn history_pagination_caps_inline_at_ten_and_sets_truncated_flag() {
-    let (db, _repo) = setup().await;
+    let (db, _repo) = support::setup().await;
     let pool = db.pool();
 
     let asset_id = Uuid::new_v4().to_string();
@@ -213,7 +177,7 @@ async fn history_pagination_caps_inline_at_ten_and_sets_truncated_flag() {
 
 #[tokio::test]
 async fn load_provenance_for_unknown_asset_returns_empty_map() {
-    let (db, _repo) = setup().await;
+    let (db, _repo) = support::setup().await;
     let pool = db.pool();
     let entity_id = EntityId::from_uuid(Uuid::new_v4());
     let (map, truncated) = load_provenance(pool, entity_id, "project").await.unwrap();
@@ -223,13 +187,13 @@ async fn load_provenance_for_unknown_asset_returns_empty_map() {
 
 #[tokio::test]
 async fn load_asset_detail_includes_hydrated_provenance() {
-    let (db, repo) = setup().await;
+    let (db, repo) = support::setup().await;
     let pool = db.pool();
 
     let target = Uuid::new_v4().to_string();
     let proj = Uuid::new_v4().to_string();
-    insert_target(pool, &target).await;
-    insert_project(pool, &proj, &target).await;
+    support::insert_target(pool, &target).await;
+    support::insert_project(pool, &proj, "ready").await;
     insert_prov_row(
         pool,
         "project",
@@ -253,13 +217,13 @@ async fn load_asset_detail_includes_hydrated_provenance() {
 
 #[tokio::test]
 async fn field_origins_returns_winning_tag_per_field() {
-    let (db, repo) = setup().await;
+    let (db, repo) = support::setup().await;
     let pool = db.pool();
 
     let target = Uuid::new_v4().to_string();
     let proj = Uuid::new_v4().to_string();
-    insert_target(pool, &target).await;
-    insert_project(pool, &proj, &target).await;
+    support::insert_target(pool, &target).await;
+    support::insert_project(pool, &proj, "ready").await;
 
     // `name` has only an observed entry; `target.coords` has observed +
     // reviewed (reviewed must win per priority).
@@ -305,7 +269,7 @@ async fn field_origins_returns_winning_tag_per_field() {
 
 #[tokio::test]
 async fn field_origins_empty_for_unknown_asset() {
-    let (_db, repo) = setup().await;
+    let (_db, repo) = support::setup().await;
     let entity_id = EntityId::from_uuid(Uuid::new_v4());
     let origins = repo.field_origins(entity_id, EntityType::Project).await.unwrap();
     assert!(origins.is_empty());

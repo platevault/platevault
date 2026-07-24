@@ -21,5 +21,10 @@ uuid.workspace = true
 sea-query.workspace = true
 tempfile.workspace = true
 
+[features]
+# Enables `test_support` helpers for crates that depend on persistence_core
+# in their dev-dependencies. Must NOT be enabled in production builds.
+test-fixture = []
+
 [lints]
 workspace = true

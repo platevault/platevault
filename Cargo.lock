@@ -4181,12 +4181,14 @@ dependencies = [
 name = "persistence_lifecycle"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "audit",
  "audit_types",
  "domain_core",
  "patterns",
  "persistence_core",
  "persistence_inbox",
+ "persistence_lifecycle",
  "serde",
  "serde_json",
  "sha2 0.10.9",
