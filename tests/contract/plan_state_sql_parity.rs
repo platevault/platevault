@@ -24,8 +24,7 @@ fn repo_root() -> PathBuf {
 /// Looks for the single-line pattern:
 ///   `state TEXT NOT NULL CHECK (state IN ('...','...',...)),`
 fn sql_plan_state_check() -> BTreeSet<String> {
-    let path = repo_root()
-        .join("crates/persistence/core/migrations/0001_initial_schema.sql");
+    let path = repo_root().join("crates/persistence/core/migrations/0001_initial_schema.sql");
     let sql = fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("failed to read migration {}: {e}", path.display()));
 
@@ -34,22 +33,19 @@ fn sql_plan_state_check() -> BTreeSet<String> {
         .lines()
         .find(|l| {
             let t = l.trim();
-            t.starts_with("state") && t.contains("CHECK") && t.contains("IN (") && t.contains("'draft'")
+            t.starts_with("state")
+                && t.contains("CHECK")
+                && t.contains("IN (")
+                && t.contains("'draft'")
         })
         .unwrap_or_else(|| panic!("could not find plans.state CHECK line in migration"));
 
     // Extract the parenthesized list: `('a','b',...)`.
-    let start = state_line
-        .find("IN (")
-        .map(|i| i + "IN (".len())
-        .expect("IN ( not found");
+    let start = state_line.find("IN (").map(|i| i + "IN (".len()).expect("IN ( not found");
     let end = state_line[start..].find(')').map(|i| i + start).expect(") not found");
     let inner = &state_line[start..end];
 
-    inner
-        .split(',')
-        .map(|s| s.trim().trim_matches('\'').to_owned())
-        .collect()
+    inner.split(',').map(|s| s.trim().trim_matches('\'').to_owned()).collect()
 }
 
 /// All PlanState variants serialised to their serde snake_case string.
@@ -74,7 +70,8 @@ fn plan_state_enum_matches_sql_check_constraint() {
     let enum_states = plan_state_serde_values();
 
     assert_eq!(
-        enum_states, sql_states,
+        enum_states,
+        sql_states,
         "PlanState serde variants drifted from the `plans.state` SQL CHECK constraint.\n\
          In enum but not SQL: {:?}\n\
          In SQL but not enum: {:?}",
