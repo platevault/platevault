@@ -344,6 +344,7 @@ export function LogPanel() {
           ref={listRef}
           onScroll={handleScroll}
           data-virtual-scroll="true"
+          data-testid="logpanel-events"
         >
           {visibleEntries.length === 0 ? (
             <li className={empty}>
