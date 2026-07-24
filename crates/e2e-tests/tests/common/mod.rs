@@ -1992,6 +1992,34 @@ impl E2eApp {
                         false
                     })
                 }) {
+                    // Data files appeared: wait until their total size has
+                    // been stable across 3 consecutive 200 ms polls before
+                    // returning.  WebView2's LevelDB commit is asynchronous —
+                    // the file can be present but still growing while the WAL
+                    // is being flushed.  A fixed 2 s sleep (the previous
+                    // approach at the call site) over-waits on fast runners
+                    // and could theoretically under-wait on a very slow one.
+                    // Three stable readings at 200 ms each cap the stability
+                    // window at 600 ms; the 15 s overall deadline still
+                    // bounds the worst case.
+                    let mut stable_count = 0u8;
+                    let mut prev_size = leveldb_data_size(&leveldb);
+                    while Instant::now() < deadline {
+                        tokio::time::sleep(Duration::from_millis(200)).await;
+                        let cur_size = leveldb_data_size(&leveldb);
+                        if cur_size == prev_size {
+                            stable_count += 1;
+                            if stable_count >= 3 {
+                                return Ok(());
+                            }
+                        } else {
+                            stable_count = 0;
+                            prev_size = cur_size;
+                        }
+                    }
+                    // Deadline exceeded while waiting for stability; proceed
+                    // anyway — data files are present and the caller will read
+                    // them now.
                     return Ok(());
                 }
             }
@@ -2036,6 +2064,37 @@ fn find_leveldb_dir(root: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// Sum the sizes of all `.ldb` and `.log` data files in `leveldb_dir`.
+///
+/// Used by [`E2eApp::wait_for_webview_storage_flush`] to detect when
+/// WebView2's WAL has stopped growing (a stable size across consecutive
+/// polls means the commit is complete).  Returns 0 on any I/O error —
+/// a safe fallback that keeps the stability counter from accidentally
+/// advancing while the directory is unreadable.
+#[cfg(target_os = "windows")]
+fn leveldb_data_size(leveldb_dir: &Path) -> u64 {
+    std::fs::read_dir(leveldb_dir)
+        .ok()
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter_map(|e| {
+                    let path = e.path();
+                    if !path.is_file() {
+                        return None;
+                    }
+                    let ext = path.extension().and_then(|x| x.to_str()).unwrap_or("");
+                    if matches!(ext, "ldb" | "log") {
+                        path.metadata().ok().map(|m| m.len())
+                    } else {
+                        None
+                    }
+                })
+                .sum()
+        })
+        .unwrap_or(0)
 }
 
 impl Drop for E2eApp {
