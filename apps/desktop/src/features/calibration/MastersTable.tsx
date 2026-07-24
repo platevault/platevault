@@ -561,5 +561,17 @@ export function MastersTable({
     }
   }
 
-  return <Table className="pv-calib-table" columns={columns} rows={rows} />;
+  return (
+    <div className="pv-listtable" data-testid="masters-list">
+      <Table
+        className="pv-calib-table"
+        columns={columns}
+        rows={rows}
+        virtualized
+        estimateRowHeight={36}
+        scrollClassName="pv-listtable__scroll"
+        scrollTestId="masters-virtual-sizer"
+      />
+    </div>
+  );
 }

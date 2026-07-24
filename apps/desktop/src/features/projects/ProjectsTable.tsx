@@ -340,5 +340,17 @@ export function ProjectsTable({
 
   // The project count moved to the bottom status bar (top-bar convention,
   // task #80) — no in-table footer count line.
-  return <Table className="pv-projects-table" columns={columns} rows={rows} />;
+  return (
+    <div className="pv-listtable" data-testid="projects-list">
+      <Table
+        className="pv-projects-table"
+        columns={columns}
+        rows={rows}
+        virtualized
+        estimateRowHeight={36}
+        scrollClassName="pv-listtable__scroll"
+        scrollTestId="projects-virtual-sizer"
+      />
+    </div>
+  );
 }
