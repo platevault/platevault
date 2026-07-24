@@ -56,7 +56,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, () => string> = {
   'file.not_found': m.err_file_not_found,
   'note.content_too_large': m.err_note_content_too_large,
   'session.not_found': m.err_session_not_found,
-  'session.mixed_state': m.err_session_mixed_state,
+  'session.mixed_state': m.calibration_session_mixed_state,
   'operation.handler_duplicate': m.err_operation_handler_duplicate,
   'operation.not_found': m.err_operation_not_found,
   'plan.approval_required': m.err_plan_approval_required,
