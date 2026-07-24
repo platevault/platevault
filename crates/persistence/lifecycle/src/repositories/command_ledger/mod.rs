@@ -508,6 +508,7 @@ impl CommandLedger {
         self.finish_at(lease, input, &Timestamp::now_iso()).await
     }
 
+    // CCN 11 tolerated: transaction orchestrator with preparation + commit/rollback.
     pub async fn finish_at(
         &self,
         lease: &CommandLease,

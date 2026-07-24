@@ -59,6 +59,7 @@ struct SourcePlanResult {
 /// Returns `project.not_found`, `lifecycle.read_only`, `no_selection`,
 /// `no_link_kind`, `destination.collision`, `destination.exists`, or an
 /// `internal.*` error on failure.
+// CCN 11 tolerated: linear pipeline orchestrator with early-return gates.
 pub async fn generate_source_view(
     pool: &SqlitePool,
     req: &SourceViewGenerateRequest,

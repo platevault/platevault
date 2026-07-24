@@ -93,6 +93,7 @@ pub(super) fn validate_clean_execution(row: &CommandRow) -> Result<()> {
 
 /// Reconcile a discovered audit + outbox evidence set against the row's
 /// recovery markers, returning the terminal result on success.
+// CCN 12 tolerated: flat sequential invariant checks that must all pass.
 pub(super) fn reconcile_discovered_evidence(
     row: &CommandRow,
     evidence: &RecoveryEvidence,
