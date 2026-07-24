@@ -67,10 +67,7 @@ export function useTargetTonight({
   // so the graph peak and the "Max alt" stat agree). Falls back to a direct
   // real computation from the detail's own RA/Dec when the list item isn't
   // available (e.g. direct navigation to a target's detail page).
-  // When coordinates are null (data not yet loaded), use 0/0 — the result
-  // will have needsCoordinates=true and degrade cleanly.
-  const effectiveRa = raDeg ?? 0;
-  const effectiveDec = decDeg ?? 0;
+  // Null coords propagate to altitudeFor which sets needsCoordinates=true.
   const rowAlt = item
     ? rowAltitudeFor(
         item,
@@ -82,7 +79,7 @@ export function useTargetTonight({
         sensorConfig,
       )
     : altitudeFor(
-        { id: targetId, raDeg: effectiveRa, decDeg: effectiveDec },
+        { id: targetId, raDeg, decDeg },
         usableAltDeg,
         site,
         dateMs,
@@ -102,7 +99,7 @@ export function useTargetTonight({
   const moonSpans =
     !rowAlt.needsCoordinates && !rowAlt.needsSite
       ? moonExcludedSpanHours(
-          { id: targetId, raDeg: effectiveRa, decDeg: effectiveDec },
+          { id: targetId, raDeg, decDeg },
           displayBand,
           site,
           dateMs,
@@ -110,18 +107,14 @@ export function useTargetTonight({
         )
       : [];
 
-  const moon = deriveRowMoonPlanning(
-    { raDeg: effectiveRa, decDeg: effectiveDec },
-    night,
-    guidanceParams,
-  );
+  const moon = deriveRowMoonPlanning({ raDeg, decDeg }, night, guidanceParams);
 
   const tonightAvailable = !rowAlt.needsCoordinates && !rowAlt.needsSite;
 
   const bestMoonResult = tonightAvailable
     ? bestMoonDate(
-        effectiveRa,
-        effectiveDec,
+        raDeg,
+        decDeg,
         night?.midnight ?? new Date(dateMs),
         guidanceParams,
       )
