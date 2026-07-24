@@ -218,3 +218,10 @@ perf-check:
 coverage:
     cargo llvm-cov --workspace --lcov --output-path lcov.info --doctests
     cargo llvm-cov report --summary-only
+
+# Background Rust checker: re-runs clippy on every file save via bacon.
+# Install: cargo install bacon
+# Switch jobs interactively inside bacon with the job keys listed in bacon.toml
+# (check / clippy / test / doc).
+watch:
+    bacon
