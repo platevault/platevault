@@ -11,7 +11,9 @@
 
 use std::str::FromStr;
 
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{
+    SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
+};
 
 pub mod operation_state;
 /// Reference pattern for sea-query + sqlx 0.9 binding. Compiled only under `cfg(test)`.
@@ -76,8 +78,22 @@ pub struct Database {
 impl Database {
     /// Connect to a file-backed SQLite database.
     ///
-    /// Explicitly requests WAL journaling (#830) and pins `busy_timeout`
-    /// (#1231). See `persistence_db` module docs for the full rationale.
+    /// Durability tier policy (constitution v1.1.0 §V):
+    ///
+    /// - **WAL** (`journal_mode = WAL`, #830): concurrent readers during a write,
+    ///   no reader-writer blocking, and a crash-safe write path on all platforms.
+    /// - **`synchronous = NORMAL`** (tier-2): the OS journal is fsynced at each
+    ///   checkpoint, not every commit.  Under WAL, a crash between commits risks
+    ///   at most losing the last un-checkpointed transaction — the database is
+    ///   never corrupted.  This is materially faster than `FULL` on spinning or
+    ///   network-backed storage without sacrificing integrity guarantees the app
+    ///   depends on.  Tier-1 (`FULL`) escalation per-connection for high-value
+    ///   writes (audit events, filesystem plan commits) is tracked as a follow-up
+    ///   in kyo7.49.
+    /// - **`foreign_keys = ON`**: enforced explicitly so the constraint is not
+    ///   silently absent if a future sqlx version changes its default.
+    /// - **`busy_timeout`** (#1231): pins the wait interval so it is ours, not
+    ///   a transitively-inherited default.
     ///
     /// # Errors
     ///
@@ -85,6 +101,8 @@ impl Database {
     pub async fn connect(connection_string: &str) -> DbResult<Self> {
         let options = SqliteConnectOptions::from_str(connection_string)?
             .journal_mode(SqliteJournalMode::Wal)
+            .synchronous(SqliteSynchronous::Normal)
+            .foreign_keys(true)
             .busy_timeout(BUSY_TIMEOUT);
         let pool = SqlitePoolOptions::new().max_connections(8).connect_with(options).await?;
         Ok(Self { pool })
@@ -97,6 +115,44 @@ impl Database {
     /// Returns [`DbError::Database`] if the in-memory pool cannot be created.
     pub async fn in_memory() -> DbResult<Self> {
         Self::connect("sqlite::memory:").await
+    }
+
+    /// Return `true` when at least one migration in the embedded set has not yet
+    /// been applied to this database.
+    ///
+    /// Returns `false` for fresh databases (the `_sqlx_migrations` table does
+    /// not exist yet) because there is nothing to back up before a first-time
+    /// schema creation.  The backup logic in the desktop shell uses this to skip
+    /// the VACUUM INTO cost when startup would be a no-op anyway.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of compiled-in migrations exceeds `i64::MAX`, which
+    /// cannot occur in practice.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbError::Database`] on an unexpected SQL error other than the
+    /// table-not-found case.
+    pub async fn has_pending_migrations(&self) -> DbResult<bool> {
+        let mut conn = self.pool.acquire().await?;
+        // If the migration tracking table has never been created this is a fresh
+        // database — no backup needed.
+        let table_exists: bool = sqlx::query_scalar(
+            "SELECT COUNT(*) > 0 FROM sqlite_master \
+             WHERE type = 'table' AND name = '_sqlx_migrations'",
+        )
+        .fetch_one(&mut *conn)
+        .await?;
+        if !table_exists {
+            return Ok(false);
+        }
+        let applied_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations")
+            .fetch_one(&mut *conn)
+            .await?;
+        let total =
+            i64::try_from(schema_cache::MIGRATOR.iter().count()).expect("migration count fits i64");
+        Ok(applied_count < total)
     }
 
     /// Run all pending migrations from the frozen baseline and future append-only files.
@@ -205,5 +261,54 @@ mod tests {
         db.migrate().await.expect("migrations");
         let row: (i64,) = sqlx::query_as("SELECT 1").fetch_one(db.pool()).await.unwrap();
         assert_eq!(row.0, 1);
+    }
+
+    #[tokio::test]
+    async fn foreign_keys_enabled_on_fresh_connection() {
+        let db = super::Database::in_memory().await.expect("in-memory connect");
+        let fk_on: i64 =
+            sqlx::query_scalar("PRAGMA foreign_keys").fetch_one(db.pool()).await.unwrap();
+        assert_eq!(fk_on, 1, "PRAGMA foreign_keys must be 1 (ON) on every connection");
+    }
+
+    #[tokio::test]
+    async fn synchronous_normal_on_fresh_connection() {
+        let db = super::Database::in_memory().await.expect("in-memory connect");
+        // SQLite returns the numeric value: 0=OFF, 1=NORMAL, 2=FULL, 3=EXTRA.
+        let sync_level: i64 =
+            sqlx::query_scalar("PRAGMA synchronous").fetch_one(db.pool()).await.unwrap();
+        assert_eq!(sync_level, 1, "synchronous must be NORMAL (1) per tier-2 policy");
+    }
+
+    #[tokio::test]
+    async fn has_pending_migrations_is_false_for_fresh_db() {
+        let db = super::Database::in_memory().await.expect("in-memory connect");
+        // Fresh DB: _sqlx_migrations does not exist yet.
+        let pending = db.has_pending_migrations().await.expect("has_pending_migrations");
+        assert!(!pending, "a fresh database has no pending migrations to back up");
+    }
+
+    #[tokio::test]
+    async fn has_pending_migrations_is_false_after_migrate() {
+        let db = super::Database::in_memory().await.expect("in-memory connect");
+        db.migrate().await.expect("migrate");
+        let pending = db.has_pending_migrations().await.expect("has_pending_migrations");
+        assert!(!pending, "all migrations applied: no pending migrations");
+    }
+
+    #[tokio::test]
+    async fn has_pending_migrations_is_true_when_behind() {
+        let db = super::Database::in_memory().await.expect("in-memory connect");
+        db.migrate().await.expect("initial migrate");
+
+        // Simulate a DB that has had one migration rolled back by deleting the
+        // last applied row — so applied_count < total.
+        sqlx::query("DELETE FROM _sqlx_migrations WHERE version = (SELECT MAX(version) FROM _sqlx_migrations)")
+            .execute(db.pool())
+            .await
+            .expect("remove last applied migration");
+
+        let pending = db.has_pending_migrations().await.expect("has_pending_migrations");
+        assert!(pending, "one migration removed: must report pending");
     }
 }

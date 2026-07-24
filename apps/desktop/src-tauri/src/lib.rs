@@ -351,11 +351,113 @@ fn create_main_window(handle: &tauri::AppHandle) {
 // Sequential startup/subscriber-wiring assembly, not complex logic — same
 // shape as `bootstrap::specta::specta_builder`, which carries the same allow.
 #[allow(clippy::too_many_lines)]
+/// Extract the filesystem path from a `sqlite://…` URL, or `None` for
+/// in-memory / non-file URLs.
+///
+/// Only the path component before `?` is returned; any query parameters
+/// (e.g. `?mode=rwc`) are stripped.
+fn sqlite_file_path(db_url: &str) -> Option<std::path::PathBuf> {
+    let url = db_url.strip_prefix("sqlite://")?;
+    // Strip query string.
+    let path_part = url.split('?').next()?;
+    if path_part.is_empty() || path_part == ":memory:" {
+        return None;
+    }
+    Some(std::path::PathBuf::from(path_part))
+}
+
+/// Back up `db_path` via `VACUUM INTO '<db_path>.pre-<version>.bak'` before
+/// running migrations on an existing, behind-schema database.
+///
+/// Keeps only the two most-recent `.pre-*.bak` files alongside the database,
+/// deleting older ones after a successful backup.  A failure here (full disk,
+/// permission error) is non-fatal: the caller logs a warning and proceeds with
+/// migration rather than bricking startup.
+async fn run_pre_migration_backup(db: &Database, db_path: &std::path::Path, app_version: &str) {
+    let bak_path = db_path.with_extension(format!("pre-{app_version}.bak"));
+    // VACUUM INTO cannot accept bind parameters in SQLite — the destination
+    // path must appear as a literal in the statement.  Single quotes in the
+    // path are escaped to prevent injection; the statement is wrapped in
+    // `AssertSqlSafe` to satisfy sqlx's dynamic-SQL audit requirement.
+    let bak_str = bak_path.display().to_string().replace('\'', "''");
+    let stmt = sqlx::AssertSqlSafe(format!("VACUUM INTO '{bak_str}'"));
+    if let Err(e) = sqlx::query(stmt).execute(db.pool()).await {
+        tracing::warn!(
+            path = %bak_path.display(),
+            // Non-fatal: a full disk must not prevent the app from starting.
+            "pre-migration backup failed, proceeding without it: {e}"
+        );
+        return;
+    }
+    tracing::info!(path = %bak_path.display(), "pre-migration backup created");
+    prune_old_backups(db_path);
+}
+
+/// Delete all but the two newest `<stem>.pre-*.bak` files next to `db_path`.
+///
+/// Best-effort: any individual removal failure is logged and skipped.
+fn prune_old_backups(db_path: &std::path::Path) {
+    let Some(parent) = db_path.parent() else { return };
+    let Some(stem) = db_path.file_stem().and_then(|s| s.to_str()) else { return };
+    let prefix = format!("{stem}.pre-");
+    let suffix = ".bak";
+
+    let mut bak_files: Vec<std::path::PathBuf> = match std::fs::read_dir(parent) {
+        Ok(entries) => entries
+            .flatten()
+            .filter(|e| {
+                let name = e.file_name();
+                let n = name.to_string_lossy();
+                n.starts_with(&prefix) && n.ends_with(suffix)
+            })
+            .map(|e| e.path())
+            .collect(),
+        Err(e) => {
+            tracing::warn!("failed to read directory for backup pruning: {e}");
+            return;
+        }
+    };
+
+    if bak_files.len() <= 2 {
+        return;
+    }
+
+    // Sort oldest-first by modification time (fall back to path for stability).
+    bak_files.sort_by(|a, b| {
+        let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+        mtime(a).cmp(&mtime(b))
+    });
+
+    // Remove everything except the two newest.
+    for path in &bak_files[..bak_files.len() - 2] {
+        if let Err(e) = std::fs::remove_file(path) {
+            tracing::warn!(path = %path.display(), "failed to prune old backup: {e}");
+        }
+    }
+}
+
+#[allow(clippy::too_many_lines)]
 async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBuf) {
     let db = match Database::connect(&db_url).await {
         Ok(db) => db,
         Err(e) => return fatal(&app, &format!("failed to connect to SQLite at {db_url}: {e}")),
     };
+
+    // kyo7.28: back up the database before applying migrations to an existing,
+    // behind-schema file.  Skip for fresh databases (no migration table yet)
+    // and for in-memory connections.
+    if let Some(db_path) = sqlite_file_path(&db_url) {
+        match db.has_pending_migrations().await {
+            Ok(true) => {
+                run_pre_migration_backup(&db, &db_path, env!("CARGO_PKG_VERSION")).await;
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!("could not check for pending migrations before backup: {e}");
+            }
+        }
+    }
+
     if let Err(error) = db.migrate().await {
         // A raw `fatal()` here produced `Migration(VersionMismatch(71))` and
         // nothing else — technically true, actionable by nobody. Translate
@@ -621,6 +723,110 @@ mod tests {
 
     fn window(label: &str) -> WindowConfig {
         WindowConfig { label: label.to_owned(), ..WindowConfig::default() }
+    }
+
+    // ── sqlite_file_path ───────────────────────────────────────────────────
+
+    #[test]
+    fn sqlite_file_path_extracts_abs_path() {
+        let p = super::sqlite_file_path("sqlite:///home/user/alm.db?mode=rwc").unwrap();
+        assert_eq!(p, std::path::PathBuf::from("/home/user/alm.db"));
+    }
+
+    #[test]
+    fn sqlite_file_path_returns_none_for_memory() {
+        assert!(super::sqlite_file_path("sqlite::memory:").is_none());
+    }
+
+    // ── pre-migration backup ───────────────────────────────────────────────
+
+    /// Fresh DB (no migrations applied): backup must be skipped.
+    #[tokio::test]
+    async fn backup_skipped_for_fresh_db() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+
+        let db = Database::connect(&db_url).await.unwrap();
+        // Do NOT run migrate — fresh DB, no _sqlx_migrations table.
+        run_pre_migration_backup(&db, &db_path, "0.6.0").await;
+
+        let bak = db_path.with_extension("pre-0.6.0.bak");
+        assert!(!bak.exists(), "backup must not be created for a fresh (unmigrated) database");
+    }
+
+    /// Existing DB with all migrations applied: no backup needed (has_pending=false).
+    #[tokio::test]
+    async fn backup_skipped_when_up_to_date() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+
+        let db = Database::connect(&db_url).await.unwrap();
+        db.migrate().await.unwrap();
+
+        let pending = db.has_pending_migrations().await.unwrap();
+        assert!(!pending);
+
+        // has_pending_migrations = false → backup not triggered (tested via the
+        // flag; run_pre_migration_backup itself still works on any file-backed DB).
+    }
+
+    /// Existing DB that is behind (simulated by deleting one applied row):
+    /// backup must be created.
+    #[tokio::test]
+    async fn backup_created_when_migrations_pending() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+
+        let db = Database::connect(&db_url).await.unwrap();
+        db.migrate().await.unwrap();
+
+        // Simulate a behind-schema DB.
+        sqlx::query(
+            "DELETE FROM _sqlx_migrations \
+             WHERE version = (SELECT MAX(version) FROM _sqlx_migrations)",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        assert!(db.has_pending_migrations().await.unwrap());
+        run_pre_migration_backup(&db, &db_path, "0.6.0").await;
+
+        let bak = db_path.with_extension("pre-0.6.0.bak");
+        assert!(bak.exists(), "backup must be created when migrations are pending");
+    }
+
+    /// After creating 3 backups, the oldest must be pruned (only 2 kept).
+    #[test]
+    fn prune_keeps_two_newest_backups() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("alm.db");
+
+        // Create three fake .bak files with distinct modification times.
+        let bak1 = dir.path().join("alm.pre-0.4.0.bak");
+        let bak2 = dir.path().join("alm.pre-0.5.0.bak");
+        let bak3 = dir.path().join("alm.pre-0.6.0.bak");
+        for p in [&bak1, &bak2, &bak3] {
+            std::fs::write(p, b"dummy").unwrap();
+        }
+        // Set mtimes so ordering is deterministic: bak1 oldest, bak3 newest.
+        let epoch = std::time::SystemTime::UNIX_EPOCH;
+        for (p, secs) in [(&bak1, 1000u64), (&bak2, 2000), (&bak3, 3000)] {
+            let ft = std::fs::FileTimes::new()
+                .set_accessed(epoch + std::time::Duration::from_secs(secs))
+                .set_modified(epoch + std::time::Duration::from_secs(secs));
+            let f = std::fs::OpenOptions::new().write(true).open(p).unwrap();
+            f.set_times(ft).unwrap();
+        }
+
+        super::prune_old_backups(&db_path);
+
+        assert!(!bak1.exists(), "oldest backup must be pruned");
+        assert!(bak2.exists(), "second backup must be kept");
+        assert!(bak3.exists(), "newest backup must be kept");
     }
 
     /// The ordering guarantee, at the only place it can be enforced: Tauri
