@@ -16,6 +16,7 @@ domain_core = { path = "../../domain/core" }
 persistence_calibration = { path = "../../persistence/calibration" }
 persistence_core = { path = "../../persistence/core" }
 persistence_lifecycle = { path = "../../persistence/lifecycle" }
+persistence_sessions = { path = "../../persistence/sessions" }
 persistence_targets = { path = "../../persistence/targets" }
 serde_json.workspace = true
 sqlx.workspace = true
