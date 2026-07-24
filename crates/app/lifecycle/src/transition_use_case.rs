@@ -519,73 +519,44 @@ fn validate_edge(entity_type: EntityType, from: &str, to: &str) -> bool {
 ///    auto-transition (R-Ready-Trigger). This is the only non-blocked edge
 ///    that may be driven by actor=system.
 fn is_system_permitted(from: &str, to: &str) -> bool {
-    from == "blocked" || to == "blocked" || (from == "setup_incomplete" && to == "ready")
+    let from_state = project::ProjectState::parse_str(from);
+    let to_state = project::ProjectState::parse_str(to);
+    match (from_state, to_state) {
+        (Some(f), Some(t)) => {
+            f == project::ProjectState::Blocked
+                || t == project::ProjectState::Blocked
+                || (f == project::ProjectState::SetupIncomplete
+                    && t == project::ProjectState::Ready)
+        }
+        // Non-project entities pass raw strings; the original logic applies.
+        _ => from == "blocked" || to == "blocked" || (from == "setup_incomplete" && to == "ready"),
+    }
 }
 
-// ── string → enum parsers ────────────────────────────────────────────────
+// ── string → enum parsers (strum-backed) ─────────────────────────────────
 
 fn parse_state(s: &str) -> Option<project::ProjectState> {
-    Some(match s {
-        "setup_incomplete" => project::ProjectState::SetupIncomplete,
-        "ready" => project::ProjectState::Ready,
-        "prepared" => project::ProjectState::Prepared,
-        "processing" => project::ProjectState::Processing,
-        "completed" => project::ProjectState::Completed,
-        "archived" => project::ProjectState::Archived,
-        "blocked" => project::ProjectState::Blocked,
-        _ => return None,
-    })
+    project::ProjectState::parse_str(s)
 }
 
-/// Parses via `PlanState`'s `serde` mapping (`#[serde(rename_all =
-/// "snake_case")]`) instead of a hand-rolled match, so this stays in sync
-/// with `app_core::plans::parse_plan_state`'s sibling parser rather than
-/// drifting on new variants (audit T1-b). An unrecognised/corrupt value
-/// yields `None`, which `validate_edge` already treats as an invalid edge.
 fn parse_plan(s: &str) -> Option<plan_lifecycle::PlanState> {
-    serde_json::from_value(serde_json::Value::String(s.to_owned())).ok()
+    plan_lifecycle::PlanState::parse_str(s)
 }
 
 fn parse_file_record(s: &str) -> Option<inventory::InventoryState> {
-    Some(match s {
-        "observed" => inventory::InventoryState::Observed,
-        "changed" => inventory::InventoryState::Changed,
-        "classified" => inventory::InventoryState::Classified,
-        "missing" => inventory::InventoryState::Missing,
-        "rejected" => inventory::InventoryState::Rejected,
-        "protected" => inventory::InventoryState::Protected,
-        _ => return None,
-    })
+    s.parse().ok()
 }
 
 fn parse_data_source(s: &str) -> Option<data_source::DataSourceState> {
-    Some(match s {
-        "active" => data_source::DataSourceState::Active,
-        "missing" => data_source::DataSourceState::Missing,
-        "disabled" => data_source::DataSourceState::Disabled,
-        "reconnect_required" => data_source::DataSourceState::ReconnectRequired,
-        _ => return None,
-    })
+    s.parse().ok()
 }
 
 fn parse_prepared_source(s: &str) -> Option<prepared_source::PreparedSourceState> {
-    Some(match s {
-        "not_created" => prepared_source::PreparedSourceState::NotCreated,
-        "planned" => prepared_source::PreparedSourceState::Planned,
-        "ready" => prepared_source::PreparedSourceState::Ready,
-        "stale" => prepared_source::PreparedSourceState::Stale,
-        "retired" => prepared_source::PreparedSourceState::Retired,
-        _ => return None,
-    })
+    s.parse().ok()
 }
 
 fn parse_projection(s: &str) -> Option<projection::ProjectionState> {
-    Some(match s {
-        "current" => projection::ProjectionState::Current,
-        "stale" => projection::ProjectionState::Stale,
-        "regenerating" => projection::ProjectionState::Regenerating,
-        _ => return None,
-    })
+    s.parse().ok()
 }
 
 // ── contract → command translation ───────────────────────────────────────

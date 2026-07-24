@@ -6,6 +6,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use strum::{EnumString, IntoStaticStr};
 
 use crate::ids::{EntityId, Timestamp};
 
@@ -22,8 +23,11 @@ use crate::ids::{EntityId, Timestamp};
     Deserialize,
     JsonSchema,
     Type,
+    EnumString,
+    IntoStaticStr,
 )]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum DataSourceState {
     Active,
     Missing,

@@ -299,7 +299,9 @@ async fn maybe_auto_ready(
     project_id: &str,
     current_lifecycle: &str,
 ) -> Result<Option<String>, persistence_core::DbError> {
-    if current_lifecycle != "setup_incomplete" {
+    if domain_core::lifecycle::ProjectState::parse_str(current_lifecycle)
+        != Some(domain_core::lifecycle::ProjectState::SetupIncomplete)
+    {
         return Ok(None);
     }
     project_health::check_project_ready_invariant(pool, bus, project_id)
@@ -313,7 +315,9 @@ async fn maybe_regress_to_incomplete(
     project_id: &str,
     current_lifecycle: &str,
 ) -> Result<Option<String>, persistence_core::DbError> {
-    if current_lifecycle != "ready" {
+    if domain_core::lifecycle::ProjectState::parse_str(current_lifecycle)
+        != Some(domain_core::lifecycle::ProjectState::Ready)
+    {
         return Ok(None);
     }
     let sources = repo::list_project_sources(pool, project_id).await?;

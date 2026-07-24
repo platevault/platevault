@@ -55,7 +55,7 @@ pub async fn add_source(
     let row = repo::get_project(pool, &req.project_id).await.map_err(db_err)?;
 
     // Check archived lifecycle.
-    if row.lifecycle == "archived" {
+    if domain_core::project::validate::is_read_only(&row.lifecycle) {
         return Err(ContractError::new(
             ErrorCode::LifecycleReadOnly,
             "Sources cannot be added to an archived project.",

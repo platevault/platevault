@@ -26,8 +26,11 @@ use crate::ids::EntityId;
     Deserialize,
     JsonSchema,
     Type,
+    EnumString,
+    IntoStaticStr,
 )]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum PreparedSourceState {
     NotCreated,
     Planned,

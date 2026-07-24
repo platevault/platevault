@@ -52,6 +52,11 @@ db-boundary:
 dead-callers:
     bash scripts/check-dead-callers.sh
 
+# Lifecycle string-comparison ratchet — sealed at zero. Raw `.lifecycle == "..."`
+# comparisons must use typed ProjectState predicates instead.
+lifecycle-strings:
+    bash scripts/check-lifecycle-strings.sh
+
 # Periodic hygiene sweeps. NOT CI gates and deliberately so: these surface debt
 # to triage, not per-PR correctness, and a noisy blocking gate gets suppressed.
 # Run them when you want a health read, not on every push.
@@ -135,7 +140,7 @@ check-generated:
 
 # Full pre-merge gate: lint + tests + typecheck + generated-artifact drift +
 # DB/dead-caller boundary ratchets.
-check: lint test typecheck check-generated db-boundary dead-callers
+check: lint test typecheck check-generated db-boundary dead-callers lifecycle-strings
 
 # Placeholder fixture check hook.
 fixtures-check:
