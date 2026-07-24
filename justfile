@@ -133,8 +133,9 @@ check-generated:
     cargo test -q -p desktop_shell --features dev-tools --test bindings
     git diff --exit-code specs/*/contracts/*.generated.json apps/desktop/src/bindings/
 
-# Full pre-merge gate: lint + tests + typecheck + generated-artifact drift.
-check: lint test typecheck check-generated
+# Full pre-merge gate: lint + tests + typecheck + generated-artifact drift +
+# DB/dead-caller boundary ratchets.
+check: lint test typecheck check-generated db-boundary dead-callers
 
 # Placeholder fixture check hook.
 fixtures-check:

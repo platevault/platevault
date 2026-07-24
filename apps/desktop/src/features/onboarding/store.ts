@@ -40,7 +40,7 @@
  * `'true'`.
  */
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { commands } from '@/bindings/index';
 import type {
   OnboardingStateDto,
@@ -230,9 +230,100 @@ export function __setOnboardingStateForTest(
   emit();
 }
 
+// ── Walk-active gate + replay signal (T015) ───────────────────────────────────
+//
+// Shell gate: `setupCompleted && (!orientationDone || walkActive)`.
+// This keeps the lazy OrientationWalk chunk unloaded for users who have
+// already completed the walk AND have not requested a replay — the common
+// steady-state after first run.
+//
+// _walkActive is set BEFORE OrientationWalk mounts (by requestOrientationReplay
+// for the replay path, or by setWalkActive inside OrientationWalk on auto-run
+// start) and cleared only when the walk finishes/skips. This prevents the
+// consume-unmount race: clearing _replayPending does not collapse the Shell
+// gate because _walkActive holds it open for the full walk lifetime.
+
+let _replayPending = false;
+let _walkActive = false;
+const _walkSubs = new Set<() => void>();
+
+function walkEmit(): void {
+  for (const fn of _walkSubs) fn();
+}
+
+/**
+ * Request an orientation walk replay (FR-005 / T015). Sets _walkActive so the
+ * Shell gate opens immediately (before mount), and _replayPending so the walk
+ * component knows to skip the orientationDone check.
+ */
+export function requestOrientationReplay(): void {
+  _replayPending = true;
+  _walkActive = true;
+  walkEmit();
+}
+
+/**
+ * Signal that the walk has started (auto-run or replay). Called by
+ * OrientationWalk's launch path so the Shell gate stays open for the full
+ * duration even after the replay request is consumed.
+ */
+export function setWalkActive(active: boolean): void {
+  if (_walkActive === active) return;
+  _walkActive = active;
+  walkEmit();
+}
+
+/** Consume the one-shot replay request. Returns true and resets if pending. */
+export function consumeOrientationReplay(): boolean {
+  if (!_replayPending) return false;
+  _replayPending = false;
+  // Do NOT emit: _walkActive is already true and must stay true.
+  return true;
+}
+
+/**
+ * React hook: composite gate value for Shell — true when a walk is running or
+ * a replay has been requested. Drives `!orientationDone || walkActive` in Shell.
+ */
+export function useWalkActive(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      _walkSubs.add(fn);
+      return () => _walkSubs.delete(fn);
+    },
+    () => _walkActive,
+    () => _walkActive,
+  );
+}
+
+/** @internal Plain getter for tests — avoids calling a hook outside React. */
+export function isWalkActive(): boolean {
+  return _walkActive;
+}
+
 // ── React hooks ────────────────────────────────────────────────────────────────
 
 /** React hook: the live onboarding projection (or `null` before hydration). */
 export function useOnboardingState(): OnboardingStateDto | null {
   return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+/**
+ * Shared visibility gate for every onboarding surface: honours the
+ * deterministic suppression flag (FR-030) and the backend `sectionHidden` flag
+ * (explicit removal FR-013 / completion auto-hide FR-031). Returns `null` when
+ * the section (and its progress-ring icon) must not render at all.
+ *
+ * Kept in `store.ts` (not `ChecklistSection.tsx`) so Shell/Sidebar can import
+ * it without pulling the full checklist → FindSpotlight → joyrideAdapter tree
+ * into the boot chunk.
+ */
+export function useVisibleOnboardingState(): OnboardingStateDto | null {
+  const state = useOnboardingState();
+  useEffect(() => {
+    void startOnboardingStateSync();
+  }, []);
+  if (isOnboardingSuppressed()) return null;
+  if (!state || state.flags.sectionHidden) return null;
+  return state;
 }

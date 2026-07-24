@@ -47,6 +47,9 @@ export function InboxFilesColumn({ fileMetadata }: InboxFilesColumnProps) {
     (f) => (f.missingPathAttributes?.length ?? 0) > 0,
   );
 
+  // TODO(astro-plan-kyo7.37): virtualize or lazy-load — a large session folder
+  // renders one row per file; deferred to the memoization bead (popover rows
+  // built lazily on open).
   const metadataRows = (fileMetadata ?? []).map((f, rowIdx) => {
     const missingAttrs = f.missingPathAttributes ?? [];
     const fileName = basename(f.relativeFilePath);

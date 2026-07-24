@@ -2574,19 +2574,58 @@ fn reset_webview_storage(vars: &[(&'static str, String)]) {
 /// added at the failure site in `inbox_ui_journeys.rs` (round 3,
 /// fix-main-e2e-interplay) for the next data point.
 ///
-/// The plugin's default store is `.window-state.json` under
-/// `app.path().app_config_dir()` (`tauri-plugin-window-state` source) —
-/// which is a DIFFERENT directory than `app_data_dir()` on Linux
-/// (`$XDG_CONFIG_HOME`/`~/.config` vs `$XDG_DATA_HOME`/`~/.local/share`) but
-/// the SAME directory on Windows (`%APPDATA%`) and macOS
-/// (`~/Library/Application Support`).
-/// Failures are ignored (first run has no window-state file yet).
+/// Issue astro-plan-qmc: `app_config_dir()` uses `dirs →
+/// SHGetKnownFolderPath` on Windows and ignores `APPDATA`, so the old
+/// Windows branch was deleting under a path that never existed — a silent
+/// no-op. The fix in `lib.rs` redirects the plugin's store to `ALM_DATA_DIR`
+/// via an absolute `with_filename()` path, so this function now reads that
+/// same env var directly (identical on all platforms — no per-OS branching
+/// needed any more).
+///
+/// Logs a warning when the file can't be found at its expected location AND
+/// the current app process is not a first-run (i.e. the file has had a
+/// chance to be written): a missing file on the very first launch is normal,
+/// but a mismatch between where the app writes and where this function deletes
+/// is the bug this function is here to catch.
 ///
 /// `vars` — see [`reset_webview_storage`]'s doc on why this takes the
 /// instance's env overrides instead of reading the real OS env.
 fn reset_window_state(vars: &[(&'static str, String)]) {
-    if let Some(dir) = app_config_dir(vars) {
-        let _ = std::fs::remove_file(dir.join(".window-state.json"));
+    // On every platform the app writes `.window-state.json` under ALM_DATA_DIR
+    // when that variable is set (astro-plan-qmc fix in `lib.rs`). Fall back to
+    // `app_config_dir` on Linux/macOS where the env vars ARE honoured by the
+    // platform dirs resolver and `ALM_DATA_DIR` is only set for app-data (not
+    // config-dir) isolation.
+    let path = if let Some(data_dir) = app_data_dir(vars) {
+        data_dir.join(".window-state.json")
+    } else if let Some(cfg_dir) = app_config_dir(vars) {
+        cfg_dir.join(".window-state.json")
+    } else {
+        eprintln!(
+            "[e2e harness] reset_window_state: neither ALM_DATA_DIR nor \
+             an app_config_dir override is set — window-state file not reset"
+        );
+        return;
+    };
+
+    match std::fs::remove_file(&path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // Normal on the very first launch of a fresh instance (no prior
+            // session to have written it). Log at debug level only.
+            eprintln!(
+                "[e2e harness] reset_window_state: file not found at {} \
+                 (expected on first launch)",
+                path.display()
+            );
+        }
+        Err(e) => {
+            eprintln!(
+                "[e2e harness] reset_window_state: failed to remove {} — {e} \
+                 (window-state may bleed between sequential journeys)",
+                path.display()
+            );
+        }
     }
 }
 

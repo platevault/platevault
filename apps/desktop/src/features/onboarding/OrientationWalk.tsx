@@ -38,6 +38,8 @@ import {
   isOnboardingSuppressed,
   completeOrientation,
   startOnboardingStateSync,
+  consumeOrientationReplay,
+  setWalkActive,
 } from './store';
 import { ORIENTATION_STOPS } from './orientationSteps';
 import type { OnboardingOrientationOutcome } from '@/bindings/index';
@@ -54,15 +56,6 @@ const AC_PREV = 'prev';
 const AC_CLOSE = 'close';
 const AC_SKIP = 'skip';
 const ST_SKIPPED = 'skipped';
-
-// Module-level replay hook (T015): Settings → Advanced calls this to re-run the
-// walk regardless of `orientationDone`. Single mounted walk owns the callback.
-let replayHook: (() => void) | null = null;
-
-/** Re-run the orientation walk from the first stop (FR-005 replay). */
-export function requestOrientationReplay(): void {
-  replayHook?.();
-}
 
 export function OrientationWalk() {
   const navigate = useNavigate();
@@ -84,25 +77,27 @@ export function OrientationWalk() {
     finishedRef.current = false;
     setStepIndex(0);
     setActive(true);
+    // Keep the Shell gate open for the full walk lifetime.
+    setWalkActive(true);
   }, []);
 
-  // Register the replay hook for the walk's lifetime (T015).
+  // Auto-run (FR-001/FR-004) + replay (T015).
+  // consumeOrientationReplay() returns true when the Settings replay button
+  // was pressed; it clears _replayPending but does NOT emit to _walkSubs, so
+  // the Shell gate (_walkActive) stays open and OrientationWalk is not
+  // unmounted between this effect and the next render that calls launch().
   useEffect(() => {
-    replayHook = launch;
-    return () => {
-      if (replayHook === launch) replayHook = null;
-    };
-  }, [launch]);
-
-  // Auto-run exactly once per session (FR-001): the backend flag enforces
-  // once-per-install; this ref prevents a re-launch inside the same session
-  // during the brief window before the flag round-trips back.
-  useEffect(() => {
-    if (autoLaunchedRef.current || active) return;
+    if (active) return;
     if (!setupCompleted || !onboarding || isOnboardingSuppressed()) return;
-    if (onboarding.flags.orientationDone) return;
-    autoLaunchedRef.current = true;
-    launch();
+    if (consumeOrientationReplay()) {
+      // Replay path: _walkActive already true (set by requestOrientationReplay
+      // before mount). Ignore orientationDone; allow re-launch after a finish.
+      autoLaunchedRef.current = true;
+      launch();
+    } else if (!autoLaunchedRef.current && !onboarding.flags.orientationDone) {
+      autoLaunchedRef.current = true;
+      launch();
+    }
   }, [setupCompleted, onboarding, active, launch]);
 
   // Navigate to the current stop's real page (FR-002). Absent route = stay.
@@ -116,6 +111,9 @@ export function OrientationWalk() {
     if (finishedRef.current) return;
     finishedRef.current = true;
     setActive(false);
+    // Release the Shell gate after the walk ends so done-users unload the chunk
+    // on next remount (e.g. StrictMode) and future sessions skip the load.
+    setWalkActive(false);
     void completeOrientation(outcome).catch((err) => {
       console.warn('[onboarding] orientation complete failed:', err);
     });

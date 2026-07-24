@@ -556,6 +556,18 @@ jobs:
         if: needs.changes.outputs.frontend == 'true'
         run: pnpm -r --if-present typecheck
 
+      # Bundle-size budget gate: build the desktop bundle and fail if any
+      # entry grows beyond the limits in apps/desktop/.size-limit.json.
+      # Runs on Linux only (OS-agnostic output, no need to triple-run).
+      # Placed after typecheck so type errors surface before a slow build.
+      - name: Frontend build (for bundle-size gate)
+        if: runner.os == 'Linux' && needs.changes.outputs.frontend == 'true'
+        run: pnpm --filter @astro-plan/desktop build
+
+      - name: Bundle-size budget
+        if: runner.os == 'Linux' && needs.changes.outputs.frontend == 'true'
+        run: pnpm --filter @astro-plan/desktop size
+
       # --- Generated contract / binding drift gate (review finding W1) ---
       # Regenerates Rust->TS bindings and contracts and fails on drift. Compiles
       # Rust, so it belongs to the Rust lane.

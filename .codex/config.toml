@@ -46,7 +46,3 @@ approval_mode = "approve"
 
 [mcp_servers.playwright.tools.browser_run_code_unsafe]
 approval_mode = "approve"
-
-[mcp_servers.gitnexus]
-command = "gitnexus"
-args = ["mcp"]

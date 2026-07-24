@@ -16,9 +16,7 @@
       "Bash(xdotool search *)",
       "Bash(xwininfo -root)",
       "Bash(claude mcp *)",
-      "Bash(timeout 60 npx -y gitnexus@latest mcp)",
-      "Bash(mkdir -p /tmp/gitnexus-npx-cache)",
-      "Bash(timeout 180 npx -y gitnexus@latest --help)"
+      "mcp__serena__initial_instructions"
     ]
   },
   "enabledMcpjsonServers": [
@@ -28,8 +26,13 @@
     "playwright",
     "repomix",
     "serena",
-    "tauri",
-    "gitnexus"
+    "tauri"
+  ],
+  "disabledMcpjsonServers": [
+    "context7",
+    "mcp-package-version",
+    "playwright",
+    "repomix"
   ],
   "sandbox": {
     "enabled": false,
