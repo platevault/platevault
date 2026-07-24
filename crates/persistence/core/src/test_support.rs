@@ -11,6 +11,10 @@ use crate::Database;
 
 /// An in-memory [`Database`] with all migrations applied, ready for a single
 /// repository unit test.
+///
+/// # Panics
+///
+/// Panics if the in-memory pool or migrations fail.
 pub async fn setup_db() -> Database {
     let db = Database::in_memory().await.expect("in-memory DB");
     db.migrate().await.expect("migrations");
@@ -18,6 +22,10 @@ pub async fn setup_db() -> Database {
 }
 
 /// Insert a minimal `canonical_target` row sufficient to satisfy FK constraints.
+///
+/// # Panics
+///
+/// Panics on SQL failure.
 pub async fn insert_target(pool: &SqlitePool, id: &str) {
     sqlx::query(
         "INSERT INTO canonical_target
@@ -31,6 +39,10 @@ pub async fn insert_target(pool: &SqlitePool, id: &str) {
 }
 
 /// Insert a minimal `projects` row sufficient to satisfy FK constraints.
+///
+/// # Panics
+///
+/// Panics on SQL failure.
 pub async fn insert_project(pool: &SqlitePool, id: &str) {
     sqlx::query(
         "INSERT INTO projects \

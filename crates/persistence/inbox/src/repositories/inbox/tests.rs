@@ -1882,7 +1882,7 @@ async fn list_unacknowledged_excludes_stale_placeholder_when_sub_item_exists() {
     let db = test_db().await;
     let pool = db.pool();
 
-    let batch_resp = crate::repositories::first_run::register_source_batch(
+    let batch_resp = persistence_lifecycle::repositories::first_run::register_source_batch(
         pool,
         &RegisterSourceBatchRequest {
             sources: vec![RegisterSourceRequest {
@@ -1986,7 +1986,7 @@ async fn list_unacknowledged_keeps_unclassified_item_with_no_siblings() {
     let db = test_db().await;
     let pool = db.pool();
 
-    let batch_resp = crate::repositories::first_run::register_source_batch(
+    let batch_resp = persistence_lifecycle::repositories::first_run::register_source_batch(
         pool,
         &RegisterSourceBatchRequest {
             sources: vec![RegisterSourceRequest {
@@ -2034,7 +2034,7 @@ async fn list_and_stats_agree_when_stale_placeholder_has_evidence() {
     let db = test_db().await;
     let pool = db.pool();
 
-    let batch_resp = crate::repositories::first_run::register_source_batch(
+    let batch_resp = persistence_lifecycle::repositories::first_run::register_source_batch(
         pool,
         &RegisterSourceBatchRequest {
             sources: vec![RegisterSourceRequest {
