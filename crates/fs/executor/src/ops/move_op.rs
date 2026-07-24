@@ -5,10 +5,14 @@
 //!
 //! Strategy:
 //! - Same volume: attempt atomic `rename` (no data movement).
-//! - Cross-volume: copy-then-delete. If the delete fails, the source is
-//!   left intact and the failure code is `copy.succeeded.delete.failed`
-//!   (R-Fail-1). Rollback of the copy is attempted; if that also fails the
-//!   code becomes `copy.succeeded.delete.failed.rollback.failed`.
+//! - Cross-volume: copy-then-delete. The copy lands in a temp file inside the
+//!   destination directory and is renamed into place atomically, so a
+//!   half-written copy never leaves the destination path occupied and never
+//!   poisons a retry with `ConflictDestinationExists` (GF-3/27). If the final
+//!   delete of the source fails, the failure code is
+//!   `copy.succeeded.delete.failed` (R-Fail-1). Rollback of the copy is
+//!   attempted; if that also fails the code becomes
+//!   `copy.succeeded.delete.failed.rollback.failed`.
 //!
 //! Constitution §II: never overwrite silently — destination existence is
 //! checked before any mutation.
@@ -44,26 +48,48 @@ pub fn move_file(
         source,
         destination,
         |s, d| std::fs::rename(s, d),
+        atomic_copy,
         |p| std::fs::remove_file(p),
     )
 }
 
-/// Same as [`move_file`], with the `rename`/`remove_file` syscalls taken as
-/// parameters.
+/// Copy `source` to `destination` atomically via temp-in-dest-dir + rename.
+///
+/// A direct `std::fs::copy` to the final path leaves a partial file if the
+/// process is interrupted mid-copy — every subsequent retry sees the path
+/// occupied and hits `ConflictDestinationExists` (GF-3/27). Writing to a temp
+/// name in the same directory and then renaming avoids this: the destination
+/// path is either absent or fully written.
+fn atomic_copy(source: &Utf8Path, destination: &Utf8Path) -> std::io::Result<()> {
+    let dest_dir = destination.parent().unwrap_or_else(|| camino::Utf8Path::new("."));
+    let tmp = tempfile::Builder::new().prefix(".astroplan-copy-").tempfile_in(dest_dir)?;
+    let tmp_path = tmp.path().to_owned();
+    // Copy bytes into the temp file (same directory as destination → same volume
+    // by construction, so the final rename is always atomic).
+    std::fs::copy(source, &tmp_path)?;
+    // Keep the NamedTempFile alive until persist so the file isn't dropped early.
+    tmp.persist(destination).map_err(|e| e.error)?;
+    Ok(())
+}
+
+/// Same as [`move_file`], with the `rename`/`copy`/`remove_file` syscalls
+/// taken as parameters.
 ///
 /// This is the injectable seam behind [`move_file`]: production code always
 /// calls it with the real `std::fs` functions. Tests use it to force the
 /// `EXDEV` cross-device branch — which `tempfile::tempdir()` can never
-/// reach, since a temp dir is a single filesystem — and to force delete
-/// failures deterministically for the rollback branches. A rename-only seam
-/// cannot exercise `CopySucceededDeleteFailedRollbackFailed`: making the
-/// rollback delete fail via real directory permissions would also block the
-/// preceding copy (both need write access on the same directory entry), so
-/// `remove_file` is injected too.
+/// reach, since a temp dir is a single filesystem — and to force copy or
+/// delete failures deterministically. A rename-only seam cannot exercise
+/// `CopySucceededDeleteFailedRollbackFailed`: making the rollback delete fail
+/// via real directory permissions would also block the preceding copy (both
+/// need write access on the same directory entry), so `remove_file` is
+/// injected too. `copy` is injected so tests can force copy failures without
+/// going through the temp-file creation path.
 fn move_file_with_ops(
     source: &Utf8Path,
     destination: &Utf8Path,
     rename: impl Fn(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
+    copy: impl Fn(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
     remove_file: impl Fn(&Utf8Path) -> std::io::Result<()>,
 ) -> Result<(), (PlanItemFailure, MoveResult)> {
     let no_rollback = MoveResult {
@@ -123,7 +149,7 @@ fn move_file_with_ops(
     let source_mtime =
         std::fs::metadata(source).map(|m| FileTime::from_last_modification_time(&m)).ok();
 
-    if let Err(copy_err) = std::fs::copy(source, destination) {
+    if let Err(copy_err) = copy(source, destination) {
         return Err((
             PlanItemFailure::from_io(&copy_err, &format!("copy {source} to {destination}")),
             no_rollback,
@@ -267,6 +293,14 @@ mod tests {
         Err(std::io::Error::from_raw_os_error(cross_device_error()))
     }
 
+    fn real_copy(s: &Utf8Path, d: &Utf8Path) -> std::io::Result<()> {
+        std::fs::copy(s, d).map(|_| ())
+    }
+
+    fn fake_copy_fail(_: &Utf8Path, _: &Utf8Path) -> std::io::Result<()> {
+        Err(std::io::Error::other("injected copy failure"))
+    }
+
     #[test]
     fn move_cross_volume_success() {
         let dir = tempfile::tempdir().unwrap();
@@ -275,7 +309,7 @@ mod tests {
         let dst = root.join("dest.fits");
         std::fs::write(&src, b"cross-volume data").unwrap();
 
-        move_file_with_ops(&src, &dst, fake_exdev, |p| std::fs::remove_file(p)).unwrap();
+        move_file_with_ops(&src, &dst, fake_exdev, real_copy, |p| std::fs::remove_file(p)).unwrap();
 
         assert!(!src.exists(), "source should be gone");
         assert!(dst.exists(), "destination should exist");
@@ -286,21 +320,18 @@ mod tests {
     fn move_cross_volume_copy_fails_leaves_no_rollback() {
         let dir = tempfile::tempdir().unwrap();
         let root = utf8(dir.path());
-        // Source is a directory: `std::fs::copy` fails to open it for reading.
-        let src = root.join("source_dir");
-        std::fs::create_dir_all(&src).unwrap();
+        let src = root.join("source.fits");
+        std::fs::write(&src, b"data").unwrap();
         let dst = root.join("dest.fits");
 
         let (failure, move_result) =
-            move_file_with_ops(&src, &dst, fake_exdev, |p| std::fs::remove_file(p)).unwrap_err();
+            move_file_with_ops(&src, &dst, fake_exdev, fake_copy_fail, |p| std::fs::remove_file(p))
+                .unwrap_err();
 
-        // The io::Error kind for "copy a directory" differs across OSes (e.g.
-        // InvalidInput on Unix vs. PermissionDenied on Windows), so the
-        // resulting FailureCode is not pinned here — the invariant under test
-        // is that the failure is reported and no rollback residue is left.
         assert!(!failure.message.is_empty());
         assert!(!move_result.rollback_attempted, "copy never succeeded, no rollback to attempt");
         assert_eq!(move_result.rollback_outcome, RollbackOutcome::NotApplicable);
+        // The injected copy failure never wrote to dest, so it must not exist.
         assert!(!dst.exists(), "destination must not exist after failed copy");
         assert!(src.exists(), "source must survive a failed copy");
     }
@@ -327,7 +358,7 @@ mod tests {
         };
 
         let (failure, move_result) =
-            move_file_with_ops(&src, &dst, fake_exdev, remove_file).unwrap_err();
+            move_file_with_ops(&src, &dst, fake_exdev, real_copy, remove_file).unwrap_err();
 
         assert_eq!(failure.code, FailureCode::CopySucceededDeleteFailed);
         assert!(move_result.rollback_attempted);
@@ -352,7 +383,7 @@ mod tests {
         };
 
         let (failure, move_result) =
-            move_file_with_ops(&src, &dst, fake_exdev, remove_file).unwrap_err();
+            move_file_with_ops(&src, &dst, fake_exdev, real_copy, remove_file).unwrap_err();
 
         assert_eq!(failure.code, FailureCode::CopySucceededDeleteFailedRollbackFailed);
         assert!(move_result.rollback_attempted);
@@ -363,6 +394,35 @@ mod tests {
         // leave behind on a genuine double-failure.
         assert!(src.exists(), "source must survive a delete failure");
         assert!(dst.exists(), "destination copy must survive a failed rollback");
+    }
+
+    // ── retry-poison regression (GF-3/27) ────────────────────────────────────
+
+    /// A failed copy must not leave the destination occupied so that the next
+    /// retry can succeed. Before the atomic temp+rename fix, `std::fs::copy`
+    /// wrote directly to the destination path; an interrupt or injected failure
+    /// left a partial file there, causing every subsequent attempt to return
+    /// `ConflictDestinationExists` rather than retrying the copy.
+    #[test]
+    fn cross_volume_copy_failure_does_not_poison_dest_for_retry() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = utf8(dir.path());
+        let src = root.join("source.fits");
+        let dst = root.join("dest.fits");
+        std::fs::write(&src, b"important data").unwrap();
+
+        // First attempt: copy fails (simulates interrupt mid-copy).
+        let (_, move_result) =
+            move_file_with_ops(&src, &dst, fake_exdev, fake_copy_fail, |p| std::fs::remove_file(p))
+                .unwrap_err();
+        assert_eq!(move_result.rollback_outcome, RollbackOutcome::NotApplicable);
+        // Destination must be clear — no partial file left.
+        assert!(!dst.exists(), "failed copy must not leave dest occupied");
+
+        // Second attempt (retry): must succeed.
+        move_file_with_ops(&src, &dst, fake_exdev, real_copy, |p| std::fs::remove_file(p)).unwrap();
+        assert!(dst.exists(), "retry must succeed once dest is clear");
+        assert_eq!(std::fs::read(&dst).unwrap(), b"important data");
     }
 
     // ── mtime preservation ────────────────────────────────────────────────────
@@ -379,7 +439,7 @@ mod tests {
         let known_mtime = filetime::FileTime::from_unix_time(1_700_000_000, 0);
         filetime::set_file_mtime(&src, known_mtime).unwrap();
 
-        move_file_with_ops(&src, &dst, fake_exdev, |p| std::fs::remove_file(p)).unwrap();
+        move_file_with_ops(&src, &dst, fake_exdev, real_copy, |p| std::fs::remove_file(p)).unwrap();
 
         let dst_mtime =
             filetime::FileTime::from_last_modification_time(&std::fs::metadata(&dst).unwrap());
