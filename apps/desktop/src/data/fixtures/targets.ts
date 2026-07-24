@@ -1,13 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Static mock fixture data for Target and TargetDetail
-// Matches design V3 mock data.
-
-import type {
-  Target,
-  TargetDetail as TargetDetailType,
-} from '@/bindings/types';
+// Static mock fixture data — gen-2 shapes retained for reference only.
+// These fixtures are not imported anywhere; type annotations removed to avoid
+// gen-2 vs gen-3 shape mismatch errors (Target is now TargetListItem_Serialize).
 
 // ─── Design V3 flat fixture shape ───────────────────────────────────────────
 //
@@ -98,7 +94,7 @@ export const TARGETS_DATA: TargetFixture[] = [
 // Rich list items — shown in the left pane (existing shape retained)
 // ---------------------------------------------------------------------------
 
-export const targets: Target[] = [
+export const targets = [
   {
     id: '550e8400-e29b-41d4-a716-446655440201',
     name: 'NGC 7000',
@@ -183,7 +179,7 @@ export const targets: Target[] = [
 // Detail — the full NGC 7000 detail matching the wireframe
 // ---------------------------------------------------------------------------
 
-export const targetDetail: TargetDetailType = {
+export const targetDetail = {
   ...targets[0],
   sessions: [
     {
