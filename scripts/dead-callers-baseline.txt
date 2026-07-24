@@ -95,40 +95,38 @@ insert_evidence
 upsert_inbox_file_metadata
 
 # spec 062 node ic9h.9: persistence_sessions repository entry points consumed by
-# app-layer nodes ic9h.10 (Inbox materialization), ic9h.14 (project membership),
-# ic9h.15 (update view), and ic9h.19 (metadata correction). Remove each entry
-# as its call site lands.
+# app-layer nodes ic9h.14 (project membership), ic9h.15 (update view), and
+# ic9h.19 (metadata correction). Remove each entry as its call site lands.
+# Entries wired by ic9h.10 (Inbox materialization) have been removed.
 advance_equipment_resolution_head
 advance_metadata_resolution_head
 assert_no_supersession_cycle
-current_change_sequence
 get_accepted_equipment_resolution
 get_accepted_metadata_resolution
 get_equipment_resolution_head
 get_metadata_resolution_head
-get_operation_by_public_id
-get_result_snapshot_by_operation_public_id
 insert_equipment_resolution
 insert_equipment_resolution_head
 insert_light_session_identity
-insert_materialization_operation
 insert_metadata_resolution
 insert_metadata_resolution_frame
 insert_metadata_resolution_head
-insert_result_snapshot
-insert_session
-insert_session_frame
-insert_session_visibility
 insert_supersession
 is_session_current
 list_metadata_resolution_frames
 list_session_frames
-list_sessions_at_watermark
 list_supersession_predecessors
 list_supersession_successors
-transition_operation_to_applied
-transition_operation_to_applying
-transition_operation_to_failed
+
+# spec 062 node ic9h.10: app-layer Inbox materialization entry points consumed
+# by ic9h.23 (Tauri command adapters). Remove each entry as its adapter lands.
+insert_ready_operation
+list_sessions_first_page
+list_sessions_next_page
+mark_operation_failed
+query_operation
+query_result_snapshot
+run_apply
 
 # spec 062 node ic9h.12: consumed by app-layer nodes ic9h.13/.14/.16/.20 — remove entries as call sites land
 accept_proposal
