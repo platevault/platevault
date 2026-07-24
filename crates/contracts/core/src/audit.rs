@@ -74,3 +74,15 @@ pub struct AuditListResponse {
     pub entries: Vec<AuditEntry>,
     pub total: u32,
 }
+
+/// Response for `audit.export` — mirrors `LogExportResponse`.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AuditExportResponse {
+    /// Absolute path of the written file.
+    pub file_path: String,
+    /// Number of entries written.
+    pub count: usize,
+    /// Byte size of the written file.
+    pub bytes: u64,
+}
