@@ -209,3 +209,12 @@ perf-bench:
 # Use --generate to record a fresh baseline after a justified query-count change.
 perf-check:
     bash scripts/check-perf-baseline.sh
+
+# Measure Rust test coverage via cargo-llvm-cov and print a per-file summary.
+# Requires cargo-llvm-cov and llvm-tools-preview:
+#   rustup component add llvm-tools-preview
+#   cargo install cargo-llvm-cov
+# Writes lcov.info to the workspace root (gitignored).
+coverage:
+    cargo llvm-cov --workspace --lcov --output-path lcov.info --doctests
+    cargo llvm-cov report --summary-only
