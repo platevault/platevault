@@ -37,11 +37,12 @@ describe('unwrap (FR-003)', () => {
 });
 
 // ── T118: zod validation at the IPC seam ─────────────────────────────────────
+// Validation lives in ipc.validate.ts to keep zod off the boot chunk (T118).
 import {
   ContractErrorSchema,
   IpcPayloadValidationError,
   validateContractError,
-} from './ipc';
+} from './ipc.validate';
 
 describe('ContractErrorSchema zod validation (T118)', () => {
   const validError = {

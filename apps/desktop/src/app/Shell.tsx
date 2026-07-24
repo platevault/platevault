@@ -7,7 +7,7 @@
  * handling (built into their pages). Other routes use full-width main.
  */
 
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Outlet, useNavigate } from '@tanstack/react-router';
 import { usePreferences } from '@/data/preferences';
 import { stepZoomIn, stepZoomOut, resetZoom } from '@/data/theme';
@@ -20,17 +20,39 @@ import { LogPanelProvider, useLogPanel } from './LogPanelContext';
 import { OperationStatusProvider } from './OperationStatusContext';
 import { PageStatusProvider } from './PageStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
-import { OrientationWalk } from '@/features/onboarding/OrientationWalk';
+import { useOnboardingState, useWalkActive } from '@/features/onboarding/store';
 import { loadObservingState } from '@/features/targets/observing-sites/site-store';
 import {
   startUpdateSubscription,
   stopUpdateSubscription,
 } from '@/data/updateSubscription';
 
+// react-joyride is large (~100 kB gz). The lazy chunk loads only when
+// walkReady is true — i.e. never for users who finished the walk and haven't
+// requested a replay. walkActive holds the gate open for the full walk
+// lifetime so consuming the replay request flag can't collapse it mid-mount.
+const OrientationWalk = lazy(() =>
+  import('@/features/onboarding/OrientationWalk').then((m) => ({
+    default: m.OrientationWalk,
+  })),
+);
+
 function ShellInner() {
   const prefs = usePreferences();
+  const onboarding = useOnboardingState();
+  const walkActive = useWalkActive();
   const { expanded } = useLogPanel();
   const navigate = useNavigate();
+
+  // Gate: mount (and load) OrientationWalk when setup is done AND either:
+  //   • orientationDone is false — first-run auto-run path, OR
+  //   • walkActive is true — a replay was requested or the walk is running.
+  // Users with orientationDone=true and no pending/active walk never load the
+  // joyride chunk. walkActive is set by requestOrientationReplay BEFORE mount
+  // so the gate stays open through the entire walk, surviving consume().
+  const walkReady =
+    prefs.setupCompleted &&
+    (onboarding === null || !onboarding.flags.orientationDone || walkActive);
 
   // Redirect to /setup if first-run setup is not completed
   useEffect(() => {
@@ -139,7 +161,11 @@ function ShellInner() {
       <StatusBar />
       <CommandPalette />
       <ToastContainer />
-      <OrientationWalk />
+      {walkReady && (
+        <Suspense fallback={null}>
+          <OrientationWalk />
+        </Suspense>
+      )}
     </div>
   );
 }

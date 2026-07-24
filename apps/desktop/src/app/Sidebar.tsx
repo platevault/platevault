@@ -1,6 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { lazy, Suspense } from 'react';
 import { Link, useRouterState } from '@tanstack/react-router';
 import { m } from '@/lib/i18n';
 import {
@@ -17,7 +18,16 @@ import {
 import { clsx } from 'clsx';
 import { usePreference } from '@/data/preferences';
 import { useStatusSummary, type StatusSummary } from './useStatusSummary';
-import { ChecklistPopover } from '@/features/onboarding/ChecklistPopover';
+import { useVisibleOnboardingState } from '@/features/onboarding/store';
+
+// ChecklistPopover → ChecklistSection → FindSpotlight → joyrideAdapter →
+// react-joyride. Lazy-load this subtree so joyride is not in the boot chunk;
+// it loads only when the onboarding section is visible for this user.
+const ChecklistPopover = lazy(() =>
+  import('@/features/onboarding/ChecklistPopover').then((m) => ({
+    default: m.ChecklistPopover,
+  })),
+);
 
 interface NavItem {
   id: string;
@@ -116,6 +126,9 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = usePreference('sidebarCollapsed');
   const location = useRouterState({ select: (s) => s.location });
   const status = useStatusSummary();
+  // Gate: only mount the checklist subtree (and load its joyride chunk) when
+  // the onboarding section is visible for this user. null = suppressed or hidden.
+  const checklistVisible = useVisibleOnboardingState() !== null;
 
   const onlineRoots = status.roots.filter((r) => r.online);
   const offlineRoots = status.roots.filter((r) => !r.online);
@@ -202,9 +215,15 @@ export function Sidebar() {
           the guide anchor — keep the attribute string exact.
           Both sidebar widths use the flyout: only the trigger differs (labelled
           row vs bare ring). Rendering the list inline made it blend into the
-          sidebar's own surface — see ChecklistPopover's header. */}
+          sidebar's own surface — see ChecklistPopover's header.
+          Suspense fallback is null: the guide anchor div stays in the DOM for
+          the walk's L1→L2 spotlight, while the popover loads in the background. */}
       <div data-guide-anchor="onboarding.getting-started">
-        <ChecklistPopover labelled={!collapsed} />
+        {checklistVisible && (
+          <Suspense fallback={null}>
+            <ChecklistPopover labelled={!collapsed} />
+          </Suspense>
+        )}
       </div>
 
       {/* Settings pinned at the bottom, separated from the workflow nav */}
