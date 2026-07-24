@@ -37,7 +37,7 @@ use contracts_core::inbox::{
     InboxReclassifyRequest, InboxReclassifyResponse, InboxReclassifyV2Request,
     InboxReclassifyV2Response, InboxScanFolderRequest, InboxScanFolderResponse, InboxScanResult,
     InboxSourceGroupListItem, InboxStatsResponse, InboxTargetRecommendationsRequest,
-    InboxTargetRecommendationsResponse,
+    InboxTargetRecommendationsResponse, ScanDirWarning,
 };
 use contracts_core::plan_apply::PlanApplyResponse;
 use contracts_core::ContractError;
@@ -373,10 +373,16 @@ pub async fn inbox_scan_folder(
     let opts = resolve_scan_options(&pool).await?;
 
     // Run the blocking directory walk + per-file I/O off the async executor.
-    let scanned = tokio::task::spawn_blocking(move || scan_root(&root_path, &opts))
+    let scan_out = tokio::task::spawn_blocking(move || scan_root(&root_path, &opts))
         .await
         .map_err(|e| ContractError::internal(e.to_string()))?
         .map_err(ContractError::internal)?;
+    let scanned = scan_out.items;
+    let scan_warnings: Vec<ScanDirWarning> = scan_out
+        .warnings
+        .into_iter()
+        .map(|w| ScanDirWarning { path: w.path.to_string_lossy().into_owned(), reason: w.reason })
+        .collect();
 
     // Derive the move-vs-catalogue lane for source groups from the root's
     // organization_state (spec 041 R-12, data-model §lane column).
@@ -456,7 +462,7 @@ pub async fn inbox_scan_folder(
 
     tx.commit().await.map_err(|e| ContractError::internal(e.to_string()))?;
 
-    Ok(InboxScanFolderResponse { root_id: req.root_id, items })
+    Ok(InboxScanFolderResponse { root_id: req.root_id, items, scan_warnings })
 }
 
 /// Insert (or reuse) the individual `inbox_items` row for a single detected

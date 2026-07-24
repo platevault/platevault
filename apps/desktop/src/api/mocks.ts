@@ -2298,6 +2298,7 @@ const mockHandlers = {
           masterExposureS: 300,
         },
       ],
+      scanWarnings: [],
     } satisfies InboxScanFolderResponse_Serialize;
   },
   /**

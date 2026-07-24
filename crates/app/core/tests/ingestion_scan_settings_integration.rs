@@ -63,7 +63,7 @@ async fn scan_skips_symlinked_dir_when_setting_disabled() {
 
     set_follow_symlinks(db.pool(), false).await;
     let opts = resolve_scan_options(db.pool()).await.expect("resolve");
-    let items = scan_root(&root, &opts).unwrap();
+    let items = scan_root(&root, &opts).unwrap().items;
 
     assert!(items.is_empty(), "content behind a symlink must stay hidden when disabled");
 }
@@ -79,7 +79,7 @@ async fn scan_traverses_symlinked_dir_when_setting_enabled() {
 
     set_follow_symlinks(db.pool(), true).await;
     let opts = resolve_scan_options(db.pool()).await.expect("resolve");
-    let items = scan_root(&root, &opts).unwrap();
+    let items = scan_root(&root, &opts).unwrap().items;
 
     assert_eq!(items.len(), 1, "enabling the setting must expose the symlinked folder");
 }

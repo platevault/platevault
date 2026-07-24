@@ -5547,12 +5547,22 @@ export type InboxScanFolderResponse = InboxScanFolderResponse_Serialize | InboxS
 export type InboxScanFolderResponse_Deserialize = {
 	rootId: string,
 	items: InboxItemSummary_Deserialize[],
+	/**
+	 *  Directories that could not be read during the scan.
+	 *  Empty when all directories were accessible. Added in GF-13.
+	 */
+	scanWarnings?: ScanDirWarning[],
 };
 
 /**  Response from `inbox.scan.folder`. */
 export type InboxScanFolderResponse_Serialize = {
 	rootId: string,
 	items: InboxItemSummary_Serialize[],
+	/**
+	 *  Directories that could not be read during the scan.
+	 *  Empty when all directories were accessible. Added in GF-13.
+	 */
+	scanWarnings: ScanDirWarning[],
 };
 
 /**  Result of an inbox scan operation. */
@@ -9046,6 +9056,19 @@ export type RootInventoryConfig = {
  *  `single`).
  */
 export type ScanDepth = "recursive" | "single";
+
+/**
+ *  A directory that could not be read during a scan (non-fatal).
+ * 
+ *  Collected by the phase-1 walk and surfaced in [`InboxScanFolderResponse`]
+ *  so the UI can report partial-scan conditions without aborting the operation.
+ */
+export type ScanDirWarning = {
+	/**  Absolute path of the directory that could not be read. */
+	path: string,
+	/**  OS error description (e.g. "Permission denied (os error 13)"). */
+	reason: string,
+};
 
 /**  A single search result from global search. */
 export type SearchResult = SearchResult_Serialize | SearchResult_Deserialize;

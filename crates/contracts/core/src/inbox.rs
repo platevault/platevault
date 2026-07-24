@@ -345,12 +345,29 @@ pub struct InboxItemSummary {
     pub master_exposure_s: Option<f64>,
 }
 
+/// A directory that could not be read during a scan (non-fatal).
+///
+/// Collected by the phase-1 walk and surfaced in [`InboxScanFolderResponse`]
+/// so the UI can report partial-scan conditions without aborting the operation.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanDirWarning {
+    /// Absolute path of the directory that could not be read.
+    pub path: String,
+    /// OS error description (e.g. "Permission denied (os error 13)").
+    pub reason: String,
+}
+
 /// Response from `inbox.scan.folder`.
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InboxScanFolderResponse {
     pub root_id: String,
     pub items: Vec<InboxItemSummary>,
+    /// Directories that could not be read during the scan.
+    /// Empty when all directories were accessible. Added in GF-13.
+    #[serde(default)]
+    pub scan_warnings: Vec<ScanDirWarning>,
 }
 
 // ── Cross-root unacknowledged list (spec 039) ─────────────────────────────────

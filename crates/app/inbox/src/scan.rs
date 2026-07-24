@@ -265,6 +265,31 @@ fn relative_utf8(root: &Path, path: &Path) -> String {
 /// 8 avoids thrashing a rotational HDD while still saturating an SSD.
 const MAX_SCAN_WORKERS: usize = 8;
 
+/// A non-fatal directory-access problem collected during phase 1.
+///
+/// These are returned in [`ScanOutput::warnings`] so callers can surface them
+/// without aborting the scan. The root directory itself is still fatal — only
+/// subdirs are demoted to warnings.
+#[derive(Clone, Debug)]
+pub struct ScanWarning {
+    /// Absolute path of the directory that could not be read.
+    pub path: PathBuf,
+    /// OS error description (e.g. "Permission denied (os error 13)").
+    pub reason: String,
+}
+
+/// Output of a successful [`scan_root`] call.
+///
+/// `items` contains every [`ScannedInboxItem`] found in reachable leaf
+/// directories. `warnings` contains one entry for each sub-directory that
+/// could not be read (EACCES, ENOENT, etc.) but did not abort the scan.
+#[derive(Debug, Default)]
+pub struct ScanOutput {
+    pub items: Vec<ScannedInboxItem>,
+    /// Per-directory access errors collected during the phase-1 walk.
+    pub warnings: Vec<ScanWarning>,
+}
+
 /// Leaf-folder inventory collected by the pure directory walk (phase 1).
 ///
 /// Holds only paths — no per-file I/O yet. The expensive work (signature
@@ -302,23 +327,26 @@ struct LeafDir {
 /// # Errors
 ///
 /// Returns an error string if `root` is not a directory or cannot be read.
+/// Unreadable *sub*-directories are non-fatal: they are collected in
+/// [`ScanOutput::warnings`] and the scan continues with whatever it can reach.
 ///
 /// # Panics
 ///
 /// Panics only if a scan worker thread panics due to an internal bug
 /// (e.g. a logic error in [`process_leaf`]). Per-file I/O failures
 /// (unreadable files, parse errors) are silently skipped and do not panic.
-pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<Vec<ScannedInboxItem>, String> {
+pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<ScanOutput, String> {
     if !root.is_dir() {
         return Err(format!("scan root is not a directory: {}", root.display()));
     }
 
     // Phase 1: collect leaf dirs via fast directory walk (no per-file I/O).
     let mut leaf_dirs: Vec<LeafDir> = Vec::new();
-    collect_leaf_dirs(root, options, &mut leaf_dirs)?;
+    let mut warnings: Vec<ScanWarning> = Vec::new();
+    collect_leaf_dirs(root, options, &mut leaf_dirs, &mut warnings)?;
 
     if leaf_dirs.is_empty() {
-        return Ok(vec![]);
+        return Ok(ScanOutput { items: vec![], warnings });
     }
 
     // Phase 2: process per-file I/O.
@@ -362,7 +390,7 @@ pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<Vec<ScannedInboxI
     // Sort by relative_path for deterministic output.
     items.sort_unstable_by(|a, b| a.relative_path.cmp(&b.relative_path));
 
-    Ok(items)
+    Ok(ScanOutput { items, warnings })
 }
 
 /// Compute the [`ScannedInboxItem`] for one leaf directory.
@@ -424,10 +452,15 @@ fn process_leaf(root: &Path, leaf: &LeafDir) -> ScannedInboxItem {
 ///
 /// No per-file I/O beyond `readdir` + `file_type`; content and header reads
 /// are deferred to [`process_leaf`].
+///
+/// When called on the scan root (top-level), a read failure propagates as
+/// `Err` — there is nothing to return. When called recursively on a subdir,
+/// the same failure is pushed into `warnings` and the walk continues.
 fn collect_leaf_dirs(
     dir: &Path,
     options: &ScanOptions,
     leaf_dirs: &mut Vec<LeafDir>,
+    warnings: &mut Vec<ScanWarning>,
 ) -> Result<(), String> {
     let read_dir = std::fs::read_dir(dir)
         .map_err(|e| format!("cannot read directory {}: {e}", dir.display()))?;
@@ -484,8 +517,12 @@ fn collect_leaf_dirs(
     }
 
     // Always recurse into subdirs regardless of whether this dir has files.
+    // A read failure on a subdir is non-fatal: record it in warnings and
+    // continue so partial results reach the caller instead of nothing.
     for subdir in subdirs {
-        collect_leaf_dirs(&subdir, options, leaf_dirs)?;
+        if let Err(reason) = collect_leaf_dirs(&subdir, options, leaf_dirs, warnings) {
+            warnings.push(ScanWarning { path: subdir, reason });
+        }
     }
 
     Ok(())
@@ -691,7 +728,7 @@ mod tests {
             write_realistic_fits(tmp.path(), &case.name, case.imagetyp, case.stack_count);
             let path = tmp.path().join(&case.name);
 
-            let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+            let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
             assert_eq!(items.len(), 1, "{}: scan must return its FITS folder", case.name);
             assert_eq!(
                 items[0].masters.len(),
@@ -725,7 +762,7 @@ mod tests {
         write_file(tmp.path(), "light_001.fits", b"dummy fits content");
         write_file(tmp.path(), "light_002.fits", b"dummy fits content 2");
 
-        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].fits_files.len(), 2);
         assert_eq!(items[0].lane, Lane::Fits);
@@ -742,7 +779,7 @@ mod tests {
         write_file(&lights, "light_001.fits", b"l1");
         write_file(&darks, "dark_001.fits", b"d1");
 
-        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert_eq!(items.len(), 2, "each leaf folder is one item");
     }
 
@@ -753,7 +790,7 @@ mod tests {
         fs::create_dir_all(&sub).unwrap();
         write_file(&sub, "frame.fits", b"f");
 
-        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert_eq!(items.len(), 1, "only the leaf with fits file is an item");
         assert!(items[0].folder_path.ends_with("lights"));
     }
@@ -765,7 +802,7 @@ mod tests {
         fs::create_dir_all(&planetary).unwrap();
         write_file(&planetary, "jupiter.ser", b"SER data");
 
-        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].lane, Lane::Video);
         assert_eq!(items[0].video_files.len(), 1);
@@ -774,7 +811,7 @@ mod tests {
     #[test]
     fn empty_root_returns_no_items() {
         let tmp = tmpdir();
-        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert!(items.is_empty());
     }
 
@@ -783,7 +820,7 @@ mod tests {
         let tmp = tmpdir();
         write_file(tmp.path(), "frame.xisf", b"XISF0100 data");
 
-        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].lane, Lane::Fits);
         // xisf_files list populated, fits_files empty
@@ -804,7 +841,7 @@ mod tests {
     fn format_fits_for_fits_only_folder() {
         let tmp = tmpdir();
         write_file(tmp.path(), "dark_001.fits", b"f1");
-        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert_eq!(items[0].format, FileFormat::Fits);
     }
 
@@ -812,7 +849,7 @@ mod tests {
     fn format_xisf_for_xisf_only_folder() {
         let tmp = tmpdir();
         write_file(tmp.path(), "dark_001.xisf", b"f1");
-        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert_eq!(items[0].format, FileFormat::Xisf);
     }
 
@@ -821,7 +858,7 @@ mod tests {
         let tmp = tmpdir();
         write_file(tmp.path(), "dark_001.fits", b"f1");
         write_file(tmp.path(), "dark_002.xisf", b"f2");
-        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert_eq!(items[0].format, FileFormat::Mixed);
     }
 
@@ -831,7 +868,7 @@ mod tests {
         let planetary = tmp.path().join("p");
         fs::create_dir_all(&planetary).unwrap();
         write_file(&planetary, "jupiter.ser", b"SER");
-        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert_eq!(items[0].format, FileFormat::Video);
     }
 
@@ -840,7 +877,7 @@ mod tests {
     fn no_masters_for_dummy_fits_content() {
         let tmp = tmpdir();
         write_file(tmp.path(), "dark_001.fits", b"not a real fits file");
-        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert_eq!(items.len(), 1);
         assert!(items[0].masters.is_empty(), "dummy file cannot be a master");
     }
@@ -861,7 +898,7 @@ mod tests {
         fs::create_dir_all(&scan_root_dir).unwrap();
         symlink(&real_target, scan_root_dir.join("linked")).unwrap();
 
-        let items = scan_root(&scan_root_dir, &ScanOptions::default()).unwrap();
+        let items = scan_root(&scan_root_dir, &ScanOptions::default()).unwrap().items;
         assert!(items.is_empty(), "must not see files behind an un-enabled symlink");
     }
 
@@ -880,7 +917,7 @@ mod tests {
         symlink(&real_target, scan_root_dir.join("linked")).unwrap();
 
         let options = ScanOptions { follow_symlinks: true, workers: None };
-        let items = scan_root(&scan_root_dir, &options).unwrap();
+        let items = scan_root(&scan_root_dir, &options).unwrap().items;
         assert_eq!(items.len(), 1, "symlinked subdir is traversed when explicitly enabled");
     }
 
@@ -914,7 +951,7 @@ mod tests {
         fs::create_dir_all(&scan_root_dir).unwrap();
         make_junction(&scan_root_dir.join("junction_to_target"), &real_target);
 
-        let items = scan_root(&scan_root_dir, &ScanOptions::default()).unwrap();
+        let items = scan_root(&scan_root_dir, &ScanOptions::default()).unwrap().items;
         assert!(items.is_empty(), "must not see files behind an un-enabled junction");
     }
 
@@ -933,7 +970,7 @@ mod tests {
         make_junction(&scan_root_dir.join("junction_to_target"), &real_target);
 
         let options = ScanOptions { follow_symlinks: true, workers: None };
-        let items = scan_root(&scan_root_dir, &options).unwrap();
+        let items = scan_root(&scan_root_dir, &options).unwrap().items;
         assert_eq!(items.len(), 1, "junction is traversed when explicitly enabled");
     }
 
@@ -955,7 +992,7 @@ mod tests {
         let expected = ["aa_folder", "mm_folder", "zz_folder"];
 
         // Sequential path (production default).
-        let items_seq = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+        let items_seq = scan_root(tmp.path(), &ScanOptions::default()).unwrap().items;
         assert_eq!(items_seq.len(), 3);
         for (item, exp) in items_seq.iter().zip(expected.iter()) {
             assert!(
@@ -967,7 +1004,7 @@ mod tests {
 
         // Parallel path (workers=2 exercises the thread-scope branch).
         let opts_par = ScanOptions { follow_symlinks: false, workers: Some(2) };
-        let items_par = scan_root(tmp.path(), &opts_par).unwrap();
+        let items_par = scan_root(tmp.path(), &opts_par).unwrap().items;
         assert_eq!(items_par.len(), 3);
         for (item, exp) in items_par.iter().zip(expected.iter()) {
             assert!(
@@ -998,7 +1035,7 @@ mod tests {
         write_file(&bad, "corrupt.fits", b"this is not a fits header at all");
 
         let opts = ScanOptions { follow_symlinks: false, workers: Some(2) };
-        let items = scan_root(tmp.path(), &opts).unwrap();
+        let items = scan_root(tmp.path(), &opts).unwrap().items;
 
         // Both leaves must appear (bad content is tolerated, not fatal).
         assert_eq!(items.len(), 2, "corrupt file in one leaf must not drop the other leaf");
@@ -1008,5 +1045,57 @@ mod tests {
         let bad_item = items.iter().find(|i| i.folder_path.ends_with("bad")).unwrap();
         assert_eq!(bad_item.fits_files.len(), 1);
         assert!(bad_item.masters.is_empty(), "corrupt file must not be reported as a master");
+    }
+
+    /// An unreadable subdir (chmod 000) must not abort the scan.
+    ///
+    /// The readable sibling must still be returned as an item, and the
+    /// unreadable dir must appear exactly once in `warnings`. The root itself
+    /// remains readable, so `scan_root` returns `Ok`.
+    ///
+    /// Permission changes are Unix-only; the test is gated on `cfg(unix)` and
+    /// skipped automatically when chmod had no effect (e.g. running as root).
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_subdir_produces_warning_not_error() {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Defined before any statements so `clippy::items_after_statements` is satisfied.
+        struct RestorePerms(std::path::PathBuf);
+        impl Drop for RestorePerms {
+            fn drop(&mut self) {
+                let _ = fs::set_permissions(&self.0, fs::Permissions::from_mode(0o755));
+            }
+        }
+
+        let tmp = tmpdir();
+
+        // Readable leaf with real files.
+        let good = tmp.path().join("good");
+        fs::create_dir_all(&good).unwrap();
+        write_file(&good, "frame.fits", b"dummy fits");
+
+        // Subdir made unreadable.
+        let locked = tmp.path().join("locked");
+        fs::create_dir_all(&locked).unwrap();
+        write_file(&locked, "hidden.fits", b"hidden");
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+
+        // Restore permissions on drop so tempdir cleanup succeeds.
+        let _restore = RestorePerms(locked.clone());
+
+        // Skip when chmod had no effect (running as root bypasses permission bits).
+        if fs::read_dir(&locked).is_ok() {
+            return;
+        }
+
+        let out = scan_root(tmp.path(), &ScanOptions::default()).unwrap();
+
+        assert_eq!(out.items.len(), 1, "readable leaf must still be found");
+        assert!(out.items[0].folder_path.ends_with("good"), "only the good folder is an item");
+
+        assert_eq!(out.warnings.len(), 1, "exactly one warning for the locked dir");
+        assert_eq!(out.warnings[0].path, locked, "warning path must match the locked dir");
+        assert!(!out.warnings[0].reason.is_empty(), "warning must carry a non-empty reason");
     }
 }
