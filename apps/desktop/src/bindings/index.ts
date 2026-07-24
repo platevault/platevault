@@ -7517,12 +7517,16 @@ export type PlanRetryResponse = {
 };
 
 /**
- *  Ten-state plan lifecycle (spec 017 data-model.md `PlanState`).
- *  `paused` is surfaced here so the list/detail contracts can filter on it (R-Pause-1).
+ *  Lifecycle state for a `FilesystemPlan`.
+ * 
+ *  10 variants per spec 002 data-model.md §FilesystemPlan (inc. `paused` R-Pause-1
+ *  and `discarded` spec 017 retry-chain terminal).
  */
 export type PlanState = "draft" | "ready_for_review" | "approved" | "applying" | 
-/**  Mid-apply suspension (R-Pause-1). Written only by spec 025's executor. */
-"paused" | "applied" | "partially_applied" | "failed" | "cancelled" | "discarded";
+/**  Mid-apply suspension on `volume.unavailable`, `disk.full`, or `item.stale` (R-Pause-1). */
+"paused" | "applied" | "partially_applied" | "failed" | "cancelled" | 
+/**  Soft-delete terminal — paired with spec 017 retry-chain semantics. */
+"discarded";
 
 /**  Plan summary row — returned by `plans.list`. */
 export type PlanSummary = PlanSummary_Serialize | PlanSummary_Deserialize;
@@ -8127,7 +8131,14 @@ export type ProjectSourceRemoveResult_Serialize = {
 	newLifecycle?: string | null,
 };
 
-export type ProjectState = "setup_incomplete" | "ready" | "prepared" | "processing" | "completed" | "archived" | "blocked";
+/**
+ *  Lifecycle state for a `Project`.
+ * 
+ *  7 variants from spec 002 §Project and research.md §2.1.
+ */
+export type ProjectState = "setup_incomplete" | "ready" | "prepared" | "processing" | "completed" | "archived" | 
+/**  Carries a `block_reason` on the entity row. */
+"blocked";
 
 /**  A project summary for list views (spec 008 read surface). */
 export type ProjectSummaryDto = ProjectSummaryDto_Serialize | ProjectSummaryDto_Deserialize;
