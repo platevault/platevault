@@ -73,6 +73,7 @@ export interface InventorySource {
   kind: SourceKind;
   state: SourceState;
   sessions: InventorySession[];
+  hasMore: boolean;
 }
 
 export interface InventoryListRequest {
@@ -311,6 +312,7 @@ export const INVENTORY_SOURCES: InventorySource[] = [
     kind: 'local_disk',
     state: 'active',
     sessions: LOCAL_SESSIONS,
+    hasMore: false,
   },
   {
     id: ROOT_EXTERNAL,
@@ -318,6 +320,7 @@ export const INVENTORY_SOURCES: InventorySource[] = [
     kind: 'external_disk',
     state: 'active',
     sessions: EXTERNAL_SESSIONS,
+    hasMore: false,
   },
 ];
 

@@ -83,7 +83,7 @@ export function filterSources(
           (!camera || s.camera === camera),
       ),
     }))
-    .filter((src) => src.sessions.length > 0);
+    .filter((src) => src.sessions.length > 0) as InventorySource[];
 }
 
 /** Unique, sorted non-empty values of one session field → select options. Exported for tests. */
