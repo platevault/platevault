@@ -19,10 +19,10 @@ import {
 } from '@/features/targets/observing-sites/iana-timezones';
 import type { Twilight } from '@/features/targets/observing-sites/observer-site';
 
-// maplibre-gl is multi-MB. Lazy-load the picker so it splits to its own chunk
-// and does not inflate the setup-wizard bundle parsed on first run.
+// Leaflet is ~240 KB raw. Lazy-load so it splits to its own chunk and does
+// not inflate the setup-wizard bundle parsed on first run.
 const SiteLocationPicker = lazy(() =>
-  import('./SiteLocationPicker').then((m) => ({
+  import('@/features/targets/observing-sites/SiteLocationPicker').then((m) => ({
     default: m.SiteLocationPicker,
   })),
 );
