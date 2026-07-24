@@ -15,7 +15,8 @@
       "Bash(wmctrl -l)",
       "Bash(xdotool search *)",
       "Bash(xwininfo -root)",
-      "Bash(claude mcp *)"
+      "Bash(claude mcp *)",
+      "mcp__serena__initial_instructions"
     ]
   },
   "enabledMcpjsonServers": [
@@ -25,8 +26,13 @@
     "playwright",
     "repomix",
     "serena",
-    "tauri",
-    "gitnexus"
+    "tauri"
+  ],
+  "disabledMcpjsonServers": [
+    "context7",
+    "mcp-package-version",
+    "playwright",
+    "repomix"
   ],
   "sandbox": {
     "enabled": false,
