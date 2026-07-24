@@ -13,10 +13,15 @@
 //! framing match that the durable session then fails to actually key under —
 //! silently breaking FR-019's optic-train prefilter.
 //!
-//! `crates/app/inbox::grouping::optic_train` computes a similarly-shaped key
-//! for spec 041's T064 sub-item-splitting recipe — a different concern (inbox
-//! item materialization, not framing matching) that is not required to track
-//! this one, so it keeps its own independent implementation.
+//! `crates/app/inbox::grouping::engine::optic_train` computes a structurally
+//! identical key for the persisted `inbox_item.group_key` column (spec 041
+//! T064 / FR-039). That key is a DIFFERENT artifact: it uses the grouping
+//! engine's `SENTINEL_MISSING` (`"∅"`) for absent parts so its output is
+//! consistent with every other grouping dimension stored in the same column.
+//! This module uses `"-"`. The two are NOT interchangeable: changing either
+//! sentinel would re-group existing `inbox_item` rows, which are keyed by
+//! the `(root_id, relative_path, group_key)` UNIQUE constraint. The grouping
+//! key must stay independent of the framing-identity key.
 
 /// Sentinel for a present-but-normalized-empty part (mirrors
 /// `app_core_inbox::grouping::SENTINEL_MISSING`'s role, kept private here

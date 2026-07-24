@@ -7,8 +7,6 @@ use std::fmt::Write as _;
 
 use metadata_core::FrameType;
 
-use sessions::optic_train_key;
-
 use super::config::{GroupingConfig, TempSource, SENTINEL_MISSING};
 use super::dimension::Dimension;
 use super::metadata::FrameMetadata;
@@ -69,11 +67,7 @@ fn render_dimension(
 ) -> Option<String> {
     match dim {
         Dimension::Camera => normalize_text(meta.instrume.as_deref()),
-        Dimension::OpticTrain => optic_train_key(
-            meta.telescop.as_deref(),
-            meta.instrume.as_deref(),
-            meta.focal_length_mm,
-        ),
+        Dimension::OpticTrain => optic_train(meta),
         Dimension::Filter => normalize_text(meta.filter.as_deref()),
         Dimension::Exposure => {
             meta.exposure_s.map(|e| format_num(bucket(e, config.exposure_bucket_s)))
@@ -87,6 +81,32 @@ fn render_dimension(
         Dimension::Readout => normalize_text(meta.readout_mode.as_deref()),
         Dimension::ObservingNight => observing_night(meta),
     }
+}
+
+/// Optic-train composite = `telescop|instrume|focallen` (FR-039). Built only
+/// from present parts; entirely absent ⇒ `None` (sentinel). Each part is
+/// normalized; focal length is bucketed to whole mm so float noise doesn't fork
+/// the group.
+///
+/// Intentionally separate from `sessions::optic_train_key` (spec 041 T064):
+/// that function uses `"-"` for the framing-attribution identity key; this one
+/// uses [`SENTINEL_MISSING`] (`"∅"`) so its output is consistent with every
+/// other dimension in the persisted `group_key` column. The two keys are NOT
+/// interchangeable — changing either sentinel would re-group existing inbox
+/// items stored in the `inbox_item.group_key` UNIQUE column.
+fn optic_train(meta: &FrameMetadata) -> Option<String> {
+    let tel = normalize_text(meta.telescop.as_deref());
+    let inst = normalize_text(meta.instrume.as_deref());
+    let fl = meta.focal_length_mm.map(|f| format_num(f.round()));
+    if tel.is_none() && inst.is_none() && fl.is_none() {
+        return None;
+    }
+    Some(format!(
+        "{}|{}|{}",
+        tel.as_deref().unwrap_or(SENTINEL_MISSING),
+        inst.as_deref().unwrap_or(SENTINEL_MISSING),
+        fl.as_deref().unwrap_or(SENTINEL_MISSING),
+    ))
 }
 
 /// Temperature dimension (R-9 / FR-037). Bucketed `SET-TEMP` (or `CCD-TEMP`

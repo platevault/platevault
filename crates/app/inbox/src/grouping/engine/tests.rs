@@ -408,6 +408,31 @@ fn optic_train_focal_length_bucketed_to_whole_mm() {
     );
 }
 
+/// Sentinel stability: absent optic-train parts MUST render the grouping
+/// `SENTINEL_MISSING` (`"∅"`), not the framing-identity sentinel (`"-"`).
+/// The `group_key` column is persisted with a UNIQUE constraint — changing
+/// this value would re-group existing inbox items and violate FR-042.
+#[test]
+fn optic_train_partial_data_uses_grouping_sentinel_not_framing_sentinel() {
+    let cfg = GroupingConfig::default_for(FrameType::Light);
+    // Only telescope present; instrume and focal_length absent.
+    let mut m = light_meta();
+    m.instrume = None;
+    m.focal_length_mm = None;
+    let key = group_file(&m, &cfg).key.0;
+    // The "∅" sentinel (not "-") must appear in the optic_train token.
+    let optic_idx = key.find("optic_train=").expect("optic_train token present");
+    let token = &key[optic_idx..];
+    assert!(
+        token.contains("∅"),
+        "partial optic-train must use grouping sentinel '∅', not framing sentinel '-': {key}"
+    );
+    assert!(
+        !token.split('·').next().unwrap_or("").contains("|-|"),
+        "framing sentinel '-' must not appear in the grouping key: {key}"
+    );
+}
+
 // ── Missing-dimension sentinels (R-11) ────────────────────────────────────
 
 #[test]
