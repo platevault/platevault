@@ -7,12 +7,14 @@
 use sqlx::SqlitePool;
 
 use persistence_core::DbResult;
+use persistence_sessions::repositories::actors::lookup_spec062_target_row_id;
+use persistence_sessions::repositories::change_sequence::current_sequence;
 use persistence_sessions::repositories::materialization::{
     get_operation_by_public_id, get_result_snapshot_by_operation_public_id,
     MaterializationOperationRow, MaterializationResultSnapshotRow,
 };
 use persistence_sessions::repositories::sessions::{
-    current_change_sequence, list_sessions_at_watermark, SessionListFilter, SessionRow,
+    list_sessions_at_watermark, SessionListFilter, SessionRow,
 };
 
 /// Fetch the `session_materialization_operation` for a contract query.
@@ -60,19 +62,8 @@ pub async fn list_sessions_first_page(
     pool: &SqlitePool,
     params: &SessionListParams<'_>,
 ) -> DbResult<(i64, Vec<SessionRow>)> {
-    // Resolve canonical_target row_id when a public_id is provided.
-    let target_row_id: Option<i64> = if let Some(t) = params.canonical_target_public_id {
-        let row: Option<(i64,)> =
-            sqlx::query_as("SELECT row_id FROM spec062_target WHERE public_id = ?")
-                .bind(t)
-                .fetch_optional(pool)
-                .await?;
-        row.map(|r| r.0)
-    } else {
-        None
-    };
-
-    let watermark = current_change_sequence(pool).await?;
+    let target_row_id = resolve_target_row_id(pool, params.canonical_target_public_id).await?;
+    let watermark = current_sequence(pool).await?;
     let filter = SessionListFilter {
         canonical_target_row_id: target_row_id,
         kind: params.kind_filter,
@@ -100,17 +91,7 @@ pub async fn list_sessions_next_page(
     watermark: i64,
     params: &SessionListParams<'_>,
 ) -> DbResult<Vec<SessionRow>> {
-    let target_row_id: Option<i64> = if let Some(t) = params.canonical_target_public_id {
-        let row: Option<(i64,)> =
-            sqlx::query_as("SELECT row_id FROM spec062_target WHERE public_id = ?")
-                .bind(t)
-                .fetch_optional(pool)
-                .await?;
-        row.map(|r| r.0)
-    } else {
-        None
-    };
-
+    let target_row_id = resolve_target_row_id(pool, params.canonical_target_public_id).await?;
     let filter = SessionListFilter {
         canonical_target_row_id: target_row_id,
         kind: params.kind_filter,
@@ -125,4 +106,16 @@ pub async fn list_sessions_next_page(
         params.page_size,
     )
     .await
+}
+
+/// Resolve an optional `spec062_target` public UUID to its `row_id`.
+async fn resolve_target_row_id(
+    pool: &SqlitePool,
+    public_id: Option<&str>,
+) -> DbResult<Option<i64>> {
+    let Some(t) = public_id else {
+        return Ok(None);
+    };
+    let mut conn = pool.acquire().await?;
+    lookup_spec062_target_row_id(&mut conn, t).await
 }

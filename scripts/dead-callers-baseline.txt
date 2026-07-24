@@ -98,6 +98,9 @@ upsert_inbox_file_metadata
 # app-layer nodes ic9h.14 (project membership), ic9h.15 (update view), and
 # ic9h.19 (metadata correction). Remove each entry as its call site lands.
 # Entries wired by ic9h.10 (Inbox materialization) have been removed.
+# current_change_sequence: superseded by change_sequence::current_sequence (ic9h.10);
+# kept here pending ic9h.9 baseline cleanup or explicit removal.
+current_change_sequence
 advance_equipment_resolution_head
 advance_metadata_resolution_head
 assert_no_supersession_cycle

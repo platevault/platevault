@@ -314,3 +314,51 @@ pub async fn get_result_snapshot_by_operation_public_id(
         DbError::NotFound(format!("result snapshot for operation {operation_public_id}"))
     })
 }
+
+/// Transition an operation from `applying` or `cancelling` to `cancelled`.
+///
+/// # Errors
+///
+/// Returns [`DbError::CasFailed`] on version mismatch, or
+/// [`DbError::Database`] on SQL errors.
+pub async fn transition_operation_to_cancelled(
+    conn: &mut SqliteConnection,
+    operation_row_id: i64,
+    expected_state_version: i64,
+    finished_at: &str,
+) -> DbResult<()> {
+    let result = sqlx::query(
+        "UPDATE session_materialization_operation
+         SET state = 'cancelled',
+             state_version = state_version + 1,
+             finished_at = ?
+         WHERE row_id = ?
+           AND state IN ('applying','cancelling')
+           AND state_version = ?",
+    )
+    .bind(finished_at)
+    .bind(operation_row_id)
+    .bind(expected_state_version)
+    .execute(conn)
+    .await?;
+    if result.rows_affected() != 1 {
+        return Err(DbError::CasFailed(format!("operation {operation_row_id} cancel CAS failed")));
+    }
+    Ok(())
+}
+
+/// Fetch a `session_materialization_operation.public_id` by `row_id`.
+///
+/// # Errors
+///
+/// Returns [`DbError::NotFound`] if no matching row exists, or
+/// [`DbError::Database`] on SQL errors.
+pub async fn get_operation_public_id_by_row_id(pool: &SqlitePool, row_id: i64) -> DbResult<String> {
+    let row: (String,) =
+        sqlx::query_as("SELECT public_id FROM session_materialization_operation WHERE row_id = ?")
+            .bind(row_id)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| DbError::NotFound(format!("operation row_id {row_id}")))?;
+    Ok(row.0)
+}

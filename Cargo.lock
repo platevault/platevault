@@ -189,6 +189,7 @@ dependencies = [
  "persistence_plans",
  "persistence_sessions",
  "persistence_targets",
+ "persistence_topology",
  "serde",
  "serde_json",
  "sessions",
