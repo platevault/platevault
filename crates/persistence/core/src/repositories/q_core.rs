@@ -677,6 +677,81 @@ pub async fn session_history(
     Ok(rows)
 }
 
+// ── entity.names batch lookup ─────────────────────────────────────────────────
+
+/// Batch-fetch display names for a list of project ids via IN-clause.
+///
+/// Returns `(id, name)` pairs only for ids that exist in the DB.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn project_names_batch(
+    pool: &SqlitePool,
+    ids: &[String],
+) -> DbResult<Vec<(String, String)>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut builder = sqlx::QueryBuilder::new("SELECT id, name FROM projects WHERE id IN (");
+    let mut sep = builder.separated(", ");
+    for id in ids {
+        sep.push_bind(id);
+    }
+    builder.push(")");
+    let rows: Vec<(String, String)> = builder.build_query_as().fetch_all(pool).await?;
+    Ok(rows)
+}
+
+/// Batch-fetch display titles for a list of plan ids via IN-clause.
+///
+/// Returns `(id, title)` pairs only for ids that exist in the DB.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn plan_titles_batch(
+    pool: &SqlitePool,
+    ids: &[String],
+) -> DbResult<Vec<(String, String)>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut builder = sqlx::QueryBuilder::new("SELECT id, title FROM plans WHERE id IN (");
+    let mut sep = builder.separated(", ");
+    for id in ids {
+        sep.push_bind(id);
+    }
+    builder.push(")");
+    let rows: Vec<(String, String)> = builder.build_query_as().fetch_all(pool).await?;
+    Ok(rows)
+}
+
+/// Batch-fetch primary designations for a list of canonical target ids via IN-clause.
+///
+/// Returns `(id, primary_designation)` pairs only for ids that exist in the DB.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn target_names_batch(
+    pool: &SqlitePool,
+    ids: &[String],
+) -> DbResult<Vec<(String, String)>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut builder = sqlx::QueryBuilder::new(
+        "SELECT CAST(id AS TEXT), \
+         COALESCE(display_alias, primary_designation) \
+         FROM canonical_target WHERE CAST(id AS TEXT) IN (",
+    );
+    let mut sep = builder.separated(", ");
+    for id in ids {
+        sep.push_bind(id);
+    }
+    builder.push(")");
+    let rows: Vec<(String, String)> = builder.build_query_as().fetch_all(pool).await?;
+    Ok(rows)
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
