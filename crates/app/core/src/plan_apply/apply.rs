@@ -239,9 +239,9 @@ pub(super) struct SpawnExecutorParams {
 
 /// Fetch the plan's up-to-date cumulative item counters.
 ///
-/// Each item transition (`item_succeeded`/`item_failed`/`item_skip`/
-/// `batch_cancel_pending_items`) increments `plans.items_applied` etc. in
-/// real time via `PlanApplyCallbacks`, so the plan row already reflects the
+/// Each flush (`batch_flush_item_states`) and `batch_cancel_pending_items`
+/// increments `plans.items_applied` etc. in real time via `PlanApplyCallbacks`,
+/// so the plan row already reflects the
 /// *whole* run's history — including a pre-pause phase from before a resume
 /// (issue #575). The `TerminalCounts` returned by a single `execute_plan`
 /// invocation only covers the items just processed in that segment, which

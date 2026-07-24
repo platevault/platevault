@@ -698,9 +698,24 @@ async fn retry_plan_item_transitions_failed_item_to_applying() {
     let (db, _bus) = setup().await;
     insert_approved_plan_with_items(&db, "p-retry", 1).await;
     plans_repo::update_plan_state(db.pool(), "p-retry", "applying").await.unwrap();
-    apply_repo::item_failed(db.pool(), "p-retry-item-0", "p-retry", "permission.denied")
+    {
+        let mut conn = db.pool().acquire().await.unwrap();
+        apply_repo::batch_flush_item_states(
+            &mut conn,
+            "p-retry",
+            &[apply_repo::BatchItemState {
+                item_id: "p-retry-item-0",
+                new_state: "failed",
+                failure_reason: Some("permission.denied"),
+                is_stale: false,
+            }],
+            0,
+            1,
+            0,
+        )
         .await
         .unwrap();
+    }
     register_fake_active_run("p-retry");
 
     let resp = retry_plan_item(db.pool(), "p-retry", "p-retry-item-0").await.unwrap();
@@ -720,14 +735,24 @@ async fn retry_plan_item_rejects_when_no_active_run() {
     let (db, _bus) = setup().await;
     insert_approved_plan_with_items(&db, "p-retry-no-run", 1).await;
     plans_repo::update_plan_state(db.pool(), "p-retry-no-run", "applying").await.unwrap();
-    apply_repo::item_failed(
-        db.pool(),
-        "p-retry-no-run-item-0",
-        "p-retry-no-run",
-        "permission.denied",
-    )
-    .await
-    .unwrap();
+    {
+        let mut conn = db.pool().acquire().await.unwrap();
+        apply_repo::batch_flush_item_states(
+            &mut conn,
+            "p-retry-no-run",
+            &[apply_repo::BatchItemState {
+                item_id: "p-retry-no-run-item-0",
+                new_state: "failed",
+                failure_reason: Some("permission.denied"),
+                is_stale: false,
+            }],
+            0,
+            1,
+            0,
+        )
+        .await
+        .unwrap();
+    }
     // Deliberately NOT registering an ActiveRun.
 
     let err =

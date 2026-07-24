@@ -286,145 +286,6 @@ pub async fn resume_run(pool: &SqlitePool, plan_id: &str, run_id: &str) -> DbRes
 
 // ── Per-item state transitions ────────────────────────────────────────────────
 
-/// Transition an item from `pending` → `applying`; decrement items_pending.
-///
-/// # Errors
-///
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn item_start_applying(pool: &SqlitePool, item_id: &str, plan_id: &str) -> DbResult<()> {
-    let mut tx = pool.begin().await?;
-
-    sqlx::query("UPDATE plan_items SET item_state = 'applying' WHERE id = ?")
-        .bind(item_id)
-        .execute(&mut *tx)
-        .await?;
-
-    sqlx::query(
-        "UPDATE plans SET items_pending = items_pending - 1 WHERE id = ? AND items_pending > 0",
-    )
-    .bind(plan_id)
-    .execute(&mut *tx)
-    .await?;
-
-    tx.commit().await?;
-    Ok(())
-}
-
-/// Transition an item from `applying` → `succeeded`; increment items_applied.
-///
-/// # Errors
-///
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn item_succeeded(pool: &SqlitePool, item_id: &str, plan_id: &str) -> DbResult<()> {
-    let mut tx = pool.begin().await?;
-
-    sqlx::query(
-        "UPDATE plan_items SET item_state = 'succeeded', failure_reason = NULL WHERE id = ?",
-    )
-    .bind(item_id)
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query("UPDATE plans SET items_applied = items_applied + 1 WHERE id = ?")
-        .bind(plan_id)
-        .execute(&mut *tx)
-        .await?;
-
-    tx.commit().await?;
-    Ok(())
-}
-
-/// Transition an item from `applying` → `failed`; increment items_failed.
-///
-/// # Errors
-///
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn item_failed(
-    pool: &SqlitePool,
-    item_id: &str,
-    plan_id: &str,
-    failure_reason: &str,
-) -> DbResult<()> {
-    let mut tx = pool.begin().await?;
-
-    sqlx::query("UPDATE plan_items SET item_state = 'failed', failure_reason = ? WHERE id = ?")
-        .bind(failure_reason)
-        .bind(item_id)
-        .execute(&mut *tx)
-        .await?;
-
-    sqlx::query("UPDATE plans SET items_failed = items_failed + 1 WHERE id = ?")
-        .bind(plan_id)
-        .execute(&mut *tx)
-        .await?;
-
-    tx.commit().await?;
-    Ok(())
-}
-
-/// Transition an item to `stale` (R-FS-1); increments `items_failed` (the
-/// item is terminally `failed` from the plan's perspective, matching
-/// [`item_failed`]) and the run pauses.
-///
-/// Previously this left `plans.items_failed` unchanged, which `pause_run`
-/// never read either — but `resume_plan`'s cumulative-counter reporting
-/// (issue #575, spec 025 R-Pause-1) and `get_apply_status` both surface
-/// `plans.items_failed` directly, so an under-count here would silently
-/// misreport a stale-paused plan as fully applied once its remaining items
-/// finish on resume.
-///
-/// # Errors
-///
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn item_stale(pool: &SqlitePool, item_id: &str, plan_id: &str) -> DbResult<()> {
-    let mut tx = pool.begin().await?;
-
-    sqlx::query(
-        "UPDATE plan_items SET item_state = 'failed', item_stale = 1, \
-         failure_reason = 'item.stale: source file changed since approval' WHERE id = ?",
-    )
-    .bind(item_id)
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query("UPDATE plans SET items_failed = items_failed + 1 WHERE id = ?")
-        .bind(plan_id)
-        .execute(&mut *tx)
-        .await?;
-
-    tx.commit().await?;
-    Ok(())
-}
-
-/// Transition an item from `pending` → `skipped` (user action during apply).
-///
-/// # Errors
-///
-/// Returns [`DbError::Database`] on connection failure.
-pub async fn item_skip(pool: &SqlitePool, item_id: &str, plan_id: &str) -> DbResult<()> {
-    let mut tx = pool.begin().await?;
-
-    sqlx::query(
-        "UPDATE plan_items SET item_state = 'skipped' WHERE id = ? AND item_state = 'pending'",
-    )
-    .bind(item_id)
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query(
-        "UPDATE plans SET \
-         items_pending = items_pending - 1, \
-         items_skipped = items_skipped + 1 \
-         WHERE id = ? AND items_pending > 0",
-    )
-    .bind(plan_id)
-    .execute(&mut *tx)
-    .await?;
-
-    tx.commit().await?;
-    Ok(())
-}
-
 /// Transition a failed item back to `applying` (per-item retry within a run).
 /// Decrements items_failed.
 ///
@@ -995,11 +856,24 @@ mod tests {
         setup_with_approved_plan(&db, "p3", 1).await;
         cas_approved_to_applying(db.pool(), "p3", "run-3", "tok", 1, 1).await.unwrap();
 
-        item_start_applying(db.pool(), "p3-item-0", "p3").await.unwrap();
-        let items = plans_repo::list_plan_items(db.pool(), "p3").await.unwrap();
-        assert_eq!(items[0].item_state, "applying");
+        // Batch path: pending → succeeded in one flush (no applying intermediate).
+        let mut conn = db.pool().acquire().await.unwrap();
+        batch_flush_item_states(
+            &mut conn,
+            "p3",
+            &[BatchItemState {
+                item_id: "p3-item-0",
+                new_state: "succeeded",
+                failure_reason: None,
+                is_stale: false,
+            }],
+            1,
+            0,
+            0,
+        )
+        .await
+        .unwrap();
 
-        item_succeeded(db.pool(), "p3-item-0", "p3").await.unwrap();
         let items = plans_repo::list_plan_items(db.pool(), "p3").await.unwrap();
         assert_eq!(items[0].item_state, "succeeded");
 
@@ -1014,9 +888,23 @@ mod tests {
         setup_with_approved_plan(&db, "p4", 3).await;
         cas_approved_to_applying(db.pool(), "p4", "run-4", "tok", 3, 3).await.unwrap();
 
-        // Apply first item.
-        item_start_applying(db.pool(), "p4-item-0", "p4").await.unwrap();
-        item_succeeded(db.pool(), "p4-item-0", "p4").await.unwrap();
+        // Apply first item via batch path.
+        let mut conn = db.pool().acquire().await.unwrap();
+        batch_flush_item_states(
+            &mut conn,
+            "p4",
+            &[BatchItemState {
+                item_id: "p4-item-0",
+                new_state: "succeeded",
+                failure_reason: None,
+                is_stale: false,
+            }],
+            1,
+            0,
+            0,
+        )
+        .await
+        .unwrap();
 
         // Cancel remaining 2.
         let cancelled = batch_cancel_pending_items(db.pool(), "p4").await.unwrap();
