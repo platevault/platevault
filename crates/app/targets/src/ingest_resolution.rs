@@ -38,6 +38,7 @@ use persistence_targets::repositories::q_targets_ingest as repo;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
+use app_core_errors::db_err;
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use targeting::normalize::normalize;
 use targeting_resolver::cache::{self, CachedTarget};
@@ -45,8 +46,22 @@ use targeting_resolver::{ResolveError, Resolver};
 
 // ── Error ─────────────────────────────────────────────────────────────────────
 
-fn db_err(e: impl std::fmt::Display) -> ContractError {
-    ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
+/// Map a `targeting_resolver::cache::CacheError` to a `ContractError`.
+///
+/// Delegates `Persistence(DbError)` through the canonical `db_err` so
+/// `NotFound` stays `Blocking`; maps every other variant as Fatal/retryable.
+#[allow(clippy::needless_pass_by_value)]
+fn cache_err(e: targeting_resolver::cache::CacheError) -> ContractError {
+    use targeting_resolver::cache::CacheError;
+    match e {
+        CacheError::Persistence(db) => db_err(db),
+        other => ContractError::new(
+            ErrorCode::InternalDatabase,
+            format!("{other}"),
+            ErrorSeverity::Fatal,
+            true,
+        ),
+    }
 }
 
 // ── Row / outcome types ─────────────────────────────────────────────────────
@@ -138,7 +153,7 @@ pub async fn associate_or_enqueue(
     }
 
     let norm = normalize(trimmed);
-    if let Some(target) = cache::get_by_normalized(pool, &norm).await.map_err(db_err)? {
+    if let Some(target) = cache::get_by_normalized(pool, &norm).await.map_err(cache_err)? {
         // Cache/seed hit → associate inline.
         write_resolved_row(pool, image_id, trimmed, &target.id.to_string()).await?;
         if let Some(bus) = bus {
@@ -230,7 +245,7 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
         let norm = normalize(row.object_raw.trim());
 
         // 1) Cache-first (FR-006): a cached/seeded object is never re-queried.
-        if let Some(target) = cache::get_by_normalized(pool, &norm).await.map_err(db_err)? {
+        if let Some(target) = cache::get_by_normalized(pool, &norm).await.map_err(cache_err)? {
             mark_resolved(pool, &row.id, &target.id.to_string()).await?;
             if let Some(bus) = bus {
                 emit_resolved(bus, &target, Some(&row.object_raw)).await;
@@ -250,7 +265,7 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
         match resolver.resolve(row.object_raw.trim()).await {
             Ok(identity) => {
                 let (id, outcome) =
-                    cache::upsert_resolved(pool, &identity).await.map_err(db_err)?;
+                    cache::upsert_resolved(pool, &identity).await.map_err(cache_err)?;
                 // Invalidate after the write commits (never before); a
                 // `SkippedUserOverride` outcome means no row was actually
                 // written (sticky user-override lock kept precedence), so the
@@ -261,7 +276,7 @@ pub async fn resolve_pending<R: Resolver + ?Sized>(
                 let target_id = id.to_string();
                 mark_resolved(pool, &row.id, &target_id).await?;
                 if let Some(bus) = bus {
-                    if let Some(target) = cache::get_by_id(pool, id).await.map_err(db_err)? {
+                    if let Some(target) = cache::get_by_id(pool, id).await.map_err(cache_err)? {
                         emit_resolved(bus, &target, Some(&row.object_raw)).await;
                     }
                 }

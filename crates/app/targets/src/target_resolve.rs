@@ -82,7 +82,24 @@ async fn write_audit(
 // ── Error mapping ───────────────────────────────────────────────────────────
 
 fn db_err(e: &cache::CacheError) -> ContractError {
-    ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
+    use cache::CacheError;
+    use persistence_core::DbError;
+    // Delegate Persistence(NotFound) to Blocking (canonical severity).
+    // Other persistence variants and cache-specific errors map as Fatal.
+    match e {
+        CacheError::Persistence(DbError::NotFound(msg)) => ContractError::new(
+            ErrorCode::InternalDatabase,
+            msg.clone(),
+            ErrorSeverity::Blocking,
+            false,
+        ),
+        other => ContractError::new(
+            ErrorCode::InternalDatabase,
+            format!("{other}"),
+            ErrorSeverity::Fatal,
+            true,
+        ),
+    }
 }
 
 fn redb_err(e: &simbad_resolver::CacheError) -> ContractError {

@@ -16,18 +16,15 @@
 
 use camino::Utf8Path;
 use contracts_core::source_view_verify::{BrokenItem, BrokenItemState, SourceViewVerifyResponse};
-use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
+use contracts_core::{error_code::ErrorCode, ContractError};
 use domain_core::lifecycle::prepared_source::ItemObservedState;
 use persistence_plans::repositories::prepared_source_views as views_repo;
 use sqlx::SqlitePool;
 
+// Domain-scoped DB error mapper: routes NotFound to view.not_found code.
+// Other variants delegate to the canonical generic mapper (bd astro-plan-kyo7.88).
 fn db_err(e: persistence_core::DbError) -> ContractError {
-    match e {
-        persistence_core::DbError::NotFound(msg) => {
-            ContractError::new(ErrorCode::ViewNotFound, msg, ErrorSeverity::Blocking, false)
-        }
-        other => app_core_errors::db_err(other),
-    }
+    app_core_errors::db_err_with_not_found(ErrorCode::ViewNotFound)(e)
 }
 
 /// Resolved canonical-source state for one view item's `inventory_item_id`.

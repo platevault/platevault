@@ -79,8 +79,35 @@ fn offline(msg: impl Into<String>) -> ContractError {
     ContractError::new(ErrorCode::ResolveOffline, msg.into(), ErrorSeverity::Info, true)
 }
 
-fn db_err(e: impl std::fmt::Display) -> ContractError {
-    ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
+// Import canonical mapper so `.map_err(db_err)` calls correctly route
+// NotFound to Blocking instead of Fatal (bd astro-plan-kyo7.88).
+use app_core_errors::db_err;
+
+/// Map a `targeting_resolver::cache::CacheError` to a `ContractError`.
+///
+/// Delegates the `Persistence(DbError)` variant through the canonical
+/// `db_err` so `NotFound` stays `Blocking`; wraps every other variant as
+/// `Fatal`/`retryable=true` (infrastructure errors, not domain 404s).
+#[allow(clippy::needless_pass_by_value)]
+fn cache_err(e: targeting_resolver::cache::CacheError) -> ContractError {
+    use targeting_resolver::cache::CacheError;
+    match e {
+        CacheError::Persistence(db) => db_err(db),
+        other => ContractError::new(
+            ErrorCode::InternalDatabase,
+            format!("{other}"),
+            ErrorSeverity::Fatal,
+            true,
+        ),
+    }
+}
+
+/// Map a `simbad_resolver::CacheError` to a `ContractError`.
+///
+/// All variants are non-domain infrastructure failures; map as Fatal/retryable.
+#[allow(clippy::needless_pass_by_value)]
+fn simbad_cache_err(e: simbad_resolver::CacheError) -> ContractError {
+    ContractError::new(ErrorCode::InternalDatabase, format!("{e}"), ErrorSeverity::Fatal, true)
 }
 
 // ── Pointing derivation (FR-012) ─────────────────────────────────────────────
@@ -477,9 +504,7 @@ pub async fn confirm(
         // designation-derived id (existing FR-007 behaviour) when no oid is
         // given or nothing is cached under it yet.
         let by_oid = match req.candidate.simbad_oid {
-            Some(oid) => {
-                redb_cache.get_by_simbad_oid(oid).await.map_err(|e| db_err(e.to_string()))?
-            }
+            Some(oid) => redb_cache.get_by_simbad_oid(oid).await.map_err(simbad_cache_err)?,
             None => None,
         };
         by_oid.map_or_else(
@@ -488,12 +513,12 @@ pub async fn confirm(
         )
     };
     let was_durable_before =
-        targeting_resolver::cache::get_by_id(pool, id).await.map_err(db_err)?.is_some();
+        targeting_resolver::cache::get_by_id(pool, id).await.map_err(cache_err)?.is_some();
 
     let promoted =
         app_core_targets::target_resolve::promote_by_id(pool, redb_cache, id, &req.frameset_id)
             .await
-            .map_err(|e| db_err(e.message))?;
+            .map_err(std::convert::identity)?;
     if !promoted {
         return Err(ContractError::new(
             ErrorCode::CandidateInvalid,

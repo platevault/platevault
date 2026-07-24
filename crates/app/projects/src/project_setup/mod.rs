@@ -39,7 +39,7 @@
 //! via `super::`.
 
 use contracts_core::projects_v2::ProjectChannelDto;
-use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity, FieldError};
+use contracts_core::{error_code::ErrorCode, ContractError, FieldError};
 use domain_core::project::channels::{infer_channels, Channel};
 use persistence_core::repositories::q_core;
 use persistence_plans::repositories::projects as repo;
@@ -92,13 +92,9 @@ fn field_error(field: &str, error_code: ErrorCode, message: impl Into<String>) -
     FieldError { field: field.to_owned(), code, message: message.into() }
 }
 
+// Domain-scoped DB error mapper: routes NotFound to project.not_found code.
 fn db_err(e: persistence_core::DbError) -> ContractError {
-    match e {
-        persistence_core::DbError::NotFound(msg) => {
-            ContractError::new(ErrorCode::ProjectNotFound, msg, ErrorSeverity::Blocking, false)
-        }
-        other => app_core_errors::db_err(other),
-    }
+    app_core_errors::db_err_with_not_found(ErrorCode::ProjectNotFound)(e)
 }
 
 /// A project source's snapshot of its inventory session, taken at link time

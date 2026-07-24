@@ -78,13 +78,9 @@ pub const PERMANENT_DELETE_CONFIRM_TEXT: &str = "DELETE";
 
 // ── Error helpers ─────────────────────────────────────────────────────────────
 
+// Domain-scoped DB error mapper: routes NotFound to plan.not_found code.
 fn db_err(e: persistence_core::DbError) -> ContractError {
-    match e {
-        persistence_core::DbError::NotFound(msg) => {
-            ContractError::new(ErrorCode::PlanNotFound, msg, ErrorSeverity::Blocking, false)
-        }
-        other => crate::errors::db_err(other),
-    }
+    crate::errors::db_err_with_not_found(ErrorCode::PlanNotFound)(e)
 }
 
 // ── Row mapping helpers ───────────────────────────────────────────────────────

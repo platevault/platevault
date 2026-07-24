@@ -293,6 +293,7 @@ name = "app_core_targets"
 version = "0.1.0"
 dependencies = [
  "app_core_cache",
+ "app_core_errors",
  "audit",
  "contracts_core",
  "domain_core",

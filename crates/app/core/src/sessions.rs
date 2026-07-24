@@ -21,7 +21,7 @@
 //! calibration matching (gain, filter, binning, optic_train, etc.).
 //!
 //! Many contract DTO fields (confidence, metadata, warnings, framesets) have
-//! no column yet; defaulted with `// TODO(037):` markers until later
+//! no column yet; defaulted with `// TODO(astro-plan-kyo7.88):` markers until later
 //! columns/views are built. `total_integration_seconds` (#775) and
 //! `total_size_bytes` are real sums over active frames, not TODOs.
 //!
@@ -188,13 +188,13 @@ pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, S
     // Spec 041 FR-051: sessions are derived, already-confirmed inventory —
     // there is no review state left to derive a confidence level from.
     let confidence = ConfidenceLevel::Confirmed;
-    // TODO(037): optical_train_id -- fingerprint stores name, not UUID.
+    // TODO(astro-plan-kyo7.88): optical_train_id -- fingerprint stores name, not UUID.
     let optical_train_id = fp.as_ref().and_then(|f| f.optic_train.clone()).unwrap_or_default();
     // spec 048 US1: active (non-missing) frame_count/total_size_bytes.
     let (frame_count, total_size_bytes) = active_frame_summary(pool, &row.frame_ids).await?;
     // #775: real sum of active frames' per-file exposure_s (inbox_file_metadata).
     let total_integration_seconds = active_frame_exposure_seconds(pool, &row.frame_ids).await?;
-    // TODO(037): metadata -- not stored as structured provenance rows yet.
+    // TODO(astro-plan-kyo7.88): metadata -- not stored as structured provenance rows yet.
     let metadata = HashMap::new();
     // Shared precedence with q_targets_mgmt::session_counts_by_target — see
     // resolve_session_target_id's doc (reviewer seq=277).
@@ -205,13 +205,13 @@ pub async fn get_session(pool: &SqlitePool, id: &str) -> Result<SessionDetail, S
     .into_iter()
     .collect();
     let project_ids = load_project_ids(pool, &id).await?;
-    // TODO(037): warnings -- not stored.
+    // TODO(astro-plan-kyo7.88): warnings -- not stored.
     let warnings = Vec::new();
     // Calibration matches from calibration_assignment (real DB rows).
     let calibration_matches = load_calibration_matches(pool, &id).await?;
     // Audit history from audit_log_entry (real DB rows).
     let history = load_history(pool, &id).await?;
-    // TODO(037): framesets -- requires frame-level data (frame_ids join).
+    // TODO(astro-plan-kyo7.88): framesets -- requires frame-level data (frame_ids join).
     let framesets: Vec<Frameset> = Vec::new();
 
     Ok(SessionDetail {

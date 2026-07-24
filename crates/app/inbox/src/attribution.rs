@@ -65,13 +65,10 @@ use sessions::{
 };
 use sqlx::SqlitePool;
 
-// Takes ownership so it composes directly as a `.map_err(db_err)` callback
-// (`Result::map_err` requires `FnOnce(E) -> F`); a `&DbError` signature would
-// force every call site into a closure instead.
-#[allow(clippy::needless_pass_by_value)]
-fn db_err(e: persistence_core::DbError) -> ContractError {
-    ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
-}
+// Import canonical mapper so `.map_err(db_err)` works identically to the
+// previous local definition but now correctly routes NotFound to Blocking
+// instead of Fatal (bd astro-plan-kyo7.88).
+use app_core_errors::db_err;
 
 /// Load the clustering tolerance tunables from Settings (F-Framing-11, R11a).
 /// `SettingsState::default()` reproduces `ToleranceParams::defaults()`

@@ -87,7 +87,7 @@ fn score(haystack: &str, needle: &str) -> f64 {
 async fn search_targets(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>, String> {
     // Query targets by primary_designation and alias.
     // Include `match_via_alias` to score alias matches correctly.
-    let like_pattern = format!("%{q}%");
+    let like_pattern = persistence_core::repositories::sql::like_contains(q);
 
     let rows = persistence_core::repositories::q_core::search_targets_by_like(pool, &like_pattern)
         .await
@@ -136,7 +136,7 @@ async fn recent_targets(pool: &SqlitePool) -> Result<Vec<SearchResult>, String> 
 // ── Session search ────────────────────────────────────────────────────────────
 
 async fn search_sessions(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>, String> {
-    let like_pattern = format!("%{q}%");
+    let like_pattern = persistence_core::repositories::sql::like_contains(q);
 
     let rows = persistence_core::repositories::q_core::search_sessions_by_like(pool, &like_pattern)
         .await
@@ -182,7 +182,7 @@ async fn recent_sessions(pool: &SqlitePool) -> Result<Vec<SearchResult>, String>
 // ── Project search ────────────────────────────────────────────────────────────
 
 async fn search_projects(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>, String> {
-    let like_pattern = format!("%{q}%");
+    let like_pattern = persistence_core::repositories::sql::like_contains(q);
 
     let rows = persistence_core::repositories::q_core::search_projects_by_like(pool, &like_pattern)
         .await
