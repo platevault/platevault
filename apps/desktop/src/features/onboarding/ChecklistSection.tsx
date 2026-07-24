@@ -61,7 +61,6 @@ import {
 } from './FindSpotlight';
 import {
   PAGE_ORDER,
-  ONBOARDING_PAGE_PATHS,
   itemLabel,
   itemTooltip,
   prerequisiteReason,
@@ -70,8 +69,13 @@ import {
 } from './onboarding-labels';
 
 // Re-export the label/path helpers so existing callers (FindSpotlight, tests)
-// are not broken — they import these from this module today.
-export { ONBOARDING_PAGE_PATHS, itemLabel, itemTooltip, prerequisiteReason };
+// that import these from ChecklistSection still resolve.
+export {
+  ONBOARDING_PAGE_PATHS,
+  itemLabel,
+  itemTooltip,
+  prerequisiteReason,
+} from './onboarding-labels';
 
 export function isChecklistGroupSettled(items: OnboardingItemDto[]): boolean {
   return items.length > 0 && items.every((item) => item.state !== 'unchecked');
