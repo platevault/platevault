@@ -11,10 +11,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-const { mockProjectsGet, mockTargetsGet, mockPlansGet, mockInventoryList } =
+const { mockProjectsGet, mockTargetGet, mockPlansGet, mockInventoryList } =
   vi.hoisted(() => ({
     mockProjectsGet: vi.fn(),
-    mockTargetsGet: vi.fn(),
+    mockTargetGet: vi.fn(),
     mockPlansGet: vi.fn(),
     mockInventoryList: vi.fn(),
   }));
@@ -26,7 +26,7 @@ vi.mock('@/bindings/index', async (importOriginal) => {
     commands: {
       ...original.commands,
       projectsGet: mockProjectsGet,
-      targetsGet: mockTargetsGet,
+      targetGet: mockTargetGet,
       plansGet: mockPlansGet,
       inventoryList: mockInventoryList,
     },
@@ -70,7 +70,7 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockProjectsGet.mockResolvedValue(NOT_FOUND);
-  mockTargetsGet.mockResolvedValue(NOT_FOUND);
+  mockTargetGet.mockResolvedValue(NOT_FOUND);
   mockPlansGet.mockResolvedValue(NOT_FOUND);
   mockInventoryList.mockResolvedValue(emptyInventory());
 });
@@ -126,8 +126,33 @@ describe('useEntityNames', () => {
       expect(result.current.get(entityNameKey(ref))).toBe('M31 – 2026-05-20');
     });
     expect(mockProjectsGet).not.toHaveBeenCalled();
-    expect(mockTargetsGet).not.toHaveBeenCalled();
+    expect(mockTargetGet).not.toHaveBeenCalled();
     expect(mockPlansGet).not.toHaveBeenCalled();
+  });
+
+  it('resolves a known target id via commands.targetGet (gen-3 effectiveLabel)', async () => {
+    mockTargetGet.mockResolvedValue({
+      status: 'ok',
+      data: {
+        id: 'tgt-1',
+        primaryDesignation: 'NGC 7000',
+        effectiveLabel: 'North America Nebula',
+        displayAlias: 'North America Nebula',
+        objectType: 'emission_nebula',
+        raDeg: 314.75,
+        decDeg: 44.52,
+        simbadOid: null,
+        source: 'resolved',
+        aliases: [],
+      },
+    });
+    const ref = { entityType: 'target', entityId: 'tgt-1' };
+    const { result } = renderHook(() => useEntityNames([ref]), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.get(entityNameKey(ref))).toBe('North America Nebula');
+    });
+    expect(mockTargetGet).toHaveBeenCalledWith({ targetId: 'tgt-1' });
   });
 
   it('falls back (no entry in the map) for an id that genuinely fails to resolve', async () => {
@@ -135,7 +160,7 @@ describe('useEntityNames', () => {
     const { result } = renderHook(() => useEntityNames([ref]), { wrapper });
 
     await waitFor(() =>
-      expect(mockTargetsGet).toHaveBeenCalledWith('tgt-missing'),
+      expect(mockTargetGet).toHaveBeenCalledWith({ targetId: 'tgt-missing' }),
     );
     expect(result.current.get(entityNameKey(ref))).toBeUndefined();
   });
@@ -146,7 +171,7 @@ describe('useEntityNames', () => {
 
     expect(result.current.get(entityNameKey(ref))).toBeUndefined();
     expect(mockProjectsGet).not.toHaveBeenCalled();
-    expect(mockTargetsGet).not.toHaveBeenCalled();
+    expect(mockTargetGet).not.toHaveBeenCalled();
     expect(mockPlansGet).not.toHaveBeenCalled();
   });
 });

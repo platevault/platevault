@@ -59,8 +59,8 @@ export function useEntityNames(
               .then((r) => (r.status === 'ok' ? r.data.name : null))
           : ref.entityType === 'target'
             ? commands
-                .targetsGet(ref.entityId)
-                .then((r) => (r.status === 'ok' ? r.data.name : null))
+                .targetGet({ targetId: ref.entityId })
+                .then((r) => (r.status === 'ok' ? r.data.effectiveLabel : null))
             : ref.entityType === 'plan'
               ? commands
                   .plansGet(ref.entityId)

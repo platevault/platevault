@@ -1130,15 +1130,6 @@ const mockHandlers = {
   calibration_tolerances_get: async () => {
     return mockCalibrationTolerances;
   },
-  targets_list: async () => {
-    const { targets } = await import('@/data/fixtures/targets');
-    return targets;
-  },
-  targets_get: async () => {
-    const { targetDetail } = await import('@/data/fixtures/targets');
-    return targetDetail;
-  },
-
   // ── gen-3 target commands (spec 036) ──────────────────────────────────────
   target_list: async () => {
     return [

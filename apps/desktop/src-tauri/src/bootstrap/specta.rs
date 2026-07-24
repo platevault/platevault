@@ -137,7 +137,6 @@ use crate::commands::target_lookup::{
     target_resolution_settings_update, target_resolve, target_resolve_explicit, target_search,
 };
 use crate::commands::target_management as target_mgmt_cmds;
-use crate::commands::targets::{targets_get, targets_list};
 use crate::commands::tools::{
     tools_discover, tools_launch, tools_list, tools_update, tools_validate_path,
 };
@@ -216,9 +215,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // calibration master archive (#886)
         calibration_masters_archive_plan_generate,
         calibration_masters_archive_plan_generate_restore,
-        // targets (spec 029 stubs — legacy list/get)
-        targets_list,
-        targets_get,
         // target management (spec 036 — gen-3, canonical_target model)
         target_mgmt_cmds::target_get,
         target_mgmt_cmds::target_list,
@@ -468,9 +464,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         // calibration master archive (#886)
         calibration_masters_archive_plan_generate,
         calibration_masters_archive_plan_generate_restore,
-        // targets (spec 029 stubs — legacy list/get)
-        targets_list,
-        targets_get,
         // target management (spec 036 — gen-3, canonical_target model)
         target_mgmt_cmds::target_get,
         target_mgmt_cmds::target_list,

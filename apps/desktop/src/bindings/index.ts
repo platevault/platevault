@@ -177,20 +177,6 @@ export const commands = {
 	 */
 	calibrationMastersArchivePlanGenerateRestore: (archivedPlanId: string, title: string | null) => typedError<GenerateRestorePlanResult, ContractError_Serialize>(__TAURI_INVOKE("calibration_masters_archive_plan_generate_restore", { archivedPlanId, title })),
 	/**
-	 *  `targets.list` — returns all targets, optionally filtered by search.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	targetsList: (search: string | null) => typedError<Target_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("targets_list", { search })),
-	/**
-	 *  `targets.get` — returns a single target detail.
-	 * 
-	 *  # Errors
-	 *  Returns `Err(String)` on failure; the stub never fails.
-	 */
-	targetsGet: (id: string) => typedError<TargetDetail_Serialize, ContractError_Serialize>(__TAURI_INVOKE("targets_get", { id })),
-	/**
 	 *  `target.get` — return full detail for a canonical target (gen-3).
 	 * 
 	 *  # Errors
@@ -3098,23 +3084,6 @@ export type Camera = {
 	sensorHeightPx?: number | null,
 };
 
-/**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
-export type CatalogIds = CatalogIds_Serialize | CatalogIds_Deserialize;
-
-/**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
-export type CatalogIds_Deserialize = {
-	ngc: string | null,
-	ic: string | null,
-	messier: string | null,
-};
-
-/**  Catalog identifiers for a target (NGC, IC, Messier, etc.). */
-export type CatalogIds_Serialize = {
-	ngc?: string | null,
-	ic?: string | null,
-	messier?: string | null,
-};
-
 /**  Channel drift state embedded in project.get (FR-010). */
 export type ChannelDriftDto = {
 	hasNewSources: boolean,
@@ -3503,21 +3472,6 @@ export type ContractMeta_Serialize = {
 	rustHash?: string | null,
 	/**  `true` when both hashes are present and differ. */
 	mismatch?: boolean | null,
-};
-
-/**  Equatorial coordinates (J2000). */
-export type Coordinates = Coordinates_Serialize | Coordinates_Deserialize;
-
-/**  Equatorial coordinates (J2000). */
-export type Coordinates_Deserialize = {
-	ra: number | null,
-	dec: number | null,
-};
-
-/**  Equatorial coordinates (J2000). */
-export type Coordinates_Serialize = {
-	ra?: number | null,
-	dec?: number | null,
 };
 
 export type CreateCamera = {
@@ -9505,9 +9459,6 @@ export type SuggestStatus = "match" | "ambiguous" | "no_match" |
 /**  Session lacks `observer_location` or `exposure_start_utc` (A6). */
 "observer_location_missing";
 
-/**  An astronomical target as seen in list views (spec 029 stub). */
-export type Target = Target_Serialize | Target_Deserialize;
-
 /**
  *  Request for `target.adopt` — promote a redb-cache-only target (a `target_id`
  *  a prior `target.search`/`target.resolve` response returned) into the
@@ -9615,9 +9566,6 @@ export type TargetCacheClearResponse = {
 /**  Closed catalogue identifier slug (spec 035 `CatalogId`). */
 export type TargetCatalogId = "messier" | "caldwell" | "sharpless" | "abell_pn" | "abell_galaxies" | "arp" | "vdb" | "barnard" | "lbn" | "ldn" | "melotte" | "common" | "openngc";
 
-/**  Extended detail view of a target (spec 029 stub). */
-export type TargetDetail = TargetDetail_Serialize | TargetDetail_Deserialize;
-
 /**
  *  Full target detail returned by `target.get` (gen-3).
  * 
@@ -9679,40 +9627,6 @@ export type TargetDetailV3_Serialize = {
 	aliases: TargetAliasDto[],
 };
 
-/**  Extended detail view of a target (spec 029 stub). */
-export type TargetDetail_Deserialize = {
-	id: string,
-	name: string,
-	aliases: string[],
-	catalogIds: CatalogIds_Deserialize,
-	kind: TargetKind,
-	coordinates: Coordinates_Deserialize | null,
-	sessionCount: number,
-	projectCount: number,
-	totalIntegrationHours: number | null,
-	coverage: { [key in string]: number | null },
-	recommendedHours: { [key in string]: number | null },
-	sessions: AcquisitionSession_Deserialize[],
-	projects: TargetProjectStub[],
-};
-
-/**  Extended detail view of a target (spec 029 stub). */
-export type TargetDetail_Serialize = {
-	id: string,
-	name: string,
-	aliases: string[],
-	catalogIds: CatalogIds_Serialize,
-	kind: TargetKind,
-	coordinates?: Coordinates_Serialize | null,
-	sessionCount: number,
-	projectCount: number,
-	totalIntegrationHours: number | null,
-	coverage: { [key in string]: number | null },
-	recommendedHours: { [key in string]: number | null },
-	sessions: AcquisitionSession_Serialize[],
-	projects: TargetProjectStub[],
-};
-
 /**  Request for `target.display_alias.clear` (gen-3). */
 export type TargetDisplayAliasClearRequest = {
 	targetId: string,
@@ -9752,9 +9666,6 @@ export type TargetFavouritesListResult = {
 export type TargetGetRequest = {
 	targetId: string,
 };
-
-/**  Classification of an astronomical target. */
-export type TargetKind = "deep_sky" | "planetary" | "lunar" | "solar" | "landscape";
 
 /**
  *  A single row in the target list returned by `target.list` (gen-3).
@@ -9931,13 +9842,6 @@ export type TargetProjectItem = {
 	name: string,
 	/**  Lifecycle state string (e.g. `"ready"`, `"processing"`, `"done"`). */
 	lifecycle: string,
-};
-
-/**  A project stub within the target detail view (spec 029 stub). */
-export type TargetProjectStub = {
-	id: string,
-	name: string,
-	state: ProjectState,
 };
 
 /**  Request for `target.projects.list` (spec 023 US3). */
@@ -10193,40 +10097,6 @@ export type TargetSuggestion_Serialize = {
 	/**  The alias that matched the query. */
 	matchedAlias?: string | null,
 	source: TargetSource,
-};
-
-/**  An astronomical target as seen in list views (spec 029 stub). */
-export type Target_Deserialize = {
-	id: string,
-	name: string,
-	aliases: string[],
-	catalogIds: CatalogIds_Deserialize,
-	kind: TargetKind,
-	coordinates: Coordinates_Deserialize | null,
-	sessionCount: number,
-	projectCount: number,
-	totalIntegrationHours: number | null,
-	/**  Filter name -> acquired hours. */
-	coverage: { [key in string]: number | null },
-	/**  Filter name -> recommended hours. */
-	recommendedHours: { [key in string]: number | null },
-};
-
-/**  An astronomical target as seen in list views (spec 029 stub). */
-export type Target_Serialize = {
-	id: string,
-	name: string,
-	aliases: string[],
-	catalogIds: CatalogIds_Serialize,
-	kind: TargetKind,
-	coordinates?: Coordinates_Serialize | null,
-	sessionCount: number,
-	projectCount: number,
-	totalIntegrationHours: number | null,
-	/**  Filter name -> acquired hours. */
-	coverage: { [key in string]: number | null },
-	/**  Filter name -> recommended hours. */
-	recommendedHours: { [key in string]: number | null },
 };
 
 export type Telescope = {
