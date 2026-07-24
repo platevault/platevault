@@ -1119,6 +1119,10 @@ export const commands = {
 	 *  Each key that belongs to the scope is resolved via the persistence layer
 	 *  (hydrating the in-code default when no stored row exists).
 	 * 
+	 *  The `"ui_state"` scope is special: it returns all rows whose key starts with
+	 *  `"uiState."` directly from the DB (no in-code default — unknown keys simply
+	 *  return `null` on a get; the frontend falls back to its own default).
+	 * 
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */

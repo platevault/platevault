@@ -20,9 +20,13 @@ import {
   act,
 } from '@testing-library/react';
 import { appendLog, resetLogStore } from '@/data/logStore';
-import { LogPanelProvider } from '@/app/LogPanelContext';
+import {
+  LogPanelProvider,
+  LOG_PANEL_EXPANDED_LS_KEY,
+} from '@/app/LogPanelContext';
 import { LogPanel } from '@/app/LogPanel';
 import { commands } from '@/bindings/index';
+import { __resetScopeRegistryForTest } from '@/data/persisted-state';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
@@ -143,9 +147,11 @@ describe('LogPanel follow-tail scroll pause/resume (T011)', () => {
   beforeEach(() => {
     resetLogStore();
     vi.clearAllMocks();
-    // #842 persists `expanded` to localStorage; these tests assume a fresh
-    // collapsed panel on every render.
+    // #842 persists `expanded` via persisted-state; clear both keys and reset
+    // the module singleton so each test starts with a collapsed panel.
+    localStorage.removeItem(LOG_PANEL_EXPANDED_LS_KEY);
     localStorage.removeItem('alm-log-panel-expanded');
+    __resetScopeRegistryForTest();
     // jsdom does not implement `Element.scrollTo` — the follow-tail effect
     // calls it directly (smooth-scroll path) whenever reduced-motion is not
     // active. Stub it so the effect doesn't throw and unmount the tree.

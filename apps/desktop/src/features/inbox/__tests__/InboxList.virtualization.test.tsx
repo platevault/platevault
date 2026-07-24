@@ -33,9 +33,13 @@ import {
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { InboxList } from '../InboxList';
 import { FilterToolbar } from '@/components';
-import { useGrouping } from '@/lib/use-grouping';
+import {
+  useGrouping,
+  __resetGroupingRegistryForTest,
+} from '@/lib/use-grouping';
 import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from '../InboxControls';
 import type { InboxListItem } from '@/bindings/index';
+import { __resetScopeRegistryForTest } from '@/data/persisted-state';
 
 // Harness mirroring InboxPage: useGrouping + FilterToolbar.grouping feed InboxList.
 function Harness({ items }: { items: InboxListItem[] }) {
@@ -116,6 +120,8 @@ function rect(height: number): DOMRect {
 
 beforeEach(() => {
   localStorage.clear();
+  __resetGroupingRegistryForTest();
+  __resetScopeRegistryForTest();
   gbcrSpy = vi
     .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
     .mockImplementation(() => rect(ROW_PX));

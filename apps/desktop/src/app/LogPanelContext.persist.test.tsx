@@ -11,8 +11,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { appendLog, resetLogStore } from '@/data/logStore';
-import { LogPanelProvider } from '@/app/LogPanelContext';
+import {
+  LogPanelProvider,
+  LOG_PANEL_EXPANDED_LS_KEY,
+  _logPanelExpandedStateForTest,
+} from '@/app/LogPanelContext';
 import { LogPanel } from '@/app/LogPanel';
+import { __resetScopeRegistryForTest } from '@/data/persisted-state';
 
 const mockNavigate = vi.fn();
 
@@ -62,11 +67,14 @@ describe('LogPanel expanded persists across restart (#842)', () => {
     resetLogStore();
     vi.clearAllMocks();
     localStorage.clear();
+    // Reset the persisted-state module singleton so each test starts fresh.
+    __resetScopeRegistryForTest();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     localStorage.clear();
+    __resetScopeRegistryForTest();
   });
 
   it('persists expand to localStorage and restores it on remount', async () => {
@@ -78,7 +86,7 @@ describe('LogPanel expanded persists across restart (#842)', () => {
     await waitFor(() => {
       expect(getTrigger()).toHaveAttribute('aria-label', 'Collapse log panel');
     });
-    expect(localStorage.getItem('alm-log-panel-expanded')).toBe('true');
+    expect(localStorage.getItem(LOG_PANEL_EXPANDED_LS_KEY)).toBe('true');
 
     // Simulate an app restart: unmount (provider state is discarded) and
     // mount a fresh provider — it must read the persisted flag instead of
@@ -89,7 +97,9 @@ describe('LogPanel expanded persists across restart (#842)', () => {
   });
 
   it('persists collapse back to localStorage', async () => {
-    localStorage.setItem('alm-log-panel-expanded', 'true');
+    // Seed the initial expanded state via the module singleton (equivalent to
+    // what the old localStorage.setItem('alm-log-panel-expanded', 'true') did).
+    _logPanelExpandedStateForTest.set(true);
     seedEntries();
     renderPanel();
 
@@ -98,6 +108,6 @@ describe('LogPanel expanded persists across restart (#842)', () => {
     await waitFor(() => {
       expect(getTrigger()).toHaveAttribute('aria-label', 'Expand log panel');
     });
-    expect(localStorage.getItem('alm-log-panel-expanded')).toBe('false');
+    expect(localStorage.getItem(LOG_PANEL_EXPANDED_LS_KEY)).toBe('false');
   });
 });

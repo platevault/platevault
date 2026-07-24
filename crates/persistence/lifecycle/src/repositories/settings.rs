@@ -87,6 +87,29 @@ pub async fn get_all_raw(pool: &SqlitePool) -> DbResult<Vec<(String, Value)>> {
     Ok(rows.into_iter().map(|(key, Json(v))| (key, v)).collect())
 }
 
+/// Read all stored rows whose key starts with `prefix` (e.g. `"uiState."`).
+///
+/// Returns only rows that exist in the database; missing keys carry no default
+/// (the caller decides the fallback). Used by the `ui_state` scope to batch-
+/// read all persisted UI state keys without enumerating them at the Rust layer.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on query failure.
+pub async fn get_all_by_prefix(pool: &SqlitePool, prefix: &str) -> DbResult<Vec<(String, Value)>> {
+    // SQLite LIKE pattern: append '%' to the prefix. The prefix itself may
+    // contain literal '%' or '_' — escape them so they are matched literally.
+    let pattern = format!("{}%", prefix.replace('%', "\\%").replace('_', "\\_"));
+    let rows: Vec<(String, Json<Value>)> = sqlx::query_as(
+        "SELECT key, value FROM settings WHERE key LIKE ? ESCAPE '\\' ORDER BY key ASC",
+    )
+    .bind(&pattern)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.into_iter().map(|(key, Json(v))| (key, v)).collect())
+}
+
 // ── High-level settings bag ───────────────────────────────────────────────
 
 /// Load the full settings state, merging stored rows with in-code defaults.

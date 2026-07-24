@@ -86,7 +86,9 @@ mod writes;
 #[cfg(test)]
 mod tests;
 
-pub use keys::{is_global_protection_default_key, is_valid_key, overridable_keys, stable_keys};
+pub use keys::{
+    is_global_protection_default_key, is_ui_state_key, is_valid_key, overridable_keys, stable_keys,
+};
 pub use read::get_settings;
 pub use validation::{settings_value_eq, validate_value};
 pub use writes::{

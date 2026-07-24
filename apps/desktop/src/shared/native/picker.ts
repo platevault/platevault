@@ -21,6 +21,7 @@ import type {
   DirectoryPickResponse,
   FilePickResponse_Serialize,
 } from '@/bindings/index';
+import { createPersistedState } from '@/data/persisted-state';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,22 +82,40 @@ export function calibrationFileFilters(): FileFilter[] {
 }
 
 // ---------------------------------------------------------------------------
-// Last-path localStorage helpers (T012)
+// Last-path persistence helpers (T012) — SQLite-backed via ui_state scope
 // ---------------------------------------------------------------------------
 
-const LAST_PATH_PREFIX = 'alm.lastPath.';
+// One PersistedState instance per affordance kind, created lazily. These are
+// module-level so multiple picker calls share the same instance and don't
+// register duplicate scope entries.
+const lastPathStates = new Map<
+  LastPathKind,
+  ReturnType<typeof createPersistedState<string | null>>
+>();
+
+function lastPathState(
+  kind: LastPathKind,
+): ReturnType<typeof createPersistedState<string | null>> {
+  let s = lastPathStates.get(kind);
+  if (!s) {
+    s = createPersistedState<string | null>(
+      'ui_state',
+      `uiState.lastPath.${kind}`,
+      {
+        default: null,
+      },
+    );
+    lastPathStates.set(kind, s);
+  }
+  return s;
+}
 
 /**
- * Read the last-used path for a given affordance kind from localStorage.
+ * Read the last-used path for a given affordance kind.
  * Returns `undefined` if no stored path exists.
  */
 export function getLastPath(kind: LastPathKind): string | undefined {
-  try {
-    const value = localStorage.getItem(`${LAST_PATH_PREFIX}${kind}`);
-    return value ?? undefined;
-  } catch {
-    return undefined;
-  }
+  return lastPathState(kind).get() ?? undefined;
 }
 
 /**
@@ -104,12 +123,8 @@ export function getLastPath(kind: LastPathKind): string | undefined {
  * the given affordance kind.
  */
 export function setLastPath(kind: LastPathKind, selectedPath: string): void {
-  try {
-    const parent = parentDir(selectedPath);
-    localStorage.setItem(`${LAST_PATH_PREFIX}${kind}`, parent);
-  } catch {
-    // localStorage unavailable or full -- proceed without persistence
-  }
+  const parent = parentDir(selectedPath);
+  lastPathState(kind).set(parent);
 }
 
 /**
@@ -128,31 +143,26 @@ function parentDir(filePath: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Selected-filter persistence (T021)
+// Selected-filter persistence (T021) — SQLite-backed via ui_state scope
 // ---------------------------------------------------------------------------
 
-const SELECTED_FILTER_KEY = 'alm.selectedFilter';
+const selectedFilterState = createPersistedState(
+  'ui_state',
+  'uiState.selectedFilter',
+  { default: null as string | null },
+);
 
 /**
  * Persist the selected file-type filter alongside the last pick, so
  * downstream forms can read the user's preference.
  */
 export function setSelectedFilter(filterName: string): void {
-  try {
-    localStorage.setItem(SELECTED_FILTER_KEY, filterName);
-  } catch {
-    // proceed without persistence
-  }
+  selectedFilterState.set(filterName);
 }
 
 /** Read the last-selected file-type filter, if any. */
 export function getSelectedFilter(): string | undefined {
-  try {
-    const value = localStorage.getItem(SELECTED_FILTER_KEY);
-    return value ?? undefined;
-  } catch {
-    return undefined;
-  }
+  return selectedFilterState.get() ?? undefined;
 }
 
 // ---------------------------------------------------------------------------

@@ -7,15 +7,45 @@
  * Generalised from the Inbox's `useInboxControls` (spec 041 T021) so every list
  * page gets the SAME "Group by X, then by Y, then by Z" capability via the
  * shared `FilterToolbar` grouping control. The hook owns only the ordered
- * dimension ids + their localStorage persistence; each page supplies its own
- * valid dimension ids + a storage key, and feeds `dims` to its table's
- * `groupByDimensions` call.
+ * dimension ids + their persistence; each page supplies its own valid dimension
+ * ids + a storage key, and feeds `dims` to its table's `groupByDimensions` call.
+ *
+ * Persistence: all grouping state lives in SQLite (`ui_state` scope) with a
+ * localStorage boot cache. The settings key is `uiState.<storageKey>` (e.g.
+ * `uiState.targets.grouping.dims.v1`). On first hydrate the old plain
+ * localStorage key is imported automatically.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState, useSyncExternalStore } from 'react';
+import {
+  createPersistedState,
+  type PersistedStateResult,
+} from '@/data/persisted-state';
+
+// Module-level registry: one PersistedState instance per storageKey so
+// multiple renders of the same page share state and don't leak subscriptions.
+const groupingRegistry = new Map<string, PersistedStateResult<string[]>>();
+
+function getGroupingState(
+  storageKey: string,
+  defaultDims: readonly string[],
+): PersistedStateResult<string[]> {
+  let instance = groupingRegistry.get(storageKey);
+  if (!instance) {
+    instance = createPersistedState('ui_state', `uiState.${storageKey}`, {
+      default: [...defaultDims],
+    });
+    groupingRegistry.set(storageKey, instance);
+  }
+  return instance;
+}
 
 export interface UseGroupingOptions {
-  /** localStorage key for the persisted ordered dimensions (per page). */
+  /**
+   * Stable per-page key (e.g. `"targets.grouping.dims.v1"`). Used as both the
+   * SQLite settings key suffix (`uiState.<storageKey>`) and the legacy
+   * localStorage migration key.
+   */
   storageKey: string;
   /** Dimension ids this page allows (persisted values are validated against it). */
   validIds: readonly string[];
@@ -43,58 +73,48 @@ export function useGrouping({
   defaultDims = [],
 }: UseGroupingOptions): UseGroupingResult {
   const valid = new Set(validIds);
+  const state = getGroupingState(storageKey, defaultDims);
 
-  const load = useCallback((): string[] => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) {
-        return defaultDims.filter((d) => valid.has(d)).slice(0, maxLevels);
-      }
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      const seen = new Set<string>();
-      const out: string[] = [];
-      for (const d of parsed) {
-        if (typeof d === 'string' && valid.has(d) && !seen.has(d)) {
-          seen.add(d);
-          out.push(d);
-          if (out.length >= maxLevels) break;
-        }
-      }
-      return out;
-    } catch {
-      return [];
-    }
-    // `valid` is derived from validIds; depend on the stable storageKey + maxLevels.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storageKey, maxLevels]);
+  const rawDims = useSyncExternalStore(state.subscribe, state.get, state.get);
 
-  const [dims, setDims] = useState<string[]>(() => load());
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(dims));
-    } catch {
-      /* storage unavailable — non-fatal */
-    }
-  }, [storageKey, dims]);
+  // Validate stored dims against the page's valid id set and maxLevels.
+  const dims = validateDims(rawDims, valid, maxLevels);
 
   const setSlot = useCallback(
     (slot: number, value: string) => {
-      setDims((prev) => {
-        const next = prev.slice(0, slot);
-        if (value !== '') {
-          const deduped = next.filter((d) => d !== value);
-          deduped.push(value);
-          return deduped.slice(0, maxLevels);
-        }
-        return next;
-      });
+      const prev = validateDims(state.get(), valid, maxLevels);
+      const next = prev.slice(0, slot);
+      if (value !== '') {
+        const deduped = next.filter((d) => d !== value);
+        deduped.push(value);
+        state.set(deduped.slice(0, maxLevels));
+      } else {
+        state.set(next);
+      }
     },
-    [maxLevels],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, maxLevels],
   );
 
   return { dims, setSlot };
+}
+
+/** Filter + deduplicate dims against the page's valid id set. */
+function validateDims(
+  raw: string[],
+  valid: Set<string>,
+  maxLevels: number,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const d of raw) {
+    if (typeof d === 'string' && valid.has(d) && !seen.has(d)) {
+      seen.add(d);
+      out.push(d);
+      if (out.length >= maxLevels) break;
+    }
+  }
+  return out;
 }
 
 export interface UseCollapsibleGroupsResult {
@@ -119,4 +139,13 @@ export function useCollapsibleGroups(): UseCollapsibleGroupsResult {
     });
   }, []);
   return { collapsed, toggle };
+}
+
+/**
+ * Test-only: clear the per-storageKey PersistedState registry so tests don't
+ * bleed state across renders. Also call `__resetScopeRegistryForTest()` from
+ * `persisted-state.ts` to avoid stale scope registrations.
+ */
+export function __resetGroupingRegistryForTest(): void {
+  groupingRegistry.clear();
 }

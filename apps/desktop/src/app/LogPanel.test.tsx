@@ -17,8 +17,12 @@ import {
   within,
 } from '@testing-library/react';
 import { appendLog, resetLogStore } from '@/data/logStore';
-import { LogPanelProvider } from '@/app/LogPanelContext';
+import {
+  LogPanelProvider,
+  LOG_PANEL_EXPANDED_LS_KEY,
+} from '@/app/LogPanelContext';
 import { LogPanel } from '@/app/LogPanel';
+import { __resetScopeRegistryForTest } from '@/data/persisted-state';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
@@ -87,14 +91,19 @@ describe('LogPanel expand/collapse + filters (T006)', () => {
   beforeEach(() => {
     resetLogStore();
     vi.clearAllMocks();
-    // #842 persists `expanded` to localStorage; these tests assume a fresh
-    // collapsed panel on every render.
+    // #842 persists `expanded` via persisted-state; these tests assume a fresh
+    // collapsed panel on every render. Clear both the new boot-cache key and
+    // the old legacy key so module-singleton state is reset.
+    localStorage.removeItem(LOG_PANEL_EXPANDED_LS_KEY);
     localStorage.removeItem('alm-log-panel-expanded');
+    __resetScopeRegistryForTest();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    localStorage.removeItem(LOG_PANEL_EXPANDED_LS_KEY);
     localStorage.removeItem('alm-log-panel-expanded');
+    __resetScopeRegistryForTest();
   });
 
   it('toggles expand/collapse via the Collapsible trigger', async () => {
