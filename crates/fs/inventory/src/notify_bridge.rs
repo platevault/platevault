@@ -11,7 +11,7 @@ use notify::EventKind;
 /// The three event kinds both watcher event enums distinguish. `notify`
 /// event kinds outside these three (Access, Other, ...) are not forwarded.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum SimpleEventKind {
+pub enum SimpleEventKind {
     Created,
     Modified,
     Removed,
@@ -19,7 +19,7 @@ pub(crate) enum SimpleEventKind {
 
 /// Classify a raw `notify::EventKind` into the shared 3-way kind, or `None`
 /// for event kinds neither watcher forwards (e.g. `Access`).
-pub(crate) fn classify(kind: EventKind) -> Option<SimpleEventKind> {
+pub fn classify(kind: EventKind) -> Option<SimpleEventKind> {
     match kind {
         EventKind::Create(_) => Some(SimpleEventKind::Created),
         EventKind::Modify(_) => Some(SimpleEventKind::Modified),
@@ -36,10 +36,7 @@ pub(crate) fn classify(kind: EventKind) -> Option<SimpleEventKind> {
 /// crosses the IPC boundary as a wire string) — a non-UTF-8 path is skipped
 /// with a `diagnostic_source`-tagged stderr diagnostic instead. Constitution
 /// §I (Local-First custody): never silently mangle a user path.
-pub(crate) fn utf8_path_or_skip(
-    path: &std::path::Path,
-    diagnostic_source: &str,
-) -> Option<Utf8PathBuf> {
+pub fn utf8_path_or_skip(path: &std::path::Path, diagnostic_source: &str) -> Option<Utf8PathBuf> {
     if let Some(utf8) = Utf8Path::from_path(path) {
         Some(utf8.to_owned())
     } else {

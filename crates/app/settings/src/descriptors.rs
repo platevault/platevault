@@ -31,7 +31,7 @@ use serde_json::Value;
 /// as a bespoke arm in `validate_value`. The rendered error messages are
 /// byte-identical to the originals.
 #[derive(Clone, Copy)]
-pub(crate) enum ValidationRule {
+pub enum ValidationRule {
     /// String value restricted to a fixed set. `expected_msg` is the exact
     /// trailing text of the original error (e.g. `"\"lazy\", \"eager\", or \"off\""`).
     EnumStr { allowed: &'static [&'static str], expected_msg: &'static str },
@@ -73,7 +73,7 @@ pub(crate) enum ValidationRule {
 
 /// A stable settings key plus its audit/override flags, validation rule, and
 /// `SettingsState` hydration/default accessors.
-pub(crate) struct Descriptor {
+pub struct Descriptor {
     pub key: &'static str,
     pub noisy: bool,
     pub overridable: bool,
@@ -90,7 +90,7 @@ pub(crate) struct Descriptor {
 ///
 /// Order matches the historical `ALL_V1_KEYS` array so any order-sensitive
 /// consumer (e.g. `restore_defaults` over all keys) is unchanged.
-pub(crate) const DESCRIPTORS: &[Descriptor] = &[
+pub const DESCRIPTORS: &[Descriptor] = &[
     Descriptor {
         key: "pattern",
         noisy: true,
@@ -662,30 +662,30 @@ pub(crate) const DESCRIPTORS: &[Descriptor] = &[
 
 /// Look up the descriptor for a stable key, if any.
 #[must_use]
-pub(crate) fn descriptor_for(key: &str) -> Option<&'static Descriptor> {
+pub fn descriptor_for(key: &str) -> Option<&'static Descriptor> {
     DESCRIPTORS.iter().find(|d| d.key == key)
 }
 
 /// All stable v1 key names, in declaration order (the historical
 /// `ALL_V1_KEYS` order).
-pub(crate) fn all_keys() -> impl Iterator<Item = &'static str> {
+pub fn all_keys() -> impl Iterator<Item = &'static str> {
     DESCRIPTORS.iter().map(|d| d.key)
 }
 
 /// All noisy stable key names, in declaration order (historical `NOISY_KEYS`).
-pub(crate) fn noisy_keys() -> impl Iterator<Item = &'static str> {
+pub fn noisy_keys() -> impl Iterator<Item = &'static str> {
     DESCRIPTORS.iter().filter(|d| d.noisy).map(|d| d.key)
 }
 
 /// Return `true` if `key` is a stable key whose changes are audited as a snapshot.
 #[must_use]
-pub(crate) fn is_noisy(key: &str) -> bool {
+pub fn is_noisy(key: &str) -> bool {
     descriptor_for(key).is_some_and(|d| d.noisy)
 }
 
 /// Return `true` if `key` is a stable key that can be overridden per source root.
 #[must_use]
-pub(crate) fn is_overridable(key: &str) -> bool {
+pub fn is_overridable(key: &str) -> bool {
     descriptor_for(key).is_some_and(|d| d.overridable)
 }
 
@@ -697,7 +697,7 @@ pub(crate) fn is_overridable(key: &str) -> bool {
 /// Returns `Ok(())` if the rule passes. The devMode `dev-tools` cfg gate
 /// reproduces the original `validate_value` arm byte-for-byte.
 #[allow(clippy::too_many_lines)]
-pub(crate) fn check_rule(
+pub fn check_rule(
     rule: ValidationRule,
     value: &Value,
     invalid: &impl Fn(&str) -> ContractError,

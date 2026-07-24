@@ -3044,14 +3044,13 @@ mod tests {
              with a real FITS file on disk"
         );
 
-        let sigs: Vec<String> = inbox_repo::list_inbox_sub_items(db.pool(), "sg-bare")
-            .await
-            .unwrap()
-            .into_iter()
-            .filter_map(|r| r.content_signature)
-            .collect();
         assert!(
-            !sigs.is_empty(),
+            inbox_repo::list_inbox_sub_items(db.pool(), "sg-bare")
+                .await
+                .unwrap()
+                .into_iter()
+                .find_map(|r| r.content_signature)
+                .is_some(),
             "no inbox_items sub-item rows were actually persisted for the bare source group"
         );
     }

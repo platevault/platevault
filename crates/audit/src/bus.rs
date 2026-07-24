@@ -214,7 +214,7 @@ impl EventBus {
 #[async_trait::async_trait]
 impl EventPublisher for EventBus {
     async fn publish(&self, topic: &str, source: Source, payload: serde_json::Value) {
-        let _ = EventBus::publish(self, topic, source, payload).await;
+        let _ = Self::publish(self, topic, source, payload).await;
     }
 }
 

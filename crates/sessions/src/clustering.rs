@@ -70,7 +70,7 @@ pub struct SessionGeometry {
 
 /// A framing already known to the caller, considered as a join candidate
 /// (`Suggested`) or as protected, untouchable membership (`UserAdjusted`).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExistingFraming {
     pub id: EntityId,
     pub target_id: Option<EntityId>,
@@ -149,7 +149,7 @@ pub enum UnassignedReason {
 }
 
 /// The clustering outcome for one session.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Assignment {
     /// Joins an existing framing (protected `UserAdjusted` membership, or a
     /// tolerance match against a `Suggested` framing's representative).

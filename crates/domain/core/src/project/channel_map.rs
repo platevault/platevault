@@ -153,7 +153,7 @@ impl ChannelMap {
     ///
     /// Labels present only in `other` are inserted; labels present in both have
     /// their frame counts and exposures summed.
-    pub fn merge(&mut self, other: &ChannelMap) {
+    pub fn merge(&mut self, other: &Self) {
         for (label, integration) in &other.inner {
             let entry = self.inner.entry(label.clone()).or_default();
             entry.frame_count += integration.frame_count;

@@ -70,7 +70,7 @@ pub async fn get_settings(
 ///
 /// Unknown keys (structured-path keys like tools.*) are stored in the DB but
 /// not mapped to static SettingsState fields.
-pub(super) fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
+pub fn apply_value_to_state(key: &str, value: Value, state: &mut SettingsState) {
     if let Some(descriptor) = descriptors::descriptor_for(key) {
         (descriptor.apply)(value, state);
     }
@@ -79,7 +79,7 @@ pub(super) fn apply_value_to_state(key: &str, value: Value, state: &mut Settings
 }
 
 /// Return the in-code default value for a given key as `serde_json::Value`.
-pub(super) fn default_value_for_key(key: &str) -> Value {
+pub fn default_value_for_key(key: &str) -> Value {
     if let Some(descriptor) = descriptors::descriptor_for(key) {
         return (descriptor.default)(SettingsState::default());
     }

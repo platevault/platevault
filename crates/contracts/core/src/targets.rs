@@ -469,7 +469,7 @@ pub enum TargetSource {
 // ── target.search ─────────────────────────────────────────────────────────────
 
 /// A single ranked typeahead suggestion (`target.search.json` §`Suggestion`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetSuggestion {
     pub target_id: String,
@@ -484,7 +484,7 @@ pub struct TargetSuggestion {
 }
 
 /// Request for `target.search` (`target.search.json` §`Request`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetSearchRequest {
     pub contract_version: String,
@@ -509,7 +509,7 @@ fn default_search_limit() -> u32 {
 ///
 /// Local matches only; ordered by match quality. Long-tail/SIMBAD results
 /// arrive via `target.resolve`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetSearchResponse {
     pub contract_version: String,
@@ -579,7 +579,7 @@ pub enum TargetResolveErrorCode {
 }
 
 /// Error envelope for `target.resolve` (`target.resolve.json` §`ErrorEnvelope`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetResolveError {
     pub code: TargetResolveErrorCode,
@@ -590,14 +590,14 @@ pub struct TargetResolveError {
 ///
 /// When present, binds `query` to this canonical target; persisted as
 /// `source=user-override` and wins over future SIMBAD results (FR-014).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetResolveOverride {
     pub target_id: String,
 }
 
 /// Request for `target.resolve` (`target.resolve.json` §`Request`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetResolveSimbadRequest {
     pub contract_version: String,
@@ -632,7 +632,7 @@ pub struct TargetResolveSimbadResponse {
 // ── target.resolution.settings ────────────────────────────────────────────────
 
 /// SIMBAD resolver settings (`target.resolution-settings.json` §`Settings`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolverSettings {
     /// Enable/disable online SIMBAD resolution (FR-015; default true). When
@@ -644,7 +644,7 @@ pub struct ResolverSettings {
 }
 
 /// Get request for resolver settings (`target.resolution-settings.json` §`GetRequest`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolverSettingsGetRequest {
     pub contract_version: String,
@@ -654,7 +654,7 @@ pub struct ResolverSettingsGetRequest {
 }
 
 /// Update request for resolver settings (`target.resolution-settings.json` §`UpdateRequest`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolverSettingsUpdateRequest {
     pub contract_version: String,
@@ -665,7 +665,7 @@ pub struct ResolverSettingsUpdateRequest {
 }
 
 /// Response for resolver settings get/update (`target.resolution-settings.json` §`Response`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolverSettingsResponse {
     pub contract_version: String,
@@ -699,7 +699,7 @@ pub struct TargetAstroFormatBatchRequest {
 /// Absent from the response when its input RA/Dec was non-finite — never a
 /// fabricated string (callers key on `id` to look up a result and fall back
 /// to an explicit "unknown" display for ids with no match).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetAstroFormat {
     pub id: String,
@@ -710,7 +710,7 @@ pub struct TargetAstroFormat {
 }
 
 /// Response for `target.astro_format.batch`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetAstroFormatBatchResponse {
     pub formatted: Vec<TargetAstroFormat>,
@@ -724,7 +724,7 @@ pub struct TargetAstroFormatBatchResponse {
 /// with no other natural commit point (e.g. the Targets-page "Add Target"
 /// dialog; favouriting/project-create/session-link promote inline as part of
 /// their own commands).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetAdoptRequest {
     pub request_id: String,
@@ -732,7 +732,7 @@ pub struct TargetAdoptRequest {
 }
 
 /// Response for `target.adopt`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetAdoptResponse {
     pub target_id: String,
@@ -744,7 +744,7 @@ pub struct TargetAdoptResponse {
 /// Response for `target.cache.clear` (FR-002): the redb resolve cache is
 /// wiped and re-warmed from the bundled seed + existing durable
 /// `canonical_target` rows. Never touches `canonical_target` itself.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TargetCacheClearResponse {
     /// Number of entries the cache was re-warmed with after clearing.

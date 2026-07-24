@@ -113,7 +113,7 @@ impl ViewKind {
     /// Returns true for the three v1-supported kinds (not hardlink).
     #[must_use]
     pub fn is_v1_supported(self) -> bool {
-        matches!(self, ViewKind::Symlink | ViewKind::Junction | ViewKind::Copy)
+        matches!(self, Self::Symlink | Self::Junction | Self::Copy)
     }
 }
 
@@ -175,7 +175,7 @@ impl ViewState {
     /// via UI first (D-026-H2).
     #[must_use]
     pub fn allows_mutation(self) -> bool {
-        !matches!(self, ViewState::KindDiverged)
+        !matches!(self, Self::KindDiverged)
     }
 }
 
@@ -208,22 +208,22 @@ impl ItemObservedState {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            ItemObservedState::Present => "present",
-            ItemObservedState::Missing => "missing",
-            ItemObservedState::ChangedKind => "changed_kind",
-            ItemObservedState::Diverged => "diverged",
-            ItemObservedState::HashDiverged => "hash_diverged",
+            Self::Present => "present",
+            Self::Missing => "missing",
+            Self::ChangedKind => "changed_kind",
+            Self::Diverged => "diverged",
+            Self::HashDiverged => "hash_diverged",
         }
     }
 
     #[must_use]
     pub fn parse_str(s: &str) -> Option<Self> {
         match s {
-            "present" => Some(ItemObservedState::Present),
-            "missing" => Some(ItemObservedState::Missing),
-            "changed_kind" => Some(ItemObservedState::ChangedKind),
-            "diverged" => Some(ItemObservedState::Diverged),
-            "hash_diverged" => Some(ItemObservedState::HashDiverged),
+            "present" => Some(Self::Present),
+            "missing" => Some(Self::Missing),
+            "changed_kind" => Some(Self::ChangedKind),
+            "diverged" => Some(Self::Diverged),
+            "hash_diverged" => Some(Self::HashDiverged),
             _ => None,
         }
     }

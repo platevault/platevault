@@ -151,7 +151,7 @@ pub async fn update_setting(
 /// audit under `EntityType::Protection` via `protection.default.changed`,
 /// spec 016 T-004; everything else audits under `EntityType::Settings` via
 /// `settings.changed`).
-pub(super) async fn write_settings_applied_audit(
+pub async fn write_settings_applied_audit(
     bus: &EventBus,
     is_protection_default: bool,
     action: &str,
@@ -212,7 +212,7 @@ pub(super) async fn write_settings_applied_audit(
 /// have used, so a refused global-protection-default write (e.g. `T123`'s
 /// "protection refused" coverage) is tagged `EntityType::Protection`, not
 /// `EntityType::Settings`.
-pub(super) async fn write_settings_refusal(
+pub async fn write_settings_refusal(
     bus: &EventBus,
     is_protection_default: bool,
     key: &str,
@@ -437,7 +437,7 @@ pub async fn set_source_override(
 
 /// Write a durable `Outcome::Refused` row for a rejected `set_source_override`
 /// attempt (FR-130, review round 1 #1).
-pub(super) async fn write_settings_override_refusal(
+pub async fn write_settings_override_refusal(
     bus: &EventBus,
     entity_seed: &str,
     key: &str,

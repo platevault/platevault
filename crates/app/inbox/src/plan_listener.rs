@@ -519,7 +519,7 @@ pub(crate) mod tests {
         AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,
     };
 
-    pub(crate) async fn test_db() -> Database {
+    pub async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();
         db.migrate().await.unwrap();
         db
@@ -792,7 +792,7 @@ pub(crate) mod tests {
     /// Set up a real-file, applied (`item_state='succeeded'`) master-item plan
     /// linked to `item_id`/`plan_id`, with the master file written under
     /// `tmp`/`rel` at `size` bytes. Returns `(root_id, rel)`.
-    pub(crate) async fn setup_master_item_plan(
+    pub async fn setup_master_item_plan(
         db: &Database,
         tmp: &std::path::Path,
         item_id: &str,

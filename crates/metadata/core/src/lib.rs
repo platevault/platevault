@@ -51,11 +51,11 @@ impl FrameType {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            FrameType::Light => "light",
-            FrameType::Dark => "dark",
-            FrameType::Bias => "bias",
-            FrameType::Flat => "flat",
-            FrameType::DarkFlat => "dark_flat",
+            Self::Light => "light",
+            Self::Dark => "dark",
+            Self::Bias => "bias",
+            Self::Flat => "flat",
+            Self::DarkFlat => "dark_flat",
         }
     }
 
@@ -63,11 +63,11 @@ impl FrameType {
     #[must_use]
     pub fn from_str_ci(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
-            "light" => Some(FrameType::Light),
-            "dark" => Some(FrameType::Dark),
-            "bias" => Some(FrameType::Bias),
-            "flat" => Some(FrameType::Flat),
-            "dark_flat" => Some(FrameType::DarkFlat),
+            "light" => Some(Self::Light),
+            "dark" => Some(Self::Dark),
+            "bias" => Some(Self::Bias),
+            "flat" => Some(Self::Flat),
+            "dark_flat" => Some(Self::DarkFlat),
             _ => None,
         }
     }
@@ -100,11 +100,11 @@ impl EvidenceSource {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            EvidenceSource::ImagetypHeader => "imagetyp_header",
+            Self::ImagetypHeader => "imagetyp_header",
 
-            EvidenceSource::XisfProperty => "xisf_property",
-            EvidenceSource::ManualOverride => "manual_override",
-            EvidenceSource::None => "none",
+            Self::XisfProperty => "xisf_property",
+            Self::ManualOverride => "manual_override",
+            Self::None => "none",
         }
     }
 
@@ -112,10 +112,10 @@ impl EvidenceSource {
     #[must_use]
     pub fn from_str_ci(s: &str) -> Option<Self> {
         match s {
-            "imagetyp_header" => Some(EvidenceSource::ImagetypHeader),
-            "xisf_property" => Some(EvidenceSource::XisfProperty),
-            "manual_override" => Some(EvidenceSource::ManualOverride),
-            "none" => Some(EvidenceSource::None),
+            "imagetyp_header" => Some(Self::ImagetypHeader),
+            "xisf_property" => Some(Self::XisfProperty),
+            "manual_override" => Some(Self::ManualOverride),
+            "none" => Some(Self::None),
             _ => None,
         }
     }

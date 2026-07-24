@@ -61,7 +61,7 @@ fn priority(tag: ProvenanceTag) -> u8 {
 /// The bounds are expressed via attribute overrides rather than inline generic
 /// constraints to avoid conflicts when derive macros add independent `where`
 /// clauses for each trait.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 #[schemars(bound = "T: JsonSchema")]
 #[specta(bound = "T: Type")]
@@ -82,7 +82,7 @@ pub struct ProvenanceEntry<T> {
 ///
 /// `history` is append-only; mutation produces a new entry without erasing prior ones.
 /// Inline history is bounded per origin tag; older entries spill to `provenance_history_archive`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 #[schemars(bound = "T: Clone + JsonSchema")]
 #[specta(bound = "T: Clone + Type")]

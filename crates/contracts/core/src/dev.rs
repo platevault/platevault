@@ -21,7 +21,7 @@ use crate::JsonAny;
 // ── ContractMeta ──────────────────────────────────────────────────────────────
 
 /// Metadata for a single registered contract (spec 021, US1).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ContractMeta {
     /// Operation name, e.g. `plan.create`.
@@ -78,7 +78,7 @@ pub struct ContractCall {
 }
 
 /// Error details stored on a failed call.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ContractCallError {
     pub code: String,

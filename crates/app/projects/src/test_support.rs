@@ -18,10 +18,10 @@ use sqlx::SqlitePool;
 #[cfg(windows)]
 pub(crate) const TEST_PROJECT_ROOT: &str = "C:/library/projects-root";
 #[cfg(not(windows))]
-pub(crate) const TEST_PROJECT_ROOT: &str = "/library/projects-root";
+pub const TEST_PROJECT_ROOT: &str = "/library/projects-root";
 
 /// Make a Unix-style test path absolute on the current platform.
-pub(crate) fn abs(path: &str) -> String {
+pub fn abs(path: &str) -> String {
     if cfg!(windows) {
         format!("C:{path}")
     } else {
@@ -33,7 +33,7 @@ pub(crate) fn abs(path: &str) -> String {
 /// (mirrors the first-run wizard registering a project folder). Goes through
 /// the sanctioned `first_run` repository (DB-boundary rule: no raw SQL outside
 /// `crates/persistence/db`).
-pub(crate) async fn register_project_root(pool: &SqlitePool, path: &str) {
+pub async fn register_project_root(pool: &SqlitePool, path: &str) {
     first_run_repo::register_source(
         pool,
         &RegisterSourceRequest {

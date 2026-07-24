@@ -4,7 +4,7 @@
 //! The native application menu (spec 051 US5).
 
 /// Menu id for the native "Settings…" application-menu item (spec 051 US5).
-pub(crate) const MENU_ID_SETTINGS: &str = "menu-settings";
+pub const MENU_ID_SETTINGS: &str = "menu-settings";
 
 /// Build the native application menu (spec 051 US5, T032): an App submenu
 /// (About, Settings, Quit), a Window submenu, and a standard Edit submenu
@@ -12,7 +12,7 @@ pub(crate) const MENU_ID_SETTINGS: &str = "menu-settings";
 /// dialog of its own — its click is handled by `on_menu_event` in
 /// `build_app()`, which emits a frontend event for the existing Settings
 /// route to handle (T033: reuse existing UI, no new native dialog).
-pub(crate) fn build_native_menu(
+pub fn build_native_menu(
     app: &tauri::App<tauri::Wry>,
 ) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};

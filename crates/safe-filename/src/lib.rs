@@ -32,7 +32,7 @@ use unicode_security::MixedScript;
 // ── Sanitize errors ────────────────────────────────────────────────────────
 
 /// Errors that the sanitize pipeline can surface.
-#[derive(Clone, Debug, PartialEq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum SanitizeError {
     /// Token value equals `.` or `..`, or the assembled path contains `..`.
     #[error("path traversal attempt in segment: {segment}")]

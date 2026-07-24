@@ -169,8 +169,7 @@ mod tests {
         ];
         let merged = merge_channels(&inferred, &existing);
         assert_eq!(merged.len(), 3);
-        let labels: Vec<&str> = merged.iter().map(|c| c.label.as_str()).collect();
-        assert!(labels.contains(&"L"));
+        assert!(merged.iter().map(|c| c.label.as_str()).any(|l| l == "L"));
     }
 
     #[test]

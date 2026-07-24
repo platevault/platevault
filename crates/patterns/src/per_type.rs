@@ -82,7 +82,7 @@ impl FrameTypeClass {
     /// All seven classes, in declaration order. Useful for building the full
     /// per-type settings map.
     #[must_use]
-    pub fn all() -> [FrameTypeClass; 7] {
+    pub fn all() -> [Self; 7] {
         [
             Self::Light,
             Self::Flat,

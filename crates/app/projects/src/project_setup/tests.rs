@@ -621,9 +621,14 @@ async fn create_siril_plan_has_five_folders() {
     let mkdir_count = items.iter().filter(|i| i.action == "mkdir").count();
     // Siril: 5 sub-folders (no processing/)
     assert_eq!(mkdir_count, 5);
-    let folder_names: Vec<&str> =
-        items.iter().filter(|i| i.action == "mkdir").map(|i| i.name.as_str()).collect();
-    assert!(!folder_names.contains(&"processing"), "Siril has no processing/ folder");
+    assert!(
+        !items
+            .iter()
+            .filter(|i| i.action == "mkdir")
+            .map(|i| i.name.as_str())
+            .any(|n| n == "processing"),
+        "Siril has no processing/ folder"
+    );
 }
 
 // ── spec 035 US1 #2: project ↔ canonical_target association ──────────────────

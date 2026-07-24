@@ -191,7 +191,7 @@ pub enum TransitionActor {
 // filled) and made serialization emit `entityType` twice.
 macro_rules! transition_request_base {
     ($name:ident, $state_ty:ty) => {
-        #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+        #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
         #[serde(rename_all = "camelCase")]
         pub struct $name {
             pub contract_version: String,
@@ -237,7 +237,7 @@ transition_request_base!(FileRecordTransitionRequest, FileRecordState);
 // ── Discriminated request enum ────────────────────────────────────────────────
 
 /// Discriminated request — one variant per entity family.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(tag = "entityType", rename_all = "snake_case")]
 pub enum TransitionRequest {
     Project(ProjectTransitionRequest),
@@ -282,7 +282,7 @@ pub enum TransitionErrorCode {
     ProvenanceUnreviewed,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TransitionError {
     pub code: TransitionErrorCode,
@@ -314,7 +314,7 @@ pub enum TransitionStatus {
     Error,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TransitionResponse {
     pub status: TransitionStatus,

@@ -26,7 +26,7 @@ static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// A `Database` that also holds the shared cache-test lock for its
 /// lifetime. Derefs to `Database` so existing call sites (`db.pool()`,
 /// `&db` passed where `&Database` is expected) are unchanged.
-pub(crate) struct LockedDb {
+pub struct LockedDb {
     db: Database,
     _guard: tokio::sync::MutexGuard<'static, ()>,
 }
@@ -41,7 +41,7 @@ impl std::ops::Deref for LockedDb {
 
 /// Acquire the shared lock, reset both snapshot caches to a clean (miss)
 /// state, and build a fresh in-memory, migrated DB.
-pub(crate) async fn locked_db() -> LockedDb {
+pub async fn locked_db() -> LockedDb {
     let guard = LOCK.lock().await;
     crate::caches::invalidate_catalog();
     crate::caches::invalidate_resolver_settings();
@@ -54,7 +54,7 @@ pub(crate) async fn locked_db() -> LockedDb {
 /// `#[test]` functions. Blocks the current thread rather than `.await`ing
 /// — safe here because these call sites have no Tokio runtime, unlike
 /// [`locked_db`]'s async callers.
-pub(crate) fn locked_reset() -> tokio::sync::MutexGuard<'static, ()> {
+pub fn locked_reset() -> tokio::sync::MutexGuard<'static, ()> {
     let guard = LOCK.blocking_lock();
     crate::caches::invalidate_catalog();
     crate::caches::invalidate_resolver_settings();

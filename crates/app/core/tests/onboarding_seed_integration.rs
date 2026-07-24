@@ -208,7 +208,7 @@ async fn settling_the_final_open_item_hides_the_section() {
 async fn restore_clears_section_hidden() {
     let pool = setup_pool().await;
     let state = get_state(&pool).await.unwrap().state;
-    for id in state.items.iter().map(|i| i.item_id.clone()).collect::<Vec<_>>() {
+    for id in state.items.iter().map(|i| i.item_id.clone()) {
         dismiss(&pool, &id).await;
     }
     assert!(get_state(&pool).await.unwrap().state.flags.section_hidden);

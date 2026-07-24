@@ -18,8 +18,8 @@ use super::{descriptors, EntityId};
 // generic `settings.changed` topic — including for `protectedCategories`,
 // which is marked `noisy` for the generic no-op-audit policy but is an
 // explicit exception per plan.md E-016-3.
-pub(super) const GLOBAL_PROTECTION_DEFAULT_SCOPE: &str = "global";
-pub(super) const GLOBAL_PROTECTION_DEFAULT_KEYS: [&str; 3] =
+pub const GLOBAL_PROTECTION_DEFAULT_SCOPE: &str = "global";
+pub const GLOBAL_PROTECTION_DEFAULT_KEYS: [&str; 3] =
     ["defaultProtection", "blockPermanentDelete", "protectedCategories"];
 
 /// Whether `key` is one of the three global protection-default keys backed by
@@ -39,12 +39,12 @@ pub fn is_global_protection_default_key(key: &str) -> bool {
 // named-exception-list shape as `GLOBAL_PROTECTION_DEFAULT_KEYS` above, kept
 // separate from the descriptor table rather than adding a new field to every
 // one of its literals for a single-member set.
-pub(super) const NOISY_AUDITED_KEYS: [&str; 1] = ["pattern"];
+pub const NOISY_AUDITED_KEYS: [&str; 1] = ["pattern"];
 
 /// Whether a `noisy` key still gets a durable audit row at its committed
 /// value (`pattern`), vs. being fully exempt as UI state (FR-134).
 #[must_use]
-pub(super) fn is_noisy_audited_key(key: &str) -> bool {
+pub fn is_noisy_audited_key(key: &str) -> bool {
     NOISY_AUDITED_KEYS.contains(&key)
 }
 
@@ -56,7 +56,7 @@ pub(super) fn is_noisy_audited_key(key: &str) -> bool {
 /// name (stable across every write) lets `audit_log_entry` reads correlate
 /// the full history of one key under a single `entity_id`, the same way a
 /// real entity's rows are correlated by its persisted id.
-pub(super) fn settings_entity_id(key: &str) -> EntityId {
+pub fn settings_entity_id(key: &str) -> EntityId {
     static NAMESPACE: std::sync::OnceLock<uuid::Uuid> = std::sync::OnceLock::new();
     let ns = NAMESPACE.get_or_init(|| {
         uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_DNS, b"astro-plan.audit.settings")
@@ -90,7 +90,7 @@ pub fn is_valid_key(key: &str) -> bool {
 /// structured-path keys: read/write through the DB row + `default_value_for_key`
 /// only, never through the in-memory `SettingsState` bag returned by
 /// `get_settings` (unused by the Planner/Settings pane for this key).
-pub(super) fn is_catalogues_enabled_key(key: &str) -> bool {
+pub fn is_catalogues_enabled_key(key: &str) -> bool {
     key == "enabled"
 }
 
@@ -108,7 +108,7 @@ pub const SHIPPED_LOCALES: [&str; 2] = ["en-GB", "pt-BR"];
 /// into `is_valid_key`) is the fix for research D8: an unregistered key
 /// makes `settings.update` silently drop the write while still returning
 /// `Ok` to the caller.
-pub(super) fn is_locale_key(key: &str) -> bool {
+pub fn is_locale_key(key: &str) -> bool {
     key == "locale"
 }
 
@@ -132,7 +132,7 @@ pub fn overridable_keys() -> Vec<String> {
     descriptors::DESCRIPTORS.iter().filter(|d| d.overridable).map(|d| d.key.to_owned()).collect()
 }
 
-pub(super) fn is_tools_bundle_id_key(key: &str) -> bool {
+pub fn is_tools_bundle_id_key(key: &str) -> bool {
     // ^tools\.[a-z0-9_]+\.bundle_id$
     if let Some(rest) = key.strip_prefix("tools.") {
         if let Some(tool_id) = rest.strip_suffix(".bundle_id") {
@@ -145,7 +145,7 @@ pub(super) fn is_tools_bundle_id_key(key: &str) -> bool {
     false
 }
 
-pub(super) fn is_tools_key_with_suffix(key: &str, suffix: &str) -> bool {
+pub fn is_tools_key_with_suffix(key: &str, suffix: &str) -> bool {
     if let Some(rest) = key.strip_prefix("tools.") {
         if let Some(tool_id) = rest.strip_suffix(suffix) {
             return !tool_id.is_empty()
@@ -157,22 +157,22 @@ pub(super) fn is_tools_key_with_suffix(key: &str, suffix: &str) -> bool {
     false
 }
 
-pub(super) fn is_tools_executable_path_key(key: &str) -> bool {
+pub fn is_tools_executable_path_key(key: &str) -> bool {
     // ^tools\.[a-z0-9_]+\.executable_path$
     is_tools_key_with_suffix(key, ".executable_path")
 }
 
-pub(super) fn is_tools_enabled_key(key: &str) -> bool {
+pub fn is_tools_enabled_key(key: &str) -> bool {
     // ^tools\.[a-z0-9_]+\.enabled$
     is_tools_key_with_suffix(key, ".enabled")
 }
 
-pub(super) fn is_tools_auto_detected_key(key: &str) -> bool {
+pub fn is_tools_auto_detected_key(key: &str) -> bool {
     // ^tools\.[a-z0-9_]+\.auto_detected$
     is_tools_key_with_suffix(key, ".auto_detected")
 }
 
-pub(super) fn is_workflow_profile_watch_extensions_key(key: &str) -> bool {
+pub fn is_workflow_profile_watch_extensions_key(key: &str) -> bool {
     // ^workflow_profile\.[a-z0-9_]+\.watch_extensions$
     if let Some(rest) = key.strip_prefix("workflow_profile.") {
         if let Some(profile_id) = rest.strip_suffix(".watch_extensions") {
@@ -185,7 +185,7 @@ pub(super) fn is_workflow_profile_watch_extensions_key(key: &str) -> bool {
     false
 }
 
-pub(super) fn is_workflow_profile_attribution_window_key(key: &str) -> bool {
+pub fn is_workflow_profile_attribution_window_key(key: &str) -> bool {
     // ^workflow_profile\.[a-z0-9_]+\.launch_attribution_window_hours$
     if let Some(rest) = key.strip_prefix("workflow_profile.") {
         if let Some(profile_id) = rest.strip_suffix(".launch_attribution_window_hours") {

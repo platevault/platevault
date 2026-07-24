@@ -100,7 +100,7 @@ pub enum ConeSearchReason {
 /// Request for `target.cone_search.suggest`. The backend derives the
 /// pointing from the frameset's frames; the client never supplies
 /// coordinates.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ConeSearchSuggestRequest {
     pub frameset_id: String,
@@ -117,7 +117,7 @@ pub struct ConeSearchSuggestResponse {
 }
 
 /// The candidate a `target.cone_search.confirm` call binds to the frameset.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ConeSearchConfirmCandidate {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -129,7 +129,7 @@ pub struct ConeSearchConfirmCandidate {
 
 /// Request for `target.cone_search.confirm` — the single point at which a
 /// cone-search suggestion becomes durable (FR-016, SC-006).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ConeSearchConfirmRequest {
     pub frameset_id: String,
@@ -137,7 +137,7 @@ pub struct ConeSearchConfirmRequest {
 }
 
 /// Response for `target.cone_search.confirm`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ConeSearchConfirmResponse {
     pub canonical_target_id: String,

@@ -252,7 +252,7 @@ pub enum ChosenAttributionKind {
 }
 
 /// Request payload for the attribution apply-path (data-model.md `chosenAttribution?`).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ChosenAttributionDto {
     pub kind: ChosenAttributionKind,
@@ -269,7 +269,7 @@ pub struct ChosenAttributionDto {
 /// Outcome of applying a [`ChosenAttributionDto`] at confirm time
 /// (F-Framing-10/6). Returned alongside the confirm response so the UI can
 /// surface the reopen/warning without a follow-up read.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AttributionAppliedDto {
     pub project_id: String,
