@@ -738,9 +738,9 @@ async fn settings_get_returns_defaults() {
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
     let bus = EventBus::with_pool(db.pool().clone());
-    let _caches = app_core::AppCaches::shared();
-    let cache = &_caches.settings.bag;
-    let resp = app_core::settings::get_settings(db.pool(), &bus, &cache).await;
+    let caches = app_core::AppCaches::shared();
+    let cache = &caches.settings.bag;
+    let resp = app_core::settings::get_settings(db.pool(), &bus, cache).await;
     assert!(resp.is_ok(), "settings_get failed: {resp:?}");
     let state = resp.unwrap().settings;
     assert_eq!(state.log_level, "info");
@@ -753,13 +753,13 @@ async fn settings_update_and_persist() {
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
     let bus = EventBus::with_pool(db.pool().clone());
-    let _caches = app_core::AppCaches::shared();
-    let cache = &_caches.settings.bag;
+    let caches = app_core::AppCaches::shared();
+    let cache = &caches.settings.bag;
     let req = SettingsUpdateRequest {
         key: "logLevel".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("debug")),
     };
-    let resp = app_core::settings::update_setting(db.pool(), &bus, &cache, &req).await;
+    let resp = app_core::settings::update_setting(db.pool(), &bus, cache, &req).await;
     assert!(resp.is_ok(), "settings_update failed: {resp:?}");
     assert_eq!(resp.unwrap().status, SettingsUpdateStatus::Success);
 }
@@ -775,15 +775,15 @@ async fn settings_scope_roundtrip_via_usecase() {
     let db = Database::in_memory().await.expect("in-memory database");
     db.migrate().await.expect("run migrations");
     let bus = EventBus::with_pool(db.pool().clone());
-    let _caches = app_core::AppCaches::shared();
-    let cache = &_caches.settings.bag;
+    let caches = app_core::AppCaches::shared();
+    let cache = &caches.settings.bag;
 
     // 1. Write logLevel via the per-key use case (same path as settings.update).
     let req = SettingsUpdateRequest {
         key: "logLevel".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("debug")),
     };
-    let resp = app_core::settings::update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
+    let resp = app_core::settings::update_setting(db.pool(), &bus, cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Success);
 
     // 2. Read back via resolve_setting (same path as settings.get per-key resolution).
@@ -799,7 +799,7 @@ async fn settings_scope_roundtrip_via_usecase() {
         key: "rememberFollowLogs".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!(true)),
     };
-    let resp2 = app_core::settings::update_setting(db.pool(), &bus, &cache, &req2).await.unwrap();
+    let resp2 = app_core::settings::update_setting(db.pool(), &bus, cache, &req2).await.unwrap();
     assert_eq!(resp2.status, SettingsUpdateStatus::Success);
     assert!(resp2.audit_id.is_none(), "noisy key must not emit per-change audit_id");
 
@@ -807,7 +807,7 @@ async fn settings_scope_roundtrip_via_usecase() {
     let restore_req =
         contracts_core::settings::RestoreDefaultsRequest { keys: vec!["logLevel".to_owned()] };
     let restore_resp =
-        app_core::settings::restore_defaults(db.pool(), &bus, &cache, &restore_req).await.unwrap();
+        app_core::settings::restore_defaults(db.pool(), &bus, cache, &restore_req).await.unwrap();
     assert!(restore_resp.restored.contains(&"logLevel".to_owned()));
     let after_restore =
         app_core::settings::resolve_setting(db.pool(), "logLevel", None).await.unwrap();
