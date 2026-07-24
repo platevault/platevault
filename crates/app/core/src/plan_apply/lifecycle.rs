@@ -505,9 +505,7 @@ pub async fn skip_plan_item(
     let run_ref = registry.get(plan_id).ok_or_else(|| {
         ContractError::new(
             ErrorCode::RunNotFound,
-            format!(
-                "no active run found for plan {plan_id}; the run may have already finished"
-            ),
+            format!("no active run found for plan {plan_id}; the run may have already finished"),
             ErrorSeverity::Blocking,
             false,
         )

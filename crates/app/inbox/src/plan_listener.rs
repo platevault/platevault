@@ -52,15 +52,12 @@ use tokio::sync::{broadcast, Mutex};
 /// path removes it — a global Mutex previously serialized ALL plan completions,
 /// blocking unrelated plans (GF-31). The DashMap key is the plan_id; each entry
 /// holds a Mutex guarding that plan's completion path only.
-static PLAN_COMPLETION_LOCKS: std::sync::OnceLock<
-    dashmap::DashMap<String, Arc<Mutex<()>>>,
-> = std::sync::OnceLock::new();
+static PLAN_COMPLETION_LOCKS: std::sync::OnceLock<dashmap::DashMap<String, Arc<Mutex<()>>>> =
+    std::sync::OnceLock::new();
 
 fn plan_completion_lock(plan_id: &str) -> Arc<Mutex<()>> {
     let map = PLAN_COMPLETION_LOCKS.get_or_init(dashmap::DashMap::new);
-    map.entry(plan_id.to_owned())
-        .or_insert_with(|| Arc::new(Mutex::const_new(())))
-        .clone()
+    map.entry(plan_id.to_owned()).or_insert_with(|| Arc::new(Mutex::const_new(()))).clone()
 }
 
 // ── Public entry point ────────────────────────────────────────────────────────

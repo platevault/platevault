@@ -1881,3 +1881,62 @@ async fn crash_window_recovery_produces_source_missing_not_double_apply() {
     // The destination must not have been touched a second time.
     assert!(dst.exists(), "destination file must still exist — no double-apply");
 }
+
+// ── GF-5: cancel_plan on paused plan transitions DB directly ─────────────────
+
+/// GF-5 regression: cancel_plan on a plan in state "paused" with NO live
+/// ActiveRun must transition the DB to "cancelled" directly, not silently
+/// no-op. The old code only signalled the cancel token (which has no receiver
+/// when the executor's ActiveRunGuard has already dropped).
+#[tokio::test]
+async fn gf5_cancel_paused_plan_transitions_db_directly() {
+    let (db, _bus) = setup().await;
+    let plan_id = "p-gf5-cancel-paused";
+    insert_approved_plan_with_items(&db, plan_id, 3).await;
+
+    // Simulate a plan that reached "paused": CAS to applying (creates run
+    // row), then pause_run (sets terminal_state=paused on that run).
+    apply_repo::cas_approved_to_applying(db.pool(), plan_id, "run-gf5", "test-token", 3, 3)
+        .await
+        .unwrap();
+    apply_repo::pause_run(db.pool(), plan_id, "run-gf5", "item.stale", 0, 0, 0, 0, 3)
+        .await
+        .unwrap();
+
+    // Crucially, do NOT register an ActiveRun in the process-global registry.
+    // This mirrors the real state: executor's ActiveRunGuard dropped on pause.
+
+    let response = cancel_plan(db.pool(), plan_id).await.unwrap();
+    assert_eq!(response.plan_id, plan_id);
+    assert_eq!(response.items_cancelled, 3);
+
+    // The plan must now be in state "cancelled" in the DB.
+    let row = repo::get_plan(db.pool(), plan_id, false).await.unwrap();
+    assert_eq!(row.state, "cancelled", "paused plan must transition to cancelled in DB");
+}
+
+// ── GF-29: skip_plan_item rejects when no active run ─────────────────────────
+
+/// GF-29 regression: skip_plan_item on a plan that is "applying" in DB but
+/// has NO live ActiveRun registered must return run.not_found, not fabricate
+/// a success response with new_state=skipped.
+#[tokio::test]
+async fn gf29_skip_plan_item_rejects_when_no_active_run() {
+    let (db, _bus) = setup().await;
+    let plan_id = "p-gf29-skip-no-run";
+    insert_approved_plan_with_items(&db, plan_id, 1).await;
+
+    // Set plan to "applying" in DB without registering an ActiveRun.
+    sqlx::query("UPDATE plans SET state = 'applying' WHERE id = ?")
+        .bind(plan_id)
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+    let err = skip_plan_item(db.pool(), plan_id, &format!("{plan_id}-item-0")).await.unwrap_err();
+    assert_eq!(
+        err.code,
+        ErrorCode::RunNotFound,
+        "skip with no ActiveRun must return run.not_found, not fabricate success"
+    );
+}
