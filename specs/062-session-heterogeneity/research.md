@@ -24,26 +24,26 @@ Repository evidence at HEAD establishes these constraints:
 - `acquisition_session.frame_ids` and `calibration_session.frame_ids` are JSON
   arrays. `project_sources` is a mutable relational exact-session link, not an
   immutable project-membership revision
-  (`crates/persistence/db/migrations/0002_lifecycle.sql:53`,
-  `crates/persistence/db/migrations/0018_projects.sql:35`).
+  (`crates/persistence/core/migrations/0002_lifecycle.sql:53`,
+  `crates/persistence/core/migrations/0018_projects.sql:35`).
 - The framing model mutates one `framing` row and one live membership join.
   Deleting or reassigning membership loses the accepted topology that preceded
-  it (`crates/persistence/db/migrations/0064_framing.sql:29`,
-  `crates/persistence/db/src/repositories/framing.rs:168`).
+  it (`crates/persistence/core/migrations/0064_framing.sql:29`,
+  `crates/persistence/core/src/repositories/framing.rs:168`).
 - Registered cameras, telescopes, and optical trains have stable IDs. Camera
   aliases are stored as JSON and resolved with exact alias values
-  (`crates/persistence/db/migrations/0007_equipment.sql:12`,
-  `crates/persistence/db/src/repositories/equipment.rs:245`).
+  (`crates/persistence/core/migrations/0007_equipment.sql:12`,
+  `crates/persistence/core/src/repositories/equipment.rs:245`).
 - Calibration fingerprints store nullable scalar metadata and support dark,
-  flat, and bias (`crates/persistence/db/migrations/0023_calibration_fingerprints.sql:14`).
+  flat, and bias (`crates/persistence/core/migrations/0023_calibration_fingerprints.sql:14`).
 - Dark-flat is reserved in domain and contract enums, but it remains reachable
   in Inbox classification, grouping, override, and display helpers
   (`crates/metadata/core/src/lib.rs:24`,
   `crates/app/inbox/src/grouping/config.rs:66`,
   `apps/desktop/src/features/inbox/planPanelHelpers.ts:47`).
 - SQLite runs in WAL mode with a five-second writer timeout
-  (`crates/persistence/db/src/lib.rs:32`,
-  `crates/persistence/db/src/lib.rs:79`).
+  (`crates/persistence/core/src/lib.rs:32`,
+  `crates/persistence/core/src/lib.rs:79`).
 - The workspace uses `skymath` 0.5 and `target-match` 0.4. The targeting layer
   already delegates spherical separation, optics-to-field conversion, and
   rotation-aware point containment to them
@@ -169,10 +169,10 @@ scoped to that optical profile. It is not a global `filters.id`.
 
 - The existing metadata table has one nullable column per known field but no
   durable mapping from capture software to field meaning
-  (`crates/persistence/db/migrations/0049_inbox_single_type.sql:222`).
+  (`crates/persistence/core/migrations/0049_inbox_single_type.sql:222`).
 - The registered-equipment IDs provide stable anchors while aliases absorb
   capture-software spelling differences
-  (`crates/persistence/db/migrations/0007_equipment.sql:10`).
+  (`crates/persistence/core/migrations/0007_equipment.sql:10`).
 - Explicit value states preserve the specification's absent-versus-known
   matching rules.
 
@@ -238,7 +238,7 @@ this feature; selection hands exact source sessions to the external processor.
   (`crates/calibration/core/src/rules/bias.rs:16`).
 - Existing fingerprints lack separate X/Y binning, readout state, raster,
   cooling mode, distributions, and policy provenance
-  (`crates/persistence/db/migrations/0023_calibration_fingerprints.sql:14`).
+  (`crates/persistence/core/migrations/0023_calibration_fingerprints.sql:14`).
 
 ## D5 — Dark-flat detection terminates before Inbox materialization
 
@@ -309,7 +309,7 @@ configuration hash changes.
 - Lineage writes check for cycles before accepting a split or merge.
 - Existing `framing` and `framing_session` data need no compatibility bridge
   because the feature assumes resettable development databases
-  (`crates/persistence/db/migrations/0064_framing.sql:58`).
+  (`crates/persistence/core/migrations/0064_framing.sql:58`).
 
 ## D7 — Normalized SQLite remains the topology store
 
@@ -329,7 +329,7 @@ Acceptance follows one transaction protocol:
 
 `BEGIN IMMEDIATE` makes the stale-head race deterministic. WAL still permits
 readers while SQLite serializes the competing writers. The repository already
-tests this locking behavior (`crates/persistence/db/tests/two_writer_contention.rs:75`).
+tests this locking behavior (`crates/persistence/core/tests/two_writer_contention.rs:75`).
 
 Use recursive CTEs for bounded ancestry, descendants, accepted mosaic
 connectivity, bridge detection, and cycle checks. Every recursive query is
@@ -366,7 +366,7 @@ delivery mechanism.
 **Consequences**:
 
 - Add one forward migration. Do not edit applied migration files; the migration
-  runner validates embedded checksums (`crates/persistence/db/src/lib.rs:168`).
+  runner validates embedded checksums (`crates/persistence/core/src/lib.rs:168`).
 - Writer-lock wait is measured separately from acceptance execution time.
 - The scale gate must prove the CTE plans with `EXPLAIN QUERY PLAN` and realistic
   cardinalities before any closure table or graph accelerator is considered.
@@ -523,7 +523,7 @@ not delete or reinterpret the predecessor's historical entries.
 - Exact pins prevent background relation changes from altering processing
   inputs.
 - Prepared views demonstrate the existing reproducible per-item projection
-  boundary (`crates/persistence/db/migrations/0029_prepared_source_views.sql:86`).
+  boundary (`crates/persistence/core/migrations/0029_prepared_source_views.sql:86`).
 - Extension tables preserve one executor and one set of filesystem safety
   semantics.
 

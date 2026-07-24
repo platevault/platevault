@@ -35,14 +35,14 @@ Run the existing persistence suite first:
 
 ```bash
 # Available
-cargo nextest run -p persistence_db
+cargo nextest run -p persistence_core
 ```
 
 Add a focused migration target and run it against a new file-backed database:
 
 ```bash
-# Requires implementation: crates/persistence/db/tests/session_heterogeneity_migration.rs
-cargo nextest run -p persistence_db --test session_heterogeneity_migration
+# Requires implementation: crates/persistence/core/tests/session_heterogeneity_migration.rs
+cargo nextest run -p persistence_core --test session_heterogeneity_migration
 ```
 
 The focused target must prove:
@@ -124,7 +124,7 @@ Add and run focused file-backed SQLite targets:
 cargo nextest run -p app_core_inbox --test session_heterogeneity
 cargo nextest run -p app_core_projects --test related_session_addition
 cargo nextest run -p app_core_calibration --test immutable_calibration_matching
-cargo nextest run -p persistence_db --test session_topology_concurrency
+cargo nextest run -p persistence_core --test session_topology_concurrency
 ```
 
 Each target must create a temporary SQLite file, run the real migration chain,
@@ -307,8 +307,8 @@ The scale fixture must use a file-backed SQLite database in release mode.
 It must not use an in-memory database, mocked repository, or reduced row count.
 
 ```bash
-# Requires implementation: crates/persistence/db/tests/session_topology_scale.rs
-cargo test -p persistence_db \
+# Requires implementation: crates/persistence/core/tests/session_topology_scale.rs
+cargo test -p persistence_core \
   --release \
   --test session_topology_scale \
   -- \
