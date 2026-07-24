@@ -228,9 +228,7 @@ pub async fn get_accepted_metadata_resolution(
     .bind(session_row_id)
     .fetch_optional(pool)
     .await?
-    .ok_or_else(|| {
-        DbError::NotFound(format!("metadata resolution for session {session_row_id}"))
-    })
+    .ok_or_else(|| DbError::NotFound(format!("metadata resolution for session {session_row_id}")))
 }
 
 /// Return all pinned frame evidence rows for a metadata resolution revision.

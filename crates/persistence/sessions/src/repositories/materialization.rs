@@ -304,5 +304,7 @@ pub async fn get_result_snapshot_by_operation_public_id(
     .bind(operation_public_id)
     .fetch_optional(pool)
     .await?
-    .ok_or_else(|| DbError::NotFound(format!("result snapshot for operation {operation_public_id}")))
+    .ok_or_else(|| {
+        DbError::NotFound(format!("result snapshot for operation {operation_public_id}"))
+    })
 }

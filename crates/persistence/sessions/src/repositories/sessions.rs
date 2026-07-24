@@ -245,10 +245,7 @@ pub async fn insert_light_session_identity(
 ///
 /// Returns [`DbError::NotFound`] if no matching row exists, or
 /// [`DbError::Database`] on SQL errors.
-pub async fn get_session_by_public_id(
-    pool: &SqlitePool,
-    public_id: &str,
-) -> DbResult<SessionRow> {
+pub async fn get_session_by_public_id(pool: &SqlitePool, public_id: &str) -> DbResult<SessionRow> {
     sqlx::query_as::<_, SessionRow>(
         "SELECT row_id, public_id, materialization_operation_row_id, kind,
                 ordinal_in_operation, identity_digest, observing_night_date,

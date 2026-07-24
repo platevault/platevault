@@ -7,7 +7,6 @@
 //! Fixture helpers insert the minimal rows required to satisfy FK constraints.
 
 use persistence_core::test_support::setup_db;
-use sqlx::Acquire;
 use persistence_sessions::{
     repositories::{
         equipment_resolution::{
@@ -40,6 +39,7 @@ use persistence_sessions::{
     },
     test_support::{seed_frame, seed_operation_fixtures},
 };
+use sqlx::Acquire;
 
 // ── Session insert and fetch ──────────────────────────────────────────────────
 
@@ -719,10 +719,7 @@ async fn supersession_cycle_detection_rejects_cycle() {
     let mut conn2 = db.pool().acquire().await.unwrap();
     let mut tx2 = conn2.begin().await.unwrap();
     let cycle_result = assert_no_supersession_cycle(&mut tx2, s2, s1).await;
-    assert!(
-        cycle_result.is_err(),
-        "proposing s2→s1 when s1→s2 exists should detect a cycle"
-    );
+    assert!(cycle_result.is_err(), "proposing s2→s1 when s1→s2 exists should detect a cycle");
     tx2.rollback().await.unwrap();
 }
 
@@ -1247,17 +1244,18 @@ async fn materialization_operation_lifecycle_and_result_snapshot() {
 
     tx3.commit().await.unwrap();
 
-    let op_applied =
-        get_operation_by_public_id(db.pool(), "00000000-0000-7000-g001-000000000001")
-            .await
-            .unwrap();
+    let op_applied = get_operation_by_public_id(db.pool(), "00000000-0000-7000-g001-000000000001")
+        .await
+        .unwrap();
     assert_eq!(op_applied.state, "applied");
     assert_eq!(op_applied.session_count, Some(2));
 
-    let snapshot =
-        get_result_snapshot_by_operation_public_id(db.pool(), "00000000-0000-7000-g001-000000000001")
-            .await
-            .unwrap();
+    let snapshot = get_result_snapshot_by_operation_public_id(
+        db.pool(),
+        "00000000-0000-7000-g001-000000000001",
+    )
+    .await
+    .unwrap();
     assert_eq!(snapshot.session_count, 2);
     assert_eq!(snapshot.canonical_digest, "result-digest-g");
 }
@@ -1308,15 +1306,9 @@ async fn operation_failed_transition() {
 
     let mut conn3 = db.pool().acquire().await.unwrap();
     let mut tx3 = conn3.begin().await.unwrap();
-    transition_operation_to_failed(
-        &mut tx3,
-        op_id,
-        1,
-        "io_error",
-        "2026-07-22T00:00:05.000000Z",
-    )
-    .await
-    .unwrap();
+    transition_operation_to_failed(&mut tx3, op_id, 1, "io_error", "2026-07-22T00:00:05.000000Z")
+        .await
+        .unwrap();
     tx3.commit().await.unwrap();
 
     let op = get_operation_by_public_id(db.pool(), "00000000-0000-7000-h001-000000000001")
@@ -1341,7 +1333,9 @@ async fn stale_operation_cas_is_rejected() {
     let mut conn = db.pool().acquire().await.unwrap();
     let mut tx = conn.begin().await.unwrap();
     // Wrong state_version
-    let stale = transition_operation_to_applying(&mut tx, op.row_id, 99, "2026-07-22T00:00:10.000000Z").await;
+    let stale =
+        transition_operation_to_applying(&mut tx, op.row_id, 99, "2026-07-22T00:00:10.000000Z")
+            .await;
     assert!(stale.is_err(), "wrong state_version must be rejected");
     tx.rollback().await.unwrap();
 }

@@ -223,7 +223,5 @@ pub async fn get_accepted_equipment_resolution(
     .bind(session_row_id)
     .fetch_optional(pool)
     .await?
-    .ok_or_else(|| {
-        DbError::NotFound(format!("equipment resolution for session {session_row_id}"))
-    })
+    .ok_or_else(|| DbError::NotFound(format!("equipment resolution for session {session_row_id}")))
 }

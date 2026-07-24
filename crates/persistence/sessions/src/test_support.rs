@@ -77,7 +77,7 @@ pub async fn seed_operation_fixtures(pool: &SqlitePool) {
 /// Panics on any SQL failure.
 pub async fn seed_frame(pool: &SqlitePool, offset: i64) {
     sqlx::query(
-        "INSERT INTO spec062_file_identity VALUES (?, ?, NULL, '2026-07-22T00:00:00.000000Z')"
+        "INSERT INTO spec062_file_identity VALUES (?, ?, NULL, '2026-07-22T00:00:00.000000Z')",
     )
     .bind(offset)
     .bind(format!("00000000-0000-7000-a000-{offset:012}"))
