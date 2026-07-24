@@ -32,6 +32,8 @@
 //! (Ref: R-PlanOpen) as the expected degraded-mode behaviour.
 #![allow(clippy::doc_markdown)]
 
+use std::sync::Arc;
+
 use audit::bus::EventBus;
 use audit::event_bus::{
     PlanApplyingCompleted, PlanDiscarded, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_DISCARDED,
@@ -45,9 +47,30 @@ use sqlx::SqlitePool;
 use targeting_resolver::simbad::ResolveCache;
 use tokio::sync::{broadcast, Mutex};
 
-/// Serializes applied-plan side effects shared by the event listener and repair
-/// sweep. Both can observe the same plan link before either path removes it.
-static PLAN_COMPLETION_LOCK: Mutex<()> = Mutex::const_new(());
+/// Per-plan keyed lock serializing applied-plan side effects between the event
+/// listener and repair sweep. Both can observe the same plan link before either
+/// path removes it — a global Mutex previously serialized ALL plan completions,
+/// blocking unrelated plans (GF-31). The DashMap key is the plan_id; each entry
+/// holds a Mutex guarding that plan's completion path only.
+///
+/// # Bounded growth justification
+///
+/// This map grows by one entry per distinct plan_id that completes while the
+/// app is running. On a desktop client, inbox ingestion plans are created and
+/// completed one at a time; the steady-state count matches the number of plans
+/// applied in a session, not the historical total (entries persist for the
+/// process lifetime, not the DB lifetime). A session processing thousands of
+/// plans is not a realistic desktop workload, so the unbounded map is acceptable
+/// without an eviction path. If multi-session or high-volume use cases emerge,
+/// add eviction after `complete_applied_plan` returns, guarded by a strong-count
+/// check (`Arc::strong_count == 1` confirms no concurrent holder remains).
+static PLAN_COMPLETION_LOCKS: std::sync::OnceLock<dashmap::DashMap<String, Arc<Mutex<()>>>> =
+    std::sync::OnceLock::new();
+
+fn plan_completion_lock(plan_id: &str) -> Arc<Mutex<()>> {
+    let map = PLAN_COMPLETION_LOCKS.get_or_init(dashmap::DashMap::new);
+    map.entry(plan_id.to_owned()).or_insert_with(|| Arc::new(Mutex::const_new(()))).clone()
+}
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -194,7 +217,8 @@ pub(crate) async fn complete_applied_plan(
     resolve_cache: &ResolveCache,
     plan_id: &str,
 ) -> Result<(), String> {
-    let _completion_guard = PLAN_COMPLETION_LOCK.lock().await;
+    let lock = plan_completion_lock(plan_id);
+    let _completion_guard = lock.lock().await;
 
     // spec 041 US4/T032: master registration is relocated here from the old
     // confirm-time fast path. When the applied plan belongs to a detected

@@ -322,13 +322,35 @@ pub(super) fn spawn_executor_run(params: SpawnExecutorParams) {
         // Compute terminal state and persist.
         match outcome {
             ApplyOutcome::Completed(counts) => {
+                let at = Timestamp::now_iso();
+
+                // GFD-2: Sweep items orphaned `applying` by a mid-run retry
+                // whose DB flip landed but whose re-execution never got picked
+                // up before the run completed (symmetric with the Cancelled
+                // path's identical sweep). Without this, a retry_plan_item call
+                // racing with run completion leaves the item permanently stuck
+                // in `applying` with no terminal audit record.
+                match apply_repo::cancel_orphaned_applying_items(&pool, &plan_id).await {
+                    Ok(orphaned_ids) => {
+                        for item_id in &orphaned_ids {
+                            audit_item_cancelled(
+                                &pool, &bus, &run_id, &plan_id, item_id, "applying", &at,
+                            )
+                            .await;
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!(error=%e, "failed to sweep orphaned applying items on completion");
+                    }
+                }
+
                 // `counts` covers only the items processed in THIS segment.
                 // After a resume (issue #575), that undercounts a prior
                 // pre-pause phase — use the plan's cumulative counters
-                // instead (see `cumulative_counts`).
+                // instead (see `cumulative_counts`). Fetched AFTER the orphan
+                // sweep above so swept items are included.
                 let counts = cumulative_counts(&pool, &plan_id, &counts).await;
                 let terminal = counts.terminal_state(false).to_owned();
-                let at = Timestamp::now_iso();
 
                 // Spec 017 C5: on a fully-applied archive plan, drive the owning
                 // project into `archived` (the legitimate requires-plan closure).

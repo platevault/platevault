@@ -30,6 +30,7 @@ sessions = { path = "../../sessions" }
 targeting = { path = "../../targeting" }
 targeting_resolver = { path = "../../targeting/resolver" }
 camino = { workspace = true }
+dashmap = { workspace = true }
 hex.workspace = true
 serde = { workspace = true }
 serde_json.workspace = true

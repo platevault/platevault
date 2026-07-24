@@ -1,10 +1,11 @@
 use super::{
-    active_runs, apply_repo, bus_err, check_overlap_and_register, compute_plan_path_set, db_err,
-    item_row_to_executor_item, new_id, plans_repo, resolve_root_path, spawn_executor_run,
-    ActiveRun, CancellationToken, CasSnapshot, ContractError, ErrorCode, ErrorSeverity, EventBus,
-    ExecutorItem, HashMap, PlanApplyStatus, PlanApplyingResumed, PlanCancelResponse,
-    PlanItemRetryResponse, PlanItemSkipResponse, PlanResumeResponse, RetryQueue, SkipSet, Source,
-    SpawnExecutorParams, SqlitePool, Timestamp, Utf8Path, Utf8PathBuf, TOPIC_PLAN_APPLYING_RESUMED,
+    active_runs, apply_repo, audit_item_cancelled, bus_err, check_overlap_and_register,
+    compute_plan_path_set, db_err, item_row_to_executor_item, new_id, plans_repo,
+    resolve_root_path, spawn_executor_run, ActiveRun, CancellationToken, CasSnapshot,
+    ContractError, ErrorCode, ErrorSeverity, EventBus, ExecutorItem, HashMap, PlanApplyStatus,
+    PlanApplyingResumed, PlanCancelResponse, PlanItemRetryResponse, PlanItemSkipResponse,
+    PlanResumeResponse, RetryQueue, SkipSet, Source, SpawnExecutorParams, SqlitePool, Timestamp,
+    Utf8Path, Utf8PathBuf, TOPIC_PLAN_APPLYING_RESUMED,
 };
 
 // ── startup sweep ────────────────────────────────────────────────────────────
@@ -37,12 +38,17 @@ pub async fn sweep_crashed_applying_plans(
 /// and stops. Remaining pending items are transitioned to `cancelled` by
 /// the executor's background task after it observes the cancel signal.
 ///
+/// When the plan is `paused` (no live executor), transitions DB state
+/// directly and emits per-item audit rows matching the executor's Cancelled
+/// path (GF-5).
+///
 /// # Errors
 ///
 /// - `plan.not_found` — plan not found.
 /// - `plan.not_in_apply` — plan is not in applying or paused state.
 pub async fn cancel_plan(
     pool: &SqlitePool,
+    bus: &EventBus,
     plan_id: &str,
 ) -> Result<PlanCancelResponse, ContractError> {
     let plan_row = plans_repo::get_plan(pool, plan_id, false).await.map_err(db_err)?;
@@ -59,14 +65,86 @@ pub async fn cancel_plan(
         ));
     }
 
-    // Signal cancellation to the running executor.
-    {
+    // Signal cancellation to the running executor (if one is live).
+    let has_active_run = {
         let registry = active_runs();
-        if let Some(run) = registry.get(plan_id) {
+        let entry = registry.get(plan_id);
+        if let Some(ref run) = entry {
             run.cancel_token.cancel();
-            drop(run);
         }
-        drop(registry);
+        let found = entry.is_some();
+        drop(entry);
+        found
+    };
+
+    // GF-5: A paused plan has no live ActiveRun (the executor's guard dropped
+    // it when it returned Paused). Without a running executor, nothing will
+    // ever observe the cancel token — transition DB state directly and emit
+    // per-item audit rows matching the executor's Cancelled path.
+    if !has_active_run && plan_row.state == "paused" {
+        let at = Timestamp::now_iso();
+        let run_id = apply_repo::get_active_run(pool, plan_id)
+            .await
+            .ok()
+            .flatten()
+            .map_or_else(|| "unknown".to_owned(), |r| r.id);
+
+        // Emit audit rows for pending items before batch-cancelling them so
+        // the per-item prior_state is "pending" (matches Cancelled executor
+        // path). Mirror apply.rs's Cancelled outcome: list → batch-cancel →
+        // per-item audit, with a single retry on list failure.
+        let pending_ids = match apply_repo::list_pending_items(pool, plan_id).await {
+            Ok(ids) => ids,
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "paused-cancel: list_pending_items failed; retrying once"
+                );
+                apply_repo::list_pending_items(pool, plan_id).await.unwrap_or_default()
+            }
+        };
+        if let Err(e) = apply_repo::batch_cancel_pending_items(pool, plan_id).await {
+            tracing::error!(error = %e, "paused-cancel: batch_cancel_pending_items failed");
+        }
+        for item_id in &pending_ids {
+            audit_item_cancelled(pool, bus, &run_id, plan_id, item_id, "pending", &at).await;
+        }
+
+        // Sweep orphaned applying items (from retry_plan_item during pause).
+        match apply_repo::cancel_orphaned_applying_items(pool, plan_id).await {
+            Ok(orphaned) => {
+                for item_id in &orphaned {
+                    audit_item_cancelled(pool, bus, &run_id, plan_id, item_id, "applying", &at)
+                        .await;
+                }
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "paused-cancel: cancel_orphaned_applying_items failed");
+            }
+        }
+
+        // Transition plan state to cancelled (TIER-1 durability write).
+        if let Err(e) = apply_repo::complete_run(
+            pool,
+            plan_id,
+            &run_id,
+            "cancelled",
+            plan_row.items_applied,
+            plan_row.items_failed,
+            plan_row.items_skipped,
+            plan_row.items_pending + plan_row.items_cancelled,
+        )
+        .await
+        {
+            return Err(db_err(e));
+        }
+
+        return Ok(PlanCancelResponse {
+            plan_id: plan_id.to_owned(),
+            cancelled_at: at,
+            items_applied: plan_row.items_applied,
+            items_cancelled: plan_row.items_pending,
+        });
     }
 
     let cancelled_at = Timestamp::now_iso();
@@ -461,15 +539,21 @@ pub async fn skip_plan_item(
         ));
     }
 
-    // Inject into the executor's skip set.
-    {
-        let registry = active_runs();
-        if let Some(run) = registry.get(plan_id) {
-            run.skip_set.insert(item_id);
-            drop(run);
-        }
-        drop(registry);
-    }
+    // GF-29: Require a live ActiveRun before injecting the skip — mirrors
+    // retry_plan_item's guard. Without this, a skip against a plan whose run
+    // already finished fabricates new_state=skipped with nothing to execute it.
+    let registry = active_runs();
+    let run_ref = registry.get(plan_id).ok_or_else(|| {
+        ContractError::new(
+            ErrorCode::RunNotFound,
+            format!("no active run found for plan {plan_id}; the run may have already finished"),
+            ErrorSeverity::Blocking,
+            false,
+        )
+    })?;
+    run_ref.skip_set.insert(item_id);
+    drop(run_ref);
+    drop(registry);
 
     Ok(PlanItemSkipResponse { item_id: item_id.to_owned(), new_state: "skipped".to_owned() })
 }

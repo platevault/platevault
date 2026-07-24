@@ -389,3 +389,4 @@ apps/desktop/.ds-css/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+crates/app/core/projects/

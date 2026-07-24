@@ -314,18 +314,23 @@ pub(super) fn item_row_to_executor_item(
 // archive item's `archive_path` (stored root-relative when `from_root_id`
 // is set) can be turned into a real filesystem path.
 pub async fn resolve_root_path(pool: &SqlitePool, root_id: &str) -> Option<String> {
-    match inventory_repo::get_library_root_path(pool, root_id).await {
-        Ok(Some(path)) => Some(path),
-        _ => {
-            if let Some(cached) = caches::library_root().get(&root_id.to_owned()) {
-                Some(cached)
-            } else {
-                let loaded = first_run_repo::get_source_path(pool, root_id).await.ok().flatten();
-                if let Some(path) = &loaded {
-                    caches::library_root().insert(root_id.to_owned(), path.clone());
-                }
-                loaded
-            }
+    if let Ok(Some(path)) = inventory_repo::get_library_root_path(pool, root_id).await {
+        return Some(path);
+    }
+
+    let key = root_id.to_owned();
+    if let Some(cached) = caches::library_root().get(&key) {
+        return Some(cached);
+    }
+
+    let loaded = first_run_repo::get_source_path(pool, root_id).await.ok().flatten();
+    if let Some(path) = &loaded {
+        // GFD-3: Re-check cache before insert — another concurrent caller may
+        // have populated it while we were loading. The get_or_insert_with API
+        // is sync-only so we guard manually.
+        if caches::library_root().get(&key).is_none() {
+            caches::library_root().insert(key, path.clone());
         }
     }
+    loaded
 }
