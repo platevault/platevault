@@ -161,6 +161,7 @@ font-weight: var(--pv-weight-medium);
   background: var(--pv-bg); color: var(--pv-text-secondary);
 }
 .pv-radio:hover { border-color: var(--pv-ink3); }
+.pv-radio:focus-visible { outline: 2px solid transparent; box-shadow: var(--pv-focus-ring); }
 .pv-radio--active,
 .pv-radio[data-checked] {
   border-color: var(--pv-accent); background: var(--pv-accent-bg);

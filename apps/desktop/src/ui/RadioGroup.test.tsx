@@ -8,10 +8,17 @@
  * plain-<button> implementation that lacked role, aria-checked, and roving focus.
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useState } from 'react';
 import { RadioGroup, type RadioOption } from './RadioGroup';
+
+const settingsCss = readFileSync(
+  resolve(process.cwd(), 'src/styles/components/settings.css'),
+  'utf8',
+);
 
 const OPTIONS: RadioOption[] = [
   { value: 'archive', label: 'Archive' },
@@ -155,5 +162,13 @@ describe('RadioGroup a11y', () => {
       'button[type="submit"], button:not([type])',
     );
     expect(buttons.length).toBe(0);
+  });
+
+  it('declares a focus-visible ring on .pv-radio matching the shared token', () => {
+    const focusRule = settingsCss.match(
+      /\.pv-radio:focus-visible\s*\{([^}]*)\}/,
+    )?.[1];
+    expect(focusRule).toContain('box-shadow: var(--pv-focus-ring)');
+    expect(focusRule).toContain('outline: 2px solid transparent');
   });
 });
