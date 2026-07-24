@@ -881,7 +881,32 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
     )
     .await?;
 
-    let before = measure_pinned_columns(&app).await?;
+    // Poll until the side dock has fully settled at its pinned width so the
+    // table overflows enough for the sticky-column assertion to be meaningful.
+    //
+    // The side-dock `useAdaptiveDock` reads its width from localStorage on
+    // first render, but the flex layout can transiently report a narrower
+    // `clientWidth` while the CSS variable and resize observer settle after a
+    // SPA navigation + WebKit relayout. Observed on Ubuntu CI: consistently
+    // producing clientWidth=880 (dock at ~300px) for up to a few seconds
+    // before the correct 420px-dock geometry stabilises (clientWidth≈760).
+    // Polling rather than sleeping caps wait time on fast runners.
+    let before = {
+        const DOCK_SETTLE_TIMEOUT: Duration = Duration::from_secs(10);
+        let deadline = tokio::time::Instant::now() + DOCK_SETTLE_TIMEOUT;
+        let mut last = measure_pinned_columns(&app).await?;
+        loop {
+            let overflow = px(&last, "scrollWidth")? - px(&last, "clientWidth")?;
+            if overflow >= MIN_SCROLL {
+                break last;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                break last; // let the assertion below produce the diagnostic
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            last = measure_pinned_columns(&app).await?;
+        }
+    };
     let overflow = px(&before, "scrollWidth")? - px(&before, "clientWidth")?;
     anyhow::ensure!(
         overflow >= MIN_SCROLL,
