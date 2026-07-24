@@ -44,8 +44,7 @@ async fn seed_basics(pool: &SqlitePool) -> (i64, i64, i64, i64) {
     let actor_id = support::insert_actor(pool, &uuid()).await;
     let cfg_id = support::insert_config_revision(pool, &uuid(), 1).await;
     let cmd_id = support::insert_command(pool, &uuid(), actor_id).await;
-    let op_id =
-        support::insert_materialization_operation(pool, &uuid(), cmd_id, cfg_id, seq).await;
+    let op_id = support::insert_materialization_operation(pool, &uuid(), cmd_id, cfg_id, seq).await;
     let target_id = support::insert_spec062_target(pool, &uuid()).await;
     (actor_id, cfg_id, op_id, target_id)
 }
@@ -59,10 +58,8 @@ async fn singleton_panel_group_created_with_generation_zero() {
     let (actor_id, cfg_id, op_id, target_id) = seed_basics(pool).await;
     let seq = support::insert_sequence(pool).await;
 
-    let (session_row_id, _) = support::insert_light_session(
-        pool, &uuid(), &uuid(), op_id, target_id, seq, 0,
-    )
-    .await;
+    let (session_row_id, _) =
+        support::insert_light_session(pool, &uuid(), &uuid(), op_id, target_id, seq, 0).await;
 
     let group_pub = uuid();
     let rev_pub = uuid();
@@ -147,7 +144,8 @@ async fn append_panel_revision_cas_winner_advances_head() {
     .unwrap();
     tx.commit().await.unwrap();
 
-    let proposal_id = support::insert_pending_proposal(pool, &uuid(), "panel_add", cfg_id, seq).await;
+    let proposal_id =
+        support::insert_pending_proposal(pool, &uuid(), "panel_add", cfg_id, seq).await;
 
     // Append a successor revision.
     let seq2 = support::insert_sequence(pool).await;
@@ -222,7 +220,8 @@ async fn append_panel_revision_cas_loser_gets_conflict_error() {
     .unwrap();
     tx.commit().await.unwrap();
 
-    let proposal_id = support::insert_pending_proposal(pool, &uuid(), "panel_add", cfg_id, seq).await;
+    let proposal_id =
+        support::insert_pending_proposal(pool, &uuid(), "panel_add", cfg_id, seq).await;
 
     // Winner advances head to generation 1.
     let seq2 = support::insert_sequence(pool).await;
@@ -256,7 +255,8 @@ async fn append_panel_revision_cas_loser_gets_conflict_error() {
     // writer at INSERT time, before the CAS UPDATE runs. Both a DB unique
     // constraint error and CasFailed are valid concurrent-write rejections.
     let rev3_pub = uuid();
-    let proposal2_id = support::insert_pending_proposal(pool, &uuid(), "panel_add", cfg_id, seq2).await;
+    let proposal2_id =
+        support::insert_pending_proposal(pool, &uuid(), "panel_add", cfg_id, seq2).await;
     let mut conn3 = pool.acquire().await.unwrap();
     let mut tx3 = conn3.begin().await.unwrap();
     let result = panels::append_panel_revision(
@@ -339,7 +339,8 @@ async fn retire_panel_group_cas_refuses_stale_generation() {
     .unwrap();
     tx2.commit().await.unwrap();
 
-    let proposal_id = support::insert_pending_proposal(pool, &uuid(), "panel_merge", cfg_id, seq).await;
+    let proposal_id =
+        support::insert_pending_proposal(pool, &uuid(), "panel_merge", cfg_id, seq).await;
 
     // Attempt to retire with wrong generation (1 instead of 0).
     let mut conn3 = pool.acquire().await.unwrap();
@@ -358,10 +359,7 @@ async fn retire_panel_group_cas_refuses_stale_generation() {
         },
     )
     .await;
-    assert!(
-        matches!(result, Err(DbError::CasFailed(_))),
-        "expected Conflict, got {result:?}"
-    );
+    assert!(matches!(result, Err(DbError::CasFailed(_))), "expected Conflict, got {result:?}");
 }
 
 // ── 4. Lineage cycle detection ────────────────────────────────────────────────
@@ -373,8 +371,10 @@ async fn lineage_cycle_detection_rejects_direct_cycle() {
     let (actor_id, cfg_id, op_id, target_id) = seed_basics(pool).await;
     let seq = support::insert_sequence(pool).await;
 
-    let (s1, _) = support::insert_light_session(pool, &uuid(), &uuid(), op_id, target_id, seq, 0).await;
-    let (s2, _) = support::insert_light_session(pool, &uuid(), &uuid(), op_id, target_id, seq, 1).await;
+    let (s1, _) =
+        support::insert_light_session(pool, &uuid(), &uuid(), op_id, target_id, seq, 0).await;
+    let (s2, _) =
+        support::insert_light_session(pool, &uuid(), &uuid(), op_id, target_id, seq, 1).await;
 
     let g1_pub = uuid();
     let r1_pub = uuid();
@@ -418,7 +418,8 @@ async fn lineage_cycle_detection_rejects_direct_cycle() {
     .unwrap();
     tx2.commit().await.unwrap();
 
-    let proposal_id = support::insert_pending_proposal(pool, &uuid(), "panel_merge", cfg_id, seq).await;
+    let proposal_id =
+        support::insert_pending_proposal(pool, &uuid(), "panel_merge", cfg_id, seq).await;
 
     // Insert g1 → g2.
     let mut conn3 = pool.acquire().await.unwrap();
@@ -446,7 +447,8 @@ async fn lineage_cycle_detection_rejects_direct_cycle() {
     assert!(cycle, "direct cycle g2 → g1 should be detected");
 
     // No cycle for a fresh group.
-    let (s3, _) = support::insert_light_session(pool, &uuid(), &uuid(), op_id, target_id, seq, 2).await;
+    let (s3, _) =
+        support::insert_light_session(pool, &uuid(), &uuid(), op_id, target_id, seq, 2).await;
     let g3_pub = uuid();
     let r3_pub = uuid();
     let mut conn5 = pool.acquire().await.unwrap();
@@ -517,10 +519,7 @@ async fn proposal_accept_cas_refuses_concurrent_acceptor() {
     .unwrap();
 
     let (audit_row_id,): (i64,) =
-        sqlx::query_as("SELECT MAX(row_id) FROM audit_event")
-            .fetch_one(pool)
-            .await
-            .unwrap();
+        sqlx::query_as("SELECT MAX(row_id) FROM audit_event").fetch_one(pool).await.unwrap();
 
     // First acceptor succeeds.
     let snapshot1_pub = uuid();
@@ -629,9 +628,8 @@ async fn traversal_preview_completes_for_empty_graph() {
     // Poll until completed or timeout.
     let timeout = std::time::Instant::now() + Duration::from_secs(5);
     loop {
-        let state = persistence_topology::traversal::get_progress(&registry, op_id_uuid)
-            .await
-            .unwrap();
+        let state =
+            persistence_topology::traversal::get_progress(&registry, op_id_uuid).await.unwrap();
         if state.phase == persistence_topology::traversal::TraversalPhase::Completed {
             assert_eq!(state.visited_node_count, 1, "only the start node");
             assert_eq!(state.visited_edge_count, 0);
@@ -658,10 +656,9 @@ async fn traversal_node_ceiling_produces_ceiling_error() {
     // Build a chain of 4 groups: g1 → g2 → g3 → g4.
     let mut prev_group_row_id: Option<i64> = None;
     for i in 0..4u64 {
-        let (s, _) = support::insert_light_session(
-            &pool, &uuid(), &uuid(), op_id, target_id, seq, i as i64,
-        )
-        .await;
+        let (s, _) =
+            support::insert_light_session(&pool, &uuid(), &uuid(), op_id, target_id, seq, i as i64)
+                .await;
 
         let g_pub = uuid();
         let r_pub = uuid();
@@ -711,12 +708,11 @@ async fn traversal_node_ceiling_produces_ceiling_error() {
 
     // Traverse with node ceiling = 2 — should hit the ceiling at node 3.
     let start_group_id = {
-        let (id, pub_id): (i64, String) = sqlx::query_as(
-            "SELECT row_id, public_id FROM panel_group ORDER BY row_id ASC LIMIT 1",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let (id, pub_id): (i64, String) =
+            sqlx::query_as("SELECT row_id, public_id FROM panel_group ORDER BY row_id ASC LIMIT 1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         persistence_topology::traversal::EntityRef {
             entity_type: "panel_group",
             entity_id: pub_id,
@@ -731,20 +727,15 @@ async fn traversal_node_ceiling_produces_ceiling_error() {
         vec![start_group_id],
         TraversalGraph::PanelLineage,
         TraversalDirection::Successors,
-        TraversalLimits {
-            max_nodes: 2,
-            max_depth: 64,
-            max_edges: 1_000,
-        },
+        TraversalLimits { max_nodes: 2, max_depth: 64, max_edges: 1_000 },
     )
     .await
     .unwrap();
 
     let timeout = std::time::Instant::now() + Duration::from_secs(5);
     loop {
-        let state = persistence_topology::traversal::get_progress(&registry, op_id_uuid)
-            .await
-            .unwrap();
+        let state =
+            persistence_topology::traversal::get_progress(&registry, op_id_uuid).await.unwrap();
         use persistence_topology::traversal::TraversalPhase;
         if state.phase == TraversalPhase::Failed {
             // Ceiling hit sets phase=Failed with NodeCeiling terminal error.
@@ -762,7 +753,10 @@ async fn traversal_node_ceiling_produces_ceiling_error() {
             panic!("traversal was cancelled instead of hitting the ceiling");
         }
         if state.phase == TraversalPhase::Completed {
-            panic!("traversal completed without ceiling error (visited {} nodes)", state.visited_node_count);
+            panic!(
+                "traversal completed without ceiling error (visited {} nodes)",
+                state.visited_node_count
+            );
         }
         if std::time::Instant::now() > timeout {
             panic!("traversal did not terminate within 5 seconds");
@@ -827,9 +821,8 @@ async fn traversal_cancel_reaches_terminal_within_one_second() {
 
     let cancel_deadline = std::time::Instant::now() + Duration::from_secs(1);
     loop {
-        let state = persistence_topology::traversal::get_progress(&registry, op_id_uuid)
-            .await
-            .unwrap();
+        let state =
+            persistence_topology::traversal::get_progress(&registry, op_id_uuid).await.unwrap();
         use persistence_topology::traversal::TraversalPhase;
         if state.phase == TraversalPhase::Cancelled {
             // Cancel sets Cancelled phase with no terminal_error.
@@ -894,9 +887,7 @@ async fn list_proposals_cursor_pages_past_non_null_cursor() {
     let mut conn = pool.acquire().await.unwrap();
 
     // Page 1: limit=2, no cursor — should return the two newest.
-    let page1 = list_proposals(&mut *conn, None, None, None, None, 2)
-        .await
-        .unwrap();
+    let page1 = list_proposals(&mut *conn, None, None, None, None, 2).await.unwrap();
     assert_eq!(page1.len(), 2, "page 1 should have 2 rows");
     assert_eq!(page1[0].created_at, "2026-07-22T00:00:03.000000Z");
     assert_eq!(page1[1].created_at, "2026-07-22T00:00:02.000000Z");
@@ -904,26 +895,17 @@ async fn list_proposals_cursor_pages_past_non_null_cursor() {
     // Page 2: cursor from last row of page 1.
     let after_created_at = page1[1].created_at.clone();
     let after_public_id = page1[1].public_id.clone();
-    let page2 = list_proposals(
-        &mut *conn,
-        None,
-        None,
-        Some(&after_created_at),
-        Some(&after_public_id),
-        2,
-    )
-    .await
-    .unwrap();
+    let page2 =
+        list_proposals(&mut *conn, None, None, Some(&after_created_at), Some(&after_public_id), 2)
+            .await
+            .unwrap();
     assert_eq!(page2.len(), 1, "page 2 should have 1 row");
     assert_eq!(page2[0].created_at, "2026-07-22T00:00:01.000000Z");
 
     // No overlap between pages.
     let page1_ids: std::collections::HashSet<_> =
         page1.iter().map(|r| r.public_id.clone()).collect();
-    assert!(
-        !page1_ids.contains(&page2[0].public_id),
-        "pages must not overlap"
-    );
+    assert!(!page1_ids.contains(&page2[0].public_id), "pages must not overlap");
 }
 
 // ── 10. Panel group list cursor pagination ────────────────────────────────────
@@ -944,16 +926,9 @@ async fn list_panel_groups_cursor_pages_past_non_null_cursor() {
     ];
     for (i, ts) in timestamps.iter().enumerate() {
         let seq = support::insert_sequence(pool).await;
-        let (session_row_id, _) = support::insert_light_session(
-            pool,
-            &uuid(),
-            &uuid(),
-            op_id,
-            target_id,
-            seq,
-            i as i64,
-        )
-        .await;
+        let (session_row_id, _) =
+            support::insert_light_session(pool, &uuid(), &uuid(), op_id, target_id, seq, i as i64)
+                .await;
 
         let g_pub = uuid();
         let r_pub = uuid();
@@ -1075,8 +1050,5 @@ async fn list_panel_groups_cursor_pages_past_non_null_cursor() {
     // No overlap.
     let page1_ids: std::collections::HashSet<_> =
         page1.iter().map(|r| r.public_id.clone()).collect();
-    assert!(
-        !page1_ids.contains(&page2[0].public_id),
-        "pages must not overlap"
-    );
+    assert!(!page1_ids.contains(&page2[0].public_id), "pages must not overlap");
 }

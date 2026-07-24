@@ -53,11 +53,7 @@ pub struct TraversalLimits {
 
 impl Default for TraversalLimits {
     fn default() -> Self {
-        Self {
-            max_depth: 64,
-            max_nodes: 10_000,
-            max_edges: 50_000,
-        }
+        Self { max_depth: 64, max_nodes: 10_000, max_edges: 50_000 }
     }
 }
 
@@ -88,9 +84,15 @@ pub struct TraversalNode {
 /// Terminal error type for traversal.
 #[derive(Clone, Debug)]
 pub enum TraversalError {
-    NodeCeiling { max_nodes: u64 },
-    EdgeCeiling { max_edges: u64 },
-    DepthCeiling { max_depth: u32 },
+    NodeCeiling {
+        max_nodes: u64,
+    },
+    EdgeCeiling {
+        max_edges: u64,
+    },
+    DepthCeiling {
+        max_depth: u32,
+    },
     /// Operation was cancelled by the caller; no partial result is available.
     Cancelled,
     DbError(String),
@@ -157,10 +159,11 @@ pub async fn start_traversal(
     // Capture the current read watermark.
     let watermark: i64 = {
         let mut conn = pool.acquire().await.map_err(|e| e.to_string())?;
-        let (seq,): (i64,) = sqlx::query_as("SELECT COALESCE(MAX(sequence), 0) FROM repository_change")
-            .fetch_one(&mut *conn)
-            .await
-            .map_err(|e| e.to_string())?;
+        let (seq,): (i64,) =
+            sqlx::query_as("SELECT COALESCE(MAX(sequence), 0) FROM repository_change")
+                .fetch_one(&mut *conn)
+                .await
+                .map_err(|e| e.to_string())?;
         seq
     };
 
@@ -183,18 +186,8 @@ pub async fn start_traversal(
     // Spawn the BFS task.
     let registry_clone = registry.clone();
     tokio::spawn(async move {
-        run_bfs(
-            pool,
-            operation_id,
-            watermark,
-            start_refs,
-            graph,
-            direction,
-            limits,
-            state,
-            cancel,
-        )
-        .await;
+        run_bfs(pool, operation_id, watermark, start_refs, graph, direction, limits, state, cancel)
+            .await;
         // The operation stays in the registry after completion so callers can
         // retrieve results. Expiry is handled by the caller.
         let _ = registry_clone; // keep alive
@@ -246,17 +239,8 @@ async fn run_bfs(
         s.phase = TraversalPhase::Running;
     }
 
-    match bfs_inner(
-        pool,
-        watermark,
-        start_refs,
-        graph,
-        direction,
-        limits,
-        state.clone(),
-        cancel,
-    )
-    .await
+    match bfs_inner(pool, watermark, start_refs, graph, direction, limits, state.clone(), cancel)
+        .await
     {
         Ok((nodes, edges)) => {
             let mut s = state.write().await;
@@ -300,10 +284,7 @@ async fn bfs_inner(
     state: Arc<RwLock<TraversalState>>,
     cancel: Arc<AtomicBool>,
 ) -> Result<(Vec<TraversalNode>, Vec<TraversalEdge>), TraversalError> {
-    let mut conn = pool
-        .acquire()
-        .await
-        .map_err(|e| TraversalError::DbError(e.to_string()))?;
+    let mut conn = pool.acquire().await.map_err(|e| TraversalError::DbError(e.to_string()))?;
 
     // Visited set: row_id → minimum depth.
     let mut visited: HashMap<i64, u32> = HashMap::new();
@@ -331,22 +312,14 @@ async fn bfs_inner(
         }
 
         // Fetch neighbours from DB.
-        let neighbours = fetch_neighbours(
-            &mut conn,
-            &current_ref,
-            &graph,
-            &direction,
-            watermark,
-        )
-        .await
-        .map_err(|e| TraversalError::DbError(e.to_string()))?;
+        let neighbours = fetch_neighbours(&mut conn, &current_ref, &graph, &direction, watermark)
+            .await
+            .map_err(|e| TraversalError::DbError(e.to_string()))?;
 
         for (neighbour, edge_key) in neighbours {
             // Edge ceiling check.
             if result_edges.len() as u64 >= limits.max_edges {
-                return Err(TraversalError::EdgeCeiling {
-                    max_edges: limits.max_edges,
-                });
+                return Err(TraversalError::EdgeCeiling { max_edges: limits.max_edges });
             }
 
             let edge_canonical = if edge_key.0 <= edge_key.1 {
@@ -366,24 +339,17 @@ async fn bfs_inner(
 
             // Depth ceiling check.
             if next_depth > limits.max_depth {
-                return Err(TraversalError::DepthCeiling {
-                    max_depth: limits.max_depth,
-                });
+                return Err(TraversalError::DepthCeiling { max_depth: limits.max_depth });
             }
 
             // Node ceiling check (ceiling + 1 sentinel: request one more than
             // allowed to detect truncation).
             if !visited.contains_key(&neighbour.row_id) {
                 if result_nodes.len() as u64 >= limits.max_nodes {
-                    return Err(TraversalError::NodeCeiling {
-                        max_nodes: limits.max_nodes,
-                    });
+                    return Err(TraversalError::NodeCeiling { max_nodes: limits.max_nodes });
                 }
                 visited.insert(neighbour.row_id, next_depth);
-                result_nodes.push(TraversalNode {
-                    node_ref: neighbour.clone(),
-                    depth: next_depth,
-                });
+                result_nodes.push(TraversalNode { node_ref: neighbour.clone(), depth: next_depth });
                 frontier.push_back((neighbour, next_depth));
             }
 

@@ -35,10 +35,9 @@ pub async fn fetch_association_by_public_id(
     .fetch_optional(&mut *conn)
     .await?;
 
-    let (row_id, pid, purpose, proposal_id, actor_id, seq, created_at) = row
-        .ok_or_else(|| {
-            DbError::NotFound(format!("cross_target_association public_id={public_id}"))
-        })?;
+    let (row_id, pid, purpose, proposal_id, actor_id, seq, created_at) = row.ok_or_else(|| {
+        DbError::NotFound(format!("cross_target_association public_id={public_id}"))
+    })?;
 
     Ok(CrossTargetAssociationRow {
         row_id,

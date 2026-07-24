@@ -92,11 +92,21 @@ pub async fn fetch_panel_group_head(
     .fetch_optional(&mut *conn)
     .await?;
 
-    let (row_id, public_id, ct_row_id, cta_row_id, status, head_rev_id, head_gen, created_at, retired_at) =
-        group.ok_or_else(|| DbError::NotFound(format!("panel_group row_id={group_row_id}")))?;
+    let (
+        row_id,
+        public_id,
+        ct_row_id,
+        cta_row_id,
+        status,
+        head_rev_id,
+        head_gen,
+        created_at,
+        retired_at,
+    ) = group.ok_or_else(|| DbError::NotFound(format!("panel_group row_id={group_row_id}")))?;
 
-    let head_rev_row_id = head_rev_id
-        .ok_or_else(|| DbError::NotFound(format!("panel_group row_id={group_row_id} has no head")))?;
+    let head_rev_row_id = head_rev_id.ok_or_else(|| {
+        DbError::NotFound(format!("panel_group row_id={group_row_id} has no head"))
+    })?;
 
     let group_row = PanelGroupRow {
         row_id,
@@ -182,8 +192,22 @@ pub async fn fetch_panel_revision_by_row_id(
     .fetch_optional(&mut *conn)
     .await?;
 
-    let (row_id, public_id, pg_row_id, rev_num, parent_id, rep_sess_id, prop_id, cfg_id, actor_id, reason, seq, created_at) =
-        row.ok_or_else(|| DbError::NotFound(format!("panel_group_revision row_id={revision_row_id}")))?;
+    let (
+        row_id,
+        public_id,
+        pg_row_id,
+        rev_num,
+        parent_id,
+        rep_sess_id,
+        prop_id,
+        cfg_id,
+        actor_id,
+        reason,
+        seq,
+        created_at,
+    ) = row.ok_or_else(|| {
+        DbError::NotFound(format!("panel_group_revision row_id={revision_row_id}"))
+    })?;
 
     Ok(PanelGroupRevisionRow {
         row_id,
@@ -229,8 +253,21 @@ pub async fn fetch_panel_revision_by_public_id(
     .fetch_optional(&mut *conn)
     .await?;
 
-    let (row_id, pid, pg_row_id, rev_num, parent_id, rep_sess_id, prop_id, cfg_id, actor_id, reason, seq, created_at) =
-        row.ok_or_else(|| DbError::NotFound(format!("panel_group_revision public_id={public_id}")))?;
+    let (
+        row_id,
+        pid,
+        pg_row_id,
+        rev_num,
+        parent_id,
+        rep_sess_id,
+        prop_id,
+        cfg_id,
+        actor_id,
+        reason,
+        seq,
+        created_at,
+    ) = row
+        .ok_or_else(|| DbError::NotFound(format!("panel_group_revision public_id={public_id}")))?;
 
     Ok(PanelGroupRevisionRow {
         row_id,
@@ -289,22 +326,37 @@ pub async fn list_panel_revision_history(
 
     Ok(rows
         .into_iter()
-        .map(|(row_id, public_id, pg_row_id, rev_num, parent_id, rep_sess_id, prop_id, cfg_id, actor_id, reason, seq, created_at)| {
-            PanelGroupRevisionRow {
+        .map(
+            |(
                 row_id,
                 public_id,
-                panel_group_row_id: pg_row_id,
-                revision_number: rev_num,
-                parent_revision_row_id: parent_id,
-                representative_session_row_id: rep_sess_id,
-                proposal_row_id: prop_id,
-                config_revision_row_id: cfg_id,
-                actor_row_id: actor_id,
-                reason_code: reason,
-                created_sequence: seq,
+                pg_row_id,
+                rev_num,
+                parent_id,
+                rep_sess_id,
+                prop_id,
+                cfg_id,
+                actor_id,
+                reason,
+                seq,
                 created_at,
-            }
-        })
+            )| {
+                PanelGroupRevisionRow {
+                    row_id,
+                    public_id,
+                    panel_group_row_id: pg_row_id,
+                    revision_number: rev_num,
+                    parent_revision_row_id: parent_id,
+                    representative_session_row_id: rep_sess_id,
+                    proposal_row_id: prop_id,
+                    config_revision_row_id: cfg_id,
+                    actor_row_id: actor_id,
+                    reason_code: reason,
+                    created_sequence: seq,
+                    created_at,
+                }
+            },
+        )
         .collect())
 }
 
@@ -789,19 +841,31 @@ pub async fn list_panel_groups_by_target(
 
     Ok(rows
         .into_iter()
-        .map(|(row_id, public_id, ct_row_id, cta_row_id, status, head_rev_id, head_gen, created_at, retired_at)| {
-            PanelGroupRow {
+        .map(
+            |(
                 row_id,
                 public_id,
-                canonical_target_row_id: ct_row_id,
-                cross_target_association_row_id: cta_row_id,
+                ct_row_id,
+                cta_row_id,
                 status,
-                head_revision_row_id: head_rev_id,
-                head_generation: head_gen,
+                head_rev_id,
+                head_gen,
                 created_at,
                 retired_at,
-            }
-        })
+            )| {
+                PanelGroupRow {
+                    row_id,
+                    public_id,
+                    canonical_target_row_id: ct_row_id,
+                    cross_target_association_row_id: cta_row_id,
+                    status,
+                    head_revision_row_id: head_rev_id,
+                    head_generation: head_gen,
+                    created_at,
+                    retired_at,
+                }
+            },
+        )
         .collect())
 }
 

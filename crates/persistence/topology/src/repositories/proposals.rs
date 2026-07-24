@@ -96,8 +96,23 @@ pub async fn fetch_proposal_by_public_id(
     .fetch_optional(&mut *conn)
     .await?;
 
-    let (row_id, pid, rev, kind, basis, evidence, cfg, state, actor, reason, superseded, seq, decided_seq, created_at, decided_at) =
-        row.ok_or_else(|| DbError::NotFound(format!("relation_proposal public_id={public_id}")))?;
+    let (
+        row_id,
+        pid,
+        rev,
+        kind,
+        basis,
+        evidence,
+        cfg,
+        state,
+        actor,
+        reason,
+        superseded,
+        seq,
+        decided_seq,
+        created_at,
+        decided_at,
+    ) = row.ok_or_else(|| DbError::NotFound(format!("relation_proposal public_id={public_id}")))?;
 
     Ok(RelationProposalRow {
         row_id,
@@ -173,25 +188,43 @@ pub async fn list_proposals(
 
     Ok(rows
         .into_iter()
-        .map(|(row_id, pid, rev, kind, basis, evidence, cfg, state, actor, reason, superseded, seq, decided_seq, created_at, decided_at)| {
-            RelationProposalRow {
+        .map(
+            |(
                 row_id,
-                public_id: pid,
-                proposal_revision: rev,
+                pid,
+                rev,
                 kind,
-                basis_digest: basis,
-                evidence_digest: evidence,
-                config_revision_row_id: cfg,
+                basis,
+                evidence,
+                cfg,
                 state,
-                actor_row_id: actor,
-                reason_code: reason,
-                superseded_by_proposal_row_id: superseded,
-                created_sequence: seq,
-                decided_sequence: decided_seq,
+                actor,
+                reason,
+                superseded,
+                seq,
+                decided_seq,
                 created_at,
                 decided_at,
-            }
-        })
+            )| {
+                RelationProposalRow {
+                    row_id,
+                    public_id: pid,
+                    proposal_revision: rev,
+                    kind,
+                    basis_digest: basis,
+                    evidence_digest: evidence,
+                    config_revision_row_id: cfg,
+                    state,
+                    actor_row_id: actor,
+                    reason_code: reason,
+                    superseded_by_proposal_row_id: superseded,
+                    created_sequence: seq,
+                    decided_sequence: decided_seq,
+                    created_at,
+                    decided_at,
+                }
+            },
+        )
         .collect())
 }
 

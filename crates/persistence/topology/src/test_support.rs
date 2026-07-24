@@ -39,12 +39,11 @@ pub async fn insert_actor(pool: &SqlitePool, public_id: &str) -> i64 {
     .await
     .expect("insert_actor failed");
 
-    let (row_id,): (i64,) =
-        sqlx::query_as("SELECT row_id FROM spec062_actor WHERE public_id = ?")
-            .bind(public_id)
-            .fetch_one(pool)
-            .await
-            .expect("insert_actor select failed");
+    let (row_id,): (i64,) = sqlx::query_as("SELECT row_id FROM spec062_actor WHERE public_id = ?")
+        .bind(public_id)
+        .fetch_one(pool)
+        .await
+        .expect("insert_actor select failed");
     row_id
 }
 
@@ -96,11 +95,10 @@ pub async fn insert_sequence(pool: &SqlitePool) -> i64 {
     .await
     .expect("insert_sequence failed");
 
-    let (seq,): (i64,) =
-        sqlx::query_as("SELECT MAX(sequence) FROM repository_change")
-            .fetch_one(pool)
-            .await
-            .expect("insert_sequence max failed");
+    let (seq,): (i64,) = sqlx::query_as("SELECT MAX(sequence) FROM repository_change")
+        .fetch_one(pool)
+        .await
+        .expect("insert_sequence max failed");
     seq
 }
 
@@ -176,12 +174,11 @@ pub async fn insert_spec062_target(pool: &SqlitePool, public_id: &str) -> i64 {
     .await
     .expect("insert_spec062_target failed");
 
-    let (row_id,): (i64,) =
-        sqlx::query_as("SELECT row_id FROM spec062_target WHERE public_id = ?")
-            .bind(public_id)
-            .fetch_one(pool)
-            .await
-            .expect("insert_spec062_target select failed");
+    let (row_id,): (i64,) = sqlx::query_as("SELECT row_id FROM spec062_target WHERE public_id = ?")
+        .bind(public_id)
+        .fetch_one(pool)
+        .await
+        .expect("insert_spec062_target select failed");
     row_id
 }
 
@@ -229,12 +226,11 @@ pub async fn insert_frame_record(
     .await
     .expect("insert_frame_record failed");
 
-    let (row_id,): (i64,) =
-        sqlx::query_as("SELECT row_id FROM frame_record WHERE public_id = ?")
-            .bind(public_id)
-            .fetch_one(pool)
-            .await
-            .expect("insert_frame_record select failed");
+    let (row_id,): (i64,) = sqlx::query_as("SELECT row_id FROM frame_record WHERE public_id = ?")
+        .bind(public_id)
+        .fetch_one(pool)
+        .await
+        .expect("insert_frame_record select failed");
     row_id
 }
 
@@ -284,7 +280,8 @@ pub async fn insert_light_session(
 
     // Insert frame file identity and frame record.
     let file_row_id = insert_file_identity(pool, &format!("file-{frame_public_id}")).await;
-    let frame_row_id = insert_frame_record(pool, frame_public_id, file_row_id, created_sequence).await;
+    let frame_row_id =
+        insert_frame_record(pool, frame_public_id, file_row_id, created_sequence).await;
 
     // Insert session_frame with is_representative = 1.
     sqlx::query(

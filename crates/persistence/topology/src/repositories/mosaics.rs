@@ -85,16 +85,25 @@ pub async fn fetch_mosaic_by_public_id(
     conn: &mut SqliteConnection,
     public_id: &str,
 ) -> DbResult<MosaicRow> {
-    let row: Option<(i64, String, Option<i64>, Option<i64>, String, Option<i64>, i64, String, Option<String>)> =
-        sqlx::query_as(
-            "SELECT row_id, public_id, canonical_target_row_id,
+    let row: Option<(
+        i64,
+        String,
+        Option<i64>,
+        Option<i64>,
+        String,
+        Option<i64>,
+        i64,
+        String,
+        Option<String>,
+    )> = sqlx::query_as(
+        "SELECT row_id, public_id, canonical_target_row_id,
                     cross_target_association_row_id, status,
                     head_revision_row_id, head_generation, created_at, retired_at
              FROM mosaic WHERE public_id = ?",
-        )
-        .bind(public_id)
-        .fetch_optional(&mut *conn)
-        .await?;
+    )
+    .bind(public_id)
+    .fetch_optional(&mut *conn)
+    .await?;
 
     let (row_id, pid, ct, cta, status, head, gen, created_at, retired_at) =
         row.ok_or_else(|| DbError::NotFound(format!("mosaic public_id={public_id}")))?;
@@ -147,11 +156,9 @@ async fn fetch_mosaic_revision_impl(
         .fetch_optional(&mut *conn)
         .await?;
 
-    let (rid, pid, mosaic_rid, rev_num, parent, prop, cfg, actor, reason, seq, created_at) =
-        row.ok_or_else(|| {
-            DbError::NotFound(format!(
-                "mosaic_revision row_id={row_id:?} public_id={public_id:?}"
-            ))
+    let (rid, pid, mosaic_rid, rev_num, parent, prop, cfg, actor, reason, seq, created_at) = row
+        .ok_or_else(|| {
+            DbError::NotFound(format!("mosaic_revision row_id={row_id:?} public_id={public_id:?}"))
         })?;
 
     Ok(MosaicRevisionRow {
@@ -469,11 +476,10 @@ pub async fn upsert_mosaic_revision(
         .execute(&mut *conn)
         .await?;
 
-        let (id,): (i64,) =
-            sqlx::query_as("SELECT row_id FROM mosaic WHERE public_id = ?")
-                .bind(input.mosaic_public_id)
-                .fetch_one(&mut *conn)
-                .await?;
+        let (id,): (i64,) = sqlx::query_as("SELECT row_id FROM mosaic WHERE public_id = ?")
+            .bind(input.mosaic_public_id)
+            .fetch_one(&mut *conn)
+            .await?;
         id
     };
 
@@ -562,17 +568,11 @@ pub async fn upsert_mosaic_revision(
     };
 
     if result.rows_affected() != 1 {
-        return Err(DbError::CasFailed(format!(
-            "mosaic row_id={mosaic_row_id} head CAS failed"
-        )));
+        return Err(DbError::CasFailed(format!("mosaic row_id={mosaic_row_id} head CAS failed")));
     }
 
     // Record head history.
-    let new_gen = if existing_mosaic_row_id.is_none() {
-        0i64
-    } else {
-        gen_guard + 1
-    };
+    let new_gen = if existing_mosaic_row_id.is_none() { 0i64 } else { gen_guard + 1 };
     sqlx::query(
         "INSERT INTO mosaic_head_history
              (mosaic_row_id, generation, head_revision_row_id, accepted_sequence)
@@ -679,10 +679,7 @@ pub struct RetireMosaic<'a> {
     pub expected_head_generation: i64,
 }
 
-pub async fn retire_mosaic(
-    conn: &mut SqliteConnection,
-    input: &RetireMosaic<'_>,
-) -> DbResult<()> {
+pub async fn retire_mosaic(conn: &mut SqliteConnection, input: &RetireMosaic<'_>) -> DbResult<()> {
     let result = sqlx::query(
         "UPDATE mosaic
          SET status = 'retired', retired_at = ?
