@@ -207,6 +207,92 @@ async fn apply_is_idempotent_via_ledger_replay() {
     assert_eq!(count.0, 1, "no duplicate sessions after idempotent retry");
 }
 
+// ── 5. No-append invariant: two operations with the same identity digest ──
+//
+// FR-004: a later ingestion creates a NEW session even when all metadata
+// matches an accepted session. The schema permits the same identity_digest
+// across operations; the apply loop never upserts or appends.
+
+#[tokio::test]
+async fn two_operations_with_same_identity_digest_create_two_distinct_sessions() {
+    let db = setup_db().await;
+    let pool = db.pool();
+
+    // Seed and apply the first operation (one light session, frame row_id=20).
+    let (op1_row_id, sv1) = seed_second_operation_context(pool, "target-e", 1).await;
+    let progress1 =
+        app_core_inbox::session_materialization::progress::MaterializationProgress::new(1, 1);
+    app_core_inbox::session_materialization::apply::run_apply(
+        pool,
+        app_core_inbox::session_materialization::apply::ApplyParams {
+            operation_row_id: op1_row_id,
+            operation_state_version: sv1,
+            approved_plan_digest: "digest-op1",
+            actor_public_id: "actor-e1",
+            canonical_target_public_id: Some("target-e"),
+            progress: progress1,
+        },
+    )
+    .await
+    .expect("first operation apply");
+
+    // Seed a second, independent operation with the same identity_digest but a
+    // different frame (frame row_id=21). Different frame avoids the
+    // UNIQUE(materialization_operation_row_id, frame_row_id) constraint while
+    // keeping the session identity identical — exactly the "same metadata, later
+    // night" scenario from US1 acceptance scenario 2.
+    let (op2_row_id, sv2) = seed_second_operation_context(pool, "target-e", 2).await;
+    let progress2 =
+        app_core_inbox::session_materialization::progress::MaterializationProgress::new(1, 1);
+    app_core_inbox::session_materialization::apply::run_apply(
+        pool,
+        app_core_inbox::session_materialization::apply::ApplyParams {
+            operation_row_id: op2_row_id,
+            operation_state_version: sv2,
+            approved_plan_digest: "digest-op2",
+            actor_public_id: "actor-e2",
+            canonical_target_public_id: Some("target-e"),
+            progress: progress2,
+        },
+    )
+    .await
+    .expect("second operation apply");
+
+    // Both operations must be applied.
+    let applied_count: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM session_materialization_operation WHERE state = 'applied'",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(applied_count.0, 2, "both operations must reach applied state");
+
+    // Two distinct session rows — one per operation, never merged or appended.
+    let total_sessions: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM session").fetch_one(pool).await.unwrap();
+    assert_eq!(total_sessions.0, 2, "each approved operation creates a distinct session");
+
+    // The two sessions have different row_ids and different operation FK values.
+    let ops: Vec<(i64,)> =
+        sqlx::query_as("SELECT DISTINCT materialization_operation_row_id FROM session")
+            .fetch_all(pool)
+            .await
+            .unwrap();
+    assert_eq!(ops.len(), 2, "each session must be owned by a different operation");
+
+    // No session was ever modified (append-only: frame membership count stays 1 each).
+    let frame_counts: Vec<(i64,)> =
+        sqlx::query_as("SELECT COUNT(*) FROM session_frame GROUP BY session_row_id ORDER BY 1")
+            .fetch_all(pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        frame_counts,
+        vec![(1,), (1,)],
+        "each session has exactly one frame, never appended"
+    );
+}
+
 // ── 4. Cancel before commit leaves no session rows ────────────────────────
 
 #[tokio::test]

@@ -37,8 +37,8 @@ use persistence_sessions::repositories::materialization::{
     InsertMaterializationOperation, InsertMaterializationResultSnapshot,
 };
 use persistence_sessions::repositories::sessions::{
-    current_change_sequence, insert_session, insert_session_frame, insert_session_visibility,
-    InsertSession, InsertSessionFrame,
+    insert_session, insert_session_frame, insert_session_visibility, InsertSession,
+    InsertSessionFrame,
 };
 
 use super::plan_query::{
@@ -90,7 +90,7 @@ async fn insert_panel_group_revision(
             representative_session_kind, proposal_row_id,
             config_revision_row_id, actor_row_id, reason_code,
             created_sequence, created_at
-         ) VALUES (?,?,1,NULL,?,'light',NULL,?,?,'singleton_ingestion',?,?)",
+         ) VALUES (?,?,1,NULL,?,'light',NULL,?,?,'singleton_created',?,?)",
     )
     .bind(public_id)
     .bind(panel_group_row_id)
@@ -418,7 +418,13 @@ pub async fn run_apply(pool: &SqlitePool, params: ApplyParams<'_>) -> DbResult<S
         sqlx::query("PRAGMA foreign_keys = ON").execute(&mut *conn).await?;
         sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await?;
 
-        let seq = current_change_sequence(pool).await? + 1;
+        // Read sequence inside the IMMEDIATE transaction on this connection to
+        // avoid racing a concurrent writer on a separate pool connection.
+        let seq_row: (i64,) =
+            sqlx::query_as("SELECT COALESCE(MAX(sequence), 0) FROM repository_change")
+                .fetch_one(&mut *conn)
+                .await?;
+        let seq = seq_row.0 + 1;
         sqlx::query("INSERT INTO repository_change(command_row_id, created_at) VALUES (NULL, ?)")
             .bind(&now)
             .execute(&mut *conn)
@@ -564,7 +570,12 @@ pub async fn run_apply(pool: &SqlitePool, params: ApplyParams<'_>) -> DbResult<S
     sqlx::query("PRAGMA foreign_keys = ON").execute(&mut *conn).await?;
     sqlx::query("BEGIN IMMEDIATE").execute(&mut *conn).await?;
 
-    let term_seq = current_change_sequence(pool).await? + 1;
+    // Read sequence inside the IMMEDIATE transaction on this connection.
+    let term_seq_row: (i64,) =
+        sqlx::query_as("SELECT COALESCE(MAX(sequence), 0) FROM repository_change")
+            .fetch_one(&mut *conn)
+            .await?;
+    let term_seq = term_seq_row.0 + 1;
     sqlx::query("INSERT INTO repository_change(command_row_id, created_at) VALUES (NULL, ?)")
         .bind(&terminal_now)
         .execute(&mut *conn)

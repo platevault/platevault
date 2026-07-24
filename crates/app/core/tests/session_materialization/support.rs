@@ -353,3 +353,140 @@ pub async fn seed_two_session_apply_context(
 
     (1, 0)
 }
+
+/// Seed the first operation for the no-append invariant test (FR-004).
+///
+/// Seeds: base rows, site resolution, plan stub, frame 20, snapshot 1,
+/// proposed session with `identity_digest = "shared-digest"`, operation 1.
+/// Returns `(operation_row_id=1, state_version=0)`.
+pub async fn seed_second_operation_context(
+    pool: &SqlitePool,
+    target_public_id: &str,
+    pass: u8,
+) -> (i64, i64) {
+    if pass == 1 {
+        seed_first_no_append_operation(pool, target_public_id).await
+    } else {
+        seed_second_no_append_operation(pool).await
+    }
+}
+
+/// Seeds the first no-append operation (pass 1).
+async fn seed_first_no_append_operation(pool: &SqlitePool, target_public_id: &str) -> (i64, i64) {
+    seed_base(pool, "cmd-e1").await;
+    seed_site_resolution(pool, "2026-07-03").await;
+    seed_plan_stub(pool, target_public_id).await;
+    seed_frames(pool, 20, 1).await;
+
+    sqlx::query(
+        "INSERT INTO inbox_materialization_plan_result_snapshot \
+         (row_id, public_id, plan_row_id, plan_revision, config_revision_row_id, \
+          input_evidence_revision, proposed_session_count, frame_count, blocked_frame_count, \
+          canonical_digest, created_sequence, created_at) \
+         VALUES (1,'snap-e1',1,1,1,1,1,1,0,'snap-dg-e1',1,'2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(pool)
+    .await
+    .expect("seed snapshot op1");
+
+    sqlx::query(
+        "INSERT INTO inbox_plan_result_proposed_session \
+         (row_id,snapshot_row_id,proposed_session_key,kind,\
+          site_resolution_revision_row_id,identity_digest,ordinal,frame_count) \
+         VALUES (1,1,'key-e1','light',1,'shared-digest',0,1)",
+    )
+    .execute(pool)
+    .await
+    .expect("seed proposed session op1");
+
+    sqlx::query(
+        "INSERT INTO inbox_plan_result_proposed_session_frame \
+         (proposed_session_row_id,frame_row_id,ordinal) VALUES (1,20,0)",
+    )
+    .execute(pool)
+    .await
+    .expect("seed frame op1");
+
+    sqlx::query(
+        "INSERT INTO session_materialization_operation \
+         (row_id,public_id,kind,command_row_id,config_revision_row_id,state,\
+          created_sequence,created_at) \
+         VALUES (1,'op-e1','inbox_ingestion',1,1,'ready',1,'2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(pool)
+    .await
+    .expect("seed operation op1");
+
+    seed_inbox_ingestion_operation(pool, 1, 1).await;
+    (1, 0)
+}
+
+/// Seeds the second no-append operation (pass 2).
+///
+/// Frame 21 has the same session metadata as frame 20 (`shared-digest`) but is
+/// a different physical file — exercises FR-004 (later ingestion → new session).
+async fn seed_second_no_append_operation(pool: &SqlitePool) -> (i64, i64) {
+    seed_frames(pool, 21, 1).await;
+
+    sqlx::query(
+        "INSERT INTO command_execution \
+         (row_id,public_id,actor_row_id,operation,canonical_payload_digest,state,\
+          response_json,created_at,finished_at) \
+         VALUES (2,'cmd-e2',1,'inbox.materialization.apply','pd2','applied','{}',\
+                 '2026-07-22T00:00:00.000000Z','2026-07-22T00:00:01.000000Z')",
+    )
+    .execute(pool)
+    .await
+    .expect("seed command op2");
+
+    sqlx::query(
+        "INSERT INTO inbox_materialization_plan_result_snapshot \
+         (row_id,public_id,plan_row_id,plan_revision,config_revision_row_id,\
+          input_evidence_revision,proposed_session_count,frame_count,blocked_frame_count,\
+          canonical_digest,created_sequence,created_at) \
+         VALUES (2,'snap-e2',1,2,1,2,1,1,0,'snap-dg-e2',1,'2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(pool)
+    .await
+    .expect("seed snapshot op2");
+
+    sqlx::query(
+        "INSERT INTO inbox_plan_result_proposed_session \
+         (row_id,snapshot_row_id,proposed_session_key,kind,\
+          site_resolution_revision_row_id,identity_digest,ordinal,frame_count) \
+         VALUES (2,2,'key-e2','light',1,'shared-digest',0,1)",
+    )
+    .execute(pool)
+    .await
+    .expect("seed proposed session op2");
+
+    sqlx::query(
+        "INSERT INTO inbox_plan_result_proposed_session_frame \
+         (proposed_session_row_id,frame_row_id,ordinal) VALUES (2,21,0)",
+    )
+    .execute(pool)
+    .await
+    .expect("seed frame op2");
+
+    sqlx::query(
+        "INSERT INTO session_materialization_operation \
+         (row_id,public_id,kind,command_row_id,config_revision_row_id,state,\
+          created_sequence,created_at) \
+         VALUES (2,'op-e2','inbox_ingestion',2,1,'ready',1,'2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(pool)
+    .await
+    .expect("seed operation op2");
+
+    sqlx::query(
+        "INSERT INTO inbox_ingestion_operation \
+         (operation_row_id,inbox_plan_result_snapshot_row_id,approved_plan_digest,\
+          approved_by_actor_row_id,approved_at) \
+         VALUES (2,2,'test-digest',1,'2026-07-22T00:00:00.000000Z')",
+    )
+    .execute(pool)
+    .await
+    .expect("seed inbox_ingestion_operation op2");
+
+    (2, 0)
+}
