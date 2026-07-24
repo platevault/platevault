@@ -37,20 +37,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import { queryKeys } from '@/data/queryKeys';
-import type {
-  ChosenAttributionDto_Deserialize as ChosenAttributionRequest,
-  IngestionAttributionCandidateDto,
-  InboxConfirmDestination,
-  InboxReclassifyV2Response_Serialize as InboxReclassifyV2Response,
-} from '@/bindings/index';
+import type { InboxReclassifyV2Response_Serialize as InboxReclassifyV2Response } from '@/bindings/index';
 import { useSetPageStatus } from '@/app/PageStatusContext';
 import { FilterToolbar, ListPageLayout, PageTopBar } from '@/components';
+import { useInboxConfirmFlow } from './useInboxConfirmFlow';
 import { useInboxPlanApplyFlow } from './useInboxPlanApplyFlow';
 import { m } from '@/lib/i18n';
 import type { FrameType } from '@/lib/route-contract';
 import { useGrouping } from '@/lib/use-grouping';
 import { useStaleSelectionCleanup } from '@/lib/use-stale-selection';
-import { useHotkeys } from '@/lib/useHotkeys';
 import { addToast } from '@/shared/toast';
 import { Btn } from '@/ui';
 import { GROUPING_DIMENSIONS, GROUPING_STORAGE_KEY } from './InboxControls';
@@ -61,7 +56,6 @@ import type { InboxSortCol, InboxSort } from './InboxList';
 import { InboxStatsSummary } from './InboxStatsSummary';
 import { deriveInboxStats } from './inboxStatsFromItems';
 import { PlanApprovalOverlay } from './PlanApprovalOverlay';
-import type { DestructiveDestination, PendingRootPick } from './PlanPanel';
 import { buildBreakdownFromActions } from './PlanPanel';
 import type {
   InboxBreakdownTarget,
@@ -71,10 +65,8 @@ import type {
 import {
   inboxClassifyQueryKey,
   mergeRescanRoots,
-  normalizeConfirmError,
   useInboxClassification,
   useInboxClassifySourceGroup,
-  useInboxConfirm,
   useInboxItemMetadata,
   useInboxList,
   useInboxPlanBreakdowns,
@@ -82,11 +74,6 @@ import {
   useOpenInboxPlans,
 } from './store';
 
-/** Shape of `inbox.destination_root_required` error details (spec 041 US8/FR-029). */
-interface DestinationRootRequiredDetails {
-  category: string;
-  candidates: Array<{ rootId: string; path: string; kind: string }>;
-}
 
 /**
  * Pick which post-split sub-item selection should move to after a
@@ -194,20 +181,6 @@ export function resolveClassifiedGroupSelection(
   return { action: 'none' };
 }
 
-/** Type-guard for the destination-root-required details payload. */
-function asRootRequiredDetails(
-  d: unknown,
-): DestinationRootRequiredDetails | null {
-  if (
-    d &&
-    typeof d === 'object' &&
-    'candidates' in d &&
-    Array.isArray(d.candidates)
-  ) {
-    return d as DestinationRootRequiredDetails;
-  }
-  return null;
-}
 
 // #557: a shared, stable empty-array fallback. `listData?.items ?? []`
 // allocates a NEW array every render while the query is unresolved, which
@@ -572,27 +545,6 @@ export function InboxPage() {
     selectedRootPath,
   );
 
-  // GFD-1: prefetch attribution candidates alongside classify so handleConfirm
-  // can read them from cache synchronously instead of awaiting a round-trip on
-  // the hot Confirm path. The design-comment calling this "optional enrichment"
-  // is still correct as a FALLBACK policy (failure falls through), but the
-  // awaited round-trip inside handleConfirm adds perceivable latency on every
-  // confirm click. Prefetching on selection amortises it to zero.
-  //
-  // Only prefetches for classified light items (the only items where attribution
-  // candidates are meaningful); does not block confirm — the hot path still
-  // falls back to an awaited call if the prefetch hasn't landed yet.
-  const selectedItemIdForPrefetch = selectedItem?.inboxItemId ?? null;
-  useEffect(() => {
-    if (!selectedItemIdForPrefetch) return;
-    void queryClient.prefetchQuery({
-      queryKey: queryKeys.inbox.attributionSuggest(selectedItemIdForPrefetch),
-      queryFn: async () =>
-        unwrap(
-          await commands.inboxAttributionSuggest(selectedItemIdForPrefetch),
-        ),
-    });
-  }, [selectedItemIdForPrefetch, queryClient]);
 
   // Group-scoped classification for scanned-but-unclassified folders
   // (spec 058 FR-017). Unlike the item-scoped hook above this does NOT fire on
@@ -669,84 +621,45 @@ export function InboxPage() {
         .map((r) => ({ id: r.id, path: r.path, category: r.category })),
     [allRoots],
   );
-  const [selectedDestRootId, setSelectedDestRootId] = useState('');
-
-  const { confirm, loading: confirmLoading } = useInboxConfirm();
-  // FR-032: destructive-destination choice, defaults to 'archive' (Constitution §II).
-  // The literal 'archive' | 'trash' values are exactly what inbox.confirm accepts.
-  const [destructiveDestination, setDestructiveDestination] =
-    useState<DestructiveDestination>('archive');
-  // #943: `confirmLoading` (from `useInboxConfirm`) only covers the backend
-  // `inbox.confirm` mutation inside `runConfirm` — it says nothing about the
-  // `inboxAttributionSuggest` read that now runs BEFORE it. Without this,
-  // Confirm/the "C" hotkey stayed clickable for that whole await, so a
-  // re-entrant trigger landing in the window (slower CI runners widen it)
-  // could start a second `handleConfirm` and race an unattributed confirm
-  // in ahead of the picker. Guards the entire handleConfirm body, not just
-  // the mutation.
-  const [confirmFlowBusy, setConfirmFlowBusy] = useState(false);
-
-  // spec 041 US8/FR-029: when a confirm needs the user to pick among multiple
-  // candidate library roots, hold the prompt + the item it belongs to so the
-  // PlanPanel can render the picker and we can re-confirm with the chosen root.
-  const [pendingRootPick, setPendingRootPick] =
-    useState<PendingRootPick | null>(null);
-  const [rootPickItemId, setRootPickItemId] = useState<string | null>(null);
-
-  // spec 008 US7/FR-022 (#943): ranked attribution suggestions for the item
-  // awaiting confirm. Held BEFORE the confirm fires — confirm creates the plan
-  // that blocks any second confirm, so the pick must ride the first one.
-  const [pendingAttribution, setPendingAttribution] = useState<{
-    itemId: string;
-    rootAbsolutePath: string;
-    contentSignature: string;
-    rootId?: string;
-    candidates: IngestionAttributionCandidateDto[];
-  } | null>(null);
-
-  // spec 041 US8/FR-031: absolute destination paths keyed by source path,
-  // accumulated from each successful confirm's `destinations[]`. Lets the plan
-  // panel show the full absolute destination per action.
-  const [absoluteByFromPath, setAbsoluteByFromPath] = useState<
-    Record<string, string>
-  >({});
-
-  // Drop a pending root pick when the user navigates away from its item, so a
-  // stale picker never lingers under a different selection.
-  const selectedItemId = selectedItem?.inboxItemId ?? null;
-  useEffect(() => {
-    if (rootPickItemId && rootPickItemId !== selectedItemId) {
-      setPendingRootPick(null);
-      setRootPickItemId(null);
-    }
-  }, [rootPickItemId, selectedItemId]);
-
-  // #648: `selectedDestRootId` previously survived a selection change — the
-  // picker is filtered per item by frame-type category (InboxDetail's
-  // `applicableRoots`), so a calibration root chosen for a bias item is not
-  // among a subsequently-selected light item's options. The DOM <select>
-  // then fell back to its first option ("Auto") while this state still held
-  // the stale (invalid-for-this-item) root id, so a confirm sent the hidden
-  // stale value and the backend rejected it with `inbox.invalid_destination_
-  // root` for a picker that visibly read "Auto". Reset on every selection
-  // change so the picker always starts at the real "Auto" state.
-  useEffect(() => {
-    setSelectedDestRootId('');
-  }, [selectedItemId]);
-
-  const mergeDestinations = useCallback(
-    (destinations?: InboxConfirmDestination[] | null) => {
-      if (!destinations || destinations.length === 0) return;
-      setAbsoluteByFromPath((prev) => {
-        const next = { ...prev };
-        for (const d of destinations) {
-          next[d.fromPath] = d.toAbsolutePath;
-        }
-        return next;
-      });
-    },
-    [],
+  const hasMissingRequiredMeta = useMemo(
+    () =>
+      (fileMetadata ?? []).some(
+        (f) => (f.missingPathAttributes?.length ?? 0) > 0,
+      ),
+    [fileMetadata],
   );
+
+  const {
+    handleConfirm,
+    handlePickAttribution,
+    handlePickDestinationRoot,
+    handleBulkConfirm,
+    canConfirm,
+    confirmLoading,
+    confirmFlowBusy,
+    bulkConfirmLoading,
+    canBulkConfirm,
+    bulkEligibleItems,
+    destructiveDestination,
+    setDestructiveDestination,
+    selectedDestRootId,
+    setSelectedDestRootId,
+    pendingRootPick,
+    pendingAttribution,
+    clearPendingAttribution,
+    attributionProjectNames,
+    absoluteByFromPath,
+  } = useInboxConfirmFlow({
+    selectedItem,
+    selectedRootPath,
+    classification,
+    fileMetadataLoading,
+    fileMetadataError,
+    hasMissingRequiredMeta,
+    items,
+    refreshAll,
+  });
+
 
   const {
     handleApplyOne,
@@ -757,335 +670,6 @@ export function InboxPage() {
     progressPlanId,
     planBusy,
   } = useInboxPlanApplyFlow(refreshAll, viewResultAction);
-
-  /**
-   * Confirm `item` (optionally targeting a caller-chosen destination `rootId`).
-   * Centralises the success path and the structured-error handling so the
-   * initial confirm and a re-confirm after a root pick share one code path.
-   */
-  const runConfirm = useCallback(
-    async (
-      item: { inboxItemId: string; rootAbsolutePath: string },
-      contentSignature: string,
-      rootId?: string,
-      chosenAttribution?: ChosenAttributionRequest,
-    ) => {
-      try {
-        const result = await confirm({
-          inboxItemId: item.inboxItemId,
-          contentSignature,
-          rootAbsolutePath: item.rootAbsolutePath,
-          destructiveDestination,
-          rootId: rootId ?? null,
-          chosenAttribution,
-        });
-        // Success: clear any pending root pick and capture absolute destinations.
-        setPendingRootPick(null);
-        setRootPickItemId(null);
-        setPendingAttribution(null);
-        mergeDestinations(result.destinations);
-        // spec 041: masters now always return a plan too — every confirm produces
-        // a reviewable plan that appears in the aggregate surface below.
-        addToast({
-          message: m.inbox_toast_plan_created({
-            count: String(result.itemsTotal),
-          }),
-          variant: 'info',
-        });
-        refreshAll();
-      } catch (e) {
-        const { code, message, details } = normalizeConfirmError(e);
-        if (code === 'inbox.destination_root_required') {
-          // FR-029: multiple candidate roots — prompt the user to choose one.
-          const parsed = asRootRequiredDetails(details);
-          if (parsed) {
-            setPendingRootPick({
-              category: parsed.category,
-              candidates: parsed.candidates,
-            });
-            setRootPickItemId(item.inboxItemId);
-            addToast({
-              message: m.inbox_toast_choose_dest_root(),
-              variant: 'warn',
-            });
-            return;
-          }
-        }
-        if (code === 'inbox.invalid_destination_root') {
-          addToast({
-            message: message || m.inbox_toast_invalid_destination_root(),
-            variant: 'error',
-          });
-          return;
-        }
-        if (code === 'inbox.no_destination_root') {
-          addToast({
-            message: message || m.inbox_toast_no_destination_root(),
-            variant: 'error',
-          });
-          return;
-        }
-        if (code === 'inbox.missing_path_attributes') {
-          // FR-032 (US9): files lack a path-load-bearing attribute. The detail
-          // panel already annotates each blocked file; point the user there.
-          addToast({
-            message: m.inbox_toast_missing_path_attrs(),
-            variant: 'warn',
-          });
-          return;
-        }
-        if (message.includes('inbox.has.open.plan')) {
-          addToast({ message: m.inbox_toast_has_open_plan(), variant: 'warn' });
-        } else if (message.includes('classification.stale')) {
-          addToast({
-            message: m.inbox_toast_stale_classification(),
-            variant: 'warn',
-          });
-        } else {
-          addToast({
-            message: m.inbox_toast_confirm_failed({ message }),
-            variant: 'error',
-          });
-        }
-      }
-    },
-    [confirm, destructiveDestination, mergeDestinations, refreshAll],
-  );
-
-  const handleConfirm = async () => {
-    // Spec 058 T035/T036: the `classification.type === "mixed"` guard is gone
-    // with the vocabulary it tested.
-    //
-    // It was accurate when written: `mixed` was reachable only on the
-    // pre-materialization leaf-folder row spanning more than one frame type,
-    // and that row could never be confirmed. T012 stopped creating that row and
-    // T035 retired the label, so the condition can no longer be true — keeping
-    // it would read as a live safeguard while testing a value the backend never
-    // returns. A multi-type folder now reports `unclassified`, which
-    // `canConfirm` already refuses.
-    if (!selectedItem || !classification) return;
-    // Re-entrancy guard (#943 follow-up): covers this whole function,
-    // including the suggest await below — see `confirmFlowBusy`'s
-    // declaration for why `confirmLoading` alone isn't enough.
-    if (confirmFlowBusy) return;
-    setConfirmFlowBusy(true);
-    try {
-      // "" = auto-select (let the backend choose); otherwise the picked root.
-      const rootId = selectedDestRootId || undefined;
-
-      // spec 008 US7/FR-019 (#943): read the ranked attribution suggestions
-      // BEFORE confirming, so the user's pick can ride this single confirm.
-      // Suggest-never-auto-merge (FR-020) — a non-empty list always stops here
-      // for an explicit pick; it is never applied on the user's behalf.
-      // A suggest failure must not cost the user their confirm: attribution is
-      // an optional enrichment, so fall through to an unattributed confirm —
-      // but the failure is logged (not just swallowed), so a suggest-side
-      // regression stays diagnosable instead of looking like "no candidates".
-      //
-      // GFD-1: read from the prefetch cache first to avoid a blocking round-trip
-      // on the hot Confirm path. Falls back to an awaited call if the prefetch
-      // hasn't landed yet (e.g. the user clicks Confirm before classify settles).
-      let candidates: IngestionAttributionCandidateDto[] = [];
-      try {
-        const cached = queryClient.getQueryData<
-          IngestionAttributionCandidateDto[]
-        >(queryKeys.inbox.attributionSuggest(selectedItem.inboxItemId));
-        if (cached !== undefined) {
-          candidates = cached;
-        } else {
-          candidates = unwrap(
-            await commands.inboxAttributionSuggest(selectedItem.inboxItemId),
-          );
-        }
-      } catch (err) {
-        console.error(
-          `inbox.attribution.suggest failed for item ${selectedItem.inboxItemId}; confirming without an attribution pick`,
-          err,
-        );
-        candidates = [];
-      }
-      if (candidates.length > 0) {
-        setPendingAttribution({
-          itemId: selectedItem.inboxItemId,
-          rootAbsolutePath: selectedRootPath,
-          contentSignature: classification.contentSignature,
-          rootId,
-          candidates,
-        });
-        return;
-      }
-
-      await runConfirm(
-        {
-          inboxItemId: selectedItem.inboxItemId,
-          rootAbsolutePath: selectedRootPath,
-        },
-        classification.contentSignature,
-        rootId,
-      );
-    } finally {
-      setConfirmFlowBusy(false);
-    }
-  };
-
-  // The candidate DTO carries project/framing ids only, so resolve display
-  // names client-side rather than widening the contract. Fetched only while a
-  // pick is pending; falls back to the raw id if a name is unavailable.
-  const { data: attributionProjects } = useQuery({
-    queryKey: queryKeys.projects.all(),
-    queryFn: async () => unwrap(await commands.projectsList(null)),
-    enabled: pendingAttribution != null,
-  });
-  const attributionProjectNames = useMemo(() => {
-    const out: Record<string, string> = {};
-    for (const p of attributionProjects ?? []) out[p.id] = p.name;
-    return out;
-  }, [attributionProjects]);
-
-  /** FR-022: confirm the pending item carrying the user's attribution pick. */
-  const handlePickAttribution = async (chosen: ChosenAttributionRequest) => {
-    const pending = pendingAttribution;
-    if (!pending) return;
-    await runConfirm(
-      {
-        inboxItemId: pending.itemId,
-        rootAbsolutePath: pending.rootAbsolutePath,
-      },
-      pending.contentSignature,
-      pending.rootId,
-      chosen,
-    );
-  };
-
-  // task 35: bulk-confirm all cleanly-classified detections in sequence.
-  // "Cleanly classified" = state is 'classified', no open plan, and
-  // classification.type is 'single_type' (not mixed / unclassified). We use
-  // the item's contentSignature from the list (same value InboxPage uses for
-  // the single-item confirm) and always pass action='confirm' (never 'split').
-  // Items that fail individually are reported; the rest proceed.
-  const [bulkConfirmLoading, setBulkConfirmLoading] = useState(false);
-
-  // Eligible items: classified state, no plan open, not a mixed type.
-  // We only know classification type per-item when it is loaded; the list item
-  // carries `state` and `contentSignature`, so we filter on those. The backend
-  // will reject anything that turns out to be unclassified or missing attrs, and
-  // each failure produces a toast. This matches the pattern for rescan.
-  const bulkEligibleItems = useMemo(
-    () => items.filter((it) => it.state === 'classified'),
-    [items],
-  );
-
-  const canBulkConfirm = bulkEligibleItems.length > 0 && !bulkConfirmLoading;
-
-  const handleBulkConfirm = async () => {
-    if (bulkEligibleItems.length === 0) return;
-    setBulkConfirmLoading(true);
-    let successCount = 0;
-    let failCount = 0;
-    for (const it of bulkEligibleItems) {
-      try {
-        await confirm({
-          inboxItemId: it.inboxItemId,
-          contentSignature: it.contentSignature,
-          rootAbsolutePath: it.rootAbsolutePath,
-          destructiveDestination,
-          rootId: null,
-        });
-        successCount += 1;
-      } catch {
-        failCount += 1;
-      }
-    }
-    setBulkConfirmLoading(false);
-    if (failCount > 0 && successCount > 0) {
-      addToast({
-        message: m.inbox_toast_bulk_partial({
-          success: String(successCount),
-          fail: String(failCount),
-        }),
-        variant: 'warn',
-      });
-    } else if (failCount > 0 && successCount === 0) {
-      addToast({
-        message: m.inbox_toast_bulk_all_need_review(),
-        variant: 'warn',
-      });
-    } else {
-      addToast({
-        message: m.inbox_toast_bulk_confirmed({
-          count: successCount,
-        }),
-        variant: 'info',
-      });
-    }
-    refreshAll();
-  };
-
-  /** FR-029: re-confirm the pending item with the chosen destination root. */
-  const handlePickDestinationRoot = async (rootId: string) => {
-    if (!rootPickItemId || !selectedItem || !classification) return;
-    if (selectedItem.inboxItemId !== rootPickItemId) return;
-    // Spec 058 T035: the companion `mixed` guard is gone here too. It can no
-    // longer be true, and a guard that cannot fire reads as protection while
-    // providing none. A multi-type folder reports `unclassified`, which confirm
-    // already rejects before root resolution runs.
-    await runConfirm(
-      {
-        inboxItemId: selectedItem.inboxItemId,
-        rootAbsolutePath: selectedRootPath,
-      },
-      classification.contentSignature,
-      rootId,
-    );
-  };
-
-
-  const hasOpenPlan = selectedItem?.state === 'plan_open';
-
-  // Confirm gating (spec 043 §4 / task #34): MISSING REQUIRED metadata blocks
-  // confirm — any file lacking a path-load-bearing attribute cannot be routed
-  // to a destination, so the backend rejects it (inbox.missing_path_attributes).
-  // Disable confirm up-front and let the detail pane's danger alert explain why.
-  const hasMissingRequiredMeta = useMemo(
-    () =>
-      (fileMetadata ?? []).some(
-        (f) => (f.missingPathAttributes?.length ?? 0) > 0,
-      ),
-    [fileMetadata],
-  );
-
-  // spec 041 T071/T072 (FR-050): only "single_type" rows are confirmable. A
-  // folder spanning several frame types is not one thing to confirm, so it
-  // reports "unclassified" and confirm stays disabled. Spec 058 T035 retired
-  // the separate "mixed" label; the rows it described are the sub-items
-  // materialization produces, each single-type and confirmable on its own.
-  // Issue #643: while per-file metadata is loading or failed to load, we
-  // cannot know whether mandatory attributes are missing — fail safe by
-  // keeping Confirm disabled instead of judging over an empty array.
-  const canConfirm =
-    !!selectedItem &&
-    !!classification &&
-    classification.type === 'single_type' &&
-    !fileMetadataLoading &&
-    !fileMetadataError &&
-    !hasMissingRequiredMeta &&
-    !hasOpenPlan;
-
-  // Spec 027 FR-022 (issue #747): confirm the selected detection from the
-  // keyboard, so a triage sweep never leaves the home row. Gated on the same
-  // `canConfirm` as the button — the shortcut must not reach a state the
-  // visible affordance refuses. J/K navigation lives in InboxList, which owns
-  // the visual row order.
-  useHotkeys(
-    {
-      KeyC: (e) => {
-        if (!canConfirm || confirmLoading || confirmFlowBusy) return;
-        e.preventDefault();
-        void handleConfirm();
-      },
-    },
-    [canConfirm, confirmLoading, confirmFlowBusy, handleConfirm],
-  );
 
 
   // Stage B: plan review overlay open/close state.
@@ -1484,7 +1068,7 @@ export function InboxPage() {
           projectNames={attributionProjectNames}
           busy={confirmLoading}
           onPick={(chosen) => void handlePickAttribution(chosen)}
-          onCancel={() => setPendingAttribution(null)}
+          onCancel={clearPendingAttribution}
         />
       )}
 
