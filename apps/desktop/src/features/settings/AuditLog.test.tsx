@@ -351,40 +351,25 @@ describe('AuditLog', () => {
     ).toBeInTheDocument();
   });
 
-  it('exports via auditExport with the current filters and triggers a download', async () => {
-    const createObjectURL = vi.fn(() => 'blob:mock-url');
-    const revokeObjectURL = vi.fn();
-    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL });
-    const clickSpy = vi.fn();
-    const originalCreateElement = document.createElement.bind(document);
-    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-      const el = originalCreateElement(tag);
-      if (tag === 'a') el.click = clickSpy;
-      return el;
-    });
+  it('exports via auditExport with a save dialog and the current filters', async () => {
+    // Mock @tauri-apps/plugin-dialog save function.
+    vi.mock('@tauri-apps/plugin-dialog', () => ({
+      save: vi.fn().mockResolvedValue('/tmp/audit-export.ndjson'),
+    }));
 
     render(<AuditLog />, { wrapper });
     await waitFor(() => expect(mockList).toHaveBeenCalled());
 
-    // The Export button is `disabled={exporting || loading}` (AuditLog.tsx),
-    // and `loading` only clears once auditList's promise RESOLVES — the
-    // waitFor above only proves the call was made. fireEvent.click on a
-    // disabled button is a silent no-op, so clicking synchronously here
-    // races the load on slow runners: auditExport is simply never invoked
-    // and the assertion below fails with "Number of calls: 0" (observed on
-    // macos-latest). Wait for the button to actually be enabled first.
+    // Wait for the button to be enabled (loading clears after auditList resolves).
     const exportBtn = await screen.findByRole('button', {
       name: 'Export audit events to a file',
     });
     await waitFor(() => expect(exportBtn).toBeEnabled());
     fireEvent.click(exportBtn);
 
-    await waitFor(() => expect(mockExport).toHaveBeenCalledWith(null));
-    await waitFor(() => expect(clickSpy).toHaveBeenCalled());
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
-
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
+    await waitFor(() =>
+      expect(mockExport).toHaveBeenCalledWith('/tmp/audit-export.ndjson', null),
+    );
   });
 
   it('renders the state-change column (#749)', async () => {

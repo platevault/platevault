@@ -56,9 +56,9 @@ import { m } from '@/lib/i18n';
 import { revealLabel } from '@/lib/reveal-label';
 import { SessionListPopover } from './SessionListPopover';
 import { MatchCandidatesPanel } from './MatchCandidatesPanel';
-import { useMasterDetail } from './useMasterDetail';
 import { MasterArchiveFlow } from './MasterArchiveFlow';
 import { buildMasterTitle, buildFingerprintProps } from './master-detail-model';
+import { useMasterDetail } from './useMasterDetail';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 

@@ -52,7 +52,7 @@ async function assignWizardCalibrationSelections(
 
   let sessions: Array<{ id: string; sessionKey: { filter: string } }> = [];
   try {
-    sessions = unwrap(await commands.sessionsList()).filter((s) =>
+    sessions = unwrap(await commands.sessionsList(null, null)).filter((s) =>
       sessionIds.includes(s.id),
     );
   } catch {
@@ -217,7 +217,7 @@ export function WizardPage() {
   // the same `sessions.list` cache StepSources/StepViews already populate.
   const { data: allSessions } = useQuery({
     queryKey: queryKeys.sessions.all(),
-    queryFn: async () => unwrap(await commands.sessionsList()),
+    queryFn: async () => unwrap(await commands.sessionsList(null, null)),
   });
   useEffect(() => {
     if (!incomingTargetId || wizardData.name.target) return;

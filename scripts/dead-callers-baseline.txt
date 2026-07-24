@@ -212,3 +212,9 @@ list_source_availability_for_sessions
 transition_handoff_operation_state
 update_handoff_operation_progress
 upsert_source_availability
+# list_sessions / list_sessions_joined: thin wrapper entry points kept for
+# integration test ergonomics; production calls list_sessions_paginated
+# directly (perf/query-batching, kyo7.80).
+list_sessions
+list_sessions_joined
+

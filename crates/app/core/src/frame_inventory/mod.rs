@@ -206,6 +206,46 @@ pub(crate) async fn owning_session_frame_type(
     Ok((None, RawFrameType::Light))
 }
 
+/// Batch-build a reverse lookup from frame_id to (session_id, frame_type) for
+/// all sessions in the database. Replaces the per-frame LIKE full-table scan in
+/// the root-scoped list path (DSD-8). Callers that list frames by root can call
+/// this once and look up each frame in O(1) instead of issuing a LIKE query per
+/// frame.
+pub(crate) async fn build_frame_session_map(
+    pool: &sqlx::SqlitePool,
+) -> Result<std::collections::HashMap<String, (String, RawFrameType)>, ContractError> {
+    use std::collections::HashMap;
+
+    let mut map: HashMap<String, (String, RawFrameType)> = HashMap::new();
+
+    // Acquisition sessions (light frames).
+    let acq_rows = persistence_core::repositories::q_core::all_acquisition_session_frame_ids(pool)
+        .await
+        .map_err(db_err)?;
+
+    for (session_id, frame_ids_json) in acq_rows {
+        let ids: Vec<String> = serde_json::from_str(&frame_ids_json).unwrap_or_default();
+        for fid in ids {
+            map.entry(fid).or_insert_with(|| (session_id.clone(), RawFrameType::Light));
+        }
+    }
+
+    // Calibration sessions (dark/flat/bias frames).
+    let cal_rows = persistence_core::repositories::q_core::all_calibration_session_frame_ids(pool)
+        .await
+        .map_err(db_err)?;
+
+    for (session_id, frame_ids_json, kind) in cal_rows {
+        let frame_type = raw_frame_type_from_calibration_kind(&kind);
+        let ids: Vec<String> = serde_json::from_str(&frame_ids_json).unwrap_or_default();
+        for fid in ids {
+            map.entry(fid).or_insert_with(|| (session_id.clone(), frame_type));
+        }
+    }
+
+    Ok(map)
+}
+
 fn iso_now() -> String {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Iso8601::DEFAULT)

@@ -68,6 +68,7 @@ import type {
   CreateFilter,
   UpdateFilter,
   RemapVerification,
+  AuditExportResponse,
   AuditListResponse,
   AuditFilterDto,
   AuditPaginationDto,
@@ -571,9 +572,10 @@ export async function auditList(
   return unwrap(await commands.auditList(filters, pagination));
 }
 
-/** `audit.export` — export the filtered audit entries as newline-delimited JSON. */
+/** `audit.export` — export filtered audit entries to a file (NDJSON). */
 export async function auditExport(
+  filePath: string,
   filters: AuditFilterDto | null,
-): Promise<string> {
-  return unwrap(await commands.auditExport(filters));
+): Promise<AuditExportResponse> {
+  return unwrap(await commands.auditExport(filePath, filters));
 }

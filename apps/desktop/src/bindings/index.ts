@@ -38,6 +38,9 @@ export const commands = {
 	/**
 	 *  `lifecycle.ledger.list` Tauri command.
 	 * 
+	 *  Applies a server-side default limit clamp (1..=500, default 100) to prevent
+	 *  unbounded result sets over IPC.
+	 * 
 	 *  # Errors
 	 *  Returns a stringified persistence error when the repository query fails
 	 *  (e.g. transient DB unavailability). Successful empty results are `Ok(vec![])`.
@@ -52,7 +55,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns `Err(String)` on database failure.
 	 */
-	sessionsList: () => typedError<AcquisitionSession_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("sessions_list")),
+	sessionsList: (limit: number | null, offset: number | null) => typedError<AcquisitionSession_Serialize[], ContractError_Serialize>(__TAURI_INVOKE("sessions_list", { limit, offset })),
 	/**
 	 *  `sessions.get` -- returns a single session detail from real DB rows.
 	 * 
@@ -823,6 +826,9 @@ export const commands = {
 	/**
 	 *  `audit.list` — returns paginated audit entries read from `audit_log_entry`.
 	 * 
+	 *  Applies a server-side default limit clamp (1..=500, default 100) to prevent
+	 *  unbounded result sets over IPC.
+	 * 
 	 *  # Errors
 	 *  Returns `Err(ContractError)` on database failure.
 	 */
@@ -842,14 +848,14 @@ export const commands = {
 	offset?: number | null,
 } | null) => typedError<AuditListResponse_Serialize, ContractError_Serialize>(__TAURI_INVOKE("audit_list", { filters, pagination })),
 	/**
-	 *  `audit.export` — export the filtered audit entries as newline-delimited
-	 *  JSON (one `AuditEntry` per line, matching `audit.list`'s entry shape).
-	 *  Ignores pagination — export is always the full filtered set.
+	 *  `audit.export` — export filtered audit entries as newline-delimited JSON to
+	 *  a file (mirrors `log.export`). Streams backend-side; only the path and count
+	 *  cross IPC.
 	 * 
 	 *  # Errors
-	 *  Returns `Err(ContractError)` on database failure.
+	 *  Returns `Err(ContractError)` on database or filesystem failure.
 	 */
-	auditExport: (filters: {
+	auditExport: (filePath: string, filters: {
 	entityType?: string | null,
 	entityId?: string | null,
 	outcome?: AuditOutcome | null,
@@ -860,7 +866,7 @@ export const commands = {
 	from?: string | null,
 	/**  RFC 3339 upper bound on the entry timestamp (exclusive). */
 	to?: string | null,
-} | null) => typedError<string, ContractError_Serialize>(__TAURI_INVOKE("audit_export", { filters })),
+} | null) => typedError<AuditExportResponse, ContractError_Serialize>(__TAURI_INVOKE("audit_export", { filePath, filters })),
 	/**
 	 *  `log.recent` — return the most-recent log entries (initial hydration window).
 	 * 
@@ -2531,6 +2537,16 @@ export type AuditEntry_Serialize = {
 	 *  e.g. `{ "entityType": "project", "fromState": "ready", ... }`).
 	 */
 	detailParams?: { [key in string]: string } | null,
+};
+
+/**  Response for `audit.export` — mirrors `LogExportResponse`. */
+export type AuditExportResponse = {
+	/**  Absolute path of the written file. */
+	filePath: string,
+	/**  Number of entries written. */
+	count: number,
+	/**  Byte size of the written file. */
+	bytes: number,
 };
 
 /**
