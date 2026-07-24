@@ -38,7 +38,7 @@ import {
   ONBOARDING_PAGE_PATHS,
   itemLabel,
   itemTooltip,
-} from './ChecklistSection';
+} from './onboarding-labels';
 
 /**
  * Every registry item's real control has a deterministic page-level anchor.
