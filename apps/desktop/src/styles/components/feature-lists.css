@@ -961,6 +961,15 @@
   justify-content: flex-end;
 }
 
+/* === CREATE PROJECT DIALOG === */
+
+/* Selected-target pill row: horizontal flex */
+.pv-create-project__target-row {
+  display: flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+}
+
 /* === ADD TARGET DIALOG === */
 
 /* Constrain dialog popup width */
@@ -1221,4 +1230,12 @@
   .pv-calib-kvgrid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Session-id cell in MatchCandidatesPanel: truncate long ids within fixed column. */
+.pv-match-candidates__session-id {
+  color: var(--pv-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

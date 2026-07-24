@@ -3,10 +3,9 @@
  * Owns the Inbox page layout and its shared components: the 3-zone body
  * (list + side panel + bottom dock), the inbox table, summary strip, stats
  * chips, alert/banner overlay, row classification cells, and the detail panel.
- * Consolidated from .cssblocks/inbox-*.css (spec-043 merges).
  *
- * Supersedes the old `.pv-inbox-stats` full-width strip (target-search.css)
- * and the old inbox-layout classes (merges-1.css) which are deleted.
+ * The `.pv-inbox-stats` block here overrides the old full-width strip that
+ * formerly lived in target-search.css (that stale definition was deleted).
  */
 
 /* ── Top-bar summary: count text + inline per-type chips ──────────────────── */

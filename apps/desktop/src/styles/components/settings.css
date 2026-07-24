@@ -240,3 +240,15 @@ font-weight: var(--pv-weight-medium);
   gap: var(--pv-sp-2);
   align-items: center;
 }
+
+/* Narrow number input used in PlannerSettings and Framing settings panels. */
+.pv-settings__num-input {
+  width: 72px;
+  text-align: right;
+}
+
+.pv-settings__unit-label {
+  margin-left: var(--pv-sp-2);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
+}
