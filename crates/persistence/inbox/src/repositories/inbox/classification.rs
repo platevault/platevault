@@ -7,7 +7,7 @@
 
 use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use persistence_core::DbResult;
 
@@ -101,6 +101,17 @@ pub async fn upsert_classification(
     pool: &SqlitePool,
     c: &UpsertClassification<'_>,
 ) -> DbResult<()> {
+    upsert_classification_conn(pool.acquire().await?.as_mut(), c).await
+}
+
+/// Connection-level variant of [`upsert_classification`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_classification_conn(
+    conn: &mut SqliteConnection,
+    c: &UpsertClassification<'_>,
+) -> DbResult<()> {
     let now = Timestamp::now_iso();
     sqlx::query(
         "INSERT INTO inbox_classifications
@@ -120,7 +131,7 @@ pub async fn upsert_classification(
     .bind(&now)
     .bind(c.content_signature)
     .bind(c.unclassified_file_count)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
@@ -148,6 +159,17 @@ pub async fn get_classification(
 /// # Errors
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn insert_evidence(pool: &SqlitePool, ev: &InsertEvidence<'_>) -> DbResult<()> {
+    insert_evidence_conn(pool.acquire().await?.as_mut(), ev).await
+}
+
+/// Connection-level variant of [`insert_evidence`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn insert_evidence_conn(
+    conn: &mut SqliteConnection,
+    ev: &InsertEvidence<'_>,
+) -> DbResult<()> {
     sqlx::query(
         "INSERT INTO inbox_classification_evidence
             (id, inbox_item_id, relative_file_path, frame_type, evidence_source,
@@ -164,8 +186,58 @@ pub async fn insert_evidence(pool: &SqlitePool, ev: &InsertEvidence<'_>) -> DbRe
     .bind(ev.manual_override)
     .bind(i64::from(ev.is_master))
     .bind(ev.master_detector)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
+    Ok(())
+}
+
+/// Columns per evidence row for batch-insert chunking.
+const EVIDENCE_COLS: usize = 10;
+/// Maximum rows per batch INSERT (SQLite param limit 32766 / columns).
+const EVIDENCE_BATCH_SIZE: usize = 32766 / EVIDENCE_COLS;
+
+/// Batch-insert multiple evidence rows in a single statement per chunk.
+///
+/// Chunks at `32766 / 10 = 3276` rows to stay within SQLite's 32766-parameter
+/// limit. Falls back to single-row insert for any remainder. Each call
+/// generates fresh UUIDs for any row whose `id` is the empty string, but the
+/// caller is expected to set `ev.id` before passing.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn insert_evidence_batch(
+    conn: &mut SqliteConnection,
+    rows: &[InsertEvidence<'_>],
+) -> DbResult<()> {
+    if rows.is_empty() {
+        return Ok(());
+    }
+    for chunk in rows.chunks(EVIDENCE_BATCH_SIZE) {
+        // Build "VALUES (?,?,?,?,?,?,?,?,?,?), …" with one tuple per row.
+        let placeholders =
+            (0..chunk.len()).map(|_| "(?,?,?,?,?,?,?,?,?,?)").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "INSERT INTO inbox_classification_evidence
+                (id, inbox_item_id, relative_file_path, frame_type, evidence_source,
+                 raw_value, unclassified, manual_override, is_master, master_detector)
+             VALUES {placeholders}"
+        );
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(sql));
+        for ev in chunk {
+            q = q
+                .bind(ev.id)
+                .bind(ev.inbox_item_id)
+                .bind(ev.relative_file_path)
+                .bind(ev.frame_type)
+                .bind(ev.evidence_source)
+                .bind(ev.raw_value)
+                .bind(i64::from(ev.unclassified))
+                .bind(ev.manual_override)
+                .bind(i64::from(ev.is_master))
+                .bind(ev.master_detector);
+        }
+        q.execute(&mut *conn).await?;
+    }
     Ok(())
 }
 
@@ -174,9 +246,21 @@ pub async fn insert_evidence(pool: &SqlitePool, ev: &InsertEvidence<'_>) -> DbRe
 /// # Errors
 /// Returns [`DbError::Database`] on connection failure.
 pub async fn delete_evidence_for_item(pool: &SqlitePool, inbox_item_id: &str) -> DbResult<()> {
+    delete_evidence_for_item_conn(pool.acquire().await?.as_mut(), inbox_item_id).await
+}
+
+/// Connection-level variant of [`delete_evidence_for_item`]. See [`insert_plan_conn`] in
+/// `plans.rs` for the pattern.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn delete_evidence_for_item_conn(
+    conn: &mut SqliteConnection,
+    inbox_item_id: &str,
+) -> DbResult<()> {
     sqlx::query("DELETE FROM inbox_classification_evidence WHERE inbox_item_id = ?")
         .bind(inbox_item_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     Ok(())
 }
@@ -512,6 +596,81 @@ pub async fn list_file_overrides_for_group(
     .bind(source_group_id)
     .fetch_all(pool)
     .await?)
+}
+
+/// Data for one row in a batch upsert of `inbox_classifications`.
+pub struct UpsertClassificationRow<'a> {
+    pub inbox_item_id: &'a str,
+    pub result: &'a str,
+    pub frame_type: Option<&'a str>,
+    pub content_signature: &'a str,
+    pub unclassified_file_count: i64,
+}
+
+/// Batch-upsert multiple classification rows in one statement per chunk.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_classification_batch(
+    conn: &mut SqliteConnection,
+    rows: &[UpsertClassificationRow<'_>],
+) -> DbResult<()> {
+    if rows.is_empty() {
+        return Ok(());
+    }
+    let now = Timestamp::now_iso();
+    for chunk in rows.chunks(32766 / 6) {
+        let placeholders = (0..chunk.len()).map(|_| "(?,?,?,?,?,?)").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "INSERT INTO inbox_classifications
+                (inbox_item_id, result, frame_type, computed_at, content_signature,
+                 unclassified_file_count)
+             VALUES {placeholders}
+             ON CONFLICT(inbox_item_id) DO UPDATE SET
+                 result = excluded.result,
+                 frame_type = excluded.frame_type,
+                 computed_at = excluded.computed_at,
+                 content_signature = excluded.content_signature,
+                 unclassified_file_count = excluded.unclassified_file_count"
+        );
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(sql));
+        for r in chunk {
+            q = q
+                .bind(r.inbox_item_id)
+                .bind(r.result)
+                .bind(r.frame_type)
+                .bind(&now)
+                .bind(r.content_signature)
+                .bind(r.unclassified_file_count);
+        }
+        q.execute(&mut *conn).await?;
+    }
+    Ok(())
+}
+
+/// Batch-delete evidence rows for a set of item ids.
+///
+/// Uses `WHERE inbox_item_id IN (?, ?, …)`. Chunks at 32766 to stay within
+/// SQLite's parameter limit.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn delete_evidence_for_items(
+    conn: &mut SqliteConnection,
+    inbox_item_ids: &[&str],
+) -> DbResult<()> {
+    for chunk in inbox_item_ids.chunks(32766) {
+        let placeholders = (0..chunk.len()).map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "DELETE FROM inbox_classification_evidence WHERE inbox_item_id IN ({placeholders})"
+        );
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(sql));
+        for id in chunk {
+            q = q.bind(*id);
+        }
+        q.execute(&mut *conn).await?;
+    }
+    Ok(())
 }
 
 /// Mark the override for a file as stale (file size/mtime changed since the

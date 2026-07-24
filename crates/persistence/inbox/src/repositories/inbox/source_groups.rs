@@ -6,7 +6,7 @@
 
 use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use persistence_core::DbResult;
 
@@ -119,10 +119,27 @@ pub async fn update_source_group_child_count(
     source_group_id: &str,
     child_count: i64,
 ) -> DbResult<()> {
+    update_source_group_child_count_conn(
+        pool.acquire().await?.as_mut(),
+        source_group_id,
+        child_count,
+    )
+    .await
+}
+
+/// Connection-level variant of [`update_source_group_child_count`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn update_source_group_child_count_conn(
+    conn: &mut SqliteConnection,
+    source_group_id: &str,
+    child_count: i64,
+) -> DbResult<()> {
     sqlx::query("UPDATE inbox_source_groups SET child_count = ? WHERE id = ?")
         .bind(child_count)
         .bind(source_group_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     Ok(())
 }

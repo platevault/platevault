@@ -6,7 +6,7 @@
 
 use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use persistence_core::{DbError, DbResult};
 
@@ -96,12 +96,24 @@ pub async fn get_inbox_item(pool: &SqlitePool, id: &str) -> DbResult<InboxItemRo
 /// # Errors
 /// Returns [`DbError::NotFound`] if no row was updated, or [`DbError::Database`].
 pub async fn update_inbox_item_state(pool: &SqlitePool, id: &str, state: &str) -> DbResult<()> {
+    update_inbox_item_state_conn(pool.acquire().await?.as_mut(), id, state).await
+}
+
+/// Connection-level variant of [`update_inbox_item_state`].
+///
+/// # Errors
+/// Returns [`DbError::NotFound`] if no row was updated, or [`DbError::Database`].
+pub async fn update_inbox_item_state_conn(
+    conn: &mut SqliteConnection,
+    id: &str,
+    state: &str,
+) -> DbResult<()> {
     let now = Timestamp::now_iso();
     let rows = sqlx::query("UPDATE inbox_items SET state = ?, last_scanned_at = ? WHERE id = ?")
         .bind(state)
         .bind(&now)
         .bind(id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?
         .rows_affected();
 
@@ -121,6 +133,20 @@ pub async fn update_inbox_item_scan(
     content_signature: &str,
     file_count: i64,
 ) -> DbResult<()> {
+    update_inbox_item_scan_conn(pool.acquire().await?.as_mut(), id, content_signature, file_count)
+        .await
+}
+
+/// Connection-level variant of [`update_inbox_item_scan`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn update_inbox_item_scan_conn(
+    conn: &mut SqliteConnection,
+    id: &str,
+    content_signature: &str,
+    file_count: i64,
+) -> DbResult<()> {
     let now = Timestamp::now_iso();
     sqlx::query(
         "UPDATE inbox_items
@@ -131,7 +157,7 @@ pub async fn update_inbox_item_scan(
     .bind(file_count)
     .bind(&now)
     .bind(id)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
@@ -183,6 +209,17 @@ pub async fn upsert_inbox_sub_item(
     pool: &SqlitePool,
     item: &UpsertInboxSubItem<'_>,
 ) -> DbResult<String> {
+    upsert_inbox_sub_item_conn(pool.acquire().await?.as_mut(), item).await
+}
+
+/// Connection-level variant of [`upsert_inbox_sub_item`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_inbox_sub_item_conn(
+    conn: &mut SqliteConnection,
+    item: &UpsertInboxSubItem<'_>,
+) -> DbResult<String> {
     let now = Timestamp::now_iso();
     // spec 058 FR-007/SC-003: a row carrying no authoritative frame type must
     // not claim to be classified. `pending_classification` is the only other
@@ -227,7 +264,7 @@ pub async fn upsert_inbox_sub_item(
     .bind(state)
     .bind(item.lane)
     .bind(i64::from(item.needs_review))
-    .fetch_one(pool)
+    .fetch_one(&mut *conn)
     .await?;
     Ok(persisted_id)
 }
@@ -241,13 +278,24 @@ pub async fn upsert_inbox_sub_item(
 /// # Errors
 /// Returns [`DbError::Database`] on connection failure.
 pub async fn delete_sub_item_if_unlinked(pool: &SqlitePool, id: &str) -> DbResult<()> {
+    delete_sub_item_if_unlinked_conn(pool.acquire().await?.as_mut(), id).await
+}
+
+/// Connection-level variant of [`delete_sub_item_if_unlinked`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn delete_sub_item_if_unlinked_conn(
+    conn: &mut SqliteConnection,
+    id: &str,
+) -> DbResult<()> {
     sqlx::query(
         "DELETE FROM inbox_items
          WHERE id = ?
            AND id NOT IN (SELECT inbox_item_id FROM inbox_plan_links)",
     )
     .bind(id)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }

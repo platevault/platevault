@@ -44,10 +44,10 @@ use metadata_core::{
 use super::grouping::{group_file, FrameMetadata, GroupingConfig};
 use super::signature::folder_signature;
 use persistence_inbox::repositories::inbox::{
-    self as repo, InsertEvidence, UpsertClassification, UpsertInboxSubItem,
+    self as repo, InsertEvidence, UpsertClassification, UpsertFileMetadata, UpsertInboxSubItem,
 };
 use persistence_inbox::repositories::q_inbox;
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
 
@@ -94,6 +94,14 @@ pub struct ClassifyRequest {
 }
 
 // ── classify ──────────────────────────────────────────────────────────────────
+
+/// Per-file intermediate state for the classify hot path: classification result
+/// plus pre-collected file identity (stat done outside any DB transaction).
+struct FileWork {
+    fc: FileClassification,
+    file_size_bytes: Option<i64>,
+    file_mtime: Option<String>,
+}
 
 /// Run or retrieve a classification for an inbox item.
 ///
@@ -167,84 +175,113 @@ pub async fn classify(
     let override_snapshot =
         snapshot_overrides(pool, &req.inbox_item_id, &file_paths, &req.root_absolute_path).await;
 
-    // Delete stale evidence
-    repo::delete_evidence_for_item(pool, &req.inbox_item_id)
+    // ── Collect all file-level data before opening any transaction ──────────
+    //
+    // Stat calls (inside `classify_one_file` via `cached_extract`, and the
+    // explicit `fs::metadata` for file identity below) run here, outside the
+    // write transaction, so the transaction never blocks on slow filesystem I/O
+    // (constitution §II: "transaction must not span fs I/O unnecessarily long").
+
+    let mut file_work: Vec<FileWork> = Vec::with_capacity(file_paths.len());
+    for abs_path in &file_paths {
+        let fc = classify_one_file(abs_path, &req.root_absolute_path, &norm_table);
+        // #549/#1286: skip extracted masters when classifying the parent folder.
+        if fc.is_master && item.is_master_item == 0 {
+            continue;
+        }
+        // Collect file identity for metadata staleness (spec 041 R-4).
+        let (file_size_bytes, file_mtime) = match std::fs::metadata(abs_path) {
+            Ok(md) => {
+                let size = i64::try_from(md.len()).ok();
+                let mtime = md
+                    .modified()
+                    .ok()
+                    .and_then(|t| time::OffsetDateTime::from(t).format(&Rfc3339).ok());
+                (size, mtime)
+            }
+            Err(_) => (None, None),
+        };
+        file_work.push(FileWork { fc, file_size_bytes, file_mtime });
+    }
+
+    // ── Build batch payloads (owned strings) ─────────────────────────────────
+    //
+    // Binding lifetimes require owned storage for anything derived from `fc`;
+    // IDs must outlive the batch slice passed to insert_evidence_batch.
+    let ev_ids: Vec<String> = file_work.iter().map(|_| Uuid::new_v4().to_string()).collect();
+    let ev_batch: Vec<InsertEvidence<'_>> = file_work
+        .iter()
+        .zip(ev_ids.iter())
+        .map(|(w, id)| InsertEvidence {
+            id: id.as_str(),
+            inbox_item_id: &req.inbox_item_id,
+            relative_file_path: &w.fc.relative_path,
+            frame_type: w.fc.frame_type.map(FrameType::as_str),
+            evidence_source: w.fc.evidence_source.as_str(),
+            raw_value: w.fc.raw_value.as_deref(),
+            unclassified: w.fc.is_unclassified,
+            manual_override: None,
+            is_master: w.fc.is_master,
+            master_detector: w.fc.master_detector,
+        })
+        .collect();
+
+    let meta_batch: Vec<UpsertFileMetadata<'_>> = file_work
+        .iter()
+        .map(|w| {
+            build_file_metadata_upsert(
+                &req.inbox_item_id,
+                w.fc.raw_meta.as_ref(),
+                &w.fc.relative_path,
+                w.file_size_bytes,
+                w.file_mtime.as_deref(),
+            )
+        })
+        .collect();
+
+    // ── T066: per-file records for sub-item grouping ──────────────────────────
+    let mut file_records: Vec<(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)> =
+        file_work
+            .iter()
+            .map(|w| (w.fc.relative_path.clone(), w.fc.frame_type, w.fc.raw_meta.clone()))
+            .collect();
+
+    // ── Open a single write transaction for all load-bearing inserts ──────────
+    let mut tx =
+        pool.begin().await.map_err(|e| db_internal_ctx(e, "classify: begin transaction"))?;
+    let conn: &mut SqliteConnection = &mut tx;
+
+    // Delete stale evidence, breakdown, and per-file metadata.
+    repo::delete_evidence_for_item_conn(conn, &req.inbox_item_id)
         .await
         .map_err(|e| db_internal_ctx(e, "classify: delete stale evidence"))?;
-    repo::delete_breakdown_for_item(pool, &req.inbox_item_id)
+    repo::delete_breakdown_for_item_conn(conn, &req.inbox_item_id)
         .await
         .map_err(|e| db_internal_ctx(e, "classify: delete stale breakdown"))?;
     // spec 041 US2/T016: clear stale per-file metadata so removed files do not
     // leave orphaned rows behind after a re-scan.
-    repo::delete_file_metadata_for_item(pool, &req.inbox_item_id)
+    repo::delete_file_metadata_for_item_conn(conn, &req.inbox_item_id)
         .await
         .map_err(|e| db_internal_ctx(e, "classify: delete stale file metadata"))?;
 
-    let mut frame_type_files: HashMap<String, Vec<String>> = HashMap::new();
-    let mut unclassified_files: Vec<String> = Vec::new();
-    // T066: per-file records for sub-item grouping after the loop.
-    // Each entry: (relative_path, frame_type, raw_meta_for_grouping)
-    let mut file_records: Vec<(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)> =
-        Vec::new();
+    // Batch-insert all evidence rows in one (or a few chunked) statements.
+    repo::insert_evidence_batch(conn, &ev_batch)
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: insert classification evidence"))?;
 
-    for abs_path in &file_paths {
-        let fc = classify_one_file(abs_path, &req.root_absolute_path, &norm_table);
-
-        // Persist evidence (item-keyed — this is why `build_file_records`,
-        // used by the group-scoped `classify_source_group`, calls
-        // `classify_one_file` directly instead of going through this loop).
-        //
-        // #549/#1286, ported from main across this refactor: a detected
-        // calibration master gets its own `inbox_items` row at scan time
-        // (`persist_master_item`) but is never moved off disk, so a folder-level
-        // classify still walks it. Without this guard it is tallied a SECOND
-        // time into that item's evidence/breakdown/file_count. Only skip when
-        // the item being classified is not itself the master: a master's own
-        // classify call has exactly this one file and must record it.
-        //
-        // Spec 058 note: main wrote this to protect the folder placeholder,
-        // which T012 has since deleted. It is kept because the hazard is not
-        // placeholder-specific — any item whose folder still contains an
-        // extracted master would double-count it.
-        if fc.is_master && item.is_master_item == 0 {
-            continue;
-        }
-
-        let ev_id = Uuid::new_v4().to_string();
-        let ev = InsertEvidence {
-            id: &ev_id,
-            inbox_item_id: &req.inbox_item_id,
-            relative_file_path: &fc.relative_path,
-            frame_type: fc.frame_type.map(FrameType::as_str),
-            evidence_source: fc.evidence_source.as_str(),
-            raw_value: fc.raw_value.as_deref(),
-            unclassified: fc.is_unclassified,
-            manual_override: None,
-            is_master: fc.is_master,
-            master_detector: fc.master_detector,
-        };
-        repo::insert_evidence(pool, &ev)
-            .await
-            .map_err(|e| db_internal_ctx(e, "classify: insert classification evidence"))?;
-
-        // spec 041 US2/T016: persist per-file extracted header metadata. The
-        // raw extractor returns string fields; we parse the numeric ones here
-        // (gain stays a string — some cameras report scaled/non-integer gain).
-        persist_file_metadata(
-            pool,
-            &req.inbox_item_id,
-            &fc.relative_path,
-            abs_path,
-            fc.raw_meta.as_ref(),
-        )
+    // Batch-upsert all per-file metadata rows.
+    repo::upsert_inbox_file_metadata_batch(conn, &meta_batch)
         .await
         .map_err(|e| db_internal_ctx(e, "classify: persist per-file metadata"))?;
 
-        // T066: collect for sub-item grouping and the folder tallies — both
-        // computed AFTER the loop, once user overrides are layered on top of
-        // this extraction-only record.
-        file_records.push((fc.relative_path, fc.frame_type, fc.raw_meta));
-    }
+    // Commit the first transaction (wipe + batch inserts). Subsequent
+    // best-effort override re-application reads the committed evidence rows via
+    // the pool, so they must be visible before those queries run. The
+    // classification writes + sub-item materialization follow in a second
+    // transaction below.
+    tx.commit()
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: commit batch insert transaction"))?;
 
     // spec 041 R-4 / T025: re-apply snapshotted overrides to freshly-inserted
     // evidence rows, then mark stale the subset whose file identity changed.
@@ -391,6 +428,8 @@ pub async fn classify(
     }
 
     // Folder tallies from the layered (effective) records.
+    let mut frame_type_files: HashMap<String, Vec<String>> = HashMap::new();
+    let mut unclassified_files: Vec<String> = Vec::new();
     for (rel, ft_opt, _) in &file_records {
         match ft_opt {
             Some(ft) => {
@@ -457,10 +496,21 @@ pub async fn classify(
     // resolves or is discarded (`plan_listener::transition_via_plan_id`).
     // Re-derivation into proper single-type sub-items happens naturally the
     // next time classify runs on the item once it is no longer `plan_open`.
+    // ── Second transaction: classification writes + sub-item materialization ──
+    //
+    // All load-bearing writes after the override re-application run in one
+    // transaction so a partial write (e.g. a failed `update_inbox_item_state`)
+    // cannot leave the DB in a partially-updated state.
+    let mut tx2 = pool
+        .begin()
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: begin classification transaction"))?;
+    let conn2: &mut SqliteConnection = &mut tx2;
+
     let sg_id_for_split = item.source_group_id.as_deref().filter(|_| item.state != "plan_open");
     if let Some(sg_id) = sg_id_for_split {
-        materialize_sub_items(
-            pool,
+        materialize_sub_items_tx(
+            conn2,
             sg_id,
             &item.root_id,
             &item.relative_path,
@@ -479,7 +529,7 @@ pub async fn classify(
         content_signature: &content_signature,
         unclassified_file_count: unclassified_count,
     };
-    repo::upsert_classification(pool, &classification)
+    repo::upsert_classification_conn(conn2, &classification)
         .await
         .map_err(|e| db_internal_ctx(e, "classify: upsert classification"))?;
 
@@ -488,8 +538,8 @@ pub async fn classify(
     // files were filtered out of `file_records` above, so this is the
     // un-extracted remainder the placeholder is meant to represent, matching
     // the count `persist_folder_placeholder` (inbox.rs) writes at scan time.
-    repo::update_inbox_item_scan(
-        pool,
+    repo::update_inbox_item_scan_conn(
+        conn2,
         &req.inbox_item_id,
         &content_signature,
         i64::try_from(file_records.len()).unwrap_or(i64::MAX),
@@ -513,9 +563,13 @@ pub async fn classify(
     // `no_item_reports_classified_without_a_frame_type_sc003`).
     let next_state =
         if item.frame_type.is_some() { "classified" } else { "pending_classification" };
-    repo::update_inbox_item_state(pool, &req.inbox_item_id, next_state)
+    repo::update_inbox_item_state_conn(conn2, &req.inbox_item_id, next_state)
         .await
         .map_err(|e| db_internal_ctx(e, "classify: mark item classified"))?;
+
+    tx2.commit()
+        .await
+        .map_err(|e| db_internal_ctx(e, "classify: commit classification transaction"))?;
 
     // 10. Build + persist breakdown with destination previews
     let breakdown =
@@ -759,20 +813,23 @@ pub(crate) fn build_file_records(
 /// parse them to `i64`/`f64` here. `gain` is intentionally left as a string.
 /// `file_size_bytes`/`file_mtime` are the cheap per-file identity used for
 /// override staleness (R-4); a failed `stat` simply leaves them `None`.
-async fn persist_file_metadata(
-    pool: &SqlitePool,
-    inbox_item_id: &str,
-    rel: &str,
-    abs_path: &Path,
-    raw_meta: Option<&metadata_core::RawFileMetadata>,
-) -> persistence_core::DbResult<()> {
-    // Parse a trimmed numeric string (e.g. "120.0", "2") to a target number.
+/// Build a [`UpsertFileMetadata`] from already-collected file identity and raw
+/// metadata — no DB write, no stat (caller supplies `file_size_bytes` /
+/// `file_mtime` collected outside any transaction).
+///
+/// Extracted from the old `persist_file_metadata` body so the classify hot
+/// path can build the full batch without opening a DB connection per file.
+fn build_file_metadata_upsert<'a>(
+    inbox_item_id: &'a str,
+    raw_meta: Option<&'a metadata_core::RawFileMetadata>,
+    rel: &'a str,
+    file_size_bytes: Option<i64>,
+    file_mtime: Option<&'a str>,
+) -> UpsertFileMetadata<'a> {
     fn parse_f64(s: Option<&String>) -> Option<f64> {
         s.and_then(|v| v.trim().parse::<f64>().ok())
     }
     fn parse_i64(s: Option<&String>) -> Option<i64> {
-        // Integer headers (NAXIS*, XBINNING/YBINNING) are whole numbers; a few
-        // writers append a trailing ".0", so strip that before parsing.
         s.and_then(|v| {
             let t = v.trim();
             t.parse::<i64>()
@@ -781,21 +838,8 @@ async fn persist_file_metadata(
         })
     }
 
-    // Cheap per-file identity (size + mtime) for override staleness (R-4).
-    let (file_size_bytes, file_mtime) = match std::fs::metadata(abs_path) {
-        Ok(md) => {
-            let size = i64::try_from(md.len()).ok();
-            let mtime = md
-                .modified()
-                .ok()
-                .and_then(|t| time::OffsetDateTime::from(t).format(&Rfc3339).ok());
-            (size, mtime)
-        }
-        Err(_) => (None, None),
-    };
-
-    let m = if let Some(meta) = raw_meta {
-        repo::UpsertFileMetadata {
+    if let Some(meta) = raw_meta {
+        UpsertFileMetadata {
             inbox_item_id,
             relative_file_path: rel,
             filter: meta.filter.as_deref().map(str::trim).filter(|s| !s.is_empty()),
@@ -814,7 +858,7 @@ async fn persist_file_metadata(
             naxis2: parse_i64(meta.naxis2.as_ref()),
             stack_count: meta.stack_count.map(i64::from),
             file_size_bytes,
-            file_mtime: file_mtime.as_deref(),
+            file_mtime,
             // spec 041 T072/FR-044: persist the T062 extended fields so
             // `inbox.item.metadata` (display) and `inbox.target_recommendations`
             // (T074) read real values instead of permanently-NULL columns.
@@ -839,16 +883,14 @@ async fn persist_file_metadata(
         }
     } else {
         // No header metadata — still record identity for staleness tracking.
-        repo::UpsertFileMetadata {
+        UpsertFileMetadata {
             inbox_item_id,
             relative_file_path: rel,
             file_size_bytes,
-            file_mtime: file_mtime.as_deref(),
+            file_mtime,
             ..Default::default()
         }
-    };
-
-    repo::upsert_inbox_file_metadata(pool, &m).await
+    }
 }
 
 /// Collect relative file paths that need to be marked as stale after the
@@ -1181,11 +1223,46 @@ pub(crate) async fn materialize_sub_items(
     file_paths: &[PathBuf],
     file_records: &[(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)],
 ) {
+    let Ok(mut conn) = pool.acquire().await else { return };
+    materialize_sub_items_tx(
+        &mut conn,
+        source_group_id,
+        root_id,
+        relative_path,
+        lane,
+        file_paths,
+        file_records,
+    )
+    .await;
+}
+
+/// Per-group seed context built during sub-item materialization.
+struct SubItemSeed {
+    persisted_id: String,
+    is_needs_review: bool,
+    frame_type_str: Option<String>,
+    sub_sig: String,
+    /// Index range into the flat `all_files` Vec: `[start, end)`.
+    files_idx: (usize, usize),
+}
+
+/// Connection-level variant of [`materialize_sub_items`]: routes all writes
+/// through `conn` (part of the caller's transaction) while reads use `pool`.
+///
+/// Used by `classify()` so the sub-item seed writes are included in the same
+/// transaction as the classification and item-state writes.
+/// `materialize_sub_items` (pool-only) is kept for `reclassify.rs`.
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+pub(crate) async fn materialize_sub_items_tx(
+    conn: &mut SqliteConnection,
+    source_group_id: &str,
+    root_id: &str,
+    relative_path: &str,
+    lane: &str,
+    file_paths: &[PathBuf],
+    file_records: &[(String, Option<FrameType>, Option<metadata_core::RawFileMetadata>)],
+) {
     // Step 1 + 2 + T070 gate: partition files by group_key.
-    // key → (group_label, Vec<(rel_path, abs_path, raw_meta)>) — abs_path/raw_meta
-    // are carried through per-group so the cache-seed step below (R-14 CI fix,
-    // issue #755) can rebuild each sub-item's own evidence/metadata without a
-    // second DB round-trip.
     #[allow(clippy::type_complexity)]
     let mut groups: std::collections::HashMap<
         String,
@@ -1194,27 +1271,9 @@ pub(crate) async fn materialize_sub_items(
 
     for (i, (rel, frame_type_opt, raw_meta_opt)) in file_records.iter().enumerate() {
         let abs_path = file_paths.get(i).cloned();
-
-        // Spec 058 FR-028 (T007): `group_key` carries classification identity
-        // ONLY; the needs-review verdict travels alongside it as its own bool
-        // and is persisted to `inbox_items.needs_review`. A file missing a
-        // mandatory attribute keeps the identity of its frame type, so it can
-        // converge with a resolved sibling via the OR-fold below rather than
-        // being split off into a separate bucket.
-        //
-        // #1126 merge (2026-07-20): `missing_mandatory_for_file` is adopted
-        // from `main` — it folds the no-frame-type case into the same helper
-        // instead of branching on it separately, which is a real
-        // simplification. What is NOT adopted is the `SENTINEL_NEEDS_REVIEW`
-        // group key it feeds on `main`: 058 retires that sentinel (T006/T007),
-        // so the verdict lands on the `needs_review` bool while the key stays
-        // pure classification identity. `missing_mandatory_for_file(None, _)`
-        // returns `vec!["frameType"]`, i.e. non-empty, so the no-frame-type
-        // file is flagged by the same expression rather than a literal `true`.
         let missing = missing_mandatory_for_file(*frame_type_opt, raw_meta_opt.as_ref());
         let needs_review = !missing.is_empty();
         let (group_key, group_label) = if let Some(ft) = *frame_type_opt {
-            // Build effective FrameMetadata for the grouping engine.
             let meta = raw_meta_opt.as_ref().map_or_else(
                 || FrameMetadata { frame_type: ft, ..Default::default() },
                 |r| build_frame_metadata(ft, r),
@@ -1225,47 +1284,50 @@ pub(crate) async fn materialize_sub_items(
         } else {
             (GROUP_KEY_TYPE_UNKNOWN.to_owned(), "(root) · needs review".to_owned())
         };
-
-        // Files without a resolvable abs path (e.g. reclassify_v2's re-split,
-        // which has no root path to join) still need to land in their group so
-        // the sub-item is upserted with the correct file_count and evidence.
         let entry =
             groups.entry(group_key).or_insert_with(|| (group_label, needs_review, Vec::new()));
-        // OR-folded, not first-file-wins: `target` is mandatory for lights yet
-        // is not a grouping dimension, so a file missing it shares a group_key
-        // with a resolved sibling. Any unresolved file must flag the whole
-        // group or it becomes confirmable on filename order alone.
         entry.1 |= needs_review;
         entry.2.push((rel.clone(), abs_path, raw_meta_opt.clone()));
     }
 
-    // Step 4 + 5: upsert one sub-item per group and update child_count.
     let child_count = i64::try_from(groups.len()).unwrap_or(i64::MAX);
 
-    for (group_key, (group_label, is_needs_review, files)) in &groups {
+    // ── Step 1: upsert sub-items; collect persisted ids ───────────────────────
+    //
+    // Each upsert returns the id that ACTUALLY persisted (ON CONFLICT keeps the
+    // pre-existing row's id). All subsequent batch writes key on persisted_id,
+    // not on the freshly-generated candidate id (issue #854).
+    // Collect all files into a flat Vec so we can build batch payloads with
+    // contiguous index ranges.
+    #[allow(clippy::type_complexity)]
+    let mut all_files: Vec<(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)> =
+        Vec::new();
+    // Produce the sub-item seeds in deterministic key order.
+    let mut sorted_groups: Vec<(&String, &(String, bool, Vec<_>))> = groups.iter().collect();
+    sorted_groups.sort_by_key(|(k, _)| k.as_str());
+
+    let mut seeds: Vec<SubItemSeed> = Vec::with_capacity(sorted_groups.len());
+
+    for (group_key, (group_label, is_needs_review, files)) in &sorted_groups {
         let is_needs_review = *is_needs_review;
-        // Per-sub-group content_signature (R-11).
         let file_sigs: Vec<[u8; 32]> = files
             .iter()
             .filter_map(|(_, abs, _)| abs.as_deref())
             .filter_map(super::signature::file_signature)
             .collect();
         let sub_sig = folder_signature(file_sigs);
-
-        // Determine frame_type from the group_key prefix (type=<value>).
-        let frame_type_str: Option<&str> = if is_needs_review {
+        let frame_type_str: Option<String> = if is_needs_review {
             None
         } else {
-            // group_key starts with "type=<ft>·..." — extract the type token.
             group_key
                 .strip_prefix("type=")
                 .and_then(|rest| rest.split('·').next())
                 .filter(|s| !s.is_empty())
+                .map(str::to_owned)
         };
 
         let file_count = i64::try_from(files.len()).unwrap_or(i64::MAX);
         let sub_id = Uuid::new_v4().to_string();
-
         let sub_item = UpsertInboxSubItem {
             id: &sub_id,
             root_id,
@@ -1273,175 +1335,225 @@ pub(crate) async fn materialize_sub_items(
             source_group_id,
             group_key,
             group_label,
-            frame_type: frame_type_str,
+            frame_type: frame_type_str.as_deref(),
             content_signature: &sub_sig,
             file_count,
             lane,
             needs_review: is_needs_review,
         };
-
-        // Use the id that ACTUALLY persisted, not the freshly-generated
-        // `sub_id`: on a re-materialization of the same group the ON CONFLICT
-        // DO UPDATE keeps the pre-existing row's id and discards `sub_id`.
-        // Seeding the discarded id FK-fails (evidence/classification reference
-        // inbox_items(id)) and strands the real row without evidence, which
-        // makes a later reclassify find empty file records and purge the
-        // sub-item entirely — Confirm then never enables (issue #854).
-        let Ok(persisted_id) = repo::upsert_inbox_sub_item(pool, &sub_item).await else {
+        let Ok(persisted_id) = repo::upsert_inbox_sub_item_conn(conn, &sub_item).await else {
             continue;
         };
 
-        // Seed this sub-item's OWN evidence/metadata/breakdown + a matching
-        // `inbox_classifications` cache row (content_signature == sub_sig, the
-        // same value just written on the `inbox_items` row above). Without
-        // this, a subsequent `inbox.classify(sub_id)` call (e.g. the frontend
-        // selecting the newly split row) is a guaranteed cache MISS — the
-        // fallback re-derives straight from the on-disk FITS headers,
-        // silently discarding the manual/generic override that produced this
-        // very group (overrides are keyed to the pre-split item id or the
-        // source group, never copied to a freshly materialized sub-item id
-        // otherwise), re-classifying it back to unclassified and leaving
-        // Confirm permanently disabled (issue #755 CI fix, R-14).
-        seed_sub_item_cache(pool, &persisted_id, is_needs_review, frame_type_str, &sub_sig, files)
-            .await;
+        let start = all_files.len();
+        all_files.extend(files.iter().cloned());
+        let end = all_files.len();
+
+        seeds.push(SubItemSeed {
+            persisted_id,
+            is_needs_review,
+            frame_type_str,
+            sub_sig,
+            files_idx: (start, end),
+        });
     }
 
-    // Purge sub-item rows for groups that no longer exist: when a file's metadata
-    // changes it moves to a different group, leaving its old group empty. The
-    // upsert loop above never touches those orphaned rows, so delete them here
-    // (preserving any plan-linked item). Without this, a rescan after a metadata
-    // change leaves a stale sub-item (spec 041 R-11/FR-042; T067 regression).
-    let current_keys: std::collections::HashSet<&str> = groups.keys().map(String::as_str).collect();
-    if let Ok(existing) = repo::list_inbox_sub_items(pool, source_group_id).await {
-        for row in existing {
-            if !current_keys.contains(row.group_key.as_str()) {
-                repo::delete_sub_item_if_unlinked(pool, &row.id).await.unwrap_or_else(|e| {
-                    tracing::warn!(
-                        source_group = %source_group_id,
-                        sub_item = %row.id,
-                        "classify: deleting orphaned sub-item failed, stale group remains: {e}"
-                    );
-                });
+    if seeds.is_empty() {
+        // No groups succeeded — update child_count and return.
+        repo::update_source_group_child_count_conn(conn, source_group_id, child_count)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(
+                    source_group = %source_group_id,
+                    child_count,
+                    "classify: updating source-group child count failed, badge count is stale: {e}"
+                );
+            });
+        return;
+    }
+
+    // ── Step 2: batch-delete stale cache rows for all persisted ids ───────────
+    //
+    // Best-effort: a failure leaves stale rows, not corrupt ones.
+    let id_refs: Vec<&str> = seeds.iter().map(|s| s.persisted_id.as_str()).collect();
+    repo::delete_evidence_for_items(conn, &id_refs).await.unwrap_or_else(|e| {
+        tracing::warn!(
+            source_group = %source_group_id,
+            "classify: batch delete evidence failed, cache may be stale: {e}"
+        );
+    });
+    repo::delete_breakdown_for_items(conn, &id_refs).await.unwrap_or_else(|e| {
+        tracing::warn!(
+            source_group = %source_group_id,
+            "classify: batch delete breakdown failed, cache may be stale: {e}"
+        );
+    });
+    repo::delete_file_metadata_for_items(conn, &id_refs).await.unwrap_or_else(|e| {
+        tracing::warn!(
+            source_group = %source_group_id,
+            "classify: batch delete metadata failed, cache may be stale: {e}"
+        );
+    });
+
+    // ── Step 3: batch-insert evidence across all groups ───────────────────────
+    let ev_ids: Vec<String> = all_files.iter().map(|_| Uuid::new_v4().to_string()).collect();
+    let ev_batch: Vec<repo::InsertEvidence<'_>> = seeds
+        .iter()
+        .flat_map(|s| {
+            let slice = &all_files[s.files_idx.0..s.files_idx.1];
+            let id_slice = &ev_ids[s.files_idx.0..s.files_idx.1];
+            slice.iter().zip(id_slice.iter()).map(|((rel, _, _), id)| repo::InsertEvidence {
+                id: id.as_str(),
+                inbox_item_id: s.persisted_id.as_str(),
+                relative_file_path: rel.as_str(),
+                frame_type: if s.is_needs_review { None } else { s.frame_type_str.as_deref() },
+                evidence_source: EvidenceSource::ImagetypHeader.as_str(),
+                raw_value: None,
+                unclassified: s.is_needs_review,
+                manual_override: None,
+                is_master: false,
+                master_detector: None,
+            })
+        })
+        .collect();
+
+    repo::insert_evidence_batch(conn, &ev_batch).await.unwrap_or_else(|e| {
+        tracing::warn!(
+            source_group = %source_group_id,
+            "classify: batch insert evidence failed, cache may be stale: {e}"
+        );
+    });
+
+    // ── Step 4: batch-insert metadata across all groups ───────────────────────
+    //
+    // Stat calls happen here, outside any lock contention bottleneck.
+    let meta_storage: Vec<(Option<i64>, Option<String>)> = all_files
+        .iter()
+        .map(|(_, abs_opt, _)| {
+            let abs_for_stat = abs_opt.as_deref().unwrap_or_else(|| Path::new(""));
+            match std::fs::metadata(abs_for_stat) {
+                Ok(md) => {
+                    let size = i64::try_from(md.len()).ok();
+                    let mtime = md
+                        .modified()
+                        .ok()
+                        .and_then(|t| time::OffsetDateTime::from(t).format(&Rfc3339).ok());
+                    (size, mtime)
+                }
+                Err(_) => (None, None),
             }
+        })
+        .collect();
+
+    let meta_batch: Vec<repo::UpsertFileMetadata<'_>> = seeds
+        .iter()
+        .flat_map(|s| {
+            let slice = &all_files[s.files_idx.0..s.files_idx.1];
+            let stat_slice = &meta_storage[s.files_idx.0..s.files_idx.1];
+            slice.iter().zip(stat_slice.iter()).map(|((rel, _, raw_meta_opt), (sz, mt))| {
+                build_file_metadata_upsert(
+                    s.persisted_id.as_str(),
+                    raw_meta_opt.as_ref(),
+                    rel.as_str(),
+                    *sz,
+                    mt.as_deref(),
+                )
+            })
+        })
+        .collect();
+
+    repo::upsert_inbox_file_metadata_batch(conn, &meta_batch).await.unwrap_or_else(|e| {
+        tracing::warn!(
+            source_group = %source_group_id,
+            "classify: batch insert metadata failed, cache may be stale: {e}"
+        );
+    });
+
+    // ── Step 5: batch-upsert breakdown and classification for all groups ──────
+    let bd_ids: Vec<String> = seeds.iter().map(|_| Uuid::new_v4().to_string()).collect();
+    let classification_batch: Vec<repo::UpsertClassificationRow<'_>> = seeds
+        .iter()
+        .map(|s| {
+            let (db_result, unclassified_count) = if s.is_needs_review {
+                ("unclassified", i64::try_from(s.files_idx.1 - s.files_idx.0).unwrap_or(i64::MAX))
+            } else {
+                ("classified", 0)
+            };
+            repo::UpsertClassificationRow {
+                inbox_item_id: s.persisted_id.as_str(),
+                result: db_result,
+                frame_type: if s.is_needs_review { None } else { s.frame_type_str.as_deref() },
+                content_signature: s.sub_sig.as_str(),
+                unclassified_file_count: unclassified_count,
+            }
+        })
+        .collect();
+
+    repo::upsert_classification_batch(conn, &classification_batch).await.unwrap_or_else(|e| {
+        tracing::warn!(
+            source_group = %source_group_id,
+            "classify: batch upsert classification failed, cache may be stale: {e}"
+        );
+    });
+
+    // Breakdown rows (one per group, only for classified groups).
+    for (seed, bd_id) in seeds.iter().zip(bd_ids.iter()) {
+        if seed.is_needs_review {
+            continue;
+        }
+        let files_slice = &all_files[seed.files_idx.0..seed.files_idx.1];
+        let samples: Vec<&str> = files_slice.iter().take(10).map(|(r, _, _)| r.as_str()).collect();
+        let sample_json = serde_json::to_string(&samples).unwrap_or_else(|_| "[]".to_owned());
+        repo::upsert_breakdown_row_conn(
+            conn,
+            bd_id,
+            &seed.persisted_id,
+            seed.frame_type_str.as_deref().unwrap_or("unknown"),
+            i64::try_from(files_slice.len()).unwrap_or(i64::MAX),
+            None,
+            &sample_json,
+        )
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(
+                source_group = %source_group_id,
+                sub_item = %seed.persisted_id,
+                "classify: upsert breakdown failed, cache may be stale: {e}"
+            );
+        });
+    }
+
+    // ── Step 6: orphan cleanup ────────────────────────────────────────────────
+    let current_keys: std::collections::HashSet<&str> = groups.keys().map(String::as_str).collect();
+    let existing: Vec<persistence_db::repositories::inbox::InboxItemRow> = sqlx::query_as(
+        "SELECT * FROM inbox_items WHERE source_group_id = ? AND group_key != '' ORDER BY group_key",
+    )
+    .bind(source_group_id)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap_or_default();
+    for row in existing {
+        if !current_keys.contains(row.group_key.as_str()) {
+            repo::delete_sub_item_if_unlinked_conn(conn, &row.id).await.unwrap_or_else(|e| {
+                tracing::warn!(
+                    source_group = %source_group_id,
+                    sub_item = %row.id,
+                    "classify: deleting orphaned sub-item failed, stale group remains: {e}"
+                );
+            });
         }
     }
 
-    repo::update_source_group_child_count(pool, source_group_id, child_count).await.unwrap_or_else(
-        |e| {
+    repo::update_source_group_child_count_conn(conn, source_group_id, child_count)
+        .await
+        .unwrap_or_else(|e| {
             tracing::warn!(
                 source_group = %source_group_id,
                 child_count,
                 "classify: updating source-group child count failed, badge count is stale: {e}"
             );
-        },
-    );
+        });
 }
-
-/// Seed one materialized sub-item's evidence, per-file metadata, breakdown,
-/// and `inbox_classifications` cache row directly from the data that just
-/// decided its `group_key` — no on-disk re-read (issue #755 CI fix, R-14).
-///
-/// `content_signature` MUST equal the value written on the sub-item's own
-/// `inbox_items` row (`sub_sig`, from the caller) — `classify()`'s cache-hit
-/// check compares the two columns for equality.
-async fn seed_sub_item_cache(
-    pool: &SqlitePool,
-    sub_id: &str,
-    is_needs_review: bool,
-    frame_type_str: Option<&str>,
-    content_signature: &str,
-    files: &[(String, Option<PathBuf>, Option<metadata_core::RawFileMetadata>)],
-) {
-    // #1101 (from main): every write below seeds a cache the next classify
-    // re-derives, so a failure degrades rather than corrupts — log and continue.
-    //
-    // Main's version of this hunk also recomputed `is_needs_review` locally as
-    // `group_key == SENTINEL_NEEDS_REVIEW`. That is deliberately NOT taken:
-    // spec 058 T008 made needs-review a real column, and this function already
-    // receives the caller's authoritative value as a parameter. Re-deriving it
-    // from the sentinel string would reintroduce the vocabulary 058 retired.
-    let warn_seed = |op: &'static str, e: persistence_core::DbError| {
-        tracing::warn!(
-            sub_item = %sub_id,
-            is_needs_review,
-            "classify: seeding sub-item cache failed at {op}, cache is partial: {e}"
-        );
-    };
-
-    repo::delete_evidence_for_item(pool, sub_id)
-        .await
-        .unwrap_or_else(|e| warn_seed("delete evidence", e));
-    repo::delete_breakdown_for_item(pool, sub_id)
-        .await
-        .unwrap_or_else(|e| warn_seed("delete breakdown", e));
-    repo::delete_file_metadata_for_item(pool, sub_id)
-        .await
-        .unwrap_or_else(|e| warn_seed("delete file metadata", e));
-
-    let mut sample_files: Vec<String> = Vec::new();
-    for (rel, abs_opt, raw_meta_opt) in files {
-        let ev_id = Uuid::new_v4().to_string();
-        let ev = InsertEvidence {
-            id: &ev_id,
-            inbox_item_id: sub_id,
-            relative_file_path: rel,
-            frame_type: if is_needs_review { None } else { frame_type_str },
-            evidence_source: EvidenceSource::ImagetypHeader.as_str(),
-            raw_value: None,
-            unclassified: is_needs_review,
-            manual_override: None,
-            is_master: false,
-            master_detector: None,
-        };
-        repo::insert_evidence(pool, &ev).await.unwrap_or_else(|e| warn_seed("insert evidence", e));
-
-        // Real abs path when available (initial classify's own re-split) for
-        // accurate file_size_bytes/file_mtime; falls back to an unreadable
-        // sentinel path (reclassify_v2 has no root path) — persist_file_metadata
-        // already treats a failed stat as None/None, same as its documented
-        // "no abs path available" behaviour elsewhere in this module.
-        let abs_for_stat = abs_opt.as_deref().unwrap_or_else(|| Path::new(""));
-        persist_file_metadata(pool, sub_id, rel, abs_for_stat, raw_meta_opt.as_ref())
-            .await
-            .unwrap_or_else(|e| warn_seed("persist file metadata", e));
-
-        if sample_files.len() < 10 {
-            sample_files.push(rel.clone());
-        }
-    }
-
-    if !is_needs_review {
-        let bd_id = Uuid::new_v4().to_string();
-        let sample_json = serde_json::to_string(&sample_files).unwrap_or_else(|_| "[]".to_owned());
-        repo::upsert_breakdown_row(
-            pool,
-            &bd_id,
-            sub_id,
-            frame_type_str.unwrap_or("unknown"),
-            i64::try_from(files.len()).unwrap_or(i64::MAX),
-            None,
-            &sample_json,
-        )
-        .await
-        .unwrap_or_else(|e| warn_seed("upsert breakdown", e));
-    }
-
-    let (db_result, unclassified_count) = if is_needs_review {
-        ("unclassified", i64::try_from(files.len()).unwrap_or(i64::MAX))
-    } else {
-        ("classified", 0)
-    };
-
-    let classification = UpsertClassification {
-        inbox_item_id: sub_id,
-        result: db_result,
-        frame_type: if is_needs_review { None } else { frame_type_str },
-        content_signature,
-        unclassified_file_count: unclassified_count,
-    };
-    repo::upsert_classification(pool, &classification)
-        .await
-        .unwrap_or_else(|e| warn_seed("upsert classification", e));
 }
 
 /// Enumerate FITS/XISF files directly inside a folder (non-recursive).

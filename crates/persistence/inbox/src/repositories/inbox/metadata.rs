@@ -6,7 +6,7 @@
 //! `inbox_classification_breakdown`.
 
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use persistence_core::DbResult;
 
@@ -138,9 +138,20 @@ pub async fn get_file_metadata(
 /// # Errors
 /// Returns [`DbError::Database`] on connection failure.
 pub async fn delete_breakdown_for_item(pool: &SqlitePool, inbox_item_id: &str) -> DbResult<()> {
+    delete_breakdown_for_item_conn(pool.acquire().await?.as_mut(), inbox_item_id).await
+}
+
+/// Connection-level variant of [`delete_breakdown_for_item`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn delete_breakdown_for_item_conn(
+    conn: &mut SqliteConnection,
+    inbox_item_id: &str,
+) -> DbResult<()> {
     sqlx::query("DELETE FROM inbox_classification_breakdown WHERE inbox_item_id = ?")
         .bind(inbox_item_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     Ok(())
 }
@@ -151,6 +162,31 @@ pub async fn delete_breakdown_for_item(pool: &SqlitePool, inbox_item_id: &str) -
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn upsert_breakdown_row(
     pool: &SqlitePool,
+    id: &str,
+    inbox_item_id: &str,
+    kind: &str,
+    count: i64,
+    destination_preview: Option<&str>,
+    sample_files_json: &str,
+) -> DbResult<()> {
+    upsert_breakdown_row_conn(
+        pool.acquire().await?.as_mut(),
+        id,
+        inbox_item_id,
+        kind,
+        count,
+        destination_preview,
+        sample_files_json,
+    )
+    .await
+}
+
+/// Connection-level variant of [`upsert_breakdown_row`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_breakdown_row_conn(
+    conn: &mut SqliteConnection,
     id: &str,
     inbox_item_id: &str,
     kind: &str,
@@ -173,7 +209,7 @@ pub async fn upsert_breakdown_row(
     .bind(count)
     .bind(destination_preview)
     .bind(sample_files_json)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
@@ -205,6 +241,17 @@ pub async fn list_breakdown(
 /// Returns [`DbError::Database`] on constraint or connection failure.
 pub async fn upsert_inbox_file_metadata(
     pool: &SqlitePool,
+    m: &UpsertFileMetadata<'_>,
+) -> DbResult<()> {
+    upsert_inbox_file_metadata_conn(pool.acquire().await?.as_mut(), m).await
+}
+
+/// Connection-level variant of [`upsert_inbox_file_metadata`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_inbox_file_metadata_conn(
+    pool: &mut SqliteConnection,
     m: &UpsertFileMetadata<'_>,
 ) -> DbResult<()> {
     let id = uuid::Uuid::new_v4().to_string();
@@ -280,8 +327,160 @@ pub async fn upsert_inbox_file_metadata(
     .bind(m.wcs_ra_deg)
     .bind(m.wcs_dec_deg)
     .bind(m.wcs_rotation_deg)
-    .execute(pool)
+    .execute(&mut *pool)
     .await?;
+    Ok(())
+}
+
+/// Number of bound columns per `inbox_file_metadata` INSERT row for chunking.
+const FILE_META_COLS: usize = 32;
+/// Maximum rows per batch INSERT (SQLite 32766-param limit / columns).
+const FILE_META_BATCH_SIZE: usize = 32766 / FILE_META_COLS;
+
+/// Batch-upsert multiple per-file metadata rows in one statement per chunk.
+///
+/// Chunks at `32766 / 32 = 1023` rows.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_inbox_file_metadata_batch(
+    conn: &mut SqliteConnection,
+    rows: &[UpsertFileMetadata<'_>],
+) -> DbResult<()> {
+    if rows.is_empty() {
+        return Ok(());
+    }
+    // pre-generate ids once so each row has a stable id even in multi-row INSERT
+    let ids: Vec<String> = rows.iter().map(|_| uuid::Uuid::new_v4().to_string()).collect();
+
+    for (chunk_rows, chunk_ids) in
+        rows.chunks(FILE_META_BATCH_SIZE).zip(ids.chunks(FILE_META_BATCH_SIZE))
+    {
+        let placeholders = (0..chunk_rows.len())
+            .map(|_| "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "INSERT INTO inbox_file_metadata
+                (id, inbox_item_id, relative_file_path, filter, exposure_s, gain,
+                 binning_x, binning_y, temperature_c, object, date_obs, instrume,
+                 telescop, naxis1, naxis2, stack_count, file_size_bytes, file_mtime,
+                 offset, set_temp_c, ccd_temp_c, ra_deg, dec_deg, rotator_angle_deg,
+                 readout_mode, focal_length_mm, date_loc, pixel_size_um, sky_rotation_deg,
+                 wcs_ra_deg, wcs_dec_deg, wcs_rotation_deg)
+             VALUES {placeholders}
+             ON CONFLICT(inbox_item_id, relative_file_path) DO UPDATE SET
+                 filter = excluded.filter,
+                 exposure_s = excluded.exposure_s,
+                 gain = excluded.gain,
+                 binning_x = excluded.binning_x,
+                 binning_y = excluded.binning_y,
+                 temperature_c = excluded.temperature_c,
+                 object = excluded.object,
+                 date_obs = excluded.date_obs,
+                 instrume = excluded.instrume,
+                 telescop = excluded.telescop,
+                 naxis1 = excluded.naxis1,
+                 naxis2 = excluded.naxis2,
+                 stack_count = excluded.stack_count,
+                 file_size_bytes = excluded.file_size_bytes,
+                 file_mtime = excluded.file_mtime,
+                 offset = excluded.offset,
+                 set_temp_c = excluded.set_temp_c,
+                 ccd_temp_c = excluded.ccd_temp_c,
+                 ra_deg = excluded.ra_deg,
+                 dec_deg = excluded.dec_deg,
+                 rotator_angle_deg = excluded.rotator_angle_deg,
+                 readout_mode = excluded.readout_mode,
+                 focal_length_mm = excluded.focal_length_mm,
+                 date_loc = excluded.date_loc,
+                 pixel_size_um = excluded.pixel_size_um,
+                 sky_rotation_deg = excluded.sky_rotation_deg,
+                 wcs_ra_deg = excluded.wcs_ra_deg,
+                 wcs_dec_deg = excluded.wcs_dec_deg,
+                 wcs_rotation_deg = excluded.wcs_rotation_deg"
+        );
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(sql));
+        for (m, id) in chunk_rows.iter().zip(chunk_ids.iter()) {
+            q = q
+                .bind(id)
+                .bind(m.inbox_item_id)
+                .bind(m.relative_file_path)
+                .bind(m.filter)
+                .bind(m.exposure_s)
+                .bind(m.gain)
+                .bind(m.binning_x)
+                .bind(m.binning_y)
+                .bind(m.temperature_c)
+                .bind(m.object)
+                .bind(m.date_obs)
+                .bind(m.instrume)
+                .bind(m.telescop)
+                .bind(m.naxis1)
+                .bind(m.naxis2)
+                .bind(m.stack_count)
+                .bind(m.file_size_bytes)
+                .bind(m.file_mtime)
+                .bind(m.offset)
+                .bind(m.set_temp_c)
+                .bind(m.ccd_temp_c)
+                .bind(m.ra_deg)
+                .bind(m.dec_deg)
+                .bind(m.rotator_angle_deg)
+                .bind(m.readout_mode)
+                .bind(m.focal_length_mm)
+                .bind(m.date_loc)
+                .bind(m.pixel_size_um)
+                .bind(m.sky_rotation_deg)
+                .bind(m.wcs_ra_deg)
+                .bind(m.wcs_dec_deg)
+                .bind(m.wcs_rotation_deg);
+        }
+        q.execute(&mut *conn).await?;
+    }
+    Ok(())
+}
+
+/// Batch-delete file-metadata rows for a set of item ids.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn delete_file_metadata_for_items(
+    conn: &mut SqliteConnection,
+    inbox_item_ids: &[&str],
+) -> DbResult<()> {
+    for chunk in inbox_item_ids.chunks(32766) {
+        let placeholders = (0..chunk.len()).map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql =
+            format!("DELETE FROM inbox_file_metadata WHERE inbox_item_id IN ({placeholders})");
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(sql));
+        for id in chunk {
+            q = q.bind(*id);
+        }
+        q.execute(&mut *conn).await?;
+    }
+    Ok(())
+}
+
+/// Batch-delete breakdown rows for a set of item ids.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn delete_breakdown_for_items(
+    conn: &mut SqliteConnection,
+    inbox_item_ids: &[&str],
+) -> DbResult<()> {
+    for chunk in inbox_item_ids.chunks(32766) {
+        let placeholders = (0..chunk.len()).map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "DELETE FROM inbox_classification_breakdown WHERE inbox_item_id IN ({placeholders})"
+        );
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(sql));
+        for id in chunk {
+            q = q.bind(*id);
+        }
+        q.execute(&mut *conn).await?;
+    }
     Ok(())
 }
 
@@ -291,9 +490,20 @@ pub async fn upsert_inbox_file_metadata(
 /// # Errors
 /// Returns [`DbError::Database`] on connection failure.
 pub async fn delete_file_metadata_for_item(pool: &SqlitePool, inbox_item_id: &str) -> DbResult<()> {
+    delete_file_metadata_for_item_conn(pool.acquire().await?.as_mut(), inbox_item_id).await
+}
+
+/// Connection-level variant of [`delete_file_metadata_for_item`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn delete_file_metadata_for_item_conn(
+    conn: &mut SqliteConnection,
+    inbox_item_id: &str,
+) -> DbResult<()> {
     sqlx::query("DELETE FROM inbox_file_metadata WHERE inbox_item_id = ?")
         .bind(inbox_item_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     Ok(())
 }
