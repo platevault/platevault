@@ -234,8 +234,16 @@ impl PlanApplyCallbacks {
         }
 
         if let Err(e) = tx.commit().await {
-            tracing::error!(error = %e, item_count = items.len(), "group-commit flush: commit failed");
-            return;
+            tracing::error!(error = %e, item_count = items.len(), "group-commit flush: commit failed; retrying once");
+            // GF-15: Retry once — terminal-state persist is TIER-1 durability.
+            match self.retry_flush_once(&items).await {
+                Ok(()) => {}
+                Err(retry_err) => {
+                    tracing::error!(error = %retry_err, item_count = items.len(), "group-commit flush: retry also failed; recording divergence");
+                    self.record_divergence(&items).await;
+                    return;
+                }
+            }
         }
 
         // One broadcast per flush — wakes the log forwarder once per flush
@@ -289,6 +297,119 @@ impl PlanApplyCallbacks {
                     "windowFailures": window_failures,
                 }),
             );
+        }
+    }
+
+    /// GF-15: Single retry of the full flush transaction after initial commit
+    /// failure. Terminal-state persistence is TIER-1 durability (constitution
+    /// v1.1.0) — a transient SQLite busy/lock timeout must not silently drop
+    /// item outcomes.
+    async fn retry_flush_once(&self, items: &[BufferedItem]) -> Result<(), sqlx::Error> {
+        let plan_id = self.plan_id.as_str();
+        let run_id = self.run_id.as_str();
+
+        let mut delta_applied: i64 = 0;
+        let mut delta_failed: i64 = 0;
+        let mut delta_skipped: i64 = 0;
+        let mut owned_states: Vec<(String, String, Option<String>, bool)> =
+            Vec::with_capacity(items.len());
+        for item in items {
+            match item.new_state.as_str() {
+                "succeeded" => delta_applied += 1,
+                "skipped" => delta_skipped += 1,
+                _ => delta_failed += 1,
+            }
+            owned_states.push((
+                item.item_id.clone(),
+                item.new_state.clone(),
+                item.failure_reason.clone(),
+                item.new_state == "stale",
+            ));
+        }
+        let batch_states: Vec<apply_repo::BatchItemState<'_>> = owned_states
+            .iter()
+            .map(|(id, state, reason, is_stale)| apply_repo::BatchItemState {
+                item_id: id.as_str(),
+                new_state: state.as_str(),
+                failure_reason: reason.as_deref(),
+                is_stale: *is_stale,
+            })
+            .collect();
+
+        let mut tx = self.pool.begin().await?;
+
+        apply_repo::batch_flush_item_states(
+            &mut tx,
+            plan_id,
+            &batch_states,
+            delta_applied,
+            delta_failed,
+            delta_skipped,
+        )
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+
+        for item in items {
+            let failure_ref = item.failure_code.as_ref().map(|_| apply_repo::EventFailure {
+                code: item.failure_code.as_deref().unwrap_or(""),
+                message: item.failure_message.as_deref().unwrap_or(""),
+                recoverable: item.failure_recoverable.unwrap_or(false),
+            });
+            let rollback_ref = item.rollback_attempted.then(|| apply_repo::EventRollback {
+                attempted: item.rollback_attempted,
+                outcome: item.rollback_outcome.as_str(),
+                message: item.rollback_message.as_deref(),
+            });
+            let _ = apply_repo::append_event_conn(
+                &mut tx,
+                &new_id(),
+                run_id,
+                plan_id,
+                Some(item.item_id.as_str()),
+                item.prior_state.as_str(),
+                item.new_state.as_str(),
+                item.at.as_str(),
+                failure_ref.as_ref(),
+                rollback_ref.as_ref(),
+            )
+            .await;
+        }
+
+        tx.commit().await
+    }
+
+    /// GF-15: Record a durable divergence marker when both flush attempts fail.
+    /// The crash-recovery sweep can later reconcile items whose DB state
+    /// diverges from what the executor observed on disk.
+    async fn record_divergence(&self, items: &[BufferedItem]) {
+        for item in items {
+            let entry = AuditLogEntry::new(
+                EntityType::FilesystemPlan,
+                deterministic_entity_id("plan_apply.divergence", &item.item_id),
+                "plan_item.persist_divergence",
+                "system",
+                Outcome::Failed,
+                Severity::Workflow,
+                domain_core::ids::EntityId::new(),
+            )
+            .with_transition(item.prior_state.clone(), item.new_state.clone())
+            .with_reason_code("flush_commit_failed_twice")
+            .with_payload(json!({
+                "planId": self.plan_id,
+                "runId": self.run_id,
+                "itemId": item.item_id,
+                "intendedState": item.new_state,
+            }));
+            if let Err(e) =
+                persistence_core::repositories::audit_writes::insert_audit_entry(&self.pool, &entry)
+                    .await
+            {
+                tracing::error!(
+                    item_id = %item.item_id,
+                    error = %e,
+                    "CRITICAL: divergence record itself failed to persist"
+                );
+            }
         }
     }
 }

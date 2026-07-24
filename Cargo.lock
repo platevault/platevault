@@ -173,6 +173,7 @@ dependencies = [
  "calibration_master_detect",
  "camino",
  "contracts_core",
+ "dashmap",
  "domain_core",
  "fs_pathsafe",
  "hex",

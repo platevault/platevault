@@ -1194,7 +1194,11 @@ export function InboxPage() {
     [canConfirm, confirmLoading, confirmFlowBusy, handleConfirm],
   );
 
-  const planBusy = applyAllLoading || applySelectedLoading || cancelLoading;
+  // GF-30: Include progressPlanId in busy derivation — the approve→apply
+  // window between setProgressPlanId and runPlanApply completing was previously
+  // unguarded, allowing double-submit of the same plan.
+  const planBusy =
+    applyAllLoading || applySelectedLoading || cancelLoading || progressPlanId != null;
 
   // Stage B: plan review overlay open/close state.
   const [planOverlayOpen, setPlanOverlayOpen] = useState(false);
