@@ -72,6 +72,7 @@ export function LogEntryRow({
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <li
       ref={measureRef}
+      data-testid="log-entry-row"
       data-index={index}
       // eslint-disable-next-line no-restricted-syntax
       style={style}

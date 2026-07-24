@@ -183,6 +183,7 @@ export function LogPanel() {
       open={expanded}
       onOpenChange={toggle}
       className={logpanel}
+      data-testid="log-panel"
       role="log"
       aria-label={m.logpanel_aria_label()}
     >
