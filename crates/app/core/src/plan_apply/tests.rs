@@ -107,14 +107,15 @@ async fn plan_apply_callbacks_persist_every_producible_failure_code() {
     .await
     .unwrap();
 
-    let callbacks = PlanApplyCallbacks {
-        pool: db.pool().clone(),
+    let callbacks = PlanApplyCallbacks::new(
+        db.pool().clone(),
         bus,
-        plan_id: plan_id.to_owned(),
-        run_id: run_id.to_owned(),
-        op_emitter: None,
-    };
+        plan_id.to_owned(),
+        run_id.to_owned(),
+        None,
+    );
 
+    // Buffer all events (group-commit design: rows aren't written until flush).
     for (index, code) in PRODUCIBLE_CODES.into_iter().enumerate() {
         let item_id = format!("{plan_id}-item-{index}");
         callbacks.on_item_start(&item_id).await;
@@ -131,7 +132,14 @@ async fn plan_apply_callbacks_persist_every_producible_failure_code() {
                 audit_reason: None,
             })
             .await;
+    }
 
+    // Mandatory flush: drains the buffer into the DB in one tx.
+    callbacks.flush().await;
+
+    // Verify every failure code was persisted.
+    for (index, code) in PRODUCIBLE_CODES.into_iter().enumerate() {
+        let item_id = format!("{plan_id}-item-{index}");
         let persisted: Option<String> = sqlx::query_scalar(
             "SELECT failure_code FROM plan_apply_events WHERE plan_id = ? AND item_id = ?",
         )
@@ -690,9 +698,24 @@ async fn retry_plan_item_transitions_failed_item_to_applying() {
     let (db, _bus) = setup().await;
     insert_approved_plan_with_items(&db, "p-retry", 1).await;
     plans_repo::update_plan_state(db.pool(), "p-retry", "applying").await.unwrap();
-    apply_repo::item_failed(db.pool(), "p-retry-item-0", "p-retry", "permission.denied")
+    {
+        let mut conn = db.pool().acquire().await.unwrap();
+        apply_repo::batch_flush_item_states(
+            &mut conn,
+            "p-retry",
+            &[apply_repo::BatchItemState {
+                item_id: "p-retry-item-0",
+                new_state: "failed",
+                failure_reason: Some("permission.denied"),
+                is_stale: false,
+            }],
+            0,
+            1,
+            0,
+        )
         .await
         .unwrap();
+    }
     register_fake_active_run("p-retry");
 
     let resp = retry_plan_item(db.pool(), "p-retry", "p-retry-item-0").await.unwrap();
@@ -712,14 +735,24 @@ async fn retry_plan_item_rejects_when_no_active_run() {
     let (db, _bus) = setup().await;
     insert_approved_plan_with_items(&db, "p-retry-no-run", 1).await;
     plans_repo::update_plan_state(db.pool(), "p-retry-no-run", "applying").await.unwrap();
-    apply_repo::item_failed(
-        db.pool(),
-        "p-retry-no-run-item-0",
-        "p-retry-no-run",
-        "permission.denied",
-    )
-    .await
-    .unwrap();
+    {
+        let mut conn = db.pool().acquire().await.unwrap();
+        apply_repo::batch_flush_item_states(
+            &mut conn,
+            "p-retry-no-run",
+            &[apply_repo::BatchItemState {
+                item_id: "p-retry-no-run-item-0",
+                new_state: "failed",
+                failure_reason: Some("permission.denied"),
+                is_stale: false,
+            }],
+            0,
+            1,
+            0,
+        )
+        .await
+        .unwrap();
+    }
     // Deliberately NOT registering an ActiveRun.
 
     let err =
@@ -1548,4 +1581,303 @@ fn compute_plan_path_set_resolves_roots_and_archive() {
 
     let disjoint: PlanPathSet = [Utf8PathBuf::from("/elsewhere")].into_iter().collect();
     assert!(!set.overlaps(&disjoint));
+}
+
+/// Group-commit correctness: applying N items via the buffered
+/// `PlanApplyCallbacks` produces exactly N `plan_apply_events` rows + 1
+/// plan-level started row, and the `plans` counter ends at `items_applied = N`.
+///
+/// This also functions as a commit-reduction acceptance check: the design
+/// replaces ~5N individual autocommit writes with ceil(N/100) flush txs +
+/// plan-level bookends. For N=200 the former path issues ~1000 commits; the
+/// buffered path issues at most ceil(200/100)+2 = 4 commits.
+///
+/// Commit count is not directly measurable in a unit test (SQLite
+/// statement-count APIs are not exposed by sqlx), but row-count + counter
+/// correctness proves the flush logic is correct without relying on timing.
+#[tokio::test]
+async fn group_commit_produces_correct_row_count_and_counters() {
+    const N: usize = 200;
+
+    let (db, bus) = setup().await;
+    let plan_id = "gc-correctness";
+    let run_id = "gc-run-1";
+    insert_approved_plan_with_items(&db, plan_id, N).await;
+    let n = i64::try_from(N).unwrap();
+    apply_repo::cas_approved_to_applying(db.pool(), plan_id, run_id, "test-token", n, n)
+        .await
+        .unwrap();
+
+    let callbacks = PlanApplyCallbacks::new(
+        db.pool().clone(),
+        bus,
+        plan_id.to_owned(),
+        run_id.to_owned(),
+        None,
+    );
+
+    // Emit N succeeded events — mix in a few failures to test delta accounting.
+    let mut expected_applied = 0i64;
+    let mut expected_failed = 0i64;
+    for i in 0..N {
+        let item_id = format!("{plan_id}-item-{i}");
+        // Fail every 10th item so we exercise both counter paths.
+        let (new_state, failure) = if i % 10 == 9 {
+            expected_failed += 1;
+            ("failed", Some(PlanItemFailure::with_code(FailureCode::SourceMissing, "test")))
+        } else {
+            expected_applied += 1;
+            ("succeeded", None)
+        };
+
+        callbacks
+            .on_item_progress(ItemProgressEvent {
+                item_id,
+                prior_state: "pending".to_owned(),
+                new_state: new_state.to_owned(),
+                at: domain_core::ids::Timestamp::now_iso(),
+                failure,
+                rollback_attempted: false,
+                rollback_outcome: RollbackOutcome::NotApplicable,
+                rollback_message: None,
+                audit_reason: None,
+            })
+            .await;
+    }
+
+    // Final mandatory flush (mirrors what spawn_executor_run does before
+    // complete_run).
+    callbacks.flush().await;
+
+    // Verify plan_apply_events has exactly N item rows.
+    let event_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM plan_apply_events WHERE plan_id = ? AND item_id IS NOT NULL",
+    )
+    .bind(plan_id)
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(event_count, n, "must have one plan_apply_events row per item");
+
+    // Verify plans counters.
+    let plan =
+        persistence_plans::repositories::plans::get_plan(db.pool(), plan_id, false).await.unwrap();
+    assert_eq!(plan.items_applied, expected_applied, "items_applied counter");
+    assert_eq!(plan.items_failed, expected_failed, "items_failed counter");
+
+    // Verify audit_log_entry has N rows for this plan's items (one per item,
+    // written in the flush batch; entity_type = 'filesystem_plan').
+    let audit_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM audit_log_entry WHERE entity_type = 'filesystem_plan'",
+    )
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    assert!(
+        audit_count >= expected_applied + expected_failed,
+        "must have at least one audit row per item; got {audit_count}, want >= {}",
+        expected_applied + expected_failed
+    );
+}
+
+/// Flush-on-timeout: items accumulated for longer than 250 ms trigger a flush
+/// at the next item boundary even when the 100-item count threshold is not met.
+#[tokio::test]
+async fn group_commit_flush_on_timeout() {
+    let (db, bus) = setup().await;
+    let plan_id = "gc-timeout";
+    let run_id = "gc-timeout-run";
+    insert_approved_plan_with_items(&db, plan_id, 5).await;
+    apply_repo::cas_approved_to_applying(db.pool(), plan_id, run_id, "test-token", 5, 5)
+        .await
+        .unwrap();
+
+    let callbacks = PlanApplyCallbacks::new(
+        db.pool().clone(),
+        bus,
+        plan_id.to_owned(),
+        run_id.to_owned(),
+        None,
+    );
+
+    // Emit one item — well below the 100-item threshold.
+    callbacks
+        .on_item_progress(ItemProgressEvent {
+            item_id: format!("{plan_id}-item-0"),
+            prior_state: "pending".to_owned(),
+            new_state: "succeeded".to_owned(),
+            at: domain_core::ids::Timestamp::now_iso(),
+            failure: None,
+            rollback_attempted: false,
+            rollback_outcome: RollbackOutcome::NotApplicable,
+            rollback_message: None,
+            audit_reason: None,
+        })
+        .await;
+
+    // Before the 250 ms window expires the row must not be in the DB yet.
+    let count_before: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM plan_apply_events WHERE plan_id = ?")
+            .bind(plan_id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+    assert_eq!(count_before, 0, "row must be buffered, not yet flushed");
+
+    // Advance past the 250 ms window.
+    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+
+    // A second item triggers the boundary check — the 250 ms elapsed flag
+    // causes the buffer to flush (the second item is then also flushed).
+    callbacks
+        .on_item_progress(ItemProgressEvent {
+            item_id: format!("{plan_id}-item-1"),
+            prior_state: "pending".to_owned(),
+            new_state: "succeeded".to_owned(),
+            at: domain_core::ids::Timestamp::now_iso(),
+            failure: None,
+            rollback_attempted: false,
+            rollback_outcome: RollbackOutcome::NotApplicable,
+            rollback_message: None,
+            audit_reason: None,
+        })
+        .await;
+
+    let count_after: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM plan_apply_events WHERE plan_id = ?")
+            .bind(plan_id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+    assert_eq!(count_after, 2, "both items must be flushed after the 250 ms window expires");
+}
+
+/// Crash-window recovery: items from a lost flush window (simulated by
+/// executing the fs op but not flushing) re-execute on resume and land as
+/// `source.missing` terminal failures (CAS gate refuses them), never
+/// double-applying the mutation.
+///
+/// This validates the crash-safety claim in the batching design: fs ops for
+/// items in the lost window already ran; re-execution hits the
+/// `check_cas`/destination-exists gates and produces a reviewable failure
+/// rather than a silent duplicate mutation.
+#[tokio::test]
+async fn crash_window_recovery_produces_source_missing_not_double_apply() {
+    use std::fs;
+    use tempfile::TempDir;
+
+    let tmp = TempDir::new().unwrap();
+    let src = tmp.path().join("light.fits");
+    let dst = tmp.path().join("archive").join("light.fits");
+    fs::write(&src, "fits-data").unwrap();
+
+    let (db, bus) = setup().await;
+    // Register a root so item_row_to_executor_item resolves the path.
+    let root_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO registered_sources \
+         (id, kind, path, scan_depth, created_at, created_via, organization_state) \
+         VALUES (?, 'light_frames', ?, 'recursive', '2026-01-01T00:00:00Z', 'first_run', 'organized')",
+    )
+    .bind(&root_id)
+    .bind(tmp.path().to_str().unwrap())
+    .execute(db.pool())
+    .await
+    .unwrap();
+
+    // Insert a plan item that moves src → archive/light.fits.
+    let plan_id = "crash-recovery";
+    let run_id = "crash-recovery-run";
+    repo::insert_plan(
+        db.pool(),
+        &repo::InsertPlan {
+            id: plan_id,
+            title: "Crash recovery test",
+            origin: "cleanup",
+            origin_path: None,
+            plan_type: "cleanup",
+            destructive_destination: "archive",
+            parent_plan_id: None,
+            total_bytes_required: 0,
+        },
+    )
+    .await
+    .unwrap();
+    repo::insert_plan_item(
+        db.pool(),
+        &repo::InsertPlanItem {
+            id: &format!("{plan_id}-item-0"),
+            plan_id,
+            item_index: 1,
+            name: "light.fits",
+            action: "move",
+            from_root_id: Some(&root_id),
+            from_relative_path: "light.fits",
+            to_root_id: Some(&root_id),
+            to_relative_path: "archive/light.fits",
+            reason: "test",
+            protection: "normal",
+            linked_entity: None,
+            provenance_json: None,
+            archive_path: None,
+            source_id: None,
+            category: None,
+        },
+    )
+    .await
+    .unwrap();
+    repo::update_plan_state(db.pool(), plan_id, "ready_for_review").await.unwrap();
+    repo::set_approved(db.pool(), plan_id, "2026-06-01T00:00:00Z", "test-token").await.unwrap();
+
+    // Simulate the crash-window scenario: the fs op ran (rename succeeded)
+    // but the flush tx never committed — move the file manually to represent
+    // a mutation that happened in a lost flush window.
+    fs::create_dir_all(dst.parent().unwrap()).unwrap();
+    fs::rename(&src, &dst).unwrap();
+    assert!(!src.exists(), "source must be gone after simulated move");
+    assert!(dst.exists(), "destination must exist after simulated move");
+
+    // Apply the plan — the executor runs the move on a missing source. The
+    // check_cas gate returns SourceMissing → terminal failed, no double-apply.
+    let resp = apply_plan(db.pool(), &bus, plan_id, "test-token", None).await.unwrap();
+    let _ = run_id; // not used after removing the manual CAS
+    assert_eq!(resp.new_state, "applying");
+
+    // Wait for the background executor to complete.
+    for _ in 0..50 {
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let state: String = sqlx::query_scalar("SELECT state FROM plans WHERE id = ?")
+            .bind(plan_id)
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        if state != "applying" {
+            break;
+        }
+    }
+
+    // The plan must be terminal (failed or partially_applied, not applying).
+    let final_state: String = sqlx::query_scalar("SELECT state FROM plans WHERE id = ?")
+        .bind(plan_id)
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert!(
+        matches!(final_state.as_str(), "failed" | "partially_applied"),
+        "plan must be terminal after re-apply of already-moved item; got {final_state}"
+    );
+
+    // The item must be in a failed state (not succeeded — it didn't move again).
+    let item_state: String = sqlx::query_scalar("SELECT item_state FROM plan_items WHERE id = ?")
+        .bind(format!("{plan_id}-item-0"))
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(
+        item_state, "failed",
+        "re-applied item must be failed (source.missing), not succeeded"
+    );
+
+    // The destination must not have been touched a second time.
+    assert!(dst.exists(), "destination file must still exist — no double-apply");
 }

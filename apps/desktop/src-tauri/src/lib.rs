@@ -482,6 +482,26 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
     }
     let pool = db.pool().clone();
 
+    // Startup sweep: any plan left in 'applying' with no live executor (e.g.
+    // after a hard crash) is unreachable by `resume_plan` (which requires
+    // `paused` state). Flip them to `paused` with pause_reason='crash' so the
+    // user can resume or cancel them. The active_runs registry is always empty
+    // at this point, so every applying plan qualifies.
+    {
+        let sweep_pool = pool.clone();
+        tokio::spawn(async move {
+            match app_core::plan_apply::sweep_crashed_applying_plans(&sweep_pool).await {
+                Ok(ids) if !ids.is_empty() => tracing::info!(
+                    count = ids.len(),
+                    "startup: flipped {} applying plan(s) to paused (crash recovery)",
+                    ids.len()
+                ),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("startup sweep for crashed applying plans failed: {e}"),
+            }
+        });
+    }
+
     // Spec 052 P1 (D2): open (creating if missing) the shared redb resolve
     // cache. Opening is fast (no warm yet — the warm below is backgrounded so
     // a large seed never blocks startup).

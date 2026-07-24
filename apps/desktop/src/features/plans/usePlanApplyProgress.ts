@@ -157,6 +157,16 @@ export function usePlanApplyProgress() {
                   if (runId != null) next.runId = runId;
                   break;
                 }
+                case 'progress': {
+                  // Batch progress tick from the group-commit flush (kyo7.52).
+                  // Only itemsApplied is carried here — failures are counted
+                  // by individual item_failed emits to avoid double-counting
+                  // (itemsFailed is always 0 in the Progress envelope).
+                  const p = event.payload as Record<string, unknown>;
+                  if (typeof p.itemsApplied === 'number')
+                    next.applied = prev.applied + p.itemsApplied;
+                  break;
+                }
                 case 'item_applied':
                   next.applied = prev.applied + 1;
                   break;

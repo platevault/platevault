@@ -198,7 +198,7 @@ mod tests;
 pub use apply::{apply_plan, apply_plan_channel_free};
 pub use lifecycle::{
     cancel_plan, confirm_plan_destructive_items, get_apply_status, resume_plan, retry_plan_item,
-    skip_plan_item,
+    skip_plan_item, sweep_crashed_applying_plans,
 };
 pub(crate) use paths::resolve_root_path;
 

@@ -26,6 +26,34 @@ use persistence_plans::repositories::plan_apply as apply_repo;
 use persistence_plans::repositories::plans as plans_repo;
 use uuid::Uuid;
 
+/// Seed one item into `failed` state without going through the executor.
+/// Replaces the deleted `item_start_applying` + `item_failed` pair —
+/// `batch_flush_item_states` goes pending → terminal in one step,
+/// matching the group-commit path the real executor now uses.
+async fn seed_item_failed(
+    pool: &sqlx::SqlitePool,
+    item_id: &str,
+    plan_id: &str,
+    failure_reason: &str,
+) {
+    let mut conn = pool.acquire().await.expect("acquire connection");
+    apply_repo::batch_flush_item_states(
+        &mut conn,
+        plan_id,
+        &[apply_repo::BatchItemState {
+            item_id,
+            new_state: "failed",
+            failure_reason: Some(failure_reason),
+            is_stale: false,
+        }],
+        0,
+        1,
+        0,
+    )
+    .await
+    .expect("seed_item_failed");
+}
+
 /// Register a `registered_sources` root row pointing at a real directory, so
 /// `resolve_root_path`/the T023a root-map machinery has something real to
 /// resolve (required for the volume/disk probes, which target the plan
@@ -275,17 +303,13 @@ async fn resume_refused_while_volume_still_unavailable() {
     apply_repo::cas_approved_to_applying(db.pool(), &plan_id, &run_id, "tok-test-fixed", 2, 2)
         .await
         .expect("cas_approved_to_applying");
-    apply_repo::item_start_applying(db.pool(), &item0_id, &plan_id)
-        .await
-        .expect("item_start_applying");
-    apply_repo::item_failed(
+    seed_item_failed(
         db.pool(),
         &item0_id,
         &plan_id,
         "volume.unavailable: move failed: simulated disconnect",
     )
-    .await
-    .expect("item_failed");
+    .await;
     apply_repo::pause_run(db.pool(), &plan_id, &run_id, "volume.unavailable", 0, 1, 0, 0, 1)
         .await
         .expect("pause_run");
@@ -321,17 +345,13 @@ async fn resume_succeeds_after_volume_available_again() {
     apply_repo::cas_approved_to_applying(db.pool(), &plan_id, &run_id, "tok-test-fixed", 2, 2)
         .await
         .expect("cas_approved_to_applying");
-    apply_repo::item_start_applying(db.pool(), &item0_id, &plan_id)
-        .await
-        .expect("item_start_applying");
-    apply_repo::item_failed(
+    seed_item_failed(
         db.pool(),
         &item0_id,
         &plan_id,
         "volume.unavailable: move failed: simulated disconnect",
     )
-    .await
-    .expect("item_failed");
+    .await;
     apply_repo::pause_run(db.pool(), &plan_id, &run_id, "volume.unavailable", 0, 1, 0, 0, 1)
         .await
         .expect("pause_run");
@@ -380,17 +400,13 @@ async fn resume_refused_while_disk_still_full() {
     apply_repo::cas_approved_to_applying(db.pool(), &plan_id, &run_id, "tok-test-fixed", 2, 2)
         .await
         .expect("cas_approved_to_applying");
-    apply_repo::item_start_applying(db.pool(), &item0_id, &plan_id)
-        .await
-        .expect("item_start_applying");
-    apply_repo::item_failed(
+    seed_item_failed(
         db.pool(),
         &item0_id,
         &plan_id,
         "disk.full: move failed: simulated storage-full",
     )
-    .await
-    .expect("item_failed");
+    .await;
     apply_repo::pause_run(db.pool(), &plan_id, &run_id, "disk.full", 0, 1, 0, 0, 1)
         .await
         .expect("pause_run");
@@ -427,17 +443,13 @@ async fn resume_succeeds_after_disk_space_available_again() {
     apply_repo::cas_approved_to_applying(db.pool(), &plan_id, &run_id, "tok-test-fixed", 2, 2)
         .await
         .expect("cas_approved_to_applying");
-    apply_repo::item_start_applying(db.pool(), &item0_id, &plan_id)
-        .await
-        .expect("item_start_applying");
-    apply_repo::item_failed(
+    seed_item_failed(
         db.pool(),
         &item0_id,
         &plan_id,
         "disk.full: move failed: simulated storage-full",
     )
-    .await
-    .expect("item_failed");
+    .await;
     apply_repo::pause_run(db.pool(), &plan_id, &run_id, "disk.full", 0, 1, 0, 0, 1)
         .await
         .expect("pause_run");
@@ -499,17 +511,13 @@ async fn cancel_signals_the_executor_restarted_by_resume() {
     )
     .await
     .expect("cas_approved_to_applying");
-    apply_repo::item_start_applying(db.pool(), &item0_id, &plan_id)
-        .await
-        .expect("item_start_applying");
-    apply_repo::item_failed(
+    seed_item_failed(
         db.pool(),
         &item0_id,
         &plan_id,
         "volume.unavailable: move failed: simulated disconnect",
     )
-    .await
-    .expect("item_failed");
+    .await;
     apply_repo::pause_run(
         db.pool(),
         &plan_id,
