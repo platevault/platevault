@@ -163,6 +163,18 @@ pub struct SessionInfo {
     pub has_exposure_start_utc: bool,
 }
 
+impl SessionInfo {
+    /// True when the session contains mixed frame types (guard E5).
+    ///
+    /// A mixed session must be split before calibration can be suggested or
+    /// assigned; the `session_type == "mixed"` check is the single authoritative
+    /// gate shared by `suggest` and `evaluate_assign`.
+    #[must_use]
+    pub fn is_mixed(&self) -> bool {
+        self.session_type == "mixed"
+    }
+}
+
 /// Metadata for a calibration master as input to the matcher.
 ///
 /// All fingerprint fields optional; hard-rule missing fields cause `metadata_missing` mismatch.
@@ -202,7 +214,7 @@ pub fn suggest(
     config: &MatchingRuleConfig,
 ) -> Result<Vec<CalibrationMatch>, String> {
     // Guard E5: mixed-session check.
-    if session.session_type == "mixed" {
+    if session.is_mixed() {
         return Err("session.mixed_state".to_owned());
     }
 

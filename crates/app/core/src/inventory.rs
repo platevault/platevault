@@ -263,18 +263,18 @@ type SessionKeyFields =
 
 /// Parse the stored `session_key` string.
 ///
-/// The real/production format (written by `sessions::session_key`, spec 035
+/// The real/production format (written by `sessions::SessionKey::new`, spec 035
 /// US4) is the stable pipe-delimited tuple `target|filter|binning|gain|night`
 /// — see `crates/sessions/src/key.rs`. A handful of pre-035/test-only call
 /// sites still write a legacy JSON object (`{"target":...,"filter":...}`);
 /// both are accepted so neither format regresses. Mirrors `sessions::
-/// parse_session_key`'s dual-format handling (#564) — this projection had the
+/// SessionKey::parse`'s dual-format handling (#564) — this projection had the
 /// exact same JSON-only bug, silently discarding filter/binning/gain/night
 /// for every real catalogue-ingested session (every `Sessions` page row
 /// showed a generic "Session — <date>" label with blank fields).
 fn parse_session_key_fields(key: &str) -> SessionKeyFields {
     // Both branches parse raw; empty→None normalization is applied uniformly
-    // below (matching `sessions::parse_session_key`'s `non_empty` pass) so a
+    // below (matching `sessions::SessionKey::parse`'s `non_empty` pass) so a
     // legacy JSON `""` and a blank pipe segment mean the same absent field.
     let (target, filter, binning, gain, night) = if key.trim_start().starts_with('{') {
         let v: serde_json::Value = serde_json::from_str(key).unwrap_or(serde_json::Value::Null);

@@ -87,6 +87,13 @@ fn render_dimension(
 /// from present parts; entirely absent ⇒ `None` (sentinel). Each part is
 /// normalized; focal length is bucketed to whole mm so float noise doesn't fork
 /// the group.
+///
+/// Intentionally separate from `sessions::optic_train_key` (spec 041 T064):
+/// that function uses `"-"` for the framing-attribution identity key; this one
+/// uses [`SENTINEL_MISSING`] (`"∅"`) so its output is consistent with every
+/// other dimension in the persisted `group_key` column. The two keys are NOT
+/// interchangeable — changing either sentinel would re-group existing inbox
+/// items stored in the `inbox_item.group_key` UNIQUE column.
 fn optic_train(meta: &FrameMetadata) -> Option<String> {
     let tel = normalize_text(meta.telescop.as_deref());
     let inst = normalize_text(meta.instrume.as_deref());

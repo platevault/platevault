@@ -234,7 +234,7 @@ async fn load_fingerprint(pool: &SqlitePool, id: &str) -> Result<Option<Fingerpr
 /// Parse `SessionKey` from the stored `session_key` string.
 ///
 /// The real/production format (written by `crate::ingest_sessions::
-/// derive_session_key` via `sessions::session_key`, spec 035 US4) is the
+/// derive_session_key` via `sessions::SessionKey::new`, spec 035 US4) is the
 /// stable pipe-delimited tuple `target|filter|binning|gain|night` — see
 /// `crates/sessions/src/key.rs`; `app_core_projects::source_view_generate::
 /// session_night` already relies on this same shape. A handful of
@@ -270,7 +270,7 @@ type SessionKeyFields =
 /// Split the real pipe-delimited `target|filter|binning|gain|night` form,
 /// via the format's owner (`crates/sessions`).
 fn parse_session_key_delimited_fields(key: &str) -> SessionKeyFields {
-    let p = sessions::parse_session_key(key);
+    let p = sessions::SessionKey::parse(key);
     (p.target, p.filter, p.binning, p.gain, p.night)
 }
 
@@ -450,7 +450,7 @@ mod tests {
         assert_eq!(sk.filter, "");
     }
 
-    /// Real production format (spec 035 US4): `sessions::session_key` writes
+    /// Real production format (spec 035 US4): `sessions::SessionKey::new` writes
     /// a stable pipe-delimited string, not JSON — see `ingest_sessions::
     /// derive_session_key`. This was the root cause of #564: sessions from
     /// catalogue-ingest had every field but `target` come back empty because
