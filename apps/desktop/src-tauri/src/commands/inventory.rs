@@ -84,6 +84,7 @@ mod tests {
             filters: Some(InventoryListFilters {
                 source_filter: None,
                 frame_filter: Some(InventoryFrameType::Light),
+                ..Default::default()
             }),
         };
         let json = serde_json::to_value(&req).unwrap();
