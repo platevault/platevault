@@ -1846,6 +1846,16 @@ export const commands = {
 	 */
 	artifactWatcherDetach: (request: ArtifactWatcherRequest) => typedError<null, ContractError_Serialize>(__TAURI_INVOKE("artifact_watcher_detach", { request })),
 	/**
+	 *  `artifact.watcher.refresh` — manually trigger reattach for projects whose
+	 *  output folder was previously unavailable (item f: manual refresh option).
+	 * 
+	 *  Returns the list of project IDs that were successfully reattached.
+	 * 
+	 *  # Errors
+	 *  Returns `Err(String)` on catastrophic DB failure.
+	 */
+	artifactWatcherRefresh: () => typedError<string[], ContractError_Serialize>(__TAURI_INVOKE("artifact_watcher_refresh")),
+	/**
 	 *  `project.manifest.list` — list manifest snapshots for a project.
 	 * 
 	 *  Returns summaries ordered newest first, with cursor-based pagination.
