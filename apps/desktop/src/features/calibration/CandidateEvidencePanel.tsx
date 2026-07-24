@@ -122,9 +122,6 @@ function AgeLabel({
           ? m.calibration_candidate_age_red()
           : m.calibration_candidate_age_unknown();
 
-  const _kind = kind; // consumed for future kind-specific rendering
-  void _kind;
-
   return (
     <span className="pv-candidate-evidence__age" data-testid="candidate-age">
       <Pill variant={stateVariant(state)}>
