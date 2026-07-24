@@ -73,16 +73,22 @@ export interface TargetsListState extends QueryState<TargetListItem[]> {
 // ── Query hooks ───────────────────────────────────────────────────────────────
 
 /**
- * Subscribe to the full targets (Planner catalogue) list.
+ * Subscribe to the targets (Planner catalogue) list.
+ *
+ * `search` is forwarded to the backend `target.list` endpoint (GF-11 / DS-16)
+ * so alias-aware filtering happens server-side rather than over the full
+ * ~13k-alias serialized payload.  Pass `undefined` or `null` for the
+ * unfiltered catalog.
  *
  * `refetch` replaces the old manual `load()` re-fetch — `TargetsPage` calls it
  * after "Add target" and passes it as `TargetDetailV2`'s `onMutated` so an
  * alias/display-alias edit refreshes the list's search/label data too.
  */
-export function useTargets(): TargetsListState {
+export function useTargets(search?: string): TargetsListState {
+  const normalizedSearch = search?.trim() || null;
   const { data, isFetching, error, refetch } = useQuery({
-    queryKey: queryKeys.targets.list(),
-    queryFn: async () => unwrap(await commands.targetList()),
+    queryKey: [...queryKeys.targets.list(), normalizedSearch],
+    queryFn: async () => unwrap(await commands.targetList(normalizedSearch)),
   });
   return {
     data,
