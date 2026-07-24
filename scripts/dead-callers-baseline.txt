@@ -79,6 +79,11 @@ get_resolver_settings_online
 mark_recovered
 reattribute
 
+# E2E test-harness accessor for the stripped validation seed; never called by
+# production code by design — the app always loads bundled() (full seed).
+# Consumed only by PrewarmedCache in crates/e2e-tests/tests/common/mod.rs.
+bundled_e2e
+
 # Deliberately test-only per its own docstring
 # (crates/app/core/src/protection/global_defaults.rs): a thin wrapper around
 # `update_setting` kept for callers with this narrower signature. The real

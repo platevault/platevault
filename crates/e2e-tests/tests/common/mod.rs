@@ -88,55 +88,64 @@ struct PrewarmedCache {
 
 impl PrewarmedCache {
     /// Build a pre-warmed resolve cache from the stripped E2E seed.
+    ///
+    /// Spawns a dedicated OS thread so the inner `block_on` never races with
+    /// the ambient tokio runtime that `#[tokio::test]` E2E tests run under
+    /// (calling `block_on` from inside an async context panics).
     fn build() -> Result<Self> {
         let dir = tempfile::tempdir().context("failed to create pre-warm temp dir")?;
         let path = dir.path().join("simbad-cache.redb");
 
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .context("failed to build tokio runtime for pre-warm")?;
+        let path_clone = path.clone();
+        std::thread::spawn(move || -> Result<()> {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .context("failed to build tokio runtime for pre-warm")?;
 
-        rt.block_on(async {
-            let resolve_cache = targeting_resolver::simbad::ResolveCache::open(&path)
-                .context("failed to open pre-warm redb file")?;
-            let cache = resolve_cache.cache();
-            let namespace = simbad_resolver::identity::namespace("astro-plan.targets");
+            rt.block_on(async {
+                let resolve_cache = targeting_resolver::simbad::ResolveCache::open(&path_clone)
+                    .context("failed to open pre-warm redb file")?;
+                let cache = resolve_cache.cache();
+                let namespace = simbad_resolver::identity::namespace("astro-plan.targets");
 
-            let seed = targeting_resolver::seed::bundled_e2e()
-                .context("failed to parse e2e seed asset")?;
-            targeting_resolver::seed::warm_cache(&cache, &seed, &namespace)
-                .await
-                .context("failed to warm e2e seed into pre-warm cache")?;
+                let seed = targeting_resolver::seed::bundled_e2e()
+                    .context("failed to parse e2e seed asset")?;
+                targeting_resolver::seed::warm_cache(&cache, &seed, &namespace)
+                    .await
+                    .context("failed to warm e2e seed into pre-warm cache")?;
 
-            // Write the sentinel so `warm_bundled_on_first_run` skips the
-            // full seed load. Uses the FULL seed's `generated_at` as the
-            // version key (what the app's sentinel check compares against).
-            let full_seed = targeting_resolver::seed::bundled()
-                .context("failed to parse full bundled seed for sentinel")?;
-            let sentinel = simbad_resolver::ResolvedIdentity {
-                simbad_oid: Some(-1),
-                primary_designation: "\u{2205} ALM SEED WARM SENTINEL".to_owned(),
-                common_name: Some(full_seed.generated_at.clone()),
-                object_type: simbad_resolver::ObjectType::Other,
-                otype_raw: String::new(),
-                ra_deg: 0.0,
-                dec_deg: 0.0,
-                v_mag: None,
-                aliases: vec![simbad_resolver::ResolvedAlias::new(
-                    "\u{2205} ALM SEED WARM SENTINEL",
-                    simbad_resolver::AliasKind::Designation,
-                )],
-                source: simbad_resolver::TargetSource::Seed,
-            };
-            cache
-                .upsert(&sentinel, &namespace)
-                .await
-                .context("failed to write pre-warm sentinel")?;
+                // Write the sentinel so `warm_bundled_on_first_run` skips the
+                // full seed load. Uses the FULL seed's `generated_at` as the
+                // version key (what the app's sentinel check compares against).
+                let full_seed = targeting_resolver::seed::bundled()
+                    .context("failed to parse full bundled seed for sentinel")?;
+                let sentinel = simbad_resolver::ResolvedIdentity {
+                    simbad_oid: Some(-1),
+                    primary_designation: "\u{2205} ALM SEED WARM SENTINEL".to_owned(),
+                    common_name: Some(full_seed.generated_at.clone()),
+                    object_type: simbad_resolver::ObjectType::Other,
+                    otype_raw: String::new(),
+                    ra_deg: 0.0,
+                    dec_deg: 0.0,
+                    v_mag: None,
+                    aliases: vec![simbad_resolver::ResolvedAlias::new(
+                        "\u{2205} ALM SEED WARM SENTINEL",
+                        simbad_resolver::AliasKind::Designation,
+                    )],
+                    source: simbad_resolver::TargetSource::Seed,
+                };
+                cache
+                    .upsert(&sentinel, &namespace)
+                    .await
+                    .context("failed to write pre-warm sentinel")?;
 
-            resolve_cache.flush().await.context("failed to flush pre-warm cache")?;
-            anyhow::Ok(())
-        })?;
+                resolve_cache.flush().await.context("failed to flush pre-warm cache")?;
+                anyhow::Ok(())
+            })
+        })
+        .join()
+        .map_err(|_| anyhow::anyhow!("pre-warm thread panicked"))??;
 
         Ok(Self { _dir: dir, path })
     }
