@@ -39,14 +39,16 @@
 //!   rotation are excluded from clustering and returned as `Unassigned`
 //!   (never zero-defaulted) — data-model.md §211, R11 "NULL-geometry
 //!   sessions are excluded" note.
-//! - **Rotation wraparound**: compared as a circular quantity modulo 360°
-//!   (shortest arc, range `[0, 180]`), matching the RA treatment. R11a's
-//!   rationale text ("meridian-flip camera-angle drift stays inside [the 3°
-//!   tolerance]") describes flip drift as small, not a ~180° jump — NINA-style
-//!   field derotators hold sky position angle across a flip — so plain mod-360
-//!   wraparound (not mod-180) is the correct model; a mod-180 model would
-//!   incorrectly treat a deliberately-rotated composition 180° away as the
-//!   same framing.
+//! - **Rotation wraparound**: compared as an *axial* quantity modulo 180°
+//!   (shortest arc between undirected image axes, range `[0, 90]`), per spec
+//!   062 FR-025. A rectangular sensor rotated 180° captures the identical sky
+//!   footprint — θ and θ+180° are the same framing, whether the half-turn
+//!   comes from a meridian flip, a rotator re-park, or independent sessions
+//!   that happen to land 180° apart. (An earlier revision used mod-360 on the
+//!   theory that a "deliberately-rotated composition 180° away" is a distinct
+//!   framing; it is not — rotating a composition 180° reproduces the same
+//!   composition.) Image parity (mirror flips) is not detectable from the
+//!   rotation angle at all and remains a separate evidence dimension.
 
 use std::collections::BTreeMap;
 
@@ -458,7 +460,7 @@ fn best_matching_group(
                 return None;
             }
             let rotation_distance =
-                rotation_circular_distance_deg(rotation_deg, group.representative_rotation_deg());
+                rotation_axial_distance_deg(rotation_deg, group.representative_rotation_deg());
             // Epsilon guards the inclusive boundary: skymath's circular
             // distance round-trips through radians, so a degree input exactly
             // at tolerance can come back ~1e-14° over (far below any real
@@ -493,7 +495,7 @@ struct GroupAccumulator {
     sum_sin_ra: f64,
     sum_cos_ra: f64,
     sum_dec: f64,
-    rotation_mean: skymath::CircularMean,
+    rotation_mean: skymath::AxialMean,
     count: u32,
     seed_used_fallback: bool,
     session_ids: Vec<EntityId>,
@@ -507,7 +509,7 @@ impl GroupAccumulator {
             sum_sin_ra: 0.0,
             sum_cos_ra: 0.0,
             sum_dec: 0.0,
-            rotation_mean: skymath::CircularMean::new(),
+            rotation_mean: skymath::AxialMean::new(),
             count: 0,
             seed_used_fallback: false,
             session_ids: Vec::new(),
@@ -545,7 +547,7 @@ impl GroupAccumulator {
         }
     }
 
-    // `CircularMean::mean` normalizes to [0, 360); an f64->f32 rotation angle
+    // `AxialMean::mean` normalizes to [0, 180); an f64->f32 rotation angle
     // never approaches f32's magnitude limits, so this narrows precision, not
     // range. `None` only when nothing was pushed — callers only call this
     // once `count > 0` (see `representative_pointing`'s doc comment).
@@ -594,11 +596,12 @@ fn to_equatorial(p: Pointing) -> skymath::Equatorial {
         .expect("ra normalized to [0, 360), dec clamped to [-90, 90]")
 }
 
-/// Shortest circular distance between two rotation angles, in degrees,
-/// modulo 360° (range `[0, 180]`). See module docs for why 360°, not 180°.
+/// Shortest axial distance between two rotation angles, in degrees, modulo
+/// 180° (range `[0, 90]`) — θ and θ+180° describe the same image axis. See
+/// module docs for why the axial model, not full-circle mod-360.
 #[must_use]
-pub fn rotation_circular_distance_deg(a: f32, b: f32) -> f64 {
-    skymath::circular_distance(
+pub fn rotation_axial_distance_deg(a: f32, b: f32) -> f64 {
+    skymath::axial_distance(
         skymath::Angle::from_degrees(f64::from(a)),
         skymath::Angle::from_degrees(f64::from(b)),
     )
@@ -881,35 +884,53 @@ mod tests {
     }
 
     #[test]
-    fn rotation_distance_wraps_at_360_not_180() {
-        // 359 and 1 degrees are 2deg apart circularly, not ~358.
-        assert!((rotation_circular_distance_deg(359.0, 1.0) - 2.0).abs() < 1e-9);
-        // A deliberate ~180deg re-framing must NOT be treated as equivalent.
-        assert!((rotation_circular_distance_deg(0.0, 180.0) - 180.0).abs() < 1e-9);
+    fn rotation_distance_wraps_at_the_seam() {
+        // 359 and 1 degrees are 2deg apart, not ~358.
+        assert!((rotation_axial_distance_deg(359.0, 1.0) - 2.0).abs() < 1e-9);
+        // A 180deg half-turn is the SAME image axis (identical sensor
+        // footprint) — spec 062 FR-025.
+        assert!(rotation_axial_distance_deg(0.0, 180.0).abs() < 1e-9);
     }
 
     #[test]
-    fn rotation_distance_shortest_arc_not_naive_diff() {
-        // 45 and 295 degrees are 110deg apart circularly (via the 350deg/0deg
-        // seam); a naive |a-b| would wrongly give 250.
-        assert!((rotation_circular_distance_deg(45.0, 295.0) - 110.0).abs() < 1e-9);
+    fn rotation_distance_treats_half_turn_as_equivalent() {
+        // 45 and 295 axes: doubled to 90 and 230, circular distance 140,
+        // halved to 70 — via the axial seam, not the naive |a-b| = 250 nor
+        // the full-circle 110.
+        assert!((rotation_axial_distance_deg(45.0, 295.0) - 70.0).abs() < 1e-9);
+        // Meridian-flip-style offsets vanish regardless of base angle.
+        assert!(rotation_axial_distance_deg(10.0, 190.0).abs() < 1e-9);
+        // Perpendicular axes are maximally distant.
+        assert!((rotation_axial_distance_deg(0.0, 90.0) - 90.0).abs() < 1e-9);
     }
 
     #[test]
     fn rotation_distance_property_bounded_and_correct() {
-        // Same shortest-arc formula the flat calibration rule relies on
-        // (calibration_core issue #921) — any pair of angles must land in
-        // [0, 180], never the naive `(a - b).abs()` this delegates away from.
+        // Axial shortest-arc: any pair of angles must land in [0, 90] and
+        // match the double-angle reference formula.
         let angles: [f32; 9] = [0.0, 0.1, 45.0, 90.0, 180.0, 270.0, 295.0, 359.0, 359.9];
         for &a in &angles {
             for &b in &angles {
-                let d = rotation_circular_distance_deg(a, b);
-                assert!((0.0..=180.0).contains(&d), "distance {d} out of [0,180] for ({a}, {b})");
-                let raw = (f64::from(a) - f64::from(b)).abs().rem_euclid(360.0);
-                let expected = raw.min(360.0 - raw);
+                let d = rotation_axial_distance_deg(a, b);
+                assert!((0.0..=90.0).contains(&d), "distance {d} out of [0,90] for ({a}, {b})");
+                let raw = (f64::from(a) - f64::from(b)).abs().rem_euclid(180.0);
+                let expected = raw.min(180.0 - raw);
                 assert!((d - expected).abs() < 1e-9, "({a}, {b}): got {d}, expected {expected}");
             }
         }
+    }
+
+    #[test]
+    fn sessions_180_degrees_apart_collapse_into_one_framing() {
+        // Same footprint captured in different sessions with the camera a
+        // half-turn apart (meridian flip, rotator re-park, or coincidence)
+        // must cluster together — spec 062 FR-025.
+        let sessions = vec![
+            geom(1, 10, "scope-a|cam-a", 100.0, 20.0, 1.0, Some(2.0)),
+            geom(2, 10, "scope-a|cam-a", 100.0, 20.0, 181.5, Some(2.0)),
+        ];
+        let result = derive_clustering(&sessions, &[], &params());
+        assert_eq!(result.new_framings.len(), 1);
     }
 
     // ── FOV fallback path ────────────────────────────────────────────────────

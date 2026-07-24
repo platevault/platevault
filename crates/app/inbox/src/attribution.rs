@@ -60,7 +60,7 @@ use persistence_targets::repositories::framing as framing_repo;
 use persistence_targets::repositories::q_resolver;
 use sessions::{
     angular_separation_deg, optic_train_key as compute_optic_train_key,
-    rotation_circular_distance_deg, ToleranceParams,
+    rotation_axial_distance_deg, ToleranceParams,
 };
 use sqlx::SqlitePool;
 
@@ -367,7 +367,7 @@ fn best_matching_framing(
         }
         #[allow(clippy::cast_possible_truncation)]
         let f_rotation = f.rotation_deg as f32;
-        let rot_dist = rotation_circular_distance_deg(item_rotation, f_rotation);
+        let rot_dist = rotation_axial_distance_deg(item_rotation, f_rotation);
         if rot_dist > f64::from(rotation_tolerance_deg) {
             continue;
         }
