@@ -24,214 +24,34 @@ import {
   useState,
 } from 'react';
 import { m } from '@/lib/i18n';
-import { useVirtualizer, type Virtualizer } from '@tanstack/react-virtual';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Collapsible } from '@base-ui-components/react/collapsible';
 import { useNavigate } from '@tanstack/react-router';
 import { useLogPanel } from './LogPanelContext';
 import {
   subscribeLog,
   getLogSnapshot,
-  type LogEntry,
-  type LogLevel,
-  type LogEntrySource,
 } from '@/data/logStore';
 import { startLogSubscription } from '@/data/logSubscription';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
 import type { LevelFilter } from './LogPanelContext';
 import { errMessage } from '@/lib/errors';
-import { formatTimeOfDay } from '@/lib/datetime';
 import { useHotkeys } from '@/lib/useHotkeys';
 import { EmptyState } from '@/ui/EmptyState';
-
-// ── Virtualizer scroll-offset observer ──────────────────────────────────────────
-
-const scrollListenerOptions: AddEventListenerOptions = { passive: true };
-// jsdom (and any browser without the `scrollend` event) never satisfies this,
-// so every test run exercises the debounce fallback path below.
-const supportsScrollend =
-  typeof window === 'undefined' ? true : 'onscrollend' in window;
-
-/**
- * Drop-in replacement for `@tanstack/react-virtual`'s default
- * `observeElementOffset`, with one fix: it cancels its debounce fallback
- * timer on unsubscribe.
- *
- * Upstream's fallback (used whenever `scrollend` isn't supported/enabled)
- * debounces via a bare `setTimeout` whose id lives in a private closure with
- * no cancel handle (`@tanstack/virtual-core` `dist/esm/utils.js` `debounce()`
- * — confirmed unfixed through 3.17.5, the latest release as of this writing).
- * The unsubscribe function the library returns only removes the scroll
- * listeners; it never clears that timer. A scroll shortly before unmount
- * therefore leaves a real timer pending that fires later — potentially
- * after the owning test environment has been torn down, which is what
- * produced astro-plan-99u's "ReferenceError: window is not defined" (every
- * test passing, one stray async error failing the whole vitest run).
- */
-function observeElementOffsetWithCleanup<T extends Element>(
-  instance: Virtualizer<T, Element>,
-  cb: (offset: number, isScrolling: boolean) => void,
-): (() => void) | undefined {
-  const element = instance.scrollElement;
-  if (!element) return undefined;
-  const targetWindow = instance.targetWindow;
-  if (!targetWindow) return undefined;
-
-  const registerScrollendEvent =
-    instance.options.useScrollendEvent && supportsScrollend;
-  let offset = 0;
-  // `Window['setTimeout']`, not the bare global — the ambient global
-  // `setTimeout` resolves to Node's `NodeJS.Timeout`-returning overload in
-  // this project's type graph, which is incompatible with `Window`'s
-  // number-returning DOM signature that `targetWindow.setTimeout` actually
-  // uses at runtime.
-  let fallbackTimeoutId: ReturnType<Window['setTimeout']> | undefined;
-
-  const readOffset = () => {
-    const { horizontal, isRtl } = instance.options;
-    return horizontal
-      ? element.scrollLeft * ((isRtl && -1) || 1)
-      : element.scrollTop;
-  };
-
-  const scheduleFallback = () => {
-    if (fallbackTimeoutId !== undefined) {
-      targetWindow.clearTimeout(fallbackTimeoutId);
-    }
-    fallbackTimeoutId = targetWindow.setTimeout(() => {
-      fallbackTimeoutId = undefined;
-      cb(offset, false);
-    }, instance.options.isScrollingResetDelay);
-  };
-
-  const createHandler = (isScrolling: boolean) => () => {
-    offset = readOffset();
-    if (!registerScrollendEvent) scheduleFallback();
-    cb(offset, isScrolling);
-  };
-  const handler = createHandler(true);
-  const endHandler = createHandler(false);
-
-  element.addEventListener('scroll', handler, scrollListenerOptions);
-  if (registerScrollendEvent) {
-    element.addEventListener('scrollend', endHandler, scrollListenerOptions);
-  }
-
-  return () => {
-    element.removeEventListener('scroll', handler);
-    if (registerScrollendEvent) {
-      element.removeEventListener('scrollend', endHandler);
-    }
-    if (fallbackTimeoutId !== undefined) {
-      targetWindow.clearTimeout(fallbackTimeoutId);
-      fallbackTimeoutId = undefined;
-    }
-  };
-}
-
-// ── Level chip display helpers ────────────────────────────────────────────────
-
-// `label` is a render-time thunk so it re-reads the active locale (spec 046 #8).
-const LEVEL_CHIPS: { value: LevelFilter; label: () => string }[] = [
-  { value: 'all', label: () => m.common_all() },
-  { value: 'error', label: () => m.settings_advanced_log_error() },
-  { value: 'warn', label: () => m.settings_advanced_log_warn() },
-  { value: 'info', label: () => m.settings_advanced_log_info() },
-  { value: 'debug', label: () => m.settings_advanced_log_debug() },
-];
-
-// Severity order (ascending). A level-chip selection is a floor: choosing
-// e.g. "warn" shows warn AND error, matching conventional log-viewer
-// semantics rather than an exact-level match (#582).
-const LEVEL_SEVERITY: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-};
-
-function passesLevelFilter(entryLevel: LogLevel, filter: LevelFilter): boolean {
-  if (filter === 'all') return true;
-  return LEVEL_SEVERITY[entryLevel] >= LEVEL_SEVERITY[filter];
-}
-
-function passesSourceFilter(
-  entrySource: LogEntrySource,
-  filter: LogEntrySource[],
-): boolean {
-  if (filter.length === 0) return true;
-  return filter.includes(entrySource);
-}
-
-// All known log-entry sources, for the category/source filter chips (#666).
-// Kept local (not exported from `data/logStore`) — this is a UI concern only.
-const ALL_LOG_SOURCES: LogEntrySource[] = [
-  'audit',
-  'diagnostic',
-  'catalog',
-  'plan',
-  'workflow',
-  'lifecycle',
-  'inventory',
-  'settings',
-  'project',
-  'target',
-  'tool',
-];
-
-/**
- * Names the filters currently narrowing the list, or `null` when none of the
- * user-selectable filters is active.
- *
- * #669 / Journey 13: a filtered-to-empty log must never render the same copy
- * as a log that recorded nothing, so the empty state names what is excluding
- * the rows. Returns `null` when only the non-user-selectable diagnostics gate
- * is doing the excluding — there is no filter name to show the user then.
- */
-function activeFilterLabel(
-  levelFilter: LevelFilter,
-  sourceFilter: LogEntrySource[],
-): string | null {
-  const parts: string[] = [];
-  if (levelFilter !== 'all') {
-    const chip = LEVEL_CHIPS.find((c) => c.value === levelFilter);
-    if (chip) parts.push(chip.label());
-  }
-  parts.push(...sourceFilter);
-  return parts.length > 0 ? parts.join(', ') : null;
-}
-
-// ── Entity navigation helpers ─────────────────────────────────────────────────
-
-type EntityNavigateFn = (entityType: string, entityId: string) => void;
-type AuditNavigateFn = (requestId: string) => void;
-
-/**
- * Resolve an entity link's destination path, or `null` when the entity type
- * has no deep-linkable destination yet (row still shows subject-context text,
- * just without click affordance).
- *
- * `plan` is intentionally not linked — no `/plans/:id` route exists yet (#626);
- * `catalog` and the fallback point at the real Settings panes (`/settings/$pane`
- * is a plain path segment, so a literal string is fine here — no route for
- * `/audit` or `/settings?tab=catalogs` ever existed).
- */
-function buildEntityPath(entityType: string, entityId: string): string | null {
-  switch (entityType) {
-    case 'plan':
-      return null;
-    case 'project':
-      return `/projects/${entityId}`;
-    case 'session':
-      return `/sessions/${entityId}`;
-    case 'target':
-      return `/targets/${entityId}`;
-    case 'catalog':
-      return `/settings/catalogs`;
-    default:
-      return `/settings/audit?entityType=${entityType}&entityId=${entityId}`;
-  }
-}
+import { observeElementOffsetWithCleanup } from '@/lib/observe-element-offset';
+import {
+  LEVEL_CHIPS,
+  ALL_LOG_SOURCES,
+  passesLevelFilter,
+  passesSourceFilter,
+  activeFilterLabel,
+  buildEntityPath,
+  type EntityNavigateFn,
+  type AuditNavigateFn,
+} from './log-panel-model';
+import { useFollowTail } from './useFollowTail';
+import { LogEntryRow } from './LogEntryRow';
 
 // ── LogPanel component ────────────────────────────────────────────────────────
 
@@ -252,8 +72,6 @@ export function LogPanel() {
   const listRef = useRef<HTMLUListElement>(null);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
-  // Temporary scroll-up pause (does not mutate persisted preference).
-  const [scrollPaused, setScrollPaused] = useState(false);
 
   // Reduced-motion preference.
   const prefersReducedMotion =
@@ -311,41 +129,16 @@ export function LogPanel() {
     { ignoreFormFields: false },
   );
 
-  // Follow-tail scroll.
-  useEffect(() => {
-    if (!expanded || !followLogs || scrollPaused) return;
-    const list = listRef.current;
-    if (!list) return;
-    // Entries are newest-first: scroll to top (offset 0) to see the latest.
-    // Drive the virtualizer to index 0 so its window updates, then pin the
-    // native scrollTop to 0 (covers reduced-motion + non-smooth fallbacks and
-    // jsdom, where `scrollTo` is a no-op).
-    virtualizer.scrollToIndex(0, { align: 'start' });
-    if (prefersReducedMotion) {
-      list.scrollTop = 0;
-    } else {
-      list.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, [
-    visibleEntries.length,
+  // Follow-tail scroll behaviour.
+  const { scrollPaused, handleScroll, toggleFollow } = useFollowTail({
     expanded,
     followLogs,
-    scrollPaused,
-    prefersReducedMotion,
+    setFollowLogs,
+    entryCount: visibleEntries.length,
     virtualizer,
-  ]);
-
-  // Pause follow on manual scroll-up, resume on scroll-to-top.
-  const handleScroll = useCallback(() => {
-    const list = listRef.current;
-    if (!list) return;
-    // If user scrolled away from top (top = newest), pause follow.
-    if (list.scrollTop > 20) {
-      setScrollPaused(true);
-    } else {
-      setScrollPaused(false);
-    }
-  }, []);
+    listRef,
+    prefersReducedMotion,
+  });
 
   // Navigation handlers.
   const navigateToEntity: EntityNavigateFn = useCallback(
@@ -517,15 +310,7 @@ export function LogPanel() {
             <button
               type="button"
               className={`pv-btn pv-btn--ghost pv-btn--xs${followLogs ? ' pv-logpanel__chip--active' : ''}`}
-              onClick={() => {
-                const next = !followLogs;
-                setFollowLogs(next);
-                // #832: re-enabling Follow must resume at the newest row even
-                // if a manual scroll-up left `scrollPaused` set — otherwise
-                // the follow-tail effect's guard (`!followLogs ||
-                // scrollPaused`) silently no-ops and the toggle looks broken.
-                if (next) setScrollPaused(false);
-              }}
+              onClick={toggleFollow}
               aria-pressed={followLogs}
               aria-label={
                 followLogs
@@ -641,114 +426,5 @@ export function LogPanel() {
         </ul>
       </Collapsible.Panel>
     </Collapsible.Root>
-  );
-}
-
-// ── LogEntryRow sub-component ─────────────────────────────────────────────────
-
-interface LogEntryRowProps {
-  entry: LogEntry;
-  onNavigateEntity: EntityNavigateFn;
-  onNavigateAudit: AuditNavigateFn;
-  /** Virtual-row positioning style (absolute + translateY). */
-  style?: React.CSSProperties;
-  /** Virtual-row index for the virtualizer's measure cache. */
-  index?: number;
-  /** Virtualizer measure callback ref. */
-  measureRef?: (node: Element | null) => void;
-}
-
-function LogEntryRow({
-  entry,
-  onNavigateEntity,
-  onNavigateAudit,
-  style,
-  index,
-  measureRef,
-}: LogEntryRowProps) {
-  const hasEntity = entry.entityType != null && entry.entityId != null;
-  // #626: a link is only "linkable" when a real route exists for it (e.g.
-  // `plan` has no destination yet — buildEntityPath returns null for it).
-  const hasEntityLink =
-    hasEntity &&
-    buildEntityPath(entry.entityType ?? '', entry.entityId ?? '') != null;
-  const hasAuditLink = entry.requestId != null && !hasEntity;
-  // Subject context (#583): the entity/request the line is about, surfaced
-  // as visible text rather than only implied by the click-to-navigate arrow.
-  // Shown even when the entity has no link yet (e.g. `plan`, #626) so the
-  // context isn't lost, just the click affordance.
-  const contextLabel = hasEntity
-    ? `${entry.entityType} · ${entry.entityId}`
-    : hasAuditLink
-      ? entry.requestId
-      : null;
-
-  const handleClick = useCallback(() => {
-    if (hasEntityLink && entry.entityType && entry.entityId) {
-      onNavigateEntity(entry.entityType, entry.entityId);
-    } else if (hasAuditLink && entry.requestId) {
-      onNavigateAudit(entry.requestId);
-    }
-  }, [entry, hasEntityLink, hasAuditLink, onNavigateEntity, onNavigateAudit]);
-
-  const isClickable = hasEntityLink || hasAuditLink;
-
-  return (
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- interactivity is conditional; role/tabindex/keydown all upgrade to button only when clickable
-    <li
-      ref={measureRef}
-      data-index={index}
-      // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer row style passthrough (absolute + translateY)
-      style={style}
-      className={`pv-logpanel__event${isClickable ? ' pv-logpanel__event--link' : ''}`}
-      onClick={isClickable ? handleClick : undefined}
-      role={isClickable ? 'button' : 'listitem'}
-      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- only focusable when clickable, where role becomes button
-      tabIndex={isClickable ? 0 : undefined}
-      onKeyDown={
-        isClickable
-          ? (e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                handleClick();
-              }
-            }
-          : undefined
-      }
-      aria-label={
-        isClickable
-          ? m.log_entry_navigate_aria({
-              level: entry.level,
-              message: entry.message,
-            })
-          : undefined
-      }
-    >
-      <span className="pv-logpanel__event-time">
-        {formatTimeOfDay(entry.time)}
-      </span>
-      <span
-        className={`pv-logpanel__event-level pv-logpanel__event-level--${entry.level}`}
-        aria-label={entry.level}
-      >
-        {entry.level}
-      </span>
-      <span
-        className={`pv-logpanel__event-source pv-logpanel__event-source--${entry.source}`}
-      >
-        {entry.source}
-      </span>
-      {contextLabel && (
-        <span className="pv-logpanel__event-context" title={contextLabel}>
-          {contextLabel}
-        </span>
-      )}
-      <span className="pv-logpanel__event-msg">{entry.message}</span>
-      {hasEntityLink && (
-        <span className="pv-logpanel__event-link-indicator" aria-hidden="true">
-          →
-        </span>
-      )}
-    </li>
   );
 }
