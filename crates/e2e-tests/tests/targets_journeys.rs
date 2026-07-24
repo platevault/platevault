@@ -118,13 +118,14 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
     // (a) DOM dump: outerHTML of the whole `.pv-target-search` root (input +
     // filters + status + any rendered options), not the full page — small and
     // directly relevant.
-    let outer_html_script = r"
+    let outer_html_script = r#"
         var el = document.querySelector("[data-testid='target-search']");
         return el ? el.outerHTML : '<[data-testid="target-search"] not found in DOM>';
-    ";
+    "#;
     match app.driver.execute(outer_html_script, vec![]).await {
         Ok(ret) => match ret.convert::<String>() {
-            Ok(html) => report.push_str(&format!("--- [data-testid='target-search'] outerHTML ---\n{html}\n")),
+            Ok(html) => report
+                .push_str(&format!("--- [data-testid='target-search'] outerHTML ---\n{html}\n")),
             Err(e) => report.push_str(&format!("(failed to deserialise outerHTML: {e})\n")),
         },
         Err(e) => report.push_str(&format!("(outerHTML script execution failed: {e})\n")),
@@ -385,14 +386,15 @@ async fn wait_targets_in_ipc_then_invalidate(app: &E2eApp) -> anyhow::Result<()>
 async fn dump_astronomy_diagnostics(app: &E2eApp) -> String {
     let mut report = String::from("=== astronomy-columns diagnostics ===\n");
 
-    let row_html_script = r"
+    let row_html_script = r#"
         var el = document.querySelector("[data-testid='targets-table-row']");
         return el ? el.outerHTML : '<[data-testid="targets-table-row"] not found in DOM>';
-    ";
+    "#;
     match app.driver.execute(row_html_script, vec![]).await {
         Ok(ret) => match ret.convert::<String>() {
-            Ok(html) => report
-                .push_str(&format!("--- first [data-testid='targets-table-row'] outerHTML ---\n{html}\n")),
+            Ok(html) => report.push_str(&format!(
+                "--- first [data-testid='targets-table-row'] outerHTML ---\n{html}\n"
+            )),
             Err(e) => report.push_str(&format!("(failed to deserialise row outerHTML: {e})\n")),
         },
         Err(e) => report.push_str(&format!("(row outerHTML script execution failed: {e})\n")),
@@ -426,8 +428,9 @@ async fn add_target_via_ui(app: &E2eApp, query: &str) -> anyhow::Result<String> 
 
     // Poll for the dialog to actually mount: it opens asynchronously after the
     // trigger click, same route/render race `E2eApp::find_waiting` documents.
-    let popup =
-        app.find_waiting(By::Css("[data-testid='add-target-popup']"), "the Add-target dialog popup").await?;
+    let popup = app
+        .find_waiting(By::Css("[data-testid='add-target-popup']"), "the Add-target dialog popup")
+        .await?;
     let input = popup.find(By::Css("[data-testid='target-search-input']")).await?;
 
     // #841 (dialog focus race, product fix filed + out of this branch's
@@ -732,8 +735,9 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
     // real-pointer hover is not a primitive this bridge harness exercises
     // reliably, and the aria-label mirror is the accessible contract.
     add_target_via_ui(&app, "M 1").await?;
-    let row =
-        app.find_waiting(By::Css("[data-testid='targets-table-row']"), "a targets-table row to open").await?;
+    let row = app
+        .find_waiting(By::Css("[data-testid='targets-table-row']"), "a targets-table row to open")
+        .await?;
     row.click().await?;
     let best_date =
         app.wait_testid("proptable-tooltip-bestdate", UI_TIMEOUT).await.map_err(|e| {
@@ -1209,3 +1213,4 @@ async fn slow_targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::
     );
 
     app.shutdown().await
+}
