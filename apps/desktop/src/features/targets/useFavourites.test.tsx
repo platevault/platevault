@@ -99,6 +99,10 @@ describe('useFavourites', () => {
     const { result } = renderHook(() => useFavourites(), { wrapper });
     await waitFor(() => expect(mockTargetFavouritesList).toHaveBeenCalled());
 
+    // After the add succeeds the invalidate re-fetches; simulate the
+    // server-side post-add state so the refetch confirms id-x is now in the set.
+    mockTargetFavouritesList.mockReturnValue(okList(['id-x']));
+
     act(() => {
       result.current.toggle('id-x');
     });
@@ -120,6 +124,10 @@ describe('useFavourites', () => {
     mockTargetFavouritesList.mockReturnValue(okList(['id-y']));
     const { result } = renderHook(() => useFavourites(), { wrapper });
     await waitFor(() => expect(result.current.isFavourite('id-y')).toBe(true));
+
+    // After the remove succeeds the invalidate re-fetches; simulate the
+    // server-side post-remove state so the refetch doesn't restore id-y.
+    mockTargetFavouritesList.mockReturnValue(okList([]));
 
     act(() => {
       result.current.toggle('id-y');
@@ -166,6 +174,31 @@ describe('useFavourites', () => {
     );
     await waitFor(() =>
       expect(b.result.current.isFavourite('id-shared')).toBe(true),
+    );
+  });
+
+  it('GFD-4: invalidates the cache after a successful toggle so the authoritative DB state is fetched', async () => {
+    // Two list calls: initial load (empty), then the post-add reconcile.
+    mockTargetFavouritesList
+      .mockReturnValueOnce(okList([]))
+      .mockReturnValue(okList(['id-inv']));
+
+    const { result } = renderHook(() => useFavourites(), { wrapper });
+    await waitFor(() =>
+      expect(mockTargetFavouritesList).toHaveBeenCalledTimes(1),
+    );
+
+    act(() => {
+      result.current.toggle('id-inv');
+    });
+
+    // After the add settles + invalidate fires, the refetch (second list call)
+    // confirms the item is in the DB-backed set.
+    await waitFor(() =>
+      expect(mockTargetFavouritesList).toHaveBeenCalledTimes(2),
+    );
+    await waitFor(() =>
+      expect(result.current.isFavourite('id-inv')).toBe(true),
     );
   });
 });
