@@ -142,6 +142,7 @@ dependencies = [
  "persistence_calibration",
  "persistence_core",
  "persistence_lifecycle",
+ "persistence_sessions",
  "persistence_targets",
  "serde_json",
  "sqlx",

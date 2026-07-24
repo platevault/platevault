@@ -141,7 +141,6 @@ fetch_mosaic_revision_by_row_id
 fetch_panel_group_by_public_id
 fetch_panel_group_head
 fetch_panel_revision_by_public_id
-fetch_panel_revision_by_row_id
 fetch_proposal_by_public_id
 find_active_panel_group_for_session
 find_bridged_mosaic_components
@@ -174,4 +173,42 @@ retire_panel_group
 start_traversal
 supersede_proposal
 upsert_mosaic_revision
-validate_mosaic_connectivity
+
+# spec 062 node ic9h.17: calibration families, sessions, handoff, and evidence
+# entry points consumed by app-layer nodes ic9h.18 (UI) and future handoff
+# command orchestrator. Remove each entry as its call site lands.
+add_reviewed_selection_snapshot
+assign_calibration_session_to_family
+create_initial_handoff
+evaluate_candidate_evidence
+find_dark_bias_family
+find_flat_family
+get_bias_recipe
+get_calibration_session
+get_calibration_session_by_public_id
+get_dark_recipe
+get_dark_thermal_evidence
+get_family_by_public_id
+get_family_by_row_id
+get_flat_family
+get_handoff_by_public_id
+get_snapshot_by_public_id
+get_source_availability
+insert_bias_recipe
+insert_calibration_family
+insert_dark_recipe
+insert_dark_thermal_evidence
+insert_flat_family
+insert_handoff_candidate_evidence
+insert_handoff_frame
+insert_handoff_requirement
+insert_handoff_selection
+insert_operation_for_handoff
+list_calibration_sessions_by_family
+list_selection_frames
+list_snapshot_requirements
+list_snapshot_selections
+list_source_availability_for_sessions
+transition_handoff_operation_state
+update_handoff_operation_progress
+upsert_source_availability

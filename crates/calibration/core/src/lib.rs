@@ -21,6 +21,7 @@
 
 pub mod assign;
 pub mod candidate;
+pub mod families;
 pub mod ranking;
 pub mod rotation;
 pub mod rules;

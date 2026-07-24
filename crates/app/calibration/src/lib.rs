@@ -18,6 +18,7 @@ pub mod caches;
 mod audit_ids;
 pub mod equipment;
 mod matching;
+pub mod session_handoff;
 mod tolerances;
 
 // `app_core::calibration::*` historically resolved to the flat calibration
