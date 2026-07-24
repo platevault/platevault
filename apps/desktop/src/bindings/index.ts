@@ -5988,6 +5988,13 @@ export type InventoryListFilters_Deserialize = {
 	sourceFilter: string | null,
 	/**  When set, limits sessions to the given frame type. */
 	frameFilter: InventoryFrameType | null,
+	/**
+	 *  Maximum sessions returned per source root (default 1 000 server-side
+	 *  when omitted). Existing callers that omit the field keep working.
+	 */
+	limit: number | null,
+	/**  Sessions to skip before applying `limit` (0-based, per source root). */
+	offset: number | null,
 };
 
 /**  Optional filters for `inventory.list`. */
@@ -5996,6 +6003,13 @@ export type InventoryListFilters_Serialize = {
 	sourceFilter?: string | null,
 	/**  When set, limits sessions to the given frame type. */
 	frameFilter?: InventoryFrameType | null,
+	/**
+	 *  Maximum sessions returned per source root (default 1 000 server-side
+	 *  when omitted). Existing callers that omit the field keep working.
+	 */
+	limit?: number | null,
+	/**  Sessions to skip before applying `limit` (0-based, per source root). */
+	offset?: number | null,
 };
 
 /**  Request envelope for `inventory.list`. */
@@ -6205,6 +6219,12 @@ export type InventorySource_Deserialize = {
 	kind: InventorySourceKind,
 	state: InventorySourceState,
 	sessions: InventorySession_Deserialize[],
+	/**
+	 *  `true` when more sessions exist beyond the current `offset + limit` page.
+	 *  `false` for an unbounded fetch or when the last session has been returned.
+	 *  Callers that do not paginate can ignore this field.
+	 */
+	hasMore?: boolean,
 };
 
 /**
@@ -6217,6 +6237,12 @@ export type InventorySource_Serialize = {
 	kind: InventorySourceKind,
 	state: InventorySourceState,
 	sessions: InventorySession_Serialize[],
+	/**
+	 *  `true` when more sessions exist beyond the current `offset + limit` page.
+	 *  `false` for an unbounded fetch or when the last session has been returned.
+	 *  Callers that do not paginate can ignore this field.
+	 */
+	hasMore: boolean,
 };
 
 /**  Handle for a long-running operation (scan, plan apply, etc.). */

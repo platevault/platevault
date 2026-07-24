@@ -14,6 +14,57 @@ use std::sync::{Arc, OnceLock};
 use app_core_cache::SnapshotCache;
 use contracts_core::targets::{ResolverSettings, TargetListItem};
 
+/// Per-instance targets cache state (catalog + resolver settings).
+///
+/// Replaces the former process-global `CATALOG` and `RESOLVER_SETTINGS`
+/// `OnceLock` statics. Wrap in `Arc` and thread alongside pool/bus; tests
+/// construct a fresh instance per test — no serialization mutex needed.
+pub struct TargetsCaches {
+    catalog: SnapshotCache<Vec<TargetListItem>>,
+    resolver_settings: SnapshotCache<ResolverSettings>,
+}
+
+impl TargetsCaches {
+    #[must_use]
+    pub fn new() -> Self {
+        Self { catalog: SnapshotCache::new(), resolver_settings: SnapshotCache::new() }
+    }
+
+    #[must_use]
+    pub fn load_catalog(&self) -> Option<Arc<Vec<TargetListItem>>> {
+        self.catalog.load()
+    }
+
+    pub fn store_catalog(&self, value: Arc<Vec<TargetListItem>>) {
+        self.catalog.store(value);
+    }
+
+    pub fn invalidate_catalog(&self) {
+        self.catalog.invalidate();
+    }
+
+    #[must_use]
+    pub fn load_resolver_settings(&self) -> Option<Arc<ResolverSettings>> {
+        self.resolver_settings.load()
+    }
+
+    pub fn store_resolver_settings(&self, value: Arc<ResolverSettings>) {
+        self.resolver_settings.store(value);
+    }
+
+    pub fn invalidate_resolver_settings(&self) {
+        self.resolver_settings.invalidate();
+    }
+}
+
+impl Default for TargetsCaches {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── Deprecated process-global accessors (migration shim) ─────────────────────
+
 // ── catalog snapshot: full target list (+ typeahead) (`target_management.rs`) ──
 
 /// Whole-catalog snapshot backing `target.list`, inbox target recommendations,

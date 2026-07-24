@@ -1,3 +1,5 @@
+use app_core_cache::SnapshotCache;
+
 use super::*;
 use audit::EventBus;
 use persistence_core::Database;
@@ -100,24 +102,21 @@ fn descriptor_keys_are_canonical_camel_case_wire_names() {
     }
 }
 
-async fn setup() -> (Database, EventBus) {
-    // SETTINGS_BAG is a process-global single-slot cache (F0); each test
-    // gets its own in-memory DB, so a stale cross-test snapshot would
-    // silently serve another test's data. Mirrors the same caveat/fix in
-    // `app_core_cache`'s `protection_defaults_*` test (crates/app/cache/src/lib.rs).
-    caches::invalidate_settings_bag();
+/// Returns a fresh per-instance `SnapshotCache` so tests never share state
+/// through the process-global slot and can run in parallel without a mutex.
+async fn setup() -> (Database, EventBus, SnapshotCache<SettingsState>) {
     let db = Database::in_memory().await.expect("in-memory DB");
     db.migrate().await.expect("migrations");
     let bus = EventBus::with_pool(db.pool().clone());
-    (db, bus)
+    (db, bus, SnapshotCache::new())
 }
 
 // ── T007: settings.get contract test ───────────────────────────────
 
 #[tokio::test]
 async fn get_settings_returns_defaults_when_empty() {
-    let (db, bus) = setup().await;
-    let resp = get_settings(db.pool(), &bus).await.unwrap();
+    let (db, bus, cache) = setup().await;
+    let resp = get_settings(db.pool(), &bus, &cache).await.unwrap();
     let defaults = SettingsState::default();
     assert_eq!(resp.settings.log_level, defaults.log_level);
     assert_eq!(resp.settings.follow_symlinks, defaults.follow_symlinks);
@@ -130,12 +129,12 @@ async fn get_settings_returns_defaults_when_empty() {
 
 #[tokio::test]
 async fn update_setting_happy_path_non_noisy() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "logLevel".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("debug")),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Success);
     assert_eq!(resp.key, "logLevel");
     // Non-noisy key should have an audit_id.
@@ -146,12 +145,12 @@ async fn update_setting_happy_path_non_noisy() {
 /// durable `audit_log_entry` row, not just a bus-only event id.
 #[tokio::test]
 async fn update_setting_audit_id_resolves_to_durable_row() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "logLevel".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("debug")),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     let audit_id = resp.audit_id.expect("non-noisy key must return an audit_id");
 
     let row: (String, String) =
@@ -169,14 +168,14 @@ async fn update_setting_audit_id_resolves_to_durable_row() {
 /// noisy key (see `update_setting_noisy_key_no_audit_id`).
 #[tokio::test]
 async fn update_setting_noisy_audited_key_pattern_gets_audit_id() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "pattern".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!([{
             "type": "literal", "value": "changed"
         }])),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Success);
     assert!(resp.audit_id.is_some(), "durable-data noisy key `pattern` must still be audited");
 }
@@ -185,12 +184,12 @@ async fn update_setting_noisy_audited_key_pattern_gets_audit_id() {
 /// `Outcome::Refused` row with a reason_code, per FR-130/FR-134.
 #[tokio::test]
 async fn update_setting_refused_unknown_key_writes_durable_row() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "notARealKey".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("whatever")),
     };
-    let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+    let err = update_setting(db.pool(), &bus, &cache, &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::KeyUnknown);
 
     let row: (String, Option<String>) = sqlx::query_as(
@@ -209,7 +208,7 @@ async fn update_setting_refused_unknown_key_writes_durable_row() {
 /// (not localStorage) is the durable source of truth.
 #[tokio::test]
 async fn theme_persists_and_resolves_via_settings_db() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     assert_eq!(
         resolve_setting(db.pool(), "theme", None).await.unwrap(),
         serde_json::json!("system"),
@@ -220,7 +219,7 @@ async fn theme_persists_and_resolves_via_settings_db() {
         key: "theme".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("espresso-dark")),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Success);
 
     assert_eq!(
@@ -231,48 +230,48 @@ async fn theme_persists_and_resolves_via_settings_db() {
 
 #[tokio::test]
 async fn update_setting_noop_when_value_unchanged() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     // logLevel default is "info".
     let req = SettingsUpdateRequest {
         key: "logLevel".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("info")),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Noop);
     assert!(resp.audit_id.is_none());
 }
 
 #[tokio::test]
 async fn update_setting_rejects_unknown_key() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "notARealKey".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("whatever")),
     };
-    let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+    let err = update_setting(db.pool(), &bus, &cache, &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::KeyUnknown);
 }
 
 #[tokio::test]
 async fn update_setting_rejects_invalid_value() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "logLevel".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("trace")), // not a valid level
     };
-    let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+    let err = update_setting(db.pool(), &bus, &cache, &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::ValueInvalid);
 }
 
 #[tokio::test]
 async fn update_setting_noisy_key_no_audit_id() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     // "rememberFollowLogs" default is false; change to true.
     let req = SettingsUpdateRequest {
         key: "rememberFollowLogs".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!(true)),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Success);
     // Noisy key: no per-change audit id.
     assert!(resp.audit_id.is_none());
@@ -280,7 +279,7 @@ async fn update_setting_noisy_key_no_audit_id() {
 
 #[tokio::test]
 async fn update_setting_pattern_noop_structural_equality() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     // Get the default pattern and send it back — must be noop (A4, R4.1).
     let defaults = SettingsState::default();
     let pattern_value = serde_json::to_value(&defaults.pattern).unwrap();
@@ -288,13 +287,13 @@ async fn update_setting_pattern_noop_structural_equality() {
         key: "pattern".to_owned(),
         value: contracts_core::JsonAny::from(pattern_value),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Noop);
 }
 
 #[tokio::test]
 async fn update_setting_protected_categories_noop_structural_equality() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     // Default is ["lights", "masters", "finals"] — same value must be noop (R-Set-1).
     let defaults = SettingsState::default();
     let value = serde_json::to_value(&defaults.protected_categories).unwrap();
@@ -302,7 +301,7 @@ async fn update_setting_protected_categories_noop_structural_equality() {
         key: "protectedCategories".to_owned(),
         value: contracts_core::JsonAny::from(value),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Noop);
 }
 
@@ -310,10 +309,10 @@ async fn update_setting_protected_categories_noop_structural_equality() {
 
 #[tokio::test]
 async fn get_settings_repairs_invalid_stored_value() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     // Inject an invalid value directly.
     repo::set_raw(db.pool(), "logLevel", &serde_json::json!("trace")).await.unwrap();
-    let resp = get_settings(db.pool(), &bus).await.unwrap();
+    let resp = get_settings(db.pool(), &bus, &cache).await.unwrap();
     // Should have been repaired to the default.
     assert_eq!(resp.settings.log_level, "info");
     // The bad row should have been deleted.
@@ -325,13 +324,13 @@ async fn get_settings_repairs_invalid_stored_value() {
 
 #[tokio::test]
 async fn set_source_override_happy_path() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SetSourceOverrideRequest {
         source_id: "src-abc".to_owned(),
         key: "defaultProtection".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("unprotected")),
     };
-    let resp = set_source_override(db.pool(), &bus, &req).await.unwrap();
+    let resp = set_source_override(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.source_id, "src-abc");
     assert_eq!(resp.key, "defaultProtection");
 }
@@ -340,13 +339,13 @@ async fn set_source_override_happy_path() {
 /// to a real `audit_log_entry` row (FR-130/FR-131).
 #[tokio::test]
 async fn set_source_override_writes_durable_applied_audit_row() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SetSourceOverrideRequest {
         source_id: "src-abc".to_owned(),
         key: "defaultProtection".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("unprotected")),
     };
-    set_source_override(db.pool(), &bus, &req).await.unwrap();
+    set_source_override(db.pool(), &bus, &cache, &req).await.unwrap();
 
     let row: (String, String) = sqlx::query_as(
         "SELECT entity_type, outcome FROM audit_log_entry WHERE trigger = 'settings.source_override.set'",
@@ -360,13 +359,13 @@ async fn set_source_override_writes_durable_applied_audit_row() {
 
 #[tokio::test]
 async fn set_source_override_rejects_unoverridable_key() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SetSourceOverrideRequest {
         source_id: "src-abc".to_owned(),
         key: "logLevel".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("debug")),
     };
-    let err = set_source_override(db.pool(), &bus, &req).await.unwrap_err();
+    let err = set_source_override(db.pool(), &bus, &cache, &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::KeyUnoverridable);
 
     let row: (String, Option<String>) = sqlx::query_as(
@@ -388,13 +387,13 @@ async fn set_source_override_rejects_unoverridable_key() {
 #[case("hashOnScan")]
 #[tokio::test]
 async fn set_source_override_rejects_retired_scan_behavior_keys(#[case] key: &str) {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SetSourceOverrideRequest {
         source_id: "src-abc".to_owned(),
         key: key.to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!(true)),
     };
-    let err = set_source_override(db.pool(), &bus, &req).await.unwrap_err();
+    let err = set_source_override(db.pool(), &bus, &cache, &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::KeyUnoverridable);
 }
 
@@ -402,14 +401,14 @@ async fn set_source_override_rejects_retired_scan_behavior_keys(#[case] key: &st
 
 #[tokio::test]
 async fn resolve_setting_prefers_source_override() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
 
     // Set global to "protected".
     let req = SettingsUpdateRequest {
         key: "defaultProtection".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("protected")),
     };
-    update_setting(db.pool(), &bus, &req).await.unwrap();
+    update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
 
     // Set source override to "unprotected".
     let ov_req = SetSourceOverrideRequest {
@@ -417,7 +416,7 @@ async fn resolve_setting_prefers_source_override() {
         key: "defaultProtection".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("unprotected")),
     };
-    set_source_override(db.pool(), &bus, &ov_req).await.unwrap();
+    set_source_override(db.pool(), &bus, &cache, &ov_req).await.unwrap();
 
     let resolved = resolve_setting(db.pool(), "defaultProtection", Some("src-1")).await.unwrap();
     assert_eq!(resolved, serde_json::json!("unprotected"));
@@ -425,12 +424,12 @@ async fn resolve_setting_prefers_source_override() {
 
 #[tokio::test]
 async fn resolve_setting_falls_back_to_global() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "defaultProtection".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("unprotected")),
     };
-    update_setting(db.pool(), &bus, &req).await.unwrap();
+    update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
 
     // No override for "src-2".
     let resolved = resolve_setting(db.pool(), "defaultProtection", Some("src-2")).await.unwrap();
@@ -439,7 +438,7 @@ async fn resolve_setting_falls_back_to_global() {
 
 #[tokio::test]
 async fn resolve_setting_falls_back_to_default() {
-    let (db, _bus) = setup().await;
+    let (db, _bus, _cache) = setup().await;
     let resolved = resolve_setting(db.pool(), "hashOnScan", None).await.unwrap();
     assert_eq!(resolved, serde_json::json!("lazy")); // default
 }
@@ -449,7 +448,7 @@ async fn resolve_setting_falls_back_to_default() {
 /// survives a fresh `resolve_setting` read (the reload path).
 #[tokio::test]
 async fn update_setting_enabled_catalogues_persists_across_reload() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
 
     // Default (nothing stored yet) is the in-code default subset.
     let default = resolve_setting(db.pool(), "enabled", None).await.unwrap();
@@ -459,7 +458,7 @@ async fn update_setting_enabled_catalogues_persists_across_reload() {
         key: "enabled".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!(["M", "NGC", "IC", "Sh2", "LBN"])),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Success);
 
     // Simulates "leave the pane and return": a fresh resolve reads the
@@ -472,12 +471,12 @@ async fn update_setting_enabled_catalogues_persists_across_reload() {
 /// silently accepted.
 #[tokio::test]
 async fn update_setting_enabled_catalogues_rejects_unknown_id() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "enabled".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!(["NotACatalogue"])),
     };
-    let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+    let err = update_setting(db.pool(), &bus, &cache, &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::ValueInvalid);
 }
 
@@ -485,18 +484,18 @@ async fn update_setting_enabled_catalogues_rejects_unknown_id() {
 
 #[tokio::test]
 async fn restore_defaults_restores_changed_keys() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
 
     // Change logLevel.
     let req = SettingsUpdateRequest {
         key: "logLevel".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("debug")),
     };
-    update_setting(db.pool(), &bus, &req).await.unwrap();
+    update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
 
     // Restore logLevel.
     let restore_req = RestoreDefaultsRequest { keys: vec!["logLevel".to_owned()] };
-    let resp = restore_defaults(db.pool(), &bus, &restore_req).await.unwrap();
+    let resp = restore_defaults(db.pool(), &bus, &cache, &restore_req).await.unwrap();
     assert_eq!(resp.status, RestoreDefaultsStatus::Success);
     assert!(resp.restored.contains(&"logLevel".to_owned()));
     assert!(resp.already_at_default.is_empty());
@@ -508,9 +507,9 @@ async fn restore_defaults_restores_changed_keys() {
 
 #[tokio::test]
 async fn restore_defaults_noop_when_already_at_default() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let restore_req = RestoreDefaultsRequest { keys: vec!["logLevel".to_owned()] };
-    let resp = restore_defaults(db.pool(), &bus, &restore_req).await.unwrap();
+    let resp = restore_defaults(db.pool(), &bus, &cache, &restore_req).await.unwrap();
     assert_eq!(resp.status, RestoreDefaultsStatus::Noop);
     assert!(resp.restored.is_empty());
     assert!(resp.already_at_default.contains(&"logLevel".to_owned()));
@@ -518,9 +517,9 @@ async fn restore_defaults_noop_when_already_at_default() {
 
 #[tokio::test]
 async fn restore_defaults_rejects_unknown_key() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let restore_req = RestoreDefaultsRequest { keys: vec!["notAKey".to_owned()] };
-    let err = restore_defaults(db.pool(), &bus, &restore_req).await.unwrap_err();
+    let err = restore_defaults(db.pool(), &bus, &cache, &restore_req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::KeyUnknown);
 }
 
@@ -775,7 +774,7 @@ fn sample_site(id: &str, lat: f64) -> Value {
 
 #[tokio::test]
 async fn observing_sites_round_trip_through_db() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
 
     // Defaults: empty sites, null pointers, threshold 30.
     assert_eq!(resolve_setting(db.pool(), "observingSites", None).await.unwrap(), json!([]));
@@ -793,6 +792,7 @@ async fn observing_sites_round_trip_through_db() {
         update_setting(
             db.pool(),
             &bus,
+            &cache,
             &SettingsUpdateRequest { key: key.to_owned(), value: value.into() },
         )
         .await
@@ -808,7 +808,7 @@ async fn observing_sites_round_trip_through_db() {
     assert_eq!(resolve_setting(db.pool(), "usableAltitudeDeg", None).await.unwrap(), json!(40.0));
 
     // Full-state hydration maps the keys onto SettingsState fields.
-    let resp = get_settings(db.pool(), &bus).await.unwrap();
+    let resp = get_settings(db.pool(), &bus, &cache).await.unwrap();
     assert_eq!(resp.settings.observing_sites.len(), 2);
     assert_eq!(resp.settings.observing_active_site_id.as_deref(), Some("s2"));
     assert!((resp.settings.usable_altitude_deg - 40.0).abs() < f64::EPSILON);
@@ -816,11 +816,12 @@ async fn observing_sites_round_trip_through_db() {
 
 #[tokio::test]
 async fn observing_settings_reject_invalid_values() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     // Out-of-range threshold is rejected as value.invalid.
     let err = update_setting(
         db.pool(),
         &bus,
+        &cache,
         &SettingsUpdateRequest { key: "usableAltitudeDeg".to_owned(), value: json!(120).into() },
     )
     .await
@@ -832,7 +833,7 @@ async fn observing_settings_reject_invalid_values() {
 
 #[tokio::test]
 async fn framing_tolerances_round_trip_through_db() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
 
     // R11a shipped defaults.
     assert_eq!(
@@ -861,13 +862,14 @@ async fn framing_tolerances_round_trip_through_db() {
         update_setting(
             db.pool(),
             &bus,
+            &cache,
             &SettingsUpdateRequest { key: key.to_owned(), value: value.into() },
         )
         .await
         .expect("update ok");
     }
 
-    let resp = get_settings(db.pool(), &bus).await.unwrap();
+    let resp = get_settings(db.pool(), &bus, &cache).await.unwrap();
     assert!((resp.settings.framing_pointing_fraction_of_fov - 0.25).abs() < f64::EPSILON);
     assert!((resp.settings.framing_pointing_fallback_deg - 0.5).abs() < f64::EPSILON);
     assert!((resp.settings.framing_rotation_tolerance_deg - 5.0).abs() < f64::EPSILON);
@@ -876,10 +878,11 @@ async fn framing_tolerances_round_trip_through_db() {
 
 #[tokio::test]
 async fn framing_tolerances_reject_out_of_range_values() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let err = update_setting(
         db.pool(),
         &bus,
+        &cache,
         &SettingsUpdateRequest {
             key: "framingRotationToleranceDeg".to_owned(),
             value: json!(90).into(),
@@ -894,7 +897,7 @@ async fn framing_tolerances_reject_out_of_range_values() {
 
 #[tokio::test]
 async fn aging_threshold_days_persists_and_is_readable() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
 
     // Default should be 90.
     let defaults = SettingsState::default();
@@ -908,11 +911,11 @@ async fn aging_threshold_days_persists_and_is_readable() {
         key: "calibrationAgingThresholdDays".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!(180)),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Success);
 
     // Read it back via get_settings — consumer path.
-    let get_resp = get_settings(db.pool(), &bus).await.unwrap();
+    let get_resp = get_settings(db.pool(), &bus, &cache).await.unwrap();
     assert!(
         (get_resp.settings.calibration_aging_threshold_days - 180.0).abs() < f64::EPSILON,
         "calibrationAgingThresholdDays must round-trip: got {}",
@@ -924,12 +927,12 @@ async fn aging_threshold_days_persists_and_is_readable() {
 async fn aging_threshold_days_rejects_bogus_scope_key() {
     // The old dotted key 'calibration.aging_threshold_days' is no longer valid;
     // the canonical key is 'calibrationAgingThresholdDays'.
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "calibration.aging_threshold_days".to_owned(), // old dotted key name
         value: contracts_core::JsonAny::from(serde_json::json!(90)),
     };
-    let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+    let err = update_setting(db.pool(), &bus, &cache, &req).await.unwrap_err();
     assert_eq!(
         err.code,
         ErrorCode::KeyUnknown,
@@ -941,15 +944,15 @@ async fn aging_threshold_days_rejects_bogus_scope_key() {
 
 #[tokio::test]
 async fn update_patterns_by_type_round_trips_via_get() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "patternsByType".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!({"dark": "custom/{gain}/"})),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Success);
 
-    let get_resp = get_settings(db.pool(), &bus).await.unwrap();
+    let get_resp = get_settings(db.pool(), &bus, &cache).await.unwrap();
     assert_eq!(
         get_resp.settings.patterns_by_type.get("dark").map(String::as_str),
         Some("custom/{gain}/")
@@ -958,46 +961,46 @@ async fn update_patterns_by_type_round_trips_via_get() {
 
 #[tokio::test]
 async fn update_patterns_by_type_accepts_empty_object() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     // {} is the default; sending it back is a no-op, but it must validate.
     let req = SettingsUpdateRequest {
         key: "patternsByType".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!({})),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Noop);
 }
 
 #[tokio::test]
 async fn update_patterns_by_type_rejects_invalid_pattern() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "patternsByType".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!({"dark": "{telescope}/"})),
     };
-    let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+    let err = update_setting(db.pool(), &bus, &cache, &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::ValueInvalid);
 }
 
 #[tokio::test]
 async fn update_patterns_by_type_rejects_bad_class_name() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "patternsByType".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!({"nope": "x/"})),
     };
-    let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+    let err = update_setting(db.pool(), &bus, &cache, &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::ValueInvalid);
 }
 
 #[tokio::test]
 async fn update_patterns_by_type_rejects_non_object() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let req = SettingsUpdateRequest {
         key: "patternsByType".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!(["dark"])),
     };
-    let err = update_setting(db.pool(), &bus, &req).await.unwrap_err();
+    let err = update_setting(db.pool(), &bus, &cache, &req).await.unwrap_err();
     assert_eq!(err.code, ErrorCode::ValueInvalid);
 }
 
@@ -1005,7 +1008,7 @@ async fn update_patterns_by_type_rejects_non_object() {
 
 #[tokio::test]
 async fn emit_snapshot_fires_and_publishes_event() {
-    let (db, bus) = setup().await;
+    let (db, bus, _cache) = setup().await;
     let dedupe = SnapshotDedupe::new();
     let mut rx = bus.subscribe();
 
@@ -1024,7 +1027,7 @@ async fn emit_snapshot_fires_and_publishes_event() {
 /// resolve-batch heartbeat.
 #[tokio::test]
 async fn emit_snapshot_suppresses_unchanged_repeat() {
-    let (db, bus) = setup().await;
+    let (db, bus, _cache) = setup().await;
     let dedupe = SnapshotDedupe::new();
 
     emit_snapshot(db.pool(), &bus, "first", &dedupe).await.unwrap();
@@ -1042,7 +1045,7 @@ async fn emit_snapshot_suppresses_unchanged_repeat() {
 /// still publish (suppression is value-sensitive, not a blanket mute).
 #[tokio::test]
 async fn emit_snapshot_publishes_again_after_a_real_change() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let dedupe = SnapshotDedupe::new();
 
     emit_snapshot(db.pool(), &bus, "first", &dedupe).await.unwrap();
@@ -1052,7 +1055,7 @@ async fn emit_snapshot_publishes_again_after_a_real_change() {
         key: "pattern".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!(["*.fits"])),
     };
-    update_setting(db.pool(), &bus, &req).await.unwrap();
+    update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
 
     let mut rx = bus.subscribe();
     emit_snapshot(db.pool(), &bus, "second", &dedupe).await.unwrap();
@@ -1136,13 +1139,13 @@ fn overridable_keys_includes_expected_keys() {
 /// async write+read round-trip via `update_setting` + `resolve_setting`.
 #[tokio::test]
 async fn tools_bundle_id_update_round_trips() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
 
     let req = SettingsUpdateRequest {
         key: "tools.pixinsight.bundle_id".to_owned(),
         value: contracts_core::JsonAny::from(serde_json::json!("com.example.App")),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Success);
 
     // Read back via resolve_setting (no source override).
@@ -1185,7 +1188,7 @@ fn calibration_dark_temp_tolerance_accepts_positive() {
 /// No audit event should be emitted (the existing noop guard covers this).
 #[tokio::test]
 async fn imagetyp_mappings_deep_equal_noop() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
 
     // A non-default mapping (default is the empty vec []).
     let mapping = serde_json::json!([
@@ -1197,7 +1200,7 @@ async fn imagetyp_mappings_deep_equal_noop() {
         key: "imagetypNormalizationUserMappings".to_owned(),
         value: contracts_core::JsonAny::from(mapping.clone()),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Success, "initial write must succeed");
 
     // Second update: structurally identical array — must be noop.
@@ -1205,7 +1208,7 @@ async fn imagetyp_mappings_deep_equal_noop() {
         key: "imagetypNormalizationUserMappings".to_owned(),
         value: contracts_core::JsonAny::from(mapping.clone()),
     };
-    let resp2 = update_setting(db.pool(), &bus, &req2).await.unwrap();
+    let resp2 = update_setting(db.pool(), &bus, &cache, &req2).await.unwrap();
     assert_eq!(
         resp2.status,
         SettingsUpdateStatus::Noop,
@@ -1220,7 +1223,7 @@ async fn imagetyp_mappings_deep_equal_noop() {
 /// further events and no additional audit record (SC-003).
 #[tokio::test]
 async fn cleanup_type_overrides_emits_one_event_then_noop() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     let mut rx = bus.subscribe();
 
     let overrides = serde_json::json!({"1": "Archive", "20": "Delete"});
@@ -1231,7 +1234,7 @@ async fn cleanup_type_overrides_emits_one_event_then_noop() {
         key: "cleanupTypeOverrides".to_owned(),
         value: contracts_core::JsonAny::from(overrides.clone()),
     };
-    let resp = update_setting(db.pool(), &bus, &req).await.unwrap();
+    let resp = update_setting(db.pool(), &bus, &cache, &req).await.unwrap();
     assert_eq!(resp.status, SettingsUpdateStatus::Success, "initial write must succeed");
     assert!(resp.audit_id.is_some(), "real change must emit an audit event");
 
@@ -1247,7 +1250,7 @@ async fn cleanup_type_overrides_emits_one_event_then_noop() {
         key: "cleanupTypeOverrides".to_owned(),
         value: contracts_core::JsonAny::from(overrides),
     };
-    let resp2 = update_setting(db.pool(), &bus, &req2).await.unwrap();
+    let resp2 = update_setting(db.pool(), &bus, &cache, &req2).await.unwrap();
     assert_eq!(
         resp2.status,
         SettingsUpdateStatus::Noop,

@@ -1,0 +1,159 @@
+# cargo-deny configuration
+# AGPL-3.0-only project; all transitive deps must be AGPL-compatible.
+# See docs/development/supply-chain.md for policy rationale.
+
+[licenses]
+# SPDX identifiers for all licenses found in the dependency tree.
+# Each non-obvious addition is noted below.
+allow = [
+  "AGPL-3.0-only",      # This project's own license.
+  "MIT",
+  "MIT-0",              # MIT without attribution clause; more permissive than MIT.
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception", # LLVM exception allows linking without copyleft spread.
+  "MPL-2.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "Unicode-3.0",        # Unicode data tables (unicode-normalization, unicode-security).
+  "CC0-1.0",            # Public domain dedication.
+  "Unlicense",          # Public domain; functionally equivalent to CC0.
+  "0BSD",               # BSD Zero Clause; no attribution required.
+  "BSL-1.0",            # Boost Software License; permissive, used by ryu.
+  "CDLA-Permissive-2.0", # Community Data License Agreement Permissive; used by webpki-root-certs.
+  # LGPL-2.1-or-later appears in r-efi as "MIT OR Apache-2.0 OR LGPL-2.1-or-later";
+  # SPDX OR expressions are evaluated: any allowed branch satisfies the requirement,
+  # so Apache-2.0 / MIT covers r-efi. cargo-deny still requires all named identifiers
+  # to be listed here when any branch is encountered.
+  "LGPL-2.1-or-later",
+]
+
+[bans]
+# Tauri and its plugin ecosystem pull in multiple generations of the same crates
+# (objc2, windows-*, toml, schemars, thiserror, …) because different plugins pin
+# different versions. We warn instead of denying so the signal is visible without
+# blocking the build; each known transitive skip is individually documented below.
+multiple-versions = "warn"
+
+skip = [
+  # base64: swift-rs (tauri macOS bridge) pins 0.21; everything else uses 0.22.
+  { name = "base64", version = "=0.21.7" },
+  # bitflags: older platform crates still on 1.x; tauri ecosystem uses 2.x.
+  { name = "bitflags", version = "=1.3.2" },
+  # block2/objc2: tauri macOS bridge (swift-rs) uses 0.5/0.2; wry uses 0.6/0.3.
+  { name = "block2", version = "=0.5.1" },
+  { name = "objc2", version = "=0.5.2" },
+  { name = "objc2-app-kit", version = "=0.2.2" },
+  { name = "objc2-foundation", version = "=0.2.2" },
+  { name = "objc2-ui-kit", version = "=0.2.2" },
+  { name = "objc2-web-kit", version = "=0.2.2" },
+  # getrandom: 0.2 (ring/rustls transitive), 0.3 (tokio ecosystem), 0.4 (hashbrown).
+  { name = "getrandom", version = "=0.2.17" },
+  { name = "getrandom", version = "=0.3.4" },
+  # hashbrown: used by indexmap 1.x (0.12), indexmap 2.x (0.14), dashmap (0.16), ahash (0.17).
+  { name = "hashbrown", version = "=0.12.3" },
+  { name = "hashbrown", version = "=0.14.5" },
+  { name = "hashbrown", version = "=0.16.1" },
+  # heck: strum_macros / specta pin 0.4; tauri-plugin ecosystem uses 0.5.
+  { name = "heck", version = "=0.4.1" },
+  # indexmap: older tauri transitive deps on 1.x; rest of stack on 2.x.
+  { name = "indexmap", version = "=1.9.3" },
+  # jni/jni-sys: tauri Android bridge dual-version during plugin upgrade cycle.
+  { name = "jni", version = "=0.21.1" },
+  { name = "jni-sys", version = "=0.3.1" },
+  # png: tauri-plugin-updater pulls in older image decode chain (0.17).
+  { name = "png", version = "=0.17.16" },
+  # proc-macro-crate: three generations; 1.x (specta-macros), 2.x (tauri-plugin), 3.x (newest).
+  { name = "proc-macro-crate", version = "=1.3.1" },
+  { name = "proc-macro-crate", version = "=2.0.2" },
+  # r-efi: windows-sys transitive; two versions during ecosystem refresh.
+  { name = "r-efi", version = "=5.3.0" },
+  # reqwest: 0.12 used by tauri-plugin-updater; 0.13 is workspace-pinned.
+  { name = "reqwest", version = "=0.12.28" },
+  # schemars: 0.8 pulled in by tauri/specta-typescript rc; workspace pins 1.x.
+  { name = "schemars", version = "=0.8.22" },
+  { name = "schemars_derive", version = "=0.8.22" },
+  # serde_spanned/toml_datetime/toml_edit/toml: three-generation toml stack (0.8→0.9→1.x).
+  { name = "serde_spanned", version = "=0.6.9" },
+  { name = "toml", version = "=0.8.2" },
+  { name = "toml_datetime", version = "=0.6.3" },
+  { name = "toml_edit", version = "=0.19.15" },
+  { name = "toml_edit", version = "=0.20.2" },
+  # syn: 1.x (proc-macro-error, older macros), 2.x (most), 3.x (newest specta rc).
+  { name = "syn", version = "=1.0.109" },
+  { name = "syn", version = "=2.0.119" },
+  # thiserror: 1.x transitively required by older tauri deps; workspace pins 2.x.
+  { name = "thiserror", version = "=1.0.69" },
+  { name = "thiserror-impl", version = "=1.0.69" },
+  # windows/windows-*: two release trains (0.56 from older tauri-plugin pinning, 0.6x current).
+  { name = "windows", version = "=0.56.0" },
+  { name = "windows-core", version = "=0.56.0" },
+  { name = "windows-core", version = "=0.61.2" },
+  { name = "windows-implement", version = "=0.56.0" },
+  { name = "windows-interface", version = "=0.56.0" },
+  { name = "windows-link", version = "=0.1.3" },
+  { name = "windows-result", version = "=0.1.2" },
+  { name = "windows-result", version = "=0.3.4" },
+  { name = "windows-strings", version = "=0.4.2" },
+  { name = "windows-sys", version = "=0.45.0" },
+  { name = "windows-sys", version = "=0.52.0" },
+  { name = "windows-sys", version = "=0.59.0" },
+  { name = "windows-sys", version = "=0.60.2" },
+  { name = "windows-targets", version = "=0.42.2" },
+  { name = "windows-targets", version = "=0.52.6" },
+  { name = "windows_aarch64_gnullvm", version = "=0.42.2" },
+  { name = "windows_aarch64_gnullvm", version = "=0.52.6" },
+  { name = "windows_aarch64_msvc", version = "=0.42.2" },
+  { name = "windows_aarch64_msvc", version = "=0.52.6" },
+  { name = "windows_i686_gnu", version = "=0.42.2" },
+  { name = "windows_i686_gnu", version = "=0.52.6" },
+  { name = "windows_i686_gnullvm", version = "=0.52.6" },
+  { name = "windows_i686_msvc", version = "=0.42.2" },
+  { name = "windows_i686_msvc", version = "=0.52.6" },
+  { name = "windows_x86_64_gnu", version = "=0.42.2" },
+  { name = "windows_x86_64_gnu", version = "=0.52.6" },
+  { name = "windows_x86_64_gnullvm", version = "=0.42.2" },
+  { name = "windows_x86_64_gnullvm", version = "=0.52.6" },
+  { name = "windows_x86_64_msvc", version = "=0.42.2" },
+  { name = "windows_x86_64_msvc", version = "=0.52.6" },
+  # winnow: 0.5 (toml_edit 0.19/0.20), 0.7 (toml_edit 0.25), 1.x (newest).
+  { name = "winnow", version = "=0.5.40" },
+  { name = "winnow", version = "=0.7.15" },
+  # winreg: two minor versions during windows crate upgrade cycle.
+  { name = "winreg", version = "=0.55.0" },
+]
+
+[advisories]
+# Unmaintained crates that are Linux-only Tauri GTK3 transitive dependencies.
+# All are blocked until tauri moves beyond GTK3; no action we can take short
+# of blocking tauri on Linux. See https://github.com/tauri-apps/tauri/issues (tauri >GTK3 roadmap).
+ignore = [
+  # gtk-rs GTK3 crates — 10 unmaintained advisories covering gtk, gdk, gdkx11, atk,
+  # wry, muda, and tao; all Linux tauri-runtime-wry transitive deps.
+  { id = "RUSTSEC-2024-0411", reason = "tao (Linux tauri event loop) requires GTK3; no fix until tauri migrates beyond GTK3" },
+  { id = "RUSTSEC-2024-0412", reason = "gdkx11 (Linux GTK3 X11 display) requires GTK3; no fix until tauri migrates beyond GTK3" },
+  { id = "RUSTSEC-2024-0413", reason = "gtk (Linux GTK3 widget toolkit) requires GTK3; no fix until tauri migrates beyond GTK3" },
+  { id = "RUSTSEC-2024-0414", reason = "gdkx11 (Linux GTK3 X11 display variant) requires GTK3; no fix until tauri migrates beyond GTK3" },
+  { id = "RUSTSEC-2024-0415", reason = "muda (Linux menu via GTK3) requires GTK3; no fix until tauri migrates beyond GTK3" },
+  { id = "RUSTSEC-2024-0416", reason = "atk (Linux accessibility via GTK3) requires GTK3; no fix until tauri migrates beyond GTK3" },
+  { id = "RUSTSEC-2024-0417", reason = "wry (Linux WebView via GTK3) requires GTK3; no fix until tauri migrates beyond GTK3" },
+  { id = "RUSTSEC-2024-0418", reason = "gdk (Linux GTK3 drawing kit) requires GTK3; no fix until tauri migrates beyond GTK3" },
+  { id = "RUSTSEC-2024-0419", reason = "gtk (Linux GTK3 widget toolkit, 2nd advisory) requires GTK3; no fix until tauri migrates beyond GTK3" },
+  { id = "RUSTSEC-2024-0420", reason = "gtk (Linux GTK3 3rd advisory) requires GTK3; no fix until tauri migrates beyond GTK3" },
+  # proc-macro-error: unmaintained, pulled in transitively by glib-macros (GTK3 chain).
+  # No action available without upstream tauri/gtk3 migration.
+  { id = "RUSTSEC-2024-0370", reason = "glib-macros proc-macro-error; tauri GTK3 transitive dep; blocked on tauri >GTK3" },
+  # instant: unmaintained, pulled in by moka (workspace dep) and crossbeam via older tauri.
+  # moka 0.12 still depends on instant; upstream PR pending.
+  { id = "RUSTSEC-2024-0384", reason = "instant via notify-types; moka 0.12 transitive; no moka release without instant yet" },
+  # paste: unmaintained, pulled in transitively by specta rc chain.
+  { id = "RUSTSEC-2024-0436", reason = "paste via specta macros; pinned to specta 2.0.0-rc.25; unblock when specta stable ships" },
+  # unic-* crates: unmaintained, transitively required by urlpattern <- tauri-utils.
+  # The unic project is abandoned; tauri-utils will need to swap to a maintained alternative.
+  { id = "RUSTSEC-2025-0075", reason = "unic-char-property via tauri-utils/urlpattern; awaiting tauri upstream fix" },
+  { id = "RUSTSEC-2025-0080", reason = "unic-ucd-version via tauri-utils/urlpattern; awaiting tauri upstream fix" },
+  { id = "RUSTSEC-2025-0081", reason = "unic-ucd-ident via tauri-utils/urlpattern; awaiting tauri upstream fix" },
+  { id = "RUSTSEC-2025-0098", reason = "unic-ucd-ident (2nd advisory) via tauri-utils/urlpattern; awaiting tauri upstream fix" },
+  { id = "RUSTSEC-2025-0100", reason = "urlpattern itself unmaintained; tauri-utils transitive dep; awaiting tauri upstream fix" },
+]

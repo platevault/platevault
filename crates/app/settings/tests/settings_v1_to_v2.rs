@@ -29,18 +29,20 @@
 //! 6. `migration_summary_counts_are_correct` — `MigrationSummary` fields match
 //!    what happened.
 
+use app_core_cache::SnapshotCache;
 use app_core_settings::migrate::{migrate_v1_to_v2, MigrationSummary};
 use audit::EventBus;
+use domain_core::settings::SettingsState;
 use persistence_core::Database;
 use persistence_lifecycle::repositories::settings as repo;
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
 
-async fn setup() -> (Database, EventBus) {
+async fn setup() -> (Database, EventBus, SnapshotCache<SettingsState>) {
     let db = Database::in_memory().await.expect("in-memory DB");
     db.migrate().await.expect("migrations");
     let bus = EventBus::with_pool(db.pool().clone());
-    (db, bus)
+    (db, bus, SnapshotCache::new())
 }
 
 /// Seed a handful of v1 key rows with valid values.
@@ -58,7 +60,7 @@ async fn seed_v1_rows(db: &Database) {
 /// Happy path: all seeded v1 rows survive the identity migration unchanged.
 #[tokio::test]
 async fn identity_migration_retains_all_v1_keys() {
-    let (db, bus) = setup().await;
+    let (db, bus, _cache) = setup().await;
     seed_v1_rows(&db).await;
 
     let summary = migrate_v1_to_v2(db.pool(), &bus).await.expect("migrate_v1_to_v2");
@@ -93,7 +95,7 @@ async fn identity_migration_retains_all_v1_keys() {
 /// ensure the rest of the summary is unaffected.
 #[tokio::test]
 async fn dropped_key_is_removed_from_db() {
-    let (db, bus) = setup().await;
+    let (db, bus, _cache) = setup().await;
     seed_v1_rows(&db).await;
 
     // Simulate the drop: remove "followSymlinks" before the migration runs.
@@ -119,7 +121,7 @@ async fn dropped_key_is_removed_from_db() {
 /// `delete_key` directly then confirm the default is hydrated on the next read.
 #[tokio::test]
 async fn reset_key_returns_to_default_on_get_settings() {
-    let (db, bus) = setup().await;
+    let (db, bus, cache) = setup().await;
     seed_v1_rows(&db).await;
 
     // The seeded value for "logLevel" is "debug" (non-default).
@@ -135,7 +137,7 @@ async fn reset_key_returns_to_default_on_get_settings() {
     assert!(repo::get_raw(db.pool(), "logLevel").await.unwrap().is_none());
 
     // get_settings must hydrate the in-code default ("info").
-    let resp = app_core_settings::get_settings(db.pool(), &bus).await.unwrap();
+    let resp = app_core_settings::get_settings(db.pool(), &bus, &cache).await.unwrap();
     assert_eq!(
         resp.settings.log_level, "info",
         "reset key must fall back to the in-code default on the next get_settings"
@@ -147,7 +149,7 @@ async fn reset_key_returns_to_default_on_get_settings() {
 /// The migration only acts on keys it explicitly knows about.
 #[tokio::test]
 async fn unknown_key_is_not_touched_by_migration() {
-    let (db, bus) = setup().await;
+    let (db, bus, _cache) = setup().await;
 
     // Inject an unknown key directly — bypasses `update_setting` validation.
     repo::set_raw(db.pool(), "legacyObsoleteKey_v0", &serde_json::json!("some_value"))
@@ -174,7 +176,7 @@ async fn unknown_key_is_not_touched_by_migration() {
 /// published on the bus after `migrate_v1_to_v2` returns.
 #[tokio::test]
 async fn migration_emits_exactly_one_audit_event() {
-    let (db, bus) = setup().await;
+    let (db, bus, _cache) = setup().await;
     seed_v1_rows(&db).await;
 
     let mut rx = bus.subscribe();
@@ -210,7 +212,7 @@ async fn migration_emits_exactly_one_audit_event() {
 /// happened to the DB rows.
 #[tokio::test]
 async fn migration_summary_counts_are_correct() {
-    let (db, bus) = setup().await;
+    let (db, bus, _cache) = setup().await;
     seed_v1_rows(&db).await;
 
     let summary = migrate_v1_to_v2(db.pool(), &bus).await.expect("migrate_v1_to_v2");
@@ -227,7 +229,7 @@ async fn migration_summary_counts_are_correct() {
 /// emits exactly two audit events (one per call).
 #[tokio::test]
 async fn migration_is_idempotent() {
-    let (db, bus) = setup().await;
+    let (db, bus, _cache) = setup().await;
     seed_v1_rows(&db).await;
 
     let first = migrate_v1_to_v2(db.pool(), &bus).await.expect("first migrate");

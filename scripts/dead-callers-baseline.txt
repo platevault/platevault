@@ -92,3 +92,11 @@ set_global_protection_default
 # from their own test code. No production path calls it; that is by design
 # for a test fixture helper. Introduced by the persistence split (PR #1488).
 setup_db
+
+# insert_evidence / upsert_inbox_file_metadata: pool-variant entry points used
+# exclusively by test fixtures (reclassify.rs, confirm.rs, metadata.rs, etc.
+# all call them only inside #[cfg(test)] blocks). The _conn variants handle the
+# production classify hot-path; the pool forms are kept for test ergonomics
+# (callers do not hold an open transaction when seeding fixtures).
+insert_evidence
+upsert_inbox_file_metadata

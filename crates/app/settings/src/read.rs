@@ -1,7 +1,9 @@
+use app_core_cache::SnapshotCache;
+
 use super::{
-    bus_err, caches, db_err, descriptors, is_catalogues_enabled_key, is_locale_key,
-    is_tools_bundle_id_key, repo, validate_value, ContractError, EventBus, SettingsGetResponse,
-    SettingsRepair, SettingsState, Source, SqlitePool, Timestamp, Value, TOPIC_SETTINGS_REPAIR,
+    bus_err, db_err, descriptors, is_catalogues_enabled_key, is_locale_key, is_tools_bundle_id_key,
+    repo, validate_value, ContractError, EventBus, SettingsGetResponse, SettingsRepair,
+    SettingsState, Source, SqlitePool, Timestamp, Value, TOPIC_SETTINGS_REPAIR,
 };
 
 // ── get_settings ──────────────────────────────────────────────────────────
@@ -11,15 +13,20 @@ use super::{
 /// Invalid stored values are deleted and reset to default, with a
 /// `settings.repair` audit event emitted (T019).
 ///
+/// `cache` is a per-instance snapshot slot. Production callers pass
+/// `&state.caches.settings.bag`; tests pass `&SnapshotCache::new()` so every
+/// test starts with an empty slot and never sees another test's snapshot.
+///
 /// # Errors
 ///
 /// Returns `ContractError` on database or audit failure.
 pub async fn get_settings(
     pool: &SqlitePool,
     bus: &EventBus,
+    cache: &SnapshotCache<SettingsState>,
 ) -> Result<SettingsGetResponse, ContractError> {
     // Read-through: on hit, skip the DB entirely (F0 in-memory caching layer).
-    if let Some(cached) = caches::settings_bag().load() {
+    if let Some(cached) = cache.load() {
         return Ok(SettingsGetResponse { settings: (*cached).clone() });
     }
 
@@ -55,7 +62,7 @@ pub async fn get_settings(
         apply_value_to_state(&key, value, &mut settings);
     }
 
-    caches::store_settings_bag(std::sync::Arc::new(settings.clone()));
+    cache.store(std::sync::Arc::new(settings.clone()));
     Ok(SettingsGetResponse { settings })
 }
 

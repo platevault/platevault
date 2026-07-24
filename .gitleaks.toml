@@ -1,0 +1,28 @@
+# gitleaks configuration
+# https://github.com/gitleaks/gitleaks
+
+title = "platevault gitleaks config"
+
+[extend]
+# Inherit upstream gitleaks default ruleset.
+useDefault = true
+
+[[allowlists]]
+description = ".beads/** vendored dolt binary blobs — confirmed false positives; not secrets"
+# The .beads directory contains vendored binary blobs (dolt database engine) and
+# bead metadata files. These trigger entropy-based rules on binary content;
+# none are credentials. Scope the allowlist to this path only.
+paths = [
+  '''.beads/.*''',
+]
+
+[[allowlists]]
+description = "Documentation placeholder tokens — not real credentials"
+# .claude/commands/ contains documentation generator templates that use explicit
+# placeholder strings (e.g. YOUR_API_KEY) as illustrative examples, not secrets.
+paths = [
+  '''.claude/commands/.*''',
+]
+regexes = [
+  '''YOUR_API_KEY''',
+]

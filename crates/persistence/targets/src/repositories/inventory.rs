@@ -38,8 +38,11 @@ pub struct SessionProjectionRow {
     pub session_kind: String,
     /// Frame type string: "light", "dark", "flat", "bias", or derived "mixed".
     pub frame_type: String,
-    /// JSON array of frame ids.
-    pub frame_ids: String,
+    /// Pre-aggregated frame count from `json_array_length(frame_ids)`.
+    pub frame_count: i64,
+    /// First element of the `frame_ids` JSON array (`json_extract(...,'$[0]')`),
+    /// `None` when the session has no frames.
+    pub first_frame_id: Option<String>,
     /// Target id (acquisition sessions only; NULL for calibration).
     pub target_id: Option<String>,
     /// Target primary designation when linked.
@@ -65,6 +68,10 @@ pub struct InventoryFilters {
     /// When `Some`, restrict to sessions with the given frame type.
     /// `"mixed"` matches heterogeneous sessions.
     pub frame_type: Option<String>,
+    /// Cap on sessions returned per source root. `None` means no cap.
+    pub limit: Option<u32>,
+    /// Number of sessions to skip (per-source, applied after type filter).
+    pub offset: Option<u32>,
 }
 
 /// List all `LibraryRoot` rows that have at least one session under them.
@@ -108,7 +115,16 @@ pub async fn list_all_roots(pool: &SqlitePool) -> DbResult<Vec<LibraryRootRow>> 
 
 /// List sessions under a given `LibraryRoot` with optional filters applied.
 ///
-/// Calibration sessions expose `kind` as the `frame_type`.
+/// Returns `(rows, has_more)` where `has_more` is `true` when more rows exist
+/// beyond the requested page. The sentinel is derived from fetching
+/// `limit + 1` rows and trimming the extra — avoids a separate COUNT query.
+///
+/// LIMIT and OFFSET are pushed into SQL so the database never reads rows
+/// beyond the page boundary. Each session type (acquisition, calibration)
+/// receives the same limit independently; callers must be aware that a page
+/// of N may contain up to N acquisitions and N calibration rows when no
+/// frame-type filter is set.
+///
 /// `target_name` is always `None` — gen-1 `target` table is unreferenced
 /// (spec 036, T007); the gen-3 `canonical_target` is the live store.
 ///
@@ -118,65 +134,102 @@ pub async fn list_sessions_for_root(
     pool: &SqlitePool,
     root_id: &str,
     filters: &InventoryFilters,
-) -> DbResult<Vec<SessionProjectionRow>> {
+) -> DbResult<(Vec<SessionProjectionRow>, bool)> {
     let frame_filter = filters.frame_type.as_deref();
+    let offset = i64::from(filters.offset.unwrap_or(0));
 
-    // Acquisition sessions — target_name is always NULL (gen-1 `target`
-    // table is unreferenced per spec 036 T007; gen-3 canonical_target is
-    // the live store and is not part of the inventory projection).
+    // Fetch limit+1 rows to detect whether more exist beyond this page without
+    // an extra COUNT query. `None` limit means unbounded (no sentinel row).
+    let (sql_limit, sentinel) = match filters.limit {
+        Some(n) => (i64::from(n) + 1, true),
+        None => (-1_i64, false), // SQLite: LIMIT -1 = no limit
+    };
+
+    // Acquisition sessions — `frame_ids` aggregated in SQL to avoid reading
+    // the full JSON blob in Rust; only count and first element are needed.
     let acq_rows: Vec<SessionProjectionRow> = sqlx::query_as(
         r"
         SELECT
-            acs.id                          AS id,
-            acs.session_key                 AS session_key,
-            acs.root_id                     AS root_id,
-            'acquisition'                   AS session_kind,
-            'light'                         AS frame_type,
-            acs.frame_ids                   AS frame_ids,
-            acs.target_id                   AS target_id,
-            NULL                            AS target_name,
-            acs.created_at                  AS created_at,
-            acs.notes                       AS notes
+            acs.id                                      AS id,
+            acs.session_key                             AS session_key,
+            acs.root_id                                 AS root_id,
+            'acquisition'                               AS session_kind,
+            'light'                                     AS frame_type,
+            json_array_length(acs.frame_ids)            AS frame_count,
+            json_extract(acs.frame_ids, '$[0]')         AS first_frame_id,
+            acs.target_id                               AS target_id,
+            NULL                                        AS target_name,
+            acs.created_at                              AS created_at,
+            acs.notes                                   AS notes
         FROM acquisition_session acs
         WHERE acs.root_id = ?
         ORDER BY acs.created_at DESC
+        LIMIT ? OFFSET ?
         ",
     )
     .bind(root_id)
+    .bind(sql_limit)
+    .bind(offset)
     .fetch_all(pool)
     .await?;
 
-    // Calibration sessions
+    // Calibration sessions — same shape; LIMIT/OFFSET bound independently.
     let cal_rows: Vec<SessionProjectionRow> = sqlx::query_as(
         r"
         SELECT
-            cs.id                           AS id,
-            cs.session_key                  AS session_key,
-            cs.root_id                      AS root_id,
-            'calibration'                   AS session_kind,
-            cs.kind                         AS frame_type,
-            cs.frame_ids                    AS frame_ids,
-            NULL                            AS target_id,
-            NULL                            AS target_name,
-            cs.created_at                   AS created_at,
-            cs.notes                        AS notes
+            cs.id                                       AS id,
+            cs.session_key                              AS session_key,
+            cs.root_id                                  AS root_id,
+            'calibration'                               AS session_kind,
+            cs.kind                                     AS frame_type,
+            json_array_length(cs.frame_ids)             AS frame_count,
+            json_extract(cs.frame_ids, '$[0]')          AS first_frame_id,
+            NULL                                        AS target_id,
+            NULL                                        AS target_name,
+            cs.created_at                               AS created_at,
+            cs.notes                                    AS notes
         FROM calibration_session cs
         WHERE cs.root_id = ?
         ORDER BY cs.created_at DESC
+        LIMIT ? OFFSET ?
         ",
     )
     .bind(root_id)
+    .bind(sql_limit)
+    .bind(offset)
     .fetch_all(pool)
     .await?;
 
-    let all: Vec<SessionProjectionRow> = acq_rows.into_iter().chain(cal_rows).collect();
+    // Detect and trim the sentinel per-type BEFORE combining.  Doing it after
+    // chain() is incorrect: if both types overflow, pop() removes only one
+    // sentinel and the other leaks into the payload; if only acq overflows,
+    // pop() removes the last real cal row and the acq sentinel leaks.
+    let limit_usize = filters.limit.unwrap_or(0) as usize;
+    let (acq_rows, acq_has_more) = if sentinel && acq_rows.len() > limit_usize {
+        let mut v = acq_rows;
+        v.pop();
+        (v, true)
+    } else {
+        (acq_rows, false)
+    };
+    let (cal_rows, cal_has_more) = if sentinel && cal_rows.len() > limit_usize {
+        let mut v = cal_rows;
+        v.pop();
+        (v, true)
+    } else {
+        (cal_rows, false)
+    };
+    let has_more = acq_has_more || cal_has_more;
 
     // Apply post-fetch frame_type filter — cannot be trivially done in a
     // single UNION query with dynamic placeholders.
-    let filtered =
-        all.into_iter().filter(|row| frame_filter.is_none_or(|ff| row.frame_type == ff)).collect();
+    let type_filtered: Vec<SessionProjectionRow> = acq_rows
+        .into_iter()
+        .chain(cal_rows)
+        .filter(|row| frame_filter.is_none_or(|ff| row.frame_type == ff))
+        .collect();
 
-    Ok(filtered)
+    Ok((type_filtered, has_more))
 }
 
 /// A project row used only for session-link lookup.
@@ -576,11 +629,12 @@ mod tests {
     async fn list_sessions_for_root_returns_empty_on_unknown_root() {
         let db = setup_db().await;
         let filters = InventoryFilters::default();
-        let sessions =
+        let (sessions, has_more) =
             list_sessions_for_root(db.pool(), "00000000-0000-0000-0000-000000000000", &filters)
                 .await
                 .unwrap();
         assert!(sessions.is_empty());
+        assert!(!has_more);
     }
 
     #[tokio::test]
@@ -849,5 +903,257 @@ mod tests {
         assert_eq!(rows[0].master_id, "master-dark-1");
         assert_eq!(rows[0].calibration_type, "dark");
         assert!((rows[0].confidence - 0.95).abs() < f64::EPSILON);
+    }
+
+    // ── list_sessions_for_root — frame_count / first_frame_id aggregation ────
+
+    /// Verifies that `json_array_length` and `json_extract('$[0]')` return the
+    /// same values a Rust parse of the raw `frame_ids` column would produce.
+    /// This is the parity assertion called for by the task brief.
+    #[tokio::test]
+    async fn list_sessions_frame_count_and_first_frame_id_match_raw_array() {
+        let db = setup_db().await;
+
+        sqlx::query(
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-fc', 'Lib', 'local', '/lib', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        // Three frames: frame_count must be 3, first_frame_id must be "f1".
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, root_id, frame_ids, created_at) \
+             VALUES ('acq-fc', 'k', 'root-fc', '[\"f1\",\"f2\",\"f3\"]', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        // Empty array: frame_count 0, first_frame_id None.
+        sqlx::query(
+            "INSERT INTO calibration_session \
+                (id, session_key, root_id, frame_ids, kind, created_at) \
+             VALUES ('cal-fc', 'k', 'root-fc', '[]', 'dark', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let filters = InventoryFilters::default();
+        let (rows, has_more) =
+            list_sessions_for_root(db.pool(), "root-fc", &filters).await.unwrap();
+        assert_eq!(rows.len(), 2);
+        assert!(!has_more, "unbounded fetch must not signal has_more");
+
+        // Rows are ordered DESC by created_at — both share the same timestamp
+        // so order is deterministic within type (acq before cal in UNION).
+        let acq = rows.iter().find(|r| r.id == "acq-fc").expect("acq-fc missing");
+        assert_eq!(acq.frame_count, 3, "json_array_length should count 3 elements");
+        assert_eq!(
+            acq.first_frame_id.as_deref(),
+            Some("f1"),
+            "json_extract should return first element"
+        );
+
+        let cal = rows.iter().find(|r| r.id == "cal-fc").expect("cal-fc missing");
+        assert_eq!(cal.frame_count, 0, "empty array → 0");
+        assert!(cal.first_frame_id.is_none(), "empty array → None");
+    }
+
+    /// Verifies offset/limit pagination bounds results per source root.
+    #[tokio::test]
+    async fn list_sessions_limit_and_offset_bound_results() {
+        let db = setup_db().await;
+
+        sqlx::query(
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-pg', 'Lib', 'local', '/lib', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        // Insert 4 sessions with distinct timestamps so order is stable.
+        for i in 0..4u32 {
+            sqlx::query(
+                "INSERT INTO acquisition_session (id, session_key, root_id, frame_ids, created_at) \
+                 VALUES (?, 'k', 'root-pg', '[]', ?)",
+            )
+            .bind(format!("acq-pg-{i}"))
+            .bind(format!("2026-01-0{d}T00:00:00Z", d = i + 1))
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
+
+        // No cap: all 4, has_more false.
+        let (all, hm) = list_sessions_for_root(db.pool(), "root-pg", &InventoryFilters::default())
+            .await
+            .unwrap();
+        assert_eq!(all.len(), 4);
+        assert!(!hm, "unbounded fetch must not signal has_more");
+
+        // limit=2 with 4 rows → has_more true, returns 2.
+        let (limited, hm) = list_sessions_for_root(
+            db.pool(),
+            "root-pg",
+            &InventoryFilters { limit: Some(2), ..Default::default() },
+        )
+        .await
+        .unwrap();
+        assert_eq!(limited.len(), 2);
+        assert!(hm, "4 rows with limit=2 must signal has_more");
+
+        // limit=4 exactly fits → has_more false.
+        let (exact, hm) = list_sessions_for_root(
+            db.pool(),
+            "root-pg",
+            &InventoryFilters { limit: Some(4), ..Default::default() },
+        )
+        .await
+        .unwrap();
+        assert_eq!(exact.len(), 4);
+        assert!(!hm, "limit equal to row count must not signal has_more");
+
+        // offset=3, no limit: last 1 row, has_more false.
+        let (paged, hm) = list_sessions_for_root(
+            db.pool(),
+            "root-pg",
+            &InventoryFilters { offset: Some(3), ..Default::default() },
+        )
+        .await
+        .unwrap();
+        assert_eq!(paged.len(), 1);
+        assert!(!hm);
+
+        // offset past end: empty, has_more false.
+        let (past, hm) = list_sessions_for_root(
+            db.pool(),
+            "root-pg",
+            &InventoryFilters { offset: Some(10), ..Default::default() },
+        )
+        .await
+        .unwrap();
+        assert!(past.is_empty());
+        assert!(!hm);
+    }
+
+    /// Case A: both acquisition and calibration types overflow their limit.
+    /// The old single-pop was wrong here: it only removed one sentinel so
+    /// the other leaked into the payload.
+    #[tokio::test]
+    async fn list_sessions_has_more_both_types_overflow() {
+        let db = setup_db().await;
+
+        sqlx::query(
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-ab', 'Lib', 'local', '/lib', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        // 2 acquisition sessions
+        for i in 0..2u32 {
+            sqlx::query(
+                "INSERT INTO acquisition_session \
+                 (id, session_key, root_id, frame_ids, created_at) VALUES (?, 'k', 'root-ab', '[]', ?)",
+            )
+            .bind(format!("acq-ab-{i}"))
+            .bind(format!("2026-01-0{d}T00:00:00Z", d = i + 1))
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
+        // 2 calibration sessions
+        for i in 0..2u32 {
+            sqlx::query(
+                "INSERT INTO calibration_session \
+                 (id, session_key, root_id, frame_ids, kind, created_at) VALUES (?, 'k', 'root-ab', '[]', 'dark', ?)",
+            )
+            .bind(format!("cal-ab-{i}"))
+            .bind(format!("2026-01-0{d}T00:00:00Z", d = i + 1))
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
+
+        // limit=1: both types overflow → has_more, exactly 2 payload rows (1 acq + 1 cal),
+        // no sentinel in the payload.
+        let (rows, hm) = list_sessions_for_root(
+            db.pool(),
+            "root-ab",
+            &InventoryFilters { limit: Some(1), ..Default::default() },
+        )
+        .await
+        .unwrap();
+
+        assert!(hm, "both types have more rows beyond limit=1");
+        // ORDER BY created_at DESC → index-0 is newest (acq-ab-1, cal-ab-1).
+        // index-1 (acq-ab-0, cal-ab-0) is the sentinel row; it must be absent.
+        assert_eq!(rows.len(), 2, "expected 1 acq + 1 cal payload row, got {}", rows.len());
+        assert!(rows.iter().any(|r| r.id == "acq-ab-1"), "newest acq row must be in payload");
+        assert!(rows.iter().any(|r| r.id == "cal-ab-1"), "newest cal row must be in payload");
+        assert!(
+            rows.iter().all(|r| r.id != "acq-ab-0" && r.id != "cal-ab-0"),
+            "sentinel rows acq-ab-0/cal-ab-0 must not appear in payload: {:?}",
+            rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>()
+        );
+    }
+
+    /// Case B: only the acquisition type overflows; calibration fits exactly.
+    /// The old single-pop dropped the last real cal row and leaked the acq sentinel.
+    #[tokio::test]
+    async fn list_sessions_has_more_only_first_type_overflows() {
+        let db = setup_db().await;
+
+        sqlx::query(
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-ob', 'Lib', 'local', '/lib', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        // 3 acquisition sessions (will overflow limit=2)
+        for i in 0..3u32 {
+            sqlx::query(
+                "INSERT INTO acquisition_session \
+                 (id, session_key, root_id, frame_ids, created_at) VALUES (?, 'k', 'root-ob', '[]', ?)",
+            )
+            .bind(format!("acq-ob-{i}"))
+            .bind(format!("2026-01-0{d}T00:00:00Z", d = i + 1))
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
+        // 1 calibration session (fits within limit=2 — no overflow)
+        sqlx::query(
+            "INSERT INTO calibration_session \
+             (id, session_key, root_id, frame_ids, kind, created_at) \
+             VALUES ('cal-ob-0', 'k', 'root-ob', '[]', 'dark', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // limit=2: acq has 3 rows → overflows (has_more); cal has 1 → fits.
+        let (rows, hm) = list_sessions_for_root(
+            db.pool(),
+            "root-ob",
+            &InventoryFilters { limit: Some(2), ..Default::default() },
+        )
+        .await
+        .unwrap();
+
+        assert!(hm, "acquisition type overflows so has_more must be true");
+        // ORDER BY created_at DESC → acq-ob-2 is newest (payload), acq-ob-0 is oldest (sentinel).
+        // With limit=2: SQL fetches 3 rows; sentinel=acq-ob-0 is popped; payload=acq-ob-2,acq-ob-1.
+        assert_eq!(rows.len(), 3, "expected 2 acq + 1 cal payload rows, got {}", rows.len());
+        assert!(
+            rows.iter().all(|r| r.id != "acq-ob-0"),
+            "acq-ob-0 is the sentinel row and must not appear in payload"
+        );
+        assert!(
+            rows.iter().any(|r| r.id == "cal-ob-0"),
+            "real cal row must be present (old bug: pop() dropped it)"
+        );
     }
 }

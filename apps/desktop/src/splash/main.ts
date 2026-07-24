@@ -7,22 +7,24 @@
 //
 // The splash is the only window Tauri creates for itself; `main` is built by
 // the Rust side (`run_app` → `create_main_window`) only once migrations have
-// run, so this window is on screen for the whole of database startup. It holds
-// a minimum display time, waits for `main`'s "app:boot-ready" event (emitted
-// once from src/main.tsx after the first route renders), then shows `main` and
-// closes itself.
+// run, so this window is on screen for the whole of database startup. It waits
+// for `main`'s "app:boot-ready" event (emitted once from src/main.tsx after
+// the first route renders), plays a short CSS fade-out, then shows `main` and
+// closes itself. There is no minimum display floor — cold start is already
+// gated on migration completing before boot-ready fires.
 
 import { getAllWindows, getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 
-const MIN_DISPLAY_MS = 800;
+// Duration must match the CSS transition on .pv-card in splash.html.
+export const FADE_MS = 150;
 // Fallback so a stuck/never-emitted boot-ready doesn't strand the user behind
 // the splash forever. Armed from the moment the `main` window EXISTS, not from
 // process start: migration now runs behind this splash and has no bounded
 // duration, so a timer started earlier would fire mid-migration and close the
 // splash while there is still no window to show — nothing on screen at all,
 // which is the failure this whole ordering exists to remove.
-const READY_TIMEOUT_MS = 15_000;
+export const READY_TIMEOUT_MS = 15_000;
 const MAIN_POLL_MS = 250;
 
 const versionEl = document.getElementById('pv-version');
@@ -31,8 +33,20 @@ if (versionEl) {
   versionEl.textContent = version ? `v${version}` : '';
 }
 
-const start = performance.now();
+// Exported so tests can mock performance.now without touching global state.
+export const splashStart = performance.now();
 let closing = false;
+
+// Timestamp log for warm-start diagnostics. Each call appends a labelled entry
+// to the console so the deltas between splash-shown, boot-ready, and
+// window-shown are visible in dev-tools / Tauri's log output.
+function logTimestamp(label: string): void {
+  const elapsed = (performance.now() - splashStart).toFixed(1);
+  // eslint-disable-next-line no-console
+  console.debug(`[splash] ${label} +${elapsed}ms`);
+}
+
+logTimestamp('splash-shown');
 
 async function findMainWindow() {
   const windows = await getAllWindows();
@@ -43,17 +57,22 @@ async function closeSplashAndShowMain(): Promise<void> {
   if (closing) return;
   closing = true;
 
-  const elapsed = performance.now() - start;
-  if (elapsed < MIN_DISPLAY_MS) {
-    await new Promise((resolve) =>
-      setTimeout(resolve, MIN_DISPLAY_MS - elapsed),
-    );
+  logTimestamp('boot-ready-received');
+
+  // Trigger the CSS fade-out before dismissing the window so warm-start
+  // dismissal doesn't hard-cut. The .pv-fading class sets opacity:0 with a
+  // 150ms transition (matching FADE_MS). We wait for it before proceeding.
+  const card = document.querySelector<HTMLElement>('.pv-card');
+  if (card) {
+    card.classList.add('pv-fading');
+    await new Promise((resolve) => setTimeout(resolve, FADE_MS));
   }
 
   const main = await findMainWindow();
   if (main) {
     await main.show();
     await main.setFocus();
+    logTimestamp('window-shown');
   }
   await getCurrentWindow().close();
 }

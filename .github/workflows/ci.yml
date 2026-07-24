@@ -623,6 +623,24 @@ jobs:
           echo "Reporting the required context for $LEG so the PR is mergeable."
           echo "No tests ran, and none were applicable."
 
+  # Supply-chain gate: license compliance, duplicate-version policy, and security
+  # advisories via cargo-deny. Runs on the Rust lane only (deny.toml + Cargo.lock
+  # are both Rust artifacts). Linux-only: cargo-deny is OS-agnostic and running
+  # it on three platforms is pure redundancy.
+  supply-chain:
+    name: Supply chain (cargo-deny)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          # Cache the advisory DB so repeated runs do not re-fetch the full git
+          # history; the action manages the cache key automatically.
+          manifest-path: Cargo.toml
+
   # Mock-mode UI regression: fast Playwright run (Vite + chromium, mocks on, no
   # backend/Tauri build). The real UI->IPC->backend journeys run in the dedicated
   # WebdriverIO + tauri-driver workflow (e2e.yml). Not gated on `integration` so

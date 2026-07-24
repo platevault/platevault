@@ -24,21 +24,26 @@ pub mod source_groups;
 mod tests;
 
 pub use classification::{
-    delete_evidence_for_item, get_classification, insert_evidence, list_evidence,
-    list_file_overrides_for_group, mark_file_override_stale, mark_override_stale,
-    set_file_override, set_manual_override, set_overrides, upsert_classification, FileOverrideRow,
-    InboxClassificationRow, InboxEvidenceRow, InsertEvidence, UpsertClassification,
+    delete_evidence_for_item_conn, delete_evidence_for_items, get_classification, insert_evidence,
+    insert_evidence_batch, insert_evidence_conn, list_evidence, list_file_overrides_for_group,
+    mark_file_override_stale, mark_override_stale, set_file_override, set_manual_override,
+    set_overrides, upsert_classification, upsert_classification_batch, upsert_classification_conn,
+    FileOverrideRow, InboxClassificationRow, InboxEvidenceRow, InsertEvidence,
+    UpsertClassification, UpsertClassificationRow,
 };
 pub use items::{
-    delete_sub_item_if_unlinked, get_inbox_item, get_source_group_id_for_item, insert_inbox_item,
-    list_inbox_sub_items, list_item_ids_for_source_group, reset_inbox_item_to_unconfirmed,
-    update_inbox_item_scan, update_inbox_item_state, upsert_inbox_sub_item, InboxItemRow,
-    InsertInboxItem, UpsertInboxSubItem,
+    delete_sub_item_if_unlinked_conn, get_inbox_item, get_source_group_id_for_item,
+    insert_inbox_item, list_inbox_sub_items, list_inbox_sub_items_conn,
+    list_item_ids_for_source_group, reset_inbox_item_to_unconfirmed, update_inbox_item_scan_conn,
+    update_inbox_item_state, update_inbox_item_state_conn, upsert_inbox_sub_item,
+    upsert_inbox_sub_item_conn, InboxItemRow, InsertInboxItem, UpsertInboxSubItem,
 };
 pub use metadata::{
-    delete_breakdown_for_item, delete_file_metadata_for_item, get_file_metadata, list_breakdown,
+    delete_breakdown_for_item_conn, delete_breakdown_for_items, delete_file_metadata_for_item_conn,
+    delete_file_metadata_for_items, get_file_metadata, list_breakdown,
     list_inbox_attribution_geometry, list_inbox_file_metadata, list_inbox_pointing,
-    upsert_breakdown_row, upsert_inbox_file_metadata, InboxAttributionGeometryRow,
+    upsert_breakdown_row, upsert_breakdown_row_conn, upsert_inbox_file_metadata,
+    upsert_inbox_file_metadata_batch, upsert_inbox_file_metadata_conn, InboxAttributionGeometryRow,
     InboxBreakdownRow, InboxFileMetadataRow, InboxPointingRow, UpsertFileMetadata,
 };
 pub use plan_links::{
@@ -50,6 +55,6 @@ pub use projections::{
     list_unacknowledged_across_roots, InboxItemGroupingKeys, InboxListRow, InboxStatsRow,
 };
 pub use source_groups::{
-    last_scanned_by_root, list_unclassified_source_groups, update_source_group_child_count,
+    last_scanned_by_root, list_unclassified_source_groups, update_source_group_child_count_conn,
     upsert_inbox_source_group, InboxSourceGroupListRow, InboxSourceGroupRow, UpsertSourceGroup,
 };

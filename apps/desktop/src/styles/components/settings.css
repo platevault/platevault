@@ -161,12 +161,15 @@ font-weight: var(--pv-weight-medium);
   background: var(--pv-bg); color: var(--pv-text-secondary);
 }
 .pv-radio:hover { border-color: var(--pv-ink3); }
-.pv-radio--active {
+.pv-radio:focus-visible { outline: 2px solid transparent; box-shadow: var(--pv-focus-ring); }
+.pv-radio--active,
+.pv-radio[data-checked] {
   border-color: var(--pv-accent); background: var(--pv-accent-bg);
   color: var(--pv-accent-text); font-weight: var(--pv-weight-medium);
 }
 .pv-radio__desc { font-size: var(--pv-text-xs); color: var(--pv-text-muted); margin-top: 1px; }
-.pv-radio--active .pv-radio__desc { color: var(--pv-accent-text); }
+.pv-radio--active .pv-radio__desc,
+.pv-radio[data-checked] .pv-radio__desc { color: var(--pv-accent-text); }
 
 /* Segmented control */
 .pv-seg { display: inline-flex; height: var(--pv-control-h-sm); border: 1px solid var(--pv-border); border-radius: var(--pv-radius-sm); overflow: hidden; }

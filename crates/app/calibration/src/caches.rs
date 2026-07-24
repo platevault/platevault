@@ -19,6 +19,58 @@ use app_core_cache::SnapshotCache;
 use calibration_core::ranking::MatchingRuleConfig;
 use contracts_core::calibration::CalibrationMaster;
 
+/// Per-instance calibration cache state (config + masters).
+///
+/// Replaces the former process-global `CALIBRATION_CONFIG` and
+/// `CALIBRATION_MASTERS` `OnceLock` statics. Wrap in `Arc` and thread
+/// alongside pool/bus; tests construct a fresh instance per test — no
+/// serialization mutex needed.
+pub struct CalibrationCaches {
+    config: SnapshotCache<MatchingRuleConfig>,
+    masters: SnapshotCache<Vec<CalibrationMaster>>,
+}
+
+impl CalibrationCaches {
+    #[must_use]
+    pub fn new() -> Self {
+        Self { config: SnapshotCache::new(), masters: SnapshotCache::new() }
+    }
+
+    #[must_use]
+    pub fn load_config(&self) -> Option<Arc<MatchingRuleConfig>> {
+        self.config.load()
+    }
+
+    pub fn store_config(&self, value: Arc<MatchingRuleConfig>) {
+        self.config.store(value);
+    }
+
+    pub fn invalidate_config(&self) {
+        self.config.invalidate();
+    }
+
+    #[must_use]
+    pub fn load_masters(&self) -> Option<Arc<Vec<CalibrationMaster>>> {
+        self.masters.load()
+    }
+
+    pub fn store_masters(&self, value: Arc<Vec<CalibrationMaster>>) {
+        self.masters.store(value);
+    }
+
+    pub fn invalidate_masters(&self) {
+        self.masters.invalidate();
+    }
+}
+
+impl Default for CalibrationCaches {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── Deprecated process-global accessors (migration shim) ─────────────────────
+
 // ── calibration config snapshot (`matching.rs`) ───────────────────────────────
 
 /// [`MatchingRuleConfig`] loaded from the `calibration*` settings keys. 1 slot.

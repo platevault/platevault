@@ -6,7 +6,7 @@
 
 use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use persistence_core::DbResult;
 
@@ -109,20 +109,19 @@ pub async fn last_scanned_by_root(
 
 // ── InboxItem CRUD ────────────────────────────────────────────────────────────
 
-/// Update `child_count` on a source group to reflect how many single-type
-/// sub-items were materialised during classify (spec 041 T066, R-12).
+/// Connection-level variant of [`update_source_group_child_count`].
 ///
 /// # Errors
 /// Returns [`DbError::Database`] on connection failure.
-pub async fn update_source_group_child_count(
-    pool: &SqlitePool,
+pub async fn update_source_group_child_count_conn(
+    conn: &mut SqliteConnection,
     source_group_id: &str,
     child_count: i64,
 ) -> DbResult<()> {
     sqlx::query("UPDATE inbox_source_groups SET child_count = ? WHERE id = ?")
         .bind(child_count)
         .bind(source_group_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
     Ok(())
 }

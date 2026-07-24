@@ -48,7 +48,10 @@ pub async fn set_global_protection_default(
         key: key.to_owned(),
         value: contracts_core::JsonAny::from(value),
     };
-    crate::settings::update_setting(pool, bus, &req).await?;
+    // Use the process-global settings-bag shim: this wrapper has no AppCaches
+    // context and is called only from narrow test/protection paths.
+    crate::settings::update_setting(pool, bus, app_core_settings::caches::settings_bag(), &req)
+        .await?;
     // Invalidate after commit (F0 contract): all three keys share the single
     // protection_defaults snapshot, so any of them changing must drop it.
     app_core_cache::invalidate_protection_defaults();

@@ -22,6 +22,67 @@ use app_core_cache::{CacheConfig, DebounceCache, TtlCache};
 
 use crate::project_health::DebounceKey;
 
+/// Per-instance core cache state (library root, source protection, debounce).
+///
+/// Replaces the former process-global `OnceLock` statics. Wrap in `Arc` and
+/// thread alongside `SqlitePool`/`EventBus`; tests construct a fresh instance
+/// per test to eliminate cross-contamination.
+pub struct CoreCaches {
+    library_root: TtlCache<String, String>,
+    source_protection_state:
+        TtlCache<String, (u64, contracts_core::protection::SourceProtectionGetResponse)>,
+    project_block_debounce: DebounceCache<DebounceKey>,
+}
+
+impl CoreCaches {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            library_root: TtlCache::new(CacheConfig::new(256)),
+            source_protection_state: TtlCache::new(CacheConfig::new(8_192)),
+            project_block_debounce: DebounceCache::new(crate::project_health::DEBOUNCE_WINDOW),
+        }
+    }
+
+    /// The library-root cache (root_id to path).
+    #[must_use]
+    pub fn library_root(&self) -> &TtlCache<String, String> {
+        &self.library_root
+    }
+
+    /// Remove the cached path for `root_id`.
+    pub fn invalidate_library_root(&self, root_id: &str) {
+        self.library_root.invalidate(&root_id.to_owned());
+    }
+
+    /// The source-protection-state cache (source_id to (epoch, response)).
+    #[must_use]
+    pub fn source_protection_state(
+        &self,
+    ) -> &TtlCache<String, (u64, contracts_core::protection::SourceProtectionGetResponse)> {
+        &self.source_protection_state
+    }
+
+    /// Remove the cached resolved protection for `source_id`.
+    pub fn invalidate_source_protection_state(&self, source_id: &str) {
+        self.source_protection_state.invalidate(&source_id.to_owned());
+    }
+
+    /// The project-block debounce cache.
+    #[must_use]
+    pub fn project_block_debounce(&self) -> &DebounceCache<DebounceKey> {
+        &self.project_block_debounce
+    }
+}
+
+impl Default for CoreCaches {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ── Deprecated process-global accessors (migration shim) ─────────────────────
+
 // ── library_root: root_id → path (`first_run.rs`) ──────────────────────────
 
 /// `root_id` → resolved filesystem path. Capacity 256 (registered library

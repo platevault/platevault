@@ -12,11 +12,13 @@ mod support;
 
 use app_core::log_stream::{self, RecentOptions};
 use app_core::settings;
+use app_core_cache::SnapshotCache;
 use audit::event_bus::{TOPIC_SETTINGS_CHANGED, TOPIC_SETTINGS_SNAPSHOT};
 use contracts_core::settings::{
     RestoreDefaultsRequest, RestoreDefaultsStatus, SettingsUpdateRequest, SettingsUpdateStatus,
 };
 use contracts_core::JsonAny;
+use domain_core::settings::SettingsState;
 
 // ── settings: update + get round-trip ────────────────────────────────────────
 
@@ -26,14 +28,16 @@ use contracts_core::JsonAny;
 async fn setting_update_persists_and_reads_back() {
     let (db, _repo, bus) = support::setup().await;
     let pool = db.pool();
+    let cache: SnapshotCache<SettingsState> = SnapshotCache::new();
 
     // Default log_level is "info"; update to "debug".
     let req = SettingsUpdateRequest {
         key: "logLevel".to_owned(),
         value: JsonAny::from(serde_json::Value::String("debug".to_owned())),
     };
-    let resp =
-        settings::update_setting(pool, &bus, &req).await.expect("update_setting should succeed");
+    let resp = settings::update_setting(pool, &bus, &cache, &req)
+        .await
+        .expect("update_setting should succeed");
 
     assert_eq!(
         resp.status,
@@ -44,7 +48,8 @@ async fn setting_update_persists_and_reads_back() {
     assert_eq!(resp.key, "logLevel");
 
     // Re-read via get_settings (simulates a restart / fresh load).
-    let get_resp = settings::get_settings(pool, &bus).await.expect("get_settings should succeed");
+    let get_resp =
+        settings::get_settings(pool, &bus, &cache).await.expect("get_settings should succeed");
 
     assert_eq!(
         get_resp.settings.log_level, "debug",
@@ -61,13 +66,14 @@ async fn setting_update_persists_and_reads_back() {
 async fn setting_update_noop_when_value_unchanged() {
     let (db, _repo, bus) = support::setup().await;
     let pool = db.pool();
+    let cache: SnapshotCache<SettingsState> = SnapshotCache::new();
 
     // First write: set hashOnScan to "eager".
     let req = SettingsUpdateRequest {
         key: "hashOnScan".to_owned(),
         value: JsonAny::from(serde_json::Value::String("eager".to_owned())),
     };
-    settings::update_setting(pool, &bus, &req).await.expect("first update should succeed");
+    settings::update_setting(pool, &bus, &cache, &req).await.expect("first update should succeed");
 
     // Count events before the no-op attempt.
     let (before,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
@@ -77,8 +83,9 @@ async fn setting_update_noop_when_value_unchanged() {
         .expect("events count query failed");
 
     // Second write with same value — must be a no-op.
-    let resp =
-        settings::update_setting(pool, &bus, &req).await.expect("second update should succeed");
+    let resp = settings::update_setting(pool, &bus, &cache, &req)
+        .await
+        .expect("second update should succeed");
 
     assert_eq!(
         resp.status,
@@ -104,21 +111,25 @@ async fn setting_update_noop_when_value_unchanged() {
 async fn restore_defaults_reverts_to_default_value() {
     let (db, _repo, bus) = support::setup().await;
     let pool = db.pool();
+    let cache: SnapshotCache<SettingsState> = SnapshotCache::new();
 
     // Mutate logLevel away from its in-code default ("info") to "debug".
     let req = SettingsUpdateRequest {
         key: "logLevel".to_owned(),
         value: JsonAny::from(serde_json::Value::String("debug".to_owned())),
     };
-    settings::update_setting(pool, &bus, &req).await.expect("update logLevel should succeed");
+    settings::update_setting(pool, &bus, &cache, &req)
+        .await
+        .expect("update logLevel should succeed");
 
     // Confirm mutation landed.
-    let get1 = settings::get_settings(pool, &bus).await.expect("get_settings after mutation");
+    let get1 =
+        settings::get_settings(pool, &bus, &cache).await.expect("get_settings after mutation");
     assert_eq!(get1.settings.log_level, "debug", "precondition: should be 'debug' after write");
 
     // Restore only the logLevel key.
     let restore_req = RestoreDefaultsRequest { keys: vec!["logLevel".to_owned()] };
-    let restore_resp = settings::restore_defaults(pool, &bus, &restore_req)
+    let restore_resp = settings::restore_defaults(pool, &bus, &cache, &restore_req)
         .await
         .expect("restore_defaults should succeed");
 
@@ -134,7 +145,8 @@ async fn restore_defaults_reverts_to_default_value() {
     );
 
     // Read back after restore — should be back at the in-code default ("info").
-    let get2 = settings::get_settings(pool, &bus).await.expect("get_settings after restore");
+    let get2 =
+        settings::get_settings(pool, &bus, &cache).await.expect("get_settings after restore");
     assert_eq!(
         get2.settings.log_level, "info",
         "logLevel should revert to 'info' (in-code default) after restore_defaults"
@@ -157,6 +169,7 @@ async fn restore_defaults_reverts_to_default_value() {
 async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
     let (db, _repo, bus) = support::setup().await;
     let pool = db.pool();
+    let cache: SnapshotCache<SettingsState> = SnapshotCache::new();
 
     // ── non-noisy key: logLevel ───────────────────────────────────────────
     let before_non_noisy: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events WHERE topic = ?")
@@ -169,8 +182,9 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
         key: "logLevel".to_owned(),
         value: JsonAny::from(serde_json::json!("warn")),
     };
-    let resp_non_noisy =
-        settings::update_setting(pool, &bus, &req_non_noisy).await.expect("update logLevel");
+    let resp_non_noisy = settings::update_setting(pool, &bus, &cache, &req_non_noisy)
+        .await
+        .expect("update logLevel");
     assert_eq!(resp_non_noisy.status, SettingsUpdateStatus::Success);
     // Non-noisy: audit_id must be present.
     assert!(resp_non_noisy.audit_id.is_some(), "non-noisy key update must return an audit_id");
@@ -204,8 +218,9 @@ async fn noisy_key_update_does_not_emit_changed_event_non_noisy_does() {
         key: "rememberFollowLogs".to_owned(),
         value: JsonAny::from(serde_json::json!(true)),
     };
-    let resp_noisy =
-        settings::update_setting(pool, &bus, &req_noisy).await.expect("update rememberFollowLogs");
+    let resp_noisy = settings::update_setting(pool, &bus, &cache, &req_noisy)
+        .await
+        .expect("update rememberFollowLogs");
     assert_eq!(resp_noisy.status, SettingsUpdateStatus::Success);
     // Noisy: audit_id must be absent.
     assert!(resp_noisy.audit_id.is_none(), "noisy key update must NOT return an audit_id");
@@ -261,6 +276,7 @@ async fn global_protection_default_update_persists_and_emits_protection_event() 
 
     let (db, _repo, bus) = support::setup().await;
     let pool = db.pool();
+    let cache: SnapshotCache<SettingsState> = SnapshotCache::new();
 
     for (key, value) in [
         ("defaultProtection", serde_json::json!("unprotected")),
@@ -275,7 +291,7 @@ async fn global_protection_default_update_persists_and_emits_protection_event() 
 
         let req =
             SettingsUpdateRequest { key: key.to_owned(), value: JsonAny::from(value.clone()) };
-        let resp = settings::update_setting(pool, &bus, &req)
+        let resp = settings::update_setting(pool, &bus, &cache, &req)
             .await
             .unwrap_or_else(|e| panic!("update {key} must succeed: {e:?}"));
         assert_eq!(resp.status, SettingsUpdateStatus::Success, "{key} update must succeed");
@@ -330,6 +346,7 @@ async fn global_protection_default_update_persists_and_emits_protection_event() 
 async fn log_stream_recent_entries_returns_emitted_events() {
     let (db, _repo, bus) = support::setup().await;
     let pool = db.pool();
+    let cache: SnapshotCache<SettingsState> = SnapshotCache::new();
 
     // Precondition: no events yet.
     let empty = log_stream::recent_entries(pool, RecentOptions::default())
@@ -346,7 +363,9 @@ async fn log_stream_recent_entries_returns_emitted_events() {
         key: "logLevel".to_owned(),
         value: JsonAny::from(serde_json::Value::String("warn".to_owned())),
     };
-    settings::update_setting(pool, &bus, &req).await.expect("update_setting should succeed");
+    settings::update_setting(pool, &bus, &cache, &req)
+        .await
+        .expect("update_setting should succeed");
 
     // recent_entries should now include at least one entry.
     let result = log_stream::recent_entries(pool, RecentOptions::default())

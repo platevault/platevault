@@ -31,7 +31,7 @@
 //! durable state (`plans.get` / `plans.apply.status`) agrees with both.
 //!
 //! Mixed-protection-in-one-project mechanics (verified against
-//! `crates/persistence/db/src/repositories/source_protection.rs::resolve_protection`
+//! `crates/persistence/plans/src/repositories/source_protection.rs::resolve_protection`
 //! and `crates/app/core/src/cleanup_generator/scan.rs`): a per-source
 //! protection override always wins UNIFORMLY for every item in that source
 //! regardless of category, so a project-level override (what

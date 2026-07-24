@@ -14,6 +14,7 @@
 //! checked before any mutation.
 
 use camino::Utf8Path;
+use filetime::FileTime;
 
 use crate::failure::{FailureCode, PlanItemFailure, RollbackOutcome};
 
@@ -115,11 +116,34 @@ fn move_file_with_ops(
     }
 
     // Cross-volume: copy-then-delete.
+    //
+    // Read source mtime before the copy so it is available even if the source
+    // later becomes inaccessible.  Failure to read mtime is non-fatal: the data
+    // is already in `source` and will be preserved by the copy regardless.
+    let source_mtime =
+        std::fs::metadata(source).map(|m| FileTime::from_last_modification_time(&m)).ok();
+
     if let Err(copy_err) = std::fs::copy(source, destination) {
         return Err((
             PlanItemFailure::from_io(&copy_err, &format!("copy {source} to {destination}")),
             no_rollback,
         ));
+    }
+
+    // Restore mtime on the destination.  std::fs::copy resets it to "now", but
+    // mtime is user-meaningful (session-date sorting) and feeds the per-file
+    // signature in crates/app/inbox — without this a cross-volume move would
+    // look like a new file to any watcher on the destination root.
+    // Failure is non-fatal: the bytes are correct; we warn and continue.
+    if let Some(mtime) = source_mtime {
+        if let Err(e) = filetime::set_file_mtime(destination, mtime) {
+            tracing::warn!(
+                %destination,
+                error = %e,
+                "cross-volume move: could not restore mtime on destination; \
+                 file data is intact but timestamp reflects copy time"
+            );
+        }
     }
 
     // Copy succeeded. Attempt source delete.
@@ -339,5 +363,56 @@ mod tests {
         // leave behind on a genuine double-failure.
         assert!(src.exists(), "source must survive a delete failure");
         assert!(dst.exists(), "destination copy must survive a failed rollback");
+    }
+
+    // ── mtime preservation ────────────────────────────────────────────────────
+
+    #[test]
+    fn cross_volume_move_preserves_source_mtime() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = utf8(dir.path());
+        let src = root.join("source.fits");
+        let dst = root.join("dest.fits");
+        std::fs::write(&src, b"data").unwrap();
+
+        // Pin source mtime to a known value in the past.
+        let known_mtime = filetime::FileTime::from_unix_time(1_700_000_000, 0);
+        filetime::set_file_mtime(&src, known_mtime).unwrap();
+
+        move_file_with_ops(&src, &dst, fake_exdev, |p| std::fs::remove_file(p)).unwrap();
+
+        let dst_mtime =
+            filetime::FileTime::from_last_modification_time(&std::fs::metadata(&dst).unwrap());
+        assert_eq!(
+            dst_mtime.unix_seconds(),
+            known_mtime.unix_seconds(),
+            "destination mtime must match source mtime after cross-volume move"
+        );
+    }
+
+    #[test]
+    fn same_volume_move_does_not_touch_mtime_logic() {
+        // rename() preserves mtime by OS contract; this test confirms the
+        // cross-volume branch (and its mtime logic) is NOT entered on same-volume.
+        let dir = tempfile::tempdir().unwrap();
+        let root = utf8(dir.path());
+        let src = root.join("source.fits");
+        let dst = root.join("dest.fits");
+        std::fs::write(&src, b"data").unwrap();
+
+        let known_mtime = filetime::FileTime::from_unix_time(1_600_000_000, 0);
+        filetime::set_file_mtime(&src, known_mtime).unwrap();
+
+        // Real rename — same-volume, no cross-device error.
+        move_file(&src, &dst).unwrap();
+
+        let dst_mtime =
+            filetime::FileTime::from_last_modification_time(&std::fs::metadata(&dst).unwrap());
+        // rename(2) preserves mtime on every supported OS.
+        assert_eq!(
+            dst_mtime.unix_seconds(),
+            known_mtime.unix_seconds(),
+            "rename preserves mtime; destination should match the known pinned mtime"
+        );
     }
 }

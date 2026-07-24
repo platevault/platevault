@@ -189,7 +189,8 @@ pub async fn settings_update(
         let req =
             SettingsUpdateRequest { key: key.clone(), value: contracts_core::JsonAny::from(value) };
         // Swallow noop and value.invalid for forward-compat; log errors.
-        match app_core::settings::update_setting(pool, bus, &req).await {
+        match app_core::settings::update_setting(pool, bus, &state.caches.settings.bag, &req).await
+        {
             Ok(_) => {}
             Err(e) if e.code == contracts_core::error_code::ErrorCode::ValueInvalid => {
                 tracing::warn!("settings.update: value.invalid for key {key}: {}", e.message);
@@ -214,7 +215,13 @@ pub async fn settings_restore_defaults(
     request: RestoreDefaultsRequest,
 ) -> Result<RestoreDefaultsResponse, ContractError> {
     tracing::debug!("settings.restore-defaults keys={:?}", request.keys);
-    app_core::settings::restore_defaults(state.repo.pool(), &state.bus, &request).await
+    app_core::settings::restore_defaults(
+        state.repo.pool(),
+        &state.bus,
+        &state.caches.settings.bag,
+        &request,
+    )
+    .await
 }
 
 /// `settings.source-override.set` — set a per-source override for an overridable key.
@@ -232,7 +239,13 @@ pub async fn settings_source_override_set(
         request.source_id,
         request.key
     );
-    app_core::settings::set_source_override(state.repo.pool(), &state.bus, &request).await
+    app_core::settings::set_source_override(
+        state.repo.pool(),
+        &state.bus,
+        &state.caches.settings.bag,
+        &request,
+    )
+    .await
 }
 
 /// `settings.overridable-keys` — return the list of stable settings keys that

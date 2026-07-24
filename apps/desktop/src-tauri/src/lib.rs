@@ -390,6 +390,11 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
 
     let bus = EventBus::with_pool(pool.clone());
 
+    // Per-instance app-layer caches. Created early so background tasks spawned
+    // below (e.g. the settings repair pass) can share the same instance that
+    // eventually ends up in AppState.
+    let caches = app_core::AppCaches::shared();
+
     // Live event-bus subscribers. Start these *before* `bus`/`pool` are moved
     // into `AppState` below. Each spawns a tokio task on the runtime that
     // `#[tokio::main]` establishes around `run_app`.
@@ -469,8 +474,15 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
     {
         let repair_pool = pool.clone();
         let repair_bus = bus.clone();
+        let repair_caches = caches.clone();
         tokio::spawn(async move {
-            if let Err(e) = app_core::settings::get_settings(&repair_pool, &repair_bus).await {
+            if let Err(e) = app_core::settings::get_settings(
+                &repair_pool,
+                &repair_bus,
+                &repair_caches.settings.bag,
+            )
+            .await
+            {
                 tracing::warn!("settings repair pass failed: {e:?}");
             }
         });
@@ -594,7 +606,7 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
     app.manage(pool.clone());
 
     let repo = Arc::new(SqliteLifecycleRepository::new(pool, bus.clone()));
-    let state = AppState::new(repo, bus, resolve_cache, resolve_cache_path, cache_warming);
+    let state = AppState::new(repo, bus, caches, resolve_cache, resolve_cache_path, cache_warming);
 
     app.manage(state);
 
