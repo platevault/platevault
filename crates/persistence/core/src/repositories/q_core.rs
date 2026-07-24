@@ -426,15 +426,44 @@ pub struct SessionJoinRow {
 /// # Errors
 /// Returns [`crate::DbError::Database`] on query failure.
 pub async fn list_sessions_joined(pool: &SqlitePool) -> DbResult<Vec<SessionJoinRow>> {
-    let rows = sqlx::query_as::<_, SessionJoinRow>(
-        "SELECT s.id, s.session_key, s.target_id, s.frame_ids, s.created_at,
-                s.canonical_target_id, ct.primary_designation AS canonical_target_name
-         FROM acquisition_session s
-         LEFT JOIN canonical_target ct ON ct.id = s.canonical_target_id
-         ORDER BY s.created_at DESC",
-    )
-    .fetch_all(pool)
-    .await?;
+    list_sessions_joined_paginated(pool, None, None).await
+}
+
+/// Paginated variant of [`list_sessions_joined`].
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn list_sessions_joined_paginated(
+    pool: &SqlitePool,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> DbResult<Vec<SessionJoinRow>> {
+    let sql = match (limit, offset) {
+        (Some(l), Some(o)) => format!(
+            "SELECT s.id, s.session_key, s.target_id, s.frame_ids, s.created_at, \
+                    s.canonical_target_id, ct.primary_designation AS canonical_target_name \
+             FROM acquisition_session s \
+             LEFT JOIN canonical_target ct ON ct.id = s.canonical_target_id \
+             ORDER BY s.created_at DESC LIMIT {l} OFFSET {o}"
+        ),
+        (Some(l), None) => format!(
+            "SELECT s.id, s.session_key, s.target_id, s.frame_ids, s.created_at, \
+                    s.canonical_target_id, ct.primary_designation AS canonical_target_name \
+             FROM acquisition_session s \
+             LEFT JOIN canonical_target ct ON ct.id = s.canonical_target_id \
+             ORDER BY s.created_at DESC LIMIT {l}"
+        ),
+        _ => "SELECT s.id, s.session_key, s.target_id, s.frame_ids, s.created_at, \
+                    s.canonical_target_id, ct.primary_designation AS canonical_target_name \
+             FROM acquisition_session s \
+             LEFT JOIN canonical_target ct ON ct.id = s.canonical_target_id \
+             ORDER BY s.created_at DESC"
+            .to_owned(),
+    };
+    // AssertSqlSafe: limit/offset are u32 literals formatted directly — no user strings.
+    let rows = sqlx::query_as::<_, SessionJoinRow>(sqlx::AssertSqlSafe(sql))
+        .fetch_all(pool)
+        .await?;
     Ok(rows)
 }
 
@@ -675,6 +704,218 @@ pub async fn session_history(
     .fetch_all(pool)
     .await?;
     Ok(rows)
+}
+
+// ── Frame-session map (DSD-8 LIKE-scan inversion) ───────────────────────────
+
+/// All `(id, frame_ids)` pairs from `acquisition_session`.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn all_acquisition_session_frame_ids(
+    pool: &SqlitePool,
+) -> DbResult<Vec<(String, String)>> {
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT id, frame_ids FROM acquisition_session")
+            .fetch_all(pool)
+            .await?;
+    Ok(rows)
+}
+
+/// All `(id, frame_ids, kind)` triples from `calibration_session`.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn all_calibration_session_frame_ids(
+    pool: &SqlitePool,
+) -> DbResult<Vec<(String, String, String)>> {
+    let rows: Vec<(String, String, String)> =
+        sqlx::query_as("SELECT id, frame_ids, kind FROM calibration_session")
+            .fetch_all(pool)
+            .await?;
+    Ok(rows)
+}
+
+// ── Batch queries for sessions.list ──────────────────────────────────────────
+
+/// Keyed fingerprint row for batch loading.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct KeyedFingerprintRow {
+    pub id: String,
+    pub gain: Option<f64>,
+    pub filter_name: Option<String>,
+    pub binning: Option<String>,
+    pub optic_train: Option<String>,
+    pub observing_night_date: Option<String>,
+}
+
+/// Batch-load `acquisition_fingerprint` rows for multiple session ids.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn get_fingerprints_batch(
+    pool: &SqlitePool,
+    session_ids: &[String],
+) -> DbResult<Vec<KeyedFingerprintRow>> {
+    if session_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut builder = sqlx::QueryBuilder::new(
+        "SELECT id, gain, filter_name, binning, optic_train, observing_night_date \
+         FROM acquisition_fingerprint WHERE id IN (",
+    );
+    let mut sep = builder.separated(", ");
+    for id in session_ids {
+        sep.push_bind(id);
+    }
+    sep.push_unseparated(")");
+    let rows: Vec<KeyedFingerprintRow> = builder.build_query_as().fetch_all(pool).await?;
+    Ok(rows)
+}
+
+/// Batch-load `project_id` values for multiple sessions via `project_sources`.
+/// Returns `(session_id, project_id)` pairs.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn project_ids_for_sessions_batch(
+    pool: &SqlitePool,
+    session_ids: &[String],
+) -> DbResult<Vec<(String, String)>> {
+    if session_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut builder = sqlx::QueryBuilder::new(
+        "SELECT inventory_session_id, project_id FROM project_sources \
+         WHERE inventory_session_id IN (",
+    );
+    let mut sep = builder.separated(", ");
+    for id in session_ids {
+        sep.push_bind(id);
+    }
+    sep.push_unseparated(")");
+    let rows: Vec<(String, String)> = builder.build_query_as().fetch_all(pool).await?;
+    Ok(rows)
+}
+
+/// Batch active frame summary: returns `(session_frame_ids_hash, count, total_size_bytes)`
+/// per session. Takes a slice of `(session_id, frame_ids_json)` pairs.
+/// Internally collects all frame IDs, runs one query, then re-attributes by session.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn active_frame_summaries_batch(
+    pool: &SqlitePool,
+    sessions_frame_ids: &[(String, Vec<String>)],
+) -> DbResult<std::collections::HashMap<String, (i64, i64)>> {
+    use std::collections::{HashMap, HashSet};
+
+    let mut result: HashMap<String, (i64, i64)> = HashMap::new();
+    if sessions_frame_ids.is_empty() {
+        return Ok(result);
+    }
+
+    // Collect all unique frame ids and build reverse map (frame_id -> session_ids).
+    let mut all_ids: Vec<&String> = Vec::new();
+    let mut frame_to_session: HashMap<&str, &str> = HashMap::new();
+    let mut seen: HashSet<&str> = HashSet::new();
+
+    for (session_id, frame_ids) in sessions_frame_ids {
+        result.insert(session_id.clone(), (0, 0));
+        for fid in frame_ids {
+            if seen.insert(fid.as_str()) {
+                all_ids.push(fid);
+                frame_to_session.insert(fid.as_str(), session_id.as_str());
+            }
+        }
+    }
+
+    if all_ids.is_empty() {
+        return Ok(result);
+    }
+
+    // Query all at once: id, state, size_bytes for the frame ids.
+    let mut builder = sqlx::QueryBuilder::new(
+        "SELECT id, size_bytes FROM file_record WHERE state != 'missing' AND id IN (",
+    );
+    let mut sep = builder.separated(", ");
+    for id in &all_ids {
+        sep.push_bind(*id);
+    }
+    sep.push_unseparated(")");
+
+    let rows: Vec<(String, i64)> = builder.build_query_as().fetch_all(pool).await?;
+
+    for (frame_id, size_bytes) in rows {
+        if let Some(&sid) = frame_to_session.get(frame_id.as_str()) {
+            let entry = result.entry(sid.to_owned()).or_insert((0, 0));
+            entry.0 += 1;
+            entry.1 += size_bytes;
+        }
+    }
+
+    Ok(result)
+}
+
+/// Batch active frame exposure seconds: one query for all frame ids, re-attributed
+/// per session. Returns `session_id -> total_exposure_s`.
+///
+/// # Errors
+/// Returns [`crate::DbError::Database`] on query failure.
+pub async fn active_frame_exposure_seconds_batch(
+    pool: &SqlitePool,
+    sessions_frame_ids: &[(String, Vec<String>)],
+) -> DbResult<std::collections::HashMap<String, f64>> {
+    use std::collections::{HashMap, HashSet};
+
+    let mut result: HashMap<String, f64> = HashMap::new();
+    if sessions_frame_ids.is_empty() {
+        return Ok(result);
+    }
+
+    let mut all_ids: Vec<&String> = Vec::new();
+    let mut frame_to_session: HashMap<&str, &str> = HashMap::new();
+    let mut seen: HashSet<&str> = HashSet::new();
+
+    for (session_id, frame_ids) in sessions_frame_ids {
+        result.insert(session_id.clone(), 0.0);
+        for fid in frame_ids {
+            if seen.insert(fid.as_str()) {
+                all_ids.push(fid);
+                frame_to_session.insert(fid.as_str(), session_id.as_str());
+            }
+        }
+    }
+
+    if all_ids.is_empty() {
+        return Ok(result);
+    }
+
+    // Same join as active_frame_exposure_seconds but batched.
+    let mut builder = sqlx::QueryBuilder::new(
+        "SELECT fr.id, MAX(ifm.exposure_s) AS exposure_s \
+         FROM file_record fr \
+         LEFT JOIN inbox_items ii ON ii.root_id = fr.root_id \
+         LEFT JOIN inbox_file_metadata ifm \
+             ON ifm.inbox_item_id = ii.id AND ifm.relative_file_path = fr.relative_path \
+         WHERE fr.state != 'missing' AND fr.id IN (",
+    );
+    let mut sep = builder.separated(", ");
+    for id in &all_ids {
+        sep.push_bind(*id);
+    }
+    sep.push_unseparated(") GROUP BY fr.id");
+
+    let rows: Vec<(String, Option<f64>)> = builder.build_query_as().fetch_all(pool).await?;
+
+    for (frame_id, exposure) in rows {
+        if let Some(&sid) = frame_to_session.get(frame_id.as_str()) {
+            let entry = result.entry(sid.to_owned()).or_insert(0.0);
+            *entry += exposure.unwrap_or(0.0);
+        }
+    }
+
+    Ok(result)
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

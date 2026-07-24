@@ -54,48 +54,101 @@ use std::collections::HashMap;
 /// # Errors
 /// Returns `Err(String)` on database failure.
 pub async fn list_sessions(pool: &SqlitePool) -> Result<Vec<AcquisitionSession>, String> {
-    // spec 035 US4/T044: LEFT JOIN the spec-035 canonical_target so a session's
-    // resolved target name (`primary_designation`) surfaces in the read path.
-    // `canonical_target_id` (migration 0046) is the spec-035 link; it coexists
-    // with the legacy `target_id` (→ old `target` table, left NULL by ingest).
-    let rows = persistence_core::repositories::q_core::list_sessions_joined(pool)
+    list_sessions_paginated(pool, None, None).await
+}
+
+/// Paginated `sessions.list` — accepts optional `limit`/`offset`.
+///
+/// Uses set-based batch queries (fingerprints, frame summaries, exposure, project
+/// links) instead of per-row N+1 loops.
+///
+/// # Errors
+/// Returns `Err(String)` on database failure.
+pub async fn list_sessions_paginated(
+    pool: &SqlitePool,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<Vec<AcquisitionSession>, String> {
+    use persistence_core::repositories::q_core;
+
+    // 1) Fetch session rows (paginated).
+    let rows = q_core::list_sessions_joined_paginated(pool, limit, offset)
         .await
         .map_err(|e| e.to_string())?;
 
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // 2) Collect session ids and parse frame_ids once per row.
+    let session_ids: Vec<String> = rows.iter().map(|r| r.id.clone()).collect();
+    let sessions_frame_ids: Vec<(String, Vec<String>)> = rows
+        .iter()
+        .map(|r| {
+            let ids: Vec<String> = serde_json::from_str(&r.frame_ids).unwrap_or_default();
+            (r.id.clone(), ids)
+        })
+        .collect();
+
+    // 3) Batch-load fingerprints (1 query instead of N).
+    let fp_rows = q_core::get_fingerprints_batch(pool, &session_ids)
+        .await
+        .map_err(|e| e.to_string())?;
+    let fingerprints: HashMap<String, Fingerprint> = fp_rows
+        .into_iter()
+        .map(|r| {
+            (
+                r.id.clone(),
+                Fingerprint {
+                    gain: r.gain,
+                    filter_name: r.filter_name,
+                    binning: r.binning,
+                    optic_train: r.optic_train,
+                    observing_night_date: r.observing_night_date,
+                },
+            )
+        })
+        .collect();
+
+    // 4) Batch-load active frame summaries (1 query instead of N).
+    let frame_summaries = q_core::active_frame_summaries_batch(pool, &sessions_frame_ids)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 5) Batch-load exposure seconds (1 query instead of N).
+    let exposures = q_core::active_frame_exposure_seconds_batch(pool, &sessions_frame_ids)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 6) Batch-load project ids (1 query instead of N).
+    let project_pairs = q_core::project_ids_for_sessions_batch(pool, &session_ids)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut project_map: HashMap<String, Vec<String>> = HashMap::new();
+    for (sid, pid) in project_pairs {
+        project_map.entry(sid).or_default().push(pid);
+    }
+
+    // 7) Assemble results.
     let mut sessions = Vec::with_capacity(rows.len());
     for row in rows {
         let id = row.id;
-        let fp = load_fingerprint(pool, &id).await?;
-        let mut sk = parse_session_key(&row.session_key, fp.as_ref());
-        // Prefer the canonical target's display designation when linked.
+        let fp = fingerprints.get(&id);
+        let mut sk = parse_session_key(&row.session_key, fp);
         if let Some(name) = row.canonical_target_name.filter(|n| !n.is_empty()) {
             sk.target = name;
         }
-        // Spec 041 FR-051: sessions are derived, already-confirmed inventory —
-        // there is no review state left to derive a confidence level from.
         let confidence = ConfidenceLevel::Confirmed;
-        // TODO(037): optical_train_id -- fingerprint stores name, not UUID.
-        let optical_train_id = fp.as_ref().and_then(|f| f.optic_train.clone()).unwrap_or_default();
-        // spec 048 US1: frame_count/total_size_bytes are the ACTIVE (non-missing)
-        // file_record members — honest counts/totals, not the raw array length
-        // (which may retain `missing` ids in flag-missing mode).
-        let (frame_count, total_size_bytes) = active_frame_summary(pool, &row.frame_ids).await?;
-        // #775: real sum of active frames' per-file exposure_s (inbox_file_metadata).
-        let total_integration_seconds = active_frame_exposure_seconds(pool, &row.frame_ids).await?;
-        // TODO(037): metadata -- not stored as structured provenance rows yet.
+        let optical_train_id = fp.and_then(|f| f.optic_train.clone()).unwrap_or_default();
+        let (count, total) = frame_summaries.get(&id).copied().unwrap_or((0, 0));
+        let frame_count = u32::try_from(count.max(0)).unwrap_or(0);
+        let total_size_bytes = u64::try_from(total.max(0)).unwrap_or(0);
+        let total_integration_seconds = exposures.get(&id).copied().unwrap_or(0.0);
         let metadata = HashMap::new();
-        // Surface the canonical target id (spec 035) when the legacy target_id is
-        // absent — ingested sessions link via canonical_target_id (R10).
-        // Shared precedence with q_targets_mgmt::session_counts_by_target — see
-        // resolve_session_target_id's doc (reviewer seq=277).
-        let target_ids = persistence_core::repositories::q_core::resolve_session_target_id(
-            row.target_id,
-            row.canonical_target_id,
-        )
-        .into_iter()
-        .collect();
-        let project_ids = load_project_ids(pool, &id).await?;
-        // TODO(037): warnings -- not stored; derive from fingerprint in future.
+        let target_ids = q_core::resolve_session_target_id(row.target_id, row.canonical_target_id)
+            .into_iter()
+            .collect();
+        let project_ids = project_map.remove(&id).unwrap_or_default();
         let warnings = Vec::new();
         sessions.push(AcquisitionSession {
             id,
