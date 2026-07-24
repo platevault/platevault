@@ -409,72 +409,123 @@ pub async fn write_lifecycle_manifest(
 ///
 /// The subscriber uses the same idempotent write pattern as any other trigger;
 /// a retry produces a new file with a later timestamp.
+///
+/// On broadcast lag, replays missed `workflow.run_completed` events from the
+/// durable events table using a monotonic cursor (GF-19).
 #[must_use]
 pub fn spawn_workflow_run_subscriber(
     pool: SqlitePool,
     bus: EventBus,
 ) -> tokio::task::JoinHandle<()> {
     use audit::event_bus::TOPIC_WORKFLOW_RUN_COMPLETED;
-    use persistence_plans::repositories::projects::get_project;
     use tokio::sync::broadcast::error::RecvError;
 
     let mut rx = bus.subscribe();
     tokio::spawn(async move {
+        // Seed cursor at current max so first-lag replay only covers events
+        // emitted after subscribe.
+        let mut cursor: i64 = persistence_lifecycle::repositories::events::max_event_id(bus.pool())
+            .await
+            .unwrap_or(0);
+
         loop {
             match rx.recv().await {
                 Ok(env) if env.topic == TOPIC_WORKFLOW_RUN_COMPLETED => {
-                    let project_id =
-                        env.payload.get("projectId").and_then(|v| v.as_str()).map(str::to_owned);
-                    let tool_id =
-                        env.payload.get("toolId").and_then(|v| v.as_str()).map(str::to_owned);
-
-                    if let Some(pid) = project_id {
-                        // Async DB lookup: resolve project root + real lifecycle
-                        // state from the project row (#740 — this used to be
-                        // hardcoded "unknown", the one manifest a real user can
-                        // ever get failing FR-001's lifecycle-state requirement).
-                        let project_row = match get_project(&pool, &pid).await {
-                            Ok(row) => Some(row),
-                            Err(e) => {
-                                tracing::debug!(
-                                    "workflow.run_completed: could not look up project {pid}: {e}; skipping manifest"
-                                );
-                                None
-                            }
-                        };
-
-                        if let Some(row) = project_row {
-                            let project_root = std::path::PathBuf::from(&row.path);
-                            let (source_map, calibration) =
-                                build_source_calibration_snapshot(&pool, &pid).await;
-                            // Best-effort: log but do not crash the subscriber.
-                            let result = write(
-                                &pool,
-                                &bus,
-                                WriteManifestParams {
-                                    project_id: &pid,
-                                    reason: DtoManifestReason::WorkflowRun,
-                                    project_root: &project_root,
-                                    lifecycle_state: &row.lifecycle,
-                                    source_map,
-                                    calibration,
-                                    workflow_profile: tool_id,
-                                },
-                            )
-                            .await;
-                            if let Err(e) = result {
-                                tracing::warn!(
-                                    "workflow_run manifest write failed for project {pid}: {e}"
-                                );
-                            }
-                        }
-                    }
+                    handle_workflow_run_event(&pool, &bus, &env.payload).await;
                 }
-                Ok(_) | Err(RecvError::Lagged(_)) => {}
+                Ok(_) => {}
+                Err(RecvError::Lagged(n)) => {
+                    tracing::warn!(
+                        missed = n,
+                        cursor,
+                        "workflow_run_subscriber: lagged — replaying from durable events"
+                    );
+                    cursor = replay_workflow_events_since(&pool, &bus, cursor).await;
+                }
                 Err(RecvError::Closed) => break,
             }
         }
     })
+}
+
+/// Process a single `workflow.run_completed` payload: look up the project,
+/// build the manifest snapshot, and write it.
+async fn handle_workflow_run_event(pool: &SqlitePool, bus: &EventBus, payload: &serde_json::Value) {
+    use persistence_plans::repositories::projects::get_project;
+
+    let project_id = payload.get("projectId").and_then(|v| v.as_str()).map(str::to_owned);
+    let tool_id = payload.get("toolId").and_then(|v| v.as_str()).map(str::to_owned);
+
+    if let Some(pid) = project_id {
+        let project_row = match get_project(pool, &pid).await {
+            Ok(row) => Some(row),
+            Err(e) => {
+                tracing::debug!(
+                    "workflow.run_completed: could not look up project {pid}: {e}; skipping manifest"
+                );
+                None
+            }
+        };
+
+        if let Some(row) = project_row {
+            let project_root = std::path::PathBuf::from(&row.path);
+            let (source_map, calibration) = build_source_calibration_snapshot(pool, &pid).await;
+            let result = write(
+                pool,
+                bus,
+                WriteManifestParams {
+                    project_id: &pid,
+                    reason: DtoManifestReason::WorkflowRun,
+                    project_root: &project_root,
+                    lifecycle_state: &row.lifecycle,
+                    source_map,
+                    calibration,
+                    workflow_profile: tool_id,
+                },
+            )
+            .await;
+            if let Err(e) = result {
+                tracing::warn!("workflow_run manifest write failed for project {pid}: {e}");
+            }
+        }
+    }
+}
+
+/// Replay `workflow.run_completed` events from the durable table since `cursor`.
+/// Returns the updated cursor.
+async fn replay_workflow_events_since(pool: &SqlitePool, bus: &EventBus, cursor: i64) -> i64 {
+    use audit::event_bus::TOPIC_WORKFLOW_RUN_COMPLETED;
+
+    let rows = persistence_lifecycle::repositories::events::list_since_by_topic(
+        bus.pool(),
+        cursor,
+        TOPIC_WORKFLOW_RUN_COMPLETED,
+    )
+    .await;
+
+    let rows = match rows {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!("workflow_run_subscriber: replay query failed: {e}");
+            return cursor;
+        }
+    };
+
+    let mut new_cursor = cursor;
+    for row in &rows {
+        if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&row.payload) {
+            handle_workflow_run_event(pool, bus, &payload).await;
+        }
+        new_cursor = row.event_id;
+    }
+    if !rows.is_empty() {
+        tracing::info!(
+            replayed = rows.len(),
+            new_cursor,
+            "workflow_run_subscriber: replay complete"
+        );
+    }
+    new_cursor
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

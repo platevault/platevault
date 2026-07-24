@@ -183,6 +183,12 @@ impl EventBus {
         self.sender.subscribe()
     }
 
+    /// Access the underlying pool for cursor queries during lag recovery.
+    #[must_use]
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
     /// Replay events from the durable `events` table.
     ///
     /// - `topic_filter`: if `Some`, only events with that topic are returned.

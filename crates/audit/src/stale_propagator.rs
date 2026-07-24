@@ -58,11 +58,20 @@ impl StalePropagator {
     /// Spawn the subscriber loop on the current tokio runtime.
     ///
     /// Filters to `lifecycle.transition.applied` only; other topics pass
-    /// through unhandled.
+    /// through unhandled. On broadcast lag, replays missed events from the
+    /// durable events table using a monotonic cursor (GF-18).
     #[must_use]
     pub fn spawn(self, bus: &EventBus) -> tokio::task::JoinHandle<()> {
         let mut rx = bus.subscribe();
+        let bus = bus.clone();
         tokio::spawn(async move {
+            // Seed cursor at current max so we only replay events newer than
+            // our subscribe point on the first lag.
+            let mut cursor: i64 =
+                persistence_lifecycle::repositories::events::max_event_id(bus.pool())
+                    .await
+                    .unwrap_or(0);
+
             loop {
                 match rx.recv().await {
                     Ok(env) => {
@@ -70,13 +79,54 @@ impl StalePropagator {
                             let _errors = self.dispatch(&env);
                         }
                     }
-                    // Lagged receivers reattach via replay; for the skeleton
-                    // we just keep the live loop going on the next message.
-                    Err(RecvError::Lagged(_)) => {}
+                    Err(RecvError::Lagged(n)) => {
+                        tracing::warn!(
+                            missed = n,
+                            cursor,
+                            "stale_propagator: lagged — replaying from durable events"
+                        );
+                        cursor = self.replay_since(&bus, cursor).await;
+                    }
                     Err(RecvError::Closed) => break,
                 }
             }
         })
+    }
+
+    /// Replay lifecycle-transition events from the durable table since `cursor`,
+    /// dispatching each through registered hooks. Returns the new cursor.
+    async fn replay_since(&self, bus: &EventBus, cursor: i64) -> i64 {
+        let rows = persistence_lifecycle::repositories::events::list_since_by_topic(
+            bus.pool(),
+            cursor,
+            TOPIC_LIFECYCLE_TRANSITION_APPLIED,
+        )
+        .await;
+
+        let rows = match rows {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!("stale_propagator: replay query failed: {e}");
+                return cursor;
+            }
+        };
+
+        let mut new_cursor = cursor;
+        for row in &rows {
+            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&row.payload) {
+                let env = EventEnvelope::new(
+                    TOPIC_LIFECYCLE_TRANSITION_APPLIED,
+                    crate::event_bus::Source::Restore,
+                    payload,
+                );
+                let _errors = self.dispatch(&env);
+            }
+            new_cursor = row.event_id;
+        }
+        if !rows.is_empty() {
+            tracing::info!(replayed = rows.len(), new_cursor, "stale_propagator: replay complete");
+        }
+        new_cursor
     }
 }
 
@@ -322,6 +372,65 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(psv, "stale", "this project's prepared source view must flip to stale");
+    }
+
+    /// Verify that on Lagged the propagator replays from the durable events table.
+    #[tokio::test]
+    async fn lagged_replays_from_durable_events() {
+        let counter = Arc::new(AtomicUsize::new(0));
+        let counter_clone = counter.clone();
+
+        let propagator = StalePropagator::new().with_hook(Arc::new(move |_env| {
+            counter_clone.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }));
+
+        // Tiny capacity bus so we can force a lag.
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS events (\
+             event_id INTEGER PRIMARY KEY AUTOINCREMENT,\
+             topic TEXT NOT NULL, source TEXT NOT NULL,\
+             emitted_at TEXT NOT NULL, payload TEXT NOT NULL)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let bus = EventBus::new(pool, 1);
+
+        let handle = propagator.spawn(&bus);
+
+        // Publish more events than the channel capacity to force Lagged.
+        // The first goes through live, the rest overflow (capacity=1 means
+        // the channel holds 1 in-flight item before lagging).
+        for _ in 0..4 {
+            let _ = bus
+                .publish(
+                    TOPIC_LIFECYCLE_TRANSITION_APPLIED,
+                    Source::User,
+                    LifecycleTransitionApplied {
+                        entity_type: EntityType::Project,
+                        entity_id: "test".to_owned(),
+                        from_state: "ready".to_owned(),
+                        to_state: "processing".to_owned(),
+                        actor: "user".to_owned(),
+                        at: Timestamp::now_utc(),
+                        project_id: Some("test".to_owned()),
+                    },
+                )
+                .await;
+        }
+
+        // Give the task time to process live + replay path.
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        handle.abort();
+
+        // The hook must fire for all 4 events (some live, rest via replay).
+        assert!(
+            counter.load(Ordering::SeqCst) >= 4,
+            "expected at least 4 dispatches (live + replayed), got {}",
+            counter.load(Ordering::SeqCst)
+        );
     }
 
     #[tokio::test]
