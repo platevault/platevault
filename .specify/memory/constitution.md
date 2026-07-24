@@ -46,6 +46,11 @@ prefer archive or trash workflows over permanent deletion. Classification,
 cleanup, and calibration matches MUST carry confidence levels where inference is
 used.
 
+Audit records are user-facing history and review material; they are NOT
+transactional guarantees. Audit and event writes MAY be batched or written
+asynchronously provided plan state remains recoverable (see unclean-shutdown
+recovery in Product Constraints).
+
 Rationale: the product's core value is making large library changes safer, not
 making them faster at the expense of reversibility and trust.
 
@@ -83,8 +88,28 @@ in another language. The database is the durable relationship and audit record;
 generated manifests and source views are reproducible projections unless a
 research decision explicitly marks an artifact as canonical.
 
-Rationale: this preserves a migration path beyond the initial desktop shell
-without binding user-facing workflows to one backend technology.
+Not all records carry the same durability obligation. The following tiers apply:
+
+- **Tier 1 — synchronous, guaranteed**: filesystem-mutation intent and outcome
+  records, plan transactions, and any record encoding a user decision that cannot
+  be re-derived from the filesystem (e.g. frame-to-session/target attribution,
+  lifecycle choices, user overrides). These MUST be committed before the
+  corresponding filesystem action is attempted.
+- **Tier 2 — relaxed, batched/asynchronous allowed**: anything re-derivable from
+  the filesystem or recomputable (classification evidence, content signatures,
+  scan results, audit/event log rows, watcher state, caches). These MAY be
+  written asynchronously or batched.
+- **Write-behind permitted for settings, preferences, and UI state**: the
+  in-memory value is authoritative once applied; persistence MAY lag; dependents
+  MUST read the applied in-memory value, not the persisted copy.
+
+The durability test: "if this record vanished, can the application re-derive it
+from the filesystem, or is user knowledge lost?" — user-knowledge-bearing records
+are Tier 1; everything else is Tier 2 or lower.
+
+Rationale: relaxed global durability enables batched writes and
+synchronous=NORMAL SQLite mode; custody guarantees are concentrated on the
+records that cannot be reconstructed without user input.
 
 ## Product Constraints
 
@@ -99,6 +124,13 @@ without binding user-facing workflows to one backend technology.
   user explicitly enables that behavior for a root or operation.
 - Protected categories and cleanup exclusions MUST be documented before any
   cleanup plan can be generated.
+- On unclean shutdown the application MUST reconcile filesystem-mutation intents
+  against filesystem reality at boot. Auto-healing is permitted only for
+  unambiguous outcomes on re-derivable state. For ambiguous or in-progress
+  mutations the application MUST offer the user an explicit resume or repair
+  prompt before proceeding. Recovery mechanisms MUST NOT reimplement synchronous
+  durability in userspace (no write-ahead journaling beyond the Tier-1
+  intent/outcome records already required).
 
 ## SpecKit Workflow and Quality Gates
 
@@ -128,4 +160,17 @@ Versioning follows semantic versioning:
 - MINOR for new principles, new required gates, or material expansions.
 - PATCH for clarifications that do not change obligations.
 
-**Version**: 1.0.0 | **Ratified**: 2026-05-02 | **Last Amended**: 2026-05-02
+### Amendment Log
+
+- **1.1.0** (2026-07-24): Amended Principle II to clarify that audit records are
+  user-facing history, not transactional guarantees, and that async/batched audit
+  writes are permitted when plan state remains recoverable. Amended Principle V to
+  introduce a three-tier durability model (Tier 1 synchronous/guaranteed for
+  user-knowledge-bearing records; Tier 2 relaxed for re-derivable state;
+  write-behind for settings/UI state) with an explicit derivability test.
+  Added unclean-shutdown recovery constraint to Product Constraints. Rationale:
+  relaxed global durability enables batched writes and synchronous=NORMAL SQLite
+  mode; custody guarantees concentrated on Tier-1 records that cannot be
+  reconstructed without user input.
+
+**Version**: 1.1.0 | **Ratified**: 2026-05-02 | **Last Amended**: 2026-07-24
