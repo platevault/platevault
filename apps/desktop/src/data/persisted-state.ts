@@ -49,6 +49,12 @@ const scopeRegistry = new Map<string, Set<PersistedStateHandle<unknown>>>();
 // _resetForTest() on each (clears in-memory value + boot-cache LS key).
 const allInstances = new Set<PersistedStateResult<unknown>>();
 
+// Cache of DB values per scope, populated by hydrateScope on a successful
+// fetch. Late-registering handles (e.g. lazy picker/grouping instances
+// created after hydrateScope returns) consult this cache immediately in
+// registerHandle so they reconcile without a second IPC round-trip.
+const scopeValueCache = new Map<string, Record<string, unknown>>();
+
 function registerHandle<T>(
   scope: string,
   handle: PersistedStateHandle<T>,
@@ -61,6 +67,16 @@ function registerHandle<T>(
   (set as Set<PersistedStateHandle<unknown>>).add(
     handle as PersistedStateHandle<unknown>,
   );
+
+  // If this scope was already hydrated, apply the cached value immediately
+  // rather than waiting for a second hydrateScope call.
+  const cached = scopeValueCache.get(scope);
+  if (cached) {
+    const dbValue = cached[handle.settingsKey];
+    if (dbValue !== undefined && dbValue !== null) {
+      handle.setFromDb(dbValue);
+    }
+  }
 }
 
 // ── Tauri IPC helpers ─────────────────────────────────────────────────────────
@@ -206,27 +222,29 @@ export function createPersistedState<T>(
   // ── Returned API ──────────────────────────────────────────────────────────
 
   const result: PersistedStateResult<T> = {
-    get(): T {
-      return current;
-    },
+    // Arrow function properties (not method shorthands) so that bare refs like
+    // `useSyncExternalStore(state.subscribe, state.get)` pass the lint rule
+    // `noUnboundMethods` — the functions close over module-scope variables and
+    // never use `this`, so the binding is a no-op and arrow syntax is correct.
+    get: (): T => current,
 
-    set(value: T): void {
+    set: (value: T): void => {
       current = value;
       writeBootCache(lsKey, value);
       notify();
       persistToDb(value);
     },
 
-    subscribe(listener: () => void): () => void {
+    subscribe: (listener: () => void): (() => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
 
-    _reconcileFromDbValues(values: Record<string, unknown>): void {
+    _reconcileFromDbValues: (values: Record<string, unknown>): void => {
       handle.setFromDb(values[key]);
     },
 
-    cancelPendingWrite(): void {
+    cancelPendingWrite: (): void => {
       if (pendingDebounceTimer !== null) {
         clearTimeout(pendingDebounceTimer);
         pendingDebounceTimer = null;
@@ -263,17 +281,17 @@ export function createPersistedState<T>(
  * ONE `settingsGet` round-trip. No-ops outside Tauri or on IPC failure
  * (localStorage stays authoritative until the next successful call).
  *
- * Wired in `main.tsx` alongside `hydrateThemeFromSettings` — NOT called
- * automatically; callers must ensure the modules that create `createPersistedState`
- * instances for this scope are imported before calling this function.
+ * Fetched values are cached in `scopeValueCache`. Any handle that registers
+ * AFTER this call (e.g. a lazily-created picker or grouping state) is
+ * reconciled immediately from the cache in `registerHandle`, so registration
+ * order is not a correctness requirement.
+ *
+ * Wired in `main.tsx` alongside `hydrateThemeFromSettings`.
  */
 export async function hydrateScope(scope: string): Promise<void> {
   try {
     const { isTauri } = await importTauriCore();
     if (!isTauri()) return;
-
-    const handles = scopeRegistry.get(scope);
-    if (!handles || handles.size === 0) return;
 
     const [{ commands }, { unwrap }] = await Promise.all([
       import('@/bindings/index'),
@@ -283,10 +301,16 @@ export async function hydrateScope(scope: string): Promise<void> {
     const data = unwrap(await commands.settingsGet(scope));
     const values = data.values as Record<string, unknown>;
 
-    for (const h of handles) {
-      const dbValue = values[h.settingsKey];
-      if (dbValue !== undefined && dbValue !== null) {
-        h.setFromDb(dbValue);
+    // Cache for late-registering handles (picker/grouping created on first use).
+    scopeValueCache.set(scope, values);
+
+    const handles = scopeRegistry.get(scope);
+    if (handles) {
+      for (const h of handles) {
+        const dbValue = values[h.settingsKey];
+        if (dbValue !== undefined && dbValue !== null) {
+          h.setFromDb(dbValue);
+        }
       }
     }
   } catch {
@@ -361,9 +385,10 @@ export function __resetScopeRegistryForTest(): void {
   for (const instance of allInstances) {
     instance._resetForTest();
   }
-  // Clear the scope registry so hydrateScope can re-register without stale
-  // handles. Do NOT clear allInstances (they persist across resets).
+  // Clear the scope registry and value cache so hydrateScope re-fetches.
+  // Do NOT clear allInstances (they persist across resets).
   scopeRegistry.clear();
+  scopeValueCache.clear();
   // Reset the memoised Tauri core promise so mock re-imports work.
   tauriCorePromise = null;
 }

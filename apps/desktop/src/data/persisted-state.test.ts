@@ -306,8 +306,6 @@ describe('hydrateScope — DB key absent', () => {
 });
 
 describe('hydrateScope — boot integration', () => {
-  // Verifies the sequence main.tsx uses: ensure all scope-registered handles
-  // are present BEFORE calling hydrateScope, then DB values reconcile.
   it('reconciles all registered keys from DB in one round-trip', async () => {
     isTauriMock.mockReturnValue(true);
     settingsGetMock.mockResolvedValue({
@@ -340,6 +338,32 @@ describe('hydrateScope — boot integration', () => {
     // Exactly one round-trip regardless of key count.
     expect(settingsGetMock).toHaveBeenCalledTimes(1);
     expect(settingsGetMock).toHaveBeenCalledWith('ui_state');
+  });
+
+  it('late-registered handle reconciles from cache without a second IPC call', async () => {
+    // Models the picker/grouping scenario: hydrateScope fires at boot before
+    // the state is created (lazy registration on first user interaction).
+    isTauriMock.mockReturnValue(true);
+    settingsGetMock.mockResolvedValue({
+      status: 'ok',
+      data: {
+        scope: 'ui_state',
+        values: { 'uiState.lateKey': 'db-value' },
+      },
+    });
+
+    // hydrateScope fires with NO handles registered yet.
+    await hydrateScope('ui_state');
+    expect(settingsGetMock).toHaveBeenCalledTimes(1);
+
+    // Handle registers AFTER hydrateScope has returned.
+    const lateState = createPersistedState('ui_state', 'uiState.lateKey', {
+      default: 'default',
+    });
+
+    // Must have reconciled from the cache — no second IPC call.
+    expect(lateState.get()).toBe('db-value');
+    expect(settingsGetMock).toHaveBeenCalledTimes(1);
   });
 });
 
