@@ -162,6 +162,11 @@ pub struct InventorySource {
     pub kind: InventorySourceKind,
     pub state: InventorySourceState,
     pub sessions: Vec<InventorySession>,
+    /// `true` when more sessions exist beyond the current `offset + limit` page.
+    /// `false` for an unbounded fetch or when the last session has been returned.
+    /// Callers that do not paginate can ignore this field.
+    #[serde(default)]
+    pub has_more: bool,
 }
 
 // ── inventory.list request / response ────────────────────────────────────────

@@ -197,6 +197,11 @@
         "sessions": {
           "type": "array",
           "items": { "$ref": "#/$defs/InventorySession" }
+        },
+        "hasMore": {
+          "type": "boolean",
+          "description": "true when more sessions exist beyond the current offset+limit page. false for an unbounded fetch or when the last session has been returned. Callers that do not paginate can ignore this field.",
+          "default": false
         }
       }
     },

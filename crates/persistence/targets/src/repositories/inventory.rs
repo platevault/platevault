@@ -115,7 +115,16 @@ pub async fn list_all_roots(pool: &SqlitePool) -> DbResult<Vec<LibraryRootRow>> 
 
 /// List sessions under a given `LibraryRoot` with optional filters applied.
 ///
-/// Calibration sessions expose `kind` as the `frame_type`.
+/// Returns `(rows, has_more)` where `has_more` is `true` when more rows exist
+/// beyond the requested page. The sentinel is derived from fetching
+/// `limit + 1` rows and trimming the extra — avoids a separate COUNT query.
+///
+/// LIMIT and OFFSET are pushed into SQL so the database never reads rows
+/// beyond the page boundary. Each session type (acquisition, calibration)
+/// receives the same limit independently; callers must be aware that a page
+/// of N may contain up to N acquisitions and N calibration rows when no
+/// frame-type filter is set.
+///
 /// `target_name` is always `None` — gen-1 `target` table is unreferenced
 /// (spec 036, T007); the gen-3 `canonical_target` is the live store.
 ///
@@ -125,14 +134,19 @@ pub async fn list_sessions_for_root(
     pool: &SqlitePool,
     root_id: &str,
     filters: &InventoryFilters,
-) -> DbResult<Vec<SessionProjectionRow>> {
+) -> DbResult<(Vec<SessionProjectionRow>, bool)> {
     let frame_filter = filters.frame_type.as_deref();
+    let offset = i64::from(filters.offset.unwrap_or(0));
 
-    // Acquisition sessions — target_name is always NULL (gen-1 `target`
-    // table is unreferenced per spec 036 T007; gen-3 canonical_target is
-    // the live store and is not part of the inventory projection).
-    // `frame_ids` is aggregated in SQL to avoid deserialising the full JSON
-    // blob in Rust; only the count and first element are needed here.
+    // Fetch limit+1 rows to detect whether more exist beyond this page without
+    // an extra COUNT query. `None` limit means unbounded (no sentinel row).
+    let (sql_limit, sentinel) = match filters.limit {
+        Some(n) => (i64::from(n) + 1, true),
+        None => (-1_i64, false), // SQLite: LIMIT -1 = no limit
+    };
+
+    // Acquisition sessions — `frame_ids` aggregated in SQL to avoid reading
+    // the full JSON blob in Rust; only count and first element are needed.
     let acq_rows: Vec<SessionProjectionRow> = sqlx::query_as(
         r"
         SELECT
@@ -150,13 +164,16 @@ pub async fn list_sessions_for_root(
         FROM acquisition_session acs
         WHERE acs.root_id = ?
         ORDER BY acs.created_at DESC
+        LIMIT ? OFFSET ?
         ",
     )
     .bind(root_id)
+    .bind(sql_limit)
+    .bind(offset)
     .fetch_all(pool)
     .await?;
 
-    // Calibration sessions
+    // Calibration sessions — same shape; LIMIT/OFFSET bound independently.
     let cal_rows: Vec<SessionProjectionRow> = sqlx::query_as(
         r"
         SELECT
@@ -174,9 +191,12 @@ pub async fn list_sessions_for_root(
         FROM calibration_session cs
         WHERE cs.root_id = ?
         ORDER BY cs.created_at DESC
+        LIMIT ? OFFSET ?
         ",
     )
     .bind(root_id)
+    .bind(sql_limit)
+    .bind(offset)
     .fetch_all(pool)
     .await?;
 
@@ -184,22 +204,16 @@ pub async fn list_sessions_for_root(
 
     // Apply post-fetch frame_type filter — cannot be trivially done in a
     // single UNION query with dynamic placeholders.
-    let type_filtered: Vec<SessionProjectionRow> =
+    let mut type_filtered: Vec<SessionProjectionRow> =
         all.into_iter().filter(|row| frame_filter.is_none_or(|ff| row.frame_type == ff)).collect();
 
-    // Apply optional offset/limit for pagination (per-source, after type filter).
-    let offset = filters.offset.unwrap_or(0) as usize;
-    let sliced = if offset >= type_filtered.len() {
-        vec![]
-    } else {
-        let tail = &type_filtered[offset..];
-        match filters.limit {
-            Some(n) => tail.iter().take(n as usize).cloned().collect(),
-            None => tail.to_vec(),
-        }
-    };
+    // Detect has_more from the sentinel row and trim it before returning.
+    let has_more = sentinel && type_filtered.len() > filters.limit.unwrap_or(0) as usize;
+    if has_more {
+        type_filtered.pop();
+    }
 
-    Ok(sliced)
+    Ok((type_filtered, has_more))
 }
 
 /// A project row used only for session-link lookup.
@@ -599,11 +613,12 @@ mod tests {
     async fn list_sessions_for_root_returns_empty_on_unknown_root() {
         let db = setup_db().await;
         let filters = InventoryFilters::default();
-        let sessions =
+        let (sessions, has_more) =
             list_sessions_for_root(db.pool(), "00000000-0000-0000-0000-000000000000", &filters)
                 .await
                 .unwrap();
         assert!(sessions.is_empty());
+        assert!(!has_more);
     }
 
     #[tokio::test]
@@ -909,8 +924,10 @@ mod tests {
         .unwrap();
 
         let filters = InventoryFilters::default();
-        let rows = list_sessions_for_root(db.pool(), "root-fc", &filters).await.unwrap();
+        let (rows, has_more) =
+            list_sessions_for_root(db.pool(), "root-fc", &filters).await.unwrap();
         assert_eq!(rows.len(), 2);
+        assert!(!has_more, "unbounded fetch must not signal has_more");
 
         // Rows are ordered DESC by created_at — both share the same timestamp
         // so order is deterministic within type (acq before cal in UNION).
@@ -952,14 +969,15 @@ mod tests {
             .unwrap();
         }
 
-        // No cap: all 4.
-        let all = list_sessions_for_root(db.pool(), "root-pg", &InventoryFilters::default())
+        // No cap: all 4, has_more false.
+        let (all, hm) = list_sessions_for_root(db.pool(), "root-pg", &InventoryFilters::default())
             .await
             .unwrap();
         assert_eq!(all.len(), 4);
+        assert!(!hm, "unbounded fetch must not signal has_more");
 
-        // limit=2: first 2 rows (newest first per ORDER BY created_at DESC).
-        let limited = list_sessions_for_root(
+        // limit=2 with 4 rows → has_more true, returns 2.
+        let (limited, hm) = list_sessions_for_root(
             db.pool(),
             "root-pg",
             &InventoryFilters { limit: Some(2), ..Default::default() },
@@ -967,9 +985,21 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(limited.len(), 2);
+        assert!(hm, "4 rows with limit=2 must signal has_more");
 
-        // offset=3, no limit: last 1 row.
-        let paged = list_sessions_for_root(
+        // limit=4 exactly fits → has_more false.
+        let (exact, hm) = list_sessions_for_root(
+            db.pool(),
+            "root-pg",
+            &InventoryFilters { limit: Some(4), ..Default::default() },
+        )
+        .await
+        .unwrap();
+        assert_eq!(exact.len(), 4);
+        assert!(!hm, "limit equal to row count must not signal has_more");
+
+        // offset=3, no limit: last 1 row, has_more false.
+        let (paged, hm) = list_sessions_for_root(
             db.pool(),
             "root-pg",
             &InventoryFilters { offset: Some(3), ..Default::default() },
@@ -977,9 +1007,10 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(paged.len(), 1);
+        assert!(!hm);
 
-        // offset past end: empty.
-        let past = list_sessions_for_root(
+        // offset past end: empty, has_more false.
+        let (past, hm) = list_sessions_for_root(
             db.pool(),
             "root-pg",
             &InventoryFilters { offset: Some(10), ..Default::default() },
@@ -987,5 +1018,6 @@ mod tests {
         .await
         .unwrap();
         assert!(past.is_empty());
+        assert!(!hm);
     }
 }

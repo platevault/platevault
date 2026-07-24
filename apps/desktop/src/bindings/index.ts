@@ -6219,6 +6219,12 @@ export type InventorySource_Deserialize = {
 	kind: InventorySourceKind,
 	state: InventorySourceState,
 	sessions: InventorySession_Deserialize[],
+	/**
+	 *  `true` when more sessions exist beyond the current `offset + limit` page.
+	 *  `false` for an unbounded fetch or when the last session has been returned.
+	 *  Callers that do not paginate can ignore this field.
+	 */
+	hasMore?: boolean,
 };
 
 /**
@@ -6231,6 +6237,12 @@ export type InventorySource_Serialize = {
 	kind: InventorySourceKind,
 	state: InventorySourceState,
 	sessions: InventorySession_Serialize[],
+	/**
+	 *  `true` when more sessions exist beyond the current `offset + limit` page.
+	 *  `false` for an unbounded fetch or when the last session has been returned.
+	 *  Callers that do not paginate can ignore this field.
+	 */
+	hasMore: boolean,
 };
 
 /**  Handle for a long-running operation (scan, plan apply, etc.). */

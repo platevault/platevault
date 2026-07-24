@@ -76,7 +76,7 @@ pub async fn list(
             }
         }
 
-        let sessions =
+        let (sessions, has_more) =
             list_sessions_for_root(pool, &root.id, &db_filters).await.map_err(|e| e.to_string())?;
 
         if sessions.is_empty() {
@@ -127,6 +127,7 @@ pub async fn list(
             kind: map_source_kind(&root.kind),
             state: map_source_state(&root.state),
             sessions: inventory_sessions,
+            has_more,
         });
     }
 
@@ -135,19 +136,22 @@ pub async fn list(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Default per-source session cap when the caller does not specify a limit.
-/// Prevents unbounded fetches on large libraries (50 k+ frame libraries may
-/// carry hundreds of sessions per root).
+/// Default per-source session cap applied server-side when the caller omits
+/// `limit`. Each session type (acquisition, calibration) is capped
+/// independently at the SQL level; see `list_sessions_for_root`.
 const DEFAULT_SESSION_LIMIT: u32 = 1_000;
 
 fn filters_to_db(filters: Option<&InventoryListFilters>) -> InventoryFilters {
     let Some(f) = filters else {
         return InventoryFilters { limit: Some(DEFAULT_SESSION_LIMIT), ..Default::default() };
     };
+    // Treat limit=0 as unset: the schema says minimum:1 but Rust accepts
+    // Some(0) via deserialisation, which would silently empty every page.
+    let limit = f.limit.filter(|&n| n > 0).or(Some(DEFAULT_SESSION_LIMIT));
     InventoryFilters {
         source_id: f.source_filter.clone(),
         frame_type: f.frame_filter.map(frame_type_to_str).map(ToOwned::to_owned),
-        limit: Some(f.limit.unwrap_or(DEFAULT_SESSION_LIMIT)),
+        limit,
         offset: f.offset,
     }
 }
