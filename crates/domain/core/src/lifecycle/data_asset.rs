@@ -86,4 +86,3 @@ impl std::fmt::Display for EntityType {
         write!(f, "{}", self.as_str())
     }
 }
-

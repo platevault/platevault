@@ -529,11 +529,7 @@ fn is_system_permitted(from: &str, to: &str) -> bool {
                     && t == project::ProjectState::Ready)
         }
         // Non-project entities pass raw strings; the original logic applies.
-        _ => {
-            from == "blocked"
-                || to == "blocked"
-                || (from == "setup_incomplete" && to == "ready")
-        }
+        _ => from == "blocked" || to == "blocked" || (from == "setup_incomplete" && to == "ready"),
     }
 }
 

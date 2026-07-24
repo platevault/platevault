@@ -369,7 +369,7 @@ pub async fn emit_unarchive_transition(
         .await
         .map_err(|e| HealthError::NotFound(format!("project {project_id}: {e}")))?;
 
-    if row.lifecycle != "archived" {
+    if !domain_core::project::validate::is_read_only(&row.lifecycle) {
         return Ok(());
     }
 

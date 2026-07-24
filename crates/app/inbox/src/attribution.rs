@@ -330,7 +330,10 @@ async fn same_optic_train_candidates(
                 framing_id: Some(f.id.clone()),
                 target_id: f.target_id.clone(),
                 match_score: match_score_from_distance(dist, pointing_tolerance_deg),
-                reopen: Some(DomainProjectState::parse_str(&project.lifecycle).is_some_and(DomainProjectState::reopens_on_new_data)),
+                reopen: Some(
+                    DomainProjectState::parse_str(&project.lifecycle)
+                        .is_some_and(DomainProjectState::reopens_on_new_data),
+                ),
                 optic_mismatch: None,
             },
             // US6 AS3: a mosaic project's first NEW panel (pointing matches
@@ -342,7 +345,10 @@ async fn same_optic_train_candidates(
                 framing_id: None,
                 target_id: project_target_id,
                 match_score: 0.5,
-                reopen: Some(DomainProjectState::parse_str(&project.lifecycle).is_some_and(DomainProjectState::reopens_on_new_data)),
+                reopen: Some(
+                    DomainProjectState::parse_str(&project.lifecycle)
+                        .is_some_and(DomainProjectState::reopens_on_new_data),
+                ),
                 optic_mismatch: None,
             },
         });
@@ -402,7 +408,10 @@ async fn flag_optic_difference_candidates(
             framing_id: None,
             target_id: Some(target_id.to_owned()),
             match_score: 0.3,
-            reopen: Some(DomainProjectState::parse_str(&project.lifecycle).is_some_and(DomainProjectState::reopens_on_new_data)),
+            reopen: Some(
+                DomainProjectState::parse_str(&project.lifecycle)
+                    .is_some_and(DomainProjectState::reopens_on_new_data),
+            ),
             optic_mismatch: Some(true),
         });
     }
@@ -526,7 +535,9 @@ pub async fn apply_chosen_attribution(
 
     // F-Framing-6: completed-project match -> add + reopen (Q25 revoke/warn).
     let project = projects_repo::get_project(pool, &project_id).await.map_err(db_err)?;
-    let (reopened, raw_subs_archived_warning) = if DomainProjectState::parse_str(&project.lifecycle).is_some_and(DomainProjectState::reopens_on_new_data) {
+    let (reopened, raw_subs_archived_warning) = if DomainProjectState::parse_str(&project.lifecycle)
+        .is_some_and(DomainProjectState::reopens_on_new_data)
+    {
         reopen_completed_project(pool, bus, &project_id).await?
     } else {
         (false, false)
