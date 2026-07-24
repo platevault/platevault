@@ -126,6 +126,17 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 proptest = "1"
 rstest = "0.26"
 
+# Release profile: thin LTO reduces binary size and cross-crate inlining cost
+# without the full-program ThinLTO latency of lto="fat". codegen-units=1 lets
+# LLVM see the whole crate at once, which recovers missed inlining opportunities
+# that remain with the default 16 parallel units.
+# panic=abort is deliberately excluded: task-level panic containment matters
+# more than the ~5% binary-size saving (decision recorded in bead astro-plan-kyo7.15).
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
