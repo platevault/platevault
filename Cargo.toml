@@ -31,6 +31,7 @@ members = [
   "crates/persistence/inbox",
   "crates/persistence/lifecycle",
   "crates/persistence/plans",
+  "crates/persistence/sessions",
   "crates/persistence/targets",
   "crates/project/structure",
   "crates/safe-filename",

@@ -4235,6 +4235,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "persistence_sessions"
+version = "0.1.0"
+dependencies = [
+ "persistence_core",
+ "persistence_sessions",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.19",
+ "time",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "persistence_targets"
 version = "0.1.0"
 dependencies = [
