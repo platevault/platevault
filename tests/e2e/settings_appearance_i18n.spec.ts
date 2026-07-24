@@ -134,7 +134,7 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
     // flip intermediates to Archive so the change is observable. Fires
     // `cleanup_policy_update`, not `settings_update`.
     const row = page
-      .locator('.pv-settings__row')
+      .locator('[data-testid="settings-row"]')
       .filter({ hasText: 'Intermediate files' });
     await expect(row).toBeVisible();
     // SegControl renders WAI-ARIA radio-group semantics (#1010): options are
@@ -165,7 +165,7 @@ test.describe('Journey 10 · Settings configuration model (spec 018)', () => {
     await page.getByRole('button', { name: 'Cleanup', exact: true }).click();
 
     const rowAfter = page
-      .locator('.pv-settings__row')
+      .locator('[data-testid="settings-row"]')
       .filter({ hasText: 'Intermediate files' });
     await expect(rowAfter).toBeVisible();
     // No stomp risk here (single cleanup_policy_get after remount, no competing
@@ -332,7 +332,7 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
     // System + the 4 canonical (warm × 2, cool × 2) themes = 5 swatch cards.
     // Warm Clay/Espresso Dark stay in the registry (still resolve/persist if
     // already chosen — see theme.persistence.test.ts) but no longer render.
-    const swatches = page.locator('.pv-theme-swatch');
+    const swatches = page.locator('[data-testid="theme-swatch"]');
     await expect(swatches).toHaveCount(5);
 
     for (const theme of THEME_CASES) {
@@ -369,7 +369,7 @@ test.describe('Journey 10 · Appearance / 4 themes (spec 043)', () => {
     // #794 repro: switch theme, then navigate away — the choice must not
     // silently revert to the resolved-system dark default.
     await page.goto('/#/targets');
-    await expect(page.locator('.pv-sidebar')).toBeVisible();
+    await expect(page.locator('[data-testid="sidebar"]')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute(
       'data-theme',
       'observatory-cool',
@@ -413,7 +413,7 @@ test.describe('Journey 10 · Language switcher (spec 061 US2)', () => {
     // this group's only control) — `getByText(exact)` would match both, so
     // scope to the group heading specifically.
     await expect(
-      page.locator('.pv-settings__group-title', { hasText: 'Language' }),
+      page.locator('[data-testid="settings-group-title"]', { hasText: 'Language' }),
     ).toBeVisible();
 
     // FR-007: flag + native name both render as visible text.
@@ -527,14 +527,14 @@ test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
   ): Promise<void> {
     await page.setViewportSize({ width: 1100, height });
 
-    const bar = page.locator('.pv-page__bar').first();
+    const bar = page.locator('[data-testid="page-bar"]').first();
     await expect(bar).toBeVisible();
     const barBoxBefore = assertDefined(
       await bar.boundingBox(),
       'action bar boundingBox before scroll',
     );
 
-    const scroller = page.locator('.pv-two-pane__detail').first();
+    const scroller = page.locator('[data-testid="two-pane-detail"]').first();
     // Content must genuinely overflow, else "only content scrolls" is untested.
     const overflow = await scroller.evaluate(
       (el) => el.scrollHeight - el.clientHeight,
@@ -567,7 +567,7 @@ test.describe('Journey 10 · Page-layout convention (spec 043)', () => {
     ).toBeVisible();
     // The top action bar carries the page title.
     await expect(
-      page.locator('.pv-page__bar').getByText('Settings', { exact: true }),
+      page.locator('[data-testid="page-bar"]').getByText('Settings', { exact: true }),
     ).toBeVisible();
 
     await assertBarPinnedWhileContentScrolls(page, 720);
@@ -586,7 +586,7 @@ test.describe('Journey 10 · i18n catalog (spec 046)', () => {
 
     // Known keys must resolve to their English strings, not literal keys.
     await expect(
-      page.locator('.pv-page__bar').getByText('Settings', { exact: true }),
+      page.locator('[data-testid="page-bar"]').getByText('Settings', { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Data Sources', exact: true }),
@@ -608,7 +608,7 @@ test.describe('Journey 10 · i18n catalog (spec 046)', () => {
 
     // Every settings-nav label must be a rendered string, never a raw key.
     const navLabels = await page
-      .locator('.pv-settings__nav-item')
+      .locator('[data-testid="settings-nav-item"]')
       .allInnerTexts();
     expect(navLabels.length).toBeGreaterThan(0);
     for (const label of navLabels) {
@@ -681,7 +681,7 @@ test.describe('Journey 10 · Bottom log viewer (spec 019)', () => {
 
     // Truncation marker is NOT reachable in mock mode (documented above):
     // assert its honest absence rather than fabricating a truncated buffer.
-    await expect(page.locator('.pv-logpanel__truncation-marker')).toHaveCount(
+    await expect(page.locator('[data-testid="logpanel-truncation-marker"]')).toHaveCount(
       0,
     );
 
@@ -719,9 +719,9 @@ test.describe('Journey 10 · Whole-app zoom envelope pins (spec 055 FR-006)', ()
   async function assertShellIntactNoHorizontalOverflow(
     page: Page,
   ): Promise<void> {
-    await expect(page.locator('.pv-sidebar')).toBeVisible();
-    await expect(page.locator('.pv-page__bar').first()).toBeVisible();
-    await expect(page.locator('.pv-frame__main')).toBeVisible();
+    await expect(page.locator('[data-testid="sidebar"]')).toBeVisible();
+    await expect(page.locator('[data-testid="page-bar"]').first()).toBeVisible();
+    await expect(page.locator('[data-testid="frame-main"]')).toBeVisible();
 
     const overflow = await page.evaluate(() => {
       // Runs in-browser (page.evaluate serializes this closure), so it can't
@@ -750,7 +750,7 @@ test.describe('Journey 10 · Whole-app zoom envelope pins (spec 055 FR-006)', ()
     seedSetupComplete(page);
     await page.setViewportSize({ width: 880, height: 576 });
     await page.goto('/#/targets');
-    await expect(page.locator('.pv-sidebar')).toBeVisible();
+    await expect(page.locator('[data-testid="sidebar"]')).toBeVisible();
 
     await assertShellIntactNoHorizontalOverflow(page);
   });

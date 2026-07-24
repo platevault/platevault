@@ -70,7 +70,7 @@ test.describe('inbox ingest · classify / reclassify / confirm (spec 041)', () =
     await expect(page.getByTestId('inbox-item-item-003')).toBeVisible();
 
     // ── No selection yet: the bottom detail dock is not mounted ───────────────
-    await expect(page.locator('.pv-listpage__detail')).toHaveCount(0);
+    await expect(page.locator('[data-testid="listpage-detail"]')).toHaveCount(0);
 
     // ── Richer inbox queue statistics (US6): 3 non-master folders (item-001/
     //    002/003) + 1 master (item-master-dark), broken down per frame type by
@@ -148,7 +148,7 @@ test.describe('inbox ingest · classify / reclassify / confirm (spec 041)', () =
     });
 
     await page.getByTestId('inbox-item-item-001').click();
-    const detail = page.locator('.pv-listpage__detail');
+    const detail = page.locator('[data-testid="listpage-detail"]');
     await expect(detail).toBeVisible({ timeout: 5_000 });
 
     // Spec 058 T012/T035 retired both the multi-type placeholder row and the
@@ -188,7 +188,7 @@ test.describe('inbox ingest · classify / reclassify / confirm (spec 041)', () =
     // FR-015: no leaked/failed-apply error banner, and the selection clears
     // once the (mocked) reclassify succeeds — the bulk-apply affordance is
     // ready to be used again rather than stuck mid-selection.
-    await expect(detail.locator('.pv-inbox-detail__banner-mt2')).toHaveCount(0);
+    await expect(detail.locator('[data-testid="inbox-detail-banner-mt2"]')).toHaveCount(0);
     await expect(selectAll).not.toBeChecked({ timeout: 5_000 });
   });
 
@@ -207,7 +207,7 @@ test.describe('inbox ingest · classify / reclassify / confirm (spec 041)', () =
     // lands (all fixture items are organizationState="unorganized", so this
     // exercises the move-plan path per FR-017/FR-019).
     await page.getByTestId('inbox-item-item-002').click();
-    const detail = page.locator('.pv-listpage__detail');
+    const detail = page.locator('[data-testid="listpage-detail"]');
     await expect(detail).toBeVisible({ timeout: 5_000 });
     await expect(detail).toContainText('dark', { timeout: 5_000 });
 
@@ -365,9 +365,9 @@ test.describe('inbox ingest · classify / reclassify / confirm (spec 041)', () =
     const movePlan = overlay.getByTestId('plan-group-item-002');
     await expect(movePlan).toBeVisible();
     await expect(
-      movePlan.locator('.pv-plan-panel__summary-arrow'),
+      movePlan.locator('[data-testid="plan-panel-summary-arrow"]'),
     ).toBeVisible();
-    await expect(movePlan.locator('.pv-plan-panel__inplace')).toHaveCount(0);
+    await expect(movePlan.locator('[data-testid="plan-panel-inplace"]')).toHaveCount(0);
 
     // The CATALOGUE-IN-PLACE plan (organized source, seeded all-`catalogue`
     // actions where destination == source) is explicitly marked "In place"
@@ -377,12 +377,12 @@ test.describe('inbox ingest · classify / reclassify / confirm (spec 041)', () =
       'plan-group-item-organized-inplace',
     );
     await expect(inPlacePlan).toBeVisible();
-    await expect(inPlacePlan.locator('.pv-plan-panel__inplace')).toBeVisible();
+    await expect(inPlacePlan.locator('[data-testid="plan-panel-inplace"]')).toBeVisible();
     await expect(
       inPlacePlan.getByText('In place', { exact: true }),
     ).toBeVisible();
     await expect(
-      inPlacePlan.locator('.pv-plan-panel__summary-arrow'),
+      inPlacePlan.locator('[data-testid="plan-panel-summary-arrow"]'),
     ).toHaveCount(0);
 
     await expect(

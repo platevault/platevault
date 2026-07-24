@@ -36,7 +36,7 @@ import {
 } from './support/harness';
 import type { Page } from '@playwright/test';
 
-const GROUP_HEADER = '.pv-onb-checklist__group-header';
+const GROUP_HEADER = '[data-testid="onb-checklist-group-header"]';
 
 function groupHeader(page: Page, label: string) {
   return page.locator(GROUP_HEADER).filter({ hasText: label });
@@ -97,14 +97,14 @@ test.describe('onboarding getting-started checklist (spec 056 US2)', () => {
     // #1103: that trigger span is not focusable, so the reveal is owned by the
     // row's CHECKBOX (already in the tab order). BOTH paths are asserted here —
     // asserting only hover is exactly how the keyboard path regressed unnoticed.
-    const tooltip = page.locator('.pv-tooltip');
+    const tooltip = page.locator('[data-testid="tooltip"]');
     const row = page.locator('[data-item-id="sessions.review_first"]');
     const checkbox = row.locator('[role="checkbox"]');
 
     await expect(tooltip).toHaveCount(0);
 
     // 1. Pointer hover on the label.
-    await row.locator('.pv-onb-checklist__item-label').hover();
+    await row.locator('[data-testid="onb-checklist-item-label"]').hover();
     await expect(tooltip).toBeVisible();
     await expect(tooltip).toHaveText(/session/i);
 
@@ -153,7 +153,7 @@ test.describe('onboarding getting-started checklist (spec 056 US2)', () => {
     await openChecklist(page);
 
     const sessionsGroup = page
-      .locator('.pv-onb-checklist__group')
+      .locator('[data-testid="onb-checklist-group"]')
       .filter({ hasText: 'Sessions' });
     // Both Sessions items are manual (non-auto) → checkable in mock mode.
     await page.getByRole('checkbox', { name: 'Review a session' }).click();
@@ -169,7 +169,7 @@ test.describe('onboarding getting-started checklist (spec 056 US2)', () => {
     });
     await expect(header).toContainText('2/2');
     await expect(
-      sessionsGroup.locator('.pv-onb-checklist__group-done'),
+      sessionsGroup.locator('[data-testid="onb-checklist-group-done"]'),
     ).toBeVisible();
     await expect(
       page.getByRole('checkbox', { name: 'Review a session' }),
@@ -203,20 +203,20 @@ test.describe('onboarding getting-started checklist (spec 056 US2)', () => {
 
     // Open the non-modal popover.
     await ring.click();
-    await expect(page.locator('.pv-onb-popover')).toBeVisible();
+    await expect(page.locator('[data-testid="onb-popover"]')).toBeVisible();
     await expect(
-      page.locator('.pv-onb-popover').locator(SECTION),
+      page.locator('[data-testid="onb-popover"]').locator(SECTION),
     ).toBeVisible();
 
     // The ring is a toggle: a second click closes the flyout again.
     await ring.click();
     await expect(ring).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.locator('.pv-onb-popover')).toHaveCount(0);
+    await expect(page.locator('[data-testid="onb-popover"]')).toHaveCount(0);
 
     // Non-modality: with the flyout open there is no blocking backdrop — a
     // sidebar nav item is still directly clickable and navigates.
     await ring.click();
-    await expect(page.locator('.pv-onb-popover')).toBeVisible();
+    await expect(page.locator('[data-testid="onb-popover"]')).toBeVisible();
     await page.getByRole('link', { name: 'Sessions' }).click();
     await expect(page).toHaveURL(/#\/sessions/);
   });
@@ -229,10 +229,10 @@ test.describe('onboarding getting-started checklist (spec 056 US2)', () => {
     await openChecklist(page);
 
     // Collapse the whole Getting-started section (FR-012).
-    const toggle = page.locator('.pv-onb-checklist__section-toggle');
+    const toggle = page.locator('[data-testid="onb-checklist-section-toggle"]');
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.locator('.pv-onb-checklist__groups')).toHaveCount(0);
+    await expect(page.locator('[data-testid="onb-checklist-groups"]')).toHaveCount(0);
 
     // SPA navigation keeps the persisted collapse (mock flag round-trips).
     // Clicking outside the portalled panel also dismisses the flyout, so it
@@ -241,7 +241,7 @@ test.describe('onboarding getting-started checklist (spec 056 US2)', () => {
     await expect(page).toHaveURL(/#\/inbox/);
     await openChecklist(page);
     await expect(
-      page.locator('.pv-onb-checklist__section-toggle'),
+      page.locator('[data-testid="onb-checklist-section-toggle"]'),
     ).toHaveAttribute('aria-expanded', 'false');
   });
 
@@ -254,14 +254,14 @@ test.describe('onboarding getting-started checklist (spec 056 US2)', () => {
 
     // Collapse the whole section; the mock persists `sidebarCollapsed` to
     // localStorage, so it must survive a full page reload (app restart).
-    const toggle = page.locator('.pv-onb-checklist__section-toggle');
+    const toggle = page.locator('[data-testid="onb-checklist-section-toggle"]');
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
     await page.reload();
     await openChecklist(page);
     await expect(
-      page.locator('.pv-onb-checklist__section-toggle'),
+      page.locator('[data-testid="onb-checklist-section-toggle"]'),
     ).toHaveAttribute('aria-expanded', 'false');
   });
 

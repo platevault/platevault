@@ -66,7 +66,7 @@ test.describe('lifecycle transitions · write-side seam (spec 008 / design-v4)',
     // ProjectsTable (spec 043 redesign) renders each project as a
     // `tr.pv-projects-table__row` containing the project name and a state tag.
     const projectRow = page
-      .locator('.pv-projects-table__row')
+      .locator('[data-kind="projects-table-row"]')
       .filter({ hasText: 'NGC 7000 Narrowband' })
       .first();
     await expect(projectRow).toBeVisible({ timeout: 8_000 });
@@ -114,15 +114,15 @@ test.describe('lifecycle transitions · write-side seam (spec 008 / design-v4)',
     // All three mock projects should appear.
     await expect(
       page
-        .locator('.pv-projects-table__row')
+        .locator('[data-kind="projects-table-row"]')
         .filter({ hasText: 'NGC 7000 Narrowband' }),
     ).toBeVisible({ timeout: 8_000 });
     await expect(
-      page.locator('.pv-projects-table__row').filter({ hasText: 'M31 LRGB' }),
+      page.locator('[data-kind="projects-table-row"]').filter({ hasText: 'M31 LRGB' }),
     ).toBeVisible();
     await expect(
       page
-        .locator('.pv-projects-table__row')
+        .locator('[data-kind="projects-table-row"]')
         .filter({ hasText: 'IC 1396 SHO' }),
     ).toBeVisible();
   });

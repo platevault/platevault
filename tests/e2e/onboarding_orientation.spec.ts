@@ -27,10 +27,10 @@
 import { test, expect, seedSetupComplete } from './support/harness';
 import type { Page } from '@playwright/test';
 
-const TOOLTIP = '.pv-onboarding-tooltip';
-const PRIMARY = '.pv-onboarding-tooltip__primary';
-const BACK = '.pv-onboarding-tooltip__back';
-const SKIP = '.pv-onboarding-tooltip__skip';
+const TOOLTIP = '[data-testid="onboarding-tooltip"]';
+const PRIMARY = '[data-testid="onboarding-tooltip-primary"]';
+const BACK = '[data-testid="onboarding-tooltip-back"]';
+const SKIP = '[data-testid="onboarding-tooltip-skip"]';
 
 const STOP_TITLES = [
   'Start in the Inbox',

@@ -119,7 +119,7 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
     // filters + status + any rendered options), not the full page — small and
     // directly relevant.
     let outer_html_script = r"
-        var el = document.querySelector('.pv-target-search');
+        var el = document.querySelector("[data-testid='target-search']");
         return el ? el.outerHTML : '<.pv-target-search not found in DOM>';
     ";
     match app.driver.execute(outer_html_script, vec![]).await {
@@ -138,9 +138,9 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
     // renders as `text=""`, which is indistinguishable from a real element
     // whose text is genuinely empty and would misdirect the next investigation.
     for (label, css) in [
-        ("error state", ".pv-field-error"),
-        ("resolving (SIMBAD phase-2) state", ".pv-target-search__status--resolving"),
-        ("generic status line", ".pv-target-search__status"),
+        ("error state", "[data-testid='field-error']"),
+        ("resolving (SIMBAD phase-2) state", "[data-testid='target-search-status-resolving']"),
+        ("generic status line", "[data-testid='target-search-status']"),
     ] {
         match app.driver.find(By::Css(css)).await {
             Ok(el) => {
@@ -240,10 +240,10 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
             return s.length > n ? s.slice(0, n) + '...[truncated]' : s;
         }
         try {
-            var input = document.querySelector('.pv-target-search__input');
+            var input = document.querySelector("[data-testid='target-search-input']");
             var controlsId = input ? input.getAttribute('aria-controls') : null;
             var listboxEl = controlsId ? document.getElementById(controlsId) : null;
-            var optionEls = document.querySelectorAll('.pv-target-search__option');
+            var optionEls = document.querySelectorAll("[data-testid='target-search-option']");
             var roleListboxEls = document.querySelectorAll('[role="listbox"]');
             var roleOptionEls = document.querySelectorAll('[role="option"]');
             callback({
@@ -353,7 +353,7 @@ async fn wait_targets_in_ipc_then_invalidate(app: &E2eApp) -> anyhow::Result<()>
         let poll_deadline = tokio::time::Instant::now() + Duration::from_secs(10);
         let mut found = false;
         while tokio::time::Instant::now() < poll_deadline {
-            if app.driver.find(By::Css(".pv-targets-table__row")).await.is_ok() {
+            if app.driver.find(By::Css("[data-testid='targets-table-row']")).await.is_ok() {
                 found = true;
                 break;
             }
@@ -386,7 +386,7 @@ async fn dump_astronomy_diagnostics(app: &E2eApp) -> String {
     let mut report = String::from("=== astronomy-columns diagnostics ===\n");
 
     let row_html_script = r"
-        var el = document.querySelector('.pv-targets-table__row');
+        var el = document.querySelector("[data-testid='targets-table-row']");
         return el ? el.outerHTML : '<.pv-targets-table__row not found in DOM>';
     ";
     match app.driver.execute(row_html_script, vec![]).await {
@@ -427,8 +427,8 @@ async fn add_target_via_ui(app: &E2eApp, query: &str) -> anyhow::Result<String> 
     // Poll for the dialog to actually mount: it opens asynchronously after the
     // trigger click, same route/render race `E2eApp::find_waiting` documents.
     let popup =
-        app.find_waiting(By::Css(".pv-add-target__popup"), "the Add-target dialog popup").await?;
-    let input = popup.find(By::Css(".pv-target-search__input")).await?;
+        app.find_waiting(By::Css("[data-testid='add-target-popup']"), "the Add-target dialog popup").await?;
+    let input = popup.find(By::Css("[data-testid='target-search-input']")).await?;
 
     // #841 (dialog focus race, product fix filed + out of this branch's
     // scope): a keystroke can land on the modal's own close (X) button
@@ -458,7 +458,7 @@ async fn add_target_via_ui(app: &E2eApp, query: &str) -> anyhow::Result<String> 
     // `page.locator(...)` is page-scoped by default.
     let deadline = tokio::time::Instant::now() + UI_TIMEOUT;
     let option = loop {
-        if let Ok(opt) = app.driver.find(By::Css(".pv-target-search__option")).await {
+        if let Ok(opt) = app.driver.find(By::Css("[data-testid='target-search-option']")).await {
             break opt;
         }
         if tokio::time::Instant::now() >= deadline {
@@ -733,7 +733,7 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
     // reliably, and the aria-label mirror is the accessible contract.
     add_target_via_ui(&app, "M 1").await?;
     let row =
-        app.find_waiting(By::Css(".pv-targets-table__row"), "a targets-table row to open").await?;
+        app.find_waiting(By::Css("[data-testid='targets-table-row']"), "a targets-table row to open").await?;
     row.click().await?;
     let best_date =
         app.wait_testid("proptable-tooltip-bestdate", UI_TIMEOUT).await.map_err(|e| {
@@ -767,9 +767,9 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
 /// every one of these and would pass against a completely unpinned table.
 async fn measure_pinned_columns(app: &E2eApp) -> anyhow::Result<serde_json::Value> {
     let script = r#"
-        var sc = document.querySelector('.pv-targets-table__scroll');
+        var sc = document.querySelector("[data-testid='targets-table-scroll']");
         if (!sc) { return { error: 'no .pv-targets-table__scroll in the DOM' }; }
-        var row = sc.querySelector('.pv-targets-table__row');
+        var row = sc.querySelector("[data-testid='targets-table-row']");
         if (!row) { return { error: 'no .pv-targets-table__row rendered' }; }
         var headRow = sc.querySelector('thead tr');
         var scLeft = sc.getBoundingClientRect().left;
@@ -883,7 +883,7 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
     // DEFAULT_FIND_TIMEOUT (20s) is insufficient (bead astro-plan-h182).
     wait_targets_in_ipc_then_invalidate(&app).await?;
     app.find_waiting(
-        By::Css(".pv-targets-table__scroll"),
+        By::Css("[data-testid='targets-table-scroll']"),
         "the loaded Targets table scroll container",
     )
     .await?;
@@ -942,7 +942,7 @@ async fn targets_ui_identity_columns_stay_pinned_while_table_scrolls() -> anyhow
     // Scroll to the far right — the worst case for identity loss.
     app.driver
         .execute(
-            "var sc = document.querySelector('.pv-targets-table__scroll');\
+            "var sc = document.querySelector(\"[data-testid='targets-table-scroll']\");\
              sc.scrollLeft = sc.scrollWidth; return sc.scrollLeft;",
             vec![],
         )
@@ -1020,7 +1020,7 @@ async fn rendered_side_width(app: &E2eApp) -> anyhow::Result<i64> {
     let v: Value = app
         .driver
         .execute(
-            "var el = document.querySelector('.pv-listpage__detail--side');\
+            "var el = document.querySelector(\"[data-testid='listpage-detail']\");\
              return el ? Math.round(el.getBoundingClientRect().width) : -1;",
             vec![],
         )

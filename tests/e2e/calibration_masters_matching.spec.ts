@@ -87,20 +87,20 @@ test.describe('calibration · masters listing + matching (spec 040 / 007)', () =
     ).not.toBeVisible();
 
     // The dense full-width masters table renders (not the loading/empty state).
-    const table = page.locator('.pv-calib-table');
+    const table = page.locator('[data-testid="calib-table"]');
     await expect(table).toBeVisible({ timeout: 8_000 });
 
     // Each master is its OWN row, labelled by type + its discriminator
     // (exposure for darks, filter for flats) — FR-005/FR-006 "individual
     // items distinguished by filter/exposure", not a folder lump.
     const darkRow = page
-      .locator('.pv-calib-table__row')
+      .locator('[data-kind="calib-table-row"]')
       .filter({ hasText: 'Master Dark · 120s' });
     const flatRow = page
-      .locator('.pv-calib-table__row')
+      .locator('[data-kind="calib-table-row"]')
       .filter({ hasText: 'Master Flat · Ha' });
     const biasRow = page
-      .locator('.pv-calib-table__row')
+      .locator('[data-kind="calib-table-row"]')
       .filter({ hasText: 'Master Bias' })
       .first();
     await expect(darkRow).toBeVisible();
@@ -138,19 +138,19 @@ test.describe('calibration · masters listing + matching (spec 040 / 007)', () =
     seedSetupComplete(page);
     await page.goto('/#/calibration');
     await disableOnboarding(page);
-    await expect(page.locator('.pv-calib-table')).toBeVisible({
+    await expect(page.locator('[data-testid="calib-table"]')).toBeVisible({
       timeout: 8_000,
     });
 
     // m-1 (ageDays 245 > 90-day threshold) is flagged as aging IN-ROW.
     const agingRow = page
-      .locator('.pv-calib-table__row')
+      .locator('[data-kind="calib-table-row"]')
       .filter({ hasText: 'Master Dark · 120s' });
     await expect(agingRow.getByText('aging 245d')).toBeVisible();
 
     // m-5 (ageDays 38 < threshold) is fresh — no aging pill on its row.
     const freshRow = page
-      .locator('.pv-calib-table__row')
+      .locator('[data-kind="calib-table-row"]')
       .filter({ hasText: 'Master Dark · 300s' })
       .first();
     await expect(freshRow).toBeVisible();
@@ -158,7 +158,7 @@ test.describe('calibration · masters listing + matching (spec 040 / 007)', () =
 
     // Select the aging master → the right-side MasterDetail pane mounts.
     await agingRow.click();
-    const detail = page.locator('.pv-listpage__detail');
+    const detail = page.locator('[data-testid="listpage-detail"]');
     await expect(detail).toBeVisible({ timeout: 5_000 });
 
     // Fingerprint PropertyTable exposes the master's real metadata
@@ -203,7 +203,7 @@ test.describe('calibration · masters listing + matching (spec 040 / 007)', () =
     // the CalibrationMatchPanel for the project's linked source sessions
     // (inv-001 / inv-002 from mockProjectDetail008).
     const projectRow = page
-      .locator('.pv-projects-table__row')
+      .locator('[data-kind="projects-table-row"]')
       .filter({ hasText: 'NGC 7000 Narrowband' })
       .first();
     await expect(projectRow).toBeVisible({ timeout: 8_000 });

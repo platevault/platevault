@@ -72,9 +72,9 @@ async function openThemeStep(
 async function expectNoHorizontalPageOverflow(page: Page): Promise<void> {
   const geometry = await page.evaluate(() => {
     const selectors = [
-      '.pv-step-theme',
-      '.pv-theme-picker',
-      '.pv-theme-specimen',
+      '[data-testid="step-theme"]',
+      '[data-testid="theme-picker"]',
+      '[data-testid="theme-specimen"]',
     ];
     return {
       documentFits:

@@ -245,9 +245,9 @@ export async function landOnMockRoute(page: Page, hash: string): Promise<void> {
 }
 
 /** Sidebar trigger that opens the Getting-started flyout. */
-export const ONB_RING = '.pv-onb-ring';
+export const ONB_RING = '[data-testid="onb-ring"]';
 /** The checklist itself — only in the DOM while the flyout is open. */
-export const ONB_SECTION = '.pv-onb-checklist';
+export const ONB_SECTION = '[data-testid="onb-checklist"]';
 
 /**
  * Open the Getting-started flyout and wait for the checklist inside it.

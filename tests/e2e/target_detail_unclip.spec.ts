@@ -66,15 +66,15 @@ test.describe('Regression · Target detail pane content unclipped (#816)', () =>
     await page.goto('/#/targets');
     await disableOnboarding(page);
 
-    const m31 = page.locator('.pv-targets-table__row', { hasText: 'M 31' });
+    const m31 = page.locator('[data-testid="targets-table-row"]', { hasText: 'M 31' });
     await expect(m31).toBeVisible({ timeout: 8_000 });
     await m31.click();
 
-    const pane = page.locator('.pv-detail--fill');
+    const pane = page.locator('[data-testid="detail-fill"]');
     // The pane's content lives in DetailPanel's shared scroll region (#1107).
     // Before that, each feature supplied its own — here `.pv-planner__scroll`,
     // which is now a plain layout div inside the shared one.
-    const scrollRegion = page.locator('.pv-detailpanel__content');
+    const scrollRegion = page.locator('[data-testid="detailpanel-content"]');
     await expect(scrollRegion).toBeVisible();
 
     const backBtn = page.getByRole('button', { name: '← All targets' });

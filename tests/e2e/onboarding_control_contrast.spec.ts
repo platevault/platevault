@@ -65,7 +65,7 @@ test('shared form controls use the dedicated boundary token in every theme', asy
           '[data-control="toggle"]',
         );
         const disabledToggle = host.querySelector<HTMLElement>(
-          '.pv-toggle--disabled',
+          '[data-testid="toggle"]',
         );
         if (!input || !select || !toggle || !disabledToggle) {
           throw new Error('missing control probe');

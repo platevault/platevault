@@ -102,14 +102,14 @@ test.describe('wizard navigation accessibility', () => {
         ).toBeVisible();
       }
 
-      const bar = page.locator('.pv-wizard__steps-bar');
-      const cards = bar.locator('.pv-wizard__steps-card');
+      const bar = page.locator('[data-testid="wizard-steps-bar"]');
+      const cards = bar.locator('[data-testid="wizard-steps-card"]');
       await expect(cards).toHaveText([...SETUP_LOCALES[locale].labels]);
 
       const geometry = await bar.evaluate((element) => {
         const barRect = element.getBoundingClientRect();
         const cardGeometry = Array.from(
-          element.querySelectorAll<HTMLElement>('.pv-wizard__steps-card'),
+          element.querySelectorAll<HTMLElement>('[data-testid="wizard-steps-card"]'),
         ).map((card) => {
           const rect = card.getBoundingClientRect();
           const style = getComputedStyle(card);
@@ -130,7 +130,7 @@ test.describe('wizard navigation accessibility', () => {
           horizontalOverflow: element.scrollWidth > element.clientWidth + 1,
           overflowHintDisplay: getComputedStyle(
             element.parentElement?.querySelector(
-              '.pv-wizard__steps-overflow-hint',
+              '[data-testid="wizard-steps-overflow-hint"]',
             ) ?? element,
           ).display,
           cards: cardGeometry,
@@ -193,11 +193,11 @@ test.describe('wizard navigation accessibility', () => {
     await page.setViewportSize({ width: 320, height: 720 });
     await openSetupWizard(page);
 
-    const bar = page.locator('.pv-wizard__steps-bar');
+    const bar = page.locator('[data-testid="wizard-steps-bar"]');
     const overflowAffordance = await bar.evaluate((element) => {
       const style = getComputedStyle(element);
       const hint = element.parentElement?.querySelector<HTMLElement>(
-        '.pv-wizard__steps-overflow-hint',
+        '[data-testid="wizard-steps-overflow-hint"]',
       );
       const hintRect = hint?.getBoundingClientRect();
       return {
@@ -212,7 +212,7 @@ test.describe('wizard navigation accessibility', () => {
     expect(overflowAffordance.horizontalOverflow).toBe(true);
     expect(overflowAffordance.scrollbarColor).not.toBe('auto');
     expect(overflowAffordance.hintVisible).toBe(true);
-    await expect(page.locator('.pv-wizard__steps-overflow-hint')).toHaveText(
+    await expect(page.locator('[data-testid="wizard-steps-overflow-hint"]')).toHaveText(
       '↔',
     );
     await page.screenshot({
@@ -250,7 +250,7 @@ test.describe('wizard navigation accessibility', () => {
       const itemRect = element.getBoundingClientRect();
       const barRect = bar.getBoundingClientRect();
       const hintRect = bar.parentElement
-        ?.querySelector('.pv-wizard__steps-overflow-hint')
+        ?.querySelector('[data-testid="wizard-steps-overflow-hint"]')
         ?.getBoundingClientRect();
       return {
         documentOverflow:
@@ -279,10 +279,10 @@ test.describe('wizard navigation accessibility', () => {
     });
 
     const footerOrder = await page
-      .locator('.pv-wizard__content--centered')
+      .locator('[data-testid="wizard-content-centered"]')
       .evaluate((content) => {
-        const scroll = content.closest('.pv-wizard__scroll');
-        const footer = content.querySelector('.pv-wizard__footer');
+        const scroll = content.closest('[data-testid="wizard-scroll"]');
+        const footer = content.querySelector('[data-testid="wizard-footer"]');
         return {
           footerInScroll: Boolean(scroll?.contains(footer)),
           footerInContent: Boolean(footer && content.contains(footer)),

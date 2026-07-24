@@ -57,7 +57,7 @@ function seedObservingSite(page: Page): void {
 
 /** Locate a target row by its designation text (mirrors targets_planner.spec.ts). */
 function targetRow(page: Page, designation: string) {
-  return page.locator('.pv-targets-table__row', { hasText: designation });
+  return page.locator('[data-testid="targets-table-row"]', { hasText: designation });
 }
 
 test.describe('Spec 055 · semantic base layer + mono restoration (Phase 3)', () => {
@@ -125,7 +125,7 @@ test.describe('Spec 055 · semantic base layer + mono restoration (Phase 3)', ()
     // A registered data-source root's path (real, mock-fixture-backed data —
     // apps/desktop/src/api/mocks.ts `mockRoots`) — not the fabricated Advanced
     // pane db-path #601/#602 removed. Same `<code class="pv-mono">` mechanism.
-    const rootPath = page.locator('.pv-data-sources__root-path', {
+    const rootPath = page.locator('[data-testid="data-sources-root-path"]', {
       hasText: '/astro/raw',
     });
     await expect(rootPath).toBeVisible();

@@ -43,16 +43,16 @@ test.describe('onboarding removal + restore controls (spec 056 US5)', () => {
     await remove.click();
     // One-line confirm copy comes straight from `onboarding_section_remove_confirm`.
     await expect(
-      page.locator('.pv-onb-checklist__menu-confirm-text'),
+      page.locator('[data-testid="onb-checklist-menu-confirm-text"]'),
     ).toContainText('Remove the getting-started checklist?');
     await expect(
-      page.locator('.pv-onb-checklist__menu-confirm-yes'),
+      page.locator('[data-testid="onb-checklist-menu-confirm-yes"]'),
     ).toBeVisible();
 
     // Cancel closes the confirm and leaves the section in place.
-    await page.locator('.pv-onb-checklist__menu-confirm-no').click();
+    await page.locator('[data-testid="onb-checklist-menu-confirm-no"]').click();
     await expect(
-      page.locator('.pv-onb-checklist__menu-confirm-text'),
+      page.locator('[data-testid="onb-checklist-menu-confirm-text"]'),
     ).toHaveCount(0);
     await expect(page.locator(SECTION)).toBeVisible();
   });
@@ -79,7 +79,7 @@ test.describe('onboarding removal + restore controls (spec 056 US5)', () => {
     await page
       .getByRole('menuitem', { name: 'Remove getting started' })
       .click();
-    await page.locator('.pv-onb-checklist__menu-confirm-yes').click();
+    await page.locator('[data-testid="onb-checklist-menu-confirm-yes"]').click();
 
     // Removal unmounts the flyout AND its sidebar ring trigger, and the mock
     // persists `sectionHidden`, so a reload must not bring either back.
@@ -101,7 +101,7 @@ test.describe('onboarding removal + restore controls (spec 056 US5)', () => {
     await page
       .getByRole('menuitem', { name: 'Remove getting started' })
       .click();
-    await page.locator('.pv-onb-checklist__menu-confirm-yes').click();
+    await page.locator('[data-testid="onb-checklist-menu-confirm-yes"]').click();
     await expect(page.locator(SECTION)).toHaveCount(0);
 
     // … then restore from Settings → Advanced.

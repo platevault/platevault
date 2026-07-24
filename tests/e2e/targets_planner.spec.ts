@@ -88,7 +88,7 @@ function seedObservingSite(page: Page): void {
 
 /** Locate a target row by its designation text (only 2 seed rows exist). */
 function targetRow(page: Page, designation: string) {
-  return page.locator('.pv-targets-table__row', { hasText: designation });
+  return page.locator('[data-testid="targets-table-row"]', { hasText: designation });
 }
 
 // Column order in TargetsTable (see COLUMNS; sparkline + visible columns
@@ -134,7 +134,7 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
 
     // The table-level "add a site" info banner is shown.
     await expect(
-      page.locator('.pv-targets-table__no-site-banner'),
+      page.locator('[data-testid="targets-table-no-site-banner"]'),
     ).toBeVisible();
 
     // The seed catalog still lists targets (list is independent of the gate)…
@@ -145,7 +145,7 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
     //   - lunar / opposition cells render "—" (no `.pv-targets-cell--lunardist`
     //     span is emitted when the value is unknown);
     //   - max altitude degrades to 0°.
-    await expect(page.locator('.pv-targets-cell--lunardist')).toHaveCount(0);
+    await expect(page.locator('[data-testid="targets-cell-lunardist"]')).toHaveCount(0);
     await expect(m31.locator('td').nth(COL.opposition)).toHaveText('—');
     await expect(m31.locator('td').nth(COL.maxAlt)).toHaveText('0°');
   });
@@ -176,11 +176,11 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
     await expect(moon).toBeVisible({ timeout: 8_000 });
     await expect(moon).toContainText('Moon tonight');
     // Real astronomy-engine output: an 8-phase name…
-    await expect(moon.locator('.pv-moon-summary__phase')).toHaveText(
+    await expect(moon.locator('[data-testid="moon-summary-phase"]')).toHaveText(
       /new moon|crescent|quarter|gibbous|full moon/i,
     );
     // …and an illumination % + waxing/waning direction (FR-002/FR-003).
-    await expect(moon.locator('.pv-moon-summary__meta')).toHaveText(
+    await expect(moon.locator('[data-testid="moon-summary-meta"]')).toHaveText(
       /\d{1,3}% illuminated · (waxing|waning)/,
     );
     // The full text equivalent is exposed via aria-label (accessibility).
@@ -191,7 +191,7 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
 
     // The gated-off prompt + banner are gone now a site exists.
     await expect(page.getByTestId('planner-site-prompt')).toHaveCount(0);
-    await expect(page.locator('.pv-targets-table__no-site-banner')).toHaveCount(
+    await expect(page.locator('[data-testid="targets-table-no-site-banner"]')).toHaveCount(
       0,
     );
 
@@ -208,7 +208,7 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
     //    for a coordinate-bearing target) renders as a degree value, not "—". ──
     const lunar = m31.locator('td').nth(COL.lunarDist);
     await expect(lunar).toHaveText(/\d{1,3}°/);
-    await expect(lunar.locator('.pv-targets-cell--lunardist')).toBeVisible();
+    await expect(lunar.locator('[data-testid="targets-cell-lunardist"]')).toBeVisible();
 
     // ── 047 US4: real next-opposition date + relative "in N days/months". ─────
     const opposition = m31.locator('td').nth(COL.opposition);
@@ -216,7 +216,7 @@ test.describe('PLANNER REGRESSION GUARD · site gate (spec 047 D7, #450)', () =>
     await expect(opposition).not.toHaveText('—');
 
     // ── 047 US3: moon-driven filter guidance pills render in the Filters cell. ─
-    await expect(m31.locator('.pv-guidance-cell__trigger')).toBeVisible();
+    await expect(m31.locator('[data-testid="guidance-cell-trigger"]')).toBeVisible();
 
     // ── 044: imaging-time column present; renders an honest value ("2h10m"-
     //    style when the target clears the threshold tonight, else "—" with a
@@ -355,7 +355,7 @@ test.describe('Planner date picker + per-band moon-free hours (spec 044 Track B 
 
     const m31 = targetRow(page, 'M 31');
     await expect(m31).toBeVisible({ timeout: 8_000 });
-    await m31.locator('.pv-guidance-cell__trigger').click();
+    await m31.locator('[data-testid="guidance-cell-trigger"]').click();
 
     const popup = page.getByTestId('guidance-explain-popup');
     await expect(popup).toBeVisible();
@@ -396,7 +396,7 @@ test.describe('Target catalog + SIMBAD resolve-on-demand (spec 035 / 023)', () =
     await expect(search).toBeVisible();
     await search.fill('M 31');
 
-    const option = page.locator('.pv-target-search__option', {
+    const option = page.locator('[data-testid="target-search-option"]', {
       hasText: 'M 31',
     });
     await expect(option).toBeVisible({ timeout: 8_000 });
@@ -424,7 +424,7 @@ test.describe('Target catalog + SIMBAD resolve-on-demand (spec 035 / 023)', () =
     // "IC 1805" is not in the seed; only the long-tail resolver can supply it.
     await search.fill('IC 1805');
 
-    const option = page.locator('.pv-target-search__option', {
+    const option = page.locator('[data-testid="target-search-option"]', {
       hasText: 'IC 1805',
     });
     await expect(option).toBeVisible({ timeout: 8_000 });
@@ -466,7 +466,7 @@ test.describe('Honest empty-state disclosure (no fabricated data)', () => {
 
     // Favourites (#54): every star is un-filled and reports aria-pressed=false —
     // no fabricated "starred" state.
-    const star = m31.locator('.pv-targets-star');
+    const star = m31.locator('[data-testid="targets-star"]');
     await expect(star).toHaveAttribute('aria-pressed', 'false');
     await expect(star).toContainText('☆');
   });
@@ -528,7 +528,7 @@ test.describe('Planner observability iteration (spec 044 Phase 10, 2026-07-15)',
     // never a bare 0 or an unexplained "—" (SC-015).
     const imgTime = m31.locator('td').nth(COL.imagingTime);
     await expect(imgTime).toContainText('☀');
-    await expect(imgTime.locator('.pv-imgtime-glyph--warn')).toBeVisible();
+    await expect(imgTime.locator('[data-testid="imgtime-glyph-warn"]')).toBeVisible();
 
     // Detail: the same zero is stated as a sentence (FR-029)…
     await m31.click();
@@ -539,7 +539,7 @@ test.describe('Planner observability iteration (spec 044 Phase 10, 2026-07-15)',
     // plot is shaded non-dark (exactly one full-width twilight rect —
     // pre-iteration the shading was omitted entirely and a green usable fill
     // contradicted the 0-hour stat, which was the #817 report).
-    await expect(page.locator('.pv-planner__graph-twilight')).toHaveCount(1);
+    await expect(page.locator('[data-testid="planner-graph-twilight"]')).toHaveCount(1);
   });
 
   /**
@@ -670,10 +670,10 @@ test.describe('Design-review follow-ups (2026-07-11): #614 dead CTA, #618 header
 
     // The Moon summary / site-prompt no longer lives inside the pinned top
     // bar — it renders in the table's own header zone instead.
-    const topBar = page.locator('.pv-topbar');
+    const topBar = page.locator('[data-testid="topbar"]');
     await expect(topBar.getByTestId('moon-summary')).toHaveCount(0);
     await expect(
-      page.locator('.pv-targets-table__wrap').getByTestId('moon-summary'),
+      page.locator('[data-testid="targets-table-wrap"]').getByTestId('moon-summary'),
     ).toBeVisible();
 
     // "Add target" is the pinned bar's one primary CTA.

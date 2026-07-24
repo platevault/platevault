@@ -622,7 +622,7 @@ async fn classification_cell_labels(app: &E2eApp) -> anyhow::Result<Vec<String>>
             r#"
             return JSON.stringify(
                 Array.prototype.map.call(
-                    document.querySelectorAll('.pv-inbox-row__classification'),
+                    document.querySelectorAll("[data-testid='inbox-row-classification']"),
                     function (el) { return el.textContent || ''; }
                 )
             );
