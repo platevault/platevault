@@ -172,7 +172,7 @@ export function ProjectNotesSection({
 
   if (!editing) {
     return (
-      <div className="pv-project-notes__root">
+      <div className="pv-project-notes__root" data-testid="project-notes-root">
         {draft ? (
           <div data-testid="notes-body" className="pv-project-notes__body">
             {draft}
@@ -202,7 +202,7 @@ export function ProjectNotesSection({
   }
 
   return (
-    <div className="pv-project-notes__root">
+    <div className="pv-project-notes__root" data-testid="project-notes-root">
       <textarea
         data-testid="notes-textarea"
         className="pv-input pv-project-notes__textarea"

@@ -147,7 +147,7 @@ export function StepSourceFolders({
   const indexed = entries.map((entry, index) => ({ entry, index }));
 
   return (
-    <div className="pv-step-sources">
+    <div className="pv-step-sources" data-testid="step-sources">
       <p className="pv-step-sources__intro">{m.setup_sources_intro()}</p>
 
       <div className="pv-step-sources__groups">
@@ -249,7 +249,10 @@ function SourceGroup({
     >
       {/* Single compact header row: label + count + status + add button.
           When empty this is the entire card height. */}
-      <div className="pv-step-sources__group-header">
+      <div
+        className="pv-step-sources__group-header"
+        data-testid="step-sources-group-header"
+      >
         <div className="pv-step-sources__group-summary">
           <h3 id={headingId} className="pv-step-sources__group-header-label">
             {SOURCE_KIND_LABELS[kind]()}
@@ -320,7 +323,10 @@ function SourceRow({
   const isInbox = entry.kind === 'inbox';
   return (
     <div className="pv-step-sources__row">
-      <div className="pv-step-sources__row-main">
+      <div
+        className="pv-step-sources__row-main"
+        data-testid="step-sources-row-main"
+      >
         <span className="pv-step-sources__row-path pv-mono" title={entry.path}>
           {entry.path}
         </span>
@@ -389,7 +395,10 @@ function AddFolderButton({
 
   return (
     <div className="pv-step-sources__add-controls">
-      <div className="pv-step-sources__add-actions">
+      <div
+        className="pv-step-sources__add-actions"
+        data-testid="step-sources-add-actions"
+      >
         <Btn
           size="sm"
           variant="primary"

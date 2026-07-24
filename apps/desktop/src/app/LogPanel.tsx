@@ -359,7 +359,11 @@ export function LogPanel() {
       <Collapsible.Panel className="pv-logpanel__body">
         {/* Truncation marker (A4) */}
         {truncated && (
-          <div className="pv-logpanel__truncation-marker" role="note">
+          <div
+            className="pv-logpanel__truncation-marker"
+            data-testid="logpanel-truncation-marker"
+            role="note"
+          >
             {truncatedCount != null
               ? m.logpanel_history_gap_count({ count: String(truncatedCount) })
               : m.logpanel_history_gap()}

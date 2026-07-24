@@ -26,7 +26,7 @@ export const Toggle = forwardRef<HTMLLabelElement, ToggleProps>(function Toggle(
     ...labelRest
   } = rest;
   return (
-    <label ref={ref} className={cls} {...labelRest}>
+    <label ref={ref} className={cls} data-testid="toggle" {...labelRest}>
       <input
         type="checkbox"
         checked={checked}

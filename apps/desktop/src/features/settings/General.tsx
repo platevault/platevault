@@ -72,10 +72,13 @@ export function General() {
       </SettingsSection>
 
       <div className="pv-settings__group">
-        <div className="pv-settings__group-title">
+        <div
+          className="pv-settings__group-title"
+          data-testid="settings-group-title"
+        >
           {m.settings_language_title()}
         </div>
-        <div className="pv-settings__row">
+        <div className="pv-settings__row" data-testid="settings-row">
           <div className="pv-settings__row-label">
             {m.settings_language_label()}
           </div>
@@ -91,10 +94,13 @@ export function General() {
       </div>
 
       <div className="pv-settings__group">
-        <div className="pv-settings__group-title">
+        <div
+          className="pv-settings__group-title"
+          data-testid="settings-group-title"
+        >
           {m.settings_general_fontsize_title()}
         </div>
-        <div className="pv-settings__row">
+        <div className="pv-settings__row" data-testid="settings-row">
           <div className="pv-settings__row-label">
             {m.settings_general_fontsize_title()}
           </div>
@@ -119,10 +125,13 @@ export function General() {
       </div>
 
       <div className="pv-settings__group">
-        <div className="pv-settings__group-title">
+        <div
+          className="pv-settings__group-title"
+          data-testid="settings-group-title"
+        >
           {m.settings_general_zoom_title()}
         </div>
-        <div className="pv-settings__row">
+        <div className="pv-settings__row" data-testid="settings-row">
           <div className="pv-settings__row-label">
             {m.settings_general_zoom_label()}
           </div>
@@ -147,10 +156,13 @@ export function General() {
       </div>
 
       <div className="pv-settings__group">
-        <div className="pv-settings__group-title">
+        <div
+          className="pv-settings__group-title"
+          data-testid="settings-group-title"
+        >
           {m.settings_general_density_title()}
         </div>
-        <div className="pv-settings__row">
+        <div className="pv-settings__row" data-testid="settings-row">
           <div className="pv-settings__row-label">
             {m.settings_general_density_label()}
           </div>

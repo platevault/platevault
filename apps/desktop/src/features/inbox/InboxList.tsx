@@ -407,6 +407,7 @@ export function InboxList({
           const classifying = classifyingSourceGroupId === group.sourceGroupId;
           return {
             _testid: `inbox-source-group-${group.sourceGroupId}`,
+            _rowKind: 'inbox-table-row',
             _rowClassName: 'pv-inbox-table__row pv-inbox-table__row--muted',
             detection: (
               <span className="pv-inbox-cell__path-wrap">
@@ -419,7 +420,10 @@ export function InboxList({
               </span>
             ),
             type: (
-              <span className="pv-inbox-row__classification pv-inbox-row__classification--pending">
+              <span
+                className="pv-inbox-row__classification pv-inbox-row__classification--pending"
+                data-testid="inbox-row-classification"
+              >
                 {classifying
                   ? m.inbox_source_group_classifying()
                   : m.inbox_state_not_yet_classified()}
@@ -449,6 +453,7 @@ export function InboxList({
         const mod = classificationMod(item);
         return {
           _testid: `inbox-item-${item.inboxItemId}`,
+          _rowKind: 'inbox-table-row',
           _rowClassName: [
             'pv-inbox-table__row',
             selected ? 'pv-inbox-table__row--selected' : '',
@@ -487,6 +492,7 @@ export function InboxList({
           type: (
             <span
               className={`pv-inbox-row__classification pv-inbox-row__classification--${mod}`}
+              data-testid="inbox-row-classification"
             >
               {classificationLabel(item)}
             </span>

@@ -204,7 +204,10 @@ export function PlanGroupRow({
         <span className="pv-plan-panel__group-dest">
           {allInPlace ? (
             <>
-              <span className="pv-plan-panel__inplace">
+              <span
+                className="pv-plan-panel__inplace"
+                data-testid="plan-panel-inplace"
+              >
                 {m.inbox_inplace_label()}
               </span>
               <code
@@ -216,7 +219,11 @@ export function PlanGroupRow({
             </>
           ) : (
             <>
-              <span className="pv-plan-panel__summary-arrow" aria-hidden="true">
+              <span
+                className="pv-plan-panel__summary-arrow"
+                data-testid="plan-panel-summary-arrow"
+                aria-hidden="true"
+              >
                 →
               </span>
               <code
@@ -396,7 +403,10 @@ export function PlanGroupRow({
                     {a.fromPath}
                   </code>
                   {inPlace ? (
-                    <span className="pv-plan-panel__inplace">
+                    <span
+                      className="pv-plan-panel__inplace"
+                      data-testid="plan-panel-inplace"
+                    >
                       {m.inbox_inplace_label()}
                     </span>
                   ) : (

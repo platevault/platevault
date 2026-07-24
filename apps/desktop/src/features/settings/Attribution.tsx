@@ -76,7 +76,10 @@ function BundledSoftware() {
 
   return (
     <div className="pv-settings__group">
-      <div className="pv-settings__group-title">
+      <div
+        className="pv-settings__group-title"
+        data-testid="settings-group-title"
+      >
         {m.settings_attribution_bundled_title()}
       </div>
       <p className="pv-settings__group-note">
@@ -122,7 +125,10 @@ export function Attribution() {
 function DataSources() {
   return (
     <div className="pv-settings__group">
-      <div className="pv-settings__group-title">
+      <div
+        className="pv-settings__group-title"
+        data-testid="settings-group-title"
+      >
         {m.settings_attribution_title()}
       </div>
       <p className="pv-settings__group-note">{m.settings_attribution_note()}</p>

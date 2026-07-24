@@ -25,7 +25,7 @@ export const Pill = forwardRef<HTMLSpanElement, PillProps>(function Pill(
     .filter(Boolean)
     .join(' ');
   return (
-    <span ref={ref} className={cls} {...rest}>
+    <span ref={ref} className={cls} data-testid="pill" {...rest}>
       {children}
     </span>
   );

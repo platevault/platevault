@@ -292,6 +292,7 @@ export function ListPageLayout({
         {hasDetail && (
           <section
             className={detailClass}
+            data-testid="listpage-detail"
             // eslint-disable-next-line no-restricted-syntax -- dynamic: user-resizable side-panel width persisted per dockId, not a static design token
             style={detailStyle}
             role="complementary"

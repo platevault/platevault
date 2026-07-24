@@ -299,7 +299,11 @@ function SpotlightFor({
 
   if (!selector || status === 'missing') {
     return (
-      <div className="pv-onb-spotlight-unavailable" role="status">
+      <div
+        className="pv-onb-spotlight-unavailable"
+        data-testid="onb-spotlight-unavailable"
+        role="status"
+      >
         <span>
           {m.onboarding_find_unavailable({ item: itemLabel(item.itemId) })}
         </span>

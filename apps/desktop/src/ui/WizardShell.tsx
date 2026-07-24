@@ -157,10 +157,11 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
           </div>
         ) : (
           /* Centered layout (setup wizard) */
-          <div className="pv-wizard__scroll">
+          <div className="pv-wizard__scroll" data-testid="wizard-scroll">
             <div
               ref={stepContentRef}
               className="pv-wizard__content--centered"
+              data-testid="wizard-content-centered"
               role="region"
               aria-label={stepLabel}
               tabIndex={-1}
@@ -170,6 +171,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
               <nav
                 ref={progressRef}
                 className="pv-wizard__steps-bar"
+                data-testid="wizard-steps-bar"
                 aria-label={m.ui_wizard_setup_progress_aria()}
               >
                 {steps.map((step, i) => {
@@ -193,6 +195,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                       key={step.label}
                       type="button"
                       className={cardClass}
+                      data-testid="wizard-steps-card"
                       aria-current={isActive ? 'step' : undefined}
                       disabled={step.disabled}
                       onClick={() => onStepSelect(i)}
@@ -203,6 +206,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
                     <div
                       key={step.label}
                       className={cardClass}
+                      data-testid="wizard-steps-card"
                       aria-current={isActive ? 'step' : undefined}
                     >
                       {label}
@@ -212,6 +216,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
               </nav>
               <span
                 className="pv-wizard__steps-overflow-hint"
+                data-testid="wizard-steps-overflow-hint"
                 aria-hidden="true"
               >
                 ↔
@@ -220,7 +225,7 @@ export const WizardShell = forwardRef<HTMLDivElement, WizardShellProps>(
               {children}
 
               {hasCenteredFooter && (
-                <div className="pv-wizard__footer">
+                <div className="pv-wizard__footer" data-testid="wizard-footer">
                   <div className="pv-wizard__footer-inner">{footer}</div>
                 </div>
               )}

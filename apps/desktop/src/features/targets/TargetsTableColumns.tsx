@@ -160,6 +160,7 @@ export function ImagingTimeCell({
           role="img"
           aria-label={title}
           className="pv-imgtime-glyph pv-imgtime-glyph--warn"
+          data-testid="imgtime-glyph-warn"
         >
           {ZERO_REASON_GLYPH[reason]}
         </span>
@@ -181,6 +182,7 @@ export function ImagingTimeCell({
           role="img"
           aria-label={title}
           className="pv-imgtime-glyph pv-imgtime-glyph--warn"
+          data-testid="imgtime-glyph-warn"
         >
           ☾
         </span>

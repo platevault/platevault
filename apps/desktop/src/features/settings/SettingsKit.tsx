@@ -33,11 +33,21 @@ export function SettingsSection({
     <div className="pv-settings__group">
       {action ? (
         <div className="pv-settings__group-header pv-settings__group-header--ruled">
-          <div className="pv-settings__group-title">{title}</div>
+          <div
+            className="pv-settings__group-title"
+            data-testid="settings-group-title"
+          >
+            {title}
+          </div>
           {action}
         </div>
       ) : (
-        <div className="pv-settings__group-title">{title}</div>
+        <div
+          className="pv-settings__group-title"
+          data-testid="settings-group-title"
+        >
+          {title}
+        </div>
       )}
       {children}
     </div>
@@ -53,7 +63,7 @@ export interface SettingsRowProps {
 
 export function SettingsRow({ label, info, children }: SettingsRowProps) {
   return (
-    <div className="pv-settings__row">
+    <div className="pv-settings__row" data-testid="settings-row">
       <div className="pv-settings__row-label">
         <span>{label}</span>
         {info ? <InfoTip tip={info} /> : null}

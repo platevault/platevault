@@ -302,6 +302,7 @@ export function SessionsTable({
       const connLabel = sourceState ? connectivityLabel(sourceState) : null;
       return {
         _testid: `sessions-row-${s.id}`,
+        _rowKind: 'sessions-table-row',
         _guideAnchor:
           rowIndex === firstItemIndex ? 'sessions.review-row' : undefined,
         _rowClassName:

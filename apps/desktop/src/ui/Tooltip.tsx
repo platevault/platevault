@@ -55,7 +55,11 @@ export function Tooltip({
         </BaseTooltip.Trigger>
         <BaseTooltip.Portal>
           <BaseTooltip.Positioner sideOffset={sideOffset}>
-            <BaseTooltip.Popup id={popupId} className="pv-tooltip">
+            <BaseTooltip.Popup
+              id={popupId}
+              className="pv-tooltip"
+              data-testid="tooltip"
+            >
               {content}
             </BaseTooltip.Popup>
           </BaseTooltip.Positioner>

@@ -172,6 +172,7 @@ export function Sidebar() {
   return (
     <nav
       className={clsx('pv-sidebar', collapsed && 'pv-sidebar--collapsed')}
+      data-testid="sidebar"
       aria-label={m.nav_aria_label()}
     >
       {/* Header: brand mark + collapse, single line */}
@@ -203,7 +204,12 @@ export function Sidebar() {
         {NAV_GROUPS.map((group) => (
           <div key={group.label()} className="pv-sidebar__group">
             {!collapsed && (
-              <div className="pv-sidebar__group-label">{group.label()}</div>
+              <div
+                className="pv-sidebar__group-label"
+                data-testid="sidebar-group-label"
+              >
+                {group.label()}
+              </div>
             )}
             {group.items.map(renderItem)}
           </div>

@@ -70,6 +70,7 @@ export function GuidanceCell({
     <Popover.Root>
       <Popover.Trigger
         className="pv-guidance-cell__trigger"
+        data-testid="guidance-cell-trigger"
         openOnHover
         nativeButton
         onClick={(e) => e.stopPropagation()}

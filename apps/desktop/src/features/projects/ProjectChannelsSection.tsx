@@ -48,7 +48,10 @@ export function ProjectChannelsSection({
         ) : undefined
       }
     >
-      <div className="pv-project-detail__channels-section">
+      <div
+        className="pv-project-detail__channels-section"
+        data-testid="project-detail-channels-section"
+      >
         {channels.map((ch) => (
           <div key={ch.label} className="pv-project-detail__channel-row">
             <span className="pv-project-detail__ch-letter">{ch.label[0]}</span>

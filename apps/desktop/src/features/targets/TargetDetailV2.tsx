@@ -286,7 +286,17 @@ export function TargetDetailV2({
 
   return (
     <DetailPanel fill title={titleContent} titleExtra={titleExtraContent}>
-      <div className="pv-planner__scroll">
+      {/* #816 → #1107: this div used to be the pane's own scroll region,
+          because DetailPanel rendered `children` as a bare sibling of the
+          header with nothing establishing overflow — so everything below
+          (identity/tonight, coverage, links, display label, aliases, projects,
+          notes, back button) was silently clipped by the pane's
+          overflow:hidden.
+          DetailPanel now always wraps children in `.pv-detailpanel__content`,
+          which owns the scrolling for every page, so this is a plain layout
+          div. Do NOT give it `overflow-y` again — that nests a second scroller
+          inside the shared one and produces double scrollbars. */}
+      <div className="pv-planner__scroll" data-testid="planner-scroll">
         {/* ── Identity + Tonight — left-packed: [facts A][facts B][tonight] ── */}
         <div className="pv-planner__cols">
           <div className="pv-planner__col">

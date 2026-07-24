@@ -292,7 +292,7 @@ export function TargetsTable({
 
   if (count === 0 && loading) {
     return (
-      <div className="pv-targets-table__wrap">
+      <div className="pv-targets-table__wrap" data-testid="targets-table-wrap">
         {moonHeader}
         <div className="pv-targets-table__empty">
           <Skeleton variant="block" count={8} label={m.common_loading()} />
@@ -303,7 +303,7 @@ export function TargetsTable({
 
   if (count === 0 && !loading) {
     return (
-      <div className="pv-targets-table__wrap">
+      <div className="pv-targets-table__wrap" data-testid="targets-table-wrap">
         {moonHeader}
         <div className="pv-targets-table__empty">{emptyMessage}</div>
       </div>
@@ -311,10 +311,14 @@ export function TargetsTable({
   }
 
   return (
-    <div className="pv-targets-table__wrap">
+    <div className="pv-targets-table__wrap" data-testid="targets-table-wrap">
       {moonHeader}
       {!site && (
-        <Banner variant="info" className="pv-targets-table__no-site-banner">
+        <Banner
+          variant="info"
+          className="pv-targets-table__no-site-banner"
+          data-testid="targets-table-no-site-banner"
+        >
           {m.targets_planner_no_site_banner()}{' '}
           <Link
             to="/settings/$pane"
@@ -325,7 +329,11 @@ export function TargetsTable({
           </Link>
         </Banner>
       )}
-      <div ref={scrollRef} className="pv-targets-table__scroll">
+      <div
+        ref={scrollRef}
+        className="pv-targets-table__scroll"
+        data-testid="targets-table-scroll"
+      >
         <table className="pv-table pv-targets-table">
           {/* Fixed-layout colgroup: column widths are pinned so the table
               does NOT recompute widths per windowed page as pill text varies
@@ -457,6 +465,7 @@ export function TargetsTable({
               return (
                 <tr
                   key={row.key}
+                  data-testid="targets-table-row"
                   data-index={index}
                   className={
                     'pv-targets-table__row pv-table__row--clickable' +
@@ -483,6 +492,7 @@ export function TargetsTable({
                         'pv-targets-star' +
                         (isFav ? ' pv-targets-star--active' : '')
                       }
+                      data-testid="targets-star"
                       aria-label={
                         isFav
                           ? m.targets_star_unfavourite_aria({
@@ -582,6 +592,7 @@ export function TargetsTable({
                     ) : (
                       <span
                         className="pv-targets-cell--lunardist"
+                        data-testid="targets-cell-lunardist"
                         title={m.targets_table_lunar_dist_title({
                           deg: Math.round(moon.lunarSeparationDeg),
                         })}

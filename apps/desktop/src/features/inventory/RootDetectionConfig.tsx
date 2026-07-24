@@ -77,7 +77,10 @@ function RootDetectionConfigPanel({
       className="pv-settings__group"
       data-testid={`root-detection-${rootId}`}
     >
-      <div className="pv-settings__group-title">
+      <div
+        className="pv-settings__group-title"
+        data-testid="settings-group-title"
+      >
         {m.inventory_detection_title()}
         <Btn size="sm" variant="ghost" onClick={onClose}>
           {m.common_close()}
@@ -93,7 +96,7 @@ function RootDetectionConfigPanel({
 
       {data && (
         <>
-          <div className="pv-settings__row">
+          <div className="pv-settings__row" data-testid="settings-row">
             <div className="pv-settings__row-label">
               {m.inventory_detection_mode_label()}
             </div>
@@ -118,7 +121,7 @@ function RootDetectionConfigPanel({
             </div>
           </div>
 
-          <div className="pv-settings__row">
+          <div className="pv-settings__row" data-testid="settings-row">
             <div className="pv-settings__row-label">
               {m.inventory_detection_live_label()}
             </div>
@@ -140,7 +143,7 @@ function RootDetectionConfigPanel({
             </div>
           </div>
 
-          <div className="pv-settings__row">
+          <div className="pv-settings__row" data-testid="settings-row">
             <div className="pv-settings__row-label">
               {m.inventory_detection_scheduled_label()}
             </div>
@@ -162,7 +165,7 @@ function RootDetectionConfigPanel({
             </div>
           </div>
 
-          <div className="pv-settings__row">
+          <div className="pv-settings__row" data-testid="settings-row">
             <div className="pv-settings__row-label">
               {m.inventory_detection_on_open_label()}
             </div>
@@ -184,7 +187,7 @@ function RootDetectionConfigPanel({
             </div>
           </div>
 
-          <div className="pv-settings__row">
+          <div className="pv-settings__row" data-testid="settings-row">
             <div className="pv-settings__row-label">
               {m.inventory_detection_follow_symlinks_label()}
             </div>

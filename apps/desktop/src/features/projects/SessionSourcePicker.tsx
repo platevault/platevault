@@ -121,7 +121,7 @@ export function SessionSourcePicker({
   }
 
   return (
-    <div className="pv-source-picker">
+    <div className="pv-source-picker" data-testid="source-picker">
       {/* Filter row */}
       <div className="pv-source-picker__filter-row">
         <input
