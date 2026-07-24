@@ -86,3 +86,9 @@ reattribute
 # directly, which already performs the same
 # `app_core_cache::invalidate_protection_defaults()` call this wrapper makes.
 set_global_protection_default
+
+# persistence_core::test_support::setup_db — public so every persistence
+# sub-crate (persistence_inbox, persistence_lifecycle, etc.) can call it
+# from their own test code. No production path calls it; that is by design
+# for a test fixture helper. Introduced by the persistence split (PR #1488).
+setup_db
