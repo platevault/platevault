@@ -5988,6 +5988,13 @@ export type InventoryListFilters_Deserialize = {
 	sourceFilter: string | null,
 	/**  When set, limits sessions to the given frame type. */
 	frameFilter: InventoryFrameType | null,
+	/**
+	 *  Maximum sessions returned per source root (default 1 000 server-side
+	 *  when omitted). Existing callers that omit the field keep working.
+	 */
+	limit: number | null,
+	/**  Sessions to skip before applying `limit` (0-based, per source root). */
+	offset: number | null,
 };
 
 /**  Optional filters for `inventory.list`. */
@@ -5996,6 +6003,13 @@ export type InventoryListFilters_Serialize = {
 	sourceFilter?: string | null,
 	/**  When set, limits sessions to the given frame type. */
 	frameFilter?: InventoryFrameType | null,
+	/**
+	 *  Maximum sessions returned per source root (default 1 000 server-side
+	 *  when omitted). Existing callers that omit the field keep working.
+	 */
+	limit?: number | null,
+	/**  Sessions to skip before applying `limit` (0-based, per source root). */
+	offset?: number | null,
 };
 
 /**  Request envelope for `inventory.list`. */

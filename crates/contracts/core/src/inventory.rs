@@ -176,6 +176,13 @@ pub struct InventoryListFilters {
     /// When set, limits sessions to the given frame type.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub frame_filter: Option<InventoryFrameType>,
+    /// Maximum sessions returned per source root (default 1 000 server-side
+    /// when omitted). Existing callers that omit the field keep working.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    /// Sessions to skip before applying `limit` (0-based, per source root).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u32>,
 }
 
 /// Request envelope for `inventory.list`.

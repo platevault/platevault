@@ -38,8 +38,11 @@ pub struct SessionProjectionRow {
     pub session_kind: String,
     /// Frame type string: "light", "dark", "flat", "bias", or derived "mixed".
     pub frame_type: String,
-    /// JSON array of frame ids.
-    pub frame_ids: String,
+    /// Pre-aggregated frame count from `json_array_length(frame_ids)`.
+    pub frame_count: i64,
+    /// First element of the `frame_ids` JSON array (`json_extract(...,'$[0]')`),
+    /// `None` when the session has no frames.
+    pub first_frame_id: Option<String>,
     /// Target id (acquisition sessions only; NULL for calibration).
     pub target_id: Option<String>,
     /// Target primary designation when linked.
@@ -65,6 +68,10 @@ pub struct InventoryFilters {
     /// When `Some`, restrict to sessions with the given frame type.
     /// `"mixed"` matches heterogeneous sessions.
     pub frame_type: Option<String>,
+    /// Cap on sessions returned per source root. `None` means no cap.
+    pub limit: Option<u32>,
+    /// Number of sessions to skip (per-source, applied after type filter).
+    pub offset: Option<u32>,
 }
 
 /// List all `LibraryRoot` rows that have at least one session under them.
@@ -124,19 +131,22 @@ pub async fn list_sessions_for_root(
     // Acquisition sessions — target_name is always NULL (gen-1 `target`
     // table is unreferenced per spec 036 T007; gen-3 canonical_target is
     // the live store and is not part of the inventory projection).
+    // `frame_ids` is aggregated in SQL to avoid deserialising the full JSON
+    // blob in Rust; only the count and first element are needed here.
     let acq_rows: Vec<SessionProjectionRow> = sqlx::query_as(
         r"
         SELECT
-            acs.id                          AS id,
-            acs.session_key                 AS session_key,
-            acs.root_id                     AS root_id,
-            'acquisition'                   AS session_kind,
-            'light'                         AS frame_type,
-            acs.frame_ids                   AS frame_ids,
-            acs.target_id                   AS target_id,
-            NULL                            AS target_name,
-            acs.created_at                  AS created_at,
-            acs.notes                       AS notes
+            acs.id                                      AS id,
+            acs.session_key                             AS session_key,
+            acs.root_id                                 AS root_id,
+            'acquisition'                               AS session_kind,
+            'light'                                     AS frame_type,
+            json_array_length(acs.frame_ids)            AS frame_count,
+            json_extract(acs.frame_ids, '$[0]')         AS first_frame_id,
+            acs.target_id                               AS target_id,
+            NULL                                        AS target_name,
+            acs.created_at                              AS created_at,
+            acs.notes                                   AS notes
         FROM acquisition_session acs
         WHERE acs.root_id = ?
         ORDER BY acs.created_at DESC
@@ -150,16 +160,17 @@ pub async fn list_sessions_for_root(
     let cal_rows: Vec<SessionProjectionRow> = sqlx::query_as(
         r"
         SELECT
-            cs.id                           AS id,
-            cs.session_key                  AS session_key,
-            cs.root_id                      AS root_id,
-            'calibration'                   AS session_kind,
-            cs.kind                         AS frame_type,
-            cs.frame_ids                    AS frame_ids,
-            NULL                            AS target_id,
-            NULL                            AS target_name,
-            cs.created_at                   AS created_at,
-            cs.notes                        AS notes
+            cs.id                                       AS id,
+            cs.session_key                              AS session_key,
+            cs.root_id                                  AS root_id,
+            'calibration'                               AS session_kind,
+            cs.kind                                     AS frame_type,
+            json_array_length(cs.frame_ids)             AS frame_count,
+            json_extract(cs.frame_ids, '$[0]')          AS first_frame_id,
+            NULL                                        AS target_id,
+            NULL                                        AS target_name,
+            cs.created_at                               AS created_at,
+            cs.notes                                    AS notes
         FROM calibration_session cs
         WHERE cs.root_id = ?
         ORDER BY cs.created_at DESC
@@ -173,10 +184,22 @@ pub async fn list_sessions_for_root(
 
     // Apply post-fetch frame_type filter — cannot be trivially done in a
     // single UNION query with dynamic placeholders.
-    let filtered =
+    let type_filtered: Vec<SessionProjectionRow> =
         all.into_iter().filter(|row| frame_filter.is_none_or(|ff| row.frame_type == ff)).collect();
 
-    Ok(filtered)
+    // Apply optional offset/limit for pagination (per-source, after type filter).
+    let offset = filters.offset.unwrap_or(0) as usize;
+    let sliced = if offset >= type_filtered.len() {
+        vec![]
+    } else {
+        let tail = &type_filtered[offset..];
+        match filters.limit {
+            Some(n) => tail.iter().take(n as usize).cloned().collect(),
+            None => tail.to_vec(),
+        }
+    };
+
+    Ok(sliced)
 }
 
 /// A project row used only for session-link lookup.
@@ -849,5 +872,120 @@ mod tests {
         assert_eq!(rows[0].master_id, "master-dark-1");
         assert_eq!(rows[0].calibration_type, "dark");
         assert!((rows[0].confidence - 0.95).abs() < f64::EPSILON);
+    }
+
+    // ── list_sessions_for_root — frame_count / first_frame_id aggregation ────
+
+    /// Verifies that `json_array_length` and `json_extract('$[0]')` return the
+    /// same values a Rust parse of the raw `frame_ids` column would produce.
+    /// This is the parity assertion called for by the task brief.
+    #[tokio::test]
+    async fn list_sessions_frame_count_and_first_frame_id_match_raw_array() {
+        let db = setup_db().await;
+
+        sqlx::query(
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-fc', 'Lib', 'local', '/lib', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        // Three frames: frame_count must be 3, first_frame_id must be "f1".
+        sqlx::query(
+            "INSERT INTO acquisition_session (id, session_key, root_id, frame_ids, created_at) \
+             VALUES ('acq-fc', 'k', 'root-fc', '[\"f1\",\"f2\",\"f3\"]', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        // Empty array: frame_count 0, first_frame_id None.
+        sqlx::query(
+            "INSERT INTO calibration_session \
+                (id, session_key, root_id, frame_ids, kind, created_at) \
+             VALUES ('cal-fc', 'k', 'root-fc', '[]', 'dark', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let filters = InventoryFilters::default();
+        let rows = list_sessions_for_root(db.pool(), "root-fc", &filters).await.unwrap();
+        assert_eq!(rows.len(), 2);
+
+        // Rows are ordered DESC by created_at — both share the same timestamp
+        // so order is deterministic within type (acq before cal in UNION).
+        let acq = rows.iter().find(|r| r.id == "acq-fc").expect("acq-fc missing");
+        assert_eq!(acq.frame_count, 3, "json_array_length should count 3 elements");
+        assert_eq!(
+            acq.first_frame_id.as_deref(),
+            Some("f1"),
+            "json_extract should return first element"
+        );
+
+        let cal = rows.iter().find(|r| r.id == "cal-fc").expect("cal-fc missing");
+        assert_eq!(cal.frame_count, 0, "empty array → 0");
+        assert!(cal.first_frame_id.is_none(), "empty array → None");
+    }
+
+    /// Verifies offset/limit pagination bounds results per source root.
+    #[tokio::test]
+    async fn list_sessions_limit_and_offset_bound_results() {
+        let db = setup_db().await;
+
+        sqlx::query(
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-pg', 'Lib', 'local', '/lib', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        // Insert 4 sessions with distinct timestamps so order is stable.
+        for i in 0..4u32 {
+            sqlx::query(
+                "INSERT INTO acquisition_session (id, session_key, root_id, frame_ids, created_at) \
+                 VALUES (?, 'k', 'root-pg', '[]', ?)",
+            )
+            .bind(format!("acq-pg-{i}"))
+            .bind(format!("2026-01-0{d}T00:00:00Z", d = i + 1))
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
+
+        // No cap: all 4.
+        let all = list_sessions_for_root(db.pool(), "root-pg", &InventoryFilters::default())
+            .await
+            .unwrap();
+        assert_eq!(all.len(), 4);
+
+        // limit=2: first 2 rows (newest first per ORDER BY created_at DESC).
+        let limited = list_sessions_for_root(
+            db.pool(),
+            "root-pg",
+            &InventoryFilters { limit: Some(2), ..Default::default() },
+        )
+        .await
+        .unwrap();
+        assert_eq!(limited.len(), 2);
+
+        // offset=3, no limit: last 1 row.
+        let paged = list_sessions_for_root(
+            db.pool(),
+            "root-pg",
+            &InventoryFilters { offset: Some(3), ..Default::default() },
+        )
+        .await
+        .unwrap();
+        assert_eq!(paged.len(), 1);
+
+        // offset past end: empty.
+        let past = list_sessions_for_root(
+            db.pool(),
+            "root-pg",
+            &InventoryFilters { offset: Some(10), ..Default::default() },
+        )
+        .await
+        .unwrap();
+        assert!(past.is_empty());
     }
 }

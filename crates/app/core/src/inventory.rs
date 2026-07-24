@@ -135,13 +135,20 @@ pub async fn list(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/// Default per-source session cap when the caller does not specify a limit.
+/// Prevents unbounded fetches on large libraries (50 k+ frame libraries may
+/// carry hundreds of sessions per root).
+const DEFAULT_SESSION_LIMIT: u32 = 1_000;
+
 fn filters_to_db(filters: Option<&InventoryListFilters>) -> InventoryFilters {
     let Some(f) = filters else {
-        return InventoryFilters::default();
+        return InventoryFilters { limit: Some(DEFAULT_SESSION_LIMIT), ..Default::default() };
     };
     InventoryFilters {
         source_id: f.source_filter.clone(),
         frame_type: f.frame_filter.map(frame_type_to_str).map(ToOwned::to_owned),
+        limit: Some(f.limit.unwrap_or(DEFAULT_SESSION_LIMIT)),
+        offset: f.offset,
     }
 }
 
@@ -180,17 +187,6 @@ fn map_frame_type(db_kind: &str) -> InventoryFrameType {
     }
 }
 
-/// Count frame_ids JSON array length (fallback to 0 on parse failure).
-fn count_frames(frame_ids_json: &str) -> u32 {
-    serde_json::from_str::<Vec<serde_json::Value>>(frame_ids_json)
-        .map_or(0, |v| u32::try_from(v.len()).unwrap_or(0))
-}
-
-/// First frame id in a session's `frame_ids` JSON array, if any.
-fn first_frame_id(frame_ids_json: &str) -> Option<String> {
-    serde_json::from_str::<Vec<String>>(frame_ids_json).ok()?.into_iter().next()
-}
-
 /// Parent folder of a root-relative frame path, or `None` when the frame sits
 /// directly at the root (no separator). Handles both `/` and `\` so a
 /// Windows-captured relative path resolves the same as a POSIX one.
@@ -209,7 +205,7 @@ async fn build_folder_map(
 ) -> Result<HashMap<String, String>, String> {
     let first_frames: Vec<(String, String)> = sessions
         .iter()
-        .filter_map(|s| first_frame_id(&s.frame_ids).map(|fid| (s.id.clone(), fid)))
+        .filter_map(|s| s.first_frame_id.clone().map(|fid| (s.id.clone(), fid)))
         .collect();
     let frame_ids: Vec<String> = first_frames.iter().map(|(_, fid)| fid.clone()).collect();
 
@@ -347,7 +343,7 @@ fn project_row_to_session(
     folder_map: &HashMap<String, String>,
     camera_map: &HashMap<String, String>,
 ) -> InventorySession {
-    let frames = count_frames(&row.frame_ids);
+    let frames = u32::try_from(row.frame_count).unwrap_or(0);
     let relative_path = folder_map.get(&row.id).cloned();
     let name = derive_session_name(&row);
     let target = effective_target(&row);
@@ -502,12 +498,10 @@ mod tests {
         assert!(matches!(map_frame_type("mixed"), InventoryFrameType::Light));
     }
 
-    #[test]
-    fn count_frames_parses_json_array() {
-        assert_eq!(count_frames("[\"a\",\"b\",\"c\"]"), 3);
-        assert_eq!(count_frames("[]"), 0);
-        assert_eq!(count_frames("invalid"), 0);
-    }
+    // count_frames / first_frame_id Rust helpers were removed: frame_count and
+    // first_frame_id are now computed by SQLite (json_array_length /
+    // json_extract) and returned as typed columns in SessionProjectionRow.
+    // Parity is verified by the DB-level integration tests in persistence_db.
 
     // ── parse_session_key_fields (#564 backend half) ──────────────────────────
 
