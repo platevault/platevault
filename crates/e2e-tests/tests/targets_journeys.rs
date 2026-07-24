@@ -120,11 +120,11 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
     // directly relevant.
     let outer_html_script = r"
         var el = document.querySelector("[data-testid='target-search']");
-        return el ? el.outerHTML : '<.pv-target-search not found in DOM>';
+        return el ? el.outerHTML : '<[data-testid="target-search"] not found in DOM>';
     ";
     match app.driver.execute(outer_html_script, vec![]).await {
         Ok(ret) => match ret.convert::<String>() {
-            Ok(html) => report.push_str(&format!("--- .pv-target-search outerHTML ---\n{html}\n")),
+            Ok(html) => report.push_str(&format!("--- [data-testid='target-search'] outerHTML ---\n{html}\n")),
             Err(e) => report.push_str(&format!("(failed to deserialise outerHTML: {e})\n")),
         },
         Err(e) => report.push_str(&format!("(outerHTML script execution failed: {e})\n")),
@@ -370,7 +370,7 @@ async fn wait_targets_in_ipc_then_invalidate(app: &E2eApp) -> anyhow::Result<()>
                 .await
                 .map_or_else(|_| "<unknown>".to_owned(), |u| u.to_string());
             anyhow::bail!(
-                "no .pv-targets-table__row appeared within TARGETS_TABLE_TIMEOUT \
+                "no [data-testid='targets-table-row'] appeared within TARGETS_TABLE_TIMEOUT \
                  after repeated invalidate-and-poll cycles; current URL: {url}"
             );
         }
@@ -387,12 +387,12 @@ async fn dump_astronomy_diagnostics(app: &E2eApp) -> String {
 
     let row_html_script = r"
         var el = document.querySelector("[data-testid='targets-table-row']");
-        return el ? el.outerHTML : '<.pv-targets-table__row not found in DOM>';
+        return el ? el.outerHTML : '<[data-testid="targets-table-row"] not found in DOM>';
     ";
     match app.driver.execute(row_html_script, vec![]).await {
         Ok(ret) => match ret.convert::<String>() {
             Ok(html) => report
-                .push_str(&format!("--- first .pv-targets-table__row outerHTML ---\n{html}\n")),
+                .push_str(&format!("--- first [data-testid='targets-table-row'] outerHTML ---\n{html}\n")),
             Err(e) => report.push_str(&format!("(failed to deserialise row outerHTML: {e})\n")),
         },
         Err(e) => report.push_str(&format!("(row outerHTML script execution failed: {e})\n")),
@@ -768,9 +768,9 @@ async fn targets_planner_real_astronomy_after_site_creation() -> anyhow::Result<
 async fn measure_pinned_columns(app: &E2eApp) -> anyhow::Result<serde_json::Value> {
     let script = r#"
         var sc = document.querySelector("[data-testid='targets-table-scroll']");
-        if (!sc) { return { error: 'no .pv-targets-table__scroll in the DOM' }; }
+        if (!sc) { return { error: 'no [data-testid="targets-table-scroll"] in the DOM' }; }
         var row = sc.querySelector("[data-testid='targets-table-row']");
-        if (!row) { return { error: 'no .pv-targets-table__row rendered' }; }
+        if (!row) { return { error: 'no [data-testid="targets-table-row"] rendered' }; }
         var headRow = sc.querySelector('thead tr');
         var scLeft = sc.getBoundingClientRect().left;
         function offset(el) {
@@ -1209,4 +1209,3 @@ async fn slow_targets_ui_dock_pin_and_width_survive_a_real_restart() -> anyhow::
     );
 
     app.shutdown().await
-}

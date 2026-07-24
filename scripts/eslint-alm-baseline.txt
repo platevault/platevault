@@ -7,7 +7,8 @@
 # for a genuinely non-user-facing string).
 # Regenerate with: node scripts/check-eslint-baseline.mjs --generate
 src/app/CommandPalette.tsx	280	alm/require-root-testid
-src/app/LogPanel.tsx	412	alm/require-root-testid
+src/app/LogEntryRow.tsx	69	alm/require-root-testid
+src/app/LogPanel.tsx	201	alm/require-root-testid
 src/app/LogPanelContext.tsx	155	alm/require-root-testid
 src/app/OperationStatusContext.tsx	46	alm/require-root-testid
 src/app/PageStatusContext.tsx	52	alm/require-root-testid
@@ -42,7 +43,7 @@ src/features/inbox/InboxDetail.tsx	345	alm/require-root-testid
 src/features/inbox/InboxNeedsReview.tsx	103	alm/require-root-testid
 src/features/inbox/PlanDestructiveControl.tsx	32	alm/require-root-testid
 src/features/onboarding/ChecklistPopover.tsx	110	alm/require-root-testid
-src/features/onboarding/ChecklistSection.tsx	531	alm/require-root-testid
+src/features/onboarding/ChecklistSection.tsx	498	alm/require-root-testid
 src/features/onboarding/FindSpotlight.tsx	167	alm/require-root-testid
 src/features/onboarding/OrientationWalk.tsx	160	alm/require-root-testid
 src/features/onboarding/joyrideAdapter.tsx	209	alm/require-root-testid
@@ -90,19 +91,24 @@ src/features/settings/SourceViewStrategy.tsx	54	alm/require-root-testid
 src/features/settings/SourceViews.tsx	86	alm/require-root-testid
 src/features/setup/SetupPage.tsx	42	alm/require-root-testid
 src/features/setup/SetupWizard.tsx	226	alm/require-root-testid
-src/features/setup/steps/SiteLocationPicker.tsx	129	alm/require-root-testid
 src/features/setup/steps/StepCatalogs.tsx	159	alm/require-root-testid
 src/features/setup/steps/StepConfirm.tsx	67	alm/require-root-testid
 src/features/setup/steps/StepLanguage.tsx	26	alm/require-root-testid
 src/features/setup/steps/StepSite.tsx	124	alm/require-root-testid
 src/features/setup/steps/StepTools.tsx	155	alm/require-root-testid
+src/features/targets/AliasesSection.tsx	41	alm/require-root-testid
 src/features/targets/AltitudeGraph.tsx	105	alm/require-root-testid
 src/features/targets/FilterBadges.tsx	54	alm/require-root-testid
 src/features/targets/GuidanceCell.tsx	70	alm/require-root-testid
-src/features/targets/TargetDetailV2.tsx	187	alm/require-root-testid
+src/features/targets/LinkedItemsList.tsx	102	alm/require-root-testid
+src/features/targets/LinkedItemsList.tsx	37	alm/require-root-testid
+src/features/targets/NotesSection.tsx	41	alm/require-root-testid
+src/features/targets/TargetDetailV2.tsx	163	alm/require-root-testid
 src/features/targets/TargetList.tsx	71	alm/require-root-testid
 src/features/targets/TargetsPage.tsx	559	alm/require-root-testid
 src/features/targets/TargetsTableColumns.tsx	134	alm/require-root-testid
-src/features/targets/observing-sites/ObservingSites.tsx	266	alm/require-root-testid
+src/features/targets/TonightPanel.tsx	166	alm/require-root-testid
+src/features/targets/observing-sites/ObservingSites.tsx	282	alm/require-root-testid
+src/features/targets/observing-sites/SiteLocationPicker.tsx	181	alm/require-root-testid
 src/ui/NumberField.tsx	40	alm/require-root-testid
 src/ui/Tooltip.tsx	51	alm/require-root-testid

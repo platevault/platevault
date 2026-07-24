@@ -76,7 +76,7 @@ async function injectSectionAnchor(page: Page): Promise<void> {
 async function expectStop(page: Page, index: number): Promise<void> {
   await expect(page.locator(TOOLTIP)).toBeVisible();
   await expect(
-    page.locator(`${TOOLTIP} .pv-onboarding-tooltip__title`),
+    page.locator(`${TOOLTIP} [data-testid="onboarding-tooltip-title"]`),
   ).toHaveText(STOP_TITLES[index]);
 }
 

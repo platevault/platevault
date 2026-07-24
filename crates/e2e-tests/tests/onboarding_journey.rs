@@ -136,7 +136,7 @@ async fn open_checklist(app: &E2eApp) -> anyhow::Result<()> {
     .await?;
     anyhow::ensure!(
         opened,
-        "Getting-started flyout did not open (trigger `.pv-onb-ring` missing or click ignored); {}",
+        "Getting-started flyout did not open (trigger [data-testid='onb-ring'] missing or click ignored); {}",
         walk_gate_diagnostics(app).await
     );
     Ok(())
