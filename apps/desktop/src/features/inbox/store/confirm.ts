@@ -16,14 +16,9 @@ import type {
   InboxConfirmResponse,
   ChosenAttributionDto_Deserialize as ChosenAttributionRequest,
 } from '@/bindings/index';
-import type {
-  InboxReclassifyResponse,
-} from '@/bindings/aliases';
+import type { InboxReclassifyResponse } from '@/bindings/aliases';
 
-export type {
-  InboxConfirmResponse,
-  InboxReclassifyResponse,
-};
+export type { InboxConfirmResponse, InboxReclassifyResponse };
 
 // ── Mutation hooks ────────────────────────────────────────────────────────────
 

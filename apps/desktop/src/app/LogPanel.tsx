@@ -28,14 +28,10 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { Collapsible } from '@base-ui-components/react/collapsible';
 import { useNavigate } from '@tanstack/react-router';
 import { useLogPanel } from './LogPanelContext';
-import {
-  subscribeLog,
-  getLogSnapshot,
-} from '@/data/logStore';
+import { subscribeLog, getLogSnapshot } from '@/data/logStore';
 import { startLogSubscription } from '@/data/logSubscription';
 import { commands } from '@/bindings/index';
 import { unwrap } from '@/api/ipc';
-import type { LevelFilter } from './LogPanelContext';
 import { errMessage } from '@/lib/errors';
 import { useHotkeys } from '@/lib/useHotkeys';
 import { EmptyState } from '@/ui/EmptyState';

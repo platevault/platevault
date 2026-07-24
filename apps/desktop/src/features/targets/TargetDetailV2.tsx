@@ -318,17 +318,11 @@ export function TargetDetailV2({
         <div className="pv-planner__links">
           <div>
             <p className="pv-planner__link-col-title">{m.common_sessions()}</p>
-            <LinkedSessionsList
-              sessions={sessions}
-              loading={sessionsLoading}
-            />
+            <LinkedSessionsList sessions={sessions} loading={sessionsLoading} />
           </div>
           <div>
             <p className="pv-planner__link-col-title">{m.common_projects()}</p>
-            <LinkedProjectsList
-              projects={projects}
-              loading={projectsLoading}
-            />
+            <LinkedProjectsList projects={projects} loading={projectsLoading} />
           </div>
         </div>
 

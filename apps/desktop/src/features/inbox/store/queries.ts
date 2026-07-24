@@ -20,9 +20,7 @@ import type {
   InboxFileMetadata_Serialize as InboxFileMetadata,
   ConeSearchReason,
 } from '@/bindings/index';
-import type {
-  InboxClassifyResponse,
-} from '@/bindings/aliases';
+import type { InboxClassifyResponse } from '@/bindings/aliases';
 
 export type {
   InboxFileMetadata,

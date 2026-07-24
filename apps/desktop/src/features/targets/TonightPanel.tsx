@@ -13,13 +13,11 @@ import { Banner } from '@/ui';
 import { m } from '@/lib/i18n';
 import { USABLE_ALT_DEG } from './planner-altitude';
 import type { SensorConfig } from './planner-derive';
-import type { ObservingNight } from './astro/moon-state';
 import { formatOppositionDate, oppositionRelative } from './astro/opposition';
-import { AltitudeGraph, type AltPoint } from './AltitudeGraph';
+import { AltitudeGraph } from './AltitudeGraph';
 import { formatSeparationFigure } from './target-detail-format';
 import { GuidanceCell } from './GuidanceCell';
 import type { UseTargetTonightResult } from './useTargetTonight';
-import type { useGuidanceParams } from './guidance-settings';
 
 export interface TonightPanelProps {
   tonight: UseTargetTonightResult;
