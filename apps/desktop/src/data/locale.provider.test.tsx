@@ -89,12 +89,12 @@ describe('LocaleProvider / useLocale', () => {
     });
 
     expect(screen.getByTestId('locale').textContent).toBe('pt-BR');
-    expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
+    expect(localStorage.getItem('pv.locale')).toBe('pt-BR');
     expect(document.documentElement.lang).toBe('pt-BR');
   });
 
   it('sets the canonical saved locale on the document during startup', () => {
-    localStorage.setItem('alm.locale', 'pt-BR');
+    localStorage.setItem('pv.locale', 'pt-BR');
 
     render(
       <LocaleProviderUnderTest>
@@ -119,13 +119,13 @@ describe('LocaleProvider / useLocale', () => {
     });
 
     expect(screen.getByTestId('locale').textContent).toBe('en-GB');
-    expect(localStorage.getItem('alm.locale')).toBe('en-GB');
+    expect(localStorage.getItem('pv.locale')).toBe('en-GB');
     expect(document.documentElement.lang).toBe('en-GB');
   });
 
   it('adopts a DB-corrected locale discovered during mount hydration', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.locale', 'en-GB');
+    localStorage.setItem('pv.locale', 'en-GB');
     settingsGetMock.mockResolvedValue({
       status: 'ok',
       data: { scope: 'general', values: { locale: 'pt-BR' } },

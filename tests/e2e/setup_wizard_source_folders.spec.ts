@@ -28,7 +28,7 @@ const LOCALES = [
 function seedWizardAtSources(page: Page, locale: string): void {
   page.addInitScript((selectedLocale) => {
     window.localStorage.removeItem('alm-preferences');
-    window.localStorage.setItem('alm.locale', selectedLocale);
+    window.localStorage.setItem('pv.locale', selectedLocale);
     window.localStorage.setItem(
       'alm-setup-wizard-state',
       JSON.stringify({

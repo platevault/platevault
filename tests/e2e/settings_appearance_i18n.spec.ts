@@ -40,7 +40,7 @@
  *     `apps/desktop/src/api/mocks.ts`), so a real settings-DB round-trip for
  *     `locale` cannot be proven here; that is what the Rust Layer-1 test
  *     (`crates/app/core/tests/`, spec 061 T004) is for. What this file CAN
- *     and does prove is the frontend half: the `localStorage['alm.locale']`
+ *     and does prove is the frontend half: the `localStorage['pv.locale']`
  *     mirror survives a real `page.reload()`, and the UI re-hydrates from
  *     that stored value rather than merely accepting a command that returned
  *     `Ok` (research D8) — the same honest split already used by the
@@ -494,9 +494,7 @@ test.describe('Journey 10 · Language switcher (spec 061 US2)', () => {
     await expect(
       page.getByRole('radio', { name: 'Português (Brasil)' }),
     ).toHaveAttribute('aria-checked', 'true');
-    const stored = await page.evaluate(() =>
-      localStorage.getItem('alm.locale'),
-    );
+    const stored = await page.evaluate(() => localStorage.getItem('pv.locale'));
     expect(stored).toBe('pt-BR');
 
     await page.reload();
@@ -504,7 +502,7 @@ test.describe('Journey 10 · Language switcher (spec 061 US2)', () => {
     // The persisted mirror value — not a fresh default — drives the
     // re-hydrated selection.
     const storedAfter = await page.evaluate(() =>
-      localStorage.getItem('alm.locale'),
+      localStorage.getItem('pv.locale'),
     );
     expect(storedAfter).toBe('pt-BR');
     await expect(

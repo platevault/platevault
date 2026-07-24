@@ -50,7 +50,7 @@ const SYSTEM_RESOLUTION_CASES = [
 function seedThemeStep(page: Page, locale: keyof typeof LOCALES): void {
   page.addInitScript((selectedLocale) => {
     window.localStorage.removeItem('alm-preferences');
-    window.localStorage.setItem('alm.locale', selectedLocale);
+    window.localStorage.setItem('pv.locale', selectedLocale);
     window.localStorage.setItem(
       'alm-setup-wizard-state',
       JSON.stringify({ version: 2, currentStep: 1 }),

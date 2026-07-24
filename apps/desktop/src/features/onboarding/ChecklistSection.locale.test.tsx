@@ -54,6 +54,6 @@ describe('wizard copy follows the active locale', () => {
 
     expect(screen.getByTestId('locale')).toHaveTextContent('pt-BR');
     expect(screen.getByText('Escolha seu idioma preferido')).toBeVisible();
-    expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
+    expect(localStorage.getItem('pv.locale')).toBe('pt-BR');
   });
 });

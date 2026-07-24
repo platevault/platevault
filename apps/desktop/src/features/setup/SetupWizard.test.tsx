@@ -401,7 +401,7 @@ describe('SetupWizard eight-step flow', () => {
     expect(
       screen.getByText('Escolha seu idioma preferido'),
     ).toBeInTheDocument();
-    expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
+    expect(localStorage.getItem('pv.locale')).toBe('pt-BR');
 
     // Progress from before Back survives the language change.
     fireEvent.click(screen.getByRole('button', { name: /continuar/i }));

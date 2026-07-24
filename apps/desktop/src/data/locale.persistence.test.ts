@@ -5,7 +5,7 @@
  * locale.persistence.test.ts — spec 061 T012.
  *
  * The settings DB (`general` scope, `locale` key) is the durable source of
- * truth for the language choice (research D3); localStorage (`alm.locale`)
+ * truth for the language choice (research D3); localStorage (`pv.locale`)
  * is a synchronous boot mirror only. Covers the custom strategy's DB
  * write-through and `hydrateLocaleFromSettings`'s DB-wins reconciliation —
  * mirrors `theme.persistence.test.ts`'s mock shape.
@@ -103,7 +103,7 @@ describe('custom-almSettings strategy — write-through to the settings DB', () 
     void setLocale('pt-BR', { reload: false });
 
     // The localStorage mirror write is synchronous.
-    expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
+    expect(localStorage.getItem('pv.locale')).toBe('pt-BR');
 
     await waitForCall(settingsUpdateMock, 'setLocale write-through');
     expect(settingsUpdateMock).toHaveBeenCalledWith('general', {
@@ -119,7 +119,7 @@ describe('custom-almSettings strategy — write-through to the settings DB', () 
 
     void setLocale('pt-BR', { reload: false });
 
-    expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
+    expect(localStorage.getItem('pv.locale')).toBe('pt-BR');
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(settingsUpdateMock).not.toHaveBeenCalled();
   });
@@ -133,7 +133,7 @@ describe('custom-almSettings strategy — write-through to the settings DB', () 
 
     expect(() => setLocale('pt-BR', { reload: false })).not.toThrow();
     await waitForCall(settingsUpdateMock, 'rejecting settings.update');
-    expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
+    expect(localStorage.getItem('pv.locale')).toBe('pt-BR');
   }, 20_000);
 });
 
@@ -153,7 +153,7 @@ describe('hydrateLocaleFromSettings — DB wins over a disagreeing mirror', () =
 
   it('overwrites a stale mirror with the DB value', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.locale', 'en-GB');
+    localStorage.setItem('pv.locale', 'en-GB');
     settingsGetMock.mockResolvedValue({
       status: 'ok',
       data: { scope: 'general', values: { locale: 'pt-BR' } },
@@ -167,12 +167,12 @@ describe('hydrateLocaleFromSettings — DB wins over a disagreeing mirror', () =
     const corrected = await hydrateLocaleFromSettings();
 
     expect(corrected).toBe('pt-BR');
-    expect(localStorage.getItem('alm.locale')).toBe('pt-BR');
+    expect(localStorage.getItem('pv.locale')).toBe('pt-BR');
   });
 
   it('leaves the mirror untouched and returns undefined when the DB already agrees', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.locale', 'pt-BR');
+    localStorage.setItem('pv.locale', 'pt-BR');
     settingsGetMock.mockResolvedValue({
       status: 'ok',
       data: { scope: 'general', values: { locale: 'pt-BR' } },
@@ -190,7 +190,7 @@ describe('hydrateLocaleFromSettings — DB wins over a disagreeing mirror', () =
 
   it('ignores a malformed/unshipped DB value and keeps the mirror', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.locale', 'en-GB');
+    localStorage.setItem('pv.locale', 'en-GB');
     settingsGetMock.mockResolvedValue({
       status: 'ok',
       data: { scope: 'general', values: { locale: 'fr-FR' } },
@@ -204,12 +204,12 @@ describe('hydrateLocaleFromSettings — DB wins over a disagreeing mirror', () =
     const corrected = await hydrateLocaleFromSettings();
 
     expect(corrected).toBeUndefined();
-    expect(localStorage.getItem('alm.locale')).toBe('en-GB');
+    expect(localStorage.getItem('pv.locale')).toBe('en-GB');
   });
 
   it('is a no-op outside Tauri (dev server / vitest)', async () => {
     isTauriMock.mockReturnValue(false);
-    localStorage.setItem('alm.locale', 'en-GB');
+    localStorage.setItem('pv.locale', 'en-GB');
 
     const { hydrateLocaleFromSettings } = await import('./locale');
     const corrected = await hydrateLocaleFromSettings();
@@ -220,12 +220,12 @@ describe('hydrateLocaleFromSettings — DB wins over a disagreeing mirror', () =
 
   it('degrades silently when settings.get rejects — never throws', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.locale', 'en-GB');
+    localStorage.setItem('pv.locale', 'en-GB');
     settingsGetMock.mockRejectedValue(new Error('db unavailable'));
 
     const { hydrateLocaleFromSettings } = await import('./locale');
 
     await expect(hydrateLocaleFromSettings()).resolves.toBeUndefined();
-    expect(localStorage.getItem('alm.locale')).toBe('en-GB');
+    expect(localStorage.getItem('pv.locale')).toBe('en-GB');
   });
 });
