@@ -72,7 +72,7 @@ src/features/sessions/CalendarScroll.tsx	72	alm/require-root-testid
 src/features/sessions/SessionDetail.tsx	214	alm/require-root-testid
 src/features/sessions/SessionNotesSection.tsx	93	alm/require-root-testid
 src/features/sessions/SessionsPage.tsx	296	alm/require-root-testid
-src/features/settings/AuditLog.tsx	299	alm/require-root-testid
+src/features/settings/AuditLog.tsx	304	alm/require-root-testid
 src/features/settings/CalibrationMatching.tsx	189	alm/require-root-testid
 src/features/settings/Framing.tsx	130	alm/require-root-testid
 src/features/settings/PatternChipsEditor.tsx	39	alm/require-root-testid
