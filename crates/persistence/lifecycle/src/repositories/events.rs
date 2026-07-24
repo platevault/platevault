@@ -8,7 +8,7 @@
 //! `commands::log`) — hence the retention-gap and time-range read shapes
 //! below, not just the two `EventBus::replay` variants.
 
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use persistence_core::DbResult;
 
@@ -40,6 +40,29 @@ pub async fn insert_event(
             .bind(emitted_at)
             .bind(payload)
             .execute(pool)
+            .await?;
+    Ok(result.last_insert_rowid())
+}
+
+/// Append a durable event row on an existing connection (for use inside a
+/// transaction). Returns the assigned `event_id`.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on query failure.
+pub async fn insert_event_conn(
+    conn: &mut SqliteConnection,
+    topic: &str,
+    source: &str,
+    emitted_at: &str,
+    payload: &str,
+) -> DbResult<i64> {
+    let result =
+        sqlx::query("INSERT INTO events (topic, source, emitted_at, payload) VALUES (?, ?, ?, ?)")
+            .bind(topic)
+            .bind(source)
+            .bind(emitted_at)
+            .bind(payload)
+            .execute(conn)
             .await?;
     Ok(result.last_insert_rowid())
 }

@@ -304,16 +304,20 @@ pub(super) fn spawn_executor_run(params: SpawnExecutorParams) {
         // is the single removal site; there is no explicit `registry.remove`.
         let _run_guard = run_guard;
 
-        let callbacks = PlanApplyCallbacks {
-            pool: pool.clone(),
-            bus: bus.clone(),
-            plan_id: plan_id.clone(),
-            run_id: run_id.clone(),
-            op_emitter: op_emitter.clone(),
-        };
+        let callbacks = PlanApplyCallbacks::new(
+            pool.clone(),
+            bus.clone(),
+            plan_id.clone(),
+            run_id.clone(),
+            op_emitter.clone(),
+        );
 
         let outcome =
             execute_plan(executor_items, &callbacks, &cancel_token, &skip_set, &retry_queue).await;
+
+        // Mandatory flush: drain any items buffered in the last partial window
+        // before the outcome branches below read cumulative plan counters.
+        callbacks.flush().await;
 
         // Compute terminal state and persist.
         match outcome {

@@ -107,14 +107,15 @@ async fn plan_apply_callbacks_persist_every_producible_failure_code() {
     .await
     .unwrap();
 
-    let callbacks = PlanApplyCallbacks {
-        pool: db.pool().clone(),
+    let callbacks = PlanApplyCallbacks::new(
+        db.pool().clone(),
         bus,
-        plan_id: plan_id.to_owned(),
-        run_id: run_id.to_owned(),
-        op_emitter: None,
-    };
+        plan_id.to_owned(),
+        run_id.to_owned(),
+        None,
+    );
 
+    // Buffer all events (group-commit design: rows aren't written until flush).
     for (index, code) in PRODUCIBLE_CODES.into_iter().enumerate() {
         let item_id = format!("{plan_id}-item-{index}");
         callbacks.on_item_start(&item_id).await;
@@ -131,7 +132,14 @@ async fn plan_apply_callbacks_persist_every_producible_failure_code() {
                 audit_reason: None,
             })
             .await;
+    }
 
+    // Mandatory flush: drains the buffer into the DB in one tx.
+    callbacks.flush().await;
+
+    // Verify every failure code was persisted.
+    for (index, code) in PRODUCIBLE_CODES.into_iter().enumerate() {
+        let item_id = format!("{plan_id}-item-{index}");
         let persisted: Option<String> = sqlx::query_scalar(
             "SELECT failure_code FROM plan_apply_events WHERE plan_id = ? AND item_id = ?",
         )
@@ -1548,4 +1556,101 @@ fn compute_plan_path_set_resolves_roots_and_archive() {
 
     let disjoint: PlanPathSet = [Utf8PathBuf::from("/elsewhere")].into_iter().collect();
     assert!(!set.overlaps(&disjoint));
+}
+
+/// Group-commit correctness: applying N items via the buffered
+/// `PlanApplyCallbacks` produces exactly N `plan_apply_events` rows + 1
+/// plan-level started row, and the `plans` counter ends at `items_applied = N`.
+///
+/// This also functions as a commit-reduction acceptance check: the design
+/// replaces ~5N individual autocommit writes with ceil(N/100) flush txs +
+/// plan-level bookends. For N=200 the former path issues ~1000 commits; the
+/// buffered path issues at most ceil(200/100)+2 = 4 commits.
+///
+/// Commit count is not directly measurable in a unit test (SQLite
+/// statement-count APIs are not exposed by sqlx), but row-count + counter
+/// correctness proves the flush logic is correct without relying on timing.
+#[tokio::test]
+async fn group_commit_produces_correct_row_count_and_counters() {
+    const N: usize = 200;
+
+    let (db, bus) = setup().await;
+    let plan_id = "gc-correctness";
+    let run_id = "gc-run-1";
+    insert_approved_plan_with_items(&db, plan_id, N).await;
+    let n = i64::try_from(N).unwrap();
+    apply_repo::cas_approved_to_applying(db.pool(), plan_id, run_id, "test-token", n, n)
+        .await
+        .unwrap();
+
+    let callbacks = PlanApplyCallbacks::new(
+        db.pool().clone(),
+        bus,
+        plan_id.to_owned(),
+        run_id.to_owned(),
+        None,
+    );
+
+    // Emit N succeeded events — mix in a few failures to test delta accounting.
+    let mut expected_applied = 0i64;
+    let mut expected_failed = 0i64;
+    for i in 0..N {
+        let item_id = format!("{plan_id}-item-{i}");
+        // Fail every 10th item so we exercise both counter paths.
+        let (new_state, failure) = if i % 10 == 9 {
+            expected_failed += 1;
+            ("failed", Some(PlanItemFailure::with_code(FailureCode::SourceMissing, "test")))
+        } else {
+            expected_applied += 1;
+            ("succeeded", None)
+        };
+
+        callbacks
+            .on_item_progress(ItemProgressEvent {
+                item_id,
+                prior_state: "pending".to_owned(),
+                new_state: new_state.to_owned(),
+                at: domain_core::ids::Timestamp::now_iso(),
+                failure,
+                rollback_attempted: false,
+                rollback_outcome: RollbackOutcome::NotApplicable,
+                rollback_message: None,
+                audit_reason: None,
+            })
+            .await;
+    }
+
+    // Final mandatory flush (mirrors what spawn_executor_run does before
+    // complete_run).
+    callbacks.flush().await;
+
+    // Verify plan_apply_events has exactly N item rows.
+    let event_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM plan_apply_events WHERE plan_id = ? AND item_id IS NOT NULL",
+    )
+    .bind(plan_id)
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(event_count, n, "must have one plan_apply_events row per item");
+
+    // Verify plans counters.
+    let plan =
+        persistence_plans::repositories::plans::get_plan(db.pool(), plan_id, false).await.unwrap();
+    assert_eq!(plan.items_applied, expected_applied, "items_applied counter");
+    assert_eq!(plan.items_failed, expected_failed, "items_failed counter");
+
+    // Verify audit_log_entry has N rows for this plan's items (one per item,
+    // written in the flush batch; entity_type = 'filesystem_plan').
+    let audit_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM audit_log_entry WHERE entity_type = 'filesystem_plan'",
+    )
+    .fetch_one(db.pool())
+    .await
+    .unwrap();
+    assert!(
+        audit_count >= expected_applied + expected_failed,
+        "must have at least one audit row per item; got {audit_count}, want >= {}",
+        expected_applied + expected_failed
+    );
 }

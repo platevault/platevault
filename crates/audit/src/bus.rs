@@ -161,6 +161,19 @@ impl EventBus {
         Ok(entry.audit_id)
     }
 
+    /// Broadcast a signal to live subscribers **without** writing a durable
+    /// events-table row.
+    ///
+    /// Used by the group-commit flush path: durable rows are already committed
+    /// inside the flush transaction; this call wakes the log forwarder (which
+    /// re-queries the DB) without double-writing. Returns the number of active
+    /// receivers that received the signal; `0` is not an error.
+    #[must_use]
+    pub fn broadcast_only(&self, topic: &str) -> usize {
+        let envelope = EventEnvelope::new(topic, Source::System, serde_json::Value::Null);
+        self.sender.send(envelope).unwrap_or(0)
+    }
+
     /// Subscribe to all live events on the bus.
     ///
     /// Receiver is non-blocking (async). Missed events due to capacity overflow

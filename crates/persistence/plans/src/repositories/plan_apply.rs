@@ -13,7 +13,7 @@
 
 use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use persistence_core::{DbError, DbResult};
 
@@ -705,6 +705,128 @@ pub async fn get_last_item_with_failure_prefix(
     .bind(pattern)
     .fetch_optional(pool)
     .await?)
+}
+
+// ── Batch item flush (group-commit writer) ────────────────────────────────────
+
+/// One item's terminal state to persist in a flush batch.
+#[derive(Clone, Debug)]
+pub struct BatchItemState<'a> {
+    pub item_id: &'a str,
+    /// Terminal state: `succeeded`, `failed`, `skipped`, or `refused`
+    /// (refused persists as `failed`).
+    pub new_state: &'a str,
+    /// Failure reason text, if any.
+    pub failure_reason: Option<&'a str>,
+}
+
+/// Persist a batch of item terminal-state transitions in one transaction
+/// connection.
+///
+/// Issues one UPDATE per item in `states`, then one aggregated plans-counter
+/// UPDATE. Callers open the transaction, call this, write audit and event rows
+/// on the same connection, and commit — achieving one fsync per flush window.
+///
+/// `delta_applied`, `delta_failed`, `delta_skipped` are the net counter
+/// changes for this batch.
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn batch_flush_item_states(
+    conn: &mut SqliteConnection,
+    plan_id: &str,
+    states: &[BatchItemState<'_>],
+    delta_applied: i64,
+    delta_failed: i64,
+    delta_skipped: i64,
+) -> DbResult<()> {
+    if states.is_empty() {
+        return Ok(());
+    }
+
+    for item in states {
+        // Refused items have no distinct item_state — persist as 'failed'.
+        let db_state = if item.new_state == "refused" { "failed" } else { item.new_state };
+        sqlx::query("UPDATE plan_items SET item_state = ?, failure_reason = ? WHERE id = ?")
+            .bind(db_state)
+            .bind(item.failure_reason)
+            .bind(item.item_id)
+            .execute(&mut *conn)
+            .await?;
+    }
+
+    // One aggregated counter statement for the whole batch.
+    let delta_pending = delta_applied + delta_failed + delta_skipped;
+    sqlx::query(
+        "UPDATE plans SET \
+           items_applied = items_applied + ?, \
+           items_failed  = items_failed  + ?, \
+           items_skipped = items_skipped + ?, \
+           items_pending = MAX(0, items_pending - ?) \
+         WHERE id = ?",
+    )
+    .bind(delta_applied)
+    .bind(delta_failed)
+    .bind(delta_skipped)
+    .bind(delta_pending)
+    .bind(plan_id)
+    .execute(&mut *conn)
+    .await?;
+
+    Ok(())
+}
+
+/// Append a `plan_apply_events` row on an existing connection (for use inside
+/// a group-commit transaction).
+///
+/// # Errors
+///
+/// Returns [`DbError::Database`] on connection failure.
+#[allow(clippy::too_many_arguments)]
+pub async fn append_event_conn(
+    conn: &mut SqliteConnection,
+    event_id: &str,
+    run_id: &str,
+    plan_id: &str,
+    item_id: Option<&str>,
+    prior_state: &str,
+    new_state: &str,
+    at: &str,
+    failure: Option<&EventFailure<'_>>,
+    rollback: Option<&EventRollback<'_>>,
+) -> DbResult<()> {
+    let (fc, fm, fr) = failure.map_or((None, None, None), |f| {
+        (Some(f.code), Some(f.message), Some(i64::from(f.recoverable)))
+    });
+
+    let (ra, ro, rm) = rollback
+        .map_or((None, None, None), |r| (Some(i64::from(r.attempted)), Some(r.outcome), r.message));
+
+    sqlx::query(
+        "INSERT INTO plan_apply_events \
+         (id, run_id, plan_id, item_id, prior_state, new_state, at, \
+          failure_code, failure_message, failure_recoverable, \
+          rollback_attempted, rollback_outcome, rollback_message) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(event_id)
+    .bind(run_id)
+    .bind(plan_id)
+    .bind(item_id)
+    .bind(prior_state)
+    .bind(new_state)
+    .bind(at)
+    .bind(fc)
+    .bind(fm)
+    .bind(fr)
+    .bind(ra)
+    .bind(ro)
+    .bind(rm)
+    .execute(conn)
+    .await?;
+
+    Ok(())
 }
 
 // ── Startup sweep ─────────────────────────────────────────────────────────────

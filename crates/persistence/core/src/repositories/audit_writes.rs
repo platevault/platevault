@@ -52,6 +52,47 @@ pub async fn insert_audit_entry(pool: &SqlitePool, entry: &AuditLogEntry) -> DbR
     Ok(())
 }
 
+/// Insert an `audit_log_entry` row on an existing connection (for use inside
+/// a transaction).
+///
+/// # Errors
+/// Returns [`crate::DbError`] if the insert fails.
+pub async fn insert_audit_entry_conn(
+    conn: &mut SqliteConnection,
+    entry: &AuditLogEntry,
+) -> DbResult<()> {
+    let at_str = entry
+        .at
+        .as_offset_date_time()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
+    let payload_str = entry.payload.as_ref().map(std::string::ToString::to_string);
+
+    sqlx::query(
+        "INSERT INTO audit_log_entry \
+         (audit_id, entity_type, entity_id, from_state, to_state, trigger, actor, \
+          outcome, severity, request_id, at, payload, reason_code) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(entry.audit_id.as_uuid().to_string())
+    .bind(entry.entity_type.as_str())
+    .bind(entry.entity_id.to_string())
+    .bind(&entry.from_state)
+    .bind(&entry.to_state)
+    .bind(&entry.trigger)
+    .bind(&entry.actor)
+    .bind(entry.outcome.as_str())
+    .bind(entry.severity.as_str())
+    .bind(entry.request_id.to_string())
+    .bind(&at_str)
+    .bind(&payload_str)
+    .bind(&entry.reason_code)
+    .execute(conn)
+    .await?;
+
+    Ok(())
+}
+
 /// Insert a project auto-transition audit row, acquiring a connection from
 /// the pool.
 ///
