@@ -173,7 +173,7 @@ async fn dump_target_search_diagnostics(app: &E2eApp, query: &str) -> String {
     // (d) Round 2 (keepMounted alone did NOT fix this — still fails
     // identically cross-platform, deterministically): bypass the UI and
     // invoke the REAL backend `target_search` command directly through the
-    // `window.__ALM_E2E__.invoke` bridge, mirroring `inbox_ui_journeys.rs`'s
+    // `window.__PV_E2E__.invoke` bridge, mirroring `inbox_ui_journeys.rs`'s
     // direct-invoke diagnostic. This tells us whether the backend genuinely
     // returns hits for this exact query independent of the frontend
     // combobox/portal — local Chromium+mocks repro (both dev and prod

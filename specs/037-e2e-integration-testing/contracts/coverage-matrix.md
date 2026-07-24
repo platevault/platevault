@@ -114,7 +114,7 @@ so the attribute is the routing mechanism: it keeps these tests out of a plain
 "— windows-latest" contexts execute every one of them.
 
 Harness: thirtyfour + `tauri-plugin-webdriver`/`tauri-webdriver`, the
-`window.__ALM_E2E__` invoke bridge (D21 renamed the harness's stale
+`window.__PV_E2E__` invoke bridge (D21 renamed the harness's stale
 `__APP_E2E__` references to match — confirmed landed). CI (`e2e.yml`, 3-OS
 matrix) is the first real run point (no webview in the WSL dev sandbox);
 local gates (compile, clippy, fmt) are clean.

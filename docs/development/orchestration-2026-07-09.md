@@ -222,7 +222,7 @@ mechanism itself.
   either #575/#577-tracked real gaps or pre-existing docs/perf deferrals);
   012 8→2; 008 10→4; 021 re-verified (2 stay open with dev-tools evidence);
   `crates/targeting/resolver/tests/simbad_live.rs` gated behind
-  `ALM_LIVE_SIMBAD=1` (opt-in, skips gracefully by default — the earlier
+  `PV_LIVE_SIMBAD=1` (opt-in, skips gracefully by default — the earlier
   lane nE finding that this suite runs unconditionally against the real
   SIMBAD endpoint is now resolved). 3 new real-gap issues filed: **#575**
   (`plan.resume` doesn't re-validate the pause condition or restart

@@ -15,7 +15,7 @@ exports outside the database file before removing it.
 ## Reset procedure
 
 1. Stop the desktop app and any process using the database.
-2. Determine the database URL. `ALM_DB_URL` takes precedence. Without it,
+2. Determine the database URL. `PV_DB_URL` takes precedence. Without it,
    the app creates `alm.db` under Tauri's app-data directory.
 3. Remove the selected file and its SQLite sidecars (`<file>-wal` and
    `<file>-shm`) if present.
@@ -30,7 +30,7 @@ $db = "$env:APPDATA\dev.astro-plan.astro-library-manager\alm.db"
 Remove-Item -LiteralPath $db, "$db-wal", "$db-shm" -Force -ErrorAction SilentlyContinue
 ```
 
-For an explicit development URL, remove the path named by `ALM_DB_URL` after
+For an explicit development URL, remove the path named by `PV_DB_URL` after
 stripping the `sqlite://` prefix and query string. Use a path-specific remove
 command; never delete an entire app-data directory.
 

@@ -51,7 +51,7 @@ async fn main() {
     // `tauri_plugin_log::Builder::new().skip_logger()` comment in
     // `build_app()` for why the plugin does not also try to install one.
     {
-        // `ALM_DATA_DIR` (issue #1204) relocates the whole app-data root, logs
+        // `PV_DATA_DIR` (issue #1204) relocates the whole app-data root, logs
         // included — otherwise concurrent E2E instances on Windows interleave
         // their lines into one shared daily log file, which is exactly the
         // evidence trail those runs exist to produce.
@@ -96,12 +96,12 @@ async fn main() {
     }
 
     // Resolve the platform app-data directory once: it backs both the SQLite
-    // URL default (unless `ALM_DB_URL` overrides it) and the spec 052 P1
+    // URL default (unless `PV_DB_URL` overrides it) and the spec 052 P1
     // redb resolve-cache file (`simbad-cache.redb`, D2 — one global file,
-    // independent of the `ALM_DB_URL` override so dev/test SQLite swaps don't
+    // independent of the `PV_DB_URL` override so dev/test SQLite swaps don't
     // also relocate the resolve cache).
     //
-    // `ALM_DATA_DIR` overrides it outright (issue #1204). The platform
+    // `PV_DATA_DIR` overrides it outright (issue #1204). The platform
     // resolver goes through `dirs`, which on Windows reads a Known Folder and
     // therefore ignores the `APPDATA`/`LOCALAPPDATA` overrides the E2E harness
     // sets — so concurrent instances there all landed on ONE real root and
@@ -112,8 +112,8 @@ async fn main() {
     });
     std::fs::create_dir_all(&data_dir).expect("failed to create app data directory");
 
-    // `ALM_DB_URL` lets dev/test runs target an alternate SQLite store.
-    let db_url = if let Ok(url) = std::env::var("ALM_DB_URL") {
+    // `PV_DB_URL` lets dev/test runs target an alternate SQLite store.
+    let db_url = if let Ok(url) = std::env::var("PV_DB_URL") {
         url
     } else {
         let db_path = data_dir.join("alm.db");

@@ -95,7 +95,7 @@
 - Connect: `driver_session action=start host=localhost port=9223`.
 - If the app is down: kill `desktop_shell,node,cargo`; relaunch (no DB reset to keep
   state) with the detached `pnpm tauri dev --config src-tauri\tauri.dev.conf.json`
-  command (env `VITE_USE_MOCKS=false VITE_E2E=1 ALM_DB_URL=sqlite://C:\dev\astro-plan\wizard-test.db?mode=rwc`);
+  command (env `VITE_USE_MOCKS=false VITE_E2E=1 PV_DB_URL=sqlite://C:\dev\astro-plan\wizard-test.db?mode=rwc`);
   poll `/dev/tcp/127.0.0.1/9223`. Full commands in the run log's Environment section.
 - For a from-scratch first-run: kill, `Remove-Item wizard-test.db*`, `localStorage.clear()`,
   relaunch.

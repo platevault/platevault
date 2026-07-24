@@ -54,7 +54,7 @@ that layer on top of it:
   IPC-only. Validators announce when a check is backend-only IPC and classify
   findings backend-vs-UI.
 - **State-leakage prevention:** validation runs only against the Windows
-  checkout's disposable dev database (`wizard-test.db` via `ALM_DB_URL`) and
+  checkout's disposable dev database (`wizard-test.db` via `PV_DB_URL`) and
   `tempfile`-style scratch folders — never against real user libraries; this
   repo checkout is never the app's working directory, so no fixture can land in
   it.

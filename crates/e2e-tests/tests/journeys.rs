@@ -7,7 +7,7 @@
 //! `--features e2e`) behind `tauri-plugin-webdriver`/`tauri-webdriver`, and
 //! asserts against the REAL backend (real SQLite, real filesystem, real
 //! command handlers) — never a fixture/mock. Setup and assertion steps use
-//! the `window.__ALM_E2E__.invoke(...)` bridge (real IPC, no channel-taking
+//! the `window.__PV_E2E__.invoke(...)` bridge (real IPC, no channel-taking
 //! commands); mutating steps that require a `tauri::ipc::Channel` argument
 //! (`plans.apply` a.k.a. `plans_apply_real`) are deliberately routed through
 //! the channel-free command variants that exist for exactly this purpose
@@ -154,7 +154,7 @@ async fn first_run_resolve_create_project() -> anyhow::Result<()> {
 #[ignore = "Layer-2 real-UI journey: needs tauri-webdriver CLI + desktop_shell --features e2e + served frontend; run via e2e.yml (--run-ignored all)"]
 async fn plan_review_apply_with_audit() -> anyhow::Result<()> {
     let app = E2eApp::launch().await?;
-    // The `__ALM_E2E__` invoke bridge is installed by an async dynamic import in
+    // The `__PV_E2E__` invoke bridge is installed by an async dynamic import in
     // `apps/desktop/src/main.tsx`, so it is not present the instant the session
     // is created — wait for it before the first `invoke` (FR-008).
     app.wait_bridge_ready(Duration::from_secs(30)).await?;

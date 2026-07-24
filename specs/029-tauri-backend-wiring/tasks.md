@@ -105,10 +105,10 @@
 
 **Goal**: SQLite database persists to platform-appropriate on-disk path across app restarts.
 
-**Independent Test**: Launch app, verify DB file at platform path, restart, verify data persists. Override with `ALM_DB_URL` and verify.
+**Independent Test**: Launch app, verify DB file at platform path, restart, verify data persists. Override with `PV_DB_URL` and verify.
 
-- [x] T039 [US3] Refactor `apps/desktop/src-tauri/src/main.rs`: use `tauri::Builder::default().build()` to get the `App` handle, call `app.path().app_data_dir()` to resolve the platform DB path, create the directory if needed, then connect SQLite and run migrations before calling `app.run(callback)`. Preserve `ALM_DB_URL` env override.
-- [x] T040 [US3] Verify on the current platform: launch with `just tauri-dev`, confirm DB file is created at the expected path. Restart and confirm the DB is reused. Set `ALM_DB_URL=/tmp/test-alm.db` and confirm the override works.
+- [x] T039 [US3] Refactor `apps/desktop/src-tauri/src/main.rs`: use `tauri::Builder::default().build()` to get the `App` handle, call `app.path().app_data_dir()` to resolve the platform DB path, create the directory if needed, then connect SQLite and run migrations before calling `app.run(callback)`. Preserve `PV_DB_URL` env override.
+- [x] T040 [US3] Verify on the current platform: launch with `just tauri-dev`, confirm DB file is created at the expected path. Restart and confirm the DB is reused. Set `PV_DB_URL=/tmp/test-alm.db` and confirm the override works.
 
 **Checkpoint**: US3 complete — persistent storage works.
 

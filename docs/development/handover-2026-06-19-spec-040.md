@@ -72,7 +72,7 @@ powershell.exe -NoProfile -Command "Get-Process desktop_shell,cargo -EA Silently
   Remove-Item 'C:\dev\astro-plan\wizard-test.db*' -Force -EA SilentlyContinue; \
   Start-Process cmd.exe -ArgumentList '/k','C:\dev\astro-plan\run-dev.bat' -WorkingDirectory 'C:\dev\astro-plan'"
 ```
-`run-dev.bat` sets `ALM_DB_URL=sqlite://C:\dev\astro-plan\wizard-test.db?mode=rwc` then `cargo tauri dev`. First build after a pull takes ~90–110s. **Do not** build `set X=... && cmd` chains — a trailing space in the DB URL crashed SQLite.
+`run-dev.bat` sets `PV_DB_URL=sqlite://C:\dev\astro-plan\wizard-test.db?mode=rwc` then `cargo tauri dev`. First build after a pull takes ~90–110s. **Do not** build `set X=... && cmd` chains — a trailing space in the DB URL crashed SQLite.
 
 **Traps that keep recurring (all in MEMORY.md):**
 - **Mock mode hides real-backend bugs.** `VITE_USE_MOCKS` short-circuits IPC, so dotted-command-name mismatches, snake_case-vs-camelCase payloads, unmanaged `SqlitePool` state, and wrong JOIN tables only appear on the real Windows build. Generated bindings (`apps/desktop/src/bindings/index.ts`) are **authoritative**; the old `commands.ts` wrappers caused drift. Prefer real-backend integration tests.

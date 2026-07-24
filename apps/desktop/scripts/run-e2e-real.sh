@@ -60,5 +60,5 @@ trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
 
 cd "$repo_root"
 cargo build -p desktop_shell --features e2e
-ALM_DB_URL="${ALM_DB_URL:-sqlite://./e2e-test.db?mode=rwc}" \
+PV_DB_URL="${PV_DB_URL:-sqlite://./e2e-test.db?mode=rwc}" \
   cargo nextest run -p e2e_tests --profile e2e --run-ignored all --no-tests=warn

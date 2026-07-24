@@ -92,7 +92,7 @@ export function toolLaunchDisabledTooltip(
  * The first time such a tool is launched, a one-time note explains this so
  * the user isn't left wondering why no folder chooser opened.
  */
-const CWD_ANCHORED_HINT_STORAGE_PREFIX = 'alm.toolhint.cwdAnchored.';
+const CWD_ANCHORED_HINT_STORAGE_PREFIX = 'pv.toolhint.cwdAnchored.';
 
 function cwdAnchoredHintStorageKey(toolId: string): string {
   return `${CWD_ANCHORED_HINT_STORAGE_PREFIX}${toolId}`;

@@ -15,7 +15,7 @@
 //
 // Persistence (theme-settings-db): the settings DB (`general` scope, `theme`
 // / `fontSize` keys — spec 018) is the durable source of truth. localStorage
-// (`alm.theme` / `alm.fontSize`) is kept ONLY as a synchronous boot cache so
+// (`pv.theme` / `pv.fontSize`) is kept ONLY as a synchronous boot cache so
 // `initAppearance()` can paint the right theme/font size before first render
 // without waiting on an IPC round-trip. On Windows, WebView2 only flushes its
 // localStorage-backing LevelDB store on a graceful shutdown, so a force-killed
@@ -125,7 +125,7 @@ export const THEMES: ThemeMeta[] = [
   },
 ];
 
-const THEME_KEY = 'alm.theme';
+const THEME_KEY = 'pv.theme';
 const LIGHT_DEFAULT: ThemeId = 'warm-slate';
 const DARK_DEFAULT: ThemeId = 'observatory-cool';
 
@@ -363,7 +363,7 @@ export function applyDensity(density?: string): void {
 
 export type FontSizeChoice = 'small' | 'default' | 'large';
 
-const FONT_SIZE_KEY = 'alm.fontSize';
+const FONT_SIZE_KEY = 'pv.fontSize';
 const FONT_SIZE_SETTINGS_KEY = 'fontSize';
 
 /**
@@ -529,7 +529,7 @@ export const ZOOM_STEPS = [90, 100, 110, 125, 150] as const;
 export type ZoomPercent = (typeof ZOOM_STEPS)[number];
 const DEFAULT_ZOOM: ZoomPercent = 100;
 
-const ZOOM_KEY = 'alm.zoom';
+const ZOOM_KEY = 'pv.zoom';
 const ZOOM_SETTINGS_KEY = 'zoom';
 
 function isZoomPercent(v: unknown): v is ZoomPercent {

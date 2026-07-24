@@ -64,7 +64,7 @@ pub fn build_app() -> tauri::App {
     // (FR-003: the second launch performs no migration, seed, or write).
     //
     // E2E escape hatch (crates/e2e-tests): the harness sets
-    // `ALM_E2E_INSTANCE_ID` (unique per test process) and launches several
+    // `PV_E2E_INSTANCE_ID` (unique per test process) and launches several
     // `desktop_shell` instances concurrently (`test-threads > 1`). The plugin
     // enforces ONE well-known identity derived from the app identifier, and a
     // per-instance override exists only on Linux (`dbus_id`) — NOT on Windows
@@ -76,7 +76,7 @@ pub fn build_app() -> tauri::App {
     // feature at compile time, so release binaries ignore the variable — see
     // `bootstrap::single_instance_guard_enabled`.
     if crate::bootstrap::single_instance_guard_enabled(
-        std::env::var_os("ALM_E2E_INSTANCE_ID").is_some(),
+        std::env::var_os("PV_E2E_INSTANCE_ID").is_some(),
     ) {
         tb = tb.plugin(
             tauri_plugin_single_instance::Builder::new()
@@ -474,7 +474,7 @@ async fn boot(app: tauri::AppHandle, db_url: String, data_dir: std::path::PathBu
                  To recover, delete the database and let it be recreated:\n\
                  \x20 {db_url}\n\
                  \n\
-                 Set ALM_DB_URL to point at a different file if you need to keep this one."
+                 Set PV_DB_URL to point at a different file if you need to keep this one."
             );
             return fatal(&app, &message);
         }

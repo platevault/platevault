@@ -84,7 +84,7 @@ export function calibrationFileFilters(): FileFilter[] {
 // Last-path localStorage helpers (T012)
 // ---------------------------------------------------------------------------
 
-const LAST_PATH_PREFIX = 'alm.lastPath.';
+const LAST_PATH_PREFIX = 'pv.lastPath.';
 
 /**
  * Read the last-used path for a given affordance kind from localStorage.
@@ -131,7 +131,7 @@ function parentDir(filePath: string): string {
 // Selected-filter persistence (T021)
 // ---------------------------------------------------------------------------
 
-const SELECTED_FILTER_KEY = 'alm.selectedFilter';
+const SELECTED_FILTER_KEY = 'pv.selectedFilter';
 
 /**
  * Persist the selected file-type filter alongside the last pick, so

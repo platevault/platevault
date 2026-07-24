@@ -256,7 +256,7 @@ research/specs, not snap calls.
   catalog lookups at display time, per the 046 registry pattern) is queued as a follow-up
   task, not a blocking fix. Revert path: implement the routing task.
 - **D21 (2026-07-03, autonomous)**: E2E invoke-bridge global canonical name =
-  `__ALM_E2E__` (what the shipped frontend actually assigns, product prefix used
+  `__PV_E2E__` (what the shipped frontend actually assigns, product prefix used
   elsewhere); the Rust harness's `__APP_E2E__` references get renamed. Rationale:
   don't touch shipped frontend code for a naming preference. Trivial revert.
 - **D22 (2026-07-03)**: SPEC_STATUS's "033 blocked on 017 cleanup generator" is

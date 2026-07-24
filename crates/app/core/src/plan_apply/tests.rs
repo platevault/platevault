@@ -915,7 +915,7 @@ async fn confirm_then_apply_executes_previously_refused_delete_item() {
     assert!(audit_count > 0, "apply_plan must write at least one durable audit_log_entry row");
 }
 
-/// Removes `ALM_E2E_OS_TRASH_FAKE` on drop (including panic unwind) so a
+/// Removes `PV_E2E_OS_TRASH_FAKE` on drop (including panic unwind) so a
 /// failed assertion in the test body can never leak the var into other
 /// tests in this binary (this crate has no other test that exercises the
 /// `Trash` executor action, so the var is otherwise untouched here).
@@ -932,12 +932,12 @@ impl Drop for EnvVarGuard {
 /// user's plan-level "System trash" choice (`plans.destructive_destination`)
 /// was never consulted at apply time, so it silently archived into
 /// `.astro-plan-archive` regardless of what the user picked in review.
-/// `ALM_E2E_OS_TRASH_FAKE` (headless-safe OS-trash double, added for the
+/// `PV_E2E_OS_TRASH_FAKE` (headless-safe OS-trash double, added for the
 /// e2e harness) makes the OS-trash outcome deterministic here too.
 #[tokio::test]
 async fn archive_action_item_with_trash_destination_really_trashes() {
-    std::env::set_var("ALM_E2E_OS_TRASH_FAKE", "1");
-    let _env_guard = EnvVarGuard("ALM_E2E_OS_TRASH_FAKE");
+    std::env::set_var("PV_E2E_OS_TRASH_FAKE", "1");
+    let _env_guard = EnvVarGuard("PV_E2E_OS_TRASH_FAKE");
 
     let dir = tempfile::tempdir().unwrap();
     let file_path = dir.path().join("intermediate.fits");

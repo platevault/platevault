@@ -49,7 +49,7 @@ cargo nextest run -p e2e_tests --profile e2e --run-ignored all
 - The app loads its own frontend from the Tauri `devUrl` (`:5173`)
   automatically on launch; the harness does not call `driver.goto(...)` after
   connecting.
-- `window.__ALM_E2E__.invoke(...)` is the real-IPC invoke bridge exposed by
+- `window.__PV_E2E__.invoke(...)` is the real-IPC invoke bridge exposed by
   the frontend when built with `VITE_E2E=1` (`apps/desktop/src/main.tsx`).
 
 This mirrors `.github/workflows/e2e.yml` (see `specs/037-e2e-integration-testing/research.md`
@@ -61,10 +61,10 @@ D10 and `quickstart.md`).
   (`cargo install tauri-webdriver --locked`).
 - The `desktop_shell` binary must be **built with the `e2e` feature**:
   `cargo build -p desktop_shell --features e2e`. Override the binary the
-  harness launches with `ALM_E2E_APP_BIN=/path/to/binary`.
+  harness launches with `PV_E2E_APP_BIN=/path/to/binary`.
 - Vite dev server / `vite preview` running on `:5173` with:
   - `VITE_USE_MOCKS=false` — real backend.
-  - `VITE_E2E=1` — exposes the `window.__ALM_E2E__` invoke bridge.
+  - `VITE_E2E=1` — exposes the `window.__PV_E2E__` invoke bridge.
 
 ## Notes
 
@@ -75,10 +75,10 @@ D10 and `quickstart.md`).
 - Each nextest test process gets its own isolated `tauri-webdriver` proxy
   port, native plugin port, app-data/config dir, and SQLite DB file
   (`tests/common/mod.rs::InstanceEnv`), lazily allocated once per process and
-  reused across `launch()`/`relaunch()` calls within that test. `ALM_DB_URL`
+  reused across `launch()`/`relaunch()` calls within that test. `PV_DB_URL`
   is set internally per instance and no longer read from the ambient
   environment — nothing to configure. Each instance also gets its own
-  `ALM_E2E_INSTANCE_ID`, whose presence tells `apps/desktop/src-tauri/src/lib.rs`
+  `PV_E2E_INSTANCE_ID`, whose presence tells `apps/desktop/src-tauri/src/lib.rs`
   to skip the single-instance plugin entirely so concurrently-launched
   `desktop_shell` processes no longer collide on Tauri's default
   identifier-derived identity. The plugin's per-instance override exists only

@@ -151,7 +151,7 @@ describe('font size choice — persistence (mirrors the theme choice pattern)', 
     const { setFontSizeChoice } = await import('./theme');
 
     setFontSizeChoice('large');
-    expect(localStorage.getItem('alm.fontSize')).toBe('large');
+    expect(localStorage.getItem('pv.fontSize')).toBe('large');
 
     // Simulate a fresh module load (e.g. a page revisit) reading the cache.
     vi.resetModules();
@@ -202,7 +202,7 @@ describe('hydrateThemeFromSettings — reconciles font size alongside theme', ()
 
   it('ignores a malformed fontSize value and keeps the current choice', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.fontSize', 'large');
+    localStorage.setItem('pv.fontSize', 'large');
     settingsGetMock.mockResolvedValue({
       status: 'ok',
       data: { scope: 'general', values: { fontSize: 'huge' } },

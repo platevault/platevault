@@ -163,7 +163,7 @@ at review time).
     commits for review).
 
 13b. #458 round 2 (a44a3032): the 460dd650 head broke ubuntu with
-    "__ALM_E2E__ bridge missing" — the new seed invoke raced
+    "__PV_E2E__ bridge missing" — the new seed invoke raced
     complete_first_run's driver.refresh(). Re-ordered seed before the
     refresh per the inbox journeys' proven pattern. Test-file only.
 13c. #465 round 2 opened: with the DOM race removed (5c4ab4c5), the

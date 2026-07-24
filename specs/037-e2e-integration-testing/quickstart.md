@@ -27,7 +27,7 @@ HTTP-boundary-stub plan (see `contracts/coverage-matrix.md`).
 **Pre-existing exception, not covered by that decision** (RESOLVED by the
 spec-tails release-hardening sweep): `crates/targeting/resolver/tests/simbad_live.rs`
 is a separate live-network suite; it is now opt-in — skipped by default,
-set `ALM_LIVE_SIMBAD=1` to exercise it against the real SIMBAD TAP endpoint
+set `PV_LIVE_SIMBAD=1` to exercise it against the real SIMBAD TAP endpoint
 (SC-004 live coverage; still skips gracefully on a transient network error
 via its own `resolve_or_skip` helper once opted in). No longer runs
 unconditionally in `cargo test --workspace`.
@@ -86,8 +86,8 @@ the CLI on :4444 and sends the `tauri:options.application` capability (no
 @astro-plan/desktop test:e2e:real`, in turn backing `just test-e2e`) automates
 steps 2–5 for local Linux/macOS use.
 
-Set `ALM_E2E_APP_BIN=/path/to/binary` to override the default debug path.
-Set `ALM_DB_URL=sqlite:///path/to/alm.db?mode=rwc` to control which DB is reset
+Set `PV_E2E_APP_BIN=/path/to/binary` to override the default debug path.
+Set `PV_DB_URL=sqlite:///path/to/alm.db?mode=rwc` to control which DB is reset
 before each test and which one the launched app connects to; unset, the
 harness's `reset_database()` no-ops and the app falls back to its OS app-data
 path.

@@ -123,7 +123,7 @@ describe('setZoomChoice — write-through to the settings DB + engine zoom', () 
 
     setZoomChoice(125);
 
-    expect(localStorage.getItem('alm.zoom')).toBe('125');
+    expect(localStorage.getItem('pv.zoom')).toBe('125');
     await waitForCall(settingsUpdateMock);
     expect(settingsUpdateMock).toHaveBeenCalledWith('general', { zoom: 125 });
     await waitForCall(setZoomMock);
@@ -135,7 +135,7 @@ describe('setZoomChoice — write-through to the settings DB + engine zoom', () 
     const { setZoomChoice } = await import('./theme');
 
     expect(() => setZoomChoice(90)).not.toThrow();
-    expect(localStorage.getItem('alm.zoom')).toBe('90');
+    expect(localStorage.getItem('pv.zoom')).toBe('90');
 
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(settingsUpdateMock).not.toHaveBeenCalled();
@@ -150,7 +150,7 @@ describe('setZoomChoice — write-through to the settings DB + engine zoom', () 
     expect(() => setZoomChoice(150)).not.toThrow();
     await waitForCall(setZoomMock);
     // The persisted choice survives even though the engine-side call failed.
-    expect(localStorage.getItem('alm.zoom')).toBe('150');
+    expect(localStorage.getItem('pv.zoom')).toBe('150');
   });
 });
 
@@ -160,7 +160,7 @@ describe('hydrateThemeFromSettings — reconciles zoom from the settings DB too'
 
   it('overwrites a stale localStorage cache with the DB zoom value', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.zoom', '90');
+    localStorage.setItem('pv.zoom', '90');
     settingsGetMock.mockResolvedValue({
       status: 'ok',
       data: { scope: 'general', values: { zoom: 125 } },
@@ -174,7 +174,7 @@ describe('hydrateThemeFromSettings — reconciles zoom from the settings DB too'
 
   it('ignores a malformed/out-of-envelope DB zoom value and keeps the localStorage cache', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.zoom', '110');
+    localStorage.setItem('pv.zoom', '110');
     settingsGetMock.mockResolvedValue({
       status: 'ok',
       data: { scope: 'general', values: { zoom: 999 } },
@@ -193,7 +193,7 @@ describe('applyZoom — the app owns the write, never reads the engine back', ()
 
   it('initAppearance() applies the persisted zoom at boot alongside theme/density/fontSize', async () => {
     isTauriMock.mockReturnValue(true);
-    localStorage.setItem('alm.zoom', '150');
+    localStorage.setItem('pv.zoom', '150');
     const { initAppearance } = await import('./theme');
 
     initAppearance();

@@ -29,7 +29,7 @@ vi.mock('@tauri-apps/api/window', () => ({
 // `applyTheme()` reads localStorage (via getThemeChoice) — reset between
 // tests so each case starts from a known theme choice.
 function setStoredChoice(choice: string): void {
-  localStorage.setItem('alm.theme', choice);
+  localStorage.setItem('pv.theme', choice);
 }
 
 /**
@@ -176,7 +176,7 @@ describe('first-run system theme policy', () => {
       expect(document.documentElement.getAttribute('data-theme')).toBe(
         expected,
       );
-      expect(localStorage.getItem('alm.theme')).toBeNull();
+      expect(localStorage.getItem('pv.theme')).toBeNull();
     });
   }
 
@@ -188,7 +188,7 @@ describe('first-run system theme policy', () => {
   for (const { os, prefersDark, choice } of EXPLICIT_CASES) {
     it(`boots with persisted ${choice} instead of the OS ${os} preference`, async () => {
       stubOsTheme(prefersDark);
-      localStorage.setItem('alm.theme', choice);
+      localStorage.setItem('pv.theme', choice);
       document.documentElement.removeAttribute('data-theme');
       vi.resetModules();
 
@@ -198,7 +198,7 @@ describe('first-run system theme policy', () => {
 
       initAppearance();
 
-      expect(localStorage.getItem('alm.theme')).toBe(choice);
+      expect(localStorage.getItem('pv.theme')).toBe(choice);
       expect(getThemeChoice()).toBe(choice);
       expect(resolveTheme()).toBe(choice);
       expect(document.documentElement.getAttribute('data-theme')).toBe(choice);

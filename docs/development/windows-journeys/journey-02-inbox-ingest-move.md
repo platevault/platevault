@@ -22,7 +22,7 @@
   apply → poll `plans.apply.status` until `applied` → assert the source file
   moved) and `ingestion_sessions_search` (same pipeline then session
   grouping) both drive this journey's REAL backend round-trip, but through
-  the `window.__ALM_E2E__.invoke` bridge, not by clicking through the actual
+  the `window.__PV_E2E__.invoke` bridge, not by clicking through the actual
   Inbox UI. Mixed-folder splitting, the needs-review banner/badges, the bulk
   reclassify control, the root-picker prompt, and the stale-plan-refusal UI
   are **not exercised by any Layer-2 journey nor any Playwright mock spec**
