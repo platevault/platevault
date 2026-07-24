@@ -1557,7 +1557,7 @@ export const commands = {
 	 *  - `inbox.item.no_plan`   — item exists but has no linked plan.
 	 *  - `plan.not_found`       — link is present but plan row missing.
 	 */
-	inboxPlan: (inboxItemId: string) => typedError<InboxPlanView, string>(__TAURI_INVOKE("inbox_plan", { inboxItemId })),
+	inboxPlan: (inboxItemId: string) => typedError<InboxPlanView_Serialize, string>(__TAURI_INVOKE("inbox_plan", { inboxItemId })),
 	/**
 	 *  `inbox.plan.apply` — approve + apply the plan for a single inbox item.
 	 * 
@@ -1626,7 +1626,7 @@ export const commands = {
 	 *  # Errors
 	 *  Returns a string error only if the underlying list/plan queries fail.
 	 */
-	inboxPlanListOpen: () => typedError<InboxOpenPlansResponse, string>(__TAURI_INVOKE("inbox_plan_list_open")),
+	inboxPlanListOpen: () => typedError<InboxOpenPlansResponse_Serialize, string>(__TAURI_INVOKE("inbox_plan_list_open")),
 	/**
 	 *  `inbox.property_registry` — return the typed property registry.
 	 * 
@@ -5180,19 +5180,43 @@ export type InboxListResponse_Serialize = {
 };
 
 /**  One open plan in the aggregate inbox plan surface (spec 041, US2). */
-export type InboxOpenPlan = {
+export type InboxOpenPlan = InboxOpenPlan_Serialize | InboxOpenPlan_Deserialize;
+
+/**  One open plan in the aggregate inbox plan surface (spec 041, US2). */
+export type InboxOpenPlan_Deserialize = {
 	inboxItemId: string,
 	/**  Display label for the ingestion group (the item's relative path / folder name). */
 	itemName: string,
 	planId: string,
 	state: string,
 	stale: boolean,
-	actions: InboxPlanAction[],
+	actions: InboxPlanAction_Deserialize[],
+};
+
+/**  One open plan in the aggregate inbox plan surface (spec 041, US2). */
+export type InboxOpenPlan_Serialize = {
+	inboxItemId: string,
+	/**  Display label for the ingestion group (the item's relative path / folder name). */
+	itemName: string,
+	planId: string,
+	state: string,
+	stale: boolean,
+	actions: InboxPlanAction_Serialize[],
 };
 
 /**  Response from `inbox.plan.list_open` — all open plans across roots (spec 041, US2). */
-export type InboxOpenPlansResponse = {
-	plans: InboxOpenPlan[],
+export type InboxOpenPlansResponse = InboxOpenPlansResponse_Serialize | InboxOpenPlansResponse_Deserialize;
+
+/**  Response from `inbox.plan.list_open` — all open plans across roots (spec 041, US2). */
+export type InboxOpenPlansResponse_Deserialize = {
+	plans: InboxOpenPlan_Deserialize[],
+	/**  Sum of actions across all plans (for the surface header count). */
+	totalActions: number,
+};
+
+/**  Response from `inbox.plan.list_open` — all open plans across roots (spec 041, US2). */
+export type InboxOpenPlansResponse_Serialize = {
+	plans: InboxOpenPlan_Serialize[],
 	/**  Sum of actions across all plans (for the surface header count). */
 	totalActions: number,
 };
@@ -5202,7 +5226,14 @@ export type InboxOpenPlansResponse = {
  * 
  *  `action` is `"move"` | `"catalogue"` | `"archive"` | `"trash"`.
  */
-export type InboxPlanAction = {
+export type InboxPlanAction = InboxPlanAction_Serialize | InboxPlanAction_Deserialize;
+
+/**
+ *  One plan action entry in the in-context plan panel.
+ * 
+ *  `action` is `"move"` | `"catalogue"` | `"archive"` | `"trash"`.
+ */
+export type InboxPlanAction_Deserialize = {
 	/**  1-based ordinal within the plan. */
 	index: number,
 	/**  `"move"` | `"catalogue"` | `"archive"` | `"trash"` */
@@ -5218,8 +5249,35 @@ export type InboxPlanAction = {
 	requiresDestructiveConfirm: boolean,
 	/**
 	 *  Frame type of the file being acted on (e.g. `"light"`, `"dark"`, `"flat"`,
-	 *  `"bias"`, `"master_flat"`, etc.). `null` for legacy plans or catalogue/archive/trash
-	 *  actions without a classification.
+	 *  `"bias"`, `"master_flat"`, etc.). `None` for legacy plans that pre-date this
+	 *  field or for catalogue / archive / trash actions without a classification.
+	 */
+	frameType: string | null,
+};
+
+/**
+ *  One plan action entry in the in-context plan panel.
+ * 
+ *  `action` is `"move"` | `"catalogue"` | `"archive"` | `"trash"`.
+ */
+export type InboxPlanAction_Serialize = {
+	/**  1-based ordinal within the plan. */
+	index: number,
+	/**  `"move"` | `"catalogue"` | `"archive"` | `"trash"` */
+	action: string,
+	fromPath: string,
+	toPath: string,
+	/**
+	 *  Human-readable resolved destination preview
+	 *  (equals `from_path` for catalogue actions).
+	 */
+	destinationPreview: string,
+	/**  True when this action requires explicit destructive confirmation before apply. */
+	requiresDestructiveConfirm: boolean,
+	/**
+	 *  Frame type of the file being acted on (e.g. `"light"`, `"dark"`, `"flat"`,
+	 *  `"bias"`, `"master_flat"`, etc.). `None` for legacy plans that pre-date this
+	 *  field or for catalogue / archive / trash actions without a classification.
 	 */
 	frameType?: string | null,
 };
@@ -5245,7 +5303,15 @@ export type InboxPlanCancelResponse = {
  *  Read via `inbox_plan_links` so the inbox surface can show plan detail
  *  without navigating to the Archive page (FR-004).
  */
-export type InboxPlanView = {
+export type InboxPlanView = InboxPlanView_Serialize | InboxPlanView_Deserialize;
+
+/**
+ *  Response from `inbox.plan` — plan(s) linked to an inbox item (spec 041).
+ * 
+ *  Read via `inbox_plan_links` so the inbox surface can show plan detail
+ *  without navigating to the Archive page (FR-004).
+ */
+export type InboxPlanView_Deserialize = {
 	planId: string,
 	state: string,
 	/**
@@ -5255,7 +5321,26 @@ export type InboxPlanView = {
 	 *  to re-classify and re-confirm.
 	 */
 	stale: boolean,
-	actions: InboxPlanAction[],
+	actions: InboxPlanAction_Deserialize[],
+};
+
+/**
+ *  Response from `inbox.plan` — plan(s) linked to an inbox item (spec 041).
+ * 
+ *  Read via `inbox_plan_links` so the inbox surface can show plan detail
+ *  without navigating to the Archive page (FR-004).
+ */
+export type InboxPlanView_Serialize = {
+	planId: string,
+	state: string,
+	/**
+	 *  True when the executor's CAS detected that one or more source files
+	 *  changed since the plan was created (FR-007 / T011).
+	 *  When `stale` is true the UI should disable Apply and prompt the user
+	 *  to re-classify and re-confirm.
+	 */
+	stale: boolean,
+	actions: InboxPlanAction_Serialize[],
 };
 
 /**  The sky pointing a recommendation set was computed from (decimal degrees). */
