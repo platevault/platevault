@@ -45,7 +45,7 @@ import type {
 } from '@/bindings/index';
 import { useSetPageStatus } from '@/app/PageStatusContext';
 import { FilterToolbar, ListPageLayout, PageTopBar } from '@/components';
-import { usePlanApplyProgress } from '@/features/plans/usePlanApplyProgress';
+import { useInboxPlanApplyFlow } from './useInboxPlanApplyFlow';
 import { m } from '@/lib/i18n';
 import type { FrameType } from '@/lib/route-contract';
 import { useGrouping } from '@/lib/use-grouping';
@@ -72,15 +72,12 @@ import {
   inboxClassifyQueryKey,
   mergeRescanRoots,
   normalizeConfirmError,
-  useApplySelectedInboxPlans,
   useInboxClassification,
   useInboxClassifySourceGroup,
   useInboxConfirm,
   useInboxItemMetadata,
   useInboxList,
-  useInboxPlanApplyAll,
   useInboxPlanBreakdowns,
-  useInboxPlanCancel,
   useInboxRescan,
   useOpenInboxPlans,
 } from './store';
@@ -751,14 +748,15 @@ export function InboxPage() {
     [],
   );
 
-  const { applyAll, loading: applyAllLoading } = useInboxPlanApplyAll();
-  const { applySelected, loading: applySelectedLoading } =
-    useApplySelectedInboxPlans();
-  const { cancel, loading: cancelLoading } = useInboxPlanCancel();
-  // Live long-op progress consumer (spec 042 US16 / FR-021): streams per-item
-  // OperationEvents over the channel when applying a single ingestion plan.
-  const { progress: applyProgress, run: runPlanApply } = usePlanApplyProgress();
-  const [progressPlanId, setProgressPlanId] = useState<string | null>(null);
+  const {
+    handleApplyOne,
+    handleApplyAll,
+    handleApplySelected,
+    handleCancel,
+    applyProgress,
+    progressPlanId,
+    planBusy,
+  } = useInboxPlanApplyFlow(refreshAll, viewResultAction);
 
   /**
    * Confirm `item` (optionally targeting a caller-chosen destination `rootId`).
@@ -1041,115 +1039,6 @@ export function InboxPage() {
     );
   };
 
-  const handleApplySelected = async (inboxItemIds: string[]) => {
-    if (inboxItemIds.length === 0) return;
-    const result = await applySelected(inboxItemIds);
-    if (result) {
-      const failed = result.results.filter((r) => r.error != null).length;
-      if (failed > 0) {
-        addToast({
-          message: m.inbox_toast_plans_partial({
-            applied: String(result.results.length - failed),
-            failed: String(failed),
-          }),
-          variant: 'warn',
-        });
-      } else {
-        addToast({
-          message: m.inbox_toast_plans_applying({
-            count: String(result.results.length),
-          }),
-          variant: 'info',
-          // #871: no direct way to reach the moved items/updated inventory
-          // after apply — the user had to find it manually. Both bulk apply
-          // commands complete synchronously (no live progress channel), so
-          // the plans ARE already applied by the time this toast shows.
-          action: viewResultAction(),
-        });
-      }
-      refreshAll();
-    } else {
-      addToast({ message: m.inbox_toast_apply_failed(), variant: 'error' });
-    }
-  };
-
-  const handleApplyAll = async () => {
-    const result = await applyAll();
-    if (result) {
-      const failed = result.results.filter((r) => r.error != null).length;
-      if (failed > 0) {
-        addToast({
-          message: m.inbox_toast_all_plans_partial({
-            applied: String(result.results.length - failed),
-            failed: String(failed),
-          }),
-          variant: 'warn',
-        });
-      } else {
-        addToast({
-          message: m.inbox_toast_all_plans_applying({
-            count: String(result.results.length),
-          }),
-          variant: 'info',
-          action: viewResultAction(),
-        });
-      }
-      refreshAll();
-    }
-  };
-
-  // Apply a single ingestion plan with live per-item progress streamed over
-  // the long-operation OperationEvent channel (spec 042 US16 / FR-021). This is
-  // the end-to-end consumer of the channel contract on the inbox plan surface.
-  //
-  // Issue #769: a freshly-confirmed plan is `ready_for_review` with no
-  // `approval_token` — `plans.apply` unconditionally rejects any plan that
-  // isn't `approved`. Approve it first (same precondition "Apply all" already
-  // satisfies via its own backend command) and thread the returned token
-  // through, otherwise this always fails with `plan.invalid_state` before any
-  // item is touched.
-  const handleApplyOne = async (planId: string) => {
-    setProgressPlanId(planId);
-    let approvalToken: string | undefined;
-    try {
-      approvalToken = unwrap(await commands.plansApprove(planId)).approvalToken;
-    } catch {
-      // runPlanApply (the success path below) resets progress to IDLE on its
-      // own; skipping it here means a stale progressPlanId from a previously
-      // applied plan would otherwise keep pointing a progress display at this
-      // now-failed row.
-      setProgressPlanId(null);
-      addToast({
-        message: m.inbox_plan_apply_failed_toast(),
-        variant: 'error',
-      });
-      return;
-    }
-    const response = await runPlanApply({ id: planId, approvalToken });
-    // GF-30: Clear the pre-flight busy guard once runPlanApply returns.
-    // applyProgress.running covers the in-flight window; progressPlanId is
-    // only needed for the approve→channel-open gap before running goes true.
-    setProgressPlanId(null);
-    if (response) {
-      addToast({
-        message: m.inbox_plan_applied_toast(),
-        variant: 'info',
-        action: viewResultAction(),
-      });
-      refreshAll();
-    } else {
-      addToast({
-        message: m.inbox_plan_apply_failed_toast(),
-        variant: 'error',
-      });
-    }
-  };
-
-  const handleCancel = async (inboxItemId: string) => {
-    await cancel(inboxItemId);
-    addToast({ message: m.inbox_toast_plan_discarded(), variant: 'info' });
-    refreshAll();
-  };
 
   const hasOpenPlan = selectedItem?.state === 'plan_open';
 
@@ -1198,14 +1087,6 @@ export function InboxPage() {
     [canConfirm, confirmLoading, confirmFlowBusy, handleConfirm],
   );
 
-  // GF-30: Include progressPlanId in busy derivation — the approve→apply
-  // window between setProgressPlanId and runPlanApply completing was previously
-  // unguarded, allowing double-submit of the same plan.
-  const planBusy =
-    applyAllLoading ||
-    applySelectedLoading ||
-    cancelLoading ||
-    progressPlanId != null;
 
   // Stage B: plan review overlay open/close state.
   const [planOverlayOpen, setPlanOverlayOpen] = useState(false);
