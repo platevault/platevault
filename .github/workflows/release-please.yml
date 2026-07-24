@@ -116,21 +116,27 @@ jobs:
       # through to `npm run tauri`. `tauriScript: pnpm tauri` pins it to the
       # same invocation the justfile already uses for `tauri dev`.
       #
-      # includeUpdaterJson + updaterJsonPreferNsis mirror astro-up's proven
-      # release.yml (~/dev/astro-up/.github/workflows/release.yml): the
-      # Windows updater artifact is the NSIS bundle, and a signed `latest.json`
-      # is generated and uploaded alongside the platform bundles.
+      # uploadUpdaterJson + updaterJsonPreferNsis: uploadUpdaterJson was named
+      # includeUpdaterJson in v0 — renaming was required or latest.json silently
+      # stops uploading. updaterJsonPreferNsis is unchanged in v1.
       #
       # releaseDraft: false — release-please (the `release-please` job above)
       # already published a real (non-draft) GitHub Release for this tag, so
       # this step finds that release by tag and uploads bundles/signatures to
-      # it directly, rather than astro-up's separate draft-then-publish dance
-      # (that dance exists there because its release-please step creates the
-      # release explicitly as part of the same job; here it's already public
-      # by the time this job runs, and release-gate.yml already hard-gates the
-      # release PR pre-merge).
+      # it directly. In v1, tauri-action also updates the existing release name
+      # and body from releaseName/releaseBody — we pass the same values
+      # release-please wrote, so the update is effectively a no-op.
+      #
+      # v1 breaking changes that do NOT bite us:
+      #   - .app.tar.gz (macOS updater artifact) now embeds the app version in
+      #     the filename; latest.json URLs point to these versioned names.
+      #     tauri-plugin-updater 2.x follows GitHub redirect URLs so the
+      #     installed client will resolve the new names correctly.
+      #   - updaterJsonKeepUniversal removed (now always on): we never set it.
+      #   - assetNamePattern renamed to artifactNamePattern: we don't use it.
+      #   - Tauri v1/unstable support dropped: we are on Tauri 2 stable.
       - name: Build, sign, and upload Tauri bundles
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -155,7 +161,7 @@ jobs:
           releaseBody: ${{ needs.release-please.outputs.release_body }}
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: true
+          uploadUpdaterJson: true
           updaterJsonPreferNsis: true
 
       # Windows bundles above carry only the minisign updater signature, not an
