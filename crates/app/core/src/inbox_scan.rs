@@ -24,5 +24,5 @@ use sqlx::SqlitePool;
 /// Returns `ContractError` when the settings document cannot be read.
 pub async fn resolve_scan_options(pool: &SqlitePool) -> Result<ScanOptions, ContractError> {
     let settings = get_ingestion_settings(pool).await?;
-    Ok(ScanOptions { follow_symlinks: settings.follow_symlinks })
+    Ok(ScanOptions { follow_symlinks: settings.follow_symlinks, workers: None })
 }

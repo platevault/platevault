@@ -180,6 +180,16 @@ impl Lane {
 pub struct ScanOptions {
     /// Follow symlinks/junctions. Default `false` per constitution §I.
     pub follow_symlinks: bool,
+    /// Number of worker threads for per-file I/O during a scan.
+    ///
+    /// `None` (the default) uses the sequential path — one thread, no spawn
+    /// overhead. Measured to be at SSD parity vs the multi-threaded variants
+    /// (see `crates/tools/perf-bench`).
+    ///
+    /// `Some(N)` where N > 1 enables the parallel path capped at
+    /// [`MAX_SCAN_WORKERS`]. Intended for rotational HDD libraries where
+    /// per-file seek latency amortises across threads.
+    pub workers: Option<usize>,
 }
 
 // ── FITS / XISF extensions ────────────────────────────────────────────────────
@@ -275,14 +285,19 @@ struct LeafDir {
 /// Intermediate folders are not items. Symlinks are not followed unless
 /// `options.follow_symlinks = true`.
 ///
-/// Per-file I/O (64 KB signature read + FITS header parse for master
-/// detection) is distributed across a bounded worker pool via
-/// [`std::thread::scope`] so a 50 k-file library does not block a single
-/// thread for minutes. Directory traversal (phase 1) remains sequential
-/// because `readdir` syscalls are fast and do not benefit from parallelism.
+/// Two-phase design: phase 1 is a fast sequential `readdir` walk that builds
+/// a list of leaf directories (no per-file I/O). Phase 2 processes each leaf
+/// — 64 KB signature reads + FITS header parses for master detection — using
+/// either the sequential path (`options.workers == None` or `Some(1)`) or a
+/// bounded parallel pool (`options.workers == Some(N > 1)`).
+///
+/// The default is sequential. On SSD the read channel saturates at one
+/// reader and extra threads contend rather than help. Set `workers` to a
+/// value > 1 for rotational HDD libraries where parallelism amortises seek
+/// latency.
 ///
 /// Results are sorted by `relative_path` for deterministic output regardless
-/// of OS `readdir` order or worker scheduling.
+/// of OS `readdir` order.
 ///
 /// # Errors
 ///
@@ -306,31 +321,43 @@ pub fn scan_root(root: &Path, options: &ScanOptions) -> Result<Vec<ScannedInboxI
         return Ok(vec![]);
     }
 
-    // Phase 2: process per-file I/O in parallel across a bounded worker pool.
-    let worker_count = std::thread::available_parallelism()
-        .map_or(4, std::num::NonZero::get)
-        .min(MAX_SCAN_WORKERS);
-
-    // Ceiling-divide leaf dirs across workers so each gets a roughly equal
-    // share. A single extra leaf in one chunk is acceptable.
-    let chunk_size = leaf_dirs.len().div_ceil(worker_count).max(1);
+    // Phase 2: process per-file I/O.
+    //
+    // Default is sequential (worker_count == 1): no thread spawn overhead,
+    // SSD-friendly (a single reader saturates the read channel; extra threads
+    // contend rather than help), and correct for all measured configurations.
+    //
+    // Set options.workers to Some(N > 1) to enable the parallel path. Useful
+    // on rotational HDDs where per-file seek latency (~10 ms) amortises well
+    // across multiple threads. The parallel path caps at MAX_SCAN_WORKERS.
+    let worker_count = options.workers.unwrap_or(1).clamp(1, MAX_SCAN_WORKERS);
 
     let mut items: Vec<ScannedInboxItem> = Vec::with_capacity(leaf_dirs.len());
 
-    std::thread::scope(|s| {
-        let handles: Vec<_> = leaf_dirs
-            .chunks(chunk_size)
-            .map(|chunk| {
-                s.spawn(|| chunk.iter().map(|leaf| process_leaf(root, leaf)).collect::<Vec<_>>())
-            })
-            .collect();
+    if worker_count == 1 {
+        // Sequential path: no thread spawn, no join overhead.
+        items.extend(leaf_dirs.iter().map(|leaf| process_leaf(root, leaf)));
+    } else {
+        // Parallel path: ceiling-divide leaf dirs across workers.
+        let chunk_size = leaf_dirs.len().div_ceil(worker_count).max(1);
 
-        for handle in handles {
-            // Worker panics only on internal bugs; per-file I/O errors are
-            // handled inside process_leaf (bad file → skipped, not fatal).
-            items.extend(handle.join().expect("scan worker panicked"));
-        }
-    });
+        std::thread::scope(|s| {
+            let handles: Vec<_> = leaf_dirs
+                .chunks(chunk_size)
+                .map(|chunk| {
+                    s.spawn(|| {
+                        chunk.iter().map(|leaf| process_leaf(root, leaf)).collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+
+            for handle in handles {
+                // Worker panics only on internal bugs; per-file I/O errors are
+                // handled inside process_leaf (bad file → skipped, not fatal).
+                items.extend(handle.join().expect("scan worker panicked"));
+            }
+        });
+    }
 
     // Sort by relative_path for deterministic output.
     items.sort_unstable_by(|a, b| a.relative_path.cmp(&b.relative_path));
@@ -852,7 +879,7 @@ mod tests {
         fs::create_dir_all(&scan_root_dir).unwrap();
         symlink(&real_target, scan_root_dir.join("linked")).unwrap();
 
-        let options = ScanOptions { follow_symlinks: true };
+        let options = ScanOptions { follow_symlinks: true, workers: None };
         let items = scan_root(&scan_root_dir, &options).unwrap();
         assert_eq!(items.len(), 1, "symlinked subdir is traversed when explicitly enabled");
     }
@@ -905,7 +932,7 @@ mod tests {
         fs::create_dir_all(&scan_root_dir).unwrap();
         make_junction(&scan_root_dir.join("junction_to_target"), &real_target);
 
-        let options = ScanOptions { follow_symlinks: true };
+        let options = ScanOptions { follow_symlinks: true, workers: None };
         let items = scan_root(&scan_root_dir, &options).unwrap();
         assert_eq!(items.len(), 1, "junction is traversed when explicitly enabled");
     }

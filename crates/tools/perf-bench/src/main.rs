@@ -235,10 +235,24 @@ async fn main() {
     let root_id = reg.source_id;
 
     // ── Scenario A: scan_root ─────────────────────────────────────────────────
+    //
+    // SCAN_WORKERS controls the worker count passed via ScanOptions::workers:
+    //   unset (default) → None  (sequential, the production default)
+    //   "2" / "4" / "8" → Some(N) (parallel path; use for HDD comparison)
+    //
+    // For a proper worker-count comparison, run this binary once per variant
+    // so each run starts with the same cold metadata-cache and OS page-cache
+    // state.  An in-process warmup-then-sweep distorts results because moka's
+    // concurrent writes serialise subsequent single-threaded reads.
+
+    let scan_workers: Option<usize> =
+        std::env::var("SCAN_WORKERS").ok().and_then(|v| v.parse().ok());
+
+    let scan_opts = ScanOptions { follow_symlinks: false, workers: scan_workers };
 
     counter.store(0, Ordering::Relaxed);
     let t0 = Instant::now();
-    let scanned = scan_root(fixture_dir.path(), &ScanOptions::default()).expect("scan_root");
+    let scanned = scan_root(fixture_dir.path(), &scan_opts).expect("scan_root");
     let scan_ms = t0.elapsed().as_millis();
     let scan_stmts = counter.load(Ordering::Relaxed);
 
@@ -246,7 +260,11 @@ async fn main() {
         "scan_root",
         n,
         scan_ms,
-        &serde_json::json!({ "items": scanned.len(), "sqlx_stmts": scan_stmts }),
+        &serde_json::json!({
+            "items": scanned.len(),
+            "sqlx_stmts": scan_stmts,
+            "workers": scan_workers,
+        }),
     );
 
     // ── Persist source groups (prerequisite for classify) ─────────────────────
