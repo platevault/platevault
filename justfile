@@ -142,6 +142,11 @@ typecheck:
 contracts-build:
     pnpm --filter @astro-plan/contracts build
 
+# Verify the vanilla-extract theme contract file is up to date with the DTCG
+# token sources in tokens/. Fails with a diff if themes.css.ts has drifted.
+ve-themes-check:
+    pnpm --filter @astro-plan/desktop ve:themes:check
+
 # Regenerate Rust-derived JSON contract schemas and the tauri-specta
 # TypeScript bindings, then fail when either is out of sync with the
 # committed tree. Wire this into CI for spec 002 + onward.
