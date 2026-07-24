@@ -753,7 +753,7 @@ mod tests {
         assert!(!bak.exists(), "backup must not be created for a fresh (unmigrated) database");
     }
 
-    /// Existing DB with all migrations applied: no backup needed (has_pending=false).
+    /// Existing DB with all migrations applied: no backup needed (`has_pending=false`).
     #[tokio::test]
     async fn backup_skipped_when_up_to_date() {
         let dir = tempfile::tempdir().unwrap();
