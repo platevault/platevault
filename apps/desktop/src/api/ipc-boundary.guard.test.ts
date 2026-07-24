@@ -55,7 +55,10 @@ const files = Object.entries(raw)
   .filter(
     ([path]) =>
       !path.includes('/paraglide/') &&
-      !path.endsWith('/api/ipc-boundary.guard.test.ts'),
+      !path.endsWith('/api/ipc-boundary.guard.test.ts') &&
+      // vanilla-extract CSS-in-TS files; ?raw import returns undefined when the
+      // VE plugin intercepts them — and they can never be IPC boundary offenders.
+      !path.endsWith('.css.ts'),
   )
   .map(([path, src]) => ({ path, src: stripComments(src) }));
 
