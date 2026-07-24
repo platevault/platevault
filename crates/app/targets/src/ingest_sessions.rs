@@ -24,7 +24,7 @@
 //!    associate_or_enqueue`]: a cache hit links the canonical target inline; a
 //!    miss enqueues a `pending` row for the background drain. Never blocks, never
 //!    fabricates a target (FR-009/FR-013).
-//! 4. **Derive `session_key`** ([`sessions::session_key`]). When the observer
+//! 4. **Derive `session_key`** ([`sessions::SessionKey::new`]). When the observer
 //!    location is unset the observing-night boundary is computed in UTC (R11)
 //!    and `has_observer_location = 0` is recorded; the error is never propagated
 //!    so ingest is never blocked. The key's target component is the resolved
@@ -71,7 +71,7 @@ use persistence_plans::repositories::projects as repo_projects;
 use persistence_targets::repositories::framing as framing_repo;
 use persistence_targets::repositories::inventory;
 use persistence_targets::repositories::q_targets_ingest as repo;
-use sessions::{session_key, ObserverContext};
+use sessions::{ObserverContext, SessionKey};
 use sqlx::SqlitePool;
 use time::format_description::well_known::Iso8601;
 use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
@@ -412,7 +412,7 @@ pub async fn ensure_library_root(
 /// `has_observer_location` is always `false` for v1: the observer's geographic
 /// location is not yet threaded into the ingest path, so the observing-night
 /// boundary uses the UTC fallback (R11). The error path of
-/// [`sessions::session_key`] is never reached because an observer is always
+/// [`sessions::SessionKey::new`] is never reached because an observer is always
 /// supplied (UTC); ingest is never blocked on a missing location.
 fn derive_session_key(key_target: &str, meta: &RawFileMetadata) -> (String, bool) {
     let filter = meta.filter.as_deref().unwrap_or("").trim();
@@ -422,9 +422,9 @@ fn derive_session_key(key_target: &str, meta: &RawFileMetadata) -> (String, bool
 
     // R11: UTC observer fallback — never propagate ObserverLocationMissing.
     let observer = ObserverContext { utc_offset: UtcOffset::UTC };
-    let key = session_key(key_target, filter, &binning, gain, capture_at, Some(&observer))
-        .unwrap_or_else(|_| format!("{key_target}|{filter}|{binning}|{gain}|"));
-    (key, false)
+    let key = SessionKey::new(key_target, filter, &binning, gain, capture_at, Some(&observer))
+        .unwrap_or_else(|_| SessionKey(format!("{key_target}|{filter}|{binning}|{gain}|")));
+    (key.0, false)
 }
 
 /// Combine XBINNING/YBINNING into the canonical `NxM` form (e.g. `1x1`), or `""`.

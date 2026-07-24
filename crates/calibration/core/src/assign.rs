@@ -70,7 +70,7 @@ pub fn evaluate_assign(
     config: &MatchingRuleConfig,
 ) -> Result<AssignDecision, AssignError> {
     // Guard E5.
-    if session.session_type == "mixed" {
+    if session.is_mixed() {
         return Err(AssignError::SessionMixedState);
     }
 

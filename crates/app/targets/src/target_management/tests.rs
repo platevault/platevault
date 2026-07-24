@@ -439,7 +439,7 @@ async fn sessions_list_returns_linked_sessions() {
 }
 
 /// FR-003/US2-AC1 (#739): the filter segment of a real (pipe-delimited,
-/// `sessions::session_key`-shaped) `session_key` must surface on the DTO.
+/// `sessions::SessionKey::new`-shaped) `session_key` must surface on the DTO.
 #[tokio::test]
 async fn sessions_list_extracts_filter_from_session_key() {
     let db = setup().await;

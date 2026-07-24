@@ -1,7 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! T033a — `session_key` derivation + `observing_night` local-solar-noon
+//! T033a — `SessionKey` derivation + `observing_night` local-solar-noon
 //! algorithm.
 //!
 //! See `specs/002-data-lifecycle-state-model/research.md` §2.5. Missing
@@ -49,27 +49,79 @@ pub fn observing_night(
     Ok(format_date_iso(date))
 }
 
-/// Derive the canonical session key tuple as a stable string.
+/// The canonical session identity string `target_id|filter|binning|gain|night`.
 ///
-/// Frames whose `observing_night` differs MUST split into separate sessions
-/// (FR-012); that split decision lives in the candidate-formation pipeline,
-/// not here. This function is the pure key-canonicalisation step.
+/// Wraps the stable pipe-delimited serialization so callers hold a typed value
+/// rather than a plain `String`, eliminating the positional-swap hazard present
+/// when constructing via four same-type `&str` arguments.
 ///
-/// # Errors
-/// Returns [`KeyError::ObserverLocationMissing`] when `observer` is `None`.
-pub fn session_key(
-    target_id: &str,
-    filter: &str,
-    binning: &str,
-    gain: &str,
-    utc_capture_at: OffsetDateTime,
-    observer: Option<&ObserverContext>,
-) -> Result<String, KeyError> {
-    let night = observing_night(utc_capture_at, observer)?;
-    Ok(format!("{target_id}|{filter}|{binning}|{gain}|{night}"))
+/// # Construction
+/// Use [`SessionKey::new`] to derive from frame metadata.
+/// Use [`SessionKey::parse`] to split a stored key back into its fields.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct SessionKey(pub String);
+
+impl SessionKey {
+    /// Derive the canonical session key for a frame.
+    ///
+    /// Frames whose `observing_night` differs MUST split into separate sessions
+    /// (FR-012); that split decision lives in the candidate-formation pipeline,
+    /// not here. This method is the pure key-canonicalisation step.
+    ///
+    /// # Errors
+    /// Returns [`KeyError::ObserverLocationMissing`] when `observer` is `None`.
+    pub fn new(
+        target_id: &str,
+        filter: &str,
+        binning: &str,
+        gain: &str,
+        utc_capture_at: OffsetDateTime,
+        observer: Option<&ObserverContext>,
+    ) -> Result<Self, KeyError> {
+        let night = observing_night(utc_capture_at, observer)?;
+        Ok(Self(format!("{target_id}|{filter}|{binning}|{gain}|{night}")))
+    }
+
+    /// Split a stored session key back into its fields — the inverse of
+    /// [`SessionKey::new`] and the single supported reader of that format.
+    ///
+    /// A key with fewer than five segments yields `None` for the missing tail;
+    /// any extra `|` beyond the fourth stays inside `night`. Legacy JSON-object
+    /// keys are deliberately NOT handled here: that pre-035 shape is an app-layer
+    /// compatibility concern, not part of this format.
+    #[must_use]
+    pub fn parse(key: &str) -> SessionKeyParts {
+        let mut parts =
+            key.splitn(5, '|').map(|s| if s.is_empty() { None } else { Some(s.to_owned()) });
+        SessionKeyParts {
+            target: parts.next().flatten(),
+            filter: parts.next().flatten(),
+            binning: parts.next().flatten(),
+            gain: parts.next().flatten(),
+            night: parts.next().flatten(),
+        }
+    }
+
+    /// The key as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
-/// The fields encoded in a [`session_key`] string.
+impl std::fmt::Display for SessionKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl AsRef<str> for SessionKey {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+/// The fields encoded in a [`SessionKey`] string.
 ///
 /// Blank segments are `None` so callers can layer their own fallbacks (e.g.
 /// `acquisition_fingerprint`) without re-checking for empty strings.
@@ -80,26 +132,6 @@ pub struct SessionKeyParts {
     pub binning: Option<String>,
     pub gain: Option<String>,
     pub night: Option<String>,
-}
-
-/// Split a stored session key back into its fields — the inverse of
-/// [`session_key`] and the single supported reader of that format.
-///
-/// A key with fewer than five segments yields `None` for the missing tail;
-/// any extra `|` beyond the fourth stays inside `night`. Legacy JSON-object
-/// keys are deliberately NOT handled here: that pre-035 shape is an app-layer
-/// compatibility concern, not part of this format.
-#[must_use]
-pub fn parse_session_key(key: &str) -> SessionKeyParts {
-    let mut parts =
-        key.splitn(5, '|').map(|s| if s.is_empty() { None } else { Some(s.to_owned()) });
-    SessionKeyParts {
-        target: parts.next().flatten(),
-        filter: parts.next().flatten(),
-        binning: parts.next().flatten(),
-        gain: parts.next().flatten(),
-        night: parts.next().flatten(),
-    }
 }
 
 fn previous_day(d: Date) -> Date {
@@ -166,8 +198,8 @@ mod tests {
     }
 
     #[test]
-    fn session_key_stable_string() {
-        let key = session_key(
+    fn session_key_new_stable_string() {
+        let key = SessionKey::new(
             "M31",
             "Lum",
             "1x1",
@@ -176,27 +208,34 @@ mod tests {
             Some(&observer(1)),
         )
         .unwrap();
-        assert_eq!(key, "M31|Lum|1x1|100|2026-03-15");
+        assert_eq!(key.as_str(), "M31|Lum|1x1|100|2026-03-15");
     }
 
     #[test]
-    fn parse_session_key_round_trips_and_blanks_are_none() {
-        let parts = parse_session_key("M31|Lum|1x1|100|2026-03-15");
+    fn session_key_parse_round_trips_and_blanks_are_none() {
+        let parts = SessionKey::parse("M31|Lum|1x1|100|2026-03-15");
         assert_eq!(parts.target.as_deref(), Some("M31"));
         assert_eq!(parts.filter.as_deref(), Some("Lum"));
         assert_eq!(parts.night.as_deref(), Some("2026-03-15"));
 
         // An unfiltered frame writes an empty segment, not a missing one.
-        let blank = parse_session_key("M31||1x1|100|2026-03-15");
+        let blank = SessionKey::parse("M31||1x1|100|2026-03-15");
         assert_eq!(blank.filter, None);
 
         // A short/foreign key yields None rather than panicking.
-        assert_eq!(parse_session_key("KEY").filter, None);
+        assert_eq!(SessionKey::parse("KEY").filter, None);
     }
 
     #[test]
-    fn session_key_refuses_without_observer() {
-        assert!(session_key("M31", "Lum", "1x1", "100", utc(2026, Month::March, 15, 21, 0), None,)
-            .is_err());
+    fn session_key_new_refuses_without_observer() {
+        assert!(SessionKey::new(
+            "M31",
+            "Lum",
+            "1x1",
+            "100",
+            utc(2026, Month::March, 15, 21, 0),
+            None,
+        )
+        .is_err());
     }
 }

@@ -21,9 +21,7 @@ pub use identity::{
     LightSessionDiscriminators, RasterDimensions, SessionDiscriminators, SessionIdentity,
     SessionKind,
 };
-pub use key::{
-    observing_night, parse_session_key, session_key, KeyError, ObserverContext, SessionKeyParts,
-};
+pub use key::{observing_night, KeyError, ObserverContext, SessionKey, SessionKeyParts};
 pub use observing_night::{ObservingNight, ObservingNightDerivation, ObservingNightError};
 pub use optic_train::optic_train_key;
 

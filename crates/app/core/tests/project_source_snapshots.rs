@@ -93,7 +93,7 @@ async fn insert_frame(
 }
 
 /// An acquisition session keyed exactly the way real ingest keys one
-/// (`sessions::session_key`: `target|filter|binning|gain|night`).
+/// (`sessions::SessionKey::new`: `target|filter|binning|gain|night`).
 async fn insert_session(
     pool: &sqlx::SqlitePool,
     session_id: &str,

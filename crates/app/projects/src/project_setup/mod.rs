@@ -115,7 +115,7 @@ pub(super) struct SourceSnapshot {
 /// Read the snapshot fields for one inventory (acquisition) session.
 ///
 /// - `filter` comes from the session key, whose format `crates/sessions`
-///   owns (`sessions::parse_session_key`); it is the same value the Sessions
+///   owns (`sessions::SessionKey::parse`); it is the same value the Sessions
 ///   surfaces show.
 /// - `frames` is the ACTIVE (non-`missing`) frame count, matching
 ///   `app_core::sessions`' honest counts rather than the raw `frame_ids` length.
@@ -139,7 +139,7 @@ pub(super) async fn source_snapshot(
         return Ok(SourceSnapshot::default());
     };
 
-    let key = sessions::parse_session_key(&row.session_key);
+    let key = sessions::SessionKey::parse(&row.session_key);
     let target = row.canonical_target_name.filter(|n| !n.is_empty()).or(key.target);
     let filter = key.filter.unwrap_or_default();
 

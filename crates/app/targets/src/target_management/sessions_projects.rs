@@ -56,7 +56,7 @@ pub async fn sessions_list(
 }
 
 /// Extract the filter segment (2nd field) from a `session_key` of shape
-/// `target|filter|binning|gain|night` (`sessions::session_key`, #739
+/// `target|filter|binning|gain|night` (`sessions::SessionKey::new`, #739
 /// FR-003/US2-AC1). Returns `""` for a malformed/legacy key rather than
 /// panicking — display-only derivation, never authoritative.
 fn filter_from_session_key(session_key: &str) -> String {
