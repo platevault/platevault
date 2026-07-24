@@ -20,19 +20,16 @@ import { LogPanelProvider, useLogPanel } from './LogPanelContext';
 import { OperationStatusProvider } from './OperationStatusContext';
 import { PageStatusProvider } from './PageStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
-import {
-  useOnboardingState,
-  useOrientationReplayPending,
-} from '@/features/onboarding/store';
 import { loadObservingState } from '@/features/targets/observing-sites/site-store';
 import {
   startUpdateSubscription,
   stopUpdateSubscription,
 } from '@/data/updateSubscription';
 
-// react-joyride is large (~100 kB gz). Load it only once the orientation walk
-// is about to run (setupCompleted && orientationDone is false). The module
-// boundary is joyrideAdapter, which is the only file that imports react-joyride.
+// react-joyride is large (~100 kB gz). Load it only after first-run setup
+// completes — it is never needed before that point. Once loaded the component
+// stays mounted for the session so OrientationWalk's internal auto-run and
+// replay logic are never cut off by an unmount (see store.ts replayPending).
 const OrientationWalk = lazy(() =>
   import('@/features/onboarding/OrientationWalk').then((m) => ({
     default: m.OrientationWalk,
@@ -41,20 +38,13 @@ const OrientationWalk = lazy(() =>
 
 function ShellInner() {
   const prefs = usePreferences();
-  const onboarding = useOnboardingState();
-  const replayPending = useOrientationReplayPending();
   const { expanded } = useLogPanel();
   const navigate = useNavigate();
 
-  // Gate: mount OrientationWalk (loading the joyride chunk) when:
-  //   • first-run is done and orientationDone is false (initial auto-run), OR
-  //   • a replay was requested from Settings → Advanced (replayPending).
-  // The component itself handles the done flag and the replay signal, so this
-  // gate just ensures the lazy chunk loads whenever the walk might need to run.
-  const walkReady =
-    prefs.setupCompleted &&
-    onboarding !== null &&
-    (!onboarding.flags.orientationDone || replayPending);
+  // Mount OrientationWalk (triggering the joyride lazy-chunk load) as soon as
+  // setup is complete. The component owns all run/skip/replay decisions; the
+  // Shell gate only prevents an unnecessary chunk load during the setup flow.
+  const walkReady = prefs.setupCompleted;
 
   // Redirect to /setup if first-run setup is not completed
   useEffect(() => {

@@ -39,6 +39,7 @@ import {
   completeOrientation,
   startOnboardingStateSync,
   consumeOrientationReplay,
+  useOrientationReplayPending,
 } from './store';
 import { ORIENTATION_STOPS } from './orientationSteps';
 import type { OnboardingOrientationOutcome } from '@/bindings/index';
@@ -60,6 +61,10 @@ export function OrientationWalk() {
   const navigate = useNavigate();
   const [setupCompleted] = usePreference('setupCompleted');
   const onboarding = useOnboardingState();
+  // Subscribe to the replay signal so this effect re-runs when the Settings →
+  // Advanced button fires requestOrientationReplay (T015). The component is
+  // always mounted once setup completes, so there is no mount-timing race.
+  const replayPending = useOrientationReplayPending();
 
   const [active, setActive] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
@@ -78,23 +83,23 @@ export function OrientationWalk() {
     setActive(true);
   }, []);
 
-  // Auto-run gate (FR-001/FR-004) + replay gate (T015).
-  // Runs once on mount (component is only mounted when the Shell gate says it's
-  // needed). For auto-run, the backend `orientationDone` flag must be false.
-  // For replay, `consumeOrientationReplay` clears the pending signal and returns
-  // true — this path fires even when orientationDone is already true.
+  // Auto-run (FR-001/FR-004) + replay (T015).
+  // For replay: when replayPending becomes true, consumeOrientationReplay()
+  // clears it (preventing a second fire) and launches. The walk is always
+  // mounted once setup completes so consume runs inside a stable component —
+  // there is no Shell-level unmount race.
   useEffect(() => {
-    if (autoLaunchedRef.current || active) return;
+    if (active) return;
     if (!setupCompleted || !onboarding || isOnboardingSuppressed()) return;
-    if (consumeOrientationReplay()) {
-      // Replay: ignore orientationDone.
+    if (replayPending && consumeOrientationReplay()) {
+      // Replay path: ignore orientationDone, allow re-launch after a finish.
       autoLaunchedRef.current = true;
       launch();
-    } else if (!onboarding.flags.orientationDone) {
+    } else if (!autoLaunchedRef.current && !onboarding.flags.orientationDone) {
       autoLaunchedRef.current = true;
       launch();
     }
-  }, [setupCompleted, onboarding, active, launch]);
+  }, [setupCompleted, onboarding, active, replayPending, launch]);
 
   // Navigate to the current stop's real page (FR-002). Absent route = stay.
   useEffect(() => {
