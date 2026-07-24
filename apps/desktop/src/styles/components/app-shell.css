@@ -315,7 +315,7 @@
   flex-wrap: wrap;
 }
 /* Default subtitle content is a filesystem path (e.g. archive original path,
-   spec 055 T022) — break-all + mono, see merges-1.css for the prose override. */
+   spec 055 T022) — break-all + mono; detail-panes.css overrides for prose. */
 .pv-detail__subtitle {
   font-family: var(--pv-font-mono);
   font-size: var(--pv-text-xs); color: var(--pv-text-muted);

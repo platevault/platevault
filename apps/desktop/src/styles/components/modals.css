@@ -1,0 +1,115 @@
+/* PlateVault — Modal dialog
+ *
+ * Shared parameterised dialog / overlay (components/Modal.tsx).
+ * Centered card over a dimmed backdrop. Width via size presets
+ * (sm/md/lg/xl/auto — set via `pv-modal--${size}`). Consolidated from
+ * .cssblocks/projects-redesign.css (spec-043 merges).
+ */
+
+.pv-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: color-mix(in srgb, var(--pv-ink) 45%, transparent);
+  backdrop-filter: blur(2px);
+}
+@supports not (backdrop-filter: blur(2px)) {
+  .pv-modal__backdrop {
+    background: color-mix(in srgb, var(--pv-ink) 55%, transparent);
+  }
+}
+
+.pv-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 501;
+  display: flex;
+  flex-direction: column;
+  width: min(94vw, var(--pv-modal-w, 640px));
+  max-height: 88vh;
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-lg);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--pv-ink) 16%, transparent);
+  overflow: hidden;
+}
+
+/* Width presets — set via template literal `pv-modal--${size}`. */
+.pv-modal--sm   { --pv-modal-w: 420px; }
+.pv-modal--md   { --pv-modal-w: 640px; }
+.pv-modal--lg   { --pv-modal-w: 920px; }
+.pv-modal--xl   { --pv-modal-w: 1200px; }
+.pv-modal--auto { width: auto; max-width: 94vw; }
+
+.pv-modal__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--pv-sp-3);
+  padding: var(--pv-sp-3) var(--pv-sp-4);
+  border-bottom: 1px solid var(--pv-border-subtle);
+}
+.pv-modal__title {
+  font-size: var(--pv-text-md);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text);
+  margin: 0;
+}
+.pv-modal__title-spacer {
+  flex: 1;
+}
+.pv-modal__subtitle {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
+}
+/* ✕ pinned to the top-right of the header. */
+.pv-modal__close {
+  margin-left: auto;
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
+  line-height: 1;
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  border-radius: var(--pv-radius-sm);
+}
+.pv-modal__close:hover {
+  color: var(--pv-text);
+  background: var(--pv-hover-bg);
+}
+
+.pv-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--pv-sp-4);
+}
+
+/* Body variant for content that owns its own internal scroll region — the
+ * modal body deliberately drops overflow-y:auto so the child manages scroll. */
+.pv-modal__body--fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Body prose (e.g. a ConfirmOverlay description). */
+.pv-modal__message {
+  margin: 0;
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-secondary);
+}
+
+.pv-modal__footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--pv-sp-2);
+  padding: var(--pv-sp-3) var(--pv-sp-4);
+  border-top: 1px solid var(--pv-border-subtle);
+}
