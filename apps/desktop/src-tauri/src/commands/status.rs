@@ -57,7 +57,7 @@ pub async fn status_summary(state: State<'_, AppState>) -> Result<StatusSummary,
         let online = timeout(ROOT_PROBE_TIMEOUT, tokio::fs::try_exists(&path))
             .await
             .ok() // timeout => None => false
-            .and_then(std::result::Result::ok) // io::Error => false
+            .and_then(std::result::Result::ok) // permission-denied / IO error => offline, matching Path::exists() behaviour
             .unwrap_or(false);
         RootHealth { id: s.source_id, path, kind, online }
     });
