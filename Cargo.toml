@@ -33,6 +33,7 @@ members = [
   "crates/persistence/plans",
   "crates/persistence/sessions",
   "crates/persistence/targets",
+  "crates/persistence/topology",
   "crates/project/structure",
   "crates/safe-filename",
   "crates/sessions",
