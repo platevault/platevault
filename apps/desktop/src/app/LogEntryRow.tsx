@@ -101,18 +101,14 @@ export function LogEntryRow({
           : undefined
       }
     >
-      <span className={eventTime}>
-        {formatTimeOfDay(entry.time)}
-      </span>
+      <span className={eventTime}>{formatTimeOfDay(entry.time)}</span>
       <span
         className={levelRecipe({ level: entry.level })}
         aria-label={entry.level}
       >
         {entry.level}
       </span>
-      <span className={eventSource}>
-        {entry.source}
-      </span>
+      <span className={eventSource}>{entry.source}</span>
       {contextLabel && (
         <span className={eventContext} title={contextLabel}>
           {contextLabel}

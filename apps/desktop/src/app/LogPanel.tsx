@@ -261,7 +261,8 @@ export function LogPanel() {
                   'pv-btn pv-btn--ghost pv-btn--xs',
                   chipRecipe({
                     active:
-                      sourceFilter.length === 0 || sourceFilter.includes(source),
+                      sourceFilter.length === 0 ||
+                      sourceFilter.includes(source),
                   }),
                 )}
                 onClick={() =>
