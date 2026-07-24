@@ -247,7 +247,9 @@ pub(crate) async fn build_frame_session_map(
 }
 
 fn iso_now() -> String {
-    time::OffsetDateTime::now_utc()
-        .format(&time::format_description::well_known::Iso8601::DEFAULT)
-        .unwrap_or_default()
+    // Redirect to canonical Timestamp::now_iso() (bd astro-plan-kyo7.88).
+    // NOTE: previously used Iso8601::DEFAULT (sub-second precision); now Rfc3339
+    // (no sub-second). Persisted mtime/created_at string sort order is unchanged
+    // (both are lexicographically sortable ISO 8601). New rows get Rfc3339 format.
+    domain_core::ids::Timestamp::now_iso()
 }

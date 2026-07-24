@@ -76,7 +76,6 @@ use sessions::{ObserverContext, SessionKey};
 use sqlx::SqlitePool;
 use time::format_description::well_known::Iso8601;
 use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
-use uuid::Uuid;
 
 use contracts_core::ContractError;
 
@@ -524,7 +523,7 @@ async fn upsert_session(
         return Ok(existing.id);
     }
 
-    let id = Uuid::new_v4().to_string();
+    let id = domain_core::ids::new_id();
     let frames_json = serde_json::to_string(&[image_id])
         .map_err(|e| app_core_errors::db_internal_ctx(e, "serialize frame_ids"))?;
     repo::insert_acquisition_session(
@@ -713,10 +712,8 @@ mod tests {
     use persistence_core::Database;
     use persistence_plans::repositories::projects::InsertProject;
 
-    async fn test_db() -> Database {
-        let db = Database::in_memory().await.unwrap();
-        db.migrate().await.unwrap();
-        db
+    async fn test_db() -> persistence_core::Database {
+        persistence_core::test_support::setup_db().await
     }
 
     /// Insert a minimal `canonical_target` row (same shape used elsewhere in the
@@ -772,7 +769,7 @@ mod tests {
         repo_projects::insert_project_source(
             pool,
             &repo_projects::InsertProjectSource {
-                id: &Uuid::new_v4().to_string(),
+                id: &domain_core::ids::new_id(),
                 project_id,
                 inventory_session_id: session_id,
                 name_snapshot: "",
@@ -982,7 +979,7 @@ mod tests {
             "INSERT INTO ingest_resolution (id, image_id, state, target_id, object_raw, attempts)
              VALUES (?, 'image-1', 'resolved', 'target-1', 'M 31', 1)",
         )
-        .bind(Uuid::new_v4().to_string())
+        .bind(domain_core::ids::new_id())
         .execute(db.pool())
         .await
         .unwrap();

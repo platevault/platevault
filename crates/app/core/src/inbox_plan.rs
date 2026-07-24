@@ -435,10 +435,8 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::tempdir;
 
-    async fn test_db() -> Database {
-        let db = Database::in_memory().await.unwrap();
-        db.migrate().await.unwrap();
-        db
+    async fn test_db() -> persistence_core::Database {
+        persistence_core::test_support::setup_db().await
     }
 
     fn make_bus(pool: &SqlitePool) -> EventBus {

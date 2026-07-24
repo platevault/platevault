@@ -143,7 +143,6 @@ dependencies = [
  "persistence_calibration",
  "persistence_core",
  "persistence_lifecycle",
- "persistence_sessions",
  "persistence_targets",
  "serde_json",
  "sqlx",
@@ -1809,6 +1808,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fits_fixtures"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1940,7 +1946,7 @@ dependencies = [
 name = "fs_pathsafe"
 version = "0.1.0"
 dependencies = [
- "proptest",
+ "camino",
  "tempfile",
 ]
 
@@ -4121,7 +4127,6 @@ checksum = "17359afc20d7ab31fdb42bb844c8b3bb1dabd7dcf7e68428492da7f16966fcef"
 name = "patterns"
 version = "0.1.0"
 dependencies = [
- "proptest",
  "safe-filename",
  "serde",
  "serde_json",
@@ -4523,6 +4528,7 @@ dependencies = [
 name = "project_structure"
 version = "0.1.0"
 dependencies = [
+ "domain_core",
  "serde",
  "serde_json",
  "tempfile",

@@ -166,7 +166,7 @@ mod tests {
         let err = add(
             db.pool(),
             &cache,
-            &TargetFavouriteRequest { target_id: Uuid::new_v4().to_string() },
+            &TargetFavouriteRequest { target_id: domain_core::ids::new_id() },
         )
         .await
         .unwrap_err();

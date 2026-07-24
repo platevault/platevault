@@ -583,10 +583,8 @@ mod tests {
     use persistence_inbox::repositories::inbox::{InsertInboxItem, UpsertFileMetadata};
     use targeting_resolver::simbad::{ResolveCache, SimbadConfig};
 
-    async fn test_db() -> Database {
-        let db = Database::in_memory().await.unwrap();
-        db.migrate().await.unwrap();
-        db
+    async fn test_db() -> persistence_core::Database {
+        persistence_core::test_support::setup_db().await
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -63,7 +63,7 @@ async fn write_audit(
     request_id: &str,
     query: &str,
 ) {
-    let audit_id = Uuid::new_v4().to_string();
+    let audit_id = domain_core::ids::new_id();
     let at = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
@@ -707,7 +707,7 @@ mod tests {
     async fn override_unknown_target_is_unresolved() {
         let db = setup().await;
         let resolver = FakeResolver::new();
-        let missing = Uuid::new_v4().to_string();
+        let missing = domain_core::ids::new_id();
         let resp = resolve(db.pool(), &resolver, &override_req("X", &missing)).await.unwrap();
         assert_eq!(resp.status, TargetResolveStatus::Unresolved);
     }

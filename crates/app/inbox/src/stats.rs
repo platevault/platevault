@@ -65,10 +65,8 @@ mod tests {
     use persistence_core::Database;
     use persistence_inbox::repositories::inbox::{InsertEvidence, InsertInboxItem};
 
-    async fn test_db() -> Database {
-        let db = Database::in_memory().await.unwrap();
-        db.migrate().await.unwrap();
-        db
+    async fn test_db() -> persistence_core::Database {
+        persistence_core::test_support::setup_db().await
     }
 
     /// Insert one inbox item with two evidence rows and check stats maps them.

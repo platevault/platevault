@@ -36,7 +36,6 @@ use audit::{EventBus, Source};
 use domain_core::ids::Timestamp;
 use persistence_targets::repositories::q_targets_ingest as repo;
 use sqlx::SqlitePool;
-use uuid::Uuid;
 
 use app_core_errors::db_err;
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
@@ -118,7 +117,7 @@ pub async fn enqueue(
         return Ok(id);
     }
 
-    let id = Uuid::new_v4().to_string();
+    let id = domain_core::ids::new_id();
     repo::insert_ingest_resolution(pool, &id, image_id, object_raw, "pending", None)
         .await
         .map_err(db_err)?;
@@ -181,7 +180,7 @@ async fn write_resolved_row(
     } else {
         repo::insert_ingest_resolution(
             pool,
-            &Uuid::new_v4().to_string(),
+            &domain_core::ids::new_id(),
             image_id,
             object_raw,
             "resolved",
@@ -431,7 +430,7 @@ mod tests {
 
     /// Insert a `library_root` + `file_record` so the ingest_resolution FK holds.
     async fn make_image(db: &Database, rel: &str) -> String {
-        let root_id = Uuid::new_v4().to_string();
+        let root_id = domain_core::ids::new_id();
         sqlx::query(
             "INSERT INTO library_root (id, label, current_path, kind, state, created_at)
              VALUES (?, 'test', '/tmp/test', 'local', 'active', '2026-01-01T00:00:00Z')",
@@ -440,7 +439,7 @@ mod tests {
         .execute(db.pool())
         .await
         .expect("library_root insert");
-        let image_id = Uuid::new_v4().to_string();
+        let image_id = domain_core::ids::new_id();
         sqlx::query(
             "INSERT INTO file_record
                 (id, root_id, relative_path, size_bytes, mtime, state, first_seen_at, last_seen_at)

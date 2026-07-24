@@ -145,7 +145,7 @@ pub const ITEM_REGISTRY: &[ItemDef] = &[
     ItemDef {
         item_id: "inbox.confirm_first",
         page: OnboardingPage::Inbox,
-        completion_topic: Some("inventory.confirmed"),
+        completion_topic: Some(audit::TOPIC_INVENTORY_CONFIRMED),
         payload_filter: None,
         seed_query: Some(SeedMilestone::InboxConfirmed),
         prerequisite: None,
@@ -759,7 +759,7 @@ mod tests {
     #[test]
     fn only_verified_topics_appear_as_completion_topics() {
         let verified = [
-            "inventory.confirmed",
+            audit::TOPIC_INVENTORY_CONFIRMED,
             "plan.applying.completed",
             "project.created",
             "tool.launch",

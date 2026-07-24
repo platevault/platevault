@@ -1,5 +1,5 @@
 [package]
-name = "fs_pathsafe"
+name = "fits_fixtures"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
@@ -7,12 +7,8 @@ license.workspace = true
 [lib]
 path = "src/lib.rs"
 
-[dependencies]
-camino = { workspace = true }
-
-[dev-dependencies]
-proptest.workspace = true
-tempfile.workspace = true
-
 [lints]
 workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

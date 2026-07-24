@@ -288,10 +288,8 @@ mod tests {
         InsertEvidence, InsertInboxItem, UpsertFileMetadata,
     };
 
-    async fn test_db() -> Database {
-        let db = Database::in_memory().await.unwrap();
-        db.migrate().await.unwrap();
-        db
+    async fn test_db() -> persistence_core::Database {
+        persistence_core::test_support::setup_db().await
     }
 
     /// R-14 drift guard (#1116): the mandatory set the user is *shown* must equal
