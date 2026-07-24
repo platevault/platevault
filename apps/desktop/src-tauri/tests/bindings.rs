@@ -141,8 +141,6 @@ fn exports_typescript_bindings() {
         "calibration_tolerances_get",
         "calibration_tolerances_update",
         // targets
-        "targets_list",
-        "targets_get",
         "target_get",
         "target_list",
         "target_alias_add",

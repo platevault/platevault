@@ -34,7 +34,6 @@ export type {
   AuditOutcome,
   ReviewItemKind,
   SearchResultKind,
-  TargetKind,
   RootCategory,
   // Spec 041: per-source organization state (move vs catalogue).
   OrganizationState,
@@ -89,8 +88,8 @@ export type AcquisitionSession = import('./index').AcquisitionSession_Serialize;
 /** Re-export generated type so callers continue to import from '@/bindings/types'. */
 export type CalibrationMaster = import('./index').CalibrationMaster_Serialize;
 
-/** Re-export generated type so callers continue to import from '@/bindings/types'. */
-export type Target = import('./index').Target_Serialize;
+/** Re-export gen-3 list-item type so callers continue to import from '@/bindings/types'. */
+export type Target = import('./index').TargetListItem_Serialize;
 
 /** Re-export generated summary DTO so callers continue to import from '@/bindings/types'. */
 export type Project = import('./index').ProjectSummaryDto_Serialize;
@@ -130,8 +129,8 @@ export type SessionDetail = import('./index').SessionDetail_Serialize;
 /** Re-export generated type so callers continue to import from '@/bindings/types'. */
 export type MasterDetail = import('./index').MasterDetail_Serialize;
 
-/** Re-export generated type so callers continue to import from '@/bindings/types'. */
-export type TargetDetail = import('./index').TargetDetail_Serialize;
+/** Re-export gen-3 detail type so callers continue to import from '@/bindings/types'. */
+export type TargetDetail = import('./index').TargetDetailV3_Serialize;
 
 /** Re-export generated type so callers continue to import from '@/bindings/types'. */
 export type ProjectDetail = import('./index').ProjectDetailDto_Serialize;

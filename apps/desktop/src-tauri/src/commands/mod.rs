@@ -9,8 +9,10 @@
 //! contract test suite and any operation that does not yet have a typed
 //! Tauri command.
 //!
-//! Spec 029 stub modules expose every command group with hardcoded fixture
-//! data until the real persistence layer is wired.
+//! Spec 029 stub modules remain for command groups whose persistence layer is
+//! not yet wired (`sessions.calendar`/`split`/`merge`, `review.queue`,
+//! `preferences.get`/`set`, `scan.start`, `equipment.list`,
+//! `projects.create_plan`).
 //!
 //! Spec 030 modules add equipment CRUD, status, cleanup, calibration
 //! tolerances, ingestion settings, tools, inbox scan, and cleanup scan
@@ -51,5 +53,4 @@ pub mod status;
 pub mod target_favourites;
 pub mod target_lookup;
 pub mod target_management;
-pub mod targets;
 pub mod tools;

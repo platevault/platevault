@@ -1130,15 +1130,6 @@ const mockHandlers = {
   calibration_tolerances_get: async () => {
     return mockCalibrationTolerances;
   },
-  targets_list: async () => {
-    const { targets } = await import('@/data/fixtures/targets');
-    return targets;
-  },
-  targets_get: async () => {
-    const { targetDetail } = await import('@/data/fixtures/targets');
-    return targetDetail;
-  },
-
   // ── gen-3 target commands (spec 036) ──────────────────────────────────────
   target_list: async () => {
     return [
@@ -1169,6 +1160,8 @@ const mockHandlers = {
     ];
   },
   target_get: async (_args) => {
+    // tauri-specta wraps every named parameter as a top-level object key, so
+    // `target_get(req: TargetGetRequest)` arrives as `{ req: { targetId } }`.
     const req = (_args as { req?: { targetId?: string } } | undefined)?.req;
     return {
       id: req?.targetId ?? 'tgt-m31',
