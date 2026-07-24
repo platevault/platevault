@@ -44,32 +44,27 @@ pub fn validate_tool(tool: &str) -> Result<(), &'static str> {
     }
 }
 
-/// Lifecycle states where `tool` is immutable (R-Tool-Lock).
-pub const TOOL_LOCKED_LIFECYCLES: &[&str] = &["prepared", "processing", "completed", "blocked"];
+use crate::lifecycle::ProjectState;
 
-/// Returns true when the tool field is locked for the given lifecycle.
+/// Returns true when the tool field is locked for the given lifecycle string.
+/// Delegates to [`ProjectState::is_tool_locked`]; unknown strings return false.
 #[must_use]
 pub fn is_tool_locked(lifecycle: &str) -> bool {
-    TOOL_LOCKED_LIFECYCLES.contains(&lifecycle)
+    ProjectState::parse_str(lifecycle).is_some_and(ProjectState::is_tool_locked)
 }
 
-/// Lifecycle states where all edits are refused (R-Archived).
-pub const READ_ONLY_LIFECYCLES: &[&str] = &["archived"];
-
-/// Returns true when any edit is refused for the given lifecycle.
+/// Returns true when any edit is refused for the given lifecycle string.
+/// Delegates to [`ProjectState::is_read_only`]; unknown strings return false.
 #[must_use]
 pub fn is_read_only(lifecycle: &str) -> bool {
-    READ_ONLY_LIFECYCLES.contains(&lifecycle)
+    ProjectState::parse_str(lifecycle).is_some_and(ProjectState::is_read_only)
 }
 
-/// Lifecycle states where source removal is refused (spec 008 FR-011).
-pub const SOURCE_REMOVE_LOCKED_LIFECYCLES: &[&str] =
-    &["prepared", "processing", "completed", "archived"];
-
-/// Returns true when source removal is refused for the given lifecycle.
+/// Returns true when source removal is refused for the given lifecycle string.
+/// Delegates to [`ProjectState::is_source_remove_locked`]; unknown strings return false.
 #[must_use]
 pub fn is_source_remove_locked(lifecycle: &str) -> bool {
-    SOURCE_REMOVE_LOCKED_LIFECYCLES.contains(&lifecycle)
+    ProjectState::parse_str(lifecycle).is_some_and(ProjectState::is_source_remove_locked)
 }
 
 #[cfg(test)]

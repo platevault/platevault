@@ -6,6 +6,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use strum::{EnumString, IntoStaticStr};
 
 use crate::ids::{EntityId, Timestamp};
 
@@ -26,8 +27,11 @@ use crate::ids::{EntityId, Timestamp};
     Deserialize,
     JsonSchema,
     Type,
+    EnumString,
+    IntoStaticStr,
 )]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum PlanState {
     Draft,
     ReadyForReview,
@@ -44,6 +48,18 @@ pub enum PlanState {
 }
 
 impl PlanState {
+    /// Canonical snake_case string for this state (strum-backed).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        self.into()
+    }
+
+    /// Parse a snake_case string into a state, returning `None` on unknown input.
+    #[must_use]
+    pub fn parse_str(s: &str) -> Option<Self> {
+        s.parse().ok()
+    }
+
     /// Terminal states: retry produces a NEW plan with `parent_plan_id` set.
     #[must_use]
     pub const fn is_terminal(self) -> bool {

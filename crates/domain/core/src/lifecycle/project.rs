@@ -6,6 +6,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use strum::{EnumString, IntoStaticStr};
 
 use crate::ids::{EntityId, Timestamp};
 
@@ -25,8 +26,11 @@ use crate::ids::{EntityId, Timestamp};
     Deserialize,
     JsonSchema,
     Type,
+    EnumString,
+    IntoStaticStr,
 )]
 #[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum ProjectState {
     SetupIncomplete,
     Ready,
@@ -39,6 +43,18 @@ pub enum ProjectState {
 }
 
 impl ProjectState {
+    /// Canonical snake_case string for this state (strum-backed).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        self.into()
+    }
+
+    /// Parse a snake_case string into a state, returning `None` on unknown input.
+    #[must_use]
+    pub fn parse_str(s: &str) -> Option<Self> {
+        s.parse().ok()
+    }
+
     #[must_use]
     pub const fn is_before_archive(self) -> bool {
         matches!(
@@ -49,6 +65,30 @@ impl ProjectState {
                 | Self::Processing
                 | Self::Completed
         )
+    }
+
+    /// True when all edits are refused (R-Archived).
+    #[must_use]
+    pub const fn is_read_only(self) -> bool {
+        matches!(self, Self::Archived)
+    }
+
+    /// True when `tool` field changes are refused (R-Tool-Lock).
+    #[must_use]
+    pub const fn is_tool_locked(self) -> bool {
+        matches!(self, Self::Prepared | Self::Processing | Self::Completed | Self::Blocked)
+    }
+
+    /// True when source removal is refused (spec 008 FR-011).
+    #[must_use]
+    pub const fn is_source_remove_locked(self) -> bool {
+        matches!(self, Self::Prepared | Self::Processing | Self::Completed | Self::Archived)
+    }
+
+    /// True when completed projects reopen on new data (F-Framing-6).
+    #[must_use]
+    pub const fn reopens_on_new_data(self) -> bool {
+        matches!(self, Self::Completed)
     }
 }
 

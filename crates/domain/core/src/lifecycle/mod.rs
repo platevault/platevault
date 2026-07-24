@@ -15,7 +15,7 @@ pub mod projection;
 pub mod provenance;
 pub mod session;
 
-pub use data_asset::{DataAsset, EntityType};
+pub use data_asset::EntityType;
 pub use data_source::DataSourceState;
 pub use inventory::InventoryState;
 pub use plan::PlanState;
