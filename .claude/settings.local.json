@@ -15,10 +15,7 @@
       "Bash(wmctrl -l)",
       "Bash(xdotool search *)",
       "Bash(xwininfo -root)",
-      "Bash(claude mcp *)",
-      "Bash(timeout 60 npx -y gitnexus@latest mcp)",
-      "Bash(mkdir -p /tmp/gitnexus-npx-cache)",
-      "Bash(timeout 180 npx -y gitnexus@latest --help)"
+      "Bash(claude mcp *)"
     ]
   },
   "enabledMcpjsonServers": [
