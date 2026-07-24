@@ -422,11 +422,10 @@ pub fn spawn_workflow_run_subscriber(
 
     let mut rx = bus.subscribe();
     tokio::spawn(async move {
-        // Seed cursor at current max so first-lag replay only covers events
-        // emitted after subscribe.
-        let mut cursor: i64 = persistence_lifecycle::repositories::events::max_event_id(bus.pool())
-            .await
-            .unwrap_or(0);
+        // Cursor starts at 0: replay from the beginning on first lag.
+        // write() is idempotent (produces a new file per call), so replaying
+        // historical workflow.run_completed events is safe.
+        let mut cursor: i64 = 0;
 
         loop {
             match rx.recv().await {

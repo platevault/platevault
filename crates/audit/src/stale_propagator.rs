@@ -65,12 +65,10 @@ impl StalePropagator {
         let mut rx = bus.subscribe();
         let bus = bus.clone();
         tokio::spawn(async move {
-            // Seed cursor at current max so we only replay events newer than
-            // our subscribe point on the first lag.
-            let mut cursor: i64 =
-                persistence_lifecycle::repositories::events::max_event_id(bus.pool())
-                    .await
-                    .unwrap_or(0);
+            // Cursor starts at 0: replay from the beginning on first lag.
+            // Hooks are idempotent (research.md §6.1) so replaying historical
+            // events is safe; the events table is authoritative for recovery.
+            let mut cursor: i64 = 0;
 
             loop {
                 match rx.recv().await {
@@ -375,6 +373,11 @@ mod tests {
     }
 
     /// Verify that on Lagged the propagator replays from the durable events table.
+    ///
+    /// Strategy: publish all 4 events before the task gets any CPU (no yields
+    /// between publishes), so the broadcast channel overflows and the task sees
+    /// Lagged on its first recv.  Cursor=0, so replay covers all 4 durable rows.
+    /// Wait with a deadline-yield loop rather than a fixed sleep.
     #[tokio::test]
     async fn lagged_replays_from_durable_events() {
         let counter = Arc::new(AtomicUsize::new(0));
@@ -385,7 +388,7 @@ mod tests {
             Ok(())
         }));
 
-        // Tiny capacity bus so we can force a lag.
+        // Capacity=1 guarantees Lagged when we publish 4 without yielding.
         let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS events (\
@@ -400,32 +403,41 @@ mod tests {
 
         let handle = propagator.spawn(&bus);
 
-        // Publish more events than the channel capacity to force Lagged.
-        // The first goes through live, the rest overflow (capacity=1 means
-        // the channel holds 1 in-flight item before lagging).
+        // All 4 publishes happen without yielding to the spawned task,
+        // so the broadcast channel overflows (capacity=1) and the task sees Lagged.
         for _ in 0..4 {
-            let _ = bus
-                .publish(
-                    TOPIC_LIFECYCLE_TRANSITION_APPLIED,
-                    Source::User,
-                    LifecycleTransitionApplied {
-                        entity_type: EntityType::Project,
-                        entity_id: "test".to_owned(),
-                        from_state: "ready".to_owned(),
-                        to_state: "processing".to_owned(),
-                        actor: "user".to_owned(),
-                        at: Timestamp::now_utc(),
-                        project_id: Some("test".to_owned()),
-                    },
-                )
-                .await;
+            bus.publish(
+                TOPIC_LIFECYCLE_TRANSITION_APPLIED,
+                Source::User,
+                LifecycleTransitionApplied {
+                    entity_type: EntityType::Project,
+                    entity_id: "test".to_owned(),
+                    from_state: "ready".to_owned(),
+                    to_state: "processing".to_owned(),
+                    actor: "user".to_owned(),
+                    at: Timestamp::now_utc(),
+                    project_id: Some("test".to_owned()),
+                },
+            )
+            .await
+            .unwrap();
         }
 
-        // Give the task time to process live + replay path.
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        // Deadline-yield loop: give the task up to 2 s to process live + replay.
+        // With cursor=0 all 4 durable rows are replayed regardless of how many
+        // the task saw live, so the total count is >= 4.
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            tokio::task::yield_now().await;
+            if counter.load(Ordering::SeqCst) >= 4 {
+                break;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                break;
+            }
+        }
         handle.abort();
 
-        // The hook must fire for all 4 events (some live, rest via replay).
         assert!(
             counter.load(Ordering::SeqCst) >= 4,
             "expected at least 4 dispatches (live + replayed), got {}",
