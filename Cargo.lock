@@ -1883,6 +1883,7 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "domain_core",
+ "filetime",
  "fs4",
  "fs_pathsafe",
  "path-clean",
