@@ -6,7 +6,7 @@
 
 use domain_core::ids::Timestamp;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::{SqliteConnection, SqlitePool};
 
 use persistence_core::{DbError, DbResult};
 
@@ -96,12 +96,24 @@ pub async fn get_inbox_item(pool: &SqlitePool, id: &str) -> DbResult<InboxItemRo
 /// # Errors
 /// Returns [`DbError::NotFound`] if no row was updated, or [`DbError::Database`].
 pub async fn update_inbox_item_state(pool: &SqlitePool, id: &str, state: &str) -> DbResult<()> {
+    update_inbox_item_state_conn(pool.acquire().await?.as_mut(), id, state).await
+}
+
+/// Connection-level variant of [`update_inbox_item_state`].
+///
+/// # Errors
+/// Returns [`DbError::NotFound`] if no row was updated, or [`DbError::Database`].
+pub async fn update_inbox_item_state_conn(
+    conn: &mut SqliteConnection,
+    id: &str,
+    state: &str,
+) -> DbResult<()> {
     let now = Timestamp::now_iso();
     let rows = sqlx::query("UPDATE inbox_items SET state = ?, last_scanned_at = ? WHERE id = ?")
         .bind(state)
         .bind(&now)
         .bind(id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?
         .rows_affected();
 
@@ -111,12 +123,12 @@ pub async fn update_inbox_item_state(pool: &SqlitePool, id: &str, state: &str) -
     Ok(())
 }
 
-/// Update `content_signature` and `file_count` (and `last_scanned_at`).
+/// Connection-level variant of [`update_inbox_item_scan`].
 ///
 /// # Errors
 /// Returns [`DbError::Database`] on connection failure.
-pub async fn update_inbox_item_scan(
-    pool: &SqlitePool,
+pub async fn update_inbox_item_scan_conn(
+    conn: &mut SqliteConnection,
     id: &str,
     content_signature: &str,
     file_count: i64,
@@ -131,7 +143,7 @@ pub async fn update_inbox_item_scan(
     .bind(file_count)
     .bind(&now)
     .bind(id)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
@@ -183,6 +195,17 @@ pub async fn upsert_inbox_sub_item(
     pool: &SqlitePool,
     item: &UpsertInboxSubItem<'_>,
 ) -> DbResult<String> {
+    upsert_inbox_sub_item_conn(pool.acquire().await?.as_mut(), item).await
+}
+
+/// Connection-level variant of [`upsert_inbox_sub_item`].
+///
+/// # Errors
+/// Returns [`DbError::Database`] on constraint or connection failure.
+pub async fn upsert_inbox_sub_item_conn(
+    conn: &mut SqliteConnection,
+    item: &UpsertInboxSubItem<'_>,
+) -> DbResult<String> {
     let now = Timestamp::now_iso();
     // spec 058 FR-007/SC-003: a row carrying no authoritative frame type must
     // not claim to be classified. `pending_classification` is the only other
@@ -227,27 +250,26 @@ pub async fn upsert_inbox_sub_item(
     .bind(state)
     .bind(item.lane)
     .bind(i64::from(item.needs_review))
-    .fetch_one(pool)
+    .fetch_one(&mut *conn)
     .await?;
     Ok(persisted_id)
 }
 
-/// Delete a sub-item row by id, but ONLY when it is not linked to a plan.
-///
-/// Used by classify re-materialization to purge stale single-type groups that no
-/// longer have any files (a file moved groups), without disturbing plan-open
-/// items (spec 041 R-11/FR-042; T067 churn regression).
+/// Connection-level variant of [`delete_sub_item_if_unlinked`].
 ///
 /// # Errors
 /// Returns [`DbError::Database`] on connection failure.
-pub async fn delete_sub_item_if_unlinked(pool: &SqlitePool, id: &str) -> DbResult<()> {
+pub async fn delete_sub_item_if_unlinked_conn(
+    conn: &mut SqliteConnection,
+    id: &str,
+) -> DbResult<()> {
     sqlx::query(
         "DELETE FROM inbox_items
          WHERE id = ?
            AND id NOT IN (SELECT inbox_item_id FROM inbox_plan_links)",
     )
     .bind(id)
-    .execute(pool)
+    .execute(&mut *conn)
     .await?;
     Ok(())
 }
@@ -266,6 +288,20 @@ pub async fn list_inbox_sub_items(
     pool: &SqlitePool,
     source_group_id: &str,
 ) -> DbResult<Vec<InboxItemRow>> {
+    list_inbox_sub_items_conn(pool.acquire().await?.as_mut(), source_group_id).await
+}
+
+/// Connection-level variant of [`list_inbox_sub_items`].
+///
+/// Used by [`materialize_sub_items_tx`] to read existing sub-items within the
+/// same transaction so the orphan-cleanup step sees the current write state.
+///
+/// # Errors
+/// Returns [`DbError::Database`] on connection failure.
+pub async fn list_inbox_sub_items_conn(
+    conn: &mut SqliteConnection,
+    source_group_id: &str,
+) -> DbResult<Vec<InboxItemRow>> {
     let rows = sqlx::query_as::<_, InboxItemRow>(
         "SELECT * FROM inbox_items
          WHERE source_group_id = ?
@@ -273,7 +309,7 @@ pub async fn list_inbox_sub_items(
          ORDER BY group_key",
     )
     .bind(source_group_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *conn)
     .await?;
     Ok(rows)
 }
