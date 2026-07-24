@@ -50,7 +50,7 @@ function seedSetupWizard(page: Page): void {
   page.addInitScript(() => {
     window.localStorage.removeItem('alm-preferences');
     window.localStorage.removeItem('alm-setup-wizard-state');
-    window.localStorage.setItem('alm.locale', 'en-GB');
+    window.localStorage.setItem('pv.locale', 'en-GB');
   });
 }
 

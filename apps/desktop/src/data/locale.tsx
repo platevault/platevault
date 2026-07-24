@@ -118,17 +118,35 @@ function importIpc(): Promise<typeof import('@/api/ipc')> {
  */
 let inMemoryLocale: string | undefined;
 
+/**
+ * True when the most recent localStorage.setItem(LOCALE_KEY, …) threw. Gates
+ * the readable-but-empty fallback path in getLocaleMirror: only a broken
+ * WRITE justifies shadowing an empty (authoritative) storage state.
+ */
+let localeWriteFailed = false;
+
 /** Synchronous mirror read, validated against the shipped locale set. */
 function getLocaleMirror(): Locale | undefined {
   try {
     const v = localStorage.getItem(LOCALE_KEY);
-    if (v && isLocale(v)) return v;
-    // localStorage returned null (no saved value) — fall through to the
-    // in-memory fallback so a failed setItem from a prior call is still
-    // visible to Paraglide's strategy resolver.
-    return inMemoryLocale && isLocale(inMemoryLocale)
-      ? inMemoryLocale
-      : undefined;
+    if (v && isLocale(v)) {
+      // Durable storage is authoritative; drop the in-memory shadow so it
+      // can never mask a later authoritative state.
+      inMemoryLocale = undefined;
+      return v;
+    }
+    // localStorage is READABLE and empty. Two cases:
+    // - the last setItem FAILED (write-broken storage): the in-memory value
+    //   is the user's live selection — serve it so Paraglide stays coherent
+    //   with the React state (the original tlw.14 bug).
+    // - the last setItem SUCCEEDED (or never ran): empty storage is
+    //   authoritative — a cleared storage (user reset, test isolation via
+    //   localStorage.clear()) must win over a stale in-memory value.
+    if (localeWriteFailed && inMemoryLocale && isLocale(inMemoryLocale)) {
+      return inMemoryLocale;
+    }
+    inMemoryLocale = undefined;
+    return undefined;
   } catch {
     // localStorage entirely unavailable — serve the in-memory value so the
     // Paraglide strategy and React state stay coherent for the session.
@@ -179,9 +197,11 @@ function setLocaleMirror(newLocale: string): void {
   inMemoryLocale = newLocale;
   try {
     localStorage.setItem(LOCALE_KEY, newLocale);
+    localeWriteFailed = false;
   } catch {
     /* localStorage may be unavailable — in-memory fallback is sufficient for
        the session; the selection will not survive a restart */
+    localeWriteFailed = true;
   }
   persistLocaleToSettings(newLocale);
 }
