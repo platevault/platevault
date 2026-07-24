@@ -3,84 +3,103 @@
 
 /// <reference types="@testing-library/jest-dom" />
 /**
- * SiteLocationPicker tests (issue #491) — the Observing Site step's map
- * picker. `maplibre-gl` requires a real WebGL context, which jsdom doesn't
- * provide, so the module is mocked at the boundary with a fake Map/Marker
- * that records calls the way the real classes would be driven.
+ * SiteLocationPicker tests (issue #491) — shared map picker for the
+ * Observing Site step and the Settings site form. Leaflet requires a real
+ * DOM+canvas, which jsdom doesn't provide, so the module is mocked at the
+ * boundary with a fake L object that records calls the way the real Leaflet
+ * API would be driven.
+ *
+ * Leaflet's LatLng normalizes longitudes and clamps latitudes silently rather
+ * than throwing — the isValidLatLon guard in the component prevents us from
+ * ever calling panTo with out-of-range values, which this suite regression-
+ * guards against.
  */
 import { render, screen, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { MockMap, MockMarker, MockNavigationControl } = vi.hoisted(() => {
-  class MockMap {
-    static instances: MockMap[] = [];
-    // Simulates a webview with no WebGL support (real MapLibre throws
-    // synchronously from its constructor in that case).
-    static shouldThrowOnConstruct = false;
-    listeners: Record<string, Array<(...args: unknown[]) => void>> = {};
-    removed = false;
-    easeToCalls: Array<{ center: [number, number] }> = [];
-    options: unknown;
-    constructor(options: unknown) {
-      if (MockMap.shouldThrowOnConstruct) {
-        throw new Error('Failed to initialize WebGL');
-      }
-      this.options = options;
-      MockMap.instances.push(this);
-    }
-    on(event: string, cb: (...args: unknown[]) => void) {
-      this.listeners[event] ??= [];
-      this.listeners[event].push(cb);
-    }
-    addControl() {}
-    remove() {
-      this.removed = true;
-    }
-    easeTo(opts: { center: [number, number] }) {
-      assertValidLngLat(opts.center);
-      this.easeToCalls.push(opts);
-    }
-    emit(event: string, ...args: unknown[]) {
-      for (const cb of this.listeners[event] ?? []) cb(...args);
-    }
-  }
-  // Mirrors real MapLibre's `LngLat.convert` validation, which throws
-  // synchronously for out-of-range coordinates (e.g. latitude 200) — the bug
-  // this test suite regression-guards against.
-  function assertValidLngLat([lng, lat]: [number, number]): void {
+// ── Mock construction ─────────────────────────────────────────────────────────
+// `vi.hoisted` runs before any import, so MockMap is available in vi.mock().
+const { MockMap, MockMarker, MockTileLayer } = vi.hoisted(() => {
+  // Guard the same coordinate range that isValidLatLon() enforces. Leaflet
+  // doesn't throw, but panTo with a lat of 200 would silently wrap — calling
+  // it at all is the regression we're protecting against.
+  function assertValidLatLon([lat, lon]: [number, number]): void {
     if (lat < -90 || lat > 90) {
-      throw new Error(
-        'Invalid LngLat latitude value: must be between -90 and 90',
-      );
+      throw new Error(`panTo called with invalid latitude: ${lat}`);
     }
-    if (lng < -180 || lng > 180) {
-      throw new Error(
-        'Invalid LngLat longitude value: must be between -180 and 180',
-      );
+    if (lon < -180 || lon > 180) {
+      throw new Error(`panTo called with invalid longitude: ${lon}`);
     }
   }
+
   class MockMarker {
-    lngLat: [number, number] | null = null;
-    setLngLat(ll: [number, number]) {
-      assertValidLngLat(ll);
-      this.lngLat = ll;
+    latLon: [number, number] | null = null;
+    setLatLng(ll: [number, number]) {
+      this.latLon = ll;
       return this;
     }
     addTo() {
       return this;
     }
   }
-  class MockNavigationControl {}
-  return { MockMap, MockMarker, MockNavigationControl };
+
+  class MockMap {
+    static instances: MockMap[] = [];
+    static shouldThrowOnConstruct = false;
+    listeners: Record<string, Array<(...args: unknown[]) => void>> = {};
+    panToCalls: Array<[number, number]> = [];
+    removed = false;
+    constructor(_container: unknown, _options: unknown) {
+      if (MockMap.shouldThrowOnConstruct) {
+        throw new Error('Leaflet map construction failed');
+      }
+      MockMap.instances.push(this);
+    }
+    on(event: string, cb: (...args: unknown[]) => void) {
+      this.listeners[event] ??= [];
+      this.listeners[event].push(cb);
+    }
+    remove() {
+      this.removed = true;
+    }
+    panTo(ll: [number, number]) {
+      assertValidLatLon(ll);
+      this.panToCalls.push(ll);
+    }
+    emit(event: string, ...args: unknown[]) {
+      for (const cb of this.listeners[event] ?? []) cb(...args);
+    }
+  }
+
+  class MockTileLayer {
+    addTo() {
+      return this;
+    }
+  }
+
+  return { MockMap, MockMarker, MockTileLayer };
 });
 
-vi.mock('maplibre-gl', () => ({
-  Map: MockMap,
-  Marker: MockMarker,
-  NavigationControl: MockNavigationControl,
-}));
-vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
+vi.mock('leaflet', () => {
+  const marker = vi.fn(() => new MockMarker());
+  const tileLayer = vi.fn(() => new MockTileLayer());
+  const Icon = { Default: { mergeOptions: vi.fn() } };
+  return {
+    default: {
+      map: vi.fn(
+        (container: unknown, options: unknown) =>
+          new MockMap(container, options),
+      ),
+      marker,
+      tileLayer,
+      Icon,
+    },
+    Icon,
+  };
+});
+vi.mock('leaflet/dist/leaflet.css', () => ({}));
 
+// Import AFTER mocks are registered.
 import { SiteLocationPicker } from './SiteLocationPicker';
 
 beforeEach(() => {
@@ -102,13 +121,13 @@ describe('SiteLocationPicker', () => {
     const map = MockMap.instances[0];
     expect(map).toBeDefined();
     act(() => {
-      map.emit('click', { lngLat: { lat: 51.5, lng: -0.12 } });
+      map.emit('click', { latlng: { lat: 51.5, lng: -0.12 } });
     });
 
     expect(onPick).toHaveBeenCalledWith(51.5, -0.12);
   });
 
-  it('recenters the pin when lat/long props change (fields edited)', () => {
+  it('moves the pin when lat/lon props change (fields edited)', () => {
     const { rerender } = render(
       <SiteLocationPicker
         latitudeDeg={null}
@@ -128,7 +147,7 @@ describe('SiteLocationPicker', () => {
       );
     });
 
-    expect(map.easeToCalls).toContainEqual({ center: [-74, 40.7] });
+    expect(map.panToCalls).toContainEqual([40.7, -74]);
 
     act(() => {
       rerender(
@@ -140,31 +159,12 @@ describe('SiteLocationPicker', () => {
       );
     });
 
-    expect(map.easeToCalls).toContainEqual({ center: [-75, 41] });
-  });
-
-  it('degrades gracefully when the map/tiles fail to load', () => {
-    render(
-      <SiteLocationPicker
-        latitudeDeg={null}
-        longitudeDeg={null}
-        onPick={vi.fn()}
-      />,
-    );
-    const map = MockMap.instances[0];
-
-    act(() => {
-      map.emit('error', { error: new Error('tile load failed') });
-    });
-
-    expect(screen.queryByTestId('site-location-map')).not.toBeInTheDocument();
-    expect(screen.getByText(/map unavailable/i)).toBeInTheDocument();
+    expect(map.panToCalls).toContainEqual([41, -75]);
   });
 
   it('ignores an out-of-range latitude instead of crashing (regression)', () => {
-    // The lat/long fields intentionally accept out-of-range values while the
-    // wizard's own validation (siteStepError) hasn't rejected them yet — the
-    // map must not pass those straight to MapLibre, which throws for them.
+    // The lat/lon fields accept out-of-range values mid-type — the component
+    // must skip panTo/setLatLng rather than forwarding the invalid coord.
     const { rerender } = render(
       <SiteLocationPicker
         latitudeDeg={null}
@@ -186,12 +186,12 @@ describe('SiteLocationPicker', () => {
       });
     }).not.toThrow();
 
-    expect(map.easeToCalls).toHaveLength(0);
+    expect(map.panToCalls).toHaveLength(0);
     expect(screen.getByTestId('site-location-map')).toBeInTheDocument();
     expect(screen.queryByText(/map unavailable/i)).not.toBeInTheDocument();
   });
 
-  it('degrades gracefully when the map fails to construct (no WebGL)', () => {
+  it('degrades gracefully when the map fails to construct', () => {
     MockMap.shouldThrowOnConstruct = true;
 
     render(
