@@ -44,6 +44,17 @@
       "_apm_source": "code-intelligence"
     },
     {
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
+          "timeout": 3
+        }
+      ],
+      "_apm_source": "agent-coder"
+    },
+    {
       "matcher": "Bash",
       "hooks": [
         {
@@ -82,32 +93,23 @@
       "hooks": [
         {
           "type": "command",
-          "command": ".codex/hooks/speckit/scripts/speckit-issue-close-guard.sh",
-          "timeout": 30
-        },
-        {
-          "type": "command",
-          "command": ".codex/hooks/speckit/scripts/speckit-issue-label-guard.sh",
-          "timeout": 30
-        },
-        {
-          "type": "command",
-          "command": ".codex/hooks/speckit/scripts/speckit-pr-issue-refs.sh",
+          "command": ".codex/hooks/speckit/scripts/speckit-pr-title.sh",
           "timeout": 30
         }
       ],
       "_apm_source": "speckit"
     },
     {
-      "matcher": "Edit|Write|MultiEdit",
+      "matcher": "Bash",
       "hooks": [
         {
           "type": "command",
-          "command": ".codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
-          "timeout": 3
+          "command": ".codex/hooks/steering-git-workflow/scripts/pr-create-guard.sh",
+          "statusMessage": "Checking draft PR and Beads linkage policy...",
+          "timeout": 10
         }
       ],
-      "_apm_source": "agent-coder"
+      "_apm_source": "steering-git-workflow"
     }
   ],
   "PostToolUse": [
@@ -135,28 +137,6 @@
       "_apm_source": "code-intelligence"
     },
     {
-      "matcher": "apply_patch|Edit|Write|MultiEdit",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh",
-          "timeout": 3
-        }
-      ],
-      "_apm_source": "hooks-quality"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
-          "timeout": 30
-        }
-      ],
-      "_apm_source": "mcp-repomix"
-    },
-    {
       "matcher": "Bash",
       "hooks": [
         {
@@ -177,6 +157,28 @@
         }
       ],
       "_apm_source": "speckit"
+    },
+    {
+      "matcher": "apply_patch|Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh",
+          "timeout": 3
+        }
+      ],
+      "_apm_source": "hooks-quality"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".codex/hooks/mcp-repomix/scripts/repomix-refresh-snapshot.sh",
+          "timeout": 30
+        }
+      ],
+      "_apm_source": "mcp-repomix"
     }
   ],
   "SessionStart": [

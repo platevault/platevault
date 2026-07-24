@@ -20,7 +20,6 @@ dependencies:
   - wshobson/agents/plugins/shell-scripting
   - srobroek/agentic-packages/packages/frontend#main
   - srobroek/agentic-packages/packages/hooks-quality#main
-  - srobroek/agentic-packages/packages/docs-architecture#main
   - srobroek/agentic-packages/packages/steering-docs-specs#main
   - srobroek/agentic-packages/packages/steering-tools-scripts#main
   - srobroek/agentic-packages/packages/steering-infrastructure#main
@@ -32,8 +31,6 @@ dependencies:
   - srobroek/agentic-packages/packages/mcp-tauri#main
   - wshobson/agents/plugins/database-design
   - srobroek/agentic-packages/packages/user-journeys#main
-  mcp:
-  - gitnexus
 includes: auto
 targets:
 - claude

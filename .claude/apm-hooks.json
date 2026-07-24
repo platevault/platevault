@@ -1,6 +1,17 @@
 {
   "PreToolUse": [
     {
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
+          "timeout": 3
+        }
+      ],
+      "_apm_source": "agent-coder"
+    },
+    {
       "matcher": "Bash",
       "hooks": [
         {
@@ -34,11 +45,11 @@
       "_apm_source": "release-please"
     },
     {
-      "matcher": "Skill",
+      "matcher": "Bash",
       "hooks": [
         {
           "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-context7-reminder.sh"
+          "command": ".claude/hooks/speckit/scripts/speckit-pr-title.sh"
         }
       ],
       "_apm_source": "speckit"
@@ -48,29 +59,12 @@
       "hooks": [
         {
           "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-issue-close-guard.sh"
-        },
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-issue-label-guard.sh"
-        },
-        {
-          "type": "command",
-          "command": ".claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh"
+          "statusMessage": "Checking draft PR and Beads linkage policy...",
+          "command": ".claude/hooks/steering-git-workflow/scripts/pr-create-guard.sh",
+          "timeout": 10
         }
       ],
-      "_apm_source": "speckit"
-    },
-    {
-      "matcher": "Edit|Write|MultiEdit",
-      "hooks": [
-        {
-          "type": "command",
-          "command": ".claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
-          "timeout": 3
-        }
-      ],
-      "_apm_source": "agent-coder"
+      "_apm_source": "steering-git-workflow"
     }
   ],
   "SubagentStart": [
@@ -110,6 +104,17 @@
   ],
   "PostToolUse": [
     {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "if": "Bash(git commit*)",
+          "command": ".claude/hooks/speckit/scripts/speckit-task-commit-check.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    },
+    {
       "matcher": "apply_patch|Edit|Write|MultiEdit",
       "hooks": [
         {
@@ -130,17 +135,6 @@
         }
       ],
       "_apm_source": "mcp-repomix"
-    },
-    {
-      "matcher": "Bash",
-      "hooks": [
-        {
-          "type": "command",
-          "if": "Bash(git commit*)",
-          "command": ".claude/hooks/speckit/scripts/speckit-task-commit-check.sh"
-        }
-      ],
-      "_apm_source": "speckit"
     }
   ],
   "UserPromptSubmit": [

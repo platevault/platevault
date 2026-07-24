@@ -1,6 +1,6 @@
 ---
 name: playwright
-description: Automate browser tasks via Playwright MCP — navigate, click, fill forms, extract page data. Use when asked to browse, scrape, or test a web UI.
+description: Use when automating browser tasks — navigate, click, fill forms, and test web interfaces via Playwright MCP tooling.
 ---
 
 # Playwright Browser Automation
