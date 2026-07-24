@@ -2577,7 +2577,7 @@ fn reset_webview_storage(vars: &[(&'static str, String)]) {
 /// Issue astro-plan-qmc: `app_config_dir()` uses `dirs →
 /// SHGetKnownFolderPath` on Windows and ignores `APPDATA`, so the old
 /// Windows branch was deleting under a path that never existed — a silent
-/// no-op. The fix in `lib.rs` redirects the plugin's store to `ALM_DATA_DIR`
+/// no-op. The fix in `lib.rs` redirects the plugin's store to `PV_DATA_DIR`
 /// via an absolute `with_filename()` path, so this function now reads that
 /// same env var directly (identical on all platforms — no per-OS branching
 /// needed any more).
@@ -2591,10 +2591,10 @@ fn reset_webview_storage(vars: &[(&'static str, String)]) {
 /// `vars` — see [`reset_webview_storage`]'s doc on why this takes the
 /// instance's env overrides instead of reading the real OS env.
 fn reset_window_state(vars: &[(&'static str, String)]) {
-    // On every platform the app writes `.window-state.json` under ALM_DATA_DIR
+    // On every platform the app writes `.window-state.json` under PV_DATA_DIR
     // when that variable is set (astro-plan-qmc fix in `lib.rs`). Fall back to
     // `app_config_dir` on Linux/macOS where the env vars ARE honoured by the
-    // platform dirs resolver and `ALM_DATA_DIR` is only set for app-data (not
+    // platform dirs resolver and `PV_DATA_DIR` is only set for app-data (not
     // config-dir) isolation.
     let path = if let Some(data_dir) = app_data_dir(vars) {
         data_dir.join(".window-state.json")
@@ -2602,7 +2602,7 @@ fn reset_window_state(vars: &[(&'static str, String)]) {
         cfg_dir.join(".window-state.json")
     } else {
         eprintln!(
-            "[e2e harness] reset_window_state: neither ALM_DATA_DIR nor \
+            "[e2e harness] reset_window_state: neither PV_DATA_DIR nor \
              an app_config_dir override is set — window-state file not reset"
         );
         return;
