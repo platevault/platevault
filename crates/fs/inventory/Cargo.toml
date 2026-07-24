@@ -11,7 +11,8 @@ path = "src/lib.rs"
 camino = { workspace = true }
 domain_core = { path = "../../domain/core" }
 fs_pathsafe = { path = "../pathsafe" }
-notify = "7"
+notify = ">=8,<9"
+notify-debouncer-full = ">=0.7,<0.8"
 serde = { workspace = true }
 serde_json.workspace = true
 tokio = { workspace = true }
