@@ -1,0 +1,457 @@
+/* PlateVault — Projects feature styles
+ *
+ * Owns the Projects page: the sortable table, lifecycle stepper, detail
+ * sections wrapper, the dual-panel ListPageLayout variant, and the
+ * ProjectBottomDetail grid. Consolidated from .cssblocks/projects-*.css and
+ * projects-redesign.css (spec-043 merges).
+ */
+
+/* ── Projects dense sortable table ─────────────────────────────────────────── */
+.pv-projects-table {
+  table-layout: auto;
+}
+.pv-projects-table th { user-select: none; }
+.pv-projects-table td,
+.pv-projects-table th {
+  padding: var(--pv-sp-1) var(--pv-sp-3);
+}
+
+/* Selectable project rows. */
+.pv-projects-table__row { cursor: pointer; }
+.pv-projects-table__row:hover td { background: var(--pv-surface); }
+.pv-projects-table__row--selected td {
+  background: var(--pv-accent-bg);
+}
+
+/* Name cell: primary identity + optional blocked icon + drift badge. */
+.pv-projects-table__name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pv-sp-1);
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text);
+}
+.pv-projects-table__blocked-icon {
+  color: var(--pv-danger);
+  flex-shrink: 0;
+}
+.pv-projects-table__drift-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pv-sp-0);
+  margin-left: var(--pv-sp-1);
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-normal);
+  color: var(--pv-warn);
+}
+
+/* Cell helpers. */
+.pv-projects-table__cell--muted { color: var(--pv-text-muted); }
+.pv-projects-table__cell--num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.pv-projects-table__cell--mono {
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-secondary);
+}
+.pv-projects-table__dash { color: var(--pv-text-muted); }
+
+/* Empty state. */
+.pv-projects-table__empty {
+  padding: var(--pv-sp-5);
+  text-align: center;
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
+}
+
+/* ── Lifecycle stepper (#74) ──────────────────────────────────────────────── */
+/* Compact horizontal chip track; current chip highlighted, prior chips done,
+ * off-track project gets a trailing danger chip. */
+.pv-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-2);
+  padding: var(--pv-sp-3);
+  border-bottom: 1px solid var(--pv-border-subtle);
+}
+.pv-stepper__track {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pv-sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pv-stepper__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--pv-sp-0) var(--pv-sp-2);
+  font-size: var(--pv-text-xs);
+  text-transform: capitalize;
+  color: var(--pv-text-muted);
+  background: var(--pv-surface);
+  border: 1px solid var(--pv-border-subtle);
+  border-radius: var(--pv-radius-lg);
+  white-space: nowrap;
+}
+.pv-stepper__chip--done {
+  color: var(--pv-text-secondary);
+  border-color: var(--pv-border);
+}
+.pv-stepper__chip--active {
+  color: var(--pv-accent-text);
+  background: var(--pv-accent-bg);
+  border-color: var(--pv-accent);
+  font-weight: var(--pv-weight-semibold);
+}
+.pv-stepper__chip--blocked {
+  color: var(--pv-danger);
+  background: var(--pv-danger-bg);
+  border-color: var(--pv-danger);
+  font-weight: var(--pv-weight-semibold);
+}
+.pv-stepper__next {
+  margin: 0;
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+}
+.pv-stepper__history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-0);
+}
+.pv-stepper__history-row {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+}
+
+/* ── Detail single-column sections wrapper ────────────────────────────────── */
+.pv-project-detail__sections {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inline target block (under stepper) — leading uppercase label. */
+.pv-project-detail__target-info {
+  padding: 0 var(--pv-sp-3) var(--pv-sp-2);
+  cursor: pointer;
+}
+.pv-project-detail__target-info:hover .pv-project-detail__target-name {
+  text-decoration: underline;
+}
+.pv-project-detail__target-label {
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--pv-tracking-normal);
+  color: var(--pv-text-muted);
+}
+
+/* Projects detail: action-bar overlap fix (task #81). */
+.pv-project-detail__action-bar .pv-action-bar {
+  /* Relax fixed single-row height for multi-row wrapping. */
+  height: auto;
+  min-height: var(--pv-toolbar-height);
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: var(--pv-sp-2);
+  padding-top: var(--pv-sp-2);
+  padding-bottom: var(--pv-sp-2);
+}
+/* Full-width spacer forces action cluster onto its own row. */
+.pv-project-detail__action-bar .pv-action-bar__spacer {
+  flex-basis: 100%;
+}
+.pv-project-detail__action-bar .pv-action-bar__actions {
+  flex: 1 1 100%;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  row-gap: var(--pv-sp-1);
+}
+
+/* Outputs cells (task #44). */
+.pv-project-detail__output-name {
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text);
+}
+.pv-project-detail__output-format {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--pv-tracking-normal);
+}
+
+/* Cleanup protected-category block (task #44). */
+.pv-project-detail__cleanup-protected-head {
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--pv-tracking-normal);
+  color: var(--pv-text-muted);
+  padding: var(--pv-sp-2) 0 var(--pv-sp-1);
+}
+.pv-project-detail__cleanup-protected-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-1);
+}
+
+/* ── Status tag (task 105) ─────────────────────────────────────────────────
+ * Replaces filled-background Pill badges in the status column and detail
+ * header. Layout: a small colored dot + plain text label. */
+.pv-status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pv-sp-1);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-secondary);
+  white-space: nowrap;
+}
+.pv-status-tag__dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--pv-text-faint);
+}
+/* Per-variant dot colors — used via template literal `pv-status-tag--${variant}`. */
+.pv-status-tag--ok .pv-status-tag__dot     { background: var(--pv-ok); }
+.pv-status-tag--warn .pv-status-tag__dot   { background: var(--pv-warn); }
+.pv-status-tag--danger .pv-status-tag__dot { background: var(--pv-danger); }
+.pv-status-tag--info .pv-status-tag__dot   { background: var(--pv-info); }
+.pv-status-tag--accent .pv-status-tag__dot { background: var(--pv-accent); }
+.pv-status-tag--neutral .pv-status-tag__dot { background: var(--pv-text-muted); }
+/* ghost: keep the faint default — intentionally low-contrast for inactive states */
+
+/* In the detail header titleExtra slot, bump up font slightly. */
+.pv-detail__header .pv-status-tag {
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
+}
+
+/* In the blocked state the label itself picks up a danger tint. */
+.pv-status-tag--danger {
+  color: var(--pv-danger);
+}
+
+/* ── ListPageLayout side-only variant (task #94) ─────────────────────────── */
+.pv-listpage__body--side {
+  --pv-side-detail-w: 420px;
+  flex-direction: row;
+}
+.pv-listpage__detail--side {
+  flex: 0 0 var(--pv-side-detail-w);
+  width: var(--pv-side-detail-w);
+  height: auto;
+  max-height: none;
+  align-self: stretch;
+  border-top: none;
+  border-left: 1px solid var(--pv-border);
+}
+
+/* Structural tweaks for the narrow side column (#1068). */
+.pv-listpage__detail--side .pv-project-detail__sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-2);
+  min-width: 0;
+}
+/* Tables with no h-scroll wrapper: overflow-x:auto + zeroes the flex min-size. */
+.pv-listpage__detail--side .pv-section {
+  min-width: 0;
+  overflow-x: auto;
+}
+/* Calibration match table row-flex min-width (#1068). */
+.pv-listpage__detail--side .pv-session-detail2__match {
+  min-width: 0;
+}
+/* ProjectBottomDetail grid collapse in the side column (#1068). */
+.pv-listpage__detail--side .pv-project-bottom__grid {
+  grid-template-columns: 1fr;
+}
+.pv-listpage__detail--side .pv-project-bottom__cell--notes {
+  grid-column: span 1;
+}
+/* Compact stepper, metricline, and action cluster in the narrow column. */
+.pv-listpage__detail--side .pv-stepper {
+  padding-top: var(--pv-sp-1);
+  padding-bottom: var(--pv-sp-1);
+}
+.pv-listpage__detail--side .pv-metricline {
+  margin-bottom: var(--pv-sp-1);
+}
+.pv-listpage__detail--side .pv-project-detail__bar-actions {
+  flex-wrap: wrap;
+  gap: var(--pv-sp-1);
+}
+.pv-listpage__detail--side .pv-project-detail__bar-path {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+/* ── ListPageLayout dual side+bottom variant (task 104) ──────────────────── */
+.pv-listpage__body--dual {
+  flex-direction: row;
+}
+/* Left column: main content + bottom strip. */
+.pv-listpage__main-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Side detail panel (same width token as side-only). */
+.pv-listpage__side {
+  flex: 0 0 var(--pv-side-detail-w, 420px);
+  width: var(--pv-side-detail-w, 420px);
+  height: auto;
+  max-height: none;
+  align-self: stretch;
+  border-left: 1px solid var(--pv-border);
+  background: var(--pv-surface-raised);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Bottom detail strip. */
+.pv-listpage__bottom {
+  flex: 0 0 auto;
+  height: fit-content;
+  max-height: 40vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--pv-border);
+  background: var(--pv-surface-raised);
+}
+/* Close bar for both new panels. */
+.pv-listpage__panel-bar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  border-bottom: 1px solid var(--pv-border-subtle);
+}
+.pv-listpage__panel-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
+  line-height: 1;
+  padding: var(--pv-sp-1);
+  border-radius: var(--pv-radius-sm);
+}
+.pv-listpage__panel-close:hover { color: var(--pv-text); }
+.pv-listpage__panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Apply same project-detail structural tweaks to the dual side panel. */
+.pv-listpage__side .pv-project-detail__sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-2);
+}
+.pv-listpage__side .pv-stepper {
+  padding-top: var(--pv-sp-1);
+  padding-bottom: var(--pv-sp-1);
+}
+.pv-listpage__side .pv-metricline {
+  margin-bottom: var(--pv-sp-1);
+}
+.pv-listpage__side .pv-project-detail__bar-actions {
+  flex-wrap: wrap;
+  gap: var(--pv-sp-1);
+}
+.pv-listpage__side .pv-project-detail__bar-path {
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+/* ── ProjectBottomDetail horizontal section grid ──────────────────────────── */
+/* Standardised bottom detail: project identity stacked above the operational
+   sections. */
+.pv-project-detail-stack {
+  display: flex;
+  flex-direction: column;
+}
+.pv-project-detail-stack > * + * {
+  border-top: 1px solid var(--pv-border-subtle);
+}
+
+.pv-project-bottom {
+  padding: var(--pv-sp-3);
+}
+.pv-project-bottom__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--pv-sp-3);
+  align-items: start;
+}
+/* Notes get extra width — prose benefits from room. */
+.pv-project-bottom__cell--notes {
+  grid-column: span 2;
+}
+.pv-project-bottom__cell {
+  min-width: 0;
+}
+.pv-project-bottom__loading {
+  padding: var(--pv-sp-4);
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-sm);
+}
+.pv-project-bottom__error {
+  padding: var(--pv-sp-3);
+}
+
+/* Narrow viewport: collapse notes to single column. */
+@media (max-width: 700px) {
+  .pv-project-bottom__cell--notes {
+    grid-column: span 1;
+  }
+}
+
+/* ── Naming & Structure per-type editor (wave 2, task #60) ───────────────── */
+/* Stack the chip editor, live preview, and actions vertically. */
+.pv-naming__pertype-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-2);
+  align-items: stretch;
+}
+/* Live preview row: resolved sample path for this frame type. */
+.pv-naming__pertype-preview {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-muted);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border-subtle);
+  border-radius: var(--pv-radius-sm);
+}
+.pv-naming__pertype-preview-label {
+  color: var(--pv-text-faint);
+}
+.pv-naming__pertype-preview-code {
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-secondary);
+}
+.pv-naming__pertype-preview-default {
+  margin-left: var(--pv-sp-1);
+  color: var(--pv-text-faint);
+  font-style: italic;
+}
+/* Buttons line — sits below the editor + preview. */
+.pv-naming__pertype-actions {
+  display: flex;
+  gap: var(--pv-sp-2);
+}

@@ -1,0 +1,351 @@
+/* PlateVault — Inbox feature styles
+ *
+ * Owns the Inbox page layout and its shared components: the 3-zone body
+ * (list + side panel + bottom dock), the inbox table, summary strip, stats
+ * chips, alert/banner overlay, row classification cells, and the detail panel.
+ * Consolidated from .cssblocks/inbox-*.css (spec-043 merges).
+ *
+ * Supersedes the old `.pv-inbox-stats` full-width strip (target-search.css)
+ * and the old inbox-layout classes (merges-1.css) which are deleted.
+ */
+
+/* ── Top-bar summary: count text + inline per-type chips ──────────────────── */
+.pv-inbox-summary {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--pv-sp-2) var(--pv-sp-3);
+  min-width: 0;
+}
+.pv-inbox-summary__count {
+  white-space: nowrap;
+  color: var(--pv-text-secondary);
+}
+
+/* ── Per-frame-type breakdown: compact inline chip row (no strip) ────────── */
+.pv-inbox-stats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-secondary);
+}
+.pv-inbox-stats__per-type {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--pv-sp-1);
+  white-space: nowrap;
+  padding: 1px var(--pv-sp-2);
+  border: 1px solid var(--pv-border-subtle);
+  border-radius: var(--pv-radius-pill, var(--pv-radius-sm));
+  background: var(--pv-surface-raised);
+}
+.pv-inbox-stats__type {
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text);
+  text-transform: capitalize;
+}
+.pv-inbox-stats__label {
+  color: var(--pv-text-muted);
+  font-size: var(--pv-text-xs);
+}
+.pv-inbox-stats__num { font-weight: var(--pv-weight-semibold); color: var(--pv-text); }
+
+/* ── Controls toolbar (spec-043 layout adoption) ─────────────────────────── */
+/* In the top bar the grouping/sort/filter controls lay out INLINE (a single
+ * row that wraps) rather than stacked; FilterToolbar supplies the row gap. */
+.pv-inbox-list__controls--toolbar {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  padding: 0;
+}
+
+/* ── Inbox table (replaced bespoke div-list) ─────────────────────────────── */
+.pv-inbox-table {
+  table-layout: fixed;
+  width: 100%;
+}
+.pv-inbox-table td.num,
+.pv-inbox-table th.num,
+.pv-inbox-table td.pv-inbox-cell--right,
+.pv-inbox-table th.pv-inbox-cell--right {
+  text-align: right;
+}
+/* Detection (path) cell: single line, ellipsis (needs table-layout:fixed). */
+.pv-inbox-cell__path {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  color: var(--pv-text);
+}
+/* Issue #605: path + "Plan pending review" chip on one line — path shrinks
+   first, chip never wraps. */
+.pv-inbox-cell__path-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  min-width: 0;
+}
+.pv-inbox-cell__path-wrap .pv-inbox-cell__path {
+  min-width: 0;
+  flex-shrink: 1;
+}
+.pv-inbox-cell__path-wrap .pv-pill {
+  flex-shrink: 0;
+}
+.pv-inbox-table__row {
+  cursor: pointer;
+}
+.pv-inbox-table__row:hover {
+  background: var(--pv-hover-bg, var(--pv-surface));
+}
+.pv-inbox-table__row--selected,
+.pv-inbox-table__row--selected:hover {
+  background: var(--pv-info-bg);
+}
+.pv-inbox-table__row--muted {
+  opacity: 0.6;
+}
+/* Group sub-header row. */
+.pv-inbox-table__group {
+  cursor: pointer;
+}
+.pv-inbox-table__group td {
+  background: var(--pv-surface);
+  border-bottom: 1px solid var(--pv-border);
+}
+.pv-inbox-table__group:hover td {
+  background: var(--pv-hover-bg, var(--pv-surface));
+}
+/* The group cell is a real <button> — reset native chrome. */
+.pv-inbox-table__group-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--pv-text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--pv-tracking-normal);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text-muted);
+}
+
+/* ── Metadata row state ───────────────────────────────────────────────────── */
+.pv-inbox-meta-row--warn {
+  background: var(--pv-warn-bg);
+}
+
+/* ── Row classification cell (task 32) ────────────────────────────────────── */
+.pv-inbox-row__classification {
+  font-size: var(--pv-text-xs, 0.75rem);
+  font-weight: 500;
+  color: var(--pv-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* State variant colours — used via template literal `--${mod}`. */
+.pv-inbox-row__classification--pending    { color: var(--pv-text-muted); }
+.pv-inbox-row__classification--classified { color: var(--pv-text-secondary); }
+.pv-inbox-row__classification--plan_open  { color: var(--pv-ok); }
+.pv-inbox-row__classification--resolved   { color: var(--pv-ink4); }
+/* T070/FR-047: needs-review sentinel bucket. */
+.pv-inbox-row__classification--needs_review { color: var(--pv-warn); }
+
+/* ── Inbox alert / banner (task #34) ─────────────────────────────────────── */
+/* The alert becomes a flex row: message takes the available width, the inline
+ * action sits at the trailing edge. `.pv-banner` already sets display:flex. */
+.pv-inbox-alert {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.pv-inbox-alert__msg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-1);
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.pv-inbox-alert__title {
+  font-weight: var(--pv-weight-semibold);
+}
+.pv-inbox-alert__body {
+  font-size: var(--pv-text-xs);
+  line-height: var(--pv-leading-normal);
+}
+
+/* ── Plan panel summary breakdown (task #59) ──────────────────────────────── */
+.pv-plan-panel__summary-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--pv-sp-1) var(--pv-sp-2);
+  min-width: 0;
+}
+.pv-plan-panel__summary-type {
+  white-space: nowrap;
+}
+.pv-plan-panel__summary-type-count {
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text);
+}
+.pv-plan-panel__summary-type-name {
+  color: var(--pv-text-secondary);
+}
+.pv-plan-panel__summary-sep {
+  color: var(--pv-text-muted);
+}
+
+/* ── Status bar lib / page slots (spec-043, tasks #87, B) ────────────────── */
+.pv-statusbar__lib {
+  display: flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  color: var(--pv-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.pv-statusbar__page {
+  display: flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  color: var(--pv-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  min-width: 0;
+  padding-right: var(--pv-sp-3);
+  border-right: 1px solid var(--pv-border-subtle);
+}
+
+/* ── Plan panel context (narrow detail pane, #76) ────────────────────────── */
+.pv-listpage__detail-body .pv-plan-panel__bar {
+  flex-wrap: wrap;
+  gap: var(--pv-sp-2);
+}
+.pv-listpage__detail-body .pv-plan-panel__bar-actions {
+  flex-wrap: wrap;
+}
+.pv-listpage__detail-body .pv-plan-panel__summary-dest,
+.pv-listpage__detail-body .pv-plan-panel__path {
+  word-break: break-all;
+}
+
+/* ── Inbox detail two-column split (tasks #75, #98, task D) ──────────────── */
+.pv-inbox-detail__cols {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+/* LEFT: primary detail column; RIGHT: files column (task D). */
+.pv-inbox-detail__cols--split .pv-inbox-detail__aside {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  position: static;
+  align-self: stretch;
+}
+.pv-inbox-detail__cols--split .pv-inbox-detail__main {
+  flex: 0 0 var(--pv-inbox-breakdown-width, 340px);
+  min-width: 0;
+}
+
+/* Separator between breakdown and files columns. */
+.pv-inbox-detail__files {
+  border-left: 1px solid var(--pv-border-subtle);
+  padding-left: var(--pv-sp-3);
+}
+
+/* Files scroll container (task D): scrolls within the column. */
+.pv-inbox-detail__files-scroll {
+  overflow-y: auto;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+  max-height: 32vh;
+  min-height: 0;
+}
+
+/* In the two-column layout the inspector is a right-column card. */
+.pv-inbox-detail__cols--split .pv-inbox-detail__aside .pv-inbox-inspector {
+  border-top: none;
+  border-left: 1px solid var(--pv-border-subtle);
+  border-radius: var(--pv-radius-md);
+  background: var(--pv-surface-raised);
+  overflow: hidden;
+}
+
+/* Inspector KV grid: collapse from 3 to 2 columns in the narrow right column. */
+.pv-inbox-detail__cols--split .pv-inbox-inspector__grid {
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--pv-sp-0) var(--pv-sp-3);
+}
+
+/* Meta wrap no longer needs to host the inspector below the table. */
+.pv-inbox-detail__cols--split .pv-inbox-meta-wrap {
+  min-height: 0;
+}
+
+/* Destination cell in the breakdown column: single line + ellipsis (task 6). */
+.pv-inbox-detail__dest-cell {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* ── Files popover (metadata table + inspector) ───────────────────────────── */
+.pv-inbox-detail__files-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pv-sp-1);
+  margin-top: var(--pv-sp-3);
+  padding: 1px var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text);
+  background: none;
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.pv-inbox-detail__files-trigger:hover { background: var(--pv-hover-bg); }
+.pv-inbox-detail__files-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
+}
+.pv-inbox-detail__files-popup {
+  min-width: 560px;
+  max-width: 840px;
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-md);
+  box-shadow: var(--pv-shadow-sm);
+  outline: none;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.pv-inbox-detail__files-popup-table {
+  overflow-y: auto;
+  max-height: 280px;
+}
+.pv-inbox-detail__files-popup-inspector {
+  border-top: 1px solid var(--pv-border-subtle);
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+}

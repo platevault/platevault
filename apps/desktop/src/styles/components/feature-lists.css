@@ -167,55 +167,6 @@
   margin-top: 3px;
 }
 
-/* === TARGET DETAIL (legacy) === */
-
-/* Common-name span in DetailHeader title */
-.pv-target-detail-legacy__common-name {
-  color: var(--pv-text-muted);
-  font-weight: var(--pv-weight-normal);
-}
-
-/* Coverage warning Banner top margin */
-.pv-target-detail-legacy__coverage-warn {
-  margin-top: var(--pv-sp-2);
-}
-
-/* "No coverage data" faint label */
-.pv-target-detail-legacy__no-coverage {
-  font-size: var(--pv-text-xs);
-  color: var(--pv-text-faint);
-}
-
-/* Observing plans list container */
-.pv-target-detail-legacy__obs-plans {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pv-sp-2);
-  font-size: var(--pv-text-xs);
-}
-
-/* Observing plan metadata line (software · date) */
-.pv-target-detail-legacy__obs-plan-meta {
-  color: var(--pv-text-muted);
-}
-
-/* Em-dash placeholder when a session has no linked projects */
-.pv-target-detail-legacy__no-projects-dash {
-  color: var(--pv-text-faint);
-}
-
-/* Sessions summary text (simplified, non-detail view) */
-.pv-target-detail-legacy__sessions-summary {
-  color: var(--pv-text-faint);
-  font-size: var(--pv-text-sm);
-}
-
-/* Projects empty state text */
-.pv-target-detail-legacy__projects-empty {
-  color: var(--pv-text-faint);
-  font-size: var(--pv-text-sm);
-}
-
 /* === SETTINGS CALIBRATION MATCHING (criteria table) === */
 
 /* Criteria table: inherit pv-table base; pin column widths to match mock */
@@ -254,22 +205,6 @@
   font-size: var(--pv-text-sm);
   color: var(--pv-text-muted);
   margin-block-start: var(--pv-sp-2);
-}
-
-/* Legacy aliases — kept so old .pv-calib-matching__* refs compile if any remain */
-.pv-calib-matching__input-row {
-  display: flex;
-  align-items: center;
-  gap: var(--pv-sp-2);
-}
-
-.pv-calib-matching__num-input {
-  width: 80px;
-}
-
-.pv-calib-matching__unit-label {
-  font-size: var(--pv-text-sm);
-  color: var(--pv-text-muted);
 }
 
 /* === PROJECT CALIBRATION MATCH PANEL === */
@@ -1026,32 +961,6 @@
   justify-content: flex-end;
 }
 
-/* === CREATE PROJECT DIALOG === */
-
-/*
- * Scoped to the create-project dialog. All values use --pv-* design tokens.
- * No raw colors, no raw ms durations.
- */
-
-/* Dialog popup width cap */
-.pv-create-project__popup {
-  max-width: 520px;
-}
-
-/* Body stack: vertical flex with standard field gap */
-.pv-create-project__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--pv-sp-4);
-}
-
-/* Selected-target pill row: horizontal flex */
-.pv-create-project__target-row {
-  display: flex;
-  align-items: center;
-  gap: var(--pv-sp-2);
-}
-
 /* === ADD TARGET DIALOG === */
 
 /* Constrain dialog popup width */
@@ -1215,4 +1124,101 @@
   font-size: var(--pv-text-xs);
   color: var(--pv-danger);
   line-height: 1.4;
+}
+
+/* ── Calibration: masters table (spec-043, tasks #39/#73) ────────────────── */
+.pv-calib-table {
+  table-layout: auto;
+}
+.pv-calib-table th {
+  user-select: none;
+}
+.pv-calib-table td,
+.pv-calib-table th {
+  padding: var(--pv-sp-1) var(--pv-sp-3);
+}
+.pv-calib-table__row {
+  cursor: pointer;
+}
+.pv-calib-table__row:hover td {
+  background: var(--pv-surface);
+}
+.pv-calib-table__row--selected td {
+  background: var(--pv-accent-bg);
+}
+.pv-calib-cell__master-label {
+  font-weight: var(--pv-weight-medium);
+  color: var(--pv-text);
+}
+.pv-calib-cell--num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.pv-calib-cell--mono {
+  font-family: var(--pv-font-mono);
+  font-size: var(--pv-text-xs);
+  color: var(--pv-text-secondary);
+}
+.pv-calib-cell--muted {
+  color: var(--pv-text-muted);
+}
+.pv-calib-table__status {
+  padding: var(--pv-sp-5);
+  text-align: center;
+  color: var(--pv-text-muted);
+}
+
+/* ── Calibration: master detail layout (spec-043, tasks #86/#90/#97) ─────── */
+.pv-calib-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--pv-sp-5);
+  align-items: start;
+  margin-top: var(--pv-sp-3);
+}
+.pv-calib-detail__facts {
+  min-width: 0;
+}
+.pv-calib-detail__facts .pv-rail__panel {
+  max-height: none;
+  overflow: visible;
+}
+.pv-calib-detail__matches {
+  min-width: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.pv-calib-detail__matches > .pv-section {
+  margin-bottom: 0;
+}
+@media (max-width: 880px) {
+  .pv-calib-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 2-column KV grid for compact fingerprint display (task #97). */
+.pv-calib-kvgrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--pv-sp-5);
+  row-gap: 0;
+  align-items: start;
+}
+.pv-calib-kvgrid .pv-kv {
+  min-width: 0;
+  gap: var(--pv-sp-2);
+}
+.pv-calib-kvgrid .pv-kv__label {
+  width: auto;
+  max-width: 6.5rem;
+}
+.pv-calib-kvgrid .pv-kv__value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 880px) {
+  .pv-calib-kvgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

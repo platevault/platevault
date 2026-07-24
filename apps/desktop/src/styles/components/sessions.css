@@ -1,0 +1,221 @@
+/* PlateVault — Sessions feature styles
+ *
+ * Owns the Sessions detail panel layout: side-by-side column grid, the
+ * expandable frames table, and the session-list popover. Consolidated from
+ * .cssblocks/detail-panel.css, detail-density.css, targets-wave2.css
+ * (spec-043 merges). Also owns the per-detection popover shared with the
+ * targets page.
+ */
+
+/* ── Session detail side-by-side layout (task #99) ────────────────────────── */
+.pv-session-detail2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--pv-sp-6);
+  padding: var(--pv-sp-4);
+}
+.pv-session-detail2__col {
+  flex: 0 1 400px;
+  min-width: 340px;
+}
+.pv-session-detail2__linked {
+  flex: 0 0 auto;
+  min-width: 160px;
+}
+.pv-session-detail2__head {
+  font-size: var(--pv-text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--pv-tracking-normal);
+  font-weight: var(--pv-weight-semibold);
+  color: var(--pv-text-muted);
+  margin-bottom: var(--pv-sp-2);
+}
+.pv-session-detail2__linked-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-2);
+}
+.pv-session-detail2__muted { color: var(--pv-text-muted); }
+
+/* Calibration-linkage row (#772): pill + master id + score/mismatch, inline. */
+.pv-session-detail2__calib-row {
+  display: flex;
+  align-items: center;
+  gap: var(--pv-sp-2);
+}
+.pv-session-detail2__calib-note { color: var(--pv-text-faint); }
+
+/* Review actions inline with the title (left-grouped, wrapping in narrow
+   side-dock panels — #1068). */
+.pv-session-detail2__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  margin-left: var(--pv-sp-3);
+}
+
+/* Linked-project link rendered as a button — reset native button chrome. */
+.pv-session-detail2__link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--pv-accent);
+}
+.pv-session-detail2__link:hover { text-decoration: underline; }
+
+/* Stacked variant: two SessionListPopover blocks in one column. */
+.pv-session-detail2__linked--stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-4);
+}
+
+/* Matching hero (spec 043 §4): ranked candidate-masters table, below the
+   fingerprint/linked-sessions row. Shares the row's horizontal padding. */
+.pv-session-detail2__match {
+  padding: 0 var(--pv-sp-4) var(--pv-sp-4);
+}
+
+/* ── Session list popover ─────────────────────────────────────────────────── */
+.pv-session-popover__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pv-sp-1);
+  padding: 1px var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text);
+  background: none;
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-sm);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.pv-session-popover__trigger:hover {
+  background: var(--pv-hover-bg);
+}
+.pv-session-popover__trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--pv-focus-ring);
+}
+.pv-session-popover__popup {
+  min-width: 260px;
+  max-width: 360px;
+  background: var(--pv-surface-raised);
+  border: 1px solid var(--pv-border);
+  border-radius: var(--pv-radius-md);
+  box-shadow: var(--pv-shadow-sm);
+  outline: none;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.pv-session-popover__search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--pv-border-subtle);
+  outline: none;
+}
+.pv-session-popover__search:focus {
+  border-bottom-color: var(--pv-accent);
+}
+.pv-session-popover__list {
+  overflow-y: auto;
+  max-height: 240px;
+  padding: var(--pv-sp-1);
+  margin: 0;
+  list-style: none;
+}
+.pv-session-popover__item {
+  padding: 3px var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
+  border-radius: var(--pv-radius-sm);
+  color: var(--pv-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pv-session-popover__empty {
+  padding: var(--pv-sp-2);
+  font-size: var(--pv-text-sm);
+  color: var(--pv-text-muted);
+}
+
+/* ── Session frames expandable table (tasks #37/#38) ─────────────────────── */
+.pv-session-frames__table {
+  width: 100%;
+  font-size: var(--pv-text-xs);
+}
+.pv-session-frames__table th {
+  font-size: var(--pv-text-xs);
+  font-weight: var(--pv-weight-semibold);
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  color: var(--pv-text-muted);
+  text-align: left;
+  border-bottom: 1px solid var(--pv-border-subtle);
+  white-space: nowrap;
+}
+.pv-session-frames__table td {
+  padding: var(--pv-sp-1) var(--pv-sp-2);
+  vertical-align: top;
+}
+.pv-session-frames__row {
+  cursor: pointer;
+}
+.pv-session-frames__row:hover {
+  background: var(--pv-hover-bg);
+}
+/* Fixed-width column for the expand toggle. */
+.pv-session-frames__th-toggle {
+  width: 20px;
+}
+/* The expand toggle: a small chevron in its own cell. */
+.pv-session-frames__toggle {
+  color: var(--pv-text-faint);
+  font-size: var(--pv-text-xs);
+  width: 16px;
+  text-align: center;
+  user-select: none;
+}
+/* Expanded detail row — full-width td spanning all columns. */
+.pv-session-frames__expanded-row td {
+  padding: var(--pv-sp-2) var(--pv-sp-3);
+  background: var(--pv-surface);
+  border-top: 1px solid var(--pv-border-subtle);
+}
+.pv-session-frames__expanded-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pv-sp-1);
+}
+/* KV pairs inside the expanded detail row. */
+.pv-session-frames__expanded-kvrow {
+  display: flex;
+  gap: var(--pv-sp-4);
+  flex-wrap: wrap;
+}
+.pv-session-frames__expanded-kv {
+  display: flex;
+  gap: var(--pv-sp-1);
+  font-size: var(--pv-text-xs);
+}
+.pv-session-frames__expanded-kv dt {
+  color: var(--pv-text-faint);
+  font-weight: var(--pv-weight-medium);
+}
+.pv-session-frames__expanded-kv dd {
+  color: var(--pv-text);
+  margin: 0;
+}

@@ -30,8 +30,10 @@
 @import './components/dev.css';
 @import './components/redesign-detail.css';
 @import './components/tables-lists.css';
-@import './components/merges-1.css';
-@import './components/merges-2.css';
-@import './components/merges-3.css';
+@import './components/projects.css';
+@import './components/targets.css';
+@import './components/inbox.css';
+@import './components/sessions.css';
+@import './components/modals.css';
 @import './components/skeleton.css';
 @import './components/logpanel.css';

@@ -50,7 +50,7 @@
    `.pv-modal__body` — so ordinary DOM-overflow clipping does not apply, but
    plain z-index stacking does. TargetSearch is used inside Modals
    (AddTargetDialog, CreateProjectDialog), so it needs to out-rank
-   `.pv-modal`'s z-index (501, see merges-3.css) — the same reason the
+   `.pv-modal`'s z-index (501, see modals.css) — the same reason the
    command palette below is scoped to 600/601 — otherwise the modal card
    paints over the dropdown/no-match message: present and functional in the
    DOM, but never visible or hit-testable to a real (mouse-driven) user. */
@@ -284,24 +284,6 @@
 .pv-source-group-header .pv-pill { margin-left: var(--pv-sp-2); }
 .pv-list-empty { padding: var(--pv-sp-4); color: var(--pv-text-faint); font-size: var(--pv-text-sm); }
 .pv-target-row__desig { color: var(--pv-text-muted); font-size: var(--pv-text-xs); }
-
-/* === INBOX stats summary strip (was inline styles + undefined --pv-text-primary) === */
-.pv-inbox-stats {
-  display: flex; flex-wrap: wrap; gap: var(--pv-sp-3); align-items: center;
-  padding: var(--pv-sp-1) var(--pv-sp-3);
-  border-bottom: 1px solid var(--pv-border);
-  font-size: var(--pv-text-xs); color: var(--pv-text-secondary);
-  background: var(--pv-surface-raised);
-}
-.pv-inbox-stats__sep { border-left: 1px solid var(--pv-border); align-self: stretch; }
-.pv-inbox-stats__chip { margin-right: var(--pv-sp-2); white-space: nowrap; }
-.pv-inbox-stats__per-type { white-space: nowrap; }
-.pv-inbox-stats__num { font-weight: var(--pv-weight-semibold); color: var(--pv-text); }
-.pv-inbox-stats__type {
-  display: inline-block; font-weight: var(--pv-weight-semibold); color: var(--pv-text);
-  margin-right: var(--pv-sp-1); text-transform: capitalize;
-}
-.pv-inbox-stats__label { color: var(--pv-text-muted); }
 
 /* === APPEARANCE: theme swatch picker ===
    Each swatch preview re-scopes tokens via data-theme, so the bars render that
