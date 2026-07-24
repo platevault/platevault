@@ -29,7 +29,7 @@ use contracts_core::onboarding::{
 use sqlx::SqlitePool;
 
 async fn setup_pool() -> SqlitePool {
-    let db = persistence_db::Database::in_memory().await.expect("in-memory DB");
+    let db = persistence_core::Database::in_memory().await.expect("in-memory DB");
     db.migrate().await.expect("migrations");
     db.pool().clone()
 }

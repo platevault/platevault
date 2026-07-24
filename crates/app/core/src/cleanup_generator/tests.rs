@@ -16,10 +16,10 @@ use contracts_core::cleanup::{
 use contracts_core::protection::{
     PlanProtectionCheckRequest, ProtectionLevel, SourceProtectionSetRequest,
 };
-use persistence_db::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::repositories::projects::{insert_project, InsertProject};
-use persistence_db::Database;
+use persistence_core::Database;
+use persistence_plans::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::projects::{insert_project, InsertProject};
 use sqlx::SqlitePool;
 
 async fn setup() -> (Database, EventBus, std::sync::MutexGuard<'static, ()>) {

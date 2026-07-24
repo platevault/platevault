@@ -8,7 +8,7 @@ use contracts_core::inventory_frame::{
     FramePresenceState, InventoryFrameListRequest, InventoryFrameListScope,
     InventoryFrameRelinkRequest, InventoryReconcileRunRequest, ReconcileMode, ReconcileReason,
 };
-use persistence_db::Database;
+use persistence_core::Database;
 
 async fn test_db() -> Database {
     let db = Database::in_memory().await.unwrap();

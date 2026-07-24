@@ -27,8 +27,8 @@ use app_core::calibration::masters_get;
 use app_core::lifecycle::artifact::{mark_missing, mark_recovered};
 use contracts_core::calibration::CalibrationMatchMissingFlag;
 use contracts_core::inventory_frame::{InventoryReconcileRunRequest, ReconcileReason};
-use persistence_db::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
-use persistence_db::repositories::calibration_assignment::{upsert, UpsertParams};
+use persistence_calibration::repositories::calibration_assignment::{upsert, UpsertParams};
+use persistence_plans::repositories::artifacts::{insert_artifact_if_absent, InsertArtifact};
 
 // ── Seed helpers ──────────────────────────────────────────────────────────────
 

@@ -263,7 +263,7 @@ pub async fn archive_permanently_delete(
     // Read blockPermanentDelete from settings (spec 016 protection gate).
     // We load the setting directly from the settings store rather than caching
     // in AppState. Resolved via `app_core::settings::resolve_setting` (not the
-    // raw `persistence_db::repositories::settings` table) because
+    // raw `persistence_lifecycle::repositories::settings` table) because
     // `blockPermanentDelete` is a global-protection-default key backed by the
     // dedicated `protection_defaults` table (spec 016 T-003/T-005) — reading
     // the legacy generic settings table directly would silently ignore every

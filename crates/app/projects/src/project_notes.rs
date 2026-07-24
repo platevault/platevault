@@ -32,8 +32,8 @@ use uuid::Uuid;
 use contracts_core::manifests::{
     ManifestOpError, ProjectNoteUpdateRequest, ProjectNoteUpdateResult,
 };
-use persistence_db::repositories::project_notes::{get_note, upsert_note};
-use persistence_db::repositories::projects::get_project;
+use persistence_plans::repositories::project_notes::{get_note, upsert_note};
+use persistence_plans::repositories::projects::get_project;
 use project_structure::notes::{NotesFileAdapter, RealNotesAdapter};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ pub async fn update_note_with_adapter(
 
     // ── Fetch project to verify existence and lifecycle ───────────────────────
     let project = get_project(pool, &req.project_id).await.map_err(|e| {
-        if matches!(e, persistence_db::DbError::NotFound(_)) {
+        if matches!(e, persistence_core::DbError::NotFound(_)) {
             op_error("project.not_found", &format!("project {} not found", req.project_id))
         } else {
             op_error("internal", &format!("DB error: {e}"))
@@ -159,7 +159,7 @@ pub async fn get_note_content(
     pool: &SqlitePool,
     project_id: &str,
 ) -> Result<Option<String>, String> {
-    persistence_db::repositories::project_notes::get_note_content(pool, project_id)
+    persistence_plans::repositories::project_notes::get_note_content(pool, project_id)
         .await
         .map_err(|e| e.to_string())
 }
@@ -185,9 +185,10 @@ pub async fn sync_notes_to_disk(
         .await
         .map_err(|e| format!("failed to create notes directory {}: {e}", notes_dir.display()))?;
 
-    let content = persistence_db::repositories::project_notes::get_note_content(pool, project_id)
-        .await
-        .map_err(|e| format!("DB error reading notes for {project_id}: {e}"))?;
+    let content =
+        persistence_plans::repositories::project_notes::get_note_content(pool, project_id)
+            .await
+            .map_err(|e| format!("DB error reading notes for {project_id}: {e}"))?;
 
     match content {
         None => {

@@ -15,7 +15,7 @@
 mod support;
 
 use fs_executor::failure::FailureCode;
-use persistence_db::repositories::plans as plans_repo;
+use persistence_plans::repositories::plans as plans_repo;
 use uuid::Uuid;
 
 // ── Seeding helpers ───────────────────────────────────────────────────────────
@@ -295,7 +295,7 @@ async fn archive_plan_apply_drives_project_to_archived() {
     assert_eq!(plan_row.state, "applied");
 
     // Project driven to 'archived' with the plan link recorded.
-    let archived = persistence_db::repositories::projects::list_archived_projects(db.pool())
+    let archived = persistence_plans::repositories::projects::list_archived_projects(db.pool())
         .await
         .expect("list_archived_projects");
     assert_eq!(archived.len(), 1, "the completed project must now be archived");
@@ -378,8 +378,9 @@ async fn non_archive_plan_apply_leaves_project_lifecycle_untouched() {
         .expect("apply");
     support::wait_plan_terminal(db.pool(), &plan_id).await;
 
-    let project =
-        persistence_db::repositories::projects::get_project(db.pool(), &project_id).await.unwrap();
+    let project = persistence_plans::repositories::projects::get_project(db.pool(), &project_id)
+        .await
+        .unwrap();
     assert_eq!(project.lifecycle, "completed", "non-archive apply must not archive the project");
 }
 
@@ -852,7 +853,7 @@ async fn apply_plan_channel_free_auto_approves_and_moves_file() {
     // C5 lifecycle closure still fires through the channel-free path: an
     // `origin = archive` plan reaching `applied` drives the project to
     // `archived`.
-    let archived = persistence_db::repositories::projects::list_archived_projects(db.pool())
+    let archived = persistence_plans::repositories::projects::list_archived_projects(db.pool())
         .await
         .expect("list_archived_projects");
     assert_eq!(archived.len(), 1, "the completed project must now be archived");

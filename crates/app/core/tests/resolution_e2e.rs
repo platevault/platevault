@@ -30,7 +30,7 @@ use contracts_core::targets::TargetSearchRequest;
 use contracts_core::targets::{
     TargetResolveOverride, TargetResolveSimbadRequest, TargetResolveStatus, TargetSource,
 };
-use persistence_db::Database;
+use persistence_core::Database;
 use simbad_resolver::{Cache as _, RedbCache, Store};
 use targeting_resolver::cache;
 use targeting_resolver::{

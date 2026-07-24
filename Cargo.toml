@@ -28,7 +28,6 @@ members = [
   "crates/patterns",
   "crates/persistence/calibration",
   "crates/persistence/core",
-  "crates/persistence/db",
   "crates/persistence/inbox",
   "crates/persistence/lifecycle",
   "crates/persistence/plans",

@@ -22,8 +22,8 @@ use contracts_core::lifecycle::{
     ProjectState, ProjectTransitionRequest, TransitionActor, TransitionRequest, TransitionStatus,
 };
 use contracts_core::projects_v2::{ProjectSourceAddRequest, ProjectTool};
-use persistence_db::repositories::projects as repo;
-use persistence_db::Database;
+use persistence_core::Database;
+use persistence_plans::repositories::projects as repo;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -114,7 +114,7 @@ async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
     // Step 2: drive a user-IPC transition: ready → processing.
     let pid = Uuid::parse_str(&project_id).unwrap();
     let resp = apply_transition(
-        &persistence_db::repositories::lifecycle::SqliteLifecycleRepository::new(
+        &persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository::new(
             pool.clone(),
             bus.clone(),
         ),
@@ -159,7 +159,7 @@ async fn t046a_user_ipc_and_auto_read_same_canonical_lifecycle() {
 
     // A user-IPC transition that reads from the same table should see `blocked`.
     let resp2 = apply_transition(
-        &persistence_db::repositories::lifecycle::SqliteLifecycleRepository::new(
+        &persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository::new(
             pool.clone(),
             bus.clone(),
         ),
@@ -196,7 +196,7 @@ async fn t046b_no_dual_write_to_legacy_project_table() {
     // Drive a user-IPC transition: ready → processing.
     let pid = Uuid::parse_str(&project_id).unwrap();
     let resp = apply_transition(
-        &persistence_db::repositories::lifecycle::SqliteLifecycleRepository::new(
+        &persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository::new(
             pool.clone(),
             bus.clone(),
         ),
@@ -400,7 +400,7 @@ async fn t048e_unblocking_clears_blocked_reason() {
     // Now unblock via user-IPC.
     let pid = Uuid::parse_str(&project_id).unwrap();
     let resp = apply_transition(
-        &persistence_db::repositories::lifecycle::SqliteLifecycleRepository::new(
+        &persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository::new(
             pool.clone(),
             bus.clone(),
         ),

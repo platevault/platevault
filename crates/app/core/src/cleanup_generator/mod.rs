@@ -20,7 +20,7 @@
 //! the real pipeline populates: the filesystem watcher observes output files
 //! under a project's folder and records `path`, `kind`, `size_bytes`, and a
 //! rule/override classification. We call
-//! [`persistence_db::repositories::artifacts::list_artifacts_for_project`]
+//! [`persistence_plans::repositories::artifacts::list_artifacts_for_project`]
 //! directly.
 //!
 //! Raw sub-frame cleanup (e.g. "light subs now covered by a master") is a

@@ -24,7 +24,7 @@ use std::path::PathBuf;
 
 use audit::bus::EventBus;
 use audit::event_bus::{TOPIC_ARTIFACT_CLASSIFIED, TOPIC_ARTIFACT_DETECTED};
-use persistence_db::Database;
+use persistence_core::Database;
 
 use desktop_shell::watcher::{attach_project_watcher, new_artifact_watcher_registry};
 

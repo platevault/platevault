@@ -59,7 +59,7 @@ fn not_found(id: &str) -> ContractError {
     )
 }
 
-/// Map any DB-layer error (`cache::CacheError` or `persistence_db::DbError`) to
+/// Map any DB-layer error (`cache::CacheError` or `persistence_core::DbError`) to
 /// the `internal.database` `ContractError` shape. Collapses the previously
 /// byte-identical `db_err`/`persist_err` pair (Tier-3 dedup).
 fn db_err(e: impl std::fmt::Display) -> ContractError {
@@ -102,7 +102,7 @@ async fn load_alias_dtos(
     target_id_str: &str,
 ) -> Result<Vec<TargetAliasDto>, ContractError> {
     let rows =
-        persistence_db::repositories::q_targets_mgmt::list_target_aliases(pool, target_id_str)
+        persistence_targets::repositories::q_targets_mgmt::list_target_aliases(pool, target_id_str)
             .await
             .map_err(db_err)?;
 

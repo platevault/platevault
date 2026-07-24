@@ -11,7 +11,7 @@
 //! These functions take a borrowed [`sqlx::SqlitePool`] rather than owning a
 //! connection, matching the spec-013 loader ([`crate::load`]) and the
 //! `persistence_db` repositories. Raw SQL lives in
-//! `persistence_db::repositories::q_resolver` (db-boundary-zero); this module
+//! `persistence_targets::repositories::q_resolver` (db-boundary-zero); this module
 //! keeps the dedup/precedence/ranking business logic and converts between the
 //! repository's flat rows and this crate's domain types. Identities are
 //! written to `canonical_target` / `target_alias` (migration 0031).
@@ -28,7 +28,7 @@
 //! them or the coordinates are out of range.
 
 use domain_core::ids::Timestamp;
-use persistence_db::repositories::q_resolver;
+use persistence_targets::repositories::q_resolver;
 use sqlx::{SqliteConnection, SqlitePool};
 use uuid::Uuid;
 
@@ -57,7 +57,7 @@ pub enum CacheError {
     Database(#[from] sqlx::Error),
     /// A `persistence_db` repository call failed.
     #[error("persistence error: {0}")]
-    Persistence(#[from] persistence_db::DbError),
+    Persistence(#[from] persistence_core::DbError),
     /// A stored `canonical_target.id` was not a valid UUID.
     #[error("failed to parse target uuid '{0}': {1}")]
     InvalidUuid(String, uuid::Error),
@@ -583,7 +583,7 @@ pub async fn clear_display_alias(pool: &SqlitePool, target_id: Uuid) -> CacheRes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::persistence_db::Database;
+    use ::persistence_core::Database;
 
     async fn setup() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");

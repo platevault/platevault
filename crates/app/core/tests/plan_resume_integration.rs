@@ -22,8 +22,8 @@
 
 mod support;
 
-use persistence_db::repositories::plan_apply as apply_repo;
-use persistence_db::repositories::plans as plans_repo;
+use persistence_plans::repositories::plan_apply as apply_repo;
+use persistence_plans::repositories::plans as plans_repo;
 use uuid::Uuid;
 
 /// Register a `registered_sources` root row pointing at a real directory, so

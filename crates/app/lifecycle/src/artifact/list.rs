@@ -5,7 +5,7 @@
 
 use sqlx::SqlitePool;
 
-use persistence_db::repositories::artifacts::{self as repo};
+use persistence_plans::repositories::artifacts::{self as repo};
 
 use contracts_core::tools::ArtifactSummary;
 

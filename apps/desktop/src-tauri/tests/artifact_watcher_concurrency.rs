@@ -14,7 +14,7 @@
 //! root so the attach path's DB and filesystem work executes normally.
 
 use audit::bus::EventBus;
-use persistence_db::Database;
+use persistence_core::Database;
 
 use desktop_shell::watcher::{
     attach_project_watcher, detach_project_watcher, new_artifact_watcher_registry,

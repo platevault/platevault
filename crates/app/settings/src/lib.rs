@@ -33,8 +33,8 @@ use contracts_core::settings::{
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::EntityId;
 use domain_core::lifecycle::data_asset::EntityType;
-use persistence_db::repositories::settings as repo;
-use persistence_db::repositories::source_protection as protection_repo;
+use persistence_lifecycle::repositories::settings as repo;
+use persistence_plans::repositories::source_protection as protection_repo;
 use serde_json::Value;
 use sqlx::SqlitePool;
 

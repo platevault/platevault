@@ -29,14 +29,15 @@ pub async fn sessions_list(
 ) -> Result<Vec<TargetSessionItem>, ContractError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
     // Verify the target exists.
-    let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
-        .await
-        .map_err(db_err)?;
+    let exists =
+        persistence_targets::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
+            .await
+            .map_err(db_err)?;
     if !exists {
         return Err(not_found(&req.target_id));
     }
     let rows =
-        persistence_db::repositories::targets::list_sessions_for_target(pool, &req.target_id)
+        persistence_targets::repositories::targets::list_sessions_for_target(pool, &req.target_id)
             .await
             .map_err(db_err)?;
     Ok(rows
@@ -77,14 +78,15 @@ pub async fn projects_list(
     req: &TargetProjectsListRequest,
 ) -> Result<Vec<TargetProjectItem>, ContractError> {
     let _uuid = Uuid::parse_str(&req.target_id).map_err(|_| invalid_id(&req.target_id))?;
-    let exists = persistence_db::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
-        .await
-        .map_err(db_err)?;
+    let exists =
+        persistence_targets::repositories::q_targets_mgmt::target_exists(pool, &req.target_id)
+            .await
+            .map_err(db_err)?;
     if !exists {
         return Err(not_found(&req.target_id));
     }
     let rows =
-        persistence_db::repositories::targets::list_projects_for_target(pool, &req.target_id)
+        persistence_targets::repositories::targets::list_projects_for_target(pool, &req.target_id)
             .await
             .map_err(db_err)?;
     Ok(rows

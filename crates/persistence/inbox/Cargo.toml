@@ -20,7 +20,8 @@ uuid.workspace = true
 [dev-dependencies]
 persistence_core = { path = "../core", features = [] }
 persistence_plans = { path = "../plans" }
-persistence_db = { path = "../db" }
+persistence_lifecycle = { path = "../lifecycle" }
+persistence_targets = { path = "../targets" }
 tempfile.workspace = true
 tokio.workspace = true
 

@@ -19,7 +19,7 @@
 use audit::bus::EventBus;
 use contracts_core::projects_v2::{ProjectCreateRequest, ProjectCreateResult};
 use contracts_core::ContractError;
-use persistence_db::repositories::plans as plans_repo;
+use persistence_plans::repositories::plans as plans_repo;
 use sqlx::SqlitePool;
 
 use crate::projects::project_setup;
@@ -112,7 +112,7 @@ mod tests {
     use super::*;
     use contracts_core::projects_v2::ProjectTool;
     use domain_core::ids::new_id;
-    use persistence_db::Database;
+    use persistence_core::Database;
 
     async fn setup() -> (Database, EventBus) {
         let db = Database::in_memory().await.expect("in-memory DB");

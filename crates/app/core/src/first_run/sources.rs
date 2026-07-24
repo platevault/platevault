@@ -10,7 +10,7 @@ use contracts_core::first_run::{
     SetSourceOrganizationStateResponse, SourceKind, ERR_SOURCE_INVALID_ORGANIZATION_STATE,
 };
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity, JsonAny};
-use persistence_db::repositories::first_run as repo;
+use persistence_lifecycle::repositories::first_run as repo;
 use sqlx::SqlitePool;
 
 use audit::Outcome;
@@ -129,10 +129,10 @@ pub async fn set_source_organization_state(
     repo::set_source_organization_state(pool, &req.source_id, req.organization_state)
         .await
         .map_err(|e| match e {
-            persistence_db::DbError::NotFound(msg) => {
+            persistence_core::DbError::NotFound(msg) => {
                 ContractError::new(ErrorCode::SourceNotFound, msg, ErrorSeverity::Blocking, false)
             }
-            persistence_db::DbError::CasFailed(msg)
+            persistence_core::DbError::CasFailed(msg)
                 if msg.contains(ERR_SOURCE_INVALID_ORGANIZATION_STATE) =>
             {
                 ContractError::new(

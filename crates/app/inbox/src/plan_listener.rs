@@ -36,11 +36,11 @@ use audit::bus::EventBus;
 use audit::event_bus::{
     PlanApplyingCompleted, PlanDiscarded, TOPIC_PLAN_APPLYING_COMPLETED, TOPIC_PLAN_DISCARDED,
 };
-use persistence_db::repositories::inbox as inbox_repo;
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::repositories::q_inbox::{
+use persistence_inbox::repositories::inbox as inbox_repo;
+use persistence_inbox::repositories::q_inbox::{
     self, InsertCalibrationFingerprint, InsertCalibrationSession,
 };
+use persistence_plans::repositories::plans as plans_repo;
 use sqlx::SqlitePool;
 use targeting_resolver::simbad::ResolveCache;
 use tokio::sync::{broadcast, Mutex};
@@ -313,7 +313,7 @@ async fn register_master_if_applicable(pool: &SqlitePool, plan_id: &str) -> Resu
     // `resolved_root_id` (spec 006's `calibration_session.root_id`, migration
     // 0021) is captured from the same lookup and written below — this table
     // had the identical gap as `acquisition_session` (#470 round 6): the
-    // column existed, `persistence_db::repositories::inventory::
+    // column existed, `persistence_targets::repositories::inventory::
     // update_calibration_session_root_id` existed to set it, but nothing
     // ever called the setter or wrote the column at insert time, so every
     // real calibration master's `root_id` stayed `NULL` (silently decoded as
@@ -511,9 +511,9 @@ pub(crate) mod tests {
     use super::*;
     use audit::bus::EventBus;
     use audit::event_bus::{PlanApplyingCompleted, Source};
-    use persistence_db::repositories::inbox::InsertInboxItem;
-    use persistence_db::repositories::plans;
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_inbox::repositories::inbox::InsertInboxItem;
+    use persistence_plans::repositories::plans;
     use targeting_resolver::cache::upsert_resolved;
     use targeting_resolver::{
         AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource,

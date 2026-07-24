@@ -11,9 +11,9 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::first_run::SourceKind;
 use domain_core::ids::{new_id, Timestamp};
 use domain_core::project::validate::{validate_name, validate_tool};
-use persistence_db::repositories::first_run as first_run_repo;
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::repositories::projects as repo;
+use persistence_lifecycle::repositories::first_run as first_run_repo;
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::projects as repo;
 use project_structure::{required_folders, ProcessingTool as StructureTool, MARKER_FILENAME};
 use sqlx::SqlitePool;
 
@@ -110,7 +110,7 @@ struct FolderPlanData {
 
 /// Resolve the folder-structure plan for `project_path`/`tool_str` without
 /// touching the database (pure). The caller borrows these owned strings into
-/// `persistence_db::repositories::plans::{InsertPlan, InsertPlanItem}` for
+/// `persistence_plans::repositories::plans::{InsertPlan, InsertPlanItem}` for
 /// [`repo::create_project_tx`], which persists the plan (in `draft`, then
 /// advanced to `ready_for_review`) atomically with the rest of project
 /// creation.

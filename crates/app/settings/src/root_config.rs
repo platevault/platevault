@@ -25,7 +25,7 @@ use contracts_core::inventory_frame::{
     RootInventoryConfig,
 };
 use contracts_core::ContractError;
-use persistence_db::repositories::source_protection::{
+use persistence_plans::repositories::source_protection::{
     get_protection_default, set_protection_default,
 };
 use sqlx::SqlitePool;
@@ -160,7 +160,7 @@ pub async fn set_root_config(
 mod tests {
     use super::*;
     use contracts_core::inventory_frame::DetectionConfigUpdate;
-    use persistence_db::Database;
+    use persistence_core::Database;
 
     async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();

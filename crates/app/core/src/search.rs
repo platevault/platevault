@@ -89,7 +89,7 @@ async fn search_targets(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>,
     // Include `match_via_alias` to score alias matches correctly.
     let like_pattern = format!("%{q}%");
 
-    let rows = persistence_db::repositories::q_core::search_targets_by_like(pool, &like_pattern)
+    let rows = persistence_core::repositories::q_core::search_targets_by_like(pool, &like_pattern)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -116,7 +116,7 @@ async fn search_targets(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>,
 }
 
 async fn recent_targets(pool: &SqlitePool) -> Result<Vec<SearchResult>, String> {
-    let rows = persistence_db::repositories::q_core::recent_targets(pool)
+    let rows = persistence_core::repositories::q_core::recent_targets(pool)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -138,7 +138,7 @@ async fn recent_targets(pool: &SqlitePool) -> Result<Vec<SearchResult>, String> 
 async fn search_sessions(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>, String> {
     let like_pattern = format!("%{q}%");
 
-    let rows = persistence_db::repositories::q_core::search_sessions_by_like(pool, &like_pattern)
+    let rows = persistence_core::repositories::q_core::search_sessions_by_like(pool, &like_pattern)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -162,7 +162,7 @@ async fn search_sessions(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>
 }
 
 async fn recent_sessions(pool: &SqlitePool) -> Result<Vec<SearchResult>, String> {
-    let rows = persistence_db::repositories::q_core::recent_sessions(pool)
+    let rows = persistence_core::repositories::q_core::recent_sessions(pool)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -184,7 +184,7 @@ async fn recent_sessions(pool: &SqlitePool) -> Result<Vec<SearchResult>, String>
 async fn search_projects(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>, String> {
     let like_pattern = format!("%{q}%");
 
-    let rows = persistence_db::repositories::q_core::search_projects_by_like(pool, &like_pattern)
+    let rows = persistence_core::repositories::q_core::search_projects_by_like(pool, &like_pattern)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -208,7 +208,7 @@ async fn search_projects(pool: &SqlitePool, q: &str) -> Result<Vec<SearchResult>
 }
 
 async fn recent_projects(pool: &SqlitePool) -> Result<Vec<SearchResult>, String> {
-    let rows = persistence_db::repositories::q_core::recent_projects(pool)
+    let rows = persistence_core::repositories::q_core::recent_projects(pool)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -230,7 +230,7 @@ async fn recent_projects(pool: &SqlitePool) -> Result<Vec<SearchResult>, String>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::Database;
+    use persistence_core::Database;
 
     async fn test_db() -> Database {
         let db = Database::in_memory().await.unwrap();

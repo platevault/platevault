@@ -25,10 +25,10 @@ use app_core::calibration::masters_list;
 use app_core::inbox::confirm::{confirm, ConfirmRequest};
 use app_core::inbox_plan::apply_inbox_plan;
 use audit::bus::EventBus;
-use persistence_db::repositories::inbox::{
+use persistence_core::Database;
+use persistence_inbox::repositories::inbox::{
     self as inbox_repo, InsertEvidence, InsertInboxItem, UpsertClassification,
 };
-use persistence_db::Database;
 
 mod support;
 

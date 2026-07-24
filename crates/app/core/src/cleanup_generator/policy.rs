@@ -5,7 +5,7 @@
 
 use contracts_core::cleanup::{CleanupAction, CleanupPolicy, CleanupPolicyEntry};
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
-use persistence_db::repositories::source_protection as prot_repo;
+use persistence_plans::repositories::source_protection as prot_repo;
 use sqlx::SqlitePool;
 
 use crate::errors::db_err;

@@ -6,7 +6,7 @@
 use contracts_core::cleanup::{CleanupAction, GenerateCleanupPlanResult};
 use contracts_core::ContractError;
 use domain_core::ids::new_id;
-use persistence_db::repositories::projects as projects_repo;
+use persistence_plans::repositories::projects as projects_repo;
 use sqlx::SqlitePool;
 
 use crate::protection::{self, CleanupPlanItem, GenerateCleanupPlanRequest};

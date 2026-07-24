@@ -37,10 +37,10 @@ use contracts_core::manifests::{
     ManifestBodyDto, ManifestDto, ManifestGetResponse, ManifestListRequest, ManifestListResponse,
     ManifestOpError, ManifestReason as DtoManifestReason, ManifestSummaryDto,
 };
-use persistence_db::repositories::manifests::{
+use persistence_plans::repositories::manifests::{
     get_manifest, insert_manifest, list_manifests_for_project, InsertManifest,
 };
-use persistence_db::repositories::project_notes::get_note_content;
+use persistence_plans::repositories::project_notes::get_note_content;
 use project_structure::manifest::{
     manifest_relative_path, now_utc_iso, render_manifest_markdown, write_manifest_file,
     ManifestBody, ManifestReason, MANIFEST_VERSION,
@@ -123,7 +123,7 @@ pub async fn get(
     manifest_id: &str,
 ) -> Result<ManifestGetResponse, ManifestOpError> {
     let row = get_manifest(pool, manifest_id).await.map_err(|e| {
-        if matches!(e, persistence_db::DbError::NotFound(_)) {
+        if matches!(e, persistence_core::DbError::NotFound(_)) {
             manifest_op_error("manifest.not_found", &format!("manifest {manifest_id} not found"))
         } else {
             manifest_op_error("internal", &format!("DB error: {e}"))
@@ -292,7 +292,8 @@ pub async fn build_source_calibration_snapshot(
     pool: &SqlitePool,
     project_id: &str,
 ) -> (Option<serde_json::Value>, Option<serde_json::Value>) {
-    use persistence_db::repositories::{calibration_assignment, projects as projects_repo};
+    use persistence_calibration::repositories::calibration_assignment;
+    use persistence_plans::repositories::projects as projects_repo;
 
     let sources = match projects_repo::list_project_sources(pool, project_id).await {
         Ok(s) => s,
@@ -370,7 +371,7 @@ pub async fn write_lifecycle_manifest(
     project_id: &str,
     reason: DtoManifestReason,
 ) {
-    let row = match persistence_db::repositories::projects::get_project(pool, project_id).await {
+    let row = match persistence_plans::repositories::projects::get_project(pool, project_id).await {
         Ok(row) => row,
         Err(e) => {
             tracing::debug!("manifest snapshot: could not load project {project_id}: {e}");
@@ -414,7 +415,7 @@ pub fn spawn_workflow_run_subscriber(
     bus: EventBus,
 ) -> tokio::task::JoinHandle<()> {
     use audit::event_bus::TOPIC_WORKFLOW_RUN_COMPLETED;
-    use persistence_db::repositories::projects::get_project;
+    use persistence_plans::repositories::projects::get_project;
     use tokio::sync::broadcast::error::RecvError;
 
     let mut rx = bus.subscribe();
@@ -631,7 +632,7 @@ mod tests {
         let pool = setup().await;
         insert_project(&pool, "proj-notes").await;
         // Insert a note for the project.
-        persistence_db::repositories::project_notes::upsert_note(
+        persistence_plans::repositories::project_notes::upsert_note(
             &pool,
             "note-001",
             "proj-notes",
@@ -765,9 +766,9 @@ mod tests {
         .await
         .unwrap();
 
-        persistence_db::repositories::calibration_assignment::upsert(
+        persistence_calibration::repositories::calibration_assignment::upsert(
             &pool,
-            persistence_db::repositories::calibration_assignment::UpsertParams {
+            persistence_calibration::repositories::calibration_assignment::UpsertParams {
                 id: "calib-1",
                 session_id: "sess-1",
                 calibration_type: "dark",

@@ -24,8 +24,8 @@ use contracts_core::lifecycle::{
     ProjectState, ProjectTransitionRequest, TransitionActor, TransitionErrorCode,
     TransitionRequest, TransitionStatus,
 };
-use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
-use persistence_db::Database;
+use persistence_core::Database;
+use persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository;
 use uuid::Uuid;
 
 async fn setup() -> (Database, SqliteLifecycleRepository, EventBus) {

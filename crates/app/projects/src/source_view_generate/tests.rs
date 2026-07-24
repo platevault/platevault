@@ -5,8 +5,8 @@ use super::*;
 use contracts_core::error_code::ErrorCode;
 use contracts_core::source_view_generate::SourceViewGenerateRequest;
 use domain_core::ids::new_id as new_test_id;
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::Database;
+use persistence_core::Database;
+use persistence_plans::repositories::plans as plans_repo;
 
 async fn setup() -> Database {
     let db = Database::in_memory().await.expect("in-memory DB");

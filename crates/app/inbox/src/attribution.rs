@@ -52,12 +52,12 @@ use contracts_core::{ContractError, ErrorSeverity};
 use domain_core::ids::{new_id, EntityId};
 use domain_core::lifecycle::data_asset::EntityType;
 use domain_core::project::framing::Pointing;
-use persistence_db::repositories::framing as framing_repo;
-use persistence_db::repositories::inbox as inbox_repo;
-use persistence_db::repositories::lifecycle::SqliteLifecycleRepository;
-use persistence_db::repositories::plans as plans_repo;
-use persistence_db::repositories::projects as projects_repo;
-use persistence_db::repositories::q_resolver;
+use persistence_inbox::repositories::inbox as inbox_repo;
+use persistence_lifecycle::repositories::lifecycle::SqliteLifecycleRepository;
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::projects as projects_repo;
+use persistence_targets::repositories::framing as framing_repo;
+use persistence_targets::repositories::q_resolver;
 use sessions::{
     angular_separation_deg, optic_train_key as compute_optic_train_key,
     rotation_circular_distance_deg, ToleranceParams,
@@ -68,7 +68,7 @@ use sqlx::SqlitePool;
 // (`Result::map_err` requires `FnOnce(E) -> F`); a `&DbError` signature would
 // force every call site into a closure instead.
 #[allow(clippy::needless_pass_by_value)]
-fn db_err(e: persistence_db::DbError) -> ContractError {
+fn db_err(e: persistence_core::DbError) -> ContractError {
     ContractError::new(ErrorCode::InternalDatabase, e.to_string(), ErrorSeverity::Fatal, true)
 }
 
@@ -79,7 +79,7 @@ fn db_err(e: persistence_db::DbError) -> ContractError {
 #[allow(clippy::cast_possible_truncation)]
 async fn tolerance_params(pool: &SqlitePool) -> Result<ToleranceParams, ContractError> {
     let settings =
-        persistence_db::repositories::settings::load_settings(pool).await.map_err(db_err)?;
+        persistence_lifecycle::repositories::settings::load_settings(pool).await.map_err(db_err)?;
     Ok(ToleranceParams {
         pointing_fraction_of_fov: settings.framing_pointing_fraction_of_fov,
         pointing_fallback_deg: settings.framing_pointing_fallback_deg,
@@ -548,9 +548,9 @@ fn validation_err(msg: &str) -> ContractError {
     )
 }
 
-fn map_db_not_found(e: persistence_db::DbError) -> ContractError {
+fn map_db_not_found(e: persistence_core::DbError) -> ContractError {
     match e {
-        persistence_db::DbError::NotFound(msg) => {
+        persistence_core::DbError::NotFound(msg) => {
             let code = if msg.contains("framing") {
                 ErrorCode::FramingNotFound
             } else {
@@ -800,8 +800,8 @@ mod tests {
 
     // ── DB-backed integration tests ────────────────────────────────────────
 
-    use persistence_db::repositories::inbox::UpsertFileMetadata;
-    use persistence_db::Database;
+    use persistence_core::Database;
+    use persistence_inbox::repositories::inbox::UpsertFileMetadata;
 
     async fn test_db() -> Database {
         let db = Database::in_memory().await.expect("in-memory DB");
@@ -832,7 +832,7 @@ mod tests {
         rotator_angle_deg: f64,
         object: Option<&str>,
     ) {
-        persistence_db::repositories::inbox::upsert_inbox_file_metadata(
+        persistence_inbox::repositories::inbox::upsert_inbox_file_metadata(
             pool,
             &UpsertFileMetadata {
                 inbox_item_id: item_id,
@@ -1018,14 +1018,14 @@ mod tests {
     #[tokio::test]
     async fn tolerance_params_honours_stored_settings_overrides() {
         let db = test_db().await;
-        persistence_db::repositories::settings::set_raw(
+        persistence_lifecycle::repositories::settings::set_raw(
             db.pool(),
             "framingPointingFractionOfFov",
             &serde_json::json!(0.25),
         )
         .await
         .unwrap();
-        persistence_db::repositories::settings::set_raw(
+        persistence_lifecycle::repositories::settings::set_raw(
             db.pool(),
             "framingRotationToleranceDeg",
             &serde_json::json!(7.5),
@@ -1087,7 +1087,7 @@ mod tests {
 
         // Widen the pointing tolerance via Settings — 0.5 * 2.0deg FOV =
         // 1.0deg envelope, now comfortably covers the 0.5deg offset.
-        persistence_db::repositories::settings::set_raw(
+        persistence_lifecycle::repositories::settings::set_raw(
             db.pool(),
             "framingPointingFractionOfFov",
             &serde_json::json!(0.5),
@@ -1196,9 +1196,9 @@ mod tests {
     // ── suggest_candidates (read-only suggest surface, issue #943) ───────────
 
     async fn seed_evidence(pool: &SqlitePool, item_id: &str, frame_type: &str) {
-        persistence_db::repositories::inbox::insert_evidence(
+        persistence_inbox::repositories::inbox::insert_evidence(
             pool,
-            &persistence_db::repositories::inbox::InsertEvidence {
+            &persistence_inbox::repositories::inbox::InsertEvidence {
                 id: &format!("ev-{item_id}"),
                 inbox_item_id: item_id,
                 relative_file_path: "sub_0001.fits",

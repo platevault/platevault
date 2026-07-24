@@ -8,7 +8,7 @@
 //! (in-process, non-durable). Replay reads from the `events` table with a
 //! monotonic `event_id` cursor.
 //!
-//! Durable reads/writes delegate to `persistence_db::repositories::events`
+//! Durable reads/writes delegate to `persistence_lifecycle::repositories::events`
 //! (db-boundary-zero) rather than issuing raw SQL here.
 
 use audit_types::{AuditLogEntry, EventPublisher, Source};
@@ -29,7 +29,7 @@ pub enum BusError {
     #[error("serialisation error: {0}")]
     Serialise(#[from] serde_json::Error),
     #[error("database error: {0}")]
-    Database(#[from] persistence_db::DbError),
+    Database(#[from] persistence_core::DbError),
 }
 
 /// Hybrid live + durable event bus.
@@ -89,7 +89,7 @@ impl EventBus {
             .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned());
         let payload_str = serde_json::to_string(&value)?;
 
-        persistence_db::repositories::events::insert_event(
+        persistence_lifecycle::repositories::events::insert_event(
             &self.pool,
             topic,
             source_str,
@@ -145,7 +145,7 @@ impl EventBus {
         source: Source,
         event_payload: P,
     ) -> Result<AuditId, BusError> {
-        persistence_db::repositories::audit::insert_audit_entry(&self.pool, &entry)
+        persistence_lifecycle::repositories::audit::insert_audit_entry(&self.pool, &entry)
             .await
             .map_err(BusError::Database)?;
 
@@ -188,10 +188,12 @@ impl EventBus {
         let since_id = since.unwrap_or(0);
 
         let rows = if let Some(topic) = topic_filter {
-            persistence_db::repositories::events::list_since_by_topic(&self.pool, since_id, topic)
-                .await?
+            persistence_lifecycle::repositories::events::list_since_by_topic(
+                &self.pool, since_id, topic,
+            )
+            .await?
         } else {
-            persistence_db::repositories::events::list_since(&self.pool, since_id).await?
+            persistence_lifecycle::repositories::events::list_since(&self.pool, since_id).await?
         };
 
         let mut envelopes = Vec::with_capacity(rows.len());
@@ -314,8 +316,8 @@ mod tests {
     /// Real migrated DB (not the hand-rolled `events`-only fixture above) —
     /// `write_audit` needs the actual `audit_log_entry` table (migration
     /// 0063 adds `reason_code`).
-    async fn make_migrated_bus() -> (persistence_db::Database, EventBus) {
-        let db = persistence_db::Database::in_memory().await.expect("in-memory db");
+    async fn make_migrated_bus() -> (persistence_core::Database, EventBus) {
+        let db = persistence_core::Database::in_memory().await.expect("in-memory db");
         db.migrate().await.expect("migrate");
         let bus = EventBus::with_pool(db.pool().clone());
         (db, bus)

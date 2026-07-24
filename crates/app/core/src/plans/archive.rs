@@ -14,7 +14,7 @@ use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::{new_id, Timestamp};
 use fs_executor::failure::FailureCode;
 use fs_executor::ops::{delete_op, trash_op};
-use persistence_db::repositories::plans as repo;
+use persistence_plans::repositories::plans as repo;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 

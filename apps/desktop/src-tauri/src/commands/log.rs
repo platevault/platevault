@@ -171,7 +171,7 @@ pub fn start_log_forwarder(
         let mut diag_seq: u64 = 0;
 
         // Initialise cursor to the current max event_id so we only emit new events.
-        if let Ok(max_id) = persistence_db::repositories::events::max_event_id(&pool).await {
+        if let Ok(max_id) = persistence_lifecycle::repositories::events::max_event_id(&pool).await {
             cursor = max_id;
         }
 
@@ -180,7 +180,8 @@ pub fn start_log_forwarder(
                 Ok(_envelope) => {
                     // Query all new rows since cursor.
                     let rows =
-                        persistence_db::repositories::events::list_since(&pool, cursor).await;
+                        persistence_lifecycle::repositories::events::list_since(&pool, cursor)
+                            .await;
 
                     match rows {
                         Ok(rows) => {

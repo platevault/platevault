@@ -47,16 +47,16 @@ fn retry_action() -> RecoveryAction {
 
 /// Convert a `sqlx::Error` inline (command-handler shorthand).
 ///
-/// Wraps the sqlx error as `persistence_db::DbError::Database` then delegates
+/// Wraps the sqlx error as `persistence_core::DbError::Database` then delegates
 /// to `db_to_contract`.  Use this in command handlers that run inline sqlx
 /// queries instead of calling a repository function.
 #[must_use]
 pub fn sqlx_to_contract(e: sqlx::Error) -> ContractError {
-    db_to_contract(persistence_db::DbError::from(e))
+    db_to_contract(persistence_core::DbError::from(e))
 }
 
 /// Convert a database-layer error (`sqlx::Error` or
-/// [`persistence_db::DbError`]) to an `internal.database` `ContractError`
+/// [`persistence_core::DbError`]) to an `internal.database` `ContractError`
 /// while preserving the originating error and adding which operation failed.
 ///
 /// The error is wrapped with [`anyhow::Context::context`] so the original
@@ -109,9 +109,9 @@ where
 /// `project.not_found`, `view.not_found`) keep their own explicit `NotFound`
 /// arm and delegate only the remaining variants here.
 #[must_use]
-pub fn db_err(e: persistence_db::DbError) -> ContractError {
+pub fn db_err(e: persistence_core::DbError) -> ContractError {
     match e {
-        persistence_db::DbError::NotFound(msg) => {
+        persistence_core::DbError::NotFound(msg) => {
             ContractError::new(ErrorCode::InternalDatabase, msg, ErrorSeverity::Blocking, false)
         }
         other => ContractError::new(
@@ -126,7 +126,7 @@ pub fn db_err(e: persistence_db::DbError) -> ContractError {
 
 /// Back-compat alias for the US8 name. Delegates to the canonical [`db_err`].
 #[must_use]
-pub fn db_to_contract(e: persistence_db::DbError) -> ContractError {
+pub fn db_to_contract(e: persistence_core::DbError) -> ContractError {
     db_err(e)
 }
 
@@ -152,7 +152,7 @@ mod tests {
     /// mappers hardcoded `Vec::new()` via `ContractError::new`.
     #[test]
     fn db_err_fatal_branch_carries_retry_action() {
-        let err = db_err(persistence_db::DbError::CasFailed("stale version".to_owned()));
+        let err = db_err(persistence_core::DbError::CasFailed("stale version".to_owned()));
         assert!(err.retryable);
         assert_eq!(err.recovery_actions.len(), 1);
         assert_eq!(err.recovery_actions[0].code, "retry");
@@ -163,14 +163,14 @@ mod tests {
     /// path is intentionally left empty, not an oversight.
     #[test]
     fn db_err_not_found_branch_has_no_recovery_action() {
-        let err = db_err(persistence_db::DbError::NotFound("widget 1".to_owned()));
+        let err = db_err(persistence_core::DbError::NotFound("widget 1".to_owned()));
         assert!(!err.retryable);
         assert!(err.recovery_actions.is_empty());
     }
 
     #[test]
     fn db_internal_ctx_carries_retry_action() {
-        let src = persistence_db::DbError::CasFailed("stale version".to_owned());
+        let src = persistence_core::DbError::CasFailed("stale version".to_owned());
         let err = db_internal_ctx(src, "insert widget");
         assert_eq!(err.recovery_actions.len(), 1);
         assert_eq!(err.recovery_actions[0].code, "retry");
@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn bus_err_carries_retry_action() {
-        let src = audit::bus::BusError::Database(persistence_db::DbError::CasFailed(
+        let src = audit::bus::BusError::Database(persistence_core::DbError::CasFailed(
             "stale version".to_owned(),
         ));
         let err = bus_err(src);
@@ -187,7 +187,7 @@ mod tests {
     }
 }
 
-// NOTE (US11 T142): a `From<persistence_db::DbError> for ContractError` impl is
+// NOTE (US11 T142): a `From<persistence_core::DbError> for ContractError` impl is
 // **not** possible in `app_core` — both `DbError` and `ContractError` are
 // foreign types here, so the orphan rule (E0117) forbids the impl. It could
 // only live in `contracts_core`, but `contracts_core` must not depend on

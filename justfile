@@ -35,7 +35,7 @@ build:
     pnpm -r --if-present build
 
 # DB boundary ratchet — fail if production sqlx query/exec sites OUTSIDE
-# crates/persistence/db EXCEED the checked-in baseline. Counts may only shrink.
+# crates/persistence/* EXCEED the checked-in baseline. Counts may only shrink.
 # NOT YET wired into CI (see docs/development/persistence-layer-hardening.md
 # and the PR that introduced this target for why). Regenerate the baseline
 # after a refactor materially shuffles query sites:
@@ -88,7 +88,7 @@ hygiene-deps:
 # should be pub(crate). Narrowing them lets rustc's own dead_code lint fire on
 # the unused ones for free -- which is the compiler-native half of what
 # scripts/check-dead-callers.sh approximates textually. Measured 0 on
-# persistence_db on 2026-07-20; other crates are unmeasured.
+# persistence_core on 2026-07-24 (post-split); other crates are unmeasured.
 #
 # `pub` items that should be pub(crate), across the workspace.
 hygiene-pub:

@@ -40,7 +40,7 @@ use contracts_core::targets::{
     TargetResolveSimbadResponse, TargetSearchRequest, TargetSearchResponse,
 };
 use contracts_core::ContractError;
-use persistence_db::repositories::q_desktop::get_resolver_settings;
+use persistence_targets::repositories::q_desktop::get_resolver_settings;
 use tauri::State;
 
 use crate::commands::lifecycle::AppState;

@@ -40,10 +40,12 @@ use contracts_core::tools::{
     ToolProfileSummary, UpdateProcessingTool,
 };
 use domain_core::ids::{new_id, Timestamp};
-use persistence_db::repositories::{
-    first_run as first_run_repo, inventory as inv_repo, prepared_source_views as psv_repo,
-    projects as proj_repo, settings as settings_repo, tool_launches as tl_repo,
-};
+use persistence_lifecycle::repositories::first_run as first_run_repo;
+use persistence_lifecycle::repositories::settings as settings_repo;
+use persistence_plans::repositories::prepared_source_views as psv_repo;
+use persistence_plans::repositories::projects as proj_repo;
+use persistence_plans::repositories::tool_launches as tl_repo;
+use persistence_targets::repositories::inventory as inv_repo;
 use project_structure::resolve_working_folder;
 use sqlx::SqlitePool;
 #[cfg(test)]
@@ -628,7 +630,7 @@ pub fn discover(tool_id: Option<&str>) -> Result<ToolDiscoverResponse, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use persistence_db::Database;
+    use persistence_core::Database;
     use workflow_profiles::launch::FakeSpawner;
 
     async fn setup_db() -> Database {

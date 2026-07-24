@@ -11,8 +11,8 @@ use time::OffsetDateTime;
 use workflow_artifacts::{LaunchRef, DEFAULT_ATTRIBUTION_WINDOW};
 
 use domain_core::ids::Timestamp;
-use persistence_db::repositories::artifacts::{self as repo};
-use persistence_db::repositories::tool_launches::{self as tl_repo};
+use persistence_plans::repositories::artifacts::{self as repo};
+use persistence_plans::repositories::tool_launches::{self as tl_repo};
 
 use super::{load_launch_refs, parse_dt};
 

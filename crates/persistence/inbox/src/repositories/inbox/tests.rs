@@ -200,7 +200,7 @@ async fn list_unacknowledged_joins_registered_sources() {
         }],
     };
     let batch_resp =
-        persistence_db::repositories::first_run::register_source_batch(pool, &batch_req)
+        persistence_lifecycle::repositories::first_run::register_source_batch(pool, &batch_req)
             .await
             .unwrap();
     let source_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
@@ -267,7 +267,7 @@ async fn scanned_folder_is_one_source_group_row_and_no_item() {
         }],
     };
     let batch_resp =
-        persistence_db::repositories::first_run::register_source_batch(pool, &batch_req)
+        persistence_lifecycle::repositories::first_run::register_source_batch(pool, &batch_req)
             .await
             .unwrap();
     let source_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
@@ -352,7 +352,7 @@ async fn masters_only_folder_surfaces_no_source_group_row() {
         }],
     };
     let batch_resp =
-        persistence_db::repositories::first_run::register_source_batch(pool, &batch_req)
+        persistence_lifecycle::repositories::first_run::register_source_batch(pool, &batch_req)
             .await
             .unwrap();
     let source_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
@@ -416,7 +416,7 @@ async fn list_unacknowledged_orders_siblings_by_group_key() {
         }],
     };
     let batch_resp =
-        persistence_db::repositories::first_run::register_source_batch(pool, &batch_req)
+        persistence_lifecycle::repositories::first_run::register_source_batch(pool, &batch_req)
             .await
             .unwrap();
     let source_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
@@ -508,7 +508,7 @@ async fn list_unacknowledged_carries_real_organization_state() {
         ],
     };
     let batch_resp =
-        persistence_db::repositories::first_run::register_source_batch(pool, &batch_req)
+        persistence_lifecycle::repositories::first_run::register_source_batch(pool, &batch_req)
             .await
             .unwrap();
     let inbox_id = batch_resp.items[0].source_id.as_deref().unwrap().to_owned();
@@ -577,7 +577,7 @@ async fn needs_review_resolves_atomically_onto_its_natural_key_058() {
     let db = test_db().await;
     let pool = db.pool();
 
-    let batch_resp = persistence_db::repositories::first_run::register_source_batch(
+    let batch_resp = persistence_lifecycle::repositories::first_run::register_source_batch(
         pool,
         &RegisterSourceBatchRequest {
             sources: vec![RegisterSourceRequest {
@@ -1717,7 +1717,7 @@ async fn seed_inbox_source(pool: &SqlitePool, path: &str) -> String {
     use domain_core::first_run::{
         OrganizationState, RegisterSourceBatchRequest, RegisterSourceRequest, ScanDepth, SourceKind,
     };
-    let resp = persistence_db::repositories::first_run::register_source_batch(
+    let resp = persistence_lifecycle::repositories::first_run::register_source_batch(
         pool,
         &RegisterSourceBatchRequest {
             sources: vec![RegisterSourceRequest {
@@ -1827,7 +1827,7 @@ async fn only_file_count_excludes_a_masters_only_folder_058() {
 
     // Two real master rows, exactly as scan writes them.
     for (id, name) in [("m-1", "masterDark.fits"), ("m-2", "masterBias.fits")] {
-        persistence_db::repositories::q_desktop::insert_inbox_master_item(
+        persistence_targets::repositories::q_desktop::insert_inbox_master_item(
             pool,
             id,
             &source_id,

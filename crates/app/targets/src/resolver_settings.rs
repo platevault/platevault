@@ -77,7 +77,7 @@ async fn read_row(pool: &SqlitePool) -> Result<ResolverSettings, ContractError> 
         return Ok((*cached).clone());
     }
 
-    let row = persistence_db::repositories::q_targets_mgmt::get_resolver_settings(pool)
+    let row = persistence_targets::repositories::q_targets_mgmt::get_resolver_settings(pool)
         .await
         .map_err(db_err)?;
 
@@ -131,7 +131,7 @@ pub async fn update(
     let debounce_ms = i64::from(s.debounce_ms.max(1));
     let timeout_secs = i64::from(s.request_timeout_secs.max(1));
 
-    persistence_db::repositories::q_targets_mgmt::upsert_resolver_settings(
+    persistence_targets::repositories::q_targets_mgmt::upsert_resolver_settings(
         pool,
         i64::from(s.online_enabled),
         &s.simbad_endpoint,

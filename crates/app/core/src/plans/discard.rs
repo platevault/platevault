@@ -9,7 +9,7 @@ use contracts_core::lifecycle::PlanState;
 use contracts_core::plans::PlanDiscardResponse;
 use contracts_core::{error_code::ErrorCode, ContractError, ErrorSeverity};
 use domain_core::ids::Timestamp;
-use persistence_db::repositories::plans as repo;
+use persistence_plans::repositories::plans as repo;
 use sqlx::SqlitePool;
 
 use crate::errors::bus_err;

@@ -23,7 +23,8 @@ mod support;
 use app_core_projects::prepared_views::{regenerate_prepared_view, remove_prepared_view};
 use app_core_projects::source_view_generate::generate_source_view;
 use contracts_core::source_view_generate::SourceViewGenerateRequest;
-use persistence_db::repositories::{plans as plans_repo, prepared_source_views as views_repo};
+use persistence_plans::repositories::plans as plans_repo;
+use persistence_plans::repositories::prepared_source_views as views_repo;
 
 async fn insert_project_at(pool: &sqlx::SqlitePool, id: &str, path: &str) {
     sqlx::query(
@@ -114,7 +115,7 @@ async fn event_count(pool: &sqlx::SqlitePool, plan_id: &str) -> i64 {
 /// on-disk source directory, and the destination directory (both must
 /// outlive the returned view id).
 async fn generate_and_apply_view(
-    db: &persistence_db::Database,
+    db: &persistence_core::Database,
     bus: &audit::bus::EventBus,
     project_id: &str,
     src_dir: &std::path::Path,
@@ -124,7 +125,7 @@ async fn generate_and_apply_view(
     // share a filesystem here, so intra-drive applies) is a valid target for
     // this test's remove/regenerate calls. Same fixture as
     // `source_view_generation_us3_regenerate.rs`.
-    persistence_db::repositories::settings::set_raw(
+    persistence_lifecycle::repositories::settings::set_raw(
         db.pool(),
         "sourceViewLinkKindIntraDrive",
         &serde_json::json!("symlink"),

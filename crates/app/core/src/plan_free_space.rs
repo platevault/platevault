@@ -70,7 +70,8 @@ mod tests {
     use super::*;
     use audit::EventBus;
     use contracts_core::error_code::ErrorCode;
-    use persistence_db::{repositories::plans as repo, Database};
+    use persistence_core::Database;
+    use persistence_plans::repositories::plans as repo;
 
     async fn setup() -> (Database, EventBus) {
         let db = Database::in_memory().await.expect("in-memory DB");

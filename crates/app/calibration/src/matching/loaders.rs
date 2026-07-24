@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use calibration_core::ranking::MatchingRuleConfig;
 use calibration_core::{CalibrationKind, MasterInfo, SessionInfo};
-use persistence_db::repositories::q_calibration;
+use persistence_calibration::repositories::q_calibration;
 use sqlx::SqlitePool;
 
 use crate::caches;
@@ -163,38 +163,42 @@ async fn load_config_from_db(pool: &SqlitePool) -> MatchingRuleConfig {
     // store — it's user-controlled via the Settings > Calibration Matching
     // "Offset match required" toggle (spec 043 P8). Falls back to
     // `MatchingRuleConfig::default()` (true) on read failure.
-    if let Ok(row) = persistence_db::repositories::calibration_tolerances::get(pool).await {
+    if let Ok(row) = persistence_calibration::repositories::calibration_tolerances::get(pool).await
+    {
         config.require_same_offset = row.require_same_offset;
     }
 
-    if let Ok(Some(v)) = persistence_db::repositories::settings::get_raw(pool, KEY_DARK_TEMP).await
+    if let Ok(Some(v)) =
+        persistence_lifecycle::repositories::settings::get_raw(pool, KEY_DARK_TEMP).await
     {
         if let Some(n) = v.as_f64() {
             config.dark_temp_tolerance_c = n;
         }
     }
     if let Ok(Some(v)) =
-        persistence_db::repositories::settings::get_raw(pool, KEY_DARK_OVERRIDE).await
+        persistence_lifecycle::repositories::settings::get_raw(pool, KEY_DARK_OVERRIDE).await
     {
         if let Some(n) = v.as_f64() {
             config.dark_override_penalty = n;
         }
     }
     if let Ok(Some(v)) =
-        persistence_db::repositories::settings::get_raw(pool, KEY_FLAT_OVERRIDE).await
+        persistence_lifecycle::repositories::settings::get_raw(pool, KEY_FLAT_OVERRIDE).await
     {
         if let Some(n) = v.as_f64() {
             config.flat_override_penalty = n;
         }
     }
     if let Ok(Some(v)) =
-        persistence_db::repositories::settings::get_raw(pool, KEY_BIAS_OVERRIDE).await
+        persistence_lifecycle::repositories::settings::get_raw(pool, KEY_BIAS_OVERRIDE).await
     {
         if let Some(n) = v.as_f64() {
             config.bias_override_penalty = n;
         }
     }
-    if let Ok(Some(v)) = persistence_db::repositories::settings::get_raw(pool, KEY_PREFILL).await {
+    if let Ok(Some(v)) =
+        persistence_lifecycle::repositories::settings::get_raw(pool, KEY_PREFILL).await
+    {
         if let Some(b) = v.as_bool() {
             config.prefill_suggestion = b;
         }
