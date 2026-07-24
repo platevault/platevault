@@ -298,7 +298,7 @@ pub async fn build_source_calibration_snapshot(
     let sources = match projects_repo::list_project_sources(pool, project_id).await {
         Ok(s) => s,
         Err(e) => {
-            tracing::debug!("manifest snapshot: failed to list project sources: {e}");
+            tracing::debug!(error = %e, "manifest snapshot: failed to list project sources");
             return (None, None);
         }
     };
@@ -335,8 +335,9 @@ pub async fn build_source_calibration_snapshot(
             }
             Err(e) => {
                 tracing::debug!(
-                    "manifest snapshot: failed to list calibration for session {}: {e}",
-                    s.inventory_session_id
+                    session_id = s.inventory_session_id,
+                    error = %e,
+                    "manifest snapshot: failed to list calibration for session"
                 );
             }
         }
@@ -374,7 +375,7 @@ pub async fn write_lifecycle_manifest(
     let row = match persistence_plans::repositories::projects::get_project(pool, project_id).await {
         Ok(row) => row,
         Err(e) => {
-            tracing::debug!("manifest snapshot: could not load project {project_id}: {e}");
+            tracing::debug!(project_id, error = %e, "manifest snapshot: could not load project");
             return;
         }
     };
@@ -394,7 +395,7 @@ pub async fn write_lifecycle_manifest(
     )
     .await
     {
-        tracing::warn!("manifest write failed for project {project_id}: {e}");
+        tracing::warn!(project_id, error = %e, "manifest write failed");
     }
 }
 
@@ -484,7 +485,7 @@ async fn handle_workflow_run_event(pool: &SqlitePool, bus: &EventBus, payload: &
             )
             .await;
             if let Err(e) = result {
-                tracing::warn!("workflow_run manifest write failed for project {pid}: {e}");
+                tracing::warn!(project_id = pid, error = %e, "workflow_run manifest write failed");
             }
         }
     }
@@ -505,7 +506,7 @@ async fn replay_workflow_events_since(pool: &SqlitePool, bus: &EventBus, cursor:
     let rows = match rows {
         Ok(r) => r,
         Err(e) => {
-            tracing::error!("workflow_run_subscriber: replay query failed: {e}");
+            tracing::error!(error = %e, "workflow_run_subscriber: replay query failed");
             return cursor;
         }
     };

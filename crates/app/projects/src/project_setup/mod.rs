@@ -72,7 +72,7 @@ fn str_to_error_code(code: &str) -> ErrorCode {
         "name.too_long" => ErrorCode::NameTooLong,
         "tool.unknown" => ErrorCode::ToolUnknown,
         _ => {
-            tracing::warn!("unknown validation code '{code}', using InternalData");
+            tracing::warn!(code, "unknown validation code; using InternalData");
             ErrorCode::InternalData
         }
     }
@@ -183,7 +183,7 @@ fn parse_exposure_seconds(exposure: &str) -> u64 {
         #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
         Ok(v) if v.is_finite() && v >= 0.0 => v as u64,
         _ => {
-            tracing::debug!("unparseable exposure snapshot '{exposure}', treating as 0s");
+            tracing::debug!(exposure, "unparseable exposure snapshot; treating as 0s");
             0
         }
     }

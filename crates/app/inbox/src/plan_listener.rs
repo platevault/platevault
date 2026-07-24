@@ -116,7 +116,7 @@ fn spawn_repair_sweep(pool: SqlitePool, bus: EventBus, resolve_cache: ResolveCac
         loop {
             ticker.tick().await;
             if let Err(e) = crate::repair::run_repair(&pool, &bus, &resolve_cache).await {
-                tracing::warn!("inbox repair sweep: {e}");
+                tracing::warn!(error = %e, "inbox repair sweep failed");
             }
         }
     });
@@ -134,7 +134,7 @@ async fn run_listener_loop(
         match rx.recv().await {
             Ok(envelope) => {
                 if let Err(e) = handle_event(&pool, &bus, &resolve_cache, &envelope).await {
-                    tracing::warn!("inbox plan_listener: error handling event: {e}");
+                    tracing::warn!(error = %e, "inbox plan_listener: error handling event");
                 }
             }
             Err(broadcast::error::RecvError::Lagged(n)) => {
