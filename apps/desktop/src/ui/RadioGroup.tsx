@@ -1,8 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { forwardRef } from 'react';
 import type { HTMLAttributes } from 'react';
+import { RadioGroup as BaseRadioGroup } from '@base-ui-components/react/radio-group';
+import { Radio } from '@base-ui-components/react/radio';
 
 export interface RadioOption {
   value: string;
@@ -18,30 +19,39 @@ export interface RadioGroupProps
   onChange: (value: string) => void;
 }
 
-export const RadioGroup = forwardRef<HTMLDivElement, RadioGroupProps>(
-  function RadioGroup({ options, value, onChange, className, ...rest }, ref) {
-    const cls = ['pv-radio-group', className].filter(Boolean).join(' ');
-    return (
-      <div ref={ref} className={cls} {...rest}>
-        {options.map((o) => {
-          const val = typeof o === 'string' ? o : o.value;
-          const label = typeof o === 'string' ? o : o.label;
-          const desc = typeof o === 'string' ? null : o.desc;
-          const testId = typeof o === 'string' ? undefined : o.testId;
-          return (
-            <button
-              key={val}
-              className={`pv-radio ${value === val ? 'pv-radio--active' : ''}`}
-              onClick={() => onChange(val)}
-              data-testid={testId}
-            >
-              <div>{label}</div>
-              {desc && <div className="pv-radio__desc">{desc}</div>}
-            </button>
-          );
-        })}
-      </div>
-    );
-  },
-);
+export function RadioGroup({
+  options,
+  value,
+  onChange,
+  className,
+  ...rest
+}: RadioGroupProps) {
+  const cls = ['pv-radio-group', className].filter(Boolean).join(' ');
+  return (
+    <BaseRadioGroup
+      className={cls}
+      value={value}
+      onValueChange={(v) => onChange(v as string)}
+      {...rest}
+    >
+      {options.map((o) => {
+        const val = typeof o === 'string' ? o : o.value;
+        const label = typeof o === 'string' ? o : o.label;
+        const desc = typeof o === 'string' ? null : o.desc;
+        const testId = typeof o === 'string' ? undefined : o.testId;
+        return (
+          <Radio.Root
+            key={val}
+            value={val}
+            className="pv-radio"
+            data-testid={testId}
+          >
+            <div>{label}</div>
+            {desc && <div className="pv-radio__desc">{desc}</div>}
+          </Radio.Root>
+        );
+      })}
+    </BaseRadioGroup>
+  );
+}
 RadioGroup.displayName = 'RadioGroup';
