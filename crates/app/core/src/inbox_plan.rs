@@ -73,6 +73,9 @@ fn map_plan_actions(item_rows: Vec<plans_repo::PlanItemRow>) -> Vec<InboxPlanAct
                 to_path: r.to_relative_path,
                 destination_preview: dest_preview,
                 requires_destructive_confirm: r.requires_destructive_confirm.unwrap_or(0) != 0,
+                // `category` carries the per-file frame type for inbox confirm plans
+                // (stored at plan creation; `None` for legacy rows and other plan types).
+                frame_type: r.category,
             }
         })
         .collect()

@@ -430,6 +430,7 @@ async fn resolve_per_file_plan_items(
                     action: "catalogue",
                     to_root_id: ctx.item_root_id.to_owned(),
                     provenance: freeze_confirm_provenance(&bundle, is_master, None),
+                    frame_type: Some(ft.to_owned()),
                 });
             }
             OrganizationState::Unorganized => {
@@ -511,6 +512,7 @@ async fn resolve_per_file_plan_items(
                     action: "move",
                     to_root_id: dest_root.root_id,
                     provenance: freeze_confirm_provenance(&bundle, is_master, Some(&pattern)),
+                    frame_type: Some(ft.to_owned()),
                 });
             }
         }
@@ -555,7 +557,8 @@ async fn insert_plan_items_batch(
             provenance_json: row.provenance.as_deref(),
             archive_path: None,
             source_id: None,
-            category: None,
+            // Store frame type in category so InboxPlanAction::frame_type is populated.
+            category: row.frame_type.as_deref(),
         };
 
         plans_repo::insert_plan_item(pool, &plan_item)
@@ -589,6 +592,10 @@ struct ResolvedRow {
     to_root_id: String,
     /// Frozen inferred context at approval time (`freeze_confirm_provenance`).
     provenance: Option<String>,
+    /// Frame-type class string (e.g. `"light"`, `"dark_flat"`) stored in the
+    /// `category` column so `InboxPlanAction::frame_type` can be populated
+    /// without a new column.
+    frame_type: Option<String>,
 }
 
 /// A chosen destination library root (id + absolute path) for inbox moves.
