@@ -5216,6 +5216,12 @@ export type InboxPlanAction = {
 	destinationPreview: string,
 	/**  True when this action requires explicit destructive confirmation before apply. */
 	requiresDestructiveConfirm: boolean,
+	/**
+	 *  Frame type of the file being acted on (e.g. `"light"`, `"dark"`, `"flat"`,
+	 *  `"bias"`, `"master_flat"`, etc.). `null` for legacy plans or catalogue/archive/trash
+	 *  actions without a classification.
+	 */
+	frameType?: string | null,
 };
 
 /**  Per-plan result from `inbox.plan.apply_all` (spec 041, FR-003a). */
