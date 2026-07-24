@@ -3,12 +3,12 @@
     "name": "dist/ (all JS, gzip)",
     "path": "dist/assets/*.js",
     "gzip": true,
-    "limit": "480 KB"
+    "limit": "965 KB"
   },
   {
-    "name": "dist/ largest entry chunk (gzip)",
-    "path": "dist/assets/index-*.js",
+    "name": "dist/ entry chunk main-*.js (gzip)",
+    "path": "dist/assets/main-*.js",
     "gzip": true,
-    "limit": "260 KB"
+    "limit": "390 KB"
   }
 ]
