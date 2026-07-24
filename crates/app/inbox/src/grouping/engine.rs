@@ -205,7 +205,10 @@ fn normalize_text(value: Option<&str>) -> Option<String> {
     if v.is_empty() {
         return None;
     }
-    // Single-pass fold: collapse whitespace + lowercase without a Vec intermediate.
+    // Single-pass fold: collapse whitespace + ASCII lowercase without a Vec
+    // intermediate. ASCII lowercase is intentional — group_key values are
+    // persisted to the DB and must not change when non-ASCII casing rules
+    // change (e.g. Turkish İ). Matches the original to_ascii_lowercase() call.
     let mut out = String::with_capacity(v.len());
     let mut prev_ws = false;
     for c in v.chars() {
@@ -215,9 +218,7 @@ fn normalize_text(value: Option<&str>) -> Option<String> {
             }
             prev_ws = true;
         } else {
-            for lc in c.to_lowercase() {
-                out.push(lc);
-            }
+            out.push(c.to_ascii_lowercase());
             prev_ws = false;
         }
     }
