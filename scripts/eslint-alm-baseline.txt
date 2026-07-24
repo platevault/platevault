@@ -62,7 +62,7 @@ src/features/projects/edit/ChannelDriftBanner.tsx	31	alm/require-root-testid
 src/features/projects/edit/EditProjectPane.tsx	156	alm/require-root-testid
 src/features/projects/edit/EditProjectSourcesPanel.tsx	60	alm/require-root-testid
 src/features/projects/wizard/StepCalibration.tsx	193	alm/require-root-testid
-src/features/projects/wizard/StepLayout.tsx	75	alm/require-root-testid
+src/features/projects/wizard/StepLayout.tsx	76	alm/require-root-testid
 src/features/projects/wizard/StepName.tsx	122	alm/require-root-testid
 src/features/projects/wizard/StepReview.tsx	48	alm/require-root-testid
 src/features/projects/wizard/StepSources.tsx	28	alm/require-root-testid
