@@ -389,3 +389,6 @@ apps/desktop/.ds-css/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Panda CSS generated output (pilot branch only)
+apps/desktop/styled-system/

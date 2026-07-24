@@ -1,0 +1,166 @@
+#!/usr/bin/env node
+// gen-panda-tokens.mjs — generate Panda CSS token config from DTCG sources.
+//
+// Reads the same tokens/ directory that build-tokens.mjs uses and emits a
+// panda-tokens.gen.mjs that panda.config.ts imports. Generates:
+//   - conditions: one per theme ([data-theme=<id>] &)
+//   - tokens: foundation (non-color type/space/radius)
+//   - semanticTokens: all color/shadow tokens with per-theme conditional values
+//
+// Usage: node apps/desktop/scripts/gen-panda-tokens.mjs [--check]
+
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { join, basename, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const TOKENS_DIR = join(APP_DIR, 'tokens');
+const OUT = join(APP_DIR, 'panda-tokens.gen.mjs');
+
+const DEFAULT_THEME = 'warm-slate';
+
+// ── Load DTCG sources ─────────────────────────────────────────────────────────
+
+const foundation = JSON.parse(readFileSync(join(TOKENS_DIR, 'foundation.json'), 'utf8'));
+const semantic = JSON.parse(readFileSync(join(TOKENS_DIR, 'semantic.json'), 'utf8'));
+
+const themeIds = readdirSync(join(TOKENS_DIR, 'themes'))
+  .filter((f) => f.endsWith('.json'))
+  .map((f) => basename(f, '.json'))
+  .sort();
+
+const themes = Object.fromEntries(
+  themeIds.map((id) => [
+    id,
+    JSON.parse(readFileSync(join(TOKENS_DIR, 'themes', `${id}.json`), 'utf8')),
+  ]),
+);
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function toCamel(id) {
+  return id.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+// Resolve DTCG alias references like "{ink}" against a theme's raw palette.
+function resolveValue(val, themeTokens) {
+  if (typeof val !== 'string') return String(val);
+  return val.replace(/\{([^}]+)\}/g, (_, ref) => {
+    const resolved = themeTokens[ref];
+    if (resolved && resolved.$value != null) {
+      return resolveValue(String(resolved.$value), themeTokens);
+    }
+    // Unresolvable reference — leave as CSS var fallback.
+    return `var(--pv-${ref})`;
+  });
+}
+
+// ── Build conditions ──────────────────────────────────────────────────────────
+
+// Panda conditions: `[data-theme=X] &` pattern from the docs.
+const conditions = {};
+for (const id of themeIds) {
+  const camel = toCamel(id);
+  if (id === DEFAULT_THEME) {
+    // Default theme matches both no-attribute root and explicit attribute.
+    conditions[camel] = ':root:not([data-theme]) &, [data-theme="' + id + '"] &';
+  } else {
+    conditions[camel] = '[data-theme="' + id + '"] &';
+  }
+}
+
+// ── Build foundation tokens (non-color: type scale, spacing, radii, weights) ─
+
+const foundationTokens = {};
+for (const [key, def] of Object.entries(foundation)) {
+  if (def.$type === 'color') continue;
+  foundationTokens[key] = { value: String(def.$value) };
+}
+
+// ── Build semantic tokens (theme-varying) ─────────────────────────────────────
+
+const semanticTokens = {};
+
+// Raw palette tokens from themes — these vary per theme and become conditional.
+const allPaletteKeys = new Set();
+for (const id of themeIds) {
+  for (const key of Object.keys(themes[id])) {
+    allPaletteKeys.add(key);
+  }
+}
+
+for (const key of [...allPaletteKeys].sort()) {
+  const condValues = {};
+  for (const id of themeIds) {
+    const camel = toCamel(id);
+    const def = themes[id][key];
+    if (!def) continue;
+    condValues[`_${camel}`] = resolveValue(String(def.$value), themes[id]);
+  }
+  // Use the default theme's value as `base` fallback.
+  const defaultDef = themes[DEFAULT_THEME]?.[key];
+  if (defaultDef) {
+    condValues.base = resolveValue(String(defaultDef.$value), themes[DEFAULT_THEME]);
+  }
+  semanticTokens[key] = { value: condValues };
+}
+
+// Semantic aliases (text, border, chip, link, focus-ring, font-mono).
+// These either reference palette tokens or have composite values.
+for (const [key, def] of Object.entries(semantic)) {
+  if (key.startsWith('$')) continue;
+  const val = String(def.$value ?? '');
+
+  const aliasMatch = val.match(/^\{([^}]+)\}$/);
+  if (aliasMatch) {
+    // Pure alias — reference the palette semantic token via Panda's {} syntax.
+    semanticTokens[key] = { value: `{colors.${aliasMatch[1]}}` };
+  } else if (val.includes('{')) {
+    // Composite value with embedded references — resolve per-theme.
+    const condValues = {};
+    for (const id of themeIds) {
+      const camel = toCamel(id);
+      condValues[`_${camel}`] = resolveValue(val, themes[id]);
+    }
+    const defaultResolved = resolveValue(val, themes[DEFAULT_THEME]);
+    condValues.base = defaultResolved;
+    semanticTokens[key] = { value: condValues };
+  } else {
+    // Literal (e.g. font-mono) — no condition needed.
+    semanticTokens[key] = { value: val };
+  }
+}
+
+// ── Emit ──────────────────────────────────────────────────────────────────────
+
+const banner =
+  '// AUTO-GENERATED by scripts/gen-panda-tokens.mjs from apps/desktop/tokens/\n' +
+  '// Do not edit by hand. Run `node apps/desktop/scripts/gen-panda-tokens.mjs`\n' +
+  '// after editing the DTCG sources. CI fails if this file drifts.\n\n';
+
+const output =
+  banner +
+  `export const conditions = ${JSON.stringify(conditions, null, 2)};\n\n` +
+  `export const foundationTokens = ${JSON.stringify(foundationTokens, null, 2)};\n\n` +
+  `export const semanticTokens = ${JSON.stringify(semanticTokens, null, 2)};\n`;
+
+if (process.argv.includes('--check')) {
+  let existing = '';
+  try {
+    existing = readFileSync(OUT, 'utf8');
+  } catch {
+    console.error(`ERROR: ${OUT} does not exist. Run the generator first.`);
+    process.exit(1);
+  }
+  if (existing.split('\r\n').join('\n') !== output.split('\r\n').join('\n')) {
+    console.error(
+      `ERROR: ${OUT} is out of date with apps/desktop/tokens/.\n` +
+        'Run `node apps/desktop/scripts/gen-panda-tokens.mjs` and commit the result.',
+    );
+    process.exit(1);
+  }
+  console.log('OK: panda-tokens.gen.mjs matches DTCG sources.');
+} else {
+  writeFileSync(OUT, output);
+  console.log(`wrote ${OUT} (${themeIds.length} themes, ${Object.keys(semanticTokens).length} semantic tokens)`);
+}

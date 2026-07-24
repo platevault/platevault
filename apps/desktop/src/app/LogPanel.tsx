@@ -4,17 +4,7 @@
 /**
  * Bottom log panel (spec 019).
  *
- * - Full-width fold-out driven by `LogPanelContext`.
- * - Level filter chips (session-only, resets to 'all' on open). Selecting a
- *   level is a severity floor — it shows that level and everything more
- *   severe, not an exact match (#582).
- * - Follow-tail toggle (persisted via `rememberFollowLogs` setting).
- * - Diagnostics toggle (gated by `logLevel === "debug"`).
- * - Cross-link: clicking a row with `entityType` + `entityId` navigates to
- *   the entity page; rows with only `requestId` navigate to the audit timeline.
- * - Export action in the panel header.
- * - Truncation marker when history gap is detected.
- * - Escape key closes the panel.
+ * Migrated to Panda CSS (pilot/css-panda branch).
  */
 import {
   useEffect,
@@ -48,6 +38,21 @@ import {
 } from './log-panel-model';
 import { useFollowTail } from './useFollowTail';
 import { LogEntryRow } from './LogEntryRow';
+import { cx } from '@styled-system/css';
+import {
+  logpanel,
+  header,
+  title,
+  filters,
+  filtersSources,
+  actions,
+  chipRecipe,
+  exportError as exportErrorStyle,
+  body,
+  truncationMarker,
+  events,
+  empty,
+} from './logpanel.styles';
 
 // ── LogPanel component ────────────────────────────────────────────────────────
 
@@ -80,39 +85,29 @@ export function LogPanel() {
     getLogSnapshot,
   );
 
-  // Filter entries for render (computed before the follow-tail effect /
-  // virtualizer that depend on the rendered list).
+  // Filter entries for render.
   const visibleEntries = entries.filter((entry) => {
     if (!passesLevelFilter(entry.level, levelFilter)) return false;
     if (!passesSourceFilter(entry.source, sourceFilter)) return false;
     if (entry.source === 'diagnostic' && !showDiagnostics) return false;
-    // Gate diagnostics on logLevel setting (A3).
     if (entry.source === 'diagnostic' && logLevel !== 'debug') return false;
     return true;
   });
 
   const filterLabel = activeFilterLabel(levelFilter, sourceFilter);
 
-  // Virtualize the (potentially long) log list. The `<ul>` is the scroll
-  // element; entries are newest-first so index 0 (offset 0) is the newest.
   const virtualizer = useVirtualizer({
     count: visibleEntries.length,
     getScrollElement: () => listRef.current,
     estimateSize: () => 28,
     overscan: 12,
-    // astro-plan-99u: upstream's default leaks a debounce timer past
-    // unmount/teardown — see observeElementOffsetWithCleanup above.
     observeElementOffset: observeElementOffsetWithCleanup,
   });
 
-  // Start subscription on mount.
   useEffect(() => {
     void startLogSubscription();
   }, []);
 
-  // Close panel on Escape (only while expanded). We keep the form-field guard
-  // off so Escape still closes the panel from anywhere, matching the prior
-  // document-level handler.
   useHotkeys(
     {
       Escape: (e) => {
@@ -125,7 +120,6 @@ export function LogPanel() {
     { ignoreFormFields: false },
   );
 
-  // Follow-tail scroll behaviour.
   const { scrollPaused, handleScroll, toggleFollow } = useFollowTail({
     expanded,
     followLogs,
@@ -136,7 +130,6 @@ export function LogPanel() {
     prefersReducedMotion,
   });
 
-  // Navigation handlers.
   const navigateToEntity: EntityNavigateFn = useCallback(
     (entityType, entityId) => {
       const path = buildEntityPath(entityType, entityId);
@@ -153,14 +146,10 @@ export function LogPanel() {
     [navigate],
   );
 
-  // Export action — uses native file-save dialog (T062 FR-025).
   const handleExport = useCallback(async () => {
     setExportError(null);
     try {
       const requestId = crypto.randomUUID?.() ?? `req-${Date.now()}`;
-
-      // Ask the user where to save the file via the native file-save dialog.
-      // Falls back to a temp path when running under mocks or when the API is unavailable.
       let filePath: string | null = null;
       try {
         const { save: showSaveDialog } = await import(
@@ -172,14 +161,10 @@ export function LogPanel() {
           filters: [{ name: 'JSON', extensions: ['json'] }],
         });
       } catch {
-        // Dialog API unavailable (mock mode / test) — use temp path.
         filePath = null;
       }
 
-      if (!filePath) {
-        // User cancelled or dialog unavailable.
-        return;
-      }
+      if (!filePath) return;
 
       unwrap(
         await commands.logExport(
@@ -201,17 +186,17 @@ export function LogPanel() {
     <Collapsible.Root
       open={expanded}
       onOpenChange={toggle}
-      className="pv-logpanel"
+      className={logpanel}
       role="log"
       aria-label={m.logpanel_aria_label()}
     >
-      <div className="pv-logpanel__header">
-        <span className="pv-logpanel__title">{m.logpanel_title()}</span>
+      <div className={header}>
+        <span className={title}>{m.logpanel_title()}</span>
 
-        {/* Level filter chips (expanded state) */}
+        {/* Level filter chips */}
         {expanded && (
           <div
-            className="pv-logpanel__filters"
+            className={filters}
             role="group"
             aria-label={m.logpanel_level_filter_aria()}
           >
@@ -219,14 +204,12 @@ export function LogPanel() {
               <button
                 key={chip.value}
                 type="button"
-                className={`pv-btn pv-btn--ghost pv-btn--xs pv-logpanel__chip${
-                  levelFilter === chip.value ? ' pv-logpanel__chip--active' : ''
-                }`}
+                className={cx(
+                  'pv-btn pv-btn--ghost pv-btn--xs',
+                  chipRecipe({ active: levelFilter === chip.value }),
+                )}
                 onClick={() => setLevelFilter(chip.value)}
                 aria-pressed={levelFilter === chip.value}
-                // Disambiguates from the category/source filter's own "All"
-                // chip below — both groups have a visible "All" label, but
-                // e2e/a11y queries need distinct accessible names.
                 aria-label={
                   chip.value === 'all' ? m.logpanel_level_all_aria() : undefined
                 }
@@ -235,14 +218,13 @@ export function LogPanel() {
               </button>
             ))}
 
-            {/* Diagnostics toggle (only when logLevel === "debug") */}
-            {}
             {logLevel === 'debug' && (
               <button
                 type="button"
-                className={`pv-btn pv-btn--ghost pv-btn--xs pv-logpanel__chip${
-                  showDiagnostics ? ' pv-logpanel__chip--active' : ''
-                }`}
+                className={cx(
+                  'pv-btn pv-btn--ghost pv-btn--xs',
+                  chipRecipe({ active: showDiagnostics }),
+                )}
                 onClick={() => setShowDiagnostics((v) => !v)}
                 aria-pressed={showDiagnostics}
               >
@@ -255,15 +237,16 @@ export function LogPanel() {
         {/* Category/source filter chips (#666) */}
         {expanded && (
           <div
-            className="pv-logpanel__filters pv-logpanel__filters--sources"
+            className={filtersSources}
             role="group"
             aria-label={m.logpanel_source_filter_aria()}
           >
             <button
               type="button"
-              className={`pv-btn pv-btn--ghost pv-btn--xs pv-logpanel__chip${
-                sourceFilter.length === 0 ? ' pv-logpanel__chip--active' : ''
-              }`}
+              className={cx(
+                'pv-btn pv-btn--ghost pv-btn--xs',
+                chipRecipe({ active: sourceFilter.length === 0 }),
+              )}
               onClick={() => setSourceFilter([])}
               aria-pressed={sourceFilter.length === 0}
               aria-label={m.logpanel_source_all_aria()}
@@ -274,11 +257,13 @@ export function LogPanel() {
               <button
                 key={source}
                 type="button"
-                className={`pv-btn pv-btn--ghost pv-btn--xs pv-logpanel__chip${
-                  sourceFilter.length === 0 || sourceFilter.includes(source)
-                    ? ' pv-logpanel__chip--active'
-                    : ''
-                }`}
+                className={cx(
+                  'pv-btn pv-btn--ghost pv-btn--xs',
+                  chipRecipe({
+                    active:
+                      sourceFilter.length === 0 || sourceFilter.includes(source),
+                  }),
+                )}
                 onClick={() =>
                   setSourceFilter(
                     sourceFilter.length === 0
@@ -298,14 +283,15 @@ export function LogPanel() {
           </div>
         )}
 
-        {/* Actions — pinned to the header's trailing edge so they keep a
-            stable position as the filter chips wrap onto more rows. */}
-        <div className="pv-logpanel__actions">
-          {/* Follow toggle */}
+        {/* Actions */}
+        <div className={actions}>
           {expanded && (
             <button
               type="button"
-              className={`pv-btn pv-btn--ghost pv-btn--xs${followLogs ? ' pv-logpanel__chip--active' : ''}`}
+              className={cx(
+                'pv-btn pv-btn--ghost pv-btn--xs',
+                chipRecipe({ active: followLogs }),
+              )}
               onClick={toggleFollow}
               aria-pressed={followLogs}
               aria-label={
@@ -327,7 +313,6 @@ export function LogPanel() {
             </button>
           )}
 
-          {/* Export button */}
           {expanded && (
             <button
               type="button"
@@ -351,15 +336,14 @@ export function LogPanel() {
       </div>
 
       {exportError && (
-        <div className="pv-logpanel__export-error" role="alert">
+        <div className={exportErrorStyle} role="alert">
           {m.logpanel_export_failed({ error: exportError ?? '' })}
         </div>
       )}
 
-      <Collapsible.Panel className="pv-logpanel__body">
-        {/* Truncation marker (A4) */}
+      <Collapsible.Panel className={body}>
         {truncated && (
-          <div className="pv-logpanel__truncation-marker" role="note">
+          <div className={truncationMarker} role="note">
             {truncatedCount != null
               ? m.logpanel_history_gap_count({ count: String(truncatedCount) })
               : m.logpanel_history_gap()}
@@ -367,16 +351,13 @@ export function LogPanel() {
         )}
 
         <ul
-          className="pv-logpanel__events pv-virtual-scroll"
+          className={cx(events, 'pv-virtual-scroll')}
           ref={listRef}
           onScroll={handleScroll}
           data-virtual-scroll="true"
         >
           {visibleEntries.length === 0 ? (
-            <li className="pv-logpanel__empty">
-              {/* #669: a filtered-to-empty view must not read as "nothing
-                  was ever recorded" when entries exist but the active
-                  filter excludes all of them — so name the filter. */}
+            <li className={empty}>
               <EmptyState
                 title={
                   entries.length === 0
@@ -390,7 +371,7 @@ export function LogPanel() {
           ) : (
             <div
               className="pv-virtual-inner"
-              // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (getTotalSize)
+              // eslint-disable-next-line no-restricted-syntax
               style={{
                 height: `${virtualizer.getTotalSize()}px`,
                 position: 'relative',
@@ -404,7 +385,7 @@ export function LogPanel() {
                     entry={entry}
                     index={virtualRow.index}
                     measureRef={virtualizer.measureElement}
-                    // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer translateY offset per row
+                    // eslint-disable-next-line no-restricted-syntax
                     style={{
                       position: 'absolute',
                       top: 0,
