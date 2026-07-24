@@ -394,6 +394,14 @@ jobs:
         if: runner.os == 'Linux' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.scripts == 'true')
         run: just dead-callers
 
+      # Hot-read ratchet: fails if per-operation hot-read call sites in
+      # crates/app/inbox/, crates/app/core/src/plan_apply/, and watcher.rs
+      # exceed the checked-in baseline (GF-23/GF-24). Pure grep, no compile —
+      # same Linux-only gating as the DB boundary and dead-caller ratchets.
+      - name: Hot-read ratchet
+        if: runner.os == 'Linux' && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.scripts == 'true')
+        run: just hot-read
+
       # Compilation warnings/lints are OS-agnostic; running clippy on all 3 legs
       # is pure redundancy — the nextest step below builds the workspace anyway.
       - name: Clippy (workspace, all targets, deny warnings)

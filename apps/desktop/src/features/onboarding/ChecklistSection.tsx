@@ -59,56 +59,23 @@ import {
   toggleFind,
   useActiveFindItem,
 } from './FindSpotlight';
+import {
+  PAGE_ORDER,
+  itemLabel,
+  itemTooltip,
+  prerequisiteReason,
+  pageLabel,
+  pagePath,
+} from './onboarding-labels';
 
-/** Workflow-stage order (matches the sidebar nav); labels reuse existing nav
- * catalog keys so the checklist adds no new group strings. */
-const PAGE_META: Record<OnboardingPage, { path: string; label: () => string }> =
-  {
-    inbox: {
-      path: '/inbox',
-      label: () => m.settings_datasources_category_inbox(),
-    },
-    sessions: { path: '/sessions', label: () => m.common_sessions() },
-    calibration: {
-      path: '/calibration',
-      label: () => m.settings_datasources_category_calibration(),
-    },
-    targets: { path: '/targets', label: () => m.nav_targets() },
-    projects: { path: '/projects', label: () => m.common_projects() },
-  };
-
-const PAGE_ORDER: OnboardingPage[] = [
-  'inbox',
-  'sessions',
-  'calibration',
-  'targets',
-  'projects',
-];
-
-/** Route path per page — consumed by the find spotlight to navigate first. */
-export const ONBOARDING_PAGE_PATHS = Object.fromEntries(
-  PAGE_ORDER.map((p) => [p, PAGE_META[p].path]),
-) as Record<OnboardingPage, string>;
-
-/** Dynamic catalog access for registry-keyed item/prerequisite strings. The
- * keys are all present in `messages/en-GB.json` (seeded T011); the itemId → key
- * mapping is `onboarding_item_<id-with-underscores>_<label|tooltip>`. */
-const catalog = m as unknown as Record<
-  string,
-  (args?: Record<string, unknown>) => string
->;
-export const itemLabel = (id: string): string =>
-  catalog[`onboarding_item_${id.replaceAll('.', '_')}_label`]();
-export const itemTooltip = (id: string): string =>
-  catalog[`onboarding_item_${id.replaceAll('.', '_')}_tooltip`]();
-// The backend sends dotted registry reason keys (e.g.
-// `onboarding.prerequisite.inbox.confirm_first`); Paraglide message functions
-// are underscore-keyed, so convert before lookup exactly as the item strings do
-// — a raw dotted key resolves to `undefined()` and crashes the whole shell into
-// the error boundary (only the real backend populates prerequisites, so mocks
-// with `prerequisite: null` never reach this path).
-export const prerequisiteReason = (reasonKey: string): string =>
-  catalog[reasonKey.replaceAll('.', '_')]();
+// Re-export the label/path helpers so existing callers (FindSpotlight, tests)
+// that import these from ChecklistSection still resolve.
+export {
+  ONBOARDING_PAGE_PATHS,
+  itemLabel,
+  itemTooltip,
+  prerequisiteReason,
+} from './onboarding-labels';
 
 export function isChecklistGroupSettled(items: OnboardingItemDto[]): boolean {
   return items.length > 0 && items.every((item) => item.state !== 'unchecked');
@@ -124,7 +91,7 @@ export function completedChecklistItems(
 }
 
 function pageForPath(pathname: string): OnboardingPage | null {
-  return PAGE_ORDER.find((p) => pathname.startsWith(PAGE_META[p].path)) ?? null;
+  return PAGE_ORDER.find((p) => pathname.startsWith(pagePath(p))) ?? null;
 }
 
 interface ChecklistSectionProps {
@@ -365,7 +332,7 @@ export function ChecklistSection({
                     <ChevronRight size={13} aria-hidden />
                   )}
                   <span className="pv-onb-checklist__group-label">
-                    {PAGE_META[page].label()}
+                    {pageLabel(page)}
                   </span>
                   {complete && (
                     <Check
@@ -388,7 +355,7 @@ export function ChecklistSection({
                         idPrefix={idPrefix}
                         completing={choreo.completingIds.has(item.itemId)}
                         onJump={(jumpPage) =>
-                          void navigate({ to: PAGE_META[jumpPage].path })
+                          void navigate({ to: pagePath(jumpPage) })
                         }
                       />
                     ))}
@@ -609,7 +576,7 @@ export function ChecklistItemRow({
                 item.prerequisite && onJump(item.prerequisite.jumpPage)
               }
             >
-              {PAGE_META[item.prerequisite.jumpPage].label()}
+              {pageLabel(item.prerequisite.jumpPage)}
             </button>
           </span>
         )}
