@@ -8,32 +8,11 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-audit_types = { path = "../../audit-types" }
-domain_core = { path = "../../domain/core" }
-patterns = { path = "../../patterns" }
-sea-query.workspace = true
-# Sole FOV geometry helper in the workspace (`sessions::fov_diagonal_deg`),
-# reused here so a train's derived FOV cannot diverge from the one the inbox
-# attribution pass computes. `sessions` depends only on `domain_core`, so this
-# stays a leaf edge with no cycle.
-sessions = { path = "../../sessions" }
-serde.workspace = true
-serde_json.workspace = true
-sha2.workspace = true
-sqlx.workspace = true
-thiserror.workspace = true
-time.workspace = true
-tokio.workspace = true
-uuid.workspace = true
-
-# `audit` depends on `persistence_db` (for events-table SQL), so it cannot be
-# a normal dependency here (cycle). Cargo permits dev-dependency cycles: this
-# is test-only, letting `tests/*.rs` construct a real `EventBus` (which
-# implements `audit_types::EventPublisher`) to pass into
-# `SqliteLifecycleRepository::new`.
-[dev-dependencies]
-audit = { path = "../../audit" }
-tempfile.workspace = true
+persistence_core = { path = "../core" }
+persistence_inbox = { path = "../inbox" }
+persistence_lifecycle = { path = "../lifecycle" }
+persistence_plans = { path = "../plans" }
+persistence_targets = { path = "../targets" }
 
 [lints]
 workspace = true

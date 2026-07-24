@@ -4226,18 +4226,95 @@ dependencies = [
 ]
 
 [[package]]
+name = "persistence_core"
+version = "0.1.0"
+dependencies = [
+ "sea-query",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+]
+
+[[package]]
 name = "persistence_db"
+version = "0.1.0"
+dependencies = [
+ "persistence_core",
+ "persistence_inbox",
+ "persistence_lifecycle",
+ "persistence_plans",
+ "persistence_targets",
+]
+
+[[package]]
+name = "persistence_inbox"
+version = "0.1.0"
+dependencies = [
+ "domain_core",
+ "persistence_core",
+ "persistence_db",
+ "persistence_plans",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "persistence_lifecycle"
 version = "0.1.0"
 dependencies = [
  "audit",
  "audit_types",
  "domain_core",
  "patterns",
- "sea-query",
+ "persistence_core",
+ "persistence_inbox",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "persistence_plans"
+version = "0.1.0"
+dependencies = [
+ "domain_core",
+ "persistence_core",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "persistence_targets"
+version = "0.1.0"
+dependencies = [
+ "domain_core",
+ "persistence_core",
+ "persistence_lifecycle",
  "serde",
  "serde_json",
  "sessions",
- "sha2 0.10.9",
  "sqlx",
  "tempfile",
  "thiserror 2.0.18",
