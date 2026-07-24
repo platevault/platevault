@@ -10,8 +10,9 @@
 //! Tauri command.
 //!
 //! Spec 029 stub modules remain for command groups whose persistence layer is
-//! not yet wired (sessions calendar/split/merge, review queue, preferences,
-//! scan.start, equipment.list, projects.create_plan).
+//! not yet wired (`sessions.calendar`/`split`/`merge`, `review.queue`,
+//! `preferences.get`/`set`, `scan.start`, `equipment.list`,
+//! `projects.create_plan`).
 //!
 //! Spec 030 modules add equipment CRUD, status, cleanup, calibration
 //! tolerances, ingestion settings, tools, inbox scan, and cleanup scan

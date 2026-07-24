@@ -1,9 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Integration tests for all 31 Tauri stub commands.
+//! Integration tests for Tauri commands (stubs + real).
 //!
-//! **Stub commands (28)** are tested by calling the command functions directly
+//! **Stub commands (26)** are tested by calling the command functions directly
 //! — they are plain `pub async fn`s returning `Result<T, String>`.
 //!
 //! **Lifecycle commands (4)** require `State<'_, AppState>` injected by the
@@ -44,7 +44,6 @@ use desktop_shell::commands::sessions::{
 use desktop_shell::commands::settings::{settings_get, settings_update};
 
 use contracts_core::error_code::ErrorCode;
-use desktop_shell::commands::targets::{targets_get, targets_list};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -182,29 +181,6 @@ async fn stub_calibration_matches() {
         res.unwrap().is_empty(),
         "calibration_matches must return empty; use calibration.match.suggest for real results"
     );
-}
-
-// ─── Targets (2 commands) ───────────────────────────────────────────────────
-
-#[tokio::test]
-async fn stub_targets_list() {
-    let res = targets_list(None).await;
-    assert!(res.is_ok(), "targets_list failed: {res:?}");
-    assert!(!res.unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn stub_targets_get() {
-    let res = targets_get("target-001".to_owned()).await;
-    assert!(res.is_ok(), "targets_get failed: {res:?}");
-    let detail = res.unwrap();
-    // `id` is echoed straight from the argument — assert fields the command
-    // derives from stub_targets()[0] so this test can fail if that wiring breaks.
-    assert_eq!(detail.id, "target-001");
-    assert_eq!(detail.name, "NGC 7000");
-    assert_eq!(detail.session_count, 5);
-    assert_eq!(detail.projects.len(), 2);
-    assert_eq!(detail.projects[0].name, "NGC 7000 Narrowband");
 }
 
 // ─── Projects (spec 008 — real implementation with in-memory DB) ────────────

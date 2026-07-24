@@ -1160,6 +1160,8 @@ const mockHandlers = {
     ];
   },
   target_get: async (_args) => {
+    // tauri-specta wraps every named parameter as a top-level object key, so
+    // `target_get(req: TargetGetRequest)` arrives as `{ req: { targetId } }`.
     const req = (_args as { req?: { targetId?: string } } | undefined)?.req;
     return {
       id: req?.targetId ?? 'tgt-m31',
