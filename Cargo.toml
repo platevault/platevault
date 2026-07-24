@@ -142,3 +142,13 @@ pedantic = { level = "warn", priority = -1 }
 #   cargo clippy -- -W clippy::disallowed_methods
 # See docs/development/persistence-layer-hardening.md.
 disallowed_methods = "allow"
+# Cherry-picked nursery lints. The nursery GROUP is intentionally left off
+# because its membership is unstable across Rust releases; individual lints are
+# promoted here only after manual review of each suggestion class.
+use_self = "warn"
+redundant_pub_crate = "warn"
+derive_partial_eq_without_eq = "warn"
+redundant_clone = "warn"
+needless_collect = "warn"
+significant_drop_tightening = "warn"
+or_fun_call = "warn"
