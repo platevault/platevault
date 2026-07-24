@@ -81,6 +81,7 @@ pub fn is_valid_key(key: &str) -> bool {
         || is_workflow_profile_attribution_window_key(key)
         || is_catalogues_enabled_key(key)
         || is_locale_key(key)
+        || is_ui_state_key(key)
 }
 
 /// `enabled` (#645, scope `"catalogues"`): default-enabled Planner catalogue
@@ -196,4 +197,21 @@ pub fn is_workflow_profile_attribution_window_key(key: &str) -> bool {
         }
     }
     false
+}
+
+// ── UI state keys (persisted-ui-state, 2026-07-24) ───────────────────────────
+//
+// Keys in the `ui_state` scope use the `uiState.` prefix and hold ephemeral
+// UI choices (panel open/closed, grouping dims, dock placement, last paths)
+// that survive restart via SQLite but carry no audit obligation. The backend
+// stores them as plain JSON rows in the generic settings table; no descriptor
+// entry is needed because all validation is handled client-side.
+//
+// The prefix is intentionally open-ended: any `uiState.*` key is accepted,
+// letting the frontend add new keys without a Rust change per key.
+
+/// Whether `key` is a UI-state key (`uiState.` prefix).
+#[must_use]
+pub fn is_ui_state_key(key: &str) -> bool {
+    key.starts_with("uiState.")
 }

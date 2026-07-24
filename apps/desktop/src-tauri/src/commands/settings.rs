@@ -31,6 +31,8 @@
 //!   `framingRotationToleranceDeg`, `framingMosaicEnvelopeFractionOfFov`
 //!   (spec 008 Q27 F-Framing-11, R11a clustering tolerance tunables)
 //! - `"catalogues"` → `enabled` (#645, default-enabled Planner catalogues)
+//! - `"ui_state"` → all stored rows with the `uiState.` key prefix; no in-code
+//!   defaults (2026-07-24 persisted-ui-state migration).
 //! - `""` (empty) → reads the full settings bag (every descriptor key, derived
 //!   from the descriptor table so it cannot drift, plus `enabled`).
 //!
@@ -104,6 +106,15 @@ fn scope_keys(scope: &str) -> &'static [&'static str] {
             "framingRotationToleranceDeg",
             "framingMosaicEnvelopeFractionOfFov",
         ],
+        // UI-state scope — keys with the `uiState.` prefix are open-ended;
+        // `settings.get("ui_state")` returns the empty set because the caller
+        // must call `settings.get` with the exact key names it registered.
+        // The scope exists only so `settings.update` routes here without
+        // tracing noise about an "unknown scope" (the catch-all `_ => ALL_KEYS`
+        // would still accept the writes, but returning all stable keys on a
+        // `settings.get("ui_state")` call would be surprising). Individual key
+        // reads happen via the `""` (catch-all) scope or via direct `hydrateScope`.
+        "ui_state" => &[],
         // Empty scope or "global" returns every stable key.
         _ => &ALL_KEYS,
     }
@@ -131,6 +142,10 @@ static ALL_KEYS: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
 /// Each key that belongs to the scope is resolved via the persistence layer
 /// (hydrating the in-code default when no stored row exists).
 ///
+/// The `"ui_state"` scope is special: it returns all rows whose key starts with
+/// `"uiState."` directly from the DB (no in-code default — unknown keys simply
+/// return `null` on a get; the frontend falls back to its own default).
+///
 /// # Errors
 /// Returns `Err(String)` on database failure.
 #[tauri::command]
@@ -141,8 +156,21 @@ pub async fn settings_get(
 ) -> Result<SettingsData, ContractError> {
     tracing::debug!("settings.get scope={scope}");
     let pool = state.repo.pool();
-    let keys = scope_keys(&scope);
 
+    // UI-state scope: return all stored `uiState.*` rows (no in-code defaults).
+    if scope == "ui_state" {
+        let rows =
+            persistence_lifecycle::repositories::settings::get_all_by_prefix(pool, "uiState.")
+                .await
+                .map_err(app_core::errors::db_to_contract)?;
+        let values: HashMap<String, Value> = rows.into_iter().collect();
+        return Ok(SettingsData {
+            scope,
+            values: contracts_core::JsonAny::from(serde_json::to_value(values).unwrap_or_default()),
+        });
+    }
+
+    let keys = scope_keys(&scope);
     let mut values: HashMap<String, Value> = HashMap::with_capacity(keys.len());
     for key in keys {
         let val = app_core::settings::resolve_setting(pool, key, None).await?;
