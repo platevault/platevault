@@ -499,18 +499,19 @@ pub fn automatic_eligibility(input: &EligibilityInput) -> AutomaticEligibility {
     {
         return AutomaticEligibility::Blocked;
     }
-    // Dark: unregulated temperature mode is blocked for automatic.
-    if input.kind == CalibrationKind::Dark
-        && matches!(input.temperature_mode, TemperatureMode::Unregulated)
-    {
-        return AutomaticEligibility::Blocked;
-    }
     // Incompatible recipe is always blocked.
     if matches!(input.recipe_compatibility, RecipeCompatibility::Incompatible) {
         return AutomaticEligibility::Blocked;
     }
 
     // Review required conditions.
+    // Unregulated darks require manual audited selection (FR-068); review can
+    // override, so this is review_required not blocked.
+    if input.kind == CalibrationKind::Dark
+        && matches!(input.temperature_mode, TemperatureMode::Unregulated)
+    {
+        return AutomaticEligibility::ReviewRequired;
+    }
     if matches!(input.age_state, AgeState::Red) {
         return AutomaticEligibility::ReviewRequired;
     }
@@ -703,7 +704,9 @@ mod tests {
     }
 
     #[test]
-    fn eligibility_unregulated_dark_blocked() {
+    fn eligibility_unregulated_dark_review_required() {
+        // FR-068: unregulated darks require manual audited selection; review can
+        // override, so automatic eligibility is review_required, not blocked.
         let input = EligibilityInput {
             kind: CalibrationKind::Dark,
             recipe_compatibility: RecipeCompatibility::Compatible,
@@ -716,6 +719,6 @@ mod tests {
             orientation_state: OrientationState::NotApplicable,
             is_same_night_flat: false,
         };
-        assert_eq!(automatic_eligibility(&input), AutomaticEligibility::Blocked);
+        assert_eq!(automatic_eligibility(&input), AutomaticEligibility::ReviewRequired);
     }
 }
