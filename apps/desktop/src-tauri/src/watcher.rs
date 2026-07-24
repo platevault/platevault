@@ -527,6 +527,7 @@ pub async fn attach_project_watcher(
 
     tracing::info!("artifact watcher: attached for project {project_id} ({})", project.path);
     reg.entries.insert(project_id.to_owned(), ArtifactWatcherEntry { _guard: guard, forward_task });
+    drop(reg);
     Ok(())
 }
 

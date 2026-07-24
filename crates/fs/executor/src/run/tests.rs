@@ -263,6 +263,10 @@ impl ExecutorCallbacks for RetryOnFailureCallbacks {
 }
 
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn mid_run_retry_reexecutes_already_passed_item() {
     let dir = tempfile::tempdir().unwrap();
     let root = utf8(dir.path());
@@ -354,6 +358,10 @@ impl ExecutorCallbacks for CancelDuringRetryDrainCallbacks {
 }
 
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn cancellation_is_observed_between_retry_items_not_just_forward_items() {
     let dir = tempfile::tempdir().unwrap();
     let root = utf8(dir.path());

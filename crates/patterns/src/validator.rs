@@ -44,7 +44,7 @@ impl ValidationWarning {
 // ── Errors ─────────────────────────────────────────────────────────────────
 
 /// Hard errors that make a pattern invalid (data-model.md §Errors).
-#[derive(Clone, Debug, PartialEq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ValidateError {
     /// Pattern contains zero parts (data-model.md `pattern.empty`).
     #[error("pattern is empty")]

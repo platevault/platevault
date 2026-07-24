@@ -95,7 +95,7 @@ pub enum OnboardingPage {
 
 /// Prerequisite presentation for an item whose upstream milestone is missing
 /// (FR-010).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingPrerequisiteDto {
     /// Registry id of the upstream item that must be done first.
@@ -115,7 +115,7 @@ pub struct OnboardingPrerequisiteDto {
 }
 
 /// One onboarding item row for UI hydration.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingItemDto {
     pub item_id: String,
@@ -134,7 +134,7 @@ pub struct OnboardingItemDto {
 }
 
 /// Section-level flags (`onboarding_flags` singleton).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingFlagsDto {
     pub orientation_done: bool,
@@ -145,7 +145,7 @@ pub struct OnboardingFlagsDto {
 }
 
 /// Per-page item counts.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingPageProgressDto {
     pub page: OnboardingPage,
@@ -155,7 +155,7 @@ pub struct OnboardingPageProgressDto {
 
 /// Overall + per-page progress, derived from `onboarding_state` (never
 /// stored).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingProgressDto {
     pub done: u32,
@@ -165,7 +165,7 @@ pub struct OnboardingProgressDto {
 
 /// Full onboarding projection — the response shape shared by
 /// `onboarding.state.get` and `onboarding.restore`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingStateDto {
     pub items: Vec<OnboardingItemDto>,
@@ -176,7 +176,7 @@ pub struct OnboardingStateDto {
 // ── onboarding.state.get ─────────────────────────────────────────────────────
 
 /// Response from `onboarding.state.get`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingStateGetResponse {
     pub state: OnboardingStateDto,
@@ -219,7 +219,7 @@ pub enum OnboardingManualState {
 }
 
 /// Request for `onboarding.item.set_state`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingItemSetStateRequest {
     pub item_id: String,
@@ -227,7 +227,7 @@ pub struct OnboardingItemSetStateRequest {
 }
 
 /// Response from `onboarding.item.set_state` — the updated item row.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingItemSetStateResponse {
     pub item: OnboardingItemDto,
@@ -257,7 +257,7 @@ pub enum OnboardingOrientationOutcome {
 }
 
 /// Request for `onboarding.orientation.complete`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingOrientationCompleteRequest {
     pub outcome: OnboardingOrientationOutcome,
@@ -265,7 +265,7 @@ pub struct OnboardingOrientationCompleteRequest {
 
 /// Response from `onboarding.orientation.complete`. Idempotent — repeat
 /// calls return the original timestamp.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingOrientationCompleteResponse {
     pub orientation_done_at: String,
@@ -278,7 +278,7 @@ pub struct OnboardingOrientationCompleteResponse {
 /// via `onboarding.restore`; `hidden: false` is rejected as `invalid_state`.
 /// The completion auto-hide (FR-031) is written by the backend settle path,
 /// never through this command.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingSectionSetRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -288,7 +288,7 @@ pub struct OnboardingSectionSetRequest {
 }
 
 /// Response from `onboarding.section.set` — the updated flags.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingSectionSetResponse {
     pub flags: OnboardingFlagsDto,
@@ -297,7 +297,7 @@ pub struct OnboardingSectionSetResponse {
 // ── onboarding.restore ───────────────────────────────────────────────────────
 
 /// Response from `onboarding.restore` — same shape as `onboarding.state.get`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingRestoreResponse {
     pub state: OnboardingStateDto,
@@ -307,7 +307,7 @@ pub struct OnboardingRestoreResponse {
 
 /// Payload for the `onboarding:state-changed` Tauri notification. A hint
 /// only — the frontend re-reads via `onboarding.state.get`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OnboardingStateChangedEvent {
     pub item_id: Option<String>,

@@ -27,7 +27,7 @@ pub struct AssignDecision {
 }
 
 /// Error returned by `evaluate_assign` when the assignment is rejected.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssignError {
     /// Master has hard-rule dimension mismatches and `override_flag` was false.
     IncompatibleDimensions { dimensions: Vec<Dimension> },

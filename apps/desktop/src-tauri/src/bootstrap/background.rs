@@ -15,7 +15,7 @@ use sqlx::SqlitePool;
 /// only recomputed their staleness through calling code that happened to
 /// run the exact update, not automatically on the owning project's
 /// transition (research.md §6 fan-out).
-pub(crate) fn spawn_stale_dependent_propagator(
+pub fn spawn_stale_dependent_propagator(
     pool: SqlitePool,
     bus: &EventBus,
 ) -> tokio::task::JoinHandle<()> {
@@ -34,7 +34,7 @@ pub(crate) fn spawn_stale_dependent_propagator(
 /// dropped/lagged broadcast event, an app crash mid-resolution, or a resolver
 /// that was offline when the plan applied — within a bounded interval.
 /// Failures are logged, never fatal — the next pass retries.
-pub(crate) fn spawn_ingest_resolution_drain(
+pub fn spawn_ingest_resolution_drain(
     pool: SqlitePool,
     bus: EventBus,
     resolve_cache: targeting_resolver::simbad::ResolveCache,

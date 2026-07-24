@@ -1,6 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
+// Guard held across assertions on borrowed data throughout this file.
+#![allow(clippy::significant_drop_tightening)]
+
 use super::*;
 use audit::bus::EventBus;
 use contracts_core::error_code::ErrorCode;

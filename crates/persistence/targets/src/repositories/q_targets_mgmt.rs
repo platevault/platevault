@@ -398,7 +398,7 @@ mod tests {
         );
 
         assert_eq!(
-            Some("legacy-both".to_owned()).or(Some("canon-both".to_owned())),
+            Some("legacy-both".to_owned()).or_else(|| Some("canon-both".to_owned())),
             Some("legacy-both".to_owned()),
             "app_core::sessions's own precedence call must agree with the count above"
         );

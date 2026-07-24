@@ -18,7 +18,7 @@ use domain_core::ids::EntityId;
 ///
 /// The `astro-plan.audit.{namespace}` seed is load-bearing: changing it
 /// re-keys every already-written audit row's `entity_id`.
-pub(crate) fn audit_entity_id(namespace: &str, id: &str) -> EntityId {
+pub fn audit_entity_id(namespace: &str, id: &str) -> EntityId {
     uuid::Uuid::parse_str(id).map_or_else(
         |_| {
             let ns = uuid::Uuid::new_v5(

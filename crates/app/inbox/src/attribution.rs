@@ -792,7 +792,7 @@ mod tests {
         };
         assert!(complete.has_framing_geometry());
 
-        let missing_rotation = ItemGeometry { rotation_deg: None, ..complete.clone() };
+        let missing_rotation = ItemGeometry { rotation_deg: None, ..complete };
         assert!(!missing_rotation.has_framing_geometry());
 
         assert!(!ItemGeometry::default().has_framing_geometry());

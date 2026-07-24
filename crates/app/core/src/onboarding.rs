@@ -287,7 +287,7 @@ fn page_order(page: OnboardingPage) -> u8 {
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum OnboardingError {
     /// `item.set_state` referenced an `item_id` not in [`ITEM_REGISTRY`].
     #[error("unknown onboarding item id: {0}")]
@@ -311,7 +311,7 @@ pub enum OnboardingError {
 impl From<OnboardingError> for ContractError {
     fn from(e: OnboardingError) -> Self {
         match e {
-            OnboardingError::UnknownItem(id) => ContractError::new(
+            OnboardingError::UnknownItem(id) => Self::new(
                 ErrorCode::OnboardingItemUnknown,
                 format!("unknown onboarding item id: {id}"),
                 ErrorSeverity::Blocking,
@@ -319,14 +319,14 @@ impl From<OnboardingError> for ContractError {
             ),
             OnboardingError::AutomaticItemManualCompletion(_)
             | OnboardingError::SectionSetEmptyRequest
-            | OnboardingError::SectionUnhideNotAllowed => ContractError::new(
+            | OnboardingError::SectionUnhideNotAllowed => Self::new(
                 ErrorCode::OnboardingInvalidState,
                 e.to_string(),
                 ErrorSeverity::Blocking,
                 false,
             ),
             OnboardingError::PersistenceUnavailable(msg) => {
-                ContractError::new(ErrorCode::InternalDatabase, msg, ErrorSeverity::Fatal, true)
+                Self::new(ErrorCode::InternalDatabase, msg, ErrorSeverity::Fatal, true)
             }
         }
     }

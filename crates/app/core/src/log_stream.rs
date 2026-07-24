@@ -74,22 +74,16 @@ impl From<LogError> for ContractError {
                     LogExportErrorCode::PathWriteDenied => ErrorCode::PathWriteDenied,
                     LogExportErrorCode::PathParentMissing => ErrorCode::PathParentMissing,
                 };
-                ContractError::new(error_code, message, ErrorSeverity::Blocking, false)
+                Self::new(error_code, message, ErrorSeverity::Blocking, false)
             }
-            LogError::Database(db_err) => ContractError::new(
-                ErrorCode::DatabaseError,
-                db_err.to_string(),
-                ErrorSeverity::Fatal,
-                true,
-            ),
-            LogError::Serialise(e) => ContractError::new(
-                ErrorCode::SerialiseError,
-                e.to_string(),
-                ErrorSeverity::Fatal,
-                false,
-            ),
+            LogError::Database(db_err) => {
+                Self::new(ErrorCode::DatabaseError, db_err.to_string(), ErrorSeverity::Fatal, true)
+            }
+            LogError::Serialise(e) => {
+                Self::new(ErrorCode::SerialiseError, e.to_string(), ErrorSeverity::Fatal, false)
+            }
             LogError::Io(e) => {
-                ContractError::new(ErrorCode::IoError, e.to_string(), ErrorSeverity::Fatal, false)
+                Self::new(ErrorCode::IoError, e.to_string(), ErrorSeverity::Fatal, false)
             }
         }
     }
@@ -151,7 +145,7 @@ impl Default for RecentOptions<'_> {
 
 /// Result of [`recent_entries`]: the projected entries plus retention-gap
 /// info (spec 019 FR-015).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecentEntries {
     /// Oldest-first window of projected entries.
     pub entries: Vec<LogEntry>,

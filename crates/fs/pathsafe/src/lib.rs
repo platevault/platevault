@@ -258,7 +258,7 @@ mod tests {
         // returns the root (caller does a recursive OS-level watch/walk that
         // will itself follow links) — verify that contract explicitly.
         let dirs = real_dirs_under(&scan_root, true);
-        assert_eq!(dirs, vec![scan_root.clone()]);
+        assert_eq!(dirs, vec![scan_root]);
     }
 
     /// Windows-only: a directory junction (`mklink /J`) is a reparse point

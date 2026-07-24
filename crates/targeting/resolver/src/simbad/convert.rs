@@ -77,7 +77,7 @@ fn from_crate_alias(a: simbad_resolver::ResolvedAlias) -> ResolvedAlias {
     ResolvedAlias { alias: a.alias, normalized: a.normalized, kind: from_crate_alias_kind(a.kind) }
 }
 
-pub(crate) fn from_crate_alias_kind(k: simbad_resolver::AliasKind) -> AliasKind {
+pub fn from_crate_alias_kind(k: simbad_resolver::AliasKind) -> AliasKind {
     match k {
         simbad_resolver::AliasKind::Designation => AliasKind::Designation,
         simbad_resolver::AliasKind::CommonName => AliasKind::CommonName,
@@ -85,7 +85,7 @@ pub(crate) fn from_crate_alias_kind(k: simbad_resolver::AliasKind) -> AliasKind 
     }
 }
 
-pub(crate) fn from_crate_source(s: simbad_resolver::TargetSource) -> TargetSource {
+pub fn from_crate_source(s: simbad_resolver::TargetSource) -> TargetSource {
     match s {
         simbad_resolver::TargetSource::Seed => TargetSource::Seed,
         simbad_resolver::TargetSource::Resolved => TargetSource::Resolved,
@@ -93,7 +93,7 @@ pub(crate) fn from_crate_source(s: simbad_resolver::TargetSource) -> TargetSourc
     }
 }
 
-pub(crate) fn from_crate_object_type(o: simbad_resolver::ObjectType) -> crate::ObjectType {
+pub fn from_crate_object_type(o: simbad_resolver::ObjectType) -> crate::ObjectType {
     // Both enums share the identical closed SIMBAD-otype vocabulary; round-trip
     // through the wire string so this stays correct even if variant order ever
     // diverges between the two independently-maintained enums.

@@ -97,6 +97,10 @@ fn make_item(
 /// `..` traversal is refused **before any filesystem mutation** and the audit
 /// event carries `audit_reason = "root_escape"`.
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn t008_root_escape_refused_pre_mutation() {
     let dir = tempfile::tempdir().unwrap();
     let root = utf8(dir.path());
@@ -197,6 +201,10 @@ fn t008_path_gate_unit_safe_subpath() {
 /// refused and audited with `audit_reason = "symlink"`.
 #[cfg(unix)]
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn t009_symlink_component_refused() {
     let dir = tempfile::tempdir().unwrap();
     let root = utf8(dir.path());
@@ -269,6 +277,10 @@ fn t009_path_gate_unit_symlink_refused() {
 /// item is blocked until `destructive_confirmed = true`. This tests the fix for
 /// the `confirm_required = is_protected` inversion at `plan_apply.rs:199`.
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn t010_destructive_unconfirmed_blocked_independent_of_protection() {
     let dir = tempfile::tempdir().unwrap();
     let file = utf8(dir.path()).join("precious.fits");
@@ -320,6 +332,10 @@ async fn t010_destructive_unconfirmed_blocked_independent_of_protection() {
 
 /// T010b: Once `destructive_confirmed = true`, delete proceeds.
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn t010_destructive_confirmed_delete_proceeds() {
     let dir = tempfile::tempdir().unwrap();
     let file = utf8(dir.path()).join("to_delete.fits");
@@ -361,6 +377,10 @@ async fn t010_destructive_confirmed_delete_proceeds() {
 
 /// T010c: A trash item also requires destructive confirm.
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn t010_trash_requires_destructive_confirm() {
     let dir = tempfile::tempdir().unwrap();
     let file = utf8(dir.path()).join("to_trash.fits");
@@ -398,6 +418,10 @@ async fn t010_trash_requires_destructive_confirm() {
 /// `ConflictDestinationExists` — no silent overwrite. The audit event captures
 /// the conflict.
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn t011_existing_destination_refused_no_overwrite() {
     let dir = tempfile::tempdir().unwrap();
     let src = utf8(dir.path()).join("source.fits");
@@ -500,6 +524,10 @@ async fn t012_batch_cancel_list_pending_items_returns_correct_ids() {
 /// only the caller (app/core) emits per-item cancel audit rows. Verify no
 /// spurious events from the executor itself on cancellation.
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn t012_executor_emits_no_events_for_untouched_cancelled_items() {
     let item1 = make_item("item-1", ExecutorItemAction::NoOp, None, None, None);
     let item2 = make_item("item-2", ExecutorItemAction::NoOp, None, None, None);
@@ -523,6 +551,10 @@ async fn t012_executor_emits_no_events_for_untouched_cancelled_items() {
 /// T013 (FR-007, D7): An item whose on-disk size differs from the approved
 /// baseline is refused as `stale` and the run pauses.
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn t013_stale_item_refused_and_run_pauses() {
     let dir = tempfile::tempdir().unwrap();
     let src = utf8(dir.path()).join("stale.fits");
@@ -582,6 +614,10 @@ async fn t013_stale_item_refused_and_run_pauses() {
 
 /// T013 mtime variant: `approved_mtime` mismatch also triggers stale.
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn t013_stale_mtime_mismatch_refused() {
     let dir = tempfile::tempdir().unwrap();
     let src = utf8(dir.path()).join("mtime_stale.fits");
@@ -635,6 +671,10 @@ async fn t013_stale_mtime_mismatch_refused() {
 /// tests), rename succeeds. The test verifies that on failure the file is never
 /// silently lost — either the move succeeds or the source survives.
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn t013a_move_never_silently_loses_file() {
     let dir = tempfile::tempdir().unwrap();
     let src = utf8(dir.path()).join("important.fits");
@@ -772,6 +812,10 @@ fn t014_trash_failure_without_fallback_file_survives() {
 
 /// T014c: trash via executor loop with confirmed destructive action.
 #[tokio::test]
+#[allow(
+    clippy::significant_drop_tightening,
+    reason = "guard held across assertions on borrowed data"
+)]
 async fn t014_trash_via_executor_with_archive_fallback() {
     let src_dir = tempfile::tempdir().unwrap();
     let archive_dir = tempfile::tempdir().unwrap();

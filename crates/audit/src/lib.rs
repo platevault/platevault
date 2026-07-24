@@ -47,7 +47,7 @@ pub enum AuditError {
 
 /// Legacy flat entry used by the old `AppendOnlyAuditWriter` trait.
 /// New code should use `event::AuditLogEntry` instead.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LegacyAuditLogEntry {
     pub id: EntityId,
     pub event_type: AuditEventType,

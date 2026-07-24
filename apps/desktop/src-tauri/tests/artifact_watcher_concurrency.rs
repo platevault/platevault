@@ -13,6 +13,9 @@
 //! Both tests use an in-memory `SQLite` database and a real `tempdir` project
 //! root so the attach path's DB and filesystem work executes normally.
 
+// Guard held across assertions on borrowed data throughout this file.
+#![allow(clippy::significant_drop_tightening)]
+
 use audit::bus::EventBus;
 use persistence_core::Database;
 

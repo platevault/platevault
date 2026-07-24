@@ -155,6 +155,8 @@ pub async fn update(
 }
 
 #[cfg(test)]
+// Guard held across assertions on borrowed data in every test below.
+#[allow(clippy::significant_drop_tightening)]
 mod tests {
     use super::*;
 

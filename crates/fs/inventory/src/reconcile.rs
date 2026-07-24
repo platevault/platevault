@@ -24,7 +24,7 @@ use fs_pathsafe::real_files_under;
 
 /// One inventoried frame's identity + expected size, as recorded in
 /// `file_record` for the root being reconciled.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KnownFrame {
     /// `file_record.id`.
     pub id: String,
@@ -50,7 +50,7 @@ pub enum FrameOutcome {
 }
 
 /// One row's outcome, paired back with its `file_record.id` for the caller.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FrameReconcileEntry {
     pub id: String,
     pub relative_path: String,
@@ -58,7 +58,7 @@ pub struct FrameReconcileEntry {
 }
 
 /// Result of a single reconcile pass over a root.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReconcileReport {
     pub entries: Vec<FrameReconcileEntry>,
 }

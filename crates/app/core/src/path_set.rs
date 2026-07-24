@@ -58,10 +58,7 @@ impl PlanPathSet {
     /// ancestor of, or a descendant of any prefix in the other (subtree-prefix
     /// granularity, research R7).
     #[must_use]
-    pub fn first_overlap<'a>(
-        &'a self,
-        other: &'a PlanPathSet,
-    ) -> Option<(&'a Utf8Path, &'a Utf8Path)> {
+    pub fn first_overlap<'a>(&'a self, other: &'a Self) -> Option<(&'a Utf8Path, &'a Utf8Path)> {
         for a in &self.prefixes {
             for b in &other.prefixes {
                 if a.starts_with(b) || b.starts_with(a) {
@@ -74,7 +71,7 @@ impl PlanPathSet {
 
     /// Whether the two sets overlap at subtree-prefix granularity.
     #[must_use]
-    pub fn overlaps(&self, other: &PlanPathSet) -> bool {
+    pub fn overlaps(&self, other: &Self) -> bool {
         self.first_overlap(other).is_some()
     }
 }

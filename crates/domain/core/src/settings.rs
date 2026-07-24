@@ -24,7 +24,7 @@ use crate::JsonAny;
 /// One token or separator in the project folder naming pattern.
 ///
 /// `kind` is `"token"` (resolves at materialization) or `"separator"` (literal).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PatternPart {
     /// Stable identifier for drag-reorder.
@@ -38,7 +38,7 @@ pub struct PatternPart {
 // ── ImageTypMapping (data-model.md absorbed keys §F) ─────────────────────
 
 /// User-extensible IMAGETYP normalization entry (spec 005 R-IMAGETYP-Norm).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageTypMapping {
     pub imagetyp_string: String,
@@ -369,7 +369,7 @@ fn default_pattern() -> Vec<PatternPart> {
 /// Per-source override of an overridable settings key (data-model.md §`SourceOverride`).
 ///
 /// Overridable keys: `followSymlinks`, `hashOnScan`, `defaultProtection`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceOverride {
     pub source_id: String,

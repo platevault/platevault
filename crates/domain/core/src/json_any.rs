@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use specta::datatype::{DataType, Reference};
 use specta::Type;
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(transparent)]
 pub struct JsonAny(pub serde_json::Value);
 
@@ -33,7 +33,7 @@ impl From<serde_json::Value> for JsonAny {
 }
 
 impl From<JsonAny> for serde_json::Value {
-    fn from(value: JsonAny) -> serde_json::Value {
+    fn from(value: JsonAny) -> Self {
         value.0
     }
 }

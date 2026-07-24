@@ -453,7 +453,7 @@ pub struct RevisionRef {
     pub revision_number: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ContractRange<T> {
     pub min: T,
@@ -534,7 +534,7 @@ pub enum PageBasis {
     Watermark { watermark: SafeText },
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Type, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Page<T> {
     pub items: BoundedList<T, MAX_PAGE_ITEMS>,
@@ -719,7 +719,7 @@ pub enum CommandExecutionState {
     Failed,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(
     tag = "state",
     content = "result",
@@ -1305,7 +1305,7 @@ pub struct AuditRecord {
     pub evidence_ref: Option<SafeText>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ContractEvent<T> {
     pub event_id: CanonicalId,

@@ -62,7 +62,7 @@ impl Rect {
 /// app version persisted a smaller size than the current `tauri.conf.json`
 /// `minWidth`/`minHeight` (1100x720) — mirrors the `astro-up` reference's own
 /// explicit post-restore clamp (research.md's cited `lib.rs` excerpt).
-pub(crate) fn enforce_min_window_size(window: &tauri::WebviewWindow) {
+pub fn enforce_min_window_size(window: &tauri::WebviewWindow) {
     if let Ok(size) = window.inner_size() {
         let (w, h) = clamp_to_min_size(size.width, size.height);
         if w != size.width || h != size.height {
@@ -79,7 +79,7 @@ pub(crate) fn enforce_min_window_size(window: &tauri::WebviewWindow) {
 /// position has no overlap with any currently-connected display (e.g. a
 /// second monitor the window was on has since been disconnected), recenter
 /// the window instead of leaving it stranded off-screen.
-pub(crate) fn recenter_if_offscreen(window: &tauri::WebviewWindow) {
+pub fn recenter_if_offscreen(window: &tauri::WebviewWindow) {
     let (Ok(pos), Ok(size), Ok(monitors)) =
         (window.outer_position(), window.outer_size(), window.available_monitors())
     else {

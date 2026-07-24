@@ -88,10 +88,10 @@ impl DataType {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            DataType::Intermediate => "intermediate",
-            DataType::Master => "master",
-            DataType::Final => "final",
-            DataType::Unclassified => "unclassified",
+            Self::Intermediate => "intermediate",
+            Self::Master => "master",
+            Self::Final => "final",
+            Self::Unclassified => "unclassified",
         }
     }
 
@@ -100,10 +100,10 @@ impl DataType {
     #[must_use]
     pub fn from_artifact_kind(kind: &str) -> Self {
         match kind {
-            "intermediate" => DataType::Intermediate,
-            "master" => DataType::Master,
-            "final" => DataType::Final,
-            _ => DataType::Unclassified,
+            "intermediate" => Self::Intermediate,
+            "master" => Self::Master,
+            "final" => Self::Final,
+            _ => Self::Unclassified,
         }
     }
 
@@ -111,10 +111,10 @@ impl DataType {
     #[must_use]
     pub fn from_policy_str(s: &str) -> Self {
         match s {
-            "intermediate" => DataType::Intermediate,
-            "master" => DataType::Master,
-            "final" => DataType::Final,
-            _ => DataType::Unclassified,
+            "intermediate" => Self::Intermediate,
+            "master" => Self::Master,
+            "final" => Self::Final,
+            _ => Self::Unclassified,
         }
     }
 
@@ -124,10 +124,10 @@ impl DataType {
     #[must_use]
     pub fn protection_category(self) -> &'static str {
         match self {
-            DataType::Intermediate => "intermediate",
-            DataType::Master => "masters",
-            DataType::Final => "finals",
-            DataType::Unclassified => "unclassified",
+            Self::Intermediate => "intermediate",
+            Self::Master => "masters",
+            Self::Final => "finals",
+            Self::Unclassified => "unclassified",
         }
     }
 }

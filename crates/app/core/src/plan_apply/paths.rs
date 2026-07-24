@@ -313,7 +313,7 @@ pub(super) fn item_row_to_executor_item(
 // root_id → absolute-path mapping the apply executor uses (T023a), so an
 // archive item's `archive_path` (stored root-relative when `from_root_id`
 // is set) can be turned into a real filesystem path.
-pub(crate) async fn resolve_root_path(pool: &SqlitePool, root_id: &str) -> Option<String> {
+pub async fn resolve_root_path(pool: &SqlitePool, root_id: &str) -> Option<String> {
     match inventory_repo::get_library_root_path(pool, root_id).await {
         Ok(Some(path)) => Some(path),
         _ => {

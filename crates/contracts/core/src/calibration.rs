@@ -34,11 +34,11 @@ impl CalibrationKind {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            CalibrationKind::Dark => "dark",
-            CalibrationKind::Flat => "flat",
-            CalibrationKind::Bias => "bias",
-            CalibrationKind::DarkFlat => "dark_flat",
-            CalibrationKind::BadPixelMap => "bad_pixel_map",
+            Self::Dark => "dark",
+            Self::Flat => "flat",
+            Self::Bias => "bias",
+            Self::DarkFlat => "dark_flat",
+            Self::BadPixelMap => "bad_pixel_map",
         }
     }
 }
@@ -66,11 +66,11 @@ impl FromStr for CalibrationKind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "dark" => Ok(CalibrationKind::Dark),
-            "flat" => Ok(CalibrationKind::Flat),
-            "bias" => Ok(CalibrationKind::Bias),
-            "dark_flat" | "flat_dark" => Ok(CalibrationKind::DarkFlat),
-            "bad_pixel_map" => Ok(CalibrationKind::BadPixelMap),
+            "dark" => Ok(Self::Dark),
+            "flat" => Ok(Self::Flat),
+            "bias" => Ok(Self::Bias),
+            "dark_flat" | "flat_dark" => Ok(Self::DarkFlat),
+            "bad_pixel_map" => Ok(Self::BadPixelMap),
             other => Err(ParseCalibrationKindError(other.to_owned())),
         }
     }

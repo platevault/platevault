@@ -8,4 +8,4 @@
 //! migration rather than rewriting the baseline.
 
 /// The append-only migration set consumed by [`crate::Database`].
-pub(crate) static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
+pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");

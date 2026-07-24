@@ -26,7 +26,7 @@ use specta::Type;
 /// Re-exported from `crates/contracts/core` so the Tauri command layer can
 /// reference it without importing `crates/patterns` directly. The shape matches
 /// [`patterns::PatternPart`] exactly.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PatternPartDto {
     /// Stable client-side identifier.
@@ -44,7 +44,7 @@ pub struct PatternPartDto {
 /// All fields are optional; absent keys cause fallback substitution. The
 /// `frame_type` field accepts the closed enum
 /// `["light","dark","flat","bias","dark_flat"]`.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct MetadataBundleDto {
     #[serde(skip_serializing_if = "Option::is_none")]

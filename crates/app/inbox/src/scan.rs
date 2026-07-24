@@ -50,10 +50,10 @@ impl FileFormat {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            FileFormat::Fits => "fits",
-            FileFormat::Xisf => "xisf",
-            FileFormat::Video => "video",
-            FileFormat::Mixed => "mixed",
+            Self::Fits => "fits",
+            Self::Xisf => "xisf",
+            Self::Video => "video",
+            Self::Mixed => "mixed",
         }
     }
 }
@@ -167,8 +167,8 @@ impl Lane {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            Lane::Fits => "fits",
-            Lane::Video => "video",
+            Self::Fits => "fits",
+            Self::Video => "video",
         }
     }
 }

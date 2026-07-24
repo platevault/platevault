@@ -81,7 +81,7 @@ pub struct OperationId(pub String);
 #[serde(transparent)]
 pub struct OperationName(pub String);
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestEnvelope<T> {
     pub contract_version: String,
@@ -97,7 +97,7 @@ impl<T> RequestEnvelope<T> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseEnvelope<T> {
     pub contract_version: String,
@@ -195,7 +195,7 @@ pub enum OperationStatus {
     Failed,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationEvent {
     pub contract_version: String,
@@ -257,7 +257,7 @@ pub enum OperationEventType {
     Custom,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, specta::Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ContractError {
     pub code: error_code::ErrorCode,

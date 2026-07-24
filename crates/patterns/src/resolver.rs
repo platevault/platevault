@@ -74,7 +74,7 @@ pub struct ResolveResult {
 // ── ResolveError ──────────────────────────────────────────────────────────
 
 /// Errors that prevent a successful resolution (data-model.md §Errors).
-#[derive(Clone, Debug, PartialEq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ResolveError {
     /// Pattern is empty (data-model.md `pattern.empty`).
     #[error("pattern is empty")]

@@ -11,9 +11,9 @@
 //! instead of declared as a `mod` of this one — see that file's header
 //! comment for why a real module boundary breaks it.
 
-pub(crate) mod background;
-pub(crate) mod menu;
-pub(crate) mod window;
+pub mod background;
+pub mod menu;
+pub mod window;
 
 /// Whether `build_app` registers the single-instance guard (spec 051 US1).
 ///
@@ -22,7 +22,7 @@ pub(crate) mod window;
 /// enable, mirroring `dev-tools` — see `Cargo.toml`), and `ALM_E2E_INSTANCE_ID`
 /// is set at runtime. The compile-time half is what keeps a shipped binary
 /// from being talked out of its guard by a stray environment variable.
-pub(crate) const fn single_instance_guard_enabled(e2e_instance_id_set: bool) -> bool {
+pub const fn single_instance_guard_enabled(e2e_instance_id_set: bool) -> bool {
     !(cfg!(feature = "e2e") && e2e_instance_id_set)
 }
 

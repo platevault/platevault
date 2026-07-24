@@ -15,7 +15,7 @@ use domain_core::ids::EntityId;
 /// Derive a stable UUIDv5 `entity_id` from `namespace` (a fixed per-call-site
 /// tag, e.g. `"protection.source"`) and `seed` (the real-world string id,
 /// e.g. a source id or attempted path).
-pub(crate) fn deterministic_entity_id(namespace: &str, seed: &str) -> EntityId {
+pub fn deterministic_entity_id(namespace: &str, seed: &str) -> EntityId {
     let ns = uuid::Uuid::new_v5(
         &uuid::Uuid::NAMESPACE_DNS,
         format!("astro-plan.audit.{namespace}").as_bytes(),

@@ -263,8 +263,7 @@ mod tests {
     fn siril_layout_has_five_folders() {
         let folders = required_folders(ProcessingTool::Siril);
         assert_eq!(folders.len(), 5);
-        let names: Vec<&str> = folders.iter().map(|f| f.0.as_str()).collect();
-        assert!(!names.contains(&"processing"));
+        assert!(!folders.iter().map(|f| f.0.as_str()).any(|n| n == "processing"));
     }
 
     #[test]

@@ -99,7 +99,7 @@ struct ToolLaunchRawRow {
 
 impl From<ToolLaunchRawRow> for ToolLaunchRow {
     fn from(r: ToolLaunchRawRow) -> Self {
-        ToolLaunchRow {
+        Self {
             id: r.id,
             project_id: r.project_id,
             tool_id: r.tool_id,

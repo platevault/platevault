@@ -136,7 +136,7 @@ impl SeverityFilter {
 /// outcomes. `from_state`/`to_state` stay lifecycle-transition-specific;
 /// non-lifecycle mutations carry their before→after value pair in `payload`
 /// instead (data-model.md "Audit Entry — Generalized Mutation Record").
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AuditLogEntry {
     pub audit_id: AuditId,

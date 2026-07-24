@@ -64,7 +64,7 @@ pub enum ProvenanceOrigin {
     Applied,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceHistoryEntry {
     pub origin: ProvenanceOrigin,
@@ -76,7 +76,7 @@ pub struct ProvenanceHistoryEntry {
     pub replaced_by: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceField {
     pub field_path: String,
@@ -110,7 +110,7 @@ pub enum ProvenanceErrorCode {
     ActorNotAuthorised,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceError {
     pub code: ProvenanceErrorCode,
@@ -119,7 +119,7 @@ pub struct ProvenanceError {
     pub details: Option<crate::JsonAny>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceReadRequest {
     pub contract_version: String,
@@ -163,7 +163,7 @@ pub enum ProvenanceResponseStatus {
     Error,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProvenanceReadResponse {
     pub status: ProvenanceResponseStatus,

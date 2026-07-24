@@ -42,18 +42,18 @@ impl Dimension {
     #[must_use]
     pub(super) const fn order(self) -> u8 {
         match self {
-            Dimension::Camera => 0,
-            Dimension::OpticTrain => 1,
-            Dimension::Filter => 2,
-            Dimension::Exposure => 3,
-            Dimension::Gain => 4,
-            Dimension::Offset => 5,
-            Dimension::SetTemp => 6,
-            Dimension::Binning => 7,
-            Dimension::Pointing => 8,
-            Dimension::Rotation => 9,
-            Dimension::Readout => 10,
-            Dimension::ObservingNight => 11,
+            Self::Camera => 0,
+            Self::OpticTrain => 1,
+            Self::Filter => 2,
+            Self::Exposure => 3,
+            Self::Gain => 4,
+            Self::Offset => 5,
+            Self::SetTemp => 6,
+            Self::Binning => 7,
+            Self::Pointing => 8,
+            Self::Rotation => 9,
+            Self::Readout => 10,
+            Self::ObservingNight => 11,
         }
     }
 
@@ -61,18 +61,18 @@ impl Dimension {
     #[must_use]
     pub(super) const fn key_name(self) -> &'static str {
         match self {
-            Dimension::Camera => "camera",
-            Dimension::OpticTrain => "optic_train",
-            Dimension::Filter => "filter",
-            Dimension::Exposure => "exposure",
-            Dimension::Gain => "gain",
-            Dimension::Offset => "offset",
-            Dimension::SetTemp => "set_temp",
-            Dimension::Binning => "binning",
-            Dimension::Pointing => "pointing",
-            Dimension::Rotation => "rotation",
-            Dimension::Readout => "readout",
-            Dimension::ObservingNight => "night",
+            Self::Camera => "camera",
+            Self::OpticTrain => "optic_train",
+            Self::Filter => "filter",
+            Self::Exposure => "exposure",
+            Self::Gain => "gain",
+            Self::Offset => "offset",
+            Self::SetTemp => "set_temp",
+            Self::Binning => "binning",
+            Self::Pointing => "pointing",
+            Self::Rotation => "rotation",
+            Self::Readout => "readout",
+            Self::ObservingNight => "night",
         }
     }
 }

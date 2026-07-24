@@ -83,7 +83,7 @@ pub async fn targets_get(id: String) -> Result<TargetDetail, ContractError> {
                     evidence_ref: None,
                 },
             )]),
-            target_ids: vec![id.clone()],
+            target_ids: vec![id],
             project_ids: vec![],
             warnings: vec![],
         }],

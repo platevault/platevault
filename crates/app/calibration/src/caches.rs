@@ -139,14 +139,14 @@ pub(crate) mod cache_test_lock {
     static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     /// Acquire the shared lock for an async (`#[tokio::test]`) caller.
-    pub(crate) async fn lock() -> tokio::sync::MutexGuard<'static, ()> {
+    pub async fn lock() -> tokio::sync::MutexGuard<'static, ()> {
         LOCK.lock().await
     }
 
     /// Acquire the shared lock for a sync (`#[test]`) caller. Blocks the
     /// current thread rather than `.await`ing — safe here because these call
     /// sites have no Tokio runtime, unlike [`lock`]'s async callers.
-    pub(crate) fn lock_sync() -> tokio::sync::MutexGuard<'static, ()> {
+    pub fn lock_sync() -> tokio::sync::MutexGuard<'static, ()> {
         LOCK.blocking_lock()
     }
 }

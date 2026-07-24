@@ -13,7 +13,7 @@ use super::shared::{
     PortableContractError, RevisionRef, Rfc3339Timestamp, SafeText, SupportedFrameKind,
 };
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(
     tag = "state",
     content = "value",
@@ -1119,7 +1119,7 @@ pub enum RelationCommand {
     TraversalCancel(TraversalCancelRequest),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(tag = "event", rename_all_fields = "camelCase")]
 pub enum RelationEvent {
     #[serde(rename = "session.materialized")]

@@ -14,6 +14,8 @@ use super::shared::{
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(untagged)]
+// Self cannot be used in recursive enum variant fields (E0401).
+#[allow(clippy::use_self)]
 pub enum MetadataValue {
     Boolean(bool),
     Integer(i64),
@@ -146,7 +148,7 @@ pub enum ResolutionDecision {
     Unresolved,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolutionChoice<T> {
     #[serde(skip_serializing_if = "Option::is_none")]

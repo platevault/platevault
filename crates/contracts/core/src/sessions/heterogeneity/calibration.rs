@@ -412,7 +412,7 @@ impl KeysetListOperation for CalibrationListOperation {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CandidateListRequest {
     pub requirement: CalibrationRequirement,
@@ -461,7 +461,7 @@ pub struct HandoffOperationQueryRequest {
     pub operation_id: CanonicalId,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type, JsonSchema)]
 #[serde(tag = "operation")]
 pub enum CalibrationQuery {
     #[serde(rename = "calibration.candidate.list")]

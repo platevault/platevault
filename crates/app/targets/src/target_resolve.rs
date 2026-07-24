@@ -28,6 +28,9 @@
 //!   cache queried via the injected [`Resolver`] is an explicitly reproducible
 //!   projection (§V), never canonical.
 
+// Guard held across assertions on borrowed data throughout this file.
+#![allow(clippy::significant_drop_tightening)]
+
 use sqlx::SqlitePool;
 use uuid::Uuid;
 

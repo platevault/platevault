@@ -43,7 +43,7 @@ use serde::{Deserialize, Serialize};
 /// Invariants (enforced by [`validate`]):
 /// - `kind = "token"` ⇒ `value` must be a registered token name.
 /// - `kind = "separator"` ⇒ `value` must be one of `/`, `-`, `_`, ` `.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PatternPart {
     /// Stable client-side identifier (not semantically interpreted by the resolver).

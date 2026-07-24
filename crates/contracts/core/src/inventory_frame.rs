@@ -152,7 +152,7 @@ pub enum ReconcileMode {
 }
 
 /// Per-root detection trigger configuration (spec 048 FR-014/FR-015/FR-017).
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 #[allow(clippy::struct_excessive_bools)] // four distinct orthogonal triggers per spec 048 data-model
 pub struct DetectionConfig {
@@ -170,7 +170,7 @@ impl Default for DetectionConfig {
 
 /// A root's full reconcile/detection configuration, with defaults filled in
 /// for any unset key (spec 048 data-model.md).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct RootInventoryConfig {
     pub reconcile_mode: ReconcileMode,

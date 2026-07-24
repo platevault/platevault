@@ -141,7 +141,7 @@ impl LogLevel {
 /// A projected log entry sent to the frontend.
 ///
 /// Stable shape; `contractVersion` is always `"2.0.0"` for this spec version (H1).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LogEntry {
     /// Stable prefixed id: `aud:<event_id>` for audit-sourced entries,
@@ -308,7 +308,7 @@ fn chrono_now_utc() -> String {
 // ── Stream request / event types ──────────────────────────────────────────────
 
 /// Request to open a log stream subscription.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LogStreamRequest {
     pub contract_version: String,
@@ -341,7 +341,7 @@ fn default_window_size() -> usize {
 }
 
 /// Streamed event pushed from the backend to the frontend.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LogStreamEvent {
     pub contract_version: String,
@@ -359,7 +359,7 @@ pub struct LogStreamEvent {
 // ── Recent entries query ───────────────────────────────────────────────────────
 
 /// Response from `log.recent` (pull rather than stream).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LogRecentResponse {
     pub contract_version: String,
@@ -373,7 +373,7 @@ pub struct LogRecentResponse {
 // ── Export request / response ─────────────────────────────────────────────────
 
 /// Request to export log entries to a file.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LogExportRequest {
     pub contract_version: String,
@@ -397,7 +397,7 @@ pub struct LogExportRequest {
 }
 
 /// Success response from `log.export`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LogExportResponse {
     /// Outcome discriminator. Always `"success"` when the Tauri command returns `Ok`.
