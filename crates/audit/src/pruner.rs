@@ -32,7 +32,7 @@ use sqlx::SqlitePool;
 pub const DEFAULT_RETENTION_DAYS: u32 = 90;
 
 /// Interval between scheduled prune passes.
-const PRUNE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+const PRUNE_INTERVAL: std::time::Duration = std::time::Duration::from_hours(24);
 
 /// Run one pruning pass: delete events older than `retention_days`.
 ///
@@ -112,16 +112,23 @@ fn cutoff_iso(retention_days: u32) -> String {
 /// Gregorian calendar, no external deps.
 fn days_to_ymd(days: u64) -> (u32, u32, u32) {
     // Algorithm from https://howardhinnant.github.io/date_algorithms.html
-    let z = days as i64 + 719_468;
+    // The casts here are bounded by calendar invariants (days < ~10^6 for any
+    // reasonable date, month 1-12, day 1-31), so truncation and sign loss
+    // cannot occur in practice.
+    #[allow(clippy::cast_possible_wrap)] // days < 2^62 for any calendar date
+    let z = days.cast_signed() + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097) as u64;
     let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe as i64 + era * 400;
+    #[allow(clippy::cast_possible_wrap)] // yoe < 400, well within i64
+    let y = yoe.cast_signed() + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
+    // y is a calendar year (1970..~2500 in practice), m is 1-12, d is 1-31.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     (y as u32, m as u32, d as u32)
 }
 

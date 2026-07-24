@@ -203,6 +203,7 @@ pub async fn min_event_id(pool: &SqlitePool) -> DbResult<Option<i64>> {
 ///
 /// # Errors
 /// Returns [`DbError::Database`] on query failure.
+#[allow(dead_code)] // retention pruner will call this; no production caller yet
 pub(crate) async fn count_events(pool: &SqlitePool) -> DbResult<i64> {
     let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events").fetch_one(pool).await?;
     Ok(count)
