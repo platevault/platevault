@@ -1126,6 +1126,10 @@ export function InboxPage() {
       return;
     }
     const response = await runPlanApply({ id: planId, approvalToken });
+    // GF-30: Clear the pre-flight busy guard once runPlanApply returns.
+    // applyProgress.running covers the in-flight window; progressPlanId is
+    // only needed for the approve→channel-open gap before running goes true.
+    setProgressPlanId(null);
     if (response) {
       addToast({
         message: m.inbox_plan_applied_toast(),
