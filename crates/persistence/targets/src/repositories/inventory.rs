@@ -200,18 +200,34 @@ pub async fn list_sessions_for_root(
     .fetch_all(pool)
     .await?;
 
-    let all: Vec<SessionProjectionRow> = acq_rows.into_iter().chain(cal_rows).collect();
+    // Detect and trim the sentinel per-type BEFORE combining.  Doing it after
+    // chain() is incorrect: if both types overflow, pop() removes only one
+    // sentinel and the other leaks into the payload; if only acq overflows,
+    // pop() removes the last real cal row and the acq sentinel leaks.
+    let limit_usize = filters.limit.unwrap_or(0) as usize;
+    let (acq_rows, acq_has_more) = if sentinel && acq_rows.len() > limit_usize {
+        let mut v = acq_rows;
+        v.pop();
+        (v, true)
+    } else {
+        (acq_rows, false)
+    };
+    let (cal_rows, cal_has_more) = if sentinel && cal_rows.len() > limit_usize {
+        let mut v = cal_rows;
+        v.pop();
+        (v, true)
+    } else {
+        (cal_rows, false)
+    };
+    let has_more = acq_has_more || cal_has_more;
 
     // Apply post-fetch frame_type filter — cannot be trivially done in a
     // single UNION query with dynamic placeholders.
-    let mut type_filtered: Vec<SessionProjectionRow> =
-        all.into_iter().filter(|row| frame_filter.is_none_or(|ff| row.frame_type == ff)).collect();
-
-    // Detect has_more from the sentinel row and trim it before returning.
-    let has_more = sentinel && type_filtered.len() > filters.limit.unwrap_or(0) as usize;
-    if has_more {
-        type_filtered.pop();
-    }
+    let type_filtered: Vec<SessionProjectionRow> = acq_rows
+        .into_iter()
+        .chain(cal_rows)
+        .filter(|row| frame_filter.is_none_or(|ff| row.frame_type == ff))
+        .collect();
 
     Ok((type_filtered, has_more))
 }
@@ -1019,5 +1035,125 @@ mod tests {
         .unwrap();
         assert!(past.is_empty());
         assert!(!hm);
+    }
+
+    /// Case A: both acquisition and calibration types overflow their limit.
+    /// The old single-pop was wrong here: it only removed one sentinel so
+    /// the other leaked into the payload.
+    #[tokio::test]
+    async fn list_sessions_has_more_both_types_overflow() {
+        let db = setup_db().await;
+
+        sqlx::query(
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-ab', 'Lib', 'local', '/lib', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        // 2 acquisition sessions
+        for i in 0..2u32 {
+            sqlx::query(
+                "INSERT INTO acquisition_session \
+                 (id, session_key, root_id, frame_ids, created_at) VALUES (?, 'k', 'root-ab', '[]', ?)",
+            )
+            .bind(format!("acq-ab-{i}"))
+            .bind(format!("2026-01-0{d}T00:00:00Z", d = i + 1))
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
+        // 2 calibration sessions
+        for i in 0..2u32 {
+            sqlx::query(
+                "INSERT INTO calibration_session \
+                 (id, session_key, root_id, frame_ids, kind, created_at) VALUES (?, 'k', 'root-ab', '[]', 'dark', ?)",
+            )
+            .bind(format!("cal-ab-{i}"))
+            .bind(format!("2026-01-0{d}T00:00:00Z", d = i + 1))
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
+
+        // limit=1: both types overflow → has_more, exactly 2 payload rows (1 acq + 1 cal),
+        // no sentinel in the payload.
+        let (rows, hm) = list_sessions_for_root(
+            db.pool(),
+            "root-ab",
+            &InventoryFilters { limit: Some(1), ..Default::default() },
+        )
+        .await
+        .unwrap();
+
+        assert!(hm, "both types have more rows beyond limit=1");
+        // ORDER BY created_at DESC → index-0 is newest (acq-ab-1, cal-ab-1).
+        // index-1 (acq-ab-0, cal-ab-0) is the sentinel row; it must be absent.
+        assert_eq!(rows.len(), 2, "expected 1 acq + 1 cal payload row, got {}", rows.len());
+        assert!(rows.iter().any(|r| r.id == "acq-ab-1"), "newest acq row must be in payload");
+        assert!(rows.iter().any(|r| r.id == "cal-ab-1"), "newest cal row must be in payload");
+        assert!(
+            rows.iter().all(|r| r.id != "acq-ab-0" && r.id != "cal-ab-0"),
+            "sentinel rows acq-ab-0/cal-ab-0 must not appear in payload: {:?}",
+            rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>()
+        );
+    }
+
+    /// Case B: only the acquisition type overflows; calibration fits exactly.
+    /// The old single-pop dropped the last real cal row and leaked the acq sentinel.
+    #[tokio::test]
+    async fn list_sessions_has_more_only_first_type_overflows() {
+        let db = setup_db().await;
+
+        sqlx::query(
+            "INSERT INTO library_root (id, label, kind, current_path, state, created_at) \
+             VALUES ('root-ob', 'Lib', 'local', '/lib', 'active', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        // 3 acquisition sessions (will overflow limit=2)
+        for i in 0..3u32 {
+            sqlx::query(
+                "INSERT INTO acquisition_session \
+                 (id, session_key, root_id, frame_ids, created_at) VALUES (?, 'k', 'root-ob', '[]', ?)",
+            )
+            .bind(format!("acq-ob-{i}"))
+            .bind(format!("2026-01-0{d}T00:00:00Z", d = i + 1))
+            .execute(db.pool())
+            .await
+            .unwrap();
+        }
+        // 1 calibration session (fits within limit=2 — no overflow)
+        sqlx::query(
+            "INSERT INTO calibration_session \
+             (id, session_key, root_id, frame_ids, kind, created_at) \
+             VALUES ('cal-ob-0', 'k', 'root-ob', '[]', 'dark', '2026-01-01T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        // limit=2: acq has 3 rows → overflows (has_more); cal has 1 → fits.
+        let (rows, hm) = list_sessions_for_root(
+            db.pool(),
+            "root-ob",
+            &InventoryFilters { limit: Some(2), ..Default::default() },
+        )
+        .await
+        .unwrap();
+
+        assert!(hm, "acquisition type overflows so has_more must be true");
+        // ORDER BY created_at DESC → acq-ob-2 is newest (payload), acq-ob-0 is oldest (sentinel).
+        // With limit=2: SQL fetches 3 rows; sentinel=acq-ob-0 is popped; payload=acq-ob-2,acq-ob-1.
+        assert_eq!(rows.len(), 3, "expected 2 acq + 1 cal payload rows, got {}", rows.len());
+        assert!(
+            rows.iter().all(|r| r.id != "acq-ob-0"),
+            "acq-ob-0 is the sentinel row and must not appear in payload"
+        );
+        assert!(
+            rows.iter().any(|r| r.id == "cal-ob-0"),
+            "real cal row must be present (old bug: pop() dropped it)"
+        );
     }
 }
