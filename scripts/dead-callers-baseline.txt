@@ -141,7 +141,6 @@ fetch_mosaic_revision_by_row_id
 fetch_panel_group_by_public_id
 fetch_panel_group_head
 fetch_panel_revision_by_public_id
-fetch_panel_revision_by_row_id
 fetch_proposal_by_public_id
 find_active_panel_group_for_session
 find_bridged_mosaic_components
@@ -174,7 +173,6 @@ retire_panel_group
 start_traversal
 supersede_proposal
 upsert_mosaic_revision
-validate_mosaic_connectivity
 
 # spec 062 node ic9h.17: calibration families, sessions, handoff, and evidence
 # entry points consumed by app-layer nodes ic9h.18 (UI) and future handoff
