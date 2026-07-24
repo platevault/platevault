@@ -79,7 +79,6 @@ import {
   useOpenInboxPlans,
 } from './store';
 
-
 // Re-export pure selection-handoff functions (tested via this path).
 export {
   pickReclassifyTarget,
@@ -90,7 +89,6 @@ export type {
   ReclassifyHandoffDecision,
   ClassifiedGroupSelection,
 } from './inboxSelectionModel';
-
 
 // #557: a shared, stable empty-array fallback. `listData?.items ?? []`
 // allocates a NEW array every render while the query is unresolved, which
@@ -455,7 +453,6 @@ export function InboxPage() {
     selectedRootPath,
   );
 
-
   // Group-scoped classification for scanned-but-unclassified folders
   // (spec 058 FR-017). Unlike the item-scoped hook above this does NOT fire on
   // selection — a source-group row is not selectable — so it is driven by an
@@ -570,7 +567,6 @@ export function InboxPage() {
     refreshAll,
   });
 
-
   const {
     handleApplyOne,
     handleApplyAll,
@@ -580,7 +576,6 @@ export function InboxPage() {
     progressPlanId,
     planBusy,
   } = useInboxPlanApplyFlow(refreshAll, viewResultAction);
-
 
   // Stage B: plan review overlay open/close state.
   const [planOverlayOpen, setPlanOverlayOpen] = useState(false);

@@ -37,8 +37,7 @@ export function useInboxPlanApplyFlow(
   const { applySelected, loading: applySelectedLoading } =
     useApplySelectedInboxPlans();
   const { cancel, loading: cancelLoading } = useInboxPlanCancel();
-  const { progress: applyProgress, run: runPlanApply } =
-    usePlanApplyProgress();
+  const { progress: applyProgress, run: runPlanApply } = usePlanApplyProgress();
   const [progressPlanId, setProgressPlanId] = useState<string | null>(null);
 
   const handleApplyOne = useCallback(

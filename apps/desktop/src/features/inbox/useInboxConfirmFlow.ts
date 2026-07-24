@@ -46,11 +46,14 @@ function asRootRequiredDetails(
 export interface ConfirmFlowDeps {
   selectedItem: InboxListItem | undefined;
   selectedRootPath: string;
-  classification: {
-    contentSignature: string;
-    type: string;
-    breakdown: Array<{ kind: string; count: number }>;
-  } | null | undefined;
+  classification:
+    | {
+        contentSignature: string;
+        type: string;
+        breakdown: Array<{ kind: string; count: number }>;
+      }
+    | null
+    | undefined;
   fileMetadataLoading: boolean;
   fileMetadataError: unknown;
   hasMissingRequiredMeta: boolean;
@@ -393,7 +396,13 @@ export function useInboxConfirmFlow(deps: ConfirmFlowDeps): ConfirmFlowResult {
         rootId,
       );
     },
-    [rootPickItemId, selectedItem, classification, selectedRootPath, runConfirm],
+    [
+      rootPickItemId,
+      selectedItem,
+      classification,
+      selectedRootPath,
+      runConfirm,
+    ],
   );
 
   const hasOpenPlan = selectedItem?.state === 'plan_open';
