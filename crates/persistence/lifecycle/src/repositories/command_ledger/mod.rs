@@ -527,83 +527,27 @@ impl CommandLedger {
             input.audit.outcome.unwrap_or_else(|| default_audit_outcome(input.state));
         let mut connection = self.pool.acquire().await?;
         begin_immediate(&mut connection).await?;
-        let Some(row) = load_command(&mut connection, &lease.fence.command_id).await? else {
-            return rollback_error(&mut connection, CommandLedgerError::NotFound).await;
-        };
-        if let Some(terminal) = row.terminal() {
-            sqlx::query("COMMIT").execute(&mut *connection).await?;
-            return Ok(terminal);
-        }
-        if row.lease_owner.as_deref() != Some(&lease.fence.lease_owner)
-            || row.lease_generation != lease.fence.lease_generation
-            || row.state != "executing"
-        {
-            return rollback_error(&mut connection, CommandLedgerError::StaleFence).await;
-        }
-        if row.lease_expires_at.as_deref().is_none_or(|expiry| expiry <= now) {
-            return rollback_error(&mut connection, CommandLedgerError::LeaseExpired).await;
-        }
 
-        if let Err(e) = finish::guard_no_prior_evidence(&mut connection, row.row_id).await {
-            return rollback_error(&mut connection, e).await;
-        }
-        if let Err(e) = finish::write_evidence_marker(
+        let result = finish_transaction(
             &mut connection,
-            &row,
-            audit_outcome,
-            response_json.as_deref(),
-            input.error_code.as_deref(),
-            input.outbox.len(),
-            &outbox_digest,
-            &lease.fence.lease_owner,
-            lease.fence.lease_generation,
-            now,
-        )
-        .await
-        {
-            return rollback_error(&mut connection, e).await;
-        }
-        if let Err(e) = finish::write_audit_and_outbox(
-            &mut connection,
-            &row,
+            lease,
             input,
             audit_outcome,
+            response_json.as_deref(),
             audit_payload,
             outbox_payloads,
+            &outbox_digest,
             now,
         )
-        .await
-        {
-            return rollback_error(&mut connection, e).await;
-        }
-        if let Err(e) =
-            finish::verify_written_counts(&mut connection, row.row_id, input.outbox.len()).await
-        {
-            return rollback_error(&mut connection, e).await;
-        }
-        if let Err(e) = finish::commit_terminal_state(
-            &mut connection,
-            row.row_id,
-            input.state,
-            response_json.as_deref(),
-            input.error_code.as_deref(),
-            &lease.fence.lease_owner,
-            lease.fence.lease_generation,
-            now,
-        )
-        .await
-        {
-            return rollback_error(&mut connection, e).await;
-        }
+        .await;
 
-        sqlx::query("COMMIT").execute(&mut *connection).await?;
-        Ok(CommandTerminal {
-            command_id: lease.fence.command_id.clone(),
-            state: input.state,
-            response_json,
-            error_code: input.error_code.clone(),
-            finished_at: now.to_owned(),
-        })
+        match result {
+            Ok(terminal) => {
+                sqlx::query("COMMIT").execute(&mut *connection).await?;
+                Ok(terminal)
+            }
+            Err(e) => rollback_error(&mut connection, e).await,
+        }
     }
 
     /// Poll unpublished events in deterministic `(occurred_at, row_id)` order.
@@ -779,6 +723,86 @@ async fn load_command(
     .bind(command_id)
     .fetch_optional(&mut **connection)
     .await?)
+}
+
+/// Execute all finish steps within the open transaction. Returns the terminal
+/// on success or an error that the caller should rollback.
+#[allow(clippy::too_many_arguments)]
+async fn finish_transaction(
+    connection: &mut sqlx::pool::PoolConnection<sqlx::Sqlite>,
+    lease: &CommandLease,
+    input: &TerminalInput,
+    audit_outcome: AuditOutcome,
+    response_json: Option<&str>,
+    audit_payload: Option<String>,
+    outbox_payloads: Vec<String>,
+    outbox_digest: &str,
+    now: &str,
+) -> Result<CommandTerminal> {
+    let Some(row) = load_command(connection, &lease.fence.command_id).await? else {
+        return Err(CommandLedgerError::NotFound);
+    };
+    if let Some(terminal) = row.terminal() {
+        return Ok(terminal);
+    }
+    validate_lease_preconditions(&row, lease, now)?;
+    finish::guard_no_prior_evidence(connection, row.row_id).await?;
+    finish::write_evidence_marker(
+        connection,
+        &row,
+        audit_outcome,
+        response_json,
+        input.error_code.as_deref(),
+        input.outbox.len(),
+        outbox_digest,
+        &lease.fence.lease_owner,
+        lease.fence.lease_generation,
+        now,
+    )
+    .await?;
+    finish::write_audit_and_outbox(
+        connection,
+        &row,
+        input,
+        audit_outcome,
+        audit_payload,
+        outbox_payloads,
+        now,
+    )
+    .await?;
+    finish::verify_written_counts(connection, row.row_id, input.outbox.len()).await?;
+    finish::commit_terminal_state(
+        connection,
+        row.row_id,
+        input.state,
+        response_json,
+        input.error_code.as_deref(),
+        &lease.fence.lease_owner,
+        lease.fence.lease_generation,
+        now,
+    )
+    .await?;
+    Ok(CommandTerminal {
+        command_id: lease.fence.command_id.clone(),
+        state: input.state,
+        response_json: response_json.map(str::to_owned),
+        error_code: input.error_code.clone(),
+        finished_at: now.to_owned(),
+    })
+}
+
+/// Validate that the loaded row matches the presented lease.
+fn validate_lease_preconditions(row: &CommandRow, lease: &CommandLease, now: &str) -> Result<()> {
+    if row.lease_owner.as_deref() != Some(&lease.fence.lease_owner)
+        || row.lease_generation != lease.fence.lease_generation
+        || row.state != "executing"
+    {
+        return Err(CommandLedgerError::StaleFence);
+    }
+    if row.lease_expires_at.as_deref().is_none_or(|expiry| expiry <= now) {
+        return Err(CommandLedgerError::LeaseExpired);
+    }
+    Ok(())
 }
 
 async fn recover_expired_row(

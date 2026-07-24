@@ -63,46 +63,27 @@ pub async fn generate_source_view(
     pool: &SqlitePool,
     req: &SourceViewGenerateRequest,
 ) -> Result<SourceViewGenerateResponse, ContractError> {
-    // 1. Project + lifecycle gate (shared with spec 026 remove/regenerate).
+    // 1. Project + lifecycle gate.
     let project =
         projects_repo::get_project(pool, &req.project_id).await.map_err(project_db_err)?;
     check_project_lifecycle(pool, &req.project_id).await?;
 
-    // 2. Resolve project-linked sessions (session-level selection, CL-9 MVP fallback).
+    // 2. Resolve project-linked sessions.
     let sources = projects_repo::list_project_sources(pool, &req.project_id)
         .await
         .map_err(|e| db_internal_ctx(e, "list project sources"))?;
 
-    // Profile-driven layout (spec 049 US2 T025/T026).
+    // 3. Profile-driven layout + destination resolution.
     let layout = workflow_profiles::seed::resolve_source_view_layout(
         req.profile_id.as_deref().or(Some(project.tool.as_str())),
     );
-
-    // T041 precedence: per-generation `destinationOverride` (request) >
-    // per-project persisted override (settings KV) > envelope default.
     let plan_id = new_id();
-    let project_destination_override = if req.destination_override.is_some() {
-        None // per-generation override already wins; skip the DB read.
-    } else {
-        get_destination_override(pool, &req.project_id).await?
-    };
-    let destination_root: Utf8PathBuf = req
-        .destination_override
-        .as_deref()
-        .or(project_destination_override.as_deref())
-        .map_or_else(
-            || {
-                let root = Utf8PathBuf::from(&project.path);
-                join_portable(&join_portable(&root, "source-views"), &plan_id)
-            },
-            Utf8PathBuf::from,
-        );
+    let destination_root = resolve_destination_root(pool, req, &project.path, &plan_id).await?;
 
-    // 3. Plan source frames and calibration.
+    // 4. Plan source frames and calibration.
     let SourcePlanResult { planned, mut warnings } =
         plan_source_frames(pool, &sources, &layout, req.strict).await?;
 
-    // 4. No selection at all → refuse (nothing to generate).
     if planned.is_empty() {
         return Err(ContractError::new(
             ErrorCode::NoSelection,
@@ -112,32 +93,41 @@ pub async fn generate_source_view(
         ));
     }
 
-    // 5. Collision guard (FR-009a/FR-017).
+    // 5. Guards and warnings.
     guard_collisions(&planned)?;
-
-    // 6. Destination-exists guard (FR-016).
     guard_destinations_exist(&planned, &destination_root)?;
+    warnings.extend(check_long_paths(&planned, &destination_root));
 
-    // 7. Windows long-path warning (T042/FR-018).
-    if let Some(warning) = check_long_paths(&planned, &destination_root) {
-        warnings.push(warning);
-    }
-
-    // 8. Resolve link kind per item (FR-004/FR-022).
+    // 6. Resolve link kinds.
     let (resolved_kinds, drift_warning) =
         resolve_link_kinds(pool, &planned, &destination_root, &project.path, req.copy_opt_in)
             .await?;
-    if let Some(warning) = drift_warning {
-        warnings.push(warning);
-    }
+    warnings.extend(drift_warning);
 
     let used_copy_fallback = resolved_kinds.values().any(|kind| *kind == Materialization::Copy);
 
-    // 9. Persist the plan.
+    // 7. Persist the plan.
     persist_plan(pool, &plan_id, &req.project_id, &planned, &resolved_kinds, &destination_root)
         .await?;
 
     Ok(SourceViewGenerateResponse { plan_id, warnings, used_copy_fallback })
+}
+
+/// T041 precedence: per-generation override > per-project persisted override > default.
+async fn resolve_destination_root(
+    pool: &SqlitePool,
+    req: &SourceViewGenerateRequest,
+    project_path: &str,
+    plan_id: &str,
+) -> Result<Utf8PathBuf, ContractError> {
+    if let Some(dest) = req.destination_override.as_deref() {
+        return Ok(Utf8PathBuf::from(dest));
+    }
+    if let Some(dest) = get_destination_override(pool, &req.project_id).await? {
+        return Ok(Utf8PathBuf::from(dest));
+    }
+    let root = Utf8PathBuf::from(project_path);
+    Ok(join_portable(&join_portable(&root, "source-views"), plan_id))
 }
 
 // ── Phase: source frame planning ──────────────────────────────────────────────
