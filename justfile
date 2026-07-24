@@ -186,3 +186,9 @@ test-e2e:
 # pasting before/after numbers into PR descriptions.
 perf-bench:
     cargo run --release -p perf-bench
+
+# Check inbox hot-path query counts against the committed baseline.
+# HARD-fails on any sqlx_stmts increase; WARN-only on wall_ms > 1.5× budget.
+# Use --generate to record a fresh baseline after a justified query-count change.
+perf-check:
+    bash scripts/check-perf-baseline.sh

@@ -653,6 +653,51 @@ jobs:
           # history; the action manages the cache key automatically.
           manifest-path: Cargo.toml
 
+  # Perf regression gate (GF-6/C-9): checks that sqlx_stmts counts for the
+  # inbox hot-path scenarios (scan_root, classify_source_groups) did not
+  # increase relative to scripts/perf-baseline.json.
+  #
+  # Gating logic: ci-affected-crates.sh maps changed files to crate names.
+  # The gate runs only when the output contains app_core_inbox, persistence_inbox,
+  # or fs_inventory — the crates that implement the measured hot paths.  Any
+  # change to Cargo.lock or Cargo.toml triggers the full workspace, which also
+  # captures these crates, so the grep catches that path too.  Skipped when
+  # none of those crates are affected (docs-only, frontend-only, etc.).
+  #
+  # Linux-only: the sqlx_stmts counter is deterministic so the result is
+  # OS-agnostic; running on one platform avoids redundant compilation on all 3.
+  perf-gate:
+    name: Perf baseline (inbox hot paths)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Scope gate: only run when a change touches the measured crates.
+      # CHANGED_FILES uses the same CSV-then-newline pattern as the Rust tests step.
+      - name: Check affected crates
+        id: affected
+        env:
+          CHANGED_FILES: ${{ needs.changes.outputs.all_files }}
+        run: |
+          args=$(printf '%s' "$CHANGED_FILES" | tr ',' '\n' | bash scripts/ci-affected-crates.sh)
+          if printf '%s' "$args" | grep -qE 'app_core_inbox|persistence_inbox|fs_inventory'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Affected crates include inbox/fs_inventory — running perf gate."
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No inbox or fs_inventory crates affected — perf gate skipped."
+          fi
+
+      - name: Perf baseline ratchet
+        if: steps.affected.outputs.run == 'true'
+        env:
+          PERF_N: "500"
+        run: bash scripts/check-perf-baseline.sh
+
   # Mock-mode UI regression: fast Playwright run (Vite + chromium, mocks on, no
   # backend/Tauri build). The real UI->IPC->backend journeys run in the dedicated
   # WebdriverIO + tauri-driver workflow (e2e.yml). Not gated on `integration` so
