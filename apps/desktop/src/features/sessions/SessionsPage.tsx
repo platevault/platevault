@@ -55,6 +55,8 @@ import { isSourceActionable } from './connectivity';
 import { RelationProposalList } from './RelationProposalList';
 import { RelationProposalDetail } from './RelationProposalDetail';
 import { ManualRelationDialog } from './ManualRelationDialog';
+import { PanelGroupView } from './PanelGroupView';
+import { MatchingSettingsPanel } from './MatchingSettingsPanel';
 import { Btn } from '@/ui';
 import type { InventoryFrameType, InventorySource } from '@/bindings/index';
 
@@ -130,8 +132,11 @@ export function SessionsPage() {
     defaultDims: [],
   });
 
-  // Spec 062: proposal list/detail side panel.
+  // Spec 062: proposal list/detail and panel group/mosaic side panels.
   const [selectedProposalId, setSelectedProposalId] = useState<
+    string | undefined
+  >(undefined);
+  const [selectedPanelGroupId, setSelectedPanelGroupId] = useState<
     string | undefined
   >(undefined);
   const [showManualRelationDialog, setShowManualRelationDialog] =
@@ -303,15 +308,22 @@ export function SessionsPage() {
     />
   );
 
-  // Spec 062: proposal list detail panel — shown when a proposal is selected
-  // (replaces the session detail in the right panel when focused).
+  // Spec 062: priority order for the detail pane:
+  //   1. panel group / mosaic view (triggered from SessionGroupBadge)
+  //   2. proposal detail (triggered from RelationProposalList)
+  //   3. session detail (default)
+  const panelGroupDetail =
+    selectedPanelGroupId != null ? (
+      <PanelGroupView panelGroupId={selectedPanelGroupId} />
+    ) : undefined;
+
   const proposalDetail =
     selectedProposalId != null ? (
       <RelationProposalDetail proposalId={selectedProposalId} />
     ) : undefined;
 
-  // The active detail is the session detail (default) or the proposal detail.
   const activeDetail =
+    panelGroupDetail ??
     proposalDetail ??
     (selectedSession != null ? (
       <SessionDetail
@@ -322,26 +334,37 @@ export function SessionsPage() {
         onOpenProject={(id) =>
           navigate({ to: '/projects', search: { selected: id } })
         }
+        onOpenGroup={(id) => {
+          setSelectedPanelGroupId(id);
+          setSelectedProposalId(undefined);
+        }}
       />
     ) : undefined);
+
+  const handleCloseDetail = (() => {
+    if (selectedPanelGroupId != null)
+      return () => setSelectedPanelGroupId(undefined);
+    if (selectedProposalId != null)
+      return () => setSelectedProposalId(undefined);
+    if (selectedSession != null) return clearSelection;
+    return undefined;
+  })();
+
+  const detailAriaLabel = (() => {
+    if (selectedPanelGroupId != null)
+      return m.cmp_listpage_close_proposal_details_aria();
+    if (selectedProposalId != null)
+      return m.cmp_listpage_close_proposal_details_aria();
+    return m.cmp_listpage_close_session_details_aria();
+  })();
 
   return (
     <ListPageLayout
       topBar={topBar}
       dockId="sessions"
       detail={activeDetail}
-      onCloseDetail={
-        selectedProposalId != null
-          ? () => setSelectedProposalId(undefined)
-          : selectedSession != null
-            ? clearSelection
-            : undefined
-      }
-      detailLabel={
-        selectedProposalId != null
-          ? m.cmp_listpage_close_proposal_details_aria()
-          : m.cmp_listpage_close_session_details_aria()
-      }
+      onCloseDetail={handleCloseDetail}
+      detailLabel={detailAriaLabel}
     >
       {error != null ? (
         <div className="pv-listtable__empty">{m.sessions_load_error()}</div>
@@ -351,6 +374,7 @@ export function SessionsPage() {
           selected={selected ?? null}
           onSelect={(id) => {
             setSelectedProposalId(undefined);
+            setSelectedPanelGroupId(undefined);
             void onSelect(id);
           }}
           loading={loading}
@@ -393,6 +417,13 @@ export function SessionsPage() {
         onClose={() => setShowManualRelationDialog(false)}
         defaultSubjectIds={selected != null ? [selected] : undefined}
       />
+
+      {/* Spec 062: matching geometry and calibration settings.
+          TODO(ic9h.20): move this pane into SettingsPage as a new 'matching'
+          pane alongside 'cal' once the Tauri commands are wired — the seam is
+          SettingsPage.renderPane() in src/features/settings/SettingsPage.tsx.
+          Kept here so the surface is reachable and reviewable before .20. */}
+      <MatchingSettingsPanel />
     </ListPageLayout>
   );
 }

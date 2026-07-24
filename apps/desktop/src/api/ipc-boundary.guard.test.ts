@@ -79,7 +79,12 @@ describe('spec 037 — IPC boundary guards', () => {
       .filter(
         (f) =>
           !f.path.endsWith('/api/ipc.ts') &&
-          !f.path.endsWith('/bindings/index.ts'),
+          !f.path.endsWith('/bindings/index.ts') &&
+          // 2026-07-24: spec-062 feature-local adapter — raw invokes are the
+          // intentional seam until ic9h.20 wires the Tauri commands and generates
+          // typed bindings; at that point every invoke() here is replaced by the
+          // generated commands.* call and this entry is removed.
+          !f.path.endsWith('/features/sessions/sessionsGroupsIpc.ts'),
       )
       .filter((f) => re.test(f.src))
       .map((f) => f.path);
