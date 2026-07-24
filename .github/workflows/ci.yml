@@ -282,15 +282,15 @@ jobs:
         with:
           shared-key: "rust-${{ matrix.os }}-v2"
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
         with:
-          version: 10.33.0
+          version: 11.17.0
 
       - uses: actions/setup-node@v4
         if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.frontend == 'true'
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       # `just` drives the DB-boundary ratchet and the generated-drift gate, both
@@ -712,12 +712,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
-          version: 10.33.0
+          version: 11.17.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - name: Install JS deps
         run: pnpm install --frozen-lockfile
