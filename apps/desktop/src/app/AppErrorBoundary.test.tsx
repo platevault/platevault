@@ -19,6 +19,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // See src/test/userEvent.ts for the project setup helper.
 import { setupUser } from '../test/userEvent';
 import { AppErrorBoundary } from './AppErrorBoundary';
+import { logError } from '@/lib/diagnosticLog';
+
+vi.mock('@/lib/diagnosticLog', () => ({
+  logError: vi.fn(),
+}));
 
 // Suppress console.error for expected errors in these tests.
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -127,6 +132,15 @@ describe('AppErrorBoundary', () => {
     expect(
       screen.queryByTestId('app-error-boundary-fallback'),
     ).not.toBeInTheDocument();
+  });
+
+  it('6. forwards render errors to the diagnostics log', () => {
+    render(
+      <AppErrorBoundary>
+        <ThrowingChild message="log-me" />
+      </AppErrorBoundary>,
+    );
+    expect(logError).toHaveBeenCalledWith(expect.stringContaining('log-me'));
   });
 
   it('5. non-throwing children render normally', () => {
