@@ -11,8 +11,6 @@ dependencies:
   - srobroek/agentic-packages/packages/release-please#main
   - srobroek/agentic-packages/packages/speckit#main
   - srobroek/agentic-packages/packages/steering-speckit#main
-  # Serena is intentionally global-only. Keep language quality/steering and
-  # specialists without installing standalone LSP MCP packages.
   - srobroek/agentic-packages/packages/rust-quality#main
   - srobroek/agentic-packages/packages/language-steering-rust#main
   - wshobson/agents/plugins/systems-programming
@@ -34,10 +32,12 @@ dependencies:
   - srobroek/agentic-packages/packages/mcp-tauri#main
   - wshobson/agents/plugins/database-design
   - srobroek/agentic-packages/packages/user-journeys#main
+  mcp:
+  - gitnexus
 includes: auto
 targets:
-  - claude
-  - codex
+- claude
+- codex
 scripts:
   install-agentic-tools: apm install --target claude,codex --update
   compile-agentic-tools: apm compile --target codex --no-constitution && apm compile
