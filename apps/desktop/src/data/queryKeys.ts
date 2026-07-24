@@ -29,6 +29,22 @@ export const queryKeys = {
     all: () => ['sessions'] as const,
     calendar: (start: string, end: string) =>
       ['sessions', 'calendar', start, end] as const,
+    // spec 062
+    panelGroup: (id: string) => ['sessions', 'panelGroup', id] as const,
+    panelGroupList: (filters?: object) =>
+      filters
+        ? (['sessions', 'panelGroups', filters] as const)
+        : (['sessions', 'panelGroups'] as const),
+    mosaic: (id: string) => ['sessions', 'mosaic', id] as const,
+    proposals: (filters?: object) =>
+      filters
+        ? (['sessions', 'proposals', filters] as const)
+        : (['sessions', 'proposals'] as const),
+    proposal: (id: string) => ['sessions', 'proposal', id] as const,
+    matchingSettings: (revision?: number) =>
+      revision != null
+        ? (['sessions', 'matchingSettings', revision] as const)
+        : (['sessions', 'matchingSettings'] as const),
   },
   inbox: {
     list: (rootId: string) => ['inbox', rootId] as const,

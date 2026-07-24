@@ -52,6 +52,10 @@ import { addToast } from '@/shared/toast';
 import { m } from '@/lib/i18n';
 import { revealInventoryPath, resolveRevealPath } from './revealInventory';
 import { isSourceActionable } from './connectivity';
+import { RelationProposalList } from './RelationProposalList';
+import { RelationProposalDetail } from './RelationProposalDetail';
+import { ManualRelationDialog } from './ManualRelationDialog';
+import { Btn } from '@/ui';
 import type { InventoryFrameType, InventorySource } from '@/bindings/index';
 
 /**
@@ -125,6 +129,13 @@ export function SessionsPage() {
     validIds: ['target', 'filter', 'night', 'camera', 'month'],
     defaultDims: [],
   });
+
+  // Spec 062: proposal list/detail side panel.
+  const [selectedProposalId, setSelectedProposalId] = useState<
+    string | undefined
+  >(undefined);
+  const [showManualRelationDialog, setShowManualRelationDialog] =
+    useState(false);
 
   // Group-by options share their labels with the table's grouping-hint footer.
   const SESSION_DIMENSIONS: FilterOption[] = Object.entries(
@@ -292,25 +303,45 @@ export function SessionsPage() {
     />
   );
 
+  // Spec 062: proposal list detail panel — shown when a proposal is selected
+  // (replaces the session detail in the right panel when focused).
+  const proposalDetail =
+    selectedProposalId != null ? (
+      <RelationProposalDetail proposalId={selectedProposalId} />
+    ) : undefined;
+
+  // The active detail is the session detail (default) or the proposal detail.
+  const activeDetail =
+    proposalDetail ??
+    (selectedSession != null ? (
+      <SessionDetail
+        session={selectedSession}
+        onReveal={() => void handleReveal()}
+        revealVisible={revealVisible}
+        sourceState={selectedSource?.state}
+        onOpenProject={(id) =>
+          navigate({ to: '/projects', search: { selected: id } })
+        }
+      />
+    ) : undefined);
+
   return (
     <ListPageLayout
       topBar={topBar}
       dockId="sessions"
-      detail={
-        selectedSession != null ? (
-          <SessionDetail
-            session={selectedSession}
-            onReveal={() => void handleReveal()}
-            revealVisible={revealVisible}
-            sourceState={selectedSource?.state}
-            onOpenProject={(id) =>
-              navigate({ to: '/projects', search: { selected: id } })
-            }
-          />
-        ) : undefined
+      detail={activeDetail}
+      onCloseDetail={
+        selectedProposalId != null
+          ? () => setSelectedProposalId(undefined)
+          : selectedSession != null
+            ? clearSelection
+            : undefined
       }
-      onCloseDetail={selectedSession != null ? clearSelection : undefined}
-      detailLabel={m.cmp_listpage_close_session_details_aria()}
+      detailLabel={
+        selectedProposalId != null
+          ? m.cmp_listpage_close_proposal_details_aria()
+          : m.cmp_listpage_close_session_details_aria()
+      }
     >
       {error != null ? (
         <div className="pv-listtable__empty">{m.sessions_load_error()}</div>
@@ -318,13 +349,50 @@ export function SessionsPage() {
         <SessionsTable
           sources={sources}
           selected={selected ?? null}
-          onSelect={onSelect}
+          onSelect={(id) => {
+            setSelectedProposalId(undefined);
+            void onSelect(id);
+          }}
           loading={loading}
           sort={sort}
           onSort={handleSort}
           dims={dims}
         />
       )}
+
+      {/* Spec 062: relation proposal list — shown beneath the session table
+          when no session is selected in the detail pane, or always visible
+          as a secondary disclosure zone. Keyboard-operable; selecting a
+          proposal opens RelationProposalDetail in the right panel. */}
+      <RelationProposalList
+        selectedId={selectedProposalId}
+        onSelect={(id) => {
+          setSelectedProposalId(id);
+          // Clear session selection so the detail panel shows the proposal.
+          void navigate({
+            search: (prev) => ({ ...prev, selected: undefined }),
+            replace: true,
+          });
+        }}
+        headerAction={
+          <Btn
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowManualRelationDialog(true)}
+            aria-label={m.manual_relation_open_btn_aria()}
+            data-testid="open-manual-relation-btn"
+          >
+            {m.manual_relation_open_btn()}
+          </Btn>
+        }
+      />
+
+      {/* Spec 062: manual relation creation dialog. */}
+      <ManualRelationDialog
+        open={showManualRelationDialog}
+        onClose={() => setShowManualRelationDialog(false)}
+        defaultSubjectIds={selected != null ? [selected] : undefined}
+      />
     </ListPageLayout>
   );
 }
