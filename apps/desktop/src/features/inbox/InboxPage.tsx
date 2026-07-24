@@ -575,6 +575,28 @@ export function InboxPage() {
     selectedRootPath,
   );
 
+  // GFD-1: prefetch attribution candidates alongside classify so handleConfirm
+  // can read them from cache synchronously instead of awaiting a round-trip on
+  // the hot Confirm path. The design-comment calling this "optional enrichment"
+  // is still correct as a FALLBACK policy (failure falls through), but the
+  // awaited round-trip inside handleConfirm adds perceivable latency on every
+  // confirm click. Prefetching on selection amortises it to zero.
+  //
+  // Only prefetches for classified light items (the only items where attribution
+  // candidates are meaningful); does not block confirm — the hot path still
+  // falls back to an awaited call if the prefetch hasn't landed yet.
+  const selectedItemIdForPrefetch = selectedItem?.inboxItemId ?? null;
+  useEffect(() => {
+    if (!selectedItemIdForPrefetch) return;
+    void queryClient.prefetchQuery({
+      queryKey: queryKeys.inbox.attributionSuggest(selectedItemIdForPrefetch),
+      queryFn: async () =>
+        unwrap(
+          await commands.inboxAttributionSuggest(selectedItemIdForPrefetch),
+        ),
+    });
+  }, [selectedItemIdForPrefetch, queryClient]);
+
   // Group-scoped classification for scanned-but-unclassified folders
   // (spec 058 FR-017). Unlike the item-scoped hook above this does NOT fire on
   // selection — a source-group row is not selectable — so it is driven by an
@@ -861,11 +883,22 @@ export function InboxPage() {
       // an optional enrichment, so fall through to an unattributed confirm —
       // but the failure is logged (not just swallowed), so a suggest-side
       // regression stays diagnosable instead of looking like "no candidates".
+      //
+      // GFD-1: read from the prefetch cache first to avoid a blocking round-trip
+      // on the hot Confirm path. Falls back to an awaited call if the prefetch
+      // hasn't landed yet (e.g. the user clicks Confirm before classify settles).
       let candidates: IngestionAttributionCandidateDto[] = [];
       try {
-        candidates = unwrap(
-          await commands.inboxAttributionSuggest(selectedItem.inboxItemId),
-        );
+        const cached = queryClient.getQueryData<
+          IngestionAttributionCandidateDto[]
+        >(queryKeys.inbox.attributionSuggest(selectedItem.inboxItemId));
+        if (cached !== undefined) {
+          candidates = cached;
+        } else {
+          candidates = unwrap(
+            await commands.inboxAttributionSuggest(selectedItem.inboxItemId),
+          );
+        }
       } catch (err) {
         console.error(
           `inbox.attribution.suggest failed for item ${selectedItem.inboxItemId}; confirming without an attribution pick`,

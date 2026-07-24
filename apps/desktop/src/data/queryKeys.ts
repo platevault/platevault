@@ -35,6 +35,8 @@ export const queryKeys = {
     metadata: (itemId: string) => ['inbox', 'metadata', itemId] as const,
     coneSearch: (framesetId: string) =>
       ['inbox', 'coneSearch', framesetId] as const,
+    attributionSuggest: (itemId: string) =>
+      ['inbox', 'attributionSuggest', itemId] as const,
   },
   calibration: {
     masters: () => ['calibration', 'masters'] as const,

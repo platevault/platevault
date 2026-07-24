@@ -71,34 +71,45 @@ export function useFavourites(): UseFavouritesResult {
         new Set<string>();
       const wasFavourited = current.has(targetId);
 
-      // Optimistic update.
-      const next = new Set(current);
-      if (wasFavourited) {
-        next.delete(targetId);
-      } else {
-        next.add(targetId);
-      }
-      queryClient.setQueryData(FAVOURITES_KEY, next);
+      // Cancel any in-flight refetch before writing; an in-flight response that
+      // lands after setQueryData would clobber the optimistic set with stale data.
+      void queryClient.cancelQueries({ queryKey: FAVOURITES_KEY }).then(() => {
+        // Optimistic update after in-flight queries are cancelled.
+        const next = new Set(
+          queryClient.getQueryData<Set<string>>(FAVOURITES_KEY) ?? current,
+        );
+        if (wasFavourited) {
+          next.delete(targetId);
+        } else {
+          next.add(targetId);
+        }
+        queryClient.setQueryData(FAVOURITES_KEY, next);
 
-      const call = wasFavourited
-        ? commands.targetFavouritesRemove({ targetId })
-        : commands.targetFavouritesAdd({ targetId });
+        const call = wasFavourited
+          ? commands.targetFavouritesRemove({ targetId })
+          : commands.targetFavouritesAdd({ targetId });
 
-      Promise.resolve(call)
-        .then(unwrap)
-        .catch(() => {
-          // Revert the optimistic change on failure.
-          const reverted = new Set(
-            queryClient.getQueryData<Set<string>>(FAVOURITES_KEY) ??
-              new Set<string>(),
-          );
-          if (wasFavourited) {
-            reverted.add(targetId);
-          } else {
-            reverted.delete(targetId);
-          }
-          queryClient.setQueryData(FAVOURITES_KEY, reverted);
-        });
+        Promise.resolve(call)
+          .then(unwrap)
+          .catch(() => {
+            // Revert the optimistic change on failure.
+            const reverted = new Set(
+              queryClient.getQueryData<Set<string>>(FAVOURITES_KEY) ??
+                new Set<string>(),
+            );
+            if (wasFavourited) {
+              reverted.add(targetId);
+            } else {
+              reverted.delete(targetId);
+            }
+            queryClient.setQueryData(FAVOURITES_KEY, reverted);
+          })
+          .finally(() => {
+            // Reconcile with the backend regardless of success or failure;
+            // ensures the cache reflects the authoritative DB state after settle.
+            void queryClient.invalidateQueries({ queryKey: FAVOURITES_KEY });
+          });
+      });
     },
     [queryClient],
   );

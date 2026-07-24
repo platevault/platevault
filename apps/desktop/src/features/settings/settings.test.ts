@@ -134,6 +134,54 @@ describe('useAutoSave', () => {
 
     expect(mockUpdateSettings).toHaveBeenCalledWith('cleanup', values);
   });
+
+  it('DS-7: flushes ALL pending scopes when two different scopes are queued within 300ms', async () => {
+    const { result } = renderHook(() => useAutoSave());
+
+    act(() => {
+      result.current.save('advanced', { logLevel: 'debug' });
+      // Second call within the window targets a DIFFERENT scope.
+      result.current.save('cleanup', { blockPermanentDelete: true });
+    });
+
+    // Neither scope should fire yet.
+    expect(mockUpdateSettings).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Both scopes must be flushed.
+    expect(mockUpdateSettings).toHaveBeenCalledTimes(2);
+    expect(mockUpdateSettings).toHaveBeenCalledWith('advanced', {
+      logLevel: 'debug',
+    });
+    expect(mockUpdateSettings).toHaveBeenCalledWith('cleanup', {
+      blockPermanentDelete: true,
+    });
+  });
+
+  it('DS-7: unmount flushes pending writes without waiting for the debounce', async () => {
+    const { result, unmount } = renderHook(() => useAutoSave());
+
+    act(() => {
+      result.current.save('advanced', { logLevel: 'warn' });
+    });
+
+    // Does NOT advance timers — unmount should flush immediately.
+    await act(async () => {
+      unmount();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockUpdateSettings).toHaveBeenCalledTimes(1);
+    expect(mockUpdateSettings).toHaveBeenCalledWith('advanced', {
+      logLevel: 'warn',
+    });
+  });
 });
 
 // ── settingsRestoreDefaults wrapper ───────────────────────────────────────────
