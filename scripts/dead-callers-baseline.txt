@@ -149,7 +149,6 @@ get_progress
 insert_cross_target_association
 insert_edge_evidence
 insert_proposal
-insert_singleton_panel_group
 invalidate_edge_evidence
 is_automatic_proposal_suppressed
 lineage_cycle_exists
