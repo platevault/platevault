@@ -775,21 +775,32 @@ jobs:
   # full-matrix "Real-UI journeys (L3) — ubuntu-latest" and "— windows-latest"
   # required contexts). Only runs on pull_request; skipped on main push/dispatch
   # because the full e2e-gate-ubuntu/-windows gates cover those events.
+  #
+  # `always()` alone (without `run == 'true'`) keeps this gate reporting a
+  # definitive conclusion even on docs-only PRs where run='false' and the whole
+  # smoke chain was legitimately skipped. With `run == 'true'` in the `if:`,
+  # the gate itself skips on docs-only PRs and the required context
+  # "Real-UI smoke (L3) — ubuntu-latest" is never published — which deadlocks
+  # the PR because GitHub no longer accepts skipped as satisfying a required
+  # check. The run check moves into the step so a legitimate skip exits 0.
   e2e-smoke-gate-ubuntu:
     name: Real-UI smoke (L3) — ubuntu-latest
     needs: [changes, smoke-ubuntu]
-    # `always()` keeps this gate reporting red instead of skipping when smoke-ubuntu
-    # or its upstream builders fail. The run=='true' guard prevents a false green
-    # on a docs-only PR where the whole chain (builders included) was skipped.
-    if: always() && needs.changes.outputs.run == 'true' && github.event_name == 'pull_request'
+    if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Check smoke result
         env:
           RESULT: ${{ needs.smoke-ubuntu.result }}
+          RUN: ${{ needs.changes.outputs.run }}
         run: |
           echo "smoke-ubuntu result: $RESULT"
+          echo "e2e changes run: $RUN"
+          if [ "$RUN" != 'true' ]; then
+            echo "No E2E-relevant changes — smoke appropriately skipped."
+            exit 0
+          fi
           [ "$RESULT" = "success" ] || exit 1
 
   # ---------------------------------------------------------------------------

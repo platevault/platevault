@@ -579,10 +579,11 @@ jobs:
   # unmergeable this way, and earlier tooling-only PRs were merged by admin
   # override rather than by satisfying the gate.
   #
-  # Single-lane jobs need no shim: `ui-e2e` below is not a matrix, so when it
-  # skips it still publishes `UI mock-mode (Playwright)` under its real name,
-  # and GitHub accepts a skipped check as satisfying a required context. Only
-  # the matrix name fails to materialise.
+  # The same problem applies to non-matrix single-lane jobs: `ui-e2e-gate`
+  # below (which publishes the required "UI mock-mode (Playwright)" context)
+  # uses `always()` so the context is always published with a definitive
+  # conclusion. A plain `if: frontend == 'true'` job that skips publishes
+  # `skipped`, which GitHub no longer accepts as satisfying a required check.
   #
   # This job runs for docs-only changes, so the matrix DOES expand and the
   # required contexts are reported — green, and explicit that nothing was tested
@@ -623,7 +624,7 @@ jobs:
   # the frontend lane and a change that cannot affect the frontend skips it
   # outright rather than reporting a green check for an empty run.
   ui-e2e:
-    name: UI mock-mode (Playwright)
+    name: UI mock-mode (Playwright) — run
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
@@ -642,3 +643,33 @@ jobs:
         run: pnpm --filter @astro-plan/desktop exec playwright install --with-deps chromium
       - name: Mock-mode UI tests
         run: pnpm --filter @astro-plan/desktop test:e2e
+
+  # Gate for the mock-mode Playwright job. Published as "UI mock-mode (Playwright)"
+  # — the context required by branch protection.
+  #
+  # `ui-e2e` above skips when the frontend lane is idle (docs-only PR). A
+  # `skipped` conclusion does NOT satisfy a required check on GitHub — only
+  # `success` does. Splitting the actual work (`ui-e2e`) from the required-context
+  # gate (`ui-e2e-gate`) lets the gate always report `success` on a legitimate
+  # skip while still reporting `failure` when `ui-e2e` fails or is unexpectedly
+  # absent. The run check lives in the step so the `if: always()` keeps this
+  # job reporting a definitive conclusion on every PR regardless of the lane.
+  ui-e2e-gate:
+    name: UI mock-mode (Playwright)
+    needs: [changes, ui-e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check Playwright result
+        env:
+          RESULT: ${{ needs.ui-e2e.result }}
+          FRONTEND: ${{ needs.changes.outputs.frontend }}
+        run: |
+          echo "ui-e2e result: $RESULT"
+          echo "frontend lane active: $FRONTEND"
+          if [ "$FRONTEND" != 'true' ]; then
+            echo "Frontend lane idle — Playwright appropriately skipped."
+            exit 0
+          fi
+          [ "$RESULT" = "success" ] || exit 1

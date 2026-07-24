@@ -1,6 +1,5 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
-// PR #1437: locale is now returned in general settings reads.
 
 // Locale runtime — persisted application-language preference (spec 061).
 //
