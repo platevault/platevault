@@ -3,6 +3,8 @@
 
 import { forwardRef } from 'react';
 import type { HTMLAttributes } from 'react';
+import { RadioGroup as BaseRadioGroup } from '@base-ui-components/react/radio-group';
+import { Radio } from '@base-ui-components/react/radio';
 
 export interface RadioOption {
   value: string;
@@ -22,25 +24,31 @@ export const RadioGroup = forwardRef<HTMLDivElement, RadioGroupProps>(
   function RadioGroup({ options, value, onChange, className, ...rest }, ref) {
     const cls = ['pv-radio-group', className].filter(Boolean).join(' ');
     return (
-      <div ref={ref} className={cls} {...rest}>
+      <BaseRadioGroup
+        ref={ref}
+        className={cls}
+        value={value}
+        onValueChange={(v) => onChange(v as string)}
+        {...rest}
+      >
         {options.map((o) => {
           const val = typeof o === 'string' ? o : o.value;
           const label = typeof o === 'string' ? o : o.label;
           const desc = typeof o === 'string' ? null : o.desc;
           const testId = typeof o === 'string' ? undefined : o.testId;
           return (
-            <button
+            <Radio.Root
               key={val}
-              className={`pv-radio ${value === val ? 'pv-radio--active' : ''}`}
-              onClick={() => onChange(val)}
+              value={val}
+              className="pv-radio"
               data-testid={testId}
             >
               <div>{label}</div>
               {desc && <div className="pv-radio__desc">{desc}</div>}
-            </button>
+            </Radio.Root>
           );
         })}
-      </div>
+      </BaseRadioGroup>
     );
   },
 );
