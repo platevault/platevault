@@ -98,9 +98,13 @@ function lastPathState(
 ): ReturnType<typeof createPersistedState<string | null>> {
   let s = lastPathStates.get(kind);
   if (!s) {
-    s = createPersistedState('ui_state', `uiState.lastPath.${kind}`, {
-      default: null,
-    });
+    s = createPersistedState<string | null>(
+      'ui_state',
+      `uiState.lastPath.${kind}`,
+      {
+        default: null,
+      },
+    );
     lastPathStates.set(kind, s);
   }
   return s;

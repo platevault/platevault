@@ -113,28 +113,33 @@ export interface PersistedStateOptions<T> {
 }
 
 export interface PersistedStateResult<T> {
+  // Property types (not method declarations) so bare refs like
+  // `useSyncExternalStore(state.subscribe, state.get)` don't trip
+  // @typescript-eslint/unbound-method — the rule treats property-typed
+  // functions as stable values, not unbound methods.
+
   /** Synchronous read — always returns the current in-memory value. */
-  get(): T;
+  readonly get: () => T;
   /** Update in-memory + localStorage + schedule debounced SQLite write. */
-  set(value: T): void;
+  readonly set: (value: T) => void;
   /**
    * Subscribe to changes. Returns an unsubscribe function.
    * Directly compatible with `useSyncExternalStore`.
    */
-  subscribe(listener: () => void): () => void;
+  readonly subscribe: (listener: () => void) => () => void;
   /**
    * Reconcile in-memory + localStorage from the DB response object produced by
    * `hydrateScope`. Not called directly by consumers — call `hydrateScope`
    * instead, which issues the batch `settingsGet` and calls this on each key.
    */
-  _reconcileFromDbValues(values: Record<string, unknown>): void;
+  readonly _reconcileFromDbValues: (values: Record<string, unknown>) => void;
   /**
    * Cancel any pending debounced SQLite write. Call from a component's
    * `useEffect` cleanup to avoid timer leaks on unmount, e.g.:
    *
    *   useEffect(() => () => myState.cancelPendingWrite(), []);
    */
-  cancelPendingWrite(): void;
+  readonly cancelPendingWrite: () => void;
   /**
    * Test-only: reset in-memory value to the constructor default and clear the
    * boot-cache localStorage key. Allows module-level singletons to start fresh
