@@ -25,10 +25,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { m } from '@/lib/i18n';
-import {
-  ChecklistSection,
-  useVisibleOnboardingState,
-} from './ChecklistSection';
+import { ChecklistSection } from './ChecklistSection';
+import { useVisibleOnboardingState } from './store';
 import { useCompletionChoreography } from './choreography';
 
 /** Gap between the sidebar trigger and the portalled flyout, in px. */

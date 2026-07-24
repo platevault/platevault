@@ -40,7 +40,7 @@
  * `'true'`.
  */
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { commands } from '@/bindings/index';
 import type {
   OnboardingStateDto,
@@ -235,4 +235,24 @@ export function __setOnboardingStateForTest(
 /** React hook: the live onboarding projection (or `null` before hydration). */
 export function useOnboardingState(): OnboardingStateDto | null {
   return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+/**
+ * Shared visibility gate for every onboarding surface: honours the
+ * deterministic suppression flag (FR-030) and the backend `sectionHidden` flag
+ * (explicit removal FR-013 / completion auto-hide FR-031). Returns `null` when
+ * the section (and its progress-ring icon) must not render at all.
+ *
+ * Kept in `store.ts` (not `ChecklistSection.tsx`) so Shell/Sidebar can import
+ * it without pulling the full checklist → FindSpotlight → joyrideAdapter tree
+ * into the boot chunk.
+ */
+export function useVisibleOnboardingState(): OnboardingStateDto | null {
+  const state = useOnboardingState();
+  useEffect(() => {
+    void startOnboardingStateSync();
+  }, []);
+  if (isOnboardingSuppressed()) return null;
+  if (!state || state.flags.sectionHidden) return null;
+  return state;
 }

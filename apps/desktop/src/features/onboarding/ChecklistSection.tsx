@@ -29,7 +29,7 @@
  * dismiss affordances required for non-event items (FR-017).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   Check,
@@ -43,19 +43,15 @@ import {
 import { clsx } from 'clsx';
 import { m } from '@/lib/i18n';
 import { Tooltip } from '@/ui';
-import type {
-  OnboardingItemDto,
-  OnboardingPage,
-  OnboardingStateDto,
-} from '@/bindings/index';
+import type { OnboardingItemDto, OnboardingPage } from '@/bindings/index';
 import './checklist.css';
 import {
-  isOnboardingSuppressed,
   setOnboardingItemState,
   setOnboardingSection,
-  startOnboardingStateSync,
-  useOnboardingState,
+  useVisibleOnboardingState,
 } from './store';
+// Re-export so existing imports from ChecklistSection still resolve.
+export { useVisibleOnboardingState } from './store';
 import { useCompletionChoreography } from './choreography';
 import {
   FindSpotlight,
@@ -129,22 +125,6 @@ export function completedChecklistItems(
 
 function pageForPath(pathname: string): OnboardingPage | null {
   return PAGE_ORDER.find((p) => pathname.startsWith(PAGE_META[p].path)) ?? null;
-}
-
-/**
- * Shared visibility gate for every onboarding surface: honours the
- * deterministic suppression flag (FR-030) and the backend `sectionHidden` flag
- * (explicit removal FR-013 / completion auto-hide FR-031). Returns `null` when
- * the section (and its progress-ring icon) must not render at all.
- */
-export function useVisibleOnboardingState(): OnboardingStateDto | null {
-  const state = useOnboardingState();
-  useEffect(() => {
-    void startOnboardingStateSync();
-  }, []);
-  if (isOnboardingSuppressed()) return null;
-  if (!state || state.flags.sectionHidden) return null;
-  return state;
 }
 
 interface ChecklistSectionProps {

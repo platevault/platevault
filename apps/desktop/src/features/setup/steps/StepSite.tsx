@@ -11,13 +11,21 @@
 // Settings -> Target Planner (spec 044 US3, `ObservingSites.tsx`); the step
 // never blocks Finish (FR-025 does not require a site to complete setup).
 
+import { lazy, Suspense } from 'react';
 import { m } from '@/lib/i18n';
 import {
   localTimezone,
   ianaTimezones,
 } from '@/features/targets/observing-sites/iana-timezones';
 import type { Twilight } from '@/features/targets/observing-sites/observer-site';
-import { SiteLocationPicker } from './SiteLocationPicker';
+
+// maplibre-gl is multi-MB. Lazy-load the picker so it splits to its own chunk
+// and does not inflate the setup-wizard bundle parsed on first run.
+const SiteLocationPicker = lazy(() =>
+  import('./SiteLocationPicker').then((m) => ({
+    default: m.SiteLocationPicker,
+  })),
+);
 
 export interface SiteStepState {
   name: string;
@@ -118,17 +126,27 @@ export function StepSite({ state, onChange }: StepSiteProps) {
 
       <div className="pv-step-site__map-section">
         <span className="pv-field-label">{m.setup_site_map_label()}</span>
-        <SiteLocationPicker
-          latitudeDeg={parsedCoord(state.latitudeDegText)}
-          longitudeDeg={parsedCoord(state.longitudeDegText)}
-          onPick={(lat, lon) =>
-            onChange({
-              ...state,
-              latitudeDegText: lat.toFixed(5),
-              longitudeDegText: lon.toFixed(5),
-            })
+        <Suspense
+          fallback={
+            <div
+              className="pv-step-site__map"
+              role="status"
+              aria-label={m.setup_site_map_label()}
+            />
           }
-        />
+        >
+          <SiteLocationPicker
+            latitudeDeg={parsedCoord(state.latitudeDegText)}
+            longitudeDeg={parsedCoord(state.longitudeDegText)}
+            onPick={(lat, lon) =>
+              onChange({
+                ...state,
+                latitudeDegText: lat.toFixed(5),
+                longitudeDegText: lon.toFixed(5),
+              })
+            }
+          />
+        </Suspense>
       </div>
 
       <div className="pv-step-site__grid">

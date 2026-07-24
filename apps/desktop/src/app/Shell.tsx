@@ -7,7 +7,7 @@
  * handling (built into their pages). Other routes use full-width main.
  */
 
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Outlet, useNavigate } from '@tanstack/react-router';
 import { usePreferences } from '@/data/preferences';
 import { stepZoomIn, stepZoomOut, resetZoom } from '@/data/theme';
@@ -20,17 +20,35 @@ import { LogPanelProvider, useLogPanel } from './LogPanelContext';
 import { OperationStatusProvider } from './OperationStatusContext';
 import { PageStatusProvider } from './PageStatusContext';
 import { ToastContainer } from '@/ui/ToastContainer';
-import { OrientationWalk } from '@/features/onboarding/OrientationWalk';
+import { useOnboardingState } from '@/features/onboarding/store';
 import { loadObservingState } from '@/features/targets/observing-sites/site-store';
 import {
   startUpdateSubscription,
   stopUpdateSubscription,
 } from '@/data/updateSubscription';
 
+// react-joyride is large (~100 kB gz). Load it only once the orientation walk
+// is about to run (setupCompleted && orientationDone is false). The module
+// boundary is joyrideAdapter, which is the only file that imports react-joyride.
+const OrientationWalk = lazy(() =>
+  import('@/features/onboarding/OrientationWalk').then((m) => ({
+    default: m.OrientationWalk,
+  })),
+);
+
 function ShellInner() {
   const prefs = usePreferences();
+  const onboarding = useOnboardingState();
   const { expanded } = useLogPanel();
   const navigate = useNavigate();
+
+  // Gate: only mount OrientationWalk (and load the joyride chunk) when setup
+  // is done and the orientation walk has not yet been completed. Once
+  // orientationDone flips true, this stays false for the session.
+  const walkReady =
+    prefs.setupCompleted &&
+    onboarding !== null &&
+    !onboarding.flags.orientationDone;
 
   // Redirect to /setup if first-run setup is not completed
   useEffect(() => {
@@ -139,7 +157,11 @@ function ShellInner() {
       <StatusBar />
       <CommandPalette />
       <ToastContainer />
-      <OrientationWalk />
+      {walkReady && (
+        <Suspense fallback={null}>
+          <OrientationWalk />
+        </Suspense>
+      )}
     </div>
   );
 }
