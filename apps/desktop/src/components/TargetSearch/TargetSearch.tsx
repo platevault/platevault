@@ -83,6 +83,8 @@ import {
 } from './objectType';
 import { DEFAULT_LIMIT, MIN_RESOLVE_LEN } from './helpers';
 import { useTargetSearch } from './useTargetSearch';
+import { selectBase } from '@/styles/select.css';
+import { virtualInner, virtualScroll } from '@/ui/page-layout.css';
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -272,7 +274,7 @@ export function TargetSearch({
               {m.cmp_target_search_type_label()}
               <select
                 id={typeFilterId}
-                className="pv-select pv-target-search__filter-select"
+                className={`${selectBase} pv-target-search__filter-select`}
                 value={typeSel}
                 onChange={(e) =>
                   setTypeSel(e.target.value as TargetObjectType | '')
@@ -293,7 +295,7 @@ export function TargetSearch({
               {m.cmp_target_search_catalogue_label()}
               <select
                 id={catalogFilterId}
-                className="pv-select pv-target-search__filter-select"
+                className={`${selectBase} pv-target-search__filter-select`}
                 value={catalogSel}
                 onChange={(e) =>
                   setCatalogSel(e.target.value as TargetCatalogId | '')
@@ -354,7 +356,7 @@ export function TargetSearch({
             <Combobox.Popup className="pv-target-search__popup">
               <Combobox.List
                 ref={scrollRef}
-                className="pv-target-search__list pv-virtual-scroll"
+                className={`pv-target-search__list ${virtualScroll}`}
                 data-virtual-scroll="true"
                 aria-label={m.cmp_target_search_suggestions_aria()}
               >
@@ -447,7 +449,7 @@ export function TargetSearch({
                 )}
                 {suggestions.length > 0 && (
                   <div
-                    className="pv-virtual-inner"
+                    className={virtualInner}
                     // eslint-disable-next-line no-restricted-syntax -- dynamic: virtualizer total height (totalSize)
                     style={{ height: `${totalSize}px`, position: 'relative' }}
                   >

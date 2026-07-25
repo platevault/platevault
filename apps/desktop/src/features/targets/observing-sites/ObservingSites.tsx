@@ -49,6 +49,8 @@ import {
 import { useObservingState, saveSites } from './site-store';
 import type { ObserverSite, Twilight } from './observer-site';
 import { ianaTimezones, localTimezone } from './iana-timezones';
+import { selectBase } from '@/styles/select.css';
+import { message as modalMessage } from '@/components/modal.css';
 
 interface SiteForm {
   id: string | null;
@@ -481,7 +483,7 @@ export function ObservingSites() {
             </label>
             <select
               id="observing-site-tz"
-              className="pv-select"
+              className={selectBase}
               aria-label={m.settings_observing_sites_field_timezone()}
               value={form.timezone}
               onChange={(e) => setForm({ ...form, timezone: e.target.value })}
@@ -499,7 +501,7 @@ export function ObservingSites() {
             </label>
             <select
               id="observing-site-twilight"
-              className="pv-select"
+              className={selectBase}
               aria-label={m.settings_observing_sites_field_twilight()}
               value={form.twilight}
               onChange={(e) =>
@@ -559,7 +561,7 @@ export function ObservingSites() {
           </>
         }
       >
-        <p className="pv-modal__message">
+        <p className={modalMessage}>
           {m.settings_observing_sites_delete_confirm_desc()}
         </p>
         {deleteNeedsFallbackChoice && (
@@ -569,7 +571,7 @@ export function ObservingSites() {
             </label>
             <select
               id="observing-site-fallback"
-              className="pv-select"
+              className={selectBase}
               aria-label={m.settings_observing_sites_fallback_label()}
               value={fallbackSiteId ?? ''}
               onChange={(e) => setFallbackSiteId(e.target.value || null)}

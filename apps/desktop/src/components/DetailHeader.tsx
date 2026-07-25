@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import type { ReactNode } from 'react';
+import {
+  header as detailHeader,
+  content as detailHeaderContent,
+  title as detailTitle,
+  actions as detailActions,
+} from './DetailHeader.css';
 
 export interface DetailHeaderProps {
   title: ReactNode;
@@ -19,16 +25,16 @@ export function DetailHeader({
   children,
 }: DetailHeaderProps) {
   return (
-    <div className="pv-detail__header">
-      <div className="pv-detail__header-content">
-        <div className="pv-detail__title">
+    <div className={detailHeader}>
+      <div className={detailHeaderContent}>
+        <div className={detailTitle}>
           {title}
           {titleExtra}
         </div>
         {subtitle && <div className="pv-detail__subtitle">{subtitle}</div>}
         {children}
       </div>
-      {actions && <div className="pv-detail__actions">{actions}</div>}
+      {actions && <div className={detailActions}>{actions}</div>}
     </div>
   );
 }
