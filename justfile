@@ -269,6 +269,14 @@ library-dev-bundle:
     plutil -insert NSHighResolutionCapable -bool YES "$plist"
     codesign --force --sign - "$app"
     echo "$app"
+# Print the isolated environment for journey-driving app instance N (1-based).
+#
+# Stdout is a shell `export` block and nothing else, so `eval "$(just
+# journey-instance 2)"` is the whole setup; the resolved bridge host:port goes to
+# stderr. `--reset` wipes that instance's root first — one instance only, never
+# the shared base. See docs/development/parallel-journey-instances.md.
+journey-instance N *ARGS:
+    cargo run -q -p e2e_tests --bin journey-instance -- {{quote(N)}} {{ARGS}}
 
 # Clean build artifacts
 clean:
