@@ -394,4 +394,4 @@ apps/desktop/.ds-css/
 .beads/proxieddb/
 crates/app/core/projects/
 lcov.info
-.beads.gate.lock
+*.gate.lock*
