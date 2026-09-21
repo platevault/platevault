@@ -199,7 +199,11 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
           <tr>
             <td>{m.settings_calmatch_binning()}</td>
             <td>
-              <Toggle checked={requireBinning} onChange={handleBinningToggle} />
+              <Toggle
+                aria-label={m.settings_calmatch_binning()}
+                checked={requireBinning}
+                onChange={handleBinningToggle}
+              />
             </td>
             <td className="pv-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
@@ -208,7 +212,11 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
           <tr>
             <td>{m.settings_calmatch_gain()}</td>
             <td>
-              <Toggle checked={requireGain} onChange={handleGainToggle} />
+              <Toggle
+                aria-label={m.settings_calmatch_gain()}
+                checked={requireGain}
+                onChange={handleGainToggle}
+              />
             </td>
             <td className="pv-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
@@ -218,7 +226,11 @@ export function CalibrationMatching(_props: CalibrationMatchingProps) {
           <tr>
             <td>{m.settings_calmatch_offset()}</td>
             <td>
-              <Toggle checked={requireOffset} onChange={handleOffsetToggle} />
+              <Toggle
+                aria-label={m.settings_calmatch_offset()}
+                checked={requireOffset}
+                onChange={handleOffsetToggle}
+              />
             </td>
             <td className="pv-cell--mono">{m.settings_calmatch_exact()}</td>
           </tr>
