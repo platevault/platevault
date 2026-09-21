@@ -71,9 +71,12 @@ export function SortHeader({
       className={active ? `${sh.root} ${sh.active}` : sh.root}
       onClick={onClick}
       aria-label={ariaLabel}
-      title={title}
+      // A plain-string label ellipsizes when the column is narrower than the
+      // name, so it restates itself on hover unless the caller has a better
+      // tooltip. Rich labels are the caller's to describe.
+      title={title ?? (typeof label === 'string' ? label : undefined)}
     >
-      {label}
+      <span className={sh.label}>{label}</span>
       {active && (
         <span className={sh.arrow} aria-hidden="true">
           {dir === 'asc' ? '▲' : '▼'}

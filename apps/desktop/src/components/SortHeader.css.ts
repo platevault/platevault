@@ -13,6 +13,12 @@ export const root = style({
   display: 'inline-flex',
   alignItems: 'center',
   gap: uvars.sp1,
+  // The button is an atomic box, so the `overflow: hidden; text-overflow:
+  // ellipsis` on `.pv-table th` could only chop it mid-glyph — a header read as
+  // "BINNIN(". Bounding it to the column and letting the label shrink moves the
+  // truncation onto text, where an ellipsis and a tooltip mean something.
+  maxWidth: '100%',
+  minWidth: 0,
   background: 'none',
   border: 'none',
   padding: 0,
@@ -29,7 +35,16 @@ export const active = style({
   color: vars.text,
 });
 
+/** The shrinking part: the column name ellipsizes, the sort arrow never does. */
+export const label = style({
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+});
+
 export const arrow = style({
   fontSize: uvars.textXs,
   color: vars.textMuted,
+  flexShrink: 0,
 });
