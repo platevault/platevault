@@ -122,9 +122,17 @@ const SAMPLE_LIBRARY_PROGRESS: Record<string, OnboardingItemDto['state']> = {
 
 export function freshMockOnboardingItems(): OnboardingItemDto[] {
   const unmet = unmetPrerequisiteIds();
+  // An empty library has achieved nothing, so it must not report milestones as
+  // done. `seedEmptyInventory` is the same switch `inventory.list` reads, which
+  // keeps the checklist and the library telling one story.
+  const progress: Record<string, OnboardingItemDto['state']> = isE2EFlagSet(
+    E2E_EMPTY_INVENTORY_STORE_ID,
+  )
+    ? {}
+    : SAMPLE_LIBRARY_PROGRESS;
   return MOCK_ONBOARDING_ITEMS.map(
     ([itemId, page, hasAutoTick, upstreamItemId, jumpPage]) => {
-      const state = SAMPLE_LIBRARY_PROGRESS[itemId] ?? 'unchecked';
+      const state = progress[itemId] ?? 'unchecked';
       return {
         itemId,
         page,

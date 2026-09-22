@@ -30,6 +30,7 @@ import {
   expect,
   seedSetupComplete,
   seedOnboarding,
+  seedEmptyInventory,
   openChecklist,
   ONB_SECTION as SECTION,
   ONB_RING as RING,
@@ -53,7 +54,13 @@ test.describe('onboarding getting-started checklist (spec 056 US2)', () => {
   // US2 exercises the checklist, not the US1 walk. Seed orientation as already
   // done so the walk never auto-launches its overlay over the checklist — but
   // leave onboarding enabled (not `disableOnboarding`) so the section renders.
+  //
+  // These assertions describe a library that has achieved nothing yet, so the
+  // starting inventory is seeded empty rather than inherited from whatever the
+  // mock library happens to ship. Without it the sample library's milestones
+  // report groups as already complete and the counts read 2/2 instead of 0/2.
   test.beforeEach(({ page }) => {
+    seedEmptyInventory(page);
     seedOnboarding(page, { flags: { orientationDone: true } });
   });
 
