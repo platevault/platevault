@@ -1,0 +1,4068 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-22",
+  "task": "Bounded editorial integration of the completed challenged review; no new repository review",
+  "report": "docs/reviews/2026-09-22-holistic-review.md",
+  "report_sha256": "5a44c85349c0b6c677878e9a0fca882f05895c62dd818591f15d61a6eb4a714d",
+  "snapshot": "8198209b5be118e785e4ea85cea3f26e0ea43c1c",
+  "write_scope": [
+    "docs/reviews/2026-09-22-holistic-review.md",
+    "docs/reviews/2026-09-22-holistic-evidence/editorial-verification.json"
+  ],
+  "execution_constraints": {
+    "delegated_agents": 0,
+    "model_selection_override": false,
+    "role_note": "No agent dispatch or effort override was used in this editorial pass. Earlier @max routing remains attributed to the dispatcher evidence in verification.json; provider-side identity was not independently audited.",
+    "application_tests_builds_formatters": false,
+    "project_dependency_installation": false,
+    "global_configuration_changes": false,
+    "publication": false,
+    "runtime_reports_read_or_edited": false,
+    "scope_instruction_read": ".review-runtime/polish.txt",
+    "provisioning": "Both project provisioning files are tracked and match the historical snapshot; existing linked worktree reused."
+  },
+  "changes": {
+    "readable_evidence_links": 14,
+    "source_path_corrections": {
+      "apps/desktop/src/features/plan-review/PlanReviewOverlay.tsx": "apps/desktop/src/features/plans/PlanReviewOverlay.tsx",
+      "apps/desktop/src/features/command-palette/CommandPalette.tsx": "apps/desktop/src/app/CommandPalette.tsx",
+      "apps/desktop/src/ui/Modal.tsx": "apps/desktop/src/components/Modal.tsx",
+      "features/command-palette/CommandPalette.tsx": "apps/desktop/src/app/CommandPalette.tsx",
+      "features/archive/store.ts": "apps/desktop/src/features/archive/store.ts",
+      "features/archive/ArchivePage.tsx": "apps/desktop/src/features/archive/ArchivePage.tsx",
+      "features/settings/RemapRootDialog.tsx": "apps/desktop/src/features/settings/RemapRootDialog.tsx",
+      "ops/write_manifest_op.rs": "crates/fs/executor/src/ops/write_manifest_op.rs",
+      "ops/link_op.rs": "crates/fs/executor/src/ops/link_op.rs",
+      "OutputsCleanupSections.tsx": "apps/desktop/src/features/projects/OutputsCleanupSections.tsx",
+      "useTargetsPageFilters.ts": "apps/desktop/src/features/targets/useTargetsPageFilters.ts",
+      "useTargetsTableRows.ts": "apps/desktop/src/features/targets/useTargetsTableRows.ts",
+      "TargetsTable.tsx": "apps/desktop/src/features/targets/TargetsTable.tsx",
+      "useAdaptiveDock.ts": "apps/desktop/src/ui/useAdaptiveDock.ts",
+      "ListPageLayout.tsx": "apps/desktop/src/components/ListPageLayout.tsx",
+      "ListPageLayout.css.ts": "apps/desktop/src/components/ListPageLayout.css.ts",
+      "commands/execute.md": ".specify/extensions/agent-assign/commands/execute.md"
+    },
+    "range_correction": {
+      "from": "release-please-config.json:1-48",
+      "to": "release-please-config.json:1-43",
+      "reason": "The source file ends at line 43; read all 43 lines and retained the whole-file citation."
+    },
+    "prose": "Split dense causal/recommendation sentences, separate product finding paragraphs, replace Unicode finding ranges, remove unmeasured praise, clarify procedural versus historical statements, shorten routing paragraph. No linter configuration or source code changed.",
+    "routing_paragraph_words": {
+      "before": 65,
+      "after": 44,
+      "retained": "Failed direct dispatch, supervised temporary role mapping, unchanged global config, absent parent child cards, all 14 role reports, named Astra identity, cancelled default-scout exclusion."
+    }
+  },
+  "preservation": {
+    "finding_ids": [
+      "COR-01",
+      "COR-02",
+      "COR-03",
+      "COR-04",
+      "COR-05",
+      "COR-06",
+      "COR-07",
+      "COR-08",
+      "DEL-01",
+      "DEL-02",
+      "DEL-03",
+      "DEL-04",
+      "DEL-05",
+      "DEL-06",
+      "DEL-07",
+      "PERF-01",
+      "PERF-02",
+      "PERF-03",
+      "PERF-04",
+      "PERF-05",
+      "PERF-06",
+      "PERF-07",
+      "PERF-08",
+      "PROC-01",
+      "PROC-02",
+      "PROC-03",
+      "PROC-04",
+      "PROC-05",
+      "PROC-06",
+      "PROC-07",
+      "PROD-01",
+      "PROD-02",
+      "PROD-03",
+      "PROD-04",
+      "PROD-05",
+      "PROD-06",
+      "PROD-07",
+      "PROD-08",
+      "SEC-01",
+      "SEC-02",
+      "SEC-03",
+      "SEC-04",
+      "SEC-05",
+      "SEC-06",
+      "SEC-07",
+      "UX-01",
+      "UX-02",
+      "UX-03",
+      "UX-04",
+      "UX-05",
+      "UX-06",
+      "UX-07",
+      "UX-08",
+      "UX-09"
+    ],
+    "finding_count": 54,
+    "accepted": 45,
+    "downgraded": 9,
+    "direct_overlap_pairs": 3,
+    "source_anchor_occurrences_before": 141,
+    "source_anchor_occurrences_after": 141,
+    "anchor_occurrences_dropped": 0,
+    "source_established_is_not_end_to_end": true,
+    "reproductions": "The production reconcile classifier ran with only the Path wrapper substituted; PermissionDenied mapped to Completed while source bytes were unchanged. Actual journeys.py accepted missing provenance and contradictory pass records, and rejected retained historical retired-step evidence. These remain component/validator reproductions only.",
+    "tooling_tests": "Existing verification.json reports two passing tooling test files; this editorial pass did not rerun or extend them.",
+    "environmental_limits": "Rust session tests, Storybook/Vite and Beads sync remain blocked. No full-suite, live UI, WCAG, packaged updater, external-processor, advisory-completeness or live branch-protection pass is claimed."
+  },
+  "lint": {
+    "command": "uvx slopvac docs/reviews/2026-09-22-holistic-review.md --profile normal --format json",
+    "cwd": "/home/sjors/tmp/worktrees/astro-plan/omp-agent-holistic-review-20260922",
+    "tool_version": "2.9.1",
+    "profile": "normal",
+    "diagnostic_run_before_edits": {
+      "exit": 1,
+      "summary": {
+        "documents": 1,
+        "words": 5327,
+        "findings": 509,
+        "errors": 30,
+        "warnings": 116,
+        "suggestions": 363,
+        "per_100_words": 9.555,
+        "score": 68.5,
+        "passed": false,
+        "categories": [
+          {
+            "category": "ai-residue",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ai-tells-agentic",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ai-tells-content-shape",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ai-tells-figurative",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ai-tells-formatting",
+            "findings": 3,
+            "errors": 0,
+            "warnings": 2,
+            "suggestions": 1,
+            "per_100_words": 0.056,
+            "score": 99.4
+          },
+          {
+            "category": "ai-tells-register",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ai-tells-structure",
+            "findings": 16,
+            "errors": 15,
+            "warnings": 0,
+            "suggestions": 1,
+            "per_100_words": 0.3,
+            "score": 85.9
+          },
+          {
+            "category": "docs-discipline",
+            "findings": 1,
+            "errors": 0,
+            "warnings": 1,
+            "suggestions": 0,
+            "per_100_words": 0.019,
+            "score": 99.4
+          },
+          {
+            "category": "orwell",
+            "findings": 2,
+            "errors": 2,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.038,
+            "score": 98.6
+          },
+          {
+            "category": "prose-agency",
+            "findings": 1,
+            "errors": 0,
+            "warnings": 1,
+            "suggestions": 0,
+            "per_100_words": 0.019,
+            "score": 99.6
+          },
+          {
+            "category": "prose-craft",
+            "findings": 9,
+            "errors": 0,
+            "warnings": 2,
+            "suggestions": 7,
+            "per_100_words": 0.169,
+            "score": 99.3
+          },
+          {
+            "category": "prose-discipline",
+            "findings": 4,
+            "errors": 4,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.075,
+            "score": 97.2
+          },
+          {
+            "category": "prose-format",
+            "findings": 10,
+            "errors": 7,
+            "warnings": 0,
+            "suggestions": 3,
+            "per_100_words": 0.188,
+            "score": 90.0
+          },
+          {
+            "category": "prose-inclusive",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "prose-inflation",
+            "findings": 3,
+            "errors": 2,
+            "warnings": 0,
+            "suggestions": 1,
+            "per_100_words": 0.056,
+            "score": 98.1
+          },
+          {
+            "category": "prose-promotion",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "prose-scope",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ste-descriptive",
+            "findings": 35,
+            "errors": 0,
+            "warnings": 35,
+            "suggestions": 0,
+            "per_100_words": 0.657,
+            "score": 90.1
+          },
+          {
+            "category": "ste-nouns",
+            "findings": 68,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 68,
+            "per_100_words": 1.277,
+            "score": 96.8
+          },
+          {
+            "category": "ste-practices",
+            "findings": 21,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 21,
+            "per_100_words": 0.394,
+            "score": 99.0
+          },
+          {
+            "category": "ste-procedural",
+            "findings": 63,
+            "errors": 0,
+            "warnings": 18,
+            "suggestions": 45,
+            "per_100_words": 1.183,
+            "score": 92.8
+          },
+          {
+            "category": "ste-punctuation",
+            "findings": 154,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 154,
+            "per_100_words": 2.891,
+            "score": 92.8
+          },
+          {
+            "category": "ste-safety",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ste-sentences",
+            "findings": 45,
+            "errors": 0,
+            "warnings": 36,
+            "suggestions": 9,
+            "per_100_words": 0.845,
+            "score": 92.8
+          },
+          {
+            "category": "ste-verbs",
+            "findings": 52,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 52,
+            "per_100_words": 0.976,
+            "score": 97.6
+          },
+          {
+            "category": "ste-words",
+            "findings": 22,
+            "errors": 0,
+            "warnings": 21,
+            "suggestions": 1,
+            "per_100_words": 0.413,
+            "score": 96.0
+          }
+        ],
+        "judgement_penalty": 0.0,
+        "judgement_penalty_uncapped": 0.0,
+        "judgement_adjusted_score": 68.5,
+        "judgement_cluster_gate": null
+      }
+    },
+    "final_run_after_edits": {
+      "exit": 1,
+      "summary": {
+        "documents": 1,
+        "words": 5320,
+        "findings": 452,
+        "errors": 2,
+        "warnings": 92,
+        "suggestions": 358,
+        "per_100_words": 8.496,
+        "score": 76.0,
+        "passed": false,
+        "categories": [
+          {
+            "category": "ai-residue",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ai-tells-agentic",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ai-tells-content-shape",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ai-tells-figurative",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ai-tells-formatting",
+            "findings": 1,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 1,
+            "per_100_words": 0.019,
+            "score": 100.0
+          },
+          {
+            "category": "ai-tells-register",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ai-tells-structure",
+            "findings": 1,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 1,
+            "per_100_words": 0.019,
+            "score": 100.0
+          },
+          {
+            "category": "docs-discipline",
+            "findings": 1,
+            "errors": 0,
+            "warnings": 1,
+            "suggestions": 0,
+            "per_100_words": 0.019,
+            "score": 99.4
+          },
+          {
+            "category": "orwell",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "prose-agency",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "prose-craft",
+            "findings": 3,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 3,
+            "per_100_words": 0.056,
+            "score": 99.9
+          },
+          {
+            "category": "prose-discipline",
+            "findings": 2,
+            "errors": 2,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.038,
+            "score": 98.6
+          },
+          {
+            "category": "prose-format",
+            "findings": 1,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 1,
+            "per_100_words": 0.019,
+            "score": 100.0
+          },
+          {
+            "category": "prose-inclusive",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "prose-inflation",
+            "findings": 1,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 1,
+            "per_100_words": 0.019,
+            "score": 100.0
+          },
+          {
+            "category": "prose-promotion",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "prose-scope",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ste-descriptive",
+            "findings": 27,
+            "errors": 0,
+            "warnings": 27,
+            "suggestions": 0,
+            "per_100_words": 0.508,
+            "score": 92.4
+          },
+          {
+            "category": "ste-nouns",
+            "findings": 70,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 70,
+            "per_100_words": 1.316,
+            "score": 96.7
+          },
+          {
+            "category": "ste-practices",
+            "findings": 21,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 21,
+            "per_100_words": 0.395,
+            "score": 99.0
+          },
+          {
+            "category": "ste-procedural",
+            "findings": 54,
+            "errors": 0,
+            "warnings": 8,
+            "suggestions": 46,
+            "per_100_words": 1.015,
+            "score": 95.6
+          },
+          {
+            "category": "ste-punctuation",
+            "findings": 155,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 155,
+            "per_100_words": 2.914,
+            "score": 92.7
+          },
+          {
+            "category": "ste-safety",
+            "findings": 0,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 0,
+            "per_100_words": 0.0,
+            "score": 100.0
+          },
+          {
+            "category": "ste-sentences",
+            "findings": 45,
+            "errors": 0,
+            "warnings": 36,
+            "suggestions": 9,
+            "per_100_words": 0.846,
+            "score": 92.8
+          },
+          {
+            "category": "ste-verbs",
+            "findings": 49,
+            "errors": 0,
+            "warnings": 0,
+            "suggestions": 49,
+            "per_100_words": 0.921,
+            "score": 97.7
+          },
+          {
+            "category": "ste-words",
+            "findings": 21,
+            "errors": 0,
+            "warnings": 20,
+            "suggestions": 1,
+            "per_100_words": 0.395,
+            "score": 96.2
+          }
+        ],
+        "judgement_penalty": 0.0,
+        "judgement_penalty_uncapped": 0.0,
+        "judgement_adjusted_score": 76.0,
+        "judgement_cluster_gate": null
+      },
+      "failure_reasons": [
+        "2 error(s), limit 0"
+      ],
+      "unchecked": [],
+      "judgement_unchecked": [],
+      "stderr": ""
+    },
+    "final_runs_after_edits": 1,
+    "report_edited_after_final_lint": false,
+    "automatic_pass": false,
+    "explanations": {
+      "prose-discipline.frozen-verb": "prose-discipline.frozen-verb -- Put the action in the verb\nkind: pattern   severity: error   scope: prose\ntiers: strict=enforced  normal=enforced  relaxed=advisory\n\n\"<match>\" freezes the action in a noun. Use the plain verb.\n\nFix: Promote the noun to a finite verb and delete the general-purpose verb and its article.\n\nNamed exceptions (a suppression must cite one):\n  - identifier-fidelity\n  - quotation\n  - code-span\n  - legal-force\n  - api-name\n\n  <!-- slopvac-allow: rule=prose-discipline.frozen-verb reason=identifier-fidelity -->\n\nExamples\n  - The runner performs an analysis of the coverage report.\n  + The runner analyzes the coverage report.\n  - Conduct an investigation of the failing shard.\n  + Investigate the failing shard.\n  - The hook provides validation of the payload.\n  + The hook validates the payload.\n\nSource: ASD-STE100\n  ASD-STE100 rule 3.7 (Issue 9)\n  Both sources name this. Orwell's operators-or-verbal-false-limbs paragraph calls the pattern \"the elimination of simple verbs\"; the specification requires a verb for an action. Overlaps orwell-voice.passive-voice on sentences that are both passive and frozen, which is correct: they carry two defects and the fix differs.\n",
+      "prose-discipline.run-on": "prose-discipline.run-on -- Split the run-on\nkind: metric   severity: warning   scope: sentence\ntiers: strict=enforced  normal=enforced  relaxed=advisory\n\nThis sentence stitches <match> independent ideas together; the limit is <replacement>. Split it.\n\nFix: Split at the clause boundary that carries the least shared context.\n\nNamed exceptions (a suppression must cite one):\n  - quotation\n  - code-span\n  - vertical-list\n  - legal-force\n\n  <!-- slopvac-allow: rule=prose-discipline.run-on reason=quotation -->\n\nExamples\n  - The parser reads the file, and it normalizes the paths; then it emits the report, but it skips any entry that fails validation, which the caller must handle separately.\n  + The parser reads the file and normalizes the paths. It emits the report and skips any entry that fails validation. The caller handles those separately.\n\nSource: ASD-STE100\n  ASD-STE100 rule 4.1 (Issue 9)\n  Counts coordinating conjunctions, semicolons, dashes used as clause joins, and non-restrictive \"which\" clauses, rather than words. A sentence under the word cap can still carry four ideas, and that is the defect a reader feels. Threshold 3 permits a compound sentence with a trailing qualifier and rejects the fourth stitch.\n",
+      "ste-descriptive.sentence-too-long-descriptive": "ste-descriptive.sentence-too-long-descriptive -- Keep an explanatory sentence to twenty-five words\nkind: metric   severity: error   scope: sentence\ntiers: strict=enforced  normal=enforced  relaxed=enforced\n\nThis sentence has <value> words. Use twenty-five or fewer.\n\nFix: Split the sentence at a clause boundary.\n\nNamed exceptions (a suppression must cite one):\n  - quotation\n  - code-span\n\n  <!-- slopvac-allow: rule=ste-descriptive.sentence-too-long-descriptive reason=quotation -->\n\nExamples\n  - The gateway terminates TLS, rewrites the Host header, adds a request identifier for tracing, and forwards the request to the service that the routing table names for the path prefix.\n  + The gateway terminates TLS and rewrites the Host header. It adds a request identifier for tracing. It then forwards the request to the service that the routing table names for the path prefix.\n\nSource: ASD-STE100\n  ASD-STE100 rule 6.3 (Issue 9)\n  Same word-counting contract as the procedural cap, five words wider. A note inside a procedure takes this cap rather than the procedural one, which is why text_type classification (see metrics.md) decides which of the two rules applies rather than document location.\n",
+      "ste-sentences.complex-text-not-in-vertical-list": "ste-sentences.complex-text-not-in-vertical-list -- Use a vertical list for complex content\nkind: metric   severity: warning   scope: sentence\ntiers: strict=enforced  normal=enforced  relaxed=advisory\n\nThis sentence carries <value> coordinated items. Use a vertical list.\n\nFix: Convert the coordinated series into a vertical list.\n\nNamed exceptions (a suppression must cite one):\n  - quotation\n  - code-span\n\n  <!-- slopvac-allow: rule=ste-sentences.complex-text-not-in-vertical-list reason=quotation -->\n\nExamples\n  - The manifest sets the image tag, the replica count, the resource limits, the liveness probe, and the service account.\n  + The manifest sets these values:\n- The image tag\n- The replica count\n- The resource limits\n- The liveness probe\n- The service account\n\nSource: ASD-STE100\n  ASD-STE100 rule 4.3 (Issue 9)\n  The specification states the rule as a direction rather than a threshold, so the four-item trigger is our operational choice: three coordinated items still read cleanly inline, and the count is what a checker can measure. The formatting sub-requirements of this rule are separate mechanizable rules below.\n",
+      "ste-words.spelling": "ste-words.spelling -- Use en-US spelling\nkind: substitution   severity: warning   scope: prose\ntiers: strict=enforced  normal=enforced  relaxed=excluded\n\nUse the en-US spelling \"<replacement>\".\n\nNamed exceptions (a suppression must cite one):\n  - identifier-fidelity\n  - quotation\n  - code-span\n  - proper-noun\n  - api-name\n\n  <!-- slopvac-allow: rule=ste-words.spelling reason=identifier-fidelity -->\n\nExamples\n  - The parser normalises the colour value.\n  + The parser normalizes the color value.\n  - The build cancelled the licence check.\n  + The build canceled the license check.\n\nSource: ASD-STE100\n  ASD-STE100 rule 1.14 (Issue 9)\n  Generated from the locale table rather than written as a rule, because the correct spelling depends on the project and a rule's substitution map has only one direction. Rule 1.14 asks for American spelling; that is `locale = \"en-US\"`, the default, rather than a rule a British English project cannot turn off.\n",
+      "docs-discipline.status-language": "docs-discipline.status-language -- State what the artifact does at HEAD\nkind: pattern   severity: error   scope: prose\ntiers: strict=enforced  normal=enforced  relaxed=advisory\n\nstatus language: <match> -- state what the artifact does at HEAD\n\nFix: Delete the passage, or state the behaviour the code has now.\n\nNamed exceptions (a suppression must cite one):\n  - quotation\n\n  <!-- slopvac-allow: rule=docs-discipline.status-language reason=quotation -->\n\nExamples\n  - The globbing flag is coming soon.\n  + The flag accepts a literal path.\n  - Support for MDX is not yet implemented.\n  + The parser reads Markdown.\n\nSource: Retired Vale style \u2014 docs-discipline/StatusLanguage.yml\n  E1 in the retired slop-lint.py. The negative lookahead on `currently` exempts runtime-state description (currently running/active/...), which is legitimate present tense, not doc status. Relaxed is advisory rather than excluded because a false status claim is a factual defect, not a register preference. .vale.ini turns it off for the package's own normative source files, which quote the ban list they enforce. Go->Python: the lookahead `(?!...)` is RE2-safe and ports unchanged.\n"
+    }
+  },
+  "error_triage": [
+    {
+      "rule": "prose-discipline.frozen-verb",
+      "line": 9,
+      "matched_text": "implements ingestion",
+      "sentence_context": "PlateVault implements ingestion, calibration, project management and reviewed filesystem operations. Its weakest boundaries are where reviewed decisions become inventory, filesystem outcomes become database records, and verification results become release permission.",
+      "diagnostic": {
+        "path": "docs/reviews/2026-09-22-holistic-review.md",
+        "line": 9,
+        "column": 12,
+        "end_column": 32,
+        "rule_id": "prose-discipline.frozen-verb",
+        "category": "prose-discipline",
+        "severity": "error",
+        "message": "\"implements ingestion\" freezes the action in a noun. Use the plain verb.",
+        "matched_text": "implements ingestion",
+        "replacement": null,
+        "ste_ref": null,
+        "orwell_ref": null
+      },
+      "verdict": "false-positive",
+      "rationale": "Implements introduces a capability inventory: ingestion, calibration, project management and reviewed filesystem operations. Ingestion is the name of a feature here, not a nominalized replacement for one event verb. Replacing implements ingestion with ingests would incorrectly attach the other capability names to that verb. Retained as correct technical descriptive prose; no suppression or claim of a clean gate.",
+      "suppressed": false
+    },
+    {
+      "rule": "prose-discipline.run-on",
+      "line": 270,
+      "matched_text": ";",
+      "sentence_context": "| PROC-03 | P2 | SpecKit workflow ordering conflicts with gate prerequisites. Assignment commands produce/consume YAML, while gates require Markdown. An advertised implementation route is also marked deprecated. Choose one supported execution contract and generate/check derivatives. Installed-runner enforcement remains unverified. | `.specify/workflows/speckit-full/workflow.yml:44-73,116-120`; `gates.yaml:37-52,135-139,368-376`; `.specify/extensions/agent-assign/commands/assign.md:114-145`; `.specify/extensions/agent-assign/commands/execute.md:51-57`; `.specify/gates/nodes.json:25-89` |",
+      "diagnostic": {
+        "path": "docs/reviews/2026-09-22-holistic-review.md",
+        "line": 270,
+        "column": 396,
+        "end_column": 397,
+        "rule_id": "prose-discipline.run-on",
+        "category": "prose-discipline",
+        "severity": "error",
+        "message": "This sentence stitches 4 independent ideas together; the limit is 3. Split it.",
+        "matched_text": ";",
+        "replacement": null,
+        "ste_ref": null,
+        "orwell_ref": null
+      },
+      "verdict": "false-positive",
+      "rationale": "The semicolons separate five code-span source citations in a table evidence cell. They do not join independent prose clauses. The adjacent finding already has sentence-separated claims and recommendations. Retained to preserve every source anchor; this is a table/citation parsing false positive, not a run-on sentence.",
+      "suppressed": false
+    }
+  ],
+  "warning_triage": [
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        3
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "Date: 2026-09-22  ",
+      "verdict": "false-positive",
+      "rationale": "Date, commit and scope are separate Markdown metadata lines; the detector aggregates them as a coordinated sentence."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        9
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "PlateVault implements ingestion, calibration, project management and reviewed filesystem operations. Its weakest boundaries are where reviewed decisions become inventory, filesystem outcomes become database records, and verification results become release permission.",
+      "verdict": "false-positive",
+      "rationale": "The first sentence inventories four implemented capabilities; the second identifies three distinct conversion boundaries. Neither is a procedure."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        13
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "The architecture does not need wholesale replacement. Retain the pure domain crates and context-specific persistence. Preserve bounded metadata caching, explicit plan approval, typed contracts and generated tokens. The immediate need is consistent use of those mechanisms across production paths.",
+      "verdict": "false-positive",
+      "rationale": "Named architecture mechanisms define what the recommendations must preserve; splitting each noun into a bullet would obscure that shared constraint."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        19
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "Seven reviewers inspected independent domains. Seven different challengers then checked their findings against callers, guards, tests and contradictory requirements. The completed workers used the configured `@max` role, resolving to `openai-codex/gpt-6-astra:auto`, without an effort override.",
+      "verdict": "false-positive",
+      "rationale": "Review domains and contradictory-evidence sources describe the completed review method, not multiple reader instructions."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        27
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "- **P1:** prioritize before widening release exposure; data integrity, recovery, operational responsiveness or release-control risk.",
+      "verdict": "false-positive",
+      "rationale": "The four risk classes define the single P1 severity category."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        31
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "Evidence labels distinguish **reproduced**, **source-established**, **conditional**, and **recommendation**. Source-established findings have traced implementations and independent review, but were not all exercised end to end. Confidence is high for the described source mechanisms. Production incidence, platform-specific behavior and performance magnitude remain unmeasured unless explicitly stated.",
+      "verdict": "false-positive",
+      "rationale": "The four evidence labels and three unmeasured dimensions delimit confidence; all are required for interpreting findings."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        51
+      ],
+      "diagnostic_count": 2,
+      "matched_text": "",
+      "sentence_context": "Full commands, outputs, model provenance and limitations are in [verification.json](2026-09-22-holistic-evidence/verification.json). No live accessibility, contrast, keyboard, responsive-layout, packaged updater or external-processor certification was possible. No dependency-advisory scan covering all dependencies or live branch-protection inspection was performed.",
+      "verdict": "false-positive",
+      "rationale": "The excluded certification types and absent scans delimit this historical review; removing an item would expand its implied assurance."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        70
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "The workspace separates metadata, sessions and calibration algorithms from application orchestration and SQL repositories. Project creation already groups project, source, channel and scaffolding records in a composite transaction. SQLite enables foreign keys and WAL. Inbox repair uses durable links rather than relying solely on broadcast delivery.",
+      "verdict": "false-positive",
+      "rationale": "Project, source, channel and scaffolding records enumerate the scope of one composite transaction."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        122
+      ],
+      "diagnostic_count": 2,
+      "matched_text": "",
+      "sentence_context": "The executor rejects static descendant symlinks, checks protected sources, requires destructive confirmation and validates approval tokens. Process launching uses separate arguments rather than shell interpolation. Updater endpoint and signature configuration exist. No reachable SQL injection, shell injection, arbitrary-plan import execution or unsigned-update bypass was established.",
+      "verdict": "false-positive",
+      "rationale": "Executor safeguards are distinct counterevidence to blanket unsafe-execution claims. The process-launch and updater sentences add separate security boundaries."
+    },
+    {
+      "rule": "ste-descriptive.sentence-too-long-descriptive",
+      "affected_lines": [
+        128
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "| SEC-01 | P2, source-established; downgraded | Direct manifest projection follows a planted `notes` directory link outside the project. The established impact is redirected generated metadata. Arbitrary-code execution and unconditional destruction were not established. Use an anchored no-follow writer and exclusive publication. | `crates/project/structure/src/manifest.rs:216-233`; `crates/app/projects/src/project_manifests.rs:219-227,368-394`; `apps/desktop/src-tauri/src/commands/lifecycle.rs:235-253` |",
+      "verdict": "false-positive",
+      "rationale": "The diagnostic points at a Markdown table row with IDs, priority, prose and source citations. The table contains sentence-separated mechanisms, qualifications and recommendations; the metric aggregates table material rather than identifying an exact prose sentence. Retain the explicit qualifications and source anchors instead of splitting identifiers or flattening the table. The reported match is empty, so the full table context is preserved; exact parser sentence attribution remains unchecked."
+    },
+    {
+      "rule": "ste-descriptive.sentence-too-long-descriptive",
+      "affected_lines": [
+        134
+      ],
+      "diagnostic_count": 6,
+      "matched_text": "",
+      "sentence_context": "| SEC-07 | P2, source-established | Startup invokes `downloadAndInstall`; the later user action only relaunches. This contradicts staged-install comments and acceptance language. Tests preserve the early install behavior. Resolve download policy separately. Separate download, installation and restart. Verify the behavior on actual packaged platforms. | `apps/desktop/src/app/Shell.tsx:123-126`; `apps/desktop/src/data/updateSubscription.ts:89-115,131-168`; `apps/desktop/src/data/updateSubscription.test.ts:62-75,124-136` |",
+      "verdict": "false-positive",
+      "rationale": "The diagnostic points at a Markdown table row with IDs, priority, prose and source citations. The table contains sentence-separated mechanisms, qualifications and recommendations; the metric aggregates table material rather than identifying an exact prose sentence. Retain the explicit qualifications and source anchors instead of splitting identifiers or flattening the table. The reported match is empty, so the full table context is preserved; exact parser sentence attribution remains unchecked."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        145
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "| Acquisition and calibration inventory | Implemented, with correctness gaps | Session identity, heterogeneous fingerprints, pagination and deep links. |",
+      "verdict": "false-positive",
+      "rationale": "The inventory row lists the specific correctness gaps developed in findings, rather than independent procedure steps."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        151
+      ],
+      "diagnostic_count": 2,
+      "matched_text": "",
+      "sentence_context": "| Settings, onboarding, localization and themes | Reachable | Selected error, pending, localization and docking paths need repair and rendered verification. |",
+      "verdict": "false-positive",
+      "rationale": "The settings/theme capability row lists the bounded repair areas; it does not claim complete coverage."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        178
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "1. **Recovery and partial-result workspace.** Show interrupted work, failed items, retained sources and next safe actions in one place. Build on existing plans and durable outcomes rather than adding another execution engine.",
+      "verdict": "false-positive",
+      "rationale": "The recovery recommendation lists information one proposed workspace must expose."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        179
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "2. **Session evidence inspector.** Explain grouping, original versus approved metadata, conflicts and calibration consequences. This makes the richer evidence model useful to users once production integration is complete.",
+      "verdict": "false-positive",
+      "rationale": "The evidence-inspector recommendation lists the evidence dimensions users need to compare."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        180
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "3. **Large-library operational status.** Show scan/reconciliation progress, cancellation state, unavailable roots and last verified inventory freshness. Measure the underlying work before inventing progress percentages.",
+      "verdict": "false-positive",
+      "rationale": "Progress, cancellation, root availability and freshness are distinct status fields in one recommendation."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        188
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "Useful existing controls include a bounded 50,000-entry metadata cache, expiry, same-key extraction coalescing, Arc-backed values, bounded watcher ingress and overflow recovery. Classification also has an early cached-response path. Avoid discarding these controls when changing scheduling or data ownership.",
+      "verdict": "false-positive",
+      "rationale": "The cache/watcher controls are explicit invariants for performance changes, not a decorative list."
+    },
+    {
+      "rule": "ste-descriptive.sentence-too-long-descriptive",
+      "affected_lines": [
+        199
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "| PERF-08 | P2, correctness | Frame-type filtering happens after pagination. An older dark session can be excluded behind a page of flat/bias sessions. An empty filtered result drops the root and its continuation signal. | Filter the relation before pagination and skip irrelevant session-type queries. Verify mixed-type page boundaries and `has_more`. |",
+      "verdict": "false-positive",
+      "rationale": "The diagnostic points at a Markdown table row with IDs, priority, prose and source citations. The table contains sentence-separated mechanisms, qualifications and recommendations; the metric aggregates table material rather than identifying an exact prose sentence. Retain the explicit qualifications and source anchors instead of splitting identifiers or flattening the table. The reported match is empty, so the full table context is preserved; exact parser sentence attribution remains unchecked."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        211
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "No latency percentage, memory saving or frame-rate improvement is claimed. Preserve cache behavior, alias search, ordering, stale-generation protection and watcher recovery while removing repeated work.",
+      "verdict": "false-positive",
+      "rationale": "Cache behavior, aliases, ordering, stale-generation protection and recovery are required preservation constraints."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        215
+      ],
+      "diagnostic_count": 2,
+      "matched_text": "",
+      "sentence_context": "The interface uses dense tables and explicit review controls for filesystem work. Shared table states distinguish loading, error, empty and filtered-empty. Reduced-motion CSS, localization infrastructure and adaptive detail placement are present. Source inspection cannot establish contrast, visual hierarchy, actual focus return or responsive quality.",
+      "verdict": "false-positive",
+      "rationale": "Loading, error, empty and filtered-empty are distinct existing states; reduced motion, localization and docking are independent source-backed mechanisms."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        217
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "The design priority is clearer operational truth: what the user approved, what is still running, what partially failed and what can safely happen next. Decorative redesign would not resolve those problems.",
+      "verdict": "false-positive",
+      "rationale": "The four user questions specify operational information that feedback must convey."
+    },
+    {
+      "rule": "ste-descriptive.sentence-too-long-descriptive",
+      "affected_lines": [
+        222
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "| UX-02 | P2 | In pending archive/remap flows, disabling footer Cancel leaves Escape, backdrop and header close unguarded. Closing does not cancel backend work. Guard all dismissal routes or retain an independent outcome surface. Source-view generation already has surviving toasts. | `apps/desktop/src/components/Modal.tsx:143-179`; `apps/desktop/src/features/archive/ArchivePage.tsx:122-125,318-334`; `apps/desktop/src/features/settings/RemapRootDialog.tsx:84-115` |",
+      "verdict": "false-positive",
+      "rationale": "The diagnostic points at a Markdown table row with IDs, priority, prose and source citations. The table contains sentence-separated mechanisms, qualifications and recommendations; the metric aggregates table material rather than identifying an exact prose sentence. Retain the explicit qualifications and source anchors instead of splitting identifiers or flattening the table. The reported match is empty, so the full table context is preserved; exact parser sentence attribution remains unchecked."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        222
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "| UX-02 | P2 | In pending archive/remap flows, disabling footer Cancel leaves Escape, backdrop and header close unguarded. Closing does not cancel backend work. Guard all dismissal routes or retain an independent outcome surface. Source-view generation already has surviving toasts. | `apps/desktop/src/components/Modal.tsx:143-179`; `apps/desktop/src/features/archive/ArchivePage.tsx:122-125,318-334`; `apps/desktop/src/features/settings/RemapRootDialog.tsx:84-115` |",
+      "verdict": "false-positive",
+      "rationale": "Escape, backdrop and header close are separate dismissal routes for the same pending-operation defect."
+    },
+    {
+      "rule": "ste-descriptive.sentence-too-long-descriptive",
+      "affected_lines": [
+        229
+      ],
+      "diagnostic_count": 7,
+      "matched_text": "",
+      "sentence_context": "| UX-09 | P3 | `DESIGN.md` describes obsolete navigation, token names and primitive ownership. It tells contributors to edit generated `apps/desktop/src/styles/tokens.css`. Update authoring guidance to source tokens and actual components; do not restore obsolete navigation to satisfy stale prose. | `DESIGN.md:35-48,126-155`; `apps/desktop/src/styles/tokens.css:1-3,56-114`; `apps/desktop/package.json:28-32` |",
+      "verdict": "false-positive",
+      "rationale": "The diagnostic points at a Markdown table row with IDs, priority, prose and source citations. The table contains sentence-separated mechanisms, qualifications and recommendations; the metric aggregates table material rather than identifying an exact prose sentence. Retain the explicit qualifications and source anchors instead of splitting identifiers or flattening the table. The reported match is empty, so the full table context is preserved; exact parser sentence attribution remains unchecked."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        233
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "Rendered follow-up should cover archive partial failures, delayed remap verification, palette search replacement, Portuguese safety labels and docking at 1100\u00d7720, 1440px and 2560px widths. These checks are proposed. No layout measurements verified them. Start with actual component stories. Continue with the native workflow because browser mocks do not prove native filesystem behavior.",
+      "verdict": "false-positive",
+      "rationale": "The follow-up names exact scenarios, locales and dimensions to prevent an implied rendered pass."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        237
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "The repository has unit, contract, integration and real-UI test structures, contract generation, dependency policy, performance ratchets and release attestations. The main concern is whether changes activate the right checks and whether publication waits for their results. More happy-path test files would not repair those connections.",
+      "verdict": "false-positive",
+      "rationale": "The enumerated test structures and release controls describe existing mechanisms before judging their connections."
+    },
+    {
+      "rule": "ste-descriptive.sentence-too-long-descriptive",
+      "affected_lines": [
+        241
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "| DEL-01 | P1 | E2E activation and dist-cache identity omit catalogue JSON, Inlang settings and splash HTML inputs. Dispatched E2E can also restore stale dist. Preview serves it without rebuilding. Include all build inputs and prove freshness with a warmed-cache change. Main CI testing localization is not equivalent counterevidence. | `.github/workflows/e2e.yml:262-352,793-838`; `apps/desktop/vite.config.ts:35-51,68-76` |",
+      "verdict": "false-positive",
+      "rationale": "The diagnostic points at a Markdown table row with IDs, priority, prose and source citations. The table contains sentence-separated mechanisms, qualifications and recommendations; the metric aggregates table material rather than identifying an exact prose sentence. Retain the explicit qualifications and source anchors instead of splitting identifiers or flattening the table. The reported match is empty, so the full table context is preserved; exact parser sentence attribution remains unchecked."
+    },
+    {
+      "rule": "ste-descriptive.sentence-too-long-descriptive",
+      "affected_lines": [
+        242
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "| DEL-02 | P1 | The failure-alert workflow has no checkout. Its label/issue commands lack `--repo` or `GH_REPO`. Repository-qualified API calls in earlier steps do not supply later CLI context. Qualify each operation and decode the issue body correctly. Normal workflow notifications may still occur. | `.github/workflows/e2e-alert.yml:35-154` |",
+      "verdict": "false-positive",
+      "rationale": "The diagnostic points at a Markdown table row with IDs, priority, prose and source citations. The table contains sentence-separated mechanisms, qualifications and recommendations; the metric aggregates table material rather than identifying an exact prose sentence. Retain the explicit qualifications and source anchors instead of splitting identifiers or flattening the table. The reported match is empty, so the full table context is preserved; exact parser sentence attribution remains unchecked."
+    },
+    {
+      "rule": "ste-descriptive.sentence-too-long-descriptive",
+      "affected_lines": [
+        247
+      ],
+      "diagnostic_count": 4,
+      "matched_text": "",
+      "sentence_context": "| DEL-07 | P3, downgraded | CI generates Rust JUnit and browser failure traces but does not upload them. Failures still fail jobs and text logs remain. Retain bounded, privacy-reviewed diagnostics to reduce debugging cost. | `.config/nextest.toml:144-157`; `apps/desktop/playwright.config.ts:29-47`; `.github/workflows/ci.yml:540-588,883-907` |",
+      "verdict": "false-positive",
+      "rationale": "The diagnostic points at a Markdown table row with IDs, priority, prose and source citations. The table contains sentence-separated mechanisms, qualifications and recommendations; the metric aggregates table material rather than identifying an exact prose sentence. Retain the explicit qualifications and source anchors instead of splitting identifiers or flattening the table. The reported match is empty, so the full table context is preserved; exact parser sentence attribution remains unchecked."
+    },
+    {
+      "rule": "ste-procedural.sentence-too-long-procedural",
+      "affected_lines": [
+        247
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "| DEL-07 | P3, downgraded | CI generates Rust JUnit and browser failure traces but does not upload them. Failures still fail jobs and text logs remain. Retain bounded, privacy-reviewed diagnostics to reduce debugging cost. | `.config/nextest.toml:144-157`; `apps/desktop/playwright.config.ts:29-47`; `.github/workflows/ci.yml:540-588,883-907` |",
+      "verdict": "false-positive",
+      "rationale": "The diagnostic points at a Markdown table row with IDs, priority, prose and source citations. The table contains sentence-separated mechanisms, qualifications and recommendations; the metric aggregates table material rather than identifying an exact prose sentence. Retain the explicit qualifications and source anchors instead of splitting identifiers or flattening the table. The reported match is empty, so the full table context is preserved; exact parser sentence attribution remains unchecked."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        253
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "- Fault injection between business mutation, audit, enrichment, finalization and acknowledgement.",
+      "verdict": "false-positive",
+      "rationale": "The fault-injection boundaries must be distinguished to reproduce partial commits and acknowledgment loss."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        256
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "- Producer-to-consumer decision tables for CI selection, ALL/empty sentinels, lockfiles and mixed known/unknown paths.",
+      "verdict": "false-positive",
+      "rationale": "Selection sentinels and changed-path combinations are test inputs for one CI contract."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        260
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "No dependency is labeled deprecated or vulnerable merely because of age or a prerelease version. The review did not complete a registry/advisory audit. Follow up with manifest-versus-lock inventory, supported toolchain verification, advisory review and final shipped-artifact inspection. Do not run blanket upgrades as a substitute for reproducing the reported defects.",
+      "verdict": "false-positive",
+      "rationale": "The follow-up names the stages missing from the dependency audit rather than claiming an audit passed."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        262
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "## Engineering processes, workflows, tooling and structure",
+      "verdict": "false-positive",
+      "rationale": "The section heading indexes process, workflow, tooling and structure coverage requested for this review."
+    },
+    {
+      "rule": "ste-descriptive.sentence-too-long-descriptive",
+      "affected_lines": [
+        270
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "| PROC-03 | P2 | SpecKit workflow ordering conflicts with gate prerequisites. Assignment commands produce/consume YAML, while gates require Markdown. An advertised implementation route is also marked deprecated. Choose one supported execution contract and generate/check derivatives. Installed-runner enforcement remains unverified. | `.specify/workflows/speckit-full/workflow.yml:44-73,116-120`; `gates.yaml:37-52,135-139,368-376`; `.specify/extensions/agent-assign/commands/assign.md:114-145`; `.specify/extensions/agent-assign/commands/execute.md:51-57`; `.specify/gates/nodes.json:25-89` |",
+      "verdict": "false-positive",
+      "rationale": "The diagnostic points at a Markdown table row with IDs, priority, prose and source citations. The table contains sentence-separated mechanisms, qualifications and recommendations; the metric aggregates table material rather than identifying an exact prose sentence. Retain the explicit qualifications and source anchors instead of splitting identifiers or flattening the table. The reported match is empty, so the full table context is preserved; exact parser sentence attribution remains unchecked."
+    },
+    {
+      "rule": "ste-descriptive.sentence-too-long-descriptive",
+      "affected_lines": [
+        274
+      ],
+      "diagnostic_count": 4,
+      "matched_text": "",
+      "sentence_context": "| PROC-07 | P3, downgraded | Just recipes name bugfix/tinyspec workflows absent from the checked-in workflow registry. Lightweight extension commands do exist, and the external runner may supply additional discovery. Verify clean-environment resolution before calling the recipes broken. | `justfile:219-223`; `.specify/workflows/workflow-registry.json:3-26`; `.specify/extensions/bugfix/extension.yml:15-25`; `.specify/extensions/tinyspec/extension.yml:15-25` |",
+      "verdict": "false-positive",
+      "rationale": "The diagnostic points at a Markdown table row with IDs, priority, prose and source citations. The table contains sentence-separated mechanisms, qualifications and recommendations; the metric aggregates table material rather than identifying an exact prose sentence. Retain the explicit qualifications and source anchors instead of splitting identifiers or flattening the table. The reported match is empty, so the full table context is preserved; exact parser sentence attribution remains unchecked."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        278
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "**Consolidate competing authorities.** Workflow YAML, `gates.yaml`, compiled nodes, extension commands and design prose encode overlapping contracts. The evidence establishes contradictions between these representations. Their quantity alone is not a defect. Choose an authoritative representation for each contract. Verify generated or descriptive derivatives against it.",
+      "verdict": "false-positive",
+      "rationale": "YAML, gates, compiled nodes, extension commands and design prose are the competing authorities under review."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        284
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "**Make contributor verification explicit.** Document which commands require Rust caches, generated contracts, locale generation, frontend dependencies and native prerequisites. Separate a quick source/tooling check from actual application and release certification. Record the observed provisioning mismatch in reproducibility follow-up. Exclude it from application bug counts.",
+      "verdict": "false-positive",
+      "rationale": "The prerequisite list records the observed reproducibility boundary and does not prescribe new installation work."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        286
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "**Distinguish evidence quality from evidence volume.** Keep exact-commit run records, independent review, conservative change selection and serialized shared state. Repair their validation and connections. Removing them would not resolve contradictory workflow definitions or false-positive pass records.",
+      "verdict": "false-positive",
+      "rationale": "Exact-commit records, independent review, change selection and serialized state are distinct controls to retain."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        292
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "3. **Multiple representations of one workflow.** Live execution, recovery, archive disposal and successor APIs disagree on paths, actions or acknowledgement. Reuse the established contract rather than copying another partial interpretation.",
+      "verdict": "false-positive",
+      "rationale": "Execution, recovery, disposal and successor APIs name the actual competing interpretations, not a generic list."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        298
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "No blanket deletion list is justified. The strongest deprecation evidence concerns the advertised SpecKit route and stale design-authoring instructions, not proven unused application modules. Trace registrations, callers, persistence compatibility and generated contracts before removing code.",
+      "verdict": "false-positive",
+      "rationale": "Registrations, callers, persistence compatibility and generated contracts define the checks needed before deletion."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        319
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "This report and its evidence are persisted in the review worktree. No application fix, commit, push, release, dependency installation or external issue creation is claimed. The inaccessible Beads store prevented durable issue creation and synchronization; the report remains the available record.",
+      "verdict": "false-positive",
+      "rationale": "The absent mutations/publications are explicit historical scope boundaries; none can be removed without broadening the claim."
+    },
+    {
+      "rule": "ste-sentences.complex-text-not-in-vertical-list",
+      "affected_lines": [
+        321
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "",
+      "sentence_context": "Release readiness requires reproducing the P1 application paths with disposable data and repairing the release dependency graph. It also requires native UI and packaged-platform checks with provisioned dependencies. Resolve product-scope questions separately from defects. A passing build alone would not prove the concurrency, recovery, artifact freshness or publication guarantees described here.",
+      "verdict": "false-positive",
+      "rationale": "The release-readiness prerequisites are bounded recommendations, followed by distinct product-scope and verification limits."
+    },
+    {
+      "rule": "ste-procedural.multiple-instructions-per-sentence",
+      "affected_lines": [
+        19
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "Seven different challengers then",
+      "sentence_context": "Seven reviewers inspected independent domains. Seven different challengers then checked their findings against callers, guards, tests and contradictory requirements. The completed workers used the configured `@max` role, resolving to `openai-codex/gpt-6-astra:auto`, without an effort override.",
+      "verdict": "false-positive",
+      "rationale": "This is a past-tense account of independent challengers checking evidence, not an instruction."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        21
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "cancelled",
+      "sentence_context": "Direct `agent: \"@max\"` dispatch failed. A supervised OMP dispatcher temporarily routed scouts and reviewers to `@max`; global configuration stayed unchanged. Parent tool cards did not show its children. All 14 dispatches reported `modelRole: max`; reports name Astra. The cancelled default-scout batch contributes no findings.",
+      "verdict": "false-positive",
+      "rationale": "'cancelled' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-procedural.multiple-instructions-per-sentence",
+      "affected_lines": [
+        46
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "Storybook, then",
+      "sentence_context": "| Storybook, then direct Vite launch | Blocked | pnpm refused automatic module removal; direct Vite lacked `@vanilla-extract/vite-plugin`. |",
+      "verdict": "false-positive",
+      "rationale": "This table cell records the historical order of two blocked launch attempts, not a two-action instruction."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        57
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "acknowledgement",
+      "sentence_context": "| 1 | Make approval, ingestion and acknowledgement agree | COR-01, COR-02, COR-06, SEC-06 | Approved type survives ingestion; concurrent membership survives; transient failures remain retryable; new source mutations require a captured baseline. |",
+      "verdict": "false-positive",
+      "rationale": "'acknowledgement' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-words.approved-word-substitution",
+      "affected_lines": [
+        57
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "require",
+      "sentence_context": "| 1 | Make approval, ingestion and acknowledgement agree | COR-01, COR-02, COR-06, SEC-06 | Approved type survives ingestion; concurrent membership survives; transient failures remain retryable; new source mutations require a captured baseline. |",
+      "verdict": "false-positive",
+      "rationale": "Require/require names an enforced precondition or the necessary condition for the stated risk; need is not a more precise replacement."
+    },
+    {
+      "rule": "ste-procedural.multiple-instructions-per-sentence",
+      "affected_lines": [
+        62
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "Correct filtered inventory and remove",
+      "sentence_context": "| 6 | Correct filtered inventory and remove known scaling costs | PERF-01-06, PERF-08 | Filtering precedes pagination; watcher lookup is linear; blocking I/O leaves async workers; only needed catalogue records are cloned. |",
+      "verdict": "false-positive",
+      "rationale": "This is a work-package title; its filtering and scaling outcomes belong to one package, not one executable step."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        62
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "catalogue",
+      "sentence_context": "| 6 | Correct filtered inventory and remove known scaling costs | PERF-01-06, PERF-08 | Filtering precedes pagination; watcher lookup is linear; blocking I/O leaves async workers; only needed catalogue records are cloned. |",
+      "verdict": "false-positive",
+      "rationale": "'catalogue' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-procedural.multiple-instructions-per-sentence",
+      "affected_lines": [
+        105
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "Completion can still resolve the inbox item and delete",
+      "sentence_context": "A database error aborts the ingestion loop. Its listener wrapper logs the error. Completion can still resolve the inbox item and delete the link used by repair. This requires the ingestion write to fail while later acknowledgement writes succeed. Required fingerprint writes can also fail through logged-only paths.",
+      "verdict": "false-positive",
+      "rationale": "This describes what completion can do after an ingestion failure, not what the reader should do."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        105
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "acknowledgement",
+      "sentence_context": "A database error aborts the ingestion loop. Its listener wrapper logs the error. Completion can still resolve the inbox item and delete the link used by repair. This requires the ingestion write to fail while later acknowledgement writes succeed. Required fingerprint writes can also fail through logged-only paths.",
+      "verdict": "false-positive",
+      "rationale": "'acknowledgement' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-procedural.multiple-instructions-per-sentence",
+      "affected_lines": [
+        129
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "Existence-check then",
+      "sentence_context": "| SEC-02 | P1, source-established | Existence-check then rename/persist/copy is not atomic no-clobber. A concurrent acquisition, synchronization or export writer can lose its destination bytes. Use true no-replace publication across moves, marker writes, explicit copies and exports. Static pre-existing files are generally rejected. | `crates/fs/executor/src/ops/move_op.rs:63-71,102-125`; `crates/fs/executor/src/ops/write_manifest_op.rs:36-77`; `crates/fs/executor/src/ops/link_op.rs:47-75`; `crates/fs/pathsafe/src/export_dest.rs:155-162` |",
+      "verdict": "false-positive",
+      "rationale": "The phrase names the check-then-act race being criticized, not an instruction to perform it."
+    },
+    {
+      "rule": "ste-procedural.multiple-instructions-per-sentence",
+      "affected_lines": [
+        131
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "Recovery converts every metadata-probe error to absence, then",
+      "sentence_context": "| SEC-04 | P1, component reproduced | Recovery converts every metadata-probe error to absence, then reports a removal complete. The probe produced `PermissionDenied \u2192 Completed` while the source remained unchanged. Preserve unknown/error states. Verify volume availability before interpreting absence. | `crates/fs/executor/src/reconcile.rs:82-102`; `crates/app/core/src/plan_apply/reconcile.rs:105-129`; `crates/persistence/plans/src/repositories/plan_apply.rs:926-947,1000-1022` |",
+      "verdict": "false-positive",
+      "rationale": "This describes the reproduced erroneous classifier transition, not a requested operation."
+    },
+    {
+      "rule": "ste-words.approved-word-substitution",
+      "affected_lines": [
+        133
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "Require",
+      "sentence_context": "| SEC-06 | P2, source-established | Approval commits before freshness capture. Missing sources or snapshot-write failures leave approval valid; absent snapshot fields make CAS accept a later replacement without comparison. Require successful baselines atomically for new source-mutating approvals. Explicitly exempt source-free actions. | `crates/app/core/src/plans/approve.rs:80-112`; `crates/fs/executor/src/ops/cas_check.rs:41-45,101-115`; `crates/app/core/src/plan_apply/paths.rs:336-340` |",
+      "verdict": "false-positive",
+      "rationale": "Require/require names an enforced precondition or the necessary condition for the stated risk; need is not a more precise replacement."
+    },
+    {
+      "rule": "ste-procedural.multiple-instructions-per-sentence",
+      "affected_lines": [
+        134
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "Separate download, installation and restart",
+      "sentence_context": "| SEC-07 | P2, source-established | Startup invokes `downloadAndInstall`; the later user action only relaunches. This contradicts staged-install comments and acceptance language. Tests preserve the early install behavior. Resolve download policy separately. Separate download, installation and restart. Verify the behavior on actual packaged platforms. | `apps/desktop/src/app/Shell.tsx:123-126`; `apps/desktop/src/data/updateSubscription.ts:89-115,131-168`; `apps/desktop/src/data/updateSubscription.test.ts:62-75,124-136` |",
+      "verdict": "false-positive",
+      "rationale": "Separate takes three lifecycle phases as objects of one architectural requirement; it does not join three procedural commands."
+    },
+    {
+      "rule": "ste-words.approved-word-substitution",
+      "affected_lines": [
+        136
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "require",
+      "sentence_context": "Null CSP and broad renderer capabilities warrant a separate permission-minimization review. Without an untrusted-data-to-script path, they are hardening opportunities rather than proven XSS or RCE. Likewise, timing defects require concurrent writers; an inert image header does not supply that capability.",
+      "verdict": "false-positive",
+      "rationale": "Require/require names an enforced precondition or the necessary condition for the stated risk; need is not a more precise replacement."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        144
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "catalogue",
+      "sentence_context": "| Inbox classification, catalogue-in-place, reviewed movement | Implemented core | Approved evidence is not preserved consistently through ingestion and acknowledgement. |",
+      "verdict": "false-positive",
+      "rationale": "'catalogue' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        144
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "acknowledgement",
+      "sentence_context": "| Inbox classification, catalogue-in-place, reviewed movement | Implemented core | Approved evidence is not preserved consistently through ingestion and acknowledgement. |",
+      "verdict": "false-positive",
+      "rationale": "'acknowledgement' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        147
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "catalogue",
+      "sentence_context": "| Target catalogue and project association | Implemented core | Known project targets are missing from list projection and grouping. |",
+      "verdict": "false-positive",
+      "rationale": "'catalogue' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-words.approved-word-substitution",
+      "affected_lines": [
+        192
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "perform",
+      "sentence_context": "| PERF-01 | P1 | Cold/forced classification and source-group processing perform synchronous traversal, hashing and extraction on async workers. Cached item responses can skip this. | Move bounded filesystem work to blocking execution; measure unrelated command latency for cold, forced and cache-hit cases. |",
+      "verdict": "false-positive",
+      "rationale": "Perform describes synchronous traversal, hashing and extraction as the implementation mechanism. A shared verb introduces three domain operations; no hidden actor or abstract unsupported claim results."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        195
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "catalogues",
+      "sentence_context": "| PERF-04 | P2 | A new list-state wrapper invalidates filtering and progressive-reveal derivation. Growing prefixes are repeatedly mapped and sorted. | Stabilize dependencies and derive filtered/sorted data once. Measure filter calls, rows visited and sort work, including heavily filtered catalogues. |",
+      "verdict": "false-positive",
+      "rationale": "'catalogues' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        197
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "catalogue",
+      "sentence_context": "| PERF-06 | P2 | Cached target search deep-clones the entire owned catalogue before filtering. | Filter shared data first and clone only returned records. Measure allocations and executed query keys; do not assume every keystroke causes IPC. |",
+      "verdict": "false-positive",
+      "rationale": "'catalogue' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        241
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "catalogue",
+      "sentence_context": "| DEL-01 | P1 | E2E activation and dist-cache identity omit catalogue JSON, Inlang settings and splash HTML inputs. Dispatched E2E can also restore stale dist. Preview serves it without rebuilding. Include all build inputs and prove freshness with a warmed-cache change. Main CI testing localization is not equivalent counterevidence. | `.github/workflows/e2e.yml:262-352,793-838`; `apps/desktop/vite.config.ts:35-51,68-76` |",
+      "verdict": "false-positive",
+      "rationale": "'catalogue' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "docs-discipline.status-language",
+      "affected_lines": [
+        244
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "draft",
+      "sentence_context": "| DEL-04 | P1 | Release creation/publication does not wait for the independent hard Release Gate or all platform artifacts. Independent matrix success can expose a partial release. Build artifacts into a draft/staging release. Verify them before one gated publication transition. | `.github/workflows/release-please.yml:63-78,161-170`; `.github/workflows/release-gate.yml:24-53,245-260`; `release-please-config.json:1-43` |",
+      "verdict": "false-positive",
+      "rationale": "Draft/staging release is the proposed publication state before a gated transition, not a claim that this historical document or an unavailable feature has draft status."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        253
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "acknowledgement",
+      "sentence_context": "- Fault injection between business mutation, audit, enrichment, finalization and acknowledgement.",
+      "verdict": "false-positive",
+      "rationale": "'acknowledgement' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-words.approved-word-substitution",
+      "affected_lines": [
+        270
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "require",
+      "sentence_context": "| PROC-03 | P2 | SpecKit workflow ordering conflicts with gate prerequisites. Assignment commands produce/consume YAML, while gates require Markdown. An advertised implementation route is also marked deprecated. Choose one supported execution contract and generate/check derivatives. Installed-runner enforcement remains unverified. | `.specify/workflows/speckit-full/workflow.yml:44-73,116-120`; `gates.yaml:37-52,135-139,368-376`; `.specify/extensions/agent-assign/commands/assign.md:114-145`; `.specify/extensions/agent-assign/commands/execute.md:51-57`; `.specify/gates/nodes.json:25-89` |",
+      "verdict": "false-positive",
+      "rationale": "Require/require names an enforced precondition or the necessary condition for the stated risk; need is not a more precise replacement."
+    },
+    {
+      "rule": "ste-words.approved-word-substitution",
+      "affected_lines": [
+        284
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "require",
+      "sentence_context": "**Make contributor verification explicit.** Document which commands require Rust caches, generated contracts, locale generation, frontend dependencies and native prerequisites. Separate a quick source/tooling check from actual application and release certification. Record the observed provisioning mismatch in reproducibility follow-up. Exclude it from application bug counts.",
+      "verdict": "false-positive",
+      "rationale": "Require/require names an enforced precondition or the necessary condition for the stated risk; need is not a more precise replacement."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        292
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "acknowledgement",
+      "sentence_context": "3. **Multiple representations of one workflow.** Live execution, recovery, archive disposal and successor APIs disagree on paths, actions or acknowledgement. Reuse the established contract rather than copying another partial interpretation.",
+      "verdict": "false-positive",
+      "rationale": "'acknowledgement' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-words.spelling",
+      "affected_lines": [
+        295
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "catalogue",
+      "sentence_context": "6. **Broad invalidation and unnecessary ownership copies.** New wrapper objects and whole-catalogue clones defeat existing caches and memoization.",
+      "verdict": "false-positive",
+      "rationale": "'catalogue' is valid en-GB spelling in the retained review prose. The normal profile prefers en-US; this advisory mismatch does not change meaning. No project locale/config override was made."
+    },
+    {
+      "rule": "ste-words.approved-word-substitution",
+      "affected_lines": [
+        308
+      ],
+      "diagnostic_count": 1,
+      "matched_text": "require",
+      "sentence_context": "| Empty virtualizer fallback proves production rendering failure | Mechanism exists; production occurrence and cost require rendering evidence. P3. |",
+      "verdict": "false-positive",
+      "rationale": "Require/require names an enforced precondition or the necessary condition for the stated risk; need is not a more precise replacement."
+    }
+  ],
+  "warning_coverage": {
+    "reported": 92,
+    "triaged": 92,
+    "groups": 71,
+    "untriaged": 0,
+    "group_policy": "Only identical rule, source line and matched text share a group; every diagnostic and its exact reported coordinates/message remains included."
+  },
+  "suggestion_coverage": {
+    "reported": 358,
+    "status": "No individual disposition claimed for all 358 advisory suggestions. All 66 supplied judgement questions were answered separately. Raw suggestions are retained below for future inspection."
+  },
+  "path_validation": {
+    "method": "Extract all backtick path:line citations; validate file existence and every endpoint. Resolve shorthand via provided inventories and exact-filename glob. Compare Git blob hashes against git ls-tree at the cited snapshot. This verifies referents and bounds, not every causal claim.",
+    "anchor_count": 141,
+    "unique_anchored_paths": 105,
+    "all_in_bounds": true,
+    "anchors": [
+      {
+        "report_line": 74,
+        "path": "docs/release/pre-1-0-database-baseline.md",
+        "ranges": "3-27",
+        "file_exists": true,
+        "source_lines": 28,
+        "in_bounds": true
+      },
+      {
+        "report_line": 74,
+        "path": "apps/desktop/src-tauri/src/lib.rs",
+        "ranges": "625-648",
+        "file_exists": true,
+        "source_lines": 1117,
+        "in_bounds": true
+      },
+      {
+        "report_line": 80,
+        "path": "crates/app/inbox/src/confirm.rs",
+        "ranges": "424-444,570-574,931-939",
+        "file_exists": true,
+        "source_lines": 3501,
+        "in_bounds": true
+      },
+      {
+        "report_line": 80,
+        "path": "crates/persistence/targets/src/repositories/q_targets_ingest.rs",
+        "ranges": "282-297",
+        "file_exists": true,
+        "source_lines": 474,
+        "in_bounds": true
+      },
+      {
+        "report_line": 80,
+        "path": "crates/app/targets/src/ingest_sessions.rs",
+        "ranges": "191-198,716-728",
+        "file_exists": true,
+        "source_lines": 1251,
+        "in_bounds": true
+      },
+      {
+        "report_line": 86,
+        "path": "crates/app/targets/src/ingest_sessions.rs",
+        "ranges": "563-622",
+        "file_exists": true,
+        "source_lines": 1251,
+        "in_bounds": true
+      },
+      {
+        "report_line": 86,
+        "path": "crates/persistence/targets/src/repositories/q_targets_ingest.rs",
+        "ranges": "336-434",
+        "file_exists": true,
+        "source_lines": 474,
+        "in_bounds": true
+      },
+      {
+        "report_line": 86,
+        "path": "crates/app/inbox/src/plan_listener.rs",
+        "ranges": "51-74,114-124,225-228",
+        "file_exists": true,
+        "source_lines": 1183,
+        "in_bounds": true
+      },
+      {
+        "report_line": 86,
+        "path": "crates/persistence/core/migrations/0001_initial_schema.sql",
+        "ranges": "2979-2980",
+        "file_exists": true,
+        "source_lines": 4195,
+        "in_bounds": true
+      },
+      {
+        "report_line": 92,
+        "path": "crates/app/targets/src/ingest_sessions.rs",
+        "ranges": "219-249,675-697",
+        "file_exists": true,
+        "source_lines": 1251,
+        "in_bounds": true
+      },
+      {
+        "report_line": 92,
+        "path": "crates/app/targets/src/ingest_resolution.rs",
+        "ranges": "143-166",
+        "file_exists": true,
+        "source_lines": 727,
+        "in_bounds": true
+      },
+      {
+        "report_line": 92,
+        "path": "crates/persistence/targets/src/repositories/q_targets_ingest.rs",
+        "ranges": "445-463",
+        "file_exists": true,
+        "source_lines": 474,
+        "in_bounds": true
+      },
+      {
+        "report_line": 98,
+        "path": "crates/app/targets/src/ingest_sessions.rs",
+        "ranges": "355-401,493-503",
+        "file_exists": true,
+        "source_lines": 1251,
+        "in_bounds": true
+      },
+      {
+        "report_line": 98,
+        "path": "crates/persistence/calibration/src/repositories/q_calibration.rs",
+        "ranges": "187-210",
+        "file_exists": true,
+        "source_lines": 501,
+        "in_bounds": true
+      },
+      {
+        "report_line": 98,
+        "path": "crates/app/calibration/src/matching/loaders.rs",
+        "ranges": "39-53",
+        "file_exists": true,
+        "source_lines": 270,
+        "in_bounds": true
+      },
+      {
+        "report_line": 98,
+        "path": "crates/calibration/core/src/assign.rs",
+        "ranges": "69-78,120-145",
+        "file_exists": true,
+        "source_lines": 376,
+        "in_bounds": true
+      },
+      {
+        "report_line": 102,
+        "path": "crates/app/targets/src/ingest_sessions.rs",
+        "ranges": "374-401,493-503,515-532",
+        "file_exists": true,
+        "source_lines": 1251,
+        "in_bounds": true
+      },
+      {
+        "report_line": 102,
+        "path": "crates/app/calibration/src/matching/loaders.rs",
+        "ranges": "45-53",
+        "file_exists": true,
+        "source_lines": 270,
+        "in_bounds": true
+      },
+      {
+        "report_line": 102,
+        "path": "crates/calibration/core/src/rules/dark.rs",
+        "ranges": "125-131",
+        "file_exists": true,
+        "source_lines": 489,
+        "in_bounds": true
+      },
+      {
+        "report_line": 108,
+        "path": "crates/app/targets/src/ingest_sessions.rs",
+        "ranges": "119-155,251-278",
+        "file_exists": true,
+        "source_lines": 1251,
+        "in_bounds": true
+      },
+      {
+        "report_line": 108,
+        "path": "crates/app/inbox/src/plan_listener.rs",
+        "ranges": "220-239,266-282,582-610",
+        "file_exists": true,
+        "source_lines": 1183,
+        "in_bounds": true
+      },
+      {
+        "report_line": 108,
+        "path": "crates/app/inbox/src/repair.rs",
+        "ranges": "20-35,43-83",
+        "file_exists": true,
+        "source_lines": 353,
+        "in_bounds": true
+      },
+      {
+        "report_line": 112,
+        "path": "crates/app/calibration/src/matching/assign.rs",
+        "ranges": "130-163,200-231",
+        "file_exists": true,
+        "source_lines": 236,
+        "in_bounds": true
+      },
+      {
+        "report_line": 112,
+        "path": "crates/persistence/calibration/src/repositories/calibration_assignment.rs",
+        "ranges": "83-134",
+        "file_exists": true,
+        "source_lines": 521,
+        "in_bounds": true
+      },
+      {
+        "report_line": 112,
+        "path": "crates/audit/src/bus.rs",
+        "ranges": "188-218",
+        "file_exists": true,
+        "source_lines": 529,
+        "in_bounds": true
+      },
+      {
+        "report_line": 118,
+        "path": "crates/app/core/src/plan_apply/finalizers.rs",
+        "ranges": "84-128",
+        "file_exists": true,
+        "source_lines": 531,
+        "in_bounds": true
+      },
+      {
+        "report_line": 118,
+        "path": "crates/app/core/src/plan_apply/terminal.rs",
+        "ranges": "126-162",
+        "file_exists": true,
+        "source_lines": 491,
+        "in_bounds": true
+      },
+      {
+        "report_line": 118,
+        "path": "crates/persistence/plans/src/repositories/prepared_source_views.rs",
+        "ranges": "70-111",
+        "file_exists": true,
+        "source_lines": 416,
+        "in_bounds": true
+      },
+      {
+        "report_line": 118,
+        "path": "crates/app/projects/src/source_view_generate/generate.rs",
+        "ranges": "525-547",
+        "file_exists": true,
+        "source_lines": 638,
+        "in_bounds": true
+      },
+      {
+        "report_line": 128,
+        "path": "crates/project/structure/src/manifest.rs",
+        "ranges": "216-233",
+        "file_exists": true,
+        "source_lines": 339,
+        "in_bounds": true
+      },
+      {
+        "report_line": 128,
+        "path": "crates/app/projects/src/project_manifests.rs",
+        "ranges": "219-227,368-394",
+        "file_exists": true,
+        "source_lines": 1065,
+        "in_bounds": true
+      },
+      {
+        "report_line": 128,
+        "path": "apps/desktop/src-tauri/src/commands/lifecycle.rs",
+        "ranges": "235-253",
+        "file_exists": true,
+        "source_lines": 323,
+        "in_bounds": true
+      },
+      {
+        "report_line": 129,
+        "path": "crates/fs/executor/src/ops/move_op.rs",
+        "ranges": "63-71,102-125",
+        "file_exists": true,
+        "source_lines": 478,
+        "in_bounds": true
+      },
+      {
+        "report_line": 129,
+        "path": "crates/fs/executor/src/ops/write_manifest_op.rs",
+        "ranges": "36-77",
+        "file_exists": true,
+        "source_lines": 197,
+        "in_bounds": true
+      },
+      {
+        "report_line": 129,
+        "path": "crates/fs/executor/src/ops/link_op.rs",
+        "ranges": "47-75",
+        "file_exists": true,
+        "source_lines": 228,
+        "in_bounds": true
+      },
+      {
+        "report_line": 129,
+        "path": "crates/fs/pathsafe/src/export_dest.rs",
+        "ranges": "155-162",
+        "file_exists": true,
+        "source_lines": 433,
+        "in_bounds": true
+      },
+      {
+        "report_line": 130,
+        "path": "crates/fs/executor/src/ops/path_gate.rs",
+        "ranges": "75-116",
+        "file_exists": true,
+        "source_lines": 244,
+        "in_bounds": true
+      },
+      {
+        "report_line": 130,
+        "path": "crates/fs/executor/src/run/loop_.rs",
+        "ranges": "446-494,517-532",
+        "file_exists": true,
+        "source_lines": 576,
+        "in_bounds": true
+      },
+      {
+        "report_line": 130,
+        "path": "crates/fs/executor/src/ops/delete_op.rs",
+        "ranges": "43-53",
+        "file_exists": true,
+        "source_lines": 94,
+        "in_bounds": true
+      },
+      {
+        "report_line": 131,
+        "path": "crates/fs/executor/src/reconcile.rs",
+        "ranges": "82-102",
+        "file_exists": true,
+        "source_lines": 267,
+        "in_bounds": true
+      },
+      {
+        "report_line": 131,
+        "path": "crates/app/core/src/plan_apply/reconcile.rs",
+        "ranges": "105-129",
+        "file_exists": true,
+        "source_lines": 195,
+        "in_bounds": true
+      },
+      {
+        "report_line": 131,
+        "path": "crates/persistence/plans/src/repositories/plan_apply.rs",
+        "ranges": "926-947,1000-1022",
+        "file_exists": true,
+        "source_lines": 1623,
+        "in_bounds": true
+      },
+      {
+        "report_line": 132,
+        "path": "crates/app/projects/src/source_view_generate/generate.rs",
+        "ranges": "552-619",
+        "file_exists": true,
+        "source_lines": 638,
+        "in_bounds": true
+      },
+      {
+        "report_line": 132,
+        "path": "crates/app/core/src/plan_apply/paths.rs",
+        "ranges": "214-222,285-303",
+        "file_exists": true,
+        "source_lines": 364,
+        "in_bounds": true
+      },
+      {
+        "report_line": 132,
+        "path": "crates/app/core/src/plan_apply/reconcile.rs",
+        "ranges": "59-64,157-170",
+        "file_exists": true,
+        "source_lines": 195,
+        "in_bounds": true
+      },
+      {
+        "report_line": 133,
+        "path": "crates/app/core/src/plans/approve.rs",
+        "ranges": "80-112",
+        "file_exists": true,
+        "source_lines": 135,
+        "in_bounds": true
+      },
+      {
+        "report_line": 133,
+        "path": "crates/fs/executor/src/ops/cas_check.rs",
+        "ranges": "41-45,101-115",
+        "file_exists": true,
+        "source_lines": 245,
+        "in_bounds": true
+      },
+      {
+        "report_line": 133,
+        "path": "crates/app/core/src/plan_apply/paths.rs",
+        "ranges": "336-340",
+        "file_exists": true,
+        "source_lines": 364,
+        "in_bounds": true
+      },
+      {
+        "report_line": 134,
+        "path": "apps/desktop/src/app/Shell.tsx",
+        "ranges": "123-126",
+        "file_exists": true,
+        "source_lines": 191,
+        "in_bounds": true
+      },
+      {
+        "report_line": 134,
+        "path": "apps/desktop/src/data/updateSubscription.ts",
+        "ranges": "89-115,131-168",
+        "file_exists": true,
+        "source_lines": 190,
+        "in_bounds": true
+      },
+      {
+        "report_line": 134,
+        "path": "apps/desktop/src/data/updateSubscription.test.ts",
+        "ranges": "62-75,124-136",
+        "file_exists": true,
+        "source_lines": 206,
+        "in_bounds": true
+      },
+      {
+        "report_line": 158,
+        "path": "apps/desktop/src/features/archive/ArchivePage.tsx",
+        "ranges": "124-127,192-196",
+        "file_exists": true,
+        "source_lines": 368,
+        "in_bounds": true
+      },
+      {
+        "report_line": 158,
+        "path": "crates/app/core/src/plans/archive.rs",
+        "ranges": "124-198,215-314",
+        "file_exists": true,
+        "source_lines": 379,
+        "in_bounds": true
+      },
+      {
+        "report_line": 160,
+        "path": "crates/app/core/src/plans/archive.rs",
+        "ranges": "147-193,261-309",
+        "file_exists": true,
+        "source_lines": 379,
+        "in_bounds": true
+      },
+      {
+        "report_line": 160,
+        "path": "crates/audit-types/src/event_bus.rs",
+        "ranges": "326-340",
+        "file_exists": true,
+        "source_lines": 931,
+        "in_bounds": true
+      },
+      {
+        "report_line": 162,
+        "path": "apps/desktop/src/features/archive/ArchivePage.tsx",
+        "ranges": "124-127,192-196",
+        "file_exists": true,
+        "source_lines": 368,
+        "in_bounds": true
+      },
+      {
+        "report_line": 162,
+        "path": "apps/desktop/src/features/archive/store.ts",
+        "ranges": "117-140",
+        "file_exists": true,
+        "source_lines": 169,
+        "in_bounds": true
+      },
+      {
+        "report_line": 162,
+        "path": "apps/desktop/src/data/queryClient.ts",
+        "ranges": "15-25",
+        "file_exists": true,
+        "source_lines": 25,
+        "in_bounds": true
+      },
+      {
+        "report_line": 164,
+        "path": "apps/desktop/src/features/recovery/RecoveryBanner.tsx",
+        "ranges": "59,68-79",
+        "file_exists": true,
+        "source_lines": 83,
+        "in_bounds": true
+      },
+      {
+        "report_line": 164,
+        "path": "apps/desktop/src/features/plans/PlanReviewOverlay.tsx",
+        "ranges": "258-265,317-345,393-414",
+        "file_exists": true,
+        "source_lines": 751,
+        "in_bounds": true
+      },
+      {
+        "report_line": 166,
+        "path": "apps/desktop/src/features/projects/ProjectBottomDetail.tsx",
+        "ranges": "96-109",
+        "file_exists": true,
+        "source_lines": 119,
+        "in_bounds": true
+      },
+      {
+        "report_line": 166,
+        "path": "apps/desktop/src/features/projects/OutputsCleanupSections.tsx",
+        "ranges": "47-75,103-105",
+        "file_exists": true,
+        "source_lines": 409,
+        "in_bounds": true
+      },
+      {
+        "report_line": 166,
+        "path": "README.md",
+        "ranges": "30-32",
+        "file_exists": true,
+        "source_lines": 116,
+        "in_bounds": true
+      },
+      {
+        "report_line": 166,
+        "path": "specs/030-ui-audit-revision/spec.md",
+        "ranges": "1154,1324",
+        "file_exists": true,
+        "source_lines": 1876,
+        "in_bounds": true
+      },
+      {
+        "report_line": 168,
+        "path": "apps/desktop/src/features/projects/ProjectsTable.tsx",
+        "ranges": "44,97-98,116-120,260-262",
+        "file_exists": true,
+        "source_lines": 353,
+        "in_bounds": true
+      },
+      {
+        "report_line": 168,
+        "path": "crates/contracts/core/src/projects_v2.rs",
+        "ranges": "144-189",
+        "file_exists": true,
+        "source_lines": 430,
+        "in_bounds": true
+      },
+      {
+        "report_line": 170,
+        "path": "apps/desktop/src/app/router.tsx",
+        "ranges": "49-56",
+        "file_exists": true,
+        "source_lines": 327,
+        "in_bounds": true
+      },
+      {
+        "report_line": 170,
+        "path": "apps/desktop/src/features/sessions/SessionsPage.tsx",
+        "ranges": "107-138,165-201,254-267",
+        "file_exists": true,
+        "source_lines": 349,
+        "in_bounds": true
+      },
+      {
+        "report_line": 172,
+        "path": "apps/desktop/src/features/projects/ManifestsAccordion.tsx",
+        "ranges": "55-80",
+        "file_exists": true,
+        "source_lines": 230,
+        "in_bounds": true
+      },
+      {
+        "report_line": 172,
+        "path": "apps/desktop/src/features/projects/store.ts",
+        "ranges": "309-325",
+        "file_exists": true,
+        "source_lines": 406,
+        "in_bounds": true
+      },
+      {
+        "report_line": 172,
+        "path": "crates/app/projects/src/project_setup/sources.rs",
+        "ranges": "140,257",
+        "file_exists": true,
+        "source_lines": 265,
+        "in_bounds": true
+      },
+      {
+        "report_line": 203,
+        "path": "crates/app/inbox/src/classify.rs",
+        "ranges": "128-170,193-219,600-611,769-791",
+        "file_exists": true,
+        "source_lines": 4092,
+        "in_bounds": true
+      },
+      {
+        "report_line": 203,
+        "path": "crates/app/targets/src/metadata_cache.rs",
+        "ranges": "20-24,50-61,83-106",
+        "file_exists": true,
+        "source_lines": 194,
+        "in_bounds": true
+      },
+      {
+        "report_line": 204,
+        "path": "apps/desktop/src-tauri/src/watcher.rs",
+        "ranges": "191-205,319-366",
+        "file_exists": true,
+        "source_lines": 861,
+        "in_bounds": true
+      },
+      {
+        "report_line": 204,
+        "path": "crates/workflow/artifacts/src/reconciler.rs",
+        "ranges": "99-139",
+        "file_exists": true,
+        "source_lines": 292,
+        "in_bounds": true
+      },
+      {
+        "report_line": 205,
+        "path": "crates/app/core/src/inventory.rs",
+        "ranges": "71-93",
+        "file_exists": true,
+        "source_lines": 873,
+        "in_bounds": true
+      },
+      {
+        "report_line": 205,
+        "path": "crates/persistence/targets/src/repositories/inventory.rs",
+        "ranges": "275-307",
+        "file_exists": true,
+        "source_lines": 1401,
+        "in_bounds": true
+      },
+      {
+        "report_line": 206,
+        "path": "apps/desktop/src/features/targets/TargetsPage.tsx",
+        "ranges": "159-165",
+        "file_exists": true,
+        "source_lines": 333,
+        "in_bounds": true
+      },
+      {
+        "report_line": 206,
+        "path": "apps/desktop/src/features/targets/useTargetsPageFilters.ts",
+        "ranges": "123-181",
+        "file_exists": true,
+        "source_lines": 226,
+        "in_bounds": true
+      },
+      {
+        "report_line": 206,
+        "path": "apps/desktop/src/features/targets/useTargetsTableRows.ts",
+        "ranges": "95-198,261-303",
+        "file_exists": true,
+        "source_lines": 344,
+        "in_bounds": true
+      },
+      {
+        "report_line": 206,
+        "path": "apps/desktop/src-tauri/src/commands/target_lookup.rs",
+        "ranges": "464-495",
+        "file_exists": true,
+        "source_lines": 553,
+        "in_bounds": true
+      },
+      {
+        "report_line": 207,
+        "path": "crates/app/targets/src/target_management/list.rs",
+        "ranges": "31-78",
+        "file_exists": true,
+        "source_lines": 92,
+        "in_bounds": true
+      },
+      {
+        "report_line": 207,
+        "path": "apps/desktop/src/features/targets/store.ts",
+        "ranges": "103-112",
+        "file_exists": true,
+        "source_lines": 282,
+        "in_bounds": true
+      },
+      {
+        "report_line": 208,
+        "path": "apps/desktop/src/features/targets/useTargetsTableRows.ts",
+        "ranges": "305-324",
+        "file_exists": true,
+        "source_lines": 344,
+        "in_bounds": true
+      },
+      {
+        "report_line": 208,
+        "path": "apps/desktop/src/features/targets/TargetsTable.tsx",
+        "ranges": "383-384,449-458",
+        "file_exists": true,
+        "source_lines": 665,
+        "in_bounds": true
+      },
+      {
+        "report_line": 209,
+        "path": "crates/persistence/targets/src/repositories/inventory.rs",
+        "ranges": "138-254",
+        "file_exists": true,
+        "source_lines": 1401,
+        "in_bounds": true
+      },
+      {
+        "report_line": 209,
+        "path": "crates/app/core/src/inventory.rs",
+        "ranges": "80-86,142-159",
+        "file_exists": true,
+        "source_lines": 873,
+        "in_bounds": true
+      },
+      {
+        "report_line": 221,
+        "path": "apps/desktop/src/features/archive/ArchivePage.tsx",
+        "ranges": "127-130,191-196",
+        "file_exists": true,
+        "source_lines": 368,
+        "in_bounds": true
+      },
+      {
+        "report_line": 221,
+        "path": "apps/desktop/src/features/archive/store.ts",
+        "ranges": "119-141",
+        "file_exists": true,
+        "source_lines": 169,
+        "in_bounds": true
+      },
+      {
+        "report_line": 222,
+        "path": "apps/desktop/src/components/Modal.tsx",
+        "ranges": "143-179",
+        "file_exists": true,
+        "source_lines": 190,
+        "in_bounds": true
+      },
+      {
+        "report_line": 222,
+        "path": "apps/desktop/src/features/archive/ArchivePage.tsx",
+        "ranges": "122-125,318-334",
+        "file_exists": true,
+        "source_lines": 368,
+        "in_bounds": true
+      },
+      {
+        "report_line": 222,
+        "path": "apps/desktop/src/features/settings/RemapRootDialog.tsx",
+        "ranges": "84-115",
+        "file_exists": true,
+        "source_lines": 197,
+        "in_bounds": true
+      },
+      {
+        "report_line": 223,
+        "path": "apps/desktop/src/components/Modal.tsx",
+        "ranges": "127-134,164",
+        "file_exists": true,
+        "source_lines": 190,
+        "in_bounds": true
+      },
+      {
+        "report_line": 223,
+        "path": "apps/desktop/src/features/settings/RemapRootDialog.tsx",
+        "ranges": "59,104-107",
+        "file_exists": true,
+        "source_lines": 197,
+        "in_bounds": true
+      },
+      {
+        "report_line": 224,
+        "path": "apps/desktop/src/app/CommandPalette.tsx",
+        "ranges": "40-48,170-203,249,287-331",
+        "file_exists": true,
+        "source_lines": 337,
+        "in_bounds": true
+      },
+      {
+        "report_line": 225,
+        "path": "apps/desktop/src/app/CommandPalette.tsx",
+        "ranges": "170-203,258-284",
+        "file_exists": true,
+        "source_lines": 337,
+        "in_bounds": true
+      },
+      {
+        "report_line": 226,
+        "path": "apps/desktop/src/features/plans/PlanReviewOverlay.tsx",
+        "ranges": "446-487,619-628",
+        "file_exists": true,
+        "source_lines": 751,
+        "in_bounds": true
+      },
+      {
+        "report_line": 226,
+        "path": "apps/desktop/src/app/CommandPalette.tsx",
+        "ranges": "277",
+        "file_exists": true,
+        "source_lines": 337,
+        "in_bounds": true
+      },
+      {
+        "report_line": 227,
+        "path": "apps/desktop/src/ui/ResizeHandle.tsx",
+        "ranges": "16-25",
+        "file_exists": true,
+        "source_lines": 27,
+        "in_bounds": true
+      },
+      {
+        "report_line": 227,
+        "path": "apps/desktop/src/ui/useAdaptiveDock.ts",
+        "ranges": "127-146",
+        "file_exists": true,
+        "source_lines": 159,
+        "in_bounds": true
+      },
+      {
+        "report_line": 227,
+        "path": "apps/desktop/src/components/ListPageLayout.tsx",
+        "ranges": "337-357",
+        "file_exists": true,
+        "source_lines": 371,
+        "in_bounds": true
+      },
+      {
+        "report_line": 228,
+        "path": "apps/desktop/src/ui/useAdaptiveDock.ts",
+        "ranges": "83-125,150-155",
+        "file_exists": true,
+        "source_lines": 159,
+        "in_bounds": true
+      },
+      {
+        "report_line": 228,
+        "path": "apps/desktop/src/components/ListPageLayout.tsx",
+        "ranges": "306-310",
+        "file_exists": true,
+        "source_lines": 371,
+        "in_bounds": true
+      },
+      {
+        "report_line": 228,
+        "path": "apps/desktop/src/components/ListPageLayout.css.ts",
+        "ranges": "18-30,78-88",
+        "file_exists": true,
+        "source_lines": 276,
+        "in_bounds": true
+      },
+      {
+        "report_line": 229,
+        "path": "DESIGN.md",
+        "ranges": "35-48,126-155",
+        "file_exists": true,
+        "source_lines": 561,
+        "in_bounds": true
+      },
+      {
+        "report_line": 229,
+        "path": "apps/desktop/src/styles/tokens.css",
+        "ranges": "1-3,56-114",
+        "file_exists": true,
+        "source_lines": 447,
+        "in_bounds": true
+      },
+      {
+        "report_line": 229,
+        "path": "apps/desktop/package.json",
+        "ranges": "28-32",
+        "file_exists": true,
+        "source_lines": 121,
+        "in_bounds": true
+      },
+      {
+        "report_line": 231,
+        "path": "apps/desktop/src/features/settings/RemapRootDialog.tsx",
+        "ranges": "61-96,147-153",
+        "file_exists": true,
+        "source_lines": 197,
+        "in_bounds": true
+      },
+      {
+        "report_line": 241,
+        "path": ".github/workflows/e2e.yml",
+        "ranges": "262-352,793-838",
+        "file_exists": true,
+        "source_lines": 1377,
+        "in_bounds": true
+      },
+      {
+        "report_line": 241,
+        "path": "apps/desktop/vite.config.ts",
+        "ranges": "35-51,68-76",
+        "file_exists": true,
+        "source_lines": 94,
+        "in_bounds": true
+      },
+      {
+        "report_line": 242,
+        "path": ".github/workflows/e2e-alert.yml",
+        "ranges": "35-154",
+        "file_exists": true,
+        "source_lines": 154,
+        "in_bounds": true
+      },
+      {
+        "report_line": 243,
+        "path": ".github/workflows/release-please.yml",
+        "ranges": "161-170,243-251,291-329",
+        "file_exists": true,
+        "source_lines": 329,
+        "in_bounds": true
+      },
+      {
+        "report_line": 243,
+        "path": "apps/desktop/src-tauri/tauri.conf.json",
+        "ranges": "43-45,59-65",
+        "file_exists": true,
+        "source_lines": 67,
+        "in_bounds": true
+      },
+      {
+        "report_line": 244,
+        "path": ".github/workflows/release-please.yml",
+        "ranges": "63-78,161-170",
+        "file_exists": true,
+        "source_lines": 329,
+        "in_bounds": true
+      },
+      {
+        "report_line": 244,
+        "path": ".github/workflows/release-gate.yml",
+        "ranges": "24-53,245-260",
+        "file_exists": true,
+        "source_lines": 263,
+        "in_bounds": true
+      },
+      {
+        "report_line": 244,
+        "path": "release-please-config.json",
+        "ranges": "1-43",
+        "file_exists": true,
+        "source_lines": 43,
+        "in_bounds": true
+      },
+      {
+        "report_line": 245,
+        "path": ".github/workflows/ci.yml",
+        "ranges": "833-873",
+        "file_exists": true,
+        "source_lines": 967,
+        "in_bounds": true
+      },
+      {
+        "report_line": 245,
+        "path": "scripts/ci-affected-crates.sh",
+        "ranges": "24-31,64-115",
+        "file_exists": true,
+        "source_lines": 158,
+        "in_bounds": true
+      },
+      {
+        "report_line": 246,
+        "path": ".github/workflows/ci.yml",
+        "ranges": "138-243,788-830",
+        "file_exists": true,
+        "source_lines": 967,
+        "in_bounds": true
+      },
+      {
+        "report_line": 247,
+        "path": ".config/nextest.toml",
+        "ranges": "144-157",
+        "file_exists": true,
+        "source_lines": 170,
+        "in_bounds": true
+      },
+      {
+        "report_line": 247,
+        "path": "apps/desktop/playwright.config.ts",
+        "ranges": "29-47",
+        "file_exists": true,
+        "source_lines": 83,
+        "in_bounds": true
+      },
+      {
+        "report_line": 247,
+        "path": ".github/workflows/ci.yml",
+        "ranges": "540-588,883-907",
+        "file_exists": true,
+        "source_lines": 967,
+        "in_bounds": true
+      },
+      {
+        "report_line": 268,
+        "path": ".github/workflows/ci.yml",
+        "ranges": "138-243,788-830",
+        "file_exists": true,
+        "source_lines": 967,
+        "in_bounds": true
+      },
+      {
+        "report_line": 269,
+        "path": "scripts/ci-affected-crates.sh",
+        "ranges": "24-31,80-115",
+        "file_exists": true,
+        "source_lines": 158,
+        "in_bounds": true
+      },
+      {
+        "report_line": 269,
+        "path": ".github/workflows/ci.yml",
+        "ranges": "833-873",
+        "file_exists": true,
+        "source_lines": 967,
+        "in_bounds": true
+      },
+      {
+        "report_line": 270,
+        "path": ".specify/workflows/speckit-full/workflow.yml",
+        "ranges": "44-73,116-120",
+        "file_exists": true,
+        "source_lines": 162,
+        "in_bounds": true
+      },
+      {
+        "report_line": 270,
+        "path": "gates.yaml",
+        "ranges": "37-52,135-139,368-376",
+        "file_exists": true,
+        "source_lines": 929,
+        "in_bounds": true
+      },
+      {
+        "report_line": 270,
+        "path": ".specify/extensions/agent-assign/commands/assign.md",
+        "ranges": "114-145",
+        "file_exists": true,
+        "source_lines": 180,
+        "in_bounds": true
+      },
+      {
+        "report_line": 270,
+        "path": ".specify/extensions/agent-assign/commands/execute.md",
+        "ranges": "51-57",
+        "file_exists": true,
+        "source_lines": 190,
+        "in_bounds": true
+      },
+      {
+        "report_line": 270,
+        "path": ".specify/gates/nodes.json",
+        "ranges": "25-89",
+        "file_exists": true,
+        "source_lines": 2363,
+        "in_bounds": true
+      },
+      {
+        "report_line": 271,
+        "path": ".pre-commit-config.yaml",
+        "ranges": "16,26,45-48",
+        "file_exists": true,
+        "source_lines": 74,
+        "in_bounds": true
+      },
+      {
+        "report_line": 271,
+        "path": "scripts/precommit-verify.sh",
+        "ranges": "23-41",
+        "file_exists": true,
+        "source_lines": 42,
+        "in_bounds": true
+      },
+      {
+        "report_line": 271,
+        "path": "CONTRIBUTING.md",
+        "ranges": "28-42",
+        "file_exists": true,
+        "source_lines": 46,
+        "in_bounds": true
+      },
+      {
+        "report_line": 272,
+        "path": "docs/journeys/journeys.py",
+        "ranges": "62-95,174-202",
+        "file_exists": true,
+        "source_lines": 240,
+        "in_bounds": true
+      },
+      {
+        "report_line": 272,
+        "path": "docs/journeys/FORMAT.md",
+        "ranges": "153-181",
+        "file_exists": true,
+        "source_lines": 240,
+        "in_bounds": true
+      },
+      {
+        "report_line": 273,
+        "path": "docs/journeys/journeys.py",
+        "ranges": "149-188",
+        "file_exists": true,
+        "source_lines": 240,
+        "in_bounds": true
+      },
+      {
+        "report_line": 273,
+        "path": "docs/journeys/FORMAT.md",
+        "ranges": "104-111,225-233",
+        "file_exists": true,
+        "source_lines": 240,
+        "in_bounds": true
+      },
+      {
+        "report_line": 274,
+        "path": "justfile",
+        "ranges": "219-223",
+        "file_exists": true,
+        "source_lines": 287,
+        "in_bounds": true
+      },
+      {
+        "report_line": 274,
+        "path": ".specify/workflows/workflow-registry.json",
+        "ranges": "3-26",
+        "file_exists": true,
+        "source_lines": 29,
+        "in_bounds": true
+      },
+      {
+        "report_line": 274,
+        "path": ".specify/extensions/bugfix/extension.yml",
+        "ranges": "15-25",
+        "file_exists": true,
+        "source_lines": 39,
+        "in_bounds": true
+      },
+      {
+        "report_line": 274,
+        "path": ".specify/extensions/tinyspec/extension.yml",
+        "ranges": "15-25",
+        "file_exists": true,
+        "source_lines": 39,
+        "in_bounds": true
+      }
+    ],
+    "snapshot_command": [
+      "git",
+      "ls-tree",
+      "-r",
+      "8198209b5be118e785e4ea85cea3f26e0ea43c1c",
+      "--",
+      ".config/nextest.toml",
+      ".config/wt.toml",
+      ".github/workflows/ci.yml",
+      ".github/workflows/e2e-alert.yml",
+      ".github/workflows/e2e.yml",
+      ".github/workflows/release-gate.yml",
+      ".github/workflows/release-please.yml",
+      ".pre-commit-config.yaml",
+      ".specify/extensions/agent-assign/commands/assign.md",
+      ".specify/extensions/agent-assign/commands/execute.md",
+      ".specify/extensions/bugfix/extension.yml",
+      ".specify/extensions/tinyspec/extension.yml",
+      ".specify/gates/nodes.json",
+      ".specify/workflows/speckit-full/workflow.yml",
+      ".specify/workflows/workflow-registry.json",
+      ".worktreeinclude",
+      "CONTRIBUTING.md",
+      "DESIGN.md",
+      "README.md",
+      "apps/desktop/package.json",
+      "apps/desktop/playwright.config.ts",
+      "apps/desktop/src-tauri/src/commands/lifecycle.rs",
+      "apps/desktop/src-tauri/src/commands/target_lookup.rs",
+      "apps/desktop/src-tauri/src/lib.rs",
+      "apps/desktop/src-tauri/src/watcher.rs",
+      "apps/desktop/src-tauri/tauri.conf.json",
+      "apps/desktop/src/app/CommandPalette.tsx",
+      "apps/desktop/src/app/Shell.tsx",
+      "apps/desktop/src/app/router.tsx",
+      "apps/desktop/src/components/ListPageLayout.css.ts",
+      "apps/desktop/src/components/ListPageLayout.tsx",
+      "apps/desktop/src/components/Modal.tsx",
+      "apps/desktop/src/data/queryClient.ts",
+      "apps/desktop/src/data/updateSubscription.test.ts",
+      "apps/desktop/src/data/updateSubscription.ts",
+      "apps/desktop/src/features/archive/ArchivePage.tsx",
+      "apps/desktop/src/features/archive/store.ts",
+      "apps/desktop/src/features/plans/PlanReviewOverlay.tsx",
+      "apps/desktop/src/features/projects/ManifestsAccordion.tsx",
+      "apps/desktop/src/features/projects/OutputsCleanupSections.tsx",
+      "apps/desktop/src/features/projects/ProjectBottomDetail.tsx",
+      "apps/desktop/src/features/projects/ProjectsTable.tsx",
+      "apps/desktop/src/features/projects/store.ts",
+      "apps/desktop/src/features/recovery/RecoveryBanner.tsx",
+      "apps/desktop/src/features/sessions/SessionsPage.tsx",
+      "apps/desktop/src/features/settings/RemapRootDialog.tsx",
+      "apps/desktop/src/features/targets/TargetsPage.tsx",
+      "apps/desktop/src/features/targets/TargetsTable.tsx",
+      "apps/desktop/src/features/targets/store.ts",
+      "apps/desktop/src/features/targets/useTargetsPageFilters.ts",
+      "apps/desktop/src/features/targets/useTargetsTableRows.ts",
+      "apps/desktop/src/styles/tokens.css",
+      "apps/desktop/src/ui/ResizeHandle.tsx",
+      "apps/desktop/src/ui/useAdaptiveDock.ts",
+      "apps/desktop/vite.config.ts",
+      "crates/app/calibration/src/matching/assign.rs",
+      "crates/app/calibration/src/matching/loaders.rs",
+      "crates/app/core/src/inventory.rs",
+      "crates/app/core/src/plan_apply/finalizers.rs",
+      "crates/app/core/src/plan_apply/paths.rs",
+      "crates/app/core/src/plan_apply/reconcile.rs",
+      "crates/app/core/src/plan_apply/terminal.rs",
+      "crates/app/core/src/plans/approve.rs",
+      "crates/app/core/src/plans/archive.rs",
+      "crates/app/inbox/src/classify.rs",
+      "crates/app/inbox/src/confirm.rs",
+      "crates/app/inbox/src/plan_listener.rs",
+      "crates/app/inbox/src/repair.rs",
+      "crates/app/projects/src/project_manifests.rs",
+      "crates/app/projects/src/project_setup/sources.rs",
+      "crates/app/projects/src/source_view_generate/generate.rs",
+      "crates/app/targets/src/ingest_resolution.rs",
+      "crates/app/targets/src/ingest_sessions.rs",
+      "crates/app/targets/src/metadata_cache.rs",
+      "crates/app/targets/src/target_management/list.rs",
+      "crates/audit-types/src/event_bus.rs",
+      "crates/audit/src/bus.rs",
+      "crates/calibration/core/src/assign.rs",
+      "crates/calibration/core/src/rules/dark.rs",
+      "crates/contracts/core/src/projects_v2.rs",
+      "crates/fs/executor/src/ops/cas_check.rs",
+      "crates/fs/executor/src/ops/delete_op.rs",
+      "crates/fs/executor/src/ops/link_op.rs",
+      "crates/fs/executor/src/ops/move_op.rs",
+      "crates/fs/executor/src/ops/path_gate.rs",
+      "crates/fs/executor/src/ops/write_manifest_op.rs",
+      "crates/fs/executor/src/reconcile.rs",
+      "crates/fs/executor/src/run/loop_.rs",
+      "crates/fs/pathsafe/src/export_dest.rs",
+      "crates/persistence/calibration/src/repositories/calibration_assignment.rs",
+      "crates/persistence/calibration/src/repositories/q_calibration.rs",
+      "crates/persistence/core/migrations/0001_initial_schema.sql",
+      "crates/persistence/plans/src/repositories/plan_apply.rs",
+      "crates/persistence/plans/src/repositories/prepared_source_views.rs",
+      "crates/persistence/targets/src/repositories/inventory.rs",
+      "crates/persistence/targets/src/repositories/q_targets_ingest.rs",
+      "crates/project/structure/src/manifest.rs",
+      "crates/workflow/artifacts/src/reconciler.rs",
+      "docs/journeys/FORMAT.md",
+      "docs/journeys/journeys.py",
+      "docs/release/pre-1-0-database-baseline.md",
+      "gates.yaml",
+      "justfile",
+      "release-please-config.json",
+      "scripts/ci-affected-crates.sh",
+      "scripts/precommit-verify.sh",
+      "specs/030-ui-audit-revision/spec.md"
+    ],
+    "snapshot_exit": 0,
+    "snapshot_files": [
+      {
+        "path": ".config/nextest.toml",
+        "snapshot_blob": "76f18ff381542f522a21b5175a0159d706418e92",
+        "working_blob": "76f18ff381542f522a21b5175a0159d706418e92",
+        "matches": true
+      },
+      {
+        "path": ".config/wt.toml",
+        "snapshot_blob": "699a3f621c7aa5573de0d8dd5d485e2016e5568b",
+        "working_blob": "699a3f621c7aa5573de0d8dd5d485e2016e5568b",
+        "matches": true
+      },
+      {
+        "path": ".github/workflows/ci.yml",
+        "snapshot_blob": "55f44467f2bcd9bb0da2b9aba0d7ce75098a4fe8",
+        "working_blob": "55f44467f2bcd9bb0da2b9aba0d7ce75098a4fe8",
+        "matches": true
+      },
+      {
+        "path": ".github/workflows/e2e-alert.yml",
+        "snapshot_blob": "affdeb47556843d9128a64d0015388e896528a36",
+        "working_blob": "affdeb47556843d9128a64d0015388e896528a36",
+        "matches": true
+      },
+      {
+        "path": ".github/workflows/e2e.yml",
+        "snapshot_blob": "e1b6ff10502c0fbb959395e0e09051af5d01277a",
+        "working_blob": "e1b6ff10502c0fbb959395e0e09051af5d01277a",
+        "matches": true
+      },
+      {
+        "path": ".github/workflows/release-gate.yml",
+        "snapshot_blob": "23351df011c6bd8c8e9b2ec151797f96e3f672aa",
+        "working_blob": "23351df011c6bd8c8e9b2ec151797f96e3f672aa",
+        "matches": true
+      },
+      {
+        "path": ".github/workflows/release-please.yml",
+        "snapshot_blob": "7687ecce7fa70d105eaadadd88af4cecdb7ef42a",
+        "working_blob": "7687ecce7fa70d105eaadadd88af4cecdb7ef42a",
+        "matches": true
+      },
+      {
+        "path": ".pre-commit-config.yaml",
+        "snapshot_blob": "5170255dc0aacf9c1e3d32accfee379b70bd6f03",
+        "working_blob": "5170255dc0aacf9c1e3d32accfee379b70bd6f03",
+        "matches": true
+      },
+      {
+        "path": ".specify/extensions/agent-assign/commands/assign.md",
+        "snapshot_blob": "20ff1bab6f64b0eb044791f58962f27147e5a3ba",
+        "working_blob": "20ff1bab6f64b0eb044791f58962f27147e5a3ba",
+        "matches": true
+      },
+      {
+        "path": ".specify/extensions/agent-assign/commands/execute.md",
+        "snapshot_blob": "4c7e16284e6d98b38932d58640ccd1e5d17ac978",
+        "working_blob": "4c7e16284e6d98b38932d58640ccd1e5d17ac978",
+        "matches": true
+      },
+      {
+        "path": ".specify/extensions/bugfix/extension.yml",
+        "snapshot_blob": "55dafac4721fbb275809ee69045f8781d5964d66",
+        "working_blob": "55dafac4721fbb275809ee69045f8781d5964d66",
+        "matches": true
+      },
+      {
+        "path": ".specify/extensions/tinyspec/extension.yml",
+        "snapshot_blob": "2a1296c70ebe9c7801d4cc41a8ec5d9af8627355",
+        "working_blob": "2a1296c70ebe9c7801d4cc41a8ec5d9af8627355",
+        "matches": true
+      },
+      {
+        "path": ".specify/gates/nodes.json",
+        "snapshot_blob": "4affd252de1c87ff6b15c77f65a0ab2bb9d19026",
+        "working_blob": "4affd252de1c87ff6b15c77f65a0ab2bb9d19026",
+        "matches": true
+      },
+      {
+        "path": ".specify/workflows/speckit-full/workflow.yml",
+        "snapshot_blob": "3d791aa8f94a7a86f6f7691d863239082a9571e8",
+        "working_blob": "3d791aa8f94a7a86f6f7691d863239082a9571e8",
+        "matches": true
+      },
+      {
+        "path": ".specify/workflows/workflow-registry.json",
+        "snapshot_blob": "ea42e1b5893713b858355175a5f67c96f5ed567f",
+        "working_blob": "ea42e1b5893713b858355175a5f67c96f5ed567f",
+        "matches": true
+      },
+      {
+        "path": ".worktreeinclude",
+        "snapshot_blob": "ca6946fdd6fc3507d1e1f7ebc8d4caae1f7762b5",
+        "working_blob": "ca6946fdd6fc3507d1e1f7ebc8d4caae1f7762b5",
+        "matches": true
+      },
+      {
+        "path": "CONTRIBUTING.md",
+        "snapshot_blob": "f744f927bbdd755591a76016ab171204bf4a6164",
+        "working_blob": "f744f927bbdd755591a76016ab171204bf4a6164",
+        "matches": true
+      },
+      {
+        "path": "DESIGN.md",
+        "snapshot_blob": "193b229b5b3d7ef419e897589827ed9820957aea",
+        "working_blob": "193b229b5b3d7ef419e897589827ed9820957aea",
+        "matches": true
+      },
+      {
+        "path": "README.md",
+        "snapshot_blob": "0e112e45bf31ed5fdc79dcca2349283fca6bd372",
+        "working_blob": "0e112e45bf31ed5fdc79dcca2349283fca6bd372",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/package.json",
+        "snapshot_blob": "234c19973ce409f8c02149607578d87727967176",
+        "working_blob": "234c19973ce409f8c02149607578d87727967176",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/playwright.config.ts",
+        "snapshot_blob": "636be3e29f79947cb99b184d2f608bcb89884041",
+        "working_blob": "636be3e29f79947cb99b184d2f608bcb89884041",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src-tauri/src/commands/lifecycle.rs",
+        "snapshot_blob": "75e2586db6c1f375af97d68f63629acd57f9d278",
+        "working_blob": "75e2586db6c1f375af97d68f63629acd57f9d278",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src-tauri/src/commands/target_lookup.rs",
+        "snapshot_blob": "6628eb2f0dc4671614d69cc3b0cc8796cd678035",
+        "working_blob": "6628eb2f0dc4671614d69cc3b0cc8796cd678035",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src-tauri/src/lib.rs",
+        "snapshot_blob": "db62ad99aad6285add1d7a6a6f86b4c3659f6581",
+        "working_blob": "db62ad99aad6285add1d7a6a6f86b4c3659f6581",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src-tauri/src/watcher.rs",
+        "snapshot_blob": "d7e4694744f683378a4a77f734f0d61a04232a84",
+        "working_blob": "d7e4694744f683378a4a77f734f0d61a04232a84",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src-tauri/tauri.conf.json",
+        "snapshot_blob": "8be70e361eef2de7c57ee2c6890d860f1a607308",
+        "working_blob": "8be70e361eef2de7c57ee2c6890d860f1a607308",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/app/CommandPalette.tsx",
+        "snapshot_blob": "996dfaff82faf0c45e688c44d93b2e2dcbd671e0",
+        "working_blob": "996dfaff82faf0c45e688c44d93b2e2dcbd671e0",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/app/Shell.tsx",
+        "snapshot_blob": "f9e65696cfee0d825319c006014554958d4fb4ca",
+        "working_blob": "f9e65696cfee0d825319c006014554958d4fb4ca",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/app/router.tsx",
+        "snapshot_blob": "4c29f779699e7fe1c650ec7ff61abf4f25f1a2d5",
+        "working_blob": "4c29f779699e7fe1c650ec7ff61abf4f25f1a2d5",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/components/ListPageLayout.css.ts",
+        "snapshot_blob": "9b288d24f779e35ce990121a112de6529f133bda",
+        "working_blob": "9b288d24f779e35ce990121a112de6529f133bda",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/components/ListPageLayout.tsx",
+        "snapshot_blob": "dae7c1b539332161071d40cf3de66c7d745ff946",
+        "working_blob": "dae7c1b539332161071d40cf3de66c7d745ff946",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/components/Modal.tsx",
+        "snapshot_blob": "9a9b4dffe61d950369c503851573ee8c3f44f4e7",
+        "working_blob": "9a9b4dffe61d950369c503851573ee8c3f44f4e7",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/data/queryClient.ts",
+        "snapshot_blob": "3a5aa3a98dea6500cab2f5a646ab58c8e621c579",
+        "working_blob": "3a5aa3a98dea6500cab2f5a646ab58c8e621c579",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/data/updateSubscription.test.ts",
+        "snapshot_blob": "9dc6664d9cec25471c0c5d67c937767ff4017a4e",
+        "working_blob": "9dc6664d9cec25471c0c5d67c937767ff4017a4e",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/data/updateSubscription.ts",
+        "snapshot_blob": "ec51906af3508fee1d75627b0aaa93585af4f616",
+        "working_blob": "ec51906af3508fee1d75627b0aaa93585af4f616",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/archive/ArchivePage.tsx",
+        "snapshot_blob": "684ebb2b700a7c8003f647ea84ca052066575222",
+        "working_blob": "684ebb2b700a7c8003f647ea84ca052066575222",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/archive/store.ts",
+        "snapshot_blob": "71a27c0d0bc95f0fb49f7436833615d4b8aee8d7",
+        "working_blob": "71a27c0d0bc95f0fb49f7436833615d4b8aee8d7",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/plans/PlanReviewOverlay.tsx",
+        "snapshot_blob": "feef98efb33eb47a87cc88cfcae647be3272c856",
+        "working_blob": "feef98efb33eb47a87cc88cfcae647be3272c856",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/projects/ManifestsAccordion.tsx",
+        "snapshot_blob": "82094a6cb57a68c53a0d10ca0482d70415179f0c",
+        "working_blob": "82094a6cb57a68c53a0d10ca0482d70415179f0c",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/projects/OutputsCleanupSections.tsx",
+        "snapshot_blob": "a5b4eb2ffd9018c433d2a9368df936bb19d8ad7c",
+        "working_blob": "a5b4eb2ffd9018c433d2a9368df936bb19d8ad7c",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/projects/ProjectBottomDetail.tsx",
+        "snapshot_blob": "b20452258bf6f8b909309f0e9e7aa7ef653ccc7d",
+        "working_blob": "b20452258bf6f8b909309f0e9e7aa7ef653ccc7d",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/projects/ProjectsTable.tsx",
+        "snapshot_blob": "d5b618f205a04dbe0625cf7984bd4b34a2e7d88f",
+        "working_blob": "d5b618f205a04dbe0625cf7984bd4b34a2e7d88f",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/projects/store.ts",
+        "snapshot_blob": "9bee44285b9b6fd0028a77df47704b1344aa0fcc",
+        "working_blob": "9bee44285b9b6fd0028a77df47704b1344aa0fcc",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/recovery/RecoveryBanner.tsx",
+        "snapshot_blob": "943d77715cca5629332f3ac1e04104f0a3e6cb5b",
+        "working_blob": "943d77715cca5629332f3ac1e04104f0a3e6cb5b",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/sessions/SessionsPage.tsx",
+        "snapshot_blob": "988e955b9a980cd442348d069ec0243c8a492cc1",
+        "working_blob": "988e955b9a980cd442348d069ec0243c8a492cc1",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/settings/RemapRootDialog.tsx",
+        "snapshot_blob": "b798962815d41da284869e9648105c15a02eaeb6",
+        "working_blob": "b798962815d41da284869e9648105c15a02eaeb6",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/targets/TargetsPage.tsx",
+        "snapshot_blob": "e9cc1cbc5a2d04871bd073fbe4bce5d18ecd0aa9",
+        "working_blob": "e9cc1cbc5a2d04871bd073fbe4bce5d18ecd0aa9",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/targets/TargetsTable.tsx",
+        "snapshot_blob": "806240e2a7ae208019e18b544b187a06c8031d50",
+        "working_blob": "806240e2a7ae208019e18b544b187a06c8031d50",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/targets/store.ts",
+        "snapshot_blob": "49d8e6d75402a46763980860a355a9940655e019",
+        "working_blob": "49d8e6d75402a46763980860a355a9940655e019",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/targets/useTargetsPageFilters.ts",
+        "snapshot_blob": "b10ed39d0b45499956adcb1c33aa3ac8e2357596",
+        "working_blob": "b10ed39d0b45499956adcb1c33aa3ac8e2357596",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/features/targets/useTargetsTableRows.ts",
+        "snapshot_blob": "bcfbb960f3ef0c8e61c359a51e3dd14e645e90e9",
+        "working_blob": "bcfbb960f3ef0c8e61c359a51e3dd14e645e90e9",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/styles/tokens.css",
+        "snapshot_blob": "2da90a7184b09bc7dceb8a5dc3ead835d2379fbf",
+        "working_blob": "2da90a7184b09bc7dceb8a5dc3ead835d2379fbf",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/ui/ResizeHandle.tsx",
+        "snapshot_blob": "d5d7bbb73095d91bfc46aef8df75ab7397d87e3f",
+        "working_blob": "d5d7bbb73095d91bfc46aef8df75ab7397d87e3f",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/src/ui/useAdaptiveDock.ts",
+        "snapshot_blob": "991873903b42eef7f36c3cf92cb4235a5e52a08d",
+        "working_blob": "991873903b42eef7f36c3cf92cb4235a5e52a08d",
+        "matches": true
+      },
+      {
+        "path": "apps/desktop/vite.config.ts",
+        "snapshot_blob": "07f738d8bf6adc4af87a33ac45f24a38863fbce4",
+        "working_blob": "07f738d8bf6adc4af87a33ac45f24a38863fbce4",
+        "matches": true
+      },
+      {
+        "path": "crates/app/calibration/src/matching/assign.rs",
+        "snapshot_blob": "e16fa9a805b9e1716af3236e814904c52028f1eb",
+        "working_blob": "e16fa9a805b9e1716af3236e814904c52028f1eb",
+        "matches": true
+      },
+      {
+        "path": "crates/app/calibration/src/matching/loaders.rs",
+        "snapshot_blob": "0936bfacb1f73250e8667c1030f6960f6822a053",
+        "working_blob": "0936bfacb1f73250e8667c1030f6960f6822a053",
+        "matches": true
+      },
+      {
+        "path": "crates/app/core/src/inventory.rs",
+        "snapshot_blob": "7b989e3cd6df6200218d3d53c8a9521e3041d843",
+        "working_blob": "7b989e3cd6df6200218d3d53c8a9521e3041d843",
+        "matches": true
+      },
+      {
+        "path": "crates/app/core/src/plan_apply/finalizers.rs",
+        "snapshot_blob": "234aef2c8b5dbe616c65a34149e6b8c2ed4a1cb2",
+        "working_blob": "234aef2c8b5dbe616c65a34149e6b8c2ed4a1cb2",
+        "matches": true
+      },
+      {
+        "path": "crates/app/core/src/plan_apply/paths.rs",
+        "snapshot_blob": "7762ae8163b69a83b04cbb7a9efcce90010a0048",
+        "working_blob": "7762ae8163b69a83b04cbb7a9efcce90010a0048",
+        "matches": true
+      },
+      {
+        "path": "crates/app/core/src/plan_apply/reconcile.rs",
+        "snapshot_blob": "237d5e32867d57043e119a59ed60f676c35ebc9f",
+        "working_blob": "237d5e32867d57043e119a59ed60f676c35ebc9f",
+        "matches": true
+      },
+      {
+        "path": "crates/app/core/src/plan_apply/terminal.rs",
+        "snapshot_blob": "aa38033b773d33e3677ee8bc7f1b0c3efc0daae0",
+        "working_blob": "aa38033b773d33e3677ee8bc7f1b0c3efc0daae0",
+        "matches": true
+      },
+      {
+        "path": "crates/app/core/src/plans/approve.rs",
+        "snapshot_blob": "44f2cae9fb64d7c0d0017fcc7226e20f7d6b58ed",
+        "working_blob": "44f2cae9fb64d7c0d0017fcc7226e20f7d6b58ed",
+        "matches": true
+      },
+      {
+        "path": "crates/app/core/src/plans/archive.rs",
+        "snapshot_blob": "e09f373c4f28b1a9bb1ce8340794251602db0146",
+        "working_blob": "e09f373c4f28b1a9bb1ce8340794251602db0146",
+        "matches": true
+      },
+      {
+        "path": "crates/app/inbox/src/classify.rs",
+        "snapshot_blob": "2eabe8a8f20ec9613a26ab88a617c93ede294f98",
+        "working_blob": "2eabe8a8f20ec9613a26ab88a617c93ede294f98",
+        "matches": true
+      },
+      {
+        "path": "crates/app/inbox/src/confirm.rs",
+        "snapshot_blob": "4ac91b33bb05fd4471538e9d3fca9b54f19e38da",
+        "working_blob": "4ac91b33bb05fd4471538e9d3fca9b54f19e38da",
+        "matches": true
+      },
+      {
+        "path": "crates/app/inbox/src/plan_listener.rs",
+        "snapshot_blob": "c25b2756b8cd1ad6c905e6bd3e53118d0292b624",
+        "working_blob": "c25b2756b8cd1ad6c905e6bd3e53118d0292b624",
+        "matches": true
+      },
+      {
+        "path": "crates/app/inbox/src/repair.rs",
+        "snapshot_blob": "ac28dfa497e0697637593b72d530ec3e5dd0a01e",
+        "working_blob": "ac28dfa497e0697637593b72d530ec3e5dd0a01e",
+        "matches": true
+      },
+      {
+        "path": "crates/app/projects/src/project_manifests.rs",
+        "snapshot_blob": "bd5964bddd3190b0f2cf44e987ca031af31697ad",
+        "working_blob": "bd5964bddd3190b0f2cf44e987ca031af31697ad",
+        "matches": true
+      },
+      {
+        "path": "crates/app/projects/src/project_setup/sources.rs",
+        "snapshot_blob": "0c22365c4847c169ffcfad814a87efe89242171d",
+        "working_blob": "0c22365c4847c169ffcfad814a87efe89242171d",
+        "matches": true
+      },
+      {
+        "path": "crates/app/projects/src/source_view_generate/generate.rs",
+        "snapshot_blob": "7ba610b1d8190abcc06a55a1d91b9e7301fc5eca",
+        "working_blob": "7ba610b1d8190abcc06a55a1d91b9e7301fc5eca",
+        "matches": true
+      },
+      {
+        "path": "crates/app/targets/src/ingest_resolution.rs",
+        "snapshot_blob": "6163ac3df5de46d4b026d1f08295c4399c9ed907",
+        "working_blob": "6163ac3df5de46d4b026d1f08295c4399c9ed907",
+        "matches": true
+      },
+      {
+        "path": "crates/app/targets/src/ingest_sessions.rs",
+        "snapshot_blob": "3e7fa12784e6d6bb40568e84f4eada72e1fabbd0",
+        "working_blob": "3e7fa12784e6d6bb40568e84f4eada72e1fabbd0",
+        "matches": true
+      },
+      {
+        "path": "crates/app/targets/src/metadata_cache.rs",
+        "snapshot_blob": "463923d5c0d8a7068af5742c225bdd24d5c7db27",
+        "working_blob": "463923d5c0d8a7068af5742c225bdd24d5c7db27",
+        "matches": true
+      },
+      {
+        "path": "crates/app/targets/src/target_management/list.rs",
+        "snapshot_blob": "07d6fa19b436c66a192c5ac21cce895468f92047",
+        "working_blob": "07d6fa19b436c66a192c5ac21cce895468f92047",
+        "matches": true
+      },
+      {
+        "path": "crates/audit-types/src/event_bus.rs",
+        "snapshot_blob": "494a4ba82f99c6d4d1fd1367d0b5bd0404542bdb",
+        "working_blob": "494a4ba82f99c6d4d1fd1367d0b5bd0404542bdb",
+        "matches": true
+      },
+      {
+        "path": "crates/audit/src/bus.rs",
+        "snapshot_blob": "d152958b0e38e1276b6c00a09fc9ea12821def34",
+        "working_blob": "d152958b0e38e1276b6c00a09fc9ea12821def34",
+        "matches": true
+      },
+      {
+        "path": "crates/calibration/core/src/assign.rs",
+        "snapshot_blob": "e026f3f33a80ea30fad4feda8a27d8b258814cc7",
+        "working_blob": "e026f3f33a80ea30fad4feda8a27d8b258814cc7",
+        "matches": true
+      },
+      {
+        "path": "crates/calibration/core/src/rules/dark.rs",
+        "snapshot_blob": "fdd3543838f6e751525bbb4c51d4026a6068cad0",
+        "working_blob": "fdd3543838f6e751525bbb4c51d4026a6068cad0",
+        "matches": true
+      },
+      {
+        "path": "crates/contracts/core/src/projects_v2.rs",
+        "snapshot_blob": "c6621b6ab6b1a2003b38d8d64d14150c7d58a76a",
+        "working_blob": "c6621b6ab6b1a2003b38d8d64d14150c7d58a76a",
+        "matches": true
+      },
+      {
+        "path": "crates/fs/executor/src/ops/cas_check.rs",
+        "snapshot_blob": "73987def5b1db46e505ad57a9b4d2137ff58d649",
+        "working_blob": "73987def5b1db46e505ad57a9b4d2137ff58d649",
+        "matches": true
+      },
+      {
+        "path": "crates/fs/executor/src/ops/delete_op.rs",
+        "snapshot_blob": "fadaa5c7c3fcddc042fb3df3b10f92fe1d3b58da",
+        "working_blob": "fadaa5c7c3fcddc042fb3df3b10f92fe1d3b58da",
+        "matches": true
+      },
+      {
+        "path": "crates/fs/executor/src/ops/link_op.rs",
+        "snapshot_blob": "c1ca5ac5fd61a2f1366b2c0eb29d904d3b1eaf2b",
+        "working_blob": "c1ca5ac5fd61a2f1366b2c0eb29d904d3b1eaf2b",
+        "matches": true
+      },
+      {
+        "path": "crates/fs/executor/src/ops/move_op.rs",
+        "snapshot_blob": "93ff075dad2721ce034b6e1809240a5baa794340",
+        "working_blob": "93ff075dad2721ce034b6e1809240a5baa794340",
+        "matches": true
+      },
+      {
+        "path": "crates/fs/executor/src/ops/path_gate.rs",
+        "snapshot_blob": "a51db731fafc702f24c3921d53006f3b1edd9a83",
+        "working_blob": "a51db731fafc702f24c3921d53006f3b1edd9a83",
+        "matches": true
+      },
+      {
+        "path": "crates/fs/executor/src/ops/write_manifest_op.rs",
+        "snapshot_blob": "31c9e2531ef61cba7c46f0fc279b9eb241204f37",
+        "working_blob": "31c9e2531ef61cba7c46f0fc279b9eb241204f37",
+        "matches": true
+      },
+      {
+        "path": "crates/fs/executor/src/reconcile.rs",
+        "snapshot_blob": "5f7adf01f98e185804531b0b3a269a1bcf675f8a",
+        "working_blob": "5f7adf01f98e185804531b0b3a269a1bcf675f8a",
+        "matches": true
+      },
+      {
+        "path": "crates/fs/executor/src/run/loop_.rs",
+        "snapshot_blob": "523ea1ba8e6749b641b0dccdfc5529b9dd6009da",
+        "working_blob": "523ea1ba8e6749b641b0dccdfc5529b9dd6009da",
+        "matches": true
+      },
+      {
+        "path": "crates/fs/pathsafe/src/export_dest.rs",
+        "snapshot_blob": "136133757ce25f47ced3542ac65d9c9b2956c2bb",
+        "working_blob": "136133757ce25f47ced3542ac65d9c9b2956c2bb",
+        "matches": true
+      },
+      {
+        "path": "crates/persistence/calibration/src/repositories/calibration_assignment.rs",
+        "snapshot_blob": "1f5c21b2f2751c01a4c274ef1a99a16cf203ae96",
+        "working_blob": "1f5c21b2f2751c01a4c274ef1a99a16cf203ae96",
+        "matches": true
+      },
+      {
+        "path": "crates/persistence/calibration/src/repositories/q_calibration.rs",
+        "snapshot_blob": "099d5921c959411eade6fc330ceba6761650333e",
+        "working_blob": "099d5921c959411eade6fc330ceba6761650333e",
+        "matches": true
+      },
+      {
+        "path": "crates/persistence/core/migrations/0001_initial_schema.sql",
+        "snapshot_blob": "9b705c07a4c9a029a67db05a4db81386d8386898",
+        "working_blob": "9b705c07a4c9a029a67db05a4db81386d8386898",
+        "matches": true
+      },
+      {
+        "path": "crates/persistence/plans/src/repositories/plan_apply.rs",
+        "snapshot_blob": "a9a788ff6a20a9f617eb56a78711cf2512ec8afe",
+        "working_blob": "a9a788ff6a20a9f617eb56a78711cf2512ec8afe",
+        "matches": true
+      },
+      {
+        "path": "crates/persistence/plans/src/repositories/prepared_source_views.rs",
+        "snapshot_blob": "d7e6f02df39e8b778ed1536251f4367d3fad20ce",
+        "working_blob": "d7e6f02df39e8b778ed1536251f4367d3fad20ce",
+        "matches": true
+      },
+      {
+        "path": "crates/persistence/targets/src/repositories/inventory.rs",
+        "snapshot_blob": "67120ef43bfc0d28ba112a7c5cb482342653b6b0",
+        "working_blob": "67120ef43bfc0d28ba112a7c5cb482342653b6b0",
+        "matches": true
+      },
+      {
+        "path": "crates/persistence/targets/src/repositories/q_targets_ingest.rs",
+        "snapshot_blob": "f5ebd7d7d8ddb83ce44921b1269a8ea971bad67c",
+        "working_blob": "f5ebd7d7d8ddb83ce44921b1269a8ea971bad67c",
+        "matches": true
+      },
+      {
+        "path": "crates/project/structure/src/manifest.rs",
+        "snapshot_blob": "833253acff62ac6418bc7029b0f7773c15b8127a",
+        "working_blob": "833253acff62ac6418bc7029b0f7773c15b8127a",
+        "matches": true
+      },
+      {
+        "path": "crates/workflow/artifacts/src/reconciler.rs",
+        "snapshot_blob": "67361e8ad4c44bfddac32cf93464ee9ae3d18e98",
+        "working_blob": "67361e8ad4c44bfddac32cf93464ee9ae3d18e98",
+        "matches": true
+      },
+      {
+        "path": "docs/journeys/FORMAT.md",
+        "snapshot_blob": "f97d8f270b398619b27d79d11cd442f648bb33e8",
+        "working_blob": "f97d8f270b398619b27d79d11cd442f648bb33e8",
+        "matches": true
+      },
+      {
+        "path": "docs/journeys/journeys.py",
+        "snapshot_blob": "5f8f623302f51d1d422cf612f69f1db7ecf0382c",
+        "working_blob": "5f8f623302f51d1d422cf612f69f1db7ecf0382c",
+        "matches": true
+      },
+      {
+        "path": "docs/release/pre-1-0-database-baseline.md",
+        "snapshot_blob": "4904dc300db31dee0643dbd715d8a17e18fdae68",
+        "working_blob": "4904dc300db31dee0643dbd715d8a17e18fdae68",
+        "matches": true
+      },
+      {
+        "path": "gates.yaml",
+        "snapshot_blob": "eabf4a017a2d8dd86ab164b4565260280e184745",
+        "working_blob": "eabf4a017a2d8dd86ab164b4565260280e184745",
+        "matches": true
+      },
+      {
+        "path": "justfile",
+        "snapshot_blob": "5ce8db55a6e77583628f88052fa684ac343851e4",
+        "working_blob": "5ce8db55a6e77583628f88052fa684ac343851e4",
+        "matches": true
+      },
+      {
+        "path": "release-please-config.json",
+        "snapshot_blob": "323549dcae877c1b4d0a5775dd86a24fb75a673b",
+        "working_blob": "323549dcae877c1b4d0a5775dd86a24fb75a673b",
+        "matches": true
+      },
+      {
+        "path": "scripts/ci-affected-crates.sh",
+        "snapshot_blob": "9dbd0bd0bd98af4c5fcb6153df532743201b02a7",
+        "working_blob": "9dbd0bd0bd98af4c5fcb6153df532743201b02a7",
+        "matches": true
+      },
+      {
+        "path": "scripts/precommit-verify.sh",
+        "snapshot_blob": "5e744a8e6038a1eb8df8bc4cfc43d09ed824f08a",
+        "working_blob": "5e744a8e6038a1eb8df8bc4cfc43d09ed824f08a",
+        "matches": true
+      },
+      {
+        "path": "specs/030-ui-audit-revision/spec.md",
+        "snapshot_blob": "8c50d5fbda78b16ac7ee12c0aaa5fbd9e09235dc",
+        "working_blob": "8c50d5fbda78b16ac7ee12c0aaa5fbd9e09235dc",
+        "matches": true
+      }
+    ],
+    "additional_path_checks": {
+      "count": 107,
+      "all_match_snapshot": true
+    },
+    "local_links_valid": true,
+    "links": [
+      {
+        "label": "verification.json",
+        "target": "2026-09-22-holistic-evidence/verification.json",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "build.ts",
+        "target": "https://github.com/tauri-apps/tauri-action/blob/v1/src/build.ts",
+        "kind": "external",
+        "exists": null
+      },
+      {
+        "label": "utils.ts",
+        "target": "https://github.com/tauri-apps/tauri-action/blob/v1/src/utils.ts",
+        "kind": "external",
+        "exists": null
+      },
+      {
+        "label": "logic-review.md",
+        "target": "2026-09-22-holistic-evidence/logic-review.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "logic-challenge.md",
+        "target": "2026-09-22-holistic-evidence/logic-challenge.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "security-review.md",
+        "target": "2026-09-22-holistic-evidence/security-review.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "security-challenge.md",
+        "target": "2026-09-22-holistic-evidence/security-challenge.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "performance-review.md",
+        "target": "2026-09-22-holistic-evidence/performance-review.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "performance-challenge.md",
+        "target": "2026-09-22-holistic-evidence/performance-challenge.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "product-review.md",
+        "target": "2026-09-22-holistic-evidence/product-review.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "product-challenge.md",
+        "target": "2026-09-22-holistic-evidence/product-challenge.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "design-review.md",
+        "target": "2026-09-22-holistic-evidence/design-review.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "design-challenge.md",
+        "target": "2026-09-22-holistic-evidence/design-challenge.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "delivery-review.md",
+        "target": "2026-09-22-holistic-evidence/delivery-review.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "delivery-challenge.md",
+        "target": "2026-09-22-holistic-evidence/delivery-challenge.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "process-review.md",
+        "target": "2026-09-22-holistic-evidence/process-review.md",
+        "kind": "local",
+        "exists": true
+      },
+      {
+        "label": "process-challenge.md",
+        "target": "2026-09-22-holistic-evidence/process-challenge.md",
+        "kind": "local",
+        "exists": true
+      }
+    ],
+    "external_link_limitation": "The two upstream tauri-action v1 URLs remain mutable and were not fetched in this editorial pass; the report explicitly requires pinning before artifact-handling changes."
+  },
+  "review_docs": {
+    "genre": "Historical source-review and decision artifact",
+    "profile": "normal",
+    "verdict": "REVISE",
+    "gate": "score 76.0/100 - 2 errors, 92 warnings, 8.496/100w (exit 1)",
+    "register": "Technical historical review with stable IDs, bounded mechanisms, source anchors and explicit execution limits. Causal rationale and temporal facts belong to this genre.",
+    "claims": "Path existence, snapshot identity and line bounds verified. Existing verification.json checked for reproduction/tooling scope; not every original source claim or external reference was independently re-reviewed.",
+    "action": "Do not treat this as an automatic prose or release PASS. Retain recorded false positives and limits; pin and validate the upstream action before acting on the Windows signing-lane claim.",
+    "judgement_questions": [
+      {
+        "rule": "ai-tells-structure.contrastive-inversion-remainder",
+        "scope": "paragraph",
+        "question": "Does this contrast either negate an alternative nobody proposed or add no information? Factual corrections and instructions that name a real alternative are not defects; preserve them. Flag only when removing the contrast preserves the same actionable meaning.",
+        "status": "satisfied",
+        "evidence": "Remaining contrasts name rejected challenger subclaims or explicit review limits: SEC-01, SEC-03, PROD-05, PERF-07 and the corrections table. Removing them would enlarge the claims."
+      },
+      {
+        "rule": "ai-tells-structure.staccato-negative-parallel-remainder",
+        "scope": "paragraph",
+        "question": "Do the consecutive fragments in this passage each add a fact, or does the run exist to build rhythm toward the last one?",
+        "status": "satisfied",
+        "evidence": "Severity definitions and table cells carry distinct facts. No consecutive emphasis-only fragment run remains."
+      },
+      {
+        "rule": "ai-tells-structure.tricolon-abuse-remainder",
+        "scope": "document",
+        "question": "Do the parallel items -- three identical-shape bullets, or two tricolons in consecutive sentences -- each state a fact the others do not?",
+        "status": "satisfied",
+        "evidence": "Work packages have separate dependencies and completion evidence. The product recommendations cover recovery, evidence, status, interoperability and output scope, not three restatements."
+      },
+      {
+        "rule": "ai-tells-structure.false-suspense-remainder",
+        "scope": "paragraph",
+        "question": "Does this transition announce that something important follows without stating any part of it?",
+        "status": "satisfied",
+        "evidence": "Assessment states the ingestion, recovery and publication risks immediately; no transition withholds the conclusion."
+      },
+      {
+        "rule": "ai-tells-structure.meta-narration-remainder",
+        "scope": "paragraph",
+        "question": "If this sentence were removed, would the reader lose a current fact, required constraint, reproducible action, or explicit change/decision purpose? Flag it when it only announces the document's route, sequence, or implementation journey. Keep navigation that names a prerequisite, safety boundary, release delta, historical record, decision, plan, or specification purpose.",
+        "status": "satisfied",
+        "evidence": "Method records the 14-worker routing, cancelled batch and inaccessible child cards. Those historical facts qualify the evidence rather than narrating the document outline."
+      },
+      {
+        "rule": "ai-tells-structure.heading-echo",
+        "scope": "paragraph",
+        "question": "Given the heading alone, does the first sentence repeat its proposition with no new operation, constraint, path, metric, or scope? Same topic is not enough to flag.",
+        "status": "satisfied",
+        "evidence": "Headings introduce domains; their first paragraphs add mechanisms, constraints or evidence. Executed checks begins a result table rather than repeating the title."
+      },
+      {
+        "rule": "ai-tells-structure.summary-closer-remainder",
+        "scope": "document",
+        "question": "Does the final section state anything the sections above did not, or does it re-list them?",
+        "status": "satisfied",
+        "evidence": "Delivery names the unavailable issue-store record and release-readiness prerequisites. Evidence index adds the 14 readable evidence links and precedence rule."
+      },
+      {
+        "rule": "ai-tells-structure.listicle-in-a-trench-coat",
+        "scope": "document",
+        "question": "Do consecutive paragraphs enumerate positions in a sequence (\"The first X is ... The second X is ...\") without any of them depending on the one before?",
+        "status": "satisfied",
+        "evidence": "Independent findings are explicit numbered IDs, tables or lists; prose does not hide a numbered sequence."
+      },
+      {
+        "rule": "ai-tells-structure.anaphora-abuse",
+        "scope": "paragraph",
+        "question": "Do three or more consecutive sentences open on the same subject-verb pair, with only the object changing?",
+        "status": "satisfied",
+        "evidence": "No three consecutive sentences repeat a subject-verb opening solely for cadence."
+      },
+      {
+        "rule": "ai-tells-structure.analogy-stack-authority",
+        "scope": "paragraph",
+        "question": "Does this passage borrow authority by naming well-known companies or products that have no causal connection to the claim?",
+        "status": "satisfied",
+        "evidence": "PixInsight/WBPP and platform names identify unverified interoperability targets, not borrowed prestige."
+      },
+      {
+        "rule": "ai-tells-structure.invented-concept-label",
+        "scope": "document",
+        "question": "Does this document name a concept in title-case or quoted form (\"the supervision paradox\", \"workload creep\") without defining it and without citing a source that uses the term?",
+        "status": "satisfied",
+        "evidence": "P1/P2/P3 and evidence labels are defined in Method; finding labels name concrete mechanisms rather than invented abstractions."
+      },
+      {
+        "rule": "ai-tells-structure.cataphoric-lead-in-remainder",
+        "scope": "paragraph",
+        "question": "Does announcing the count change what the reader does, or does the list immediately below already show its own length?",
+        "status": "satisfied",
+        "evidence": "The count of 54 findings distinguishes accepted/downgraded findings from unique defects; it supports traceability and scope."
+      },
+      {
+        "rule": "ai-tells-structure.hollow-acknowledgment",
+        "scope": "paragraph",
+        "question": "Does this passage name a risk, limitation, or problem and then give the reader no action, no measurement, and no pointer to where it is handled?",
+        "status": "satisfied",
+        "evidence": "Findings pair the mechanism with action or measurement. Limits point to verification.json or the required rendered/staging follow-up."
+      },
+      {
+        "rule": "ai-tells-structure.absolute-assertion-remainder",
+        "scope": "sentence",
+        "question": "Should the reviewer preserve quotations, attributed claims, and factual descriptions tied to a named person, work, edition, document, product, or other explicit finite set, local all/only/never with its stated antecedent, and bounded comparative recommendations, while flagging unsupported authorial guarantees or categorical evaluations (including \"will tell you\", \"wherever ... has a problem\", or \"you are wrong\") and sweeping always/never/every/no X has ever claims unless attributed or supported by quantified or passage evidence?",
+        "status": "satisfied",
+        "evidence": "All/only/no statements are scoped to traced implementation paths, recorded checks or explicit nonclaims. PERF-07 and UX-03 retain production uncertainty."
+      },
+      {
+        "rule": "ai-tells-structure.negative-inventory-remainder",
+        "scope": "paragraph",
+        "question": "If this negative statement were removed, would the reader lose a reproducible result, safety or compliance constraint, debugging boundary, audit fact, or a current action? Flag it when it merely inventories what was not pinned, run, included, or recorded, including cache-style operational archaeology. Keep an explicit boundary when it changes the current contract or records a change, release, historical result, plan, or specification scope.",
+        "status": "satisfied",
+        "evidence": "Negative statements preserve unexecuted Rust/UI checks, nonpublication, rejected scientific/security overreach and absent advisory inspection. They bound historical assurance."
+      },
+      {
+        "rule": "ai-tells-structure.think-of-it-as-remainder",
+        "scope": "paragraph",
+        "question": "Is the mechanism stated anywhere in this passage, or does the analogy stand in place of it?",
+        "status": "satisfied",
+        "evidence": "No explanatory analogy substitutes for implementation evidence."
+      },
+      {
+        "rule": "ai-tells-structure.false-range",
+        "scope": "sentence",
+        "question": "Do the two endpoints of this \"from X to Y\" construction sit on a real scale, or are they two unordered members of a set?",
+        "status": "satisfied",
+        "evidence": "Numeric source ranges, finding ranges, dimensions and before/after lifecycle transitions have concrete endpoints. No rhetorical from-X-to-Y scale remains."
+      },
+      {
+        "rule": "ai-tells-structure.vague-attribution-remainder",
+        "scope": "sentence",
+        "question": "Could a reader locate the source behind this claim from what the sentence gives them?",
+        "status": "satisfied",
+        "evidence": "Claims point to repository-relative anchors, named review/challenge files and verification.json. Reviewer/challenger attribution is local to that evidence set."
+      },
+      {
+        "rule": "ai-tells-structure.audience-straddle-remainder",
+        "scope": "document",
+        "question": "Does the document make one reader switch between a primer and expert operational detail without a single task that requires both? Flag the straddle when removing either half leaves the current task and contract intact. Keep definitions needed for the stated task, and keep audience changes that are explicit in a change communication, decision, plan, or specification.",
+        "status": "satisfied",
+        "evidence": "The report consistently addresses technical maintainers planning repairs; severity/evidence definitions enable that same task."
+      },
+      {
+        "rule": "ai-tells-register.faux-candor-remainder",
+        "scope": "paragraph",
+        "question": "Does this admission cost the author anything -- a named mistake, a measured failure, a refused feature -- or is it performed vulnerability with no exposure?",
+        "status": "satisfied",
+        "evidence": "Failed direct @max dispatch, the cancelled initial batch and blocked launches are specific limitations, not performative admissions."
+      },
+      {
+        "rule": "ai-tells-register.intensifier-tics-remainder",
+        "scope": "sentence",
+        "question": "Is the reaction this adverb announces supported anywhere in the passage by a measurement, an example, or a named consequence?",
+        "status": "satisfied",
+        "evidence": "The assessment now names capabilities rather than calling functionality substantial. Remaining priorities identify data loss, recovery or release-control consequences."
+      },
+      {
+        "rule": "ai-tells-register.corporate-analytic-filler-remainder",
+        "scope": "paragraph",
+        "question": "If the analysis frame were removed, would the reader lose a fact, measurement, consequence, safety explanation, or required constraint? Flag it when the frame only declares importance, nuance, or a tradeoff and the surrounding prose carries no analysis the reader can use.",
+        "status": "satisfied",
+        "evidence": "Work packages specify findings and completion evidence; structural recommendations name conflicting authorities and production-path integration."
+      },
+      {
+        "rule": "ai-tells-register.over-formatting-reflex",
+        "scope": "document",
+        "question": "Does each table, heading, and bold-colon bullet in this document carry data with real columns or items that are parallel AND independent, or would two sentences of prose say the same thing?",
+        "status": "satisfied",
+        "evidence": "Tables compare stable IDs, severity, mechanism and source anchors. Product bullets carry independently traceable findings. No one-sentence table remains."
+      },
+      {
+        "rule": "ai-tells-register.hedged-symmetry",
+        "scope": "paragraph",
+        "question": "Is each counter-claim in this passage one somebody actually makes, or was it added so the passage reads even-handed?",
+        "status": "satisfied",
+        "evidence": "Counterclaims come from the independent challenges, including no target sort, library focus fallback, Windows collection failure and external hook uncertainty."
+      },
+      {
+        "rule": "ai-tells-register.figurative-verb-verdict-remainder",
+        "scope": "sentence",
+        "question": "Does this sentence deliver a judgement through a metaphor while stating no observation that would let a reader disagree?",
+        "status": "satisfied",
+        "evidence": "Weakest boundaries is followed by the three concrete conversions under review; the report does not rely on the metaphor to establish a defect."
+      },
+      {
+        "rule": "ai-tells-register.urgency-inflation-remainder",
+        "scope": "paragraph",
+        "question": "Does this passage name what breaks if the reader ignores it, or only that the matter is urgent?",
+        "status": "satisfied",
+        "evidence": "Immediate work addresses lost session membership, false filesystem success and ungated publication. P3 downgrades explicitly require further evidence."
+      },
+      {
+        "rule": "ai-tells-register.organic-consequence-remainder",
+        "scope": "sentence",
+        "question": "Did a person choose the thing this sentence describes as arising on its own?",
+        "status": "satisfied",
+        "evidence": "State transitions are attributed to ingestion, recovery, listeners or release workflows; recommendations remain owned by this review."
+      },
+      {
+        "rule": "ai-tells-register.false-agency-remainder",
+        "scope": "sentence",
+        "question": "Is the subject performing deliberate intent or choice, or is it a checkable technical actor under a specification? If it is a MUST/MUST NOT/DEFAULT line, imperative steering, quoted text, or a component causally operating, PRESERVE; flag only unowned intent, merit, or self-causation.",
+        "status": "satisfied",
+        "evidence": "Executor rejection, cache behavior, validator acceptance and listener completion are checkable technical operations. No component is assigned moral intent."
+      },
+      {
+        "rule": "ai-tells-register.anthropomorphised-justification-remainder",
+        "scope": "sentence",
+        "question": "Does this sentence assert a component's value by granting it merit rather than by naming a property a reader could check?",
+        "status": "satisfied",
+        "evidence": "Preserved mechanisms have named properties: bounded cache, typed contracts, transactional creation, no shell interpolation and durable links."
+      },
+      {
+        "rule": "ai-tells-formatting.table-wrapping-one-sentence",
+        "scope": "document",
+        "question": "Does each table in this document have at least two rows whose cells vary in the same dimension, or is it one sentence in a grid?",
+        "status": "satisfied",
+        "evidence": "Every table has multiple independently varying rows; source evidence and priority columns affect implementation decisions."
+      },
+      {
+        "rule": "ai-tells-content-shape.fabricated-citations-remainder",
+        "scope": "document",
+        "question": "For each reference in this document, did you fetch it yourself and confirm it says what the sentence claims?",
+        "status": "partial",
+        "evidence": "All 141 source anchors resolve, stay in range and match the cited commit bytes; one invalid endpoint was corrected to line 43. This editorial pass did not independently re-derive all findings or refetch mutable upstream v1 links. It relies on the completed challenged review and reports that limit."
+      },
+      {
+        "rule": "ai-tells-content-shape.vaporware-description",
+        "scope": "document",
+        "question": "In a current consumer or internal artifact, does each present-tense behavior claim match code at HEAD? Flag a claim that presents planned, historical, or unavailable behavior as shipped; do not apply this test to a change communication, release note, historical record, decision, future plan, or specification whose purpose is to state that other time or intent.",
+        "status": "satisfied",
+        "evidence": "Implemented explicitly means reachable source wiring. Product additions, proposed rendering checks and release work packages are labeled recommendations or future verification; no runtime certification was added."
+      },
+      {
+        "rule": "ai-tells-content-shape.elegant-variation",
+        "scope": "document",
+        "question": "Does this document refer to one thing by two or more different names without saying they are the same thing?",
+        "status": "satisfied",
+        "evidence": "Stable finding IDs, named components, plan states and source paths retain their original referents. No compatibility aliases or new terminology were introduced."
+      },
+      {
+        "rule": "ai-tells-content-shape.one-point-dilution",
+        "scope": "document",
+        "question": "Should the reviewer flag a later passage only when it recasts the same point without adding a current fact, constraint, reproduction step, decision, time-bounded change, required change-note, decision, plan, specification, or historical purpose, or a bounded, scoped recommendation or condition in the author's voice when it names a concrete action, antecedent, comparison, timing, or rationale?",
+        "status": "satisfied",
+        "evidence": "Assessment prioritizes, detailed findings give anchors, work packages define completion, and challenger corrections restrict original claims. Repeated IDs serve those distinct decision purposes."
+      },
+      {
+        "rule": "ai-tells-content-shape.padded-symmetry",
+        "scope": "document",
+        "question": "Does any section exist to match a sibling's length, or does any FAQ/Tips/Troubleshooting section answer a question nobody asked?",
+        "status": "satisfied",
+        "evidence": "Domain sections differ in length and form according to their evidence; there is no FAQ or equal-length padding."
+      },
+      {
+        "rule": "ai-tells-content-shape.textbook-connector-runs",
+        "scope": "paragraph",
+        "question": "Do two consecutive sentences in this paragraph open on a textbook connector (moreover, furthermore, additionally, consequently)?",
+        "status": "satisfied",
+        "evidence": "No consecutive Moreover/Furthermore/Additionally transitions occur."
+      },
+      {
+        "rule": "ai-tells-content-shape.over-writing-remainder",
+        "scope": "paragraph",
+        "question": "If this paragraph were removed, would the reader lose a current behavior, constraint, reproduction step, or explicit change/decision purpose? Flag it when its reasoning is an implementation journey, cache-style operational archaeology, or a postscript whose removal preserves the reader's task and current contract. Keep rationale in a decision, plan, specification, change communication, or historical record when that is the document's purpose.",
+        "status": "satisfied",
+        "evidence": "Historical execution and rationale are required for interpreting this decision artifact. The routing paragraph was reduced from 65 to 44 words while preserving every routing qualification."
+      },
+      {
+        "rule": "ai-tells-content-shape.unasked-for-rationale",
+        "scope": "paragraph",
+        "question": "If this rationale were removed, would the reader lose a constraint, invariant, gotcha, measured threshold, reproduction step, or explicit change/decision purpose? Flag a clause that only defends an implementation or narrates its journey when the behavior and current contract remain unchanged without it. Keep reasons in safety explanations, decisions, plans, specifications, change communications, and historical records when that is their purpose.",
+        "status": "satisfied",
+        "evidence": "The task explicitly requires preserving evidence and qualifications. Causal rationale explains the recommended safety boundaries and challenged severity."
+      },
+      {
+        "rule": "ai-tells-content-shape.epigram-closer-remainder",
+        "scope": "paragraph",
+        "question": "Does this closing line state a fact the paragraph or table above did not, or does it perform having concluded?",
+        "status": "satisfied",
+        "evidence": "The final line specifies that qualified consolidated conclusions take precedence over unqualified first-wave claims; deleting it changes evidence interpretation."
+      },
+      {
+        "rule": "orwell.concrete-floor",
+        "scope": "document",
+        "question": "Does this paragraph name at least one number, identifier, path, command, or dated event? If the writer possesses a more specific term than the one used, did they use it?",
+        "status": "satisfied",
+        "evidence": "Domain findings carry IDs and paths. General recommendations name concrete cache, transaction, publication, session-identity or workflow contracts and are linked by domain context."
+      },
+      {
+        "rule": "prose-discipline.competing-actor-terms",
+        "scope": "document",
+        "question": "List every term this document uses for a person or system that acts: user, customer, client, consumer, caller, requester, tenant, account, operator, admin, developer, integrator, subscriber, end user. For each pair, do they name the same subject? If yes, that is rotation and one term must win. If no, does the document define the difference at first use? - defined-distinction - quotation - api-name - glossary-entry",
+        "status": "satisfied",
+        "evidence": "User is the person operating the application; caller/listener/executor/reviewer/challenger denote different technical or review roles. They are not rotated synonyms."
+      },
+      {
+        "rule": "prose-discipline.marketing-register",
+        "scope": "paragraph",
+        "question": "For each evaluative claim in this passage, is there a number, a benchmark, a named limit, a version, or a citation within the same sentence or the next one? And would the claim's opposite be recognized as a disagreement about fact rather than a difference of opinion? A claim that fails both is marketing. - quantified - quotation - defined-term-of-art - landing-page",
+        "status": "satisfied",
+        "evidence": "Unmeasured praise about substantial functionality and fitting users was removed. Remaining claims identify mechanisms or documented limits; no benchmark improvement is claimed."
+      },
+      {
+        "rule": "prose-discipline.overloaded-sentence",
+        "scope": "sentence",
+        "question": "Read the sentence once and stop. How many separate things must the reader now remember? If more than one, could each stand as its own sentence without repeating a noun phrase to make sense? If yes, it is overloaded. A list of parallel actions sharing one subject and one verb is ONE idea, however long; two clauses joined by \"and\" that could each stand alone are two. - quotation - code-span - vertical-list - legal-force - parallel-list",
+        "status": "satisfied",
+        "evidence": "Ingestion, partial-disposal, identity, download lifecycle and release instructions were split at independent clauses. Remaining parallel noun lists describe a single mechanism or preservation constraint; table-parser attribution is separately qualified."
+      },
+      {
+        "rule": "prose-discipline.hedged-into-uselessness",
+        "scope": "document",
+        "question": "List the load-bearing claims: the sentences a reader would act on. For each, is it hedged? Then ask three things. First, could the reader act on the document as written, or does every path out of it end in \"it depends\"? Second, is any claim hedged in BOTH directions, so that the hedge and its counter-hedge cancel (\"this may improve latency, though it might also increase it\")? Third, is any hedge itself hedged (\"this could potentially help in some cases\")? A document where the majority of load-bearing claims carry a hedge is a document that says nothing, whatever each sentence looks like on its own. - genuine-uncertainty - quotation - legal-force - safety-critical - measured-variance",
+        "status": "satisfied",
+        "evidence": "P1/P2 mechanisms lead to explicit repairs. Hedges name specific uncertainty: production virtualizer frequency, focus fallback, upstream signing and runner behavior. They do not cancel the established source claims."
+      },
+      {
+        "rule": "prose-discipline.bare-quantifier-with-figure-available",
+        "scope": "document",
+        "question": "Find every bare quantifier: most, some, many, few, often, usually, frequently, generally, typically, several times, much, little. For each, ask one question -- does the writer have the number? A quantifier over something the document itself counts elsewhere, over a list it contains, or over a measurement it reports is a withheld figure and must be replaced. A quantifier over a genuinely unbounded or unmeasured set is correct and stays. - genuinely-unmeasured - quotation - unbounded-set - idiom - defined-elsewhere",
+        "status": "satisfied",
+        "evidence": "54 total, 45 accepted, nine downgraded, three overlapping pairs and 3,162 tracked files retain counts. Generally rejected static destinations and unmeasured incidence are not quantified in the evidence; no number was invented."
+      },
+      {
+        "rule": "prose-scope.code-change-prose-scope",
+        "scope": "document",
+        "question": "For every changed comment or documentation passage, does the code diff show that it directly explains or specifies the changed code? If not, did the user explicitly request that prose edit? Treat unrelated same-file comments and documentation elsewhere as defects, while correcting a stale comment that describes changed behavior.",
+        "status": "satisfied",
+        "evidence": "The user explicitly authorized this report-only editorial task. Only the report and editorial verification artifact were written; no code diff is required."
+      },
+      {
+        "rule": "ste-descriptive.information-not-gradual",
+        "scope": "paragraph",
+        "question": "Does each sentence introduce at most one new idea, and does every term appear after the sentence that introduced it? If a reader must already know a later term to parse an earlier sentence, reorder. - quotation",
+        "status": "satisfied",
+        "evidence": "Method defines priorities and evidence labels before findings. Source mechanism precedes impact, recommendation and verification qualification within the main finding blocks."
+      },
+      {
+        "rule": "ste-descriptive.missing-key-word-structure",
+        "scope": "paragraph",
+        "question": "Does each sentence pick up a key word or key phrase from the sentence before it, and is that key word written the same way each time? - quotation",
+        "status": "satisfied",
+        "evidence": "Ingestion/listener, recovery/classifier and release/publication paragraphs maintain their subjects; repeated keywords preserve reference rather than rotate synonyms."
+      },
+      {
+        "rule": "ste-descriptive.paragraph-without-related-information",
+        "scope": "paragraph",
+        "question": "Does the first sentence of this paragraph tell the reader what the paragraph is about, and does every later sentence add to that topic? - quotation",
+        "status": "satisfied",
+        "evidence": "Each paragraph opens with the mechanism or review boundary it discusses. Product findings are separated by blank lines and COR recommendations start their own paragraphs where needed."
+      },
+      {
+        "rule": "ste-descriptive.paragraph-has-multiple-topics",
+        "scope": "paragraph",
+        "question": "Could this paragraph be split at any sentence boundary without either half needing the other? If yes, it carries more than one topic. - quotation",
+        "status": "satisfied",
+        "evidence": "Long COR paragraphs were split before recommendations. Routing remains one topic; its shorter version retains dispatch, visibility, role and cancellation facts."
+      },
+      {
+        "rule": "ste-nouns.long-domain-term-without-short-form",
+        "scope": "document",
+        "question": "This domain term is longer than three words and cannot be shortened, because the project owns the name. Is it written in full at first use, and is either a short form declared or the words joined with hyphens as one unit? - code-span - identifier-fidelity",
+        "status": "satisfied",
+        "evidence": "Long source identifiers remain code spans. The report uses established short forms such as E2E, IPC, CAS and DTO for a technical audience, not invented multiword terms."
+      },
+      {
+        "rule": "ste-practices.word-swap-insufficient",
+        "scope": "sentence",
+        "question": "After you substitute the replacement word, is the sentence still grammatical, still meaningful, and still carrying your original meaning? If any of the three fails, or the word has no replacement at all, restructure the sentence instead. - quotation",
+        "status": "satisfied",
+        "evidence": "Edits rewrote causal clauses and split sentences rather than stripping uncertainty words. All 54 IDs and all 141 anchor occurrences survived."
+      },
+      {
+        "rule": "ste-practices.word-sense-incorrect",
+        "scope": "sentence",
+        "question": "For each vocabulary word in this sentence, does the sentence use the single sense the vocabulary entry records, rather than another common sense of the same spelling? - quotation - code-span",
+        "status": "unchecked",
+        "evidence": "No project-controlled vocabulary and permitted-sense table was audited in this bounded pass. Ordinary technical usage was reviewed, but controlled-language compliance is not asserted."
+      },
+      {
+        "rule": "ste-practices.ambiguous-preposition-with",
+        "scope": "sentence",
+        "question": "Does \"with\" mean an association, a shared action, or an instrument? If a reader could pick more than one, name the instrument in a separate clause or state the condition first. - quotation - code-span",
+        "status": "satisfied",
+        "evidence": "With disposable data identifies the probe input; with provisioned dependencies names an environmental prerequisite. Neither conceals a second actor or operation."
+      },
+      {
+        "rule": "ste-punctuation.parentheses-misuse",
+        "scope": "sentence",
+        "question": "Does this parenthetical give a cross-reference, an item identifier, a step number, an abbreviation, a singular-and-plural form, a short explanation, or an alternative? If it carries a second idea, promote it to its own sentence. - code-span - quotation",
+        "status": "satisfied",
+        "evidence": "The report uses inline identifiers and explicit sentences for qualifications rather than parenthetical second arguments. No information-bearing parenthetical was discarded."
+      },
+      {
+        "rule": "ste-safety.risk-level-word-missing-or-wrong",
+        "scope": "paragraph",
+        "question": "Does this block describe a risk of harm to a person, or only a risk of damage to data, systems, or equipment? Harm to a person takes the higher marker; damage alone takes the lower one; when both apply, use the higher marker. - quotation",
+        "status": "not-applicable",
+        "evidence": "The artifact classifies software/data/release risks using defined P1/P2/P3 priorities. It is not a procedure for hazards to a person."
+      },
+      {
+        "rule": "ste-sentences.sentence-not-short-or-clear",
+        "scope": "sentence",
+        "question": "Does this sentence give exactly one instruction (in a procedure) or carry exactly one topic (in description)? If it carries more, split it. - quotation",
+        "status": "satisfied",
+        "evidence": "Dense causal clauses were split; remaining lists describe one technical scope. Metric diagnostics with blank matches retain full context and do not certify exact parser sentence attribution."
+      },
+      {
+        "rule": "ste-sentences.missing-connector-between-related-sentences",
+        "scope": "paragraph",
+        "question": "Does the second sentence add a result, a contrast, or a next step to the first? If yes, does a connecting word or phrase make that relation explicit? - quotation",
+        "status": "satisfied",
+        "evidence": "The edited fingerprint paragraph uses therefore; listener completion uses still; release verification uses before. Causal and temporal relations remain explicit after splitting."
+      },
+      {
+        "rule": "ste-verbs.past-participle-not-adjectival",
+        "scope": "sentence",
+        "question": "Does this past participle sit before a noun, or after a form of \"be\", \"become\", or \"stay\", describing a condition? If it sits after another auxiliary, it is part of a verb construction and is not permitted. - quotation - code-span",
+        "status": "not-applicable",
+        "evidence": "This historical review must retain completed and blocked execution facts. Rewriting all past constructions to an STE procedural subset would erase temporal meaning."
+      },
+      {
+        "rule": "ste-verbs.gerund-outside-noun-use",
+        "scope": "sentence",
+        "question": "Is this -ing word a noun (the name of a thing or a process), or a modifier inside a domain noun? If it carries the action of the clause, rewrite it. - quotation - code-span - registered-domain-term",
+        "status": "satisfied",
+        "evidence": "Ingestion, filtering, grouping, signing and rendering name technical processes. Recommendations use finite verbs; no trailing making-sure clause obscures an action."
+      },
+      {
+        "rule": "ste-words.word-used-outside-permitted-sense",
+        "scope": "sentence",
+        "question": "Does every controlled word in this sentence carry the single meaning recorded in the vocabulary entry, rather than another dictionary meaning of the same spelling? - quotation",
+        "status": "unchecked",
+        "evidence": "No controlled-vocabulary sense registry was inspected. The normal gate returned no unchecked entries, but that is not evidence of a complete manual controlled-language audit."
+      },
+      {
+        "rule": "ste-words.domain-noun-category-membership",
+        "scope": "sentence",
+        "question": "For each noun in this sentence that is not in the controlled vocabulary, does it name a specified concept inside one of the declared domain-noun categories for this project? - code-span - identifier-fidelity",
+        "status": "unchecked",
+        "evidence": "No project domain-category registry was audited; established API and component names were preserved exactly."
+      },
+      {
+        "rule": "ste-words.unapproved-word-not-a-domain-noun",
+        "scope": "sentence",
+        "question": "Is this out-of-vocabulary word a domain noun, or a word inside a multi-word domain noun? If it is neither, it must be replaced. - code-span - identifier-fidelity - quotation",
+        "status": "unchecked",
+        "evidence": "No vocabulary approval inventory was checked. Correct technical nouns were not replaced merely to imply STE certification."
+      },
+      {
+        "rule": "ste-words.domain-noun-not-organization-approved",
+        "scope": "document",
+        "question": "Does the project glossary, API reference, or schema already name this thing? If yes, does the document use that exact name? - quotation",
+        "status": "partial",
+        "evidence": "Component paths were resolved against the supplied source inventories and exact filenames; all 107 checked path-bearing files match the snapshot. A comprehensive project glossary audit is outside this editorial task."
+      },
+      {
+        "rule": "ste-words.domain-noun-too-long-or-unclear",
+        "scope": "sentence",
+        "question": "When you had to invent this term, is it three words or fewer, and would a reader outside your team understand it without a definition?",
+        "status": "satisfied",
+        "evidence": "The edit introduces no new named domain concept. Plan-scoped identity, per-item outcomes and frame-type filtering retain established technical meanings."
+      },
+      {
+        "rule": "ste-words.domain-verb-category-membership",
+        "scope": "sentence",
+        "question": "Could this sentence be written with vocabulary verbs alone? If yes, the domain verb is not permitted. If no, does the verb belong to a declared domain-verb category and carry its category meaning in this sentence? - code-span - api-name",
+        "status": "unchecked",
+        "evidence": "No declared domain-verb vocabulary was inspected. Technical verbs retain ordinary code-review meanings; formal vocabulary approval is not claimed."
+      }
+    ],
+    "headings_reviewed": [
+      "# PlateVault repository review",
+      "## Assessment",
+      "## Method, evidence and limits",
+      "### Executed checks",
+      "## Immediate priorities",
+      "## Architecture, domain logic and data integrity",
+      "### What to preserve",
+      "### Findings",
+      "## Filesystem safety, security and privacy",
+      "## Features and end-to-end workflows",
+      "### Product findings",
+      "### Recommended product additions",
+      "## Performance and resource use",
+      "## Interface design, accessibility and interaction",
+      "## Testing, release engineering and dependencies",
+      "### Test investments that address the findings",
+      "## Engineering processes, workflows, tooling and structure",
+      "### Process findings",
+      "### Structural improvements",
+      "## Antipatterns and code smells across domains",
+      "## Challenger corrections retained in this report",
+      "## Delivery and remaining verification",
+      "### Evidence index"
+    ],
+    "longest_paragraph_exercise": "Condensed the dense routing paragraph from 65 to 44 words (about one third) without losing its execution or visibility qualifications. Finding/evidence lists were not treated as ordinary prose paragraphs.",
+    "weakest_remaining_claim": {
+      "finding": "DEL-03 and the adjacent Windows artifact-collection corroboration",
+      "claim": "Optional signing can invalidate previously published updater metadata after an earlier collection mismatch is repaired.",
+      "limitation": "Latent source-established risk only. The collection lane blocks first; no downloaded broken update was observed. External corroboration references mutable upstream v1 sources, not a pinned action implementation or a packaged-platform reproduction."
+    }
+  },
+  "unchecked_coverage": {
+    "linter_unchecked": [],
+    "manual_judgement_unchecked": [
+      {
+        "rule": "ste-practices.word-sense-incorrect",
+        "scope": "sentence",
+        "question": "For each vocabulary word in this sentence, does the sentence use the single sense the vocabulary entry records, rather than another common sense of the same spelling? - quotation - code-span",
+        "status": "unchecked",
+        "evidence": "No project-controlled vocabulary and permitted-sense table was audited in this bounded pass. Ordinary technical usage was reviewed, but controlled-language compliance is not asserted."
+      },
+      {
+        "rule": "ste-words.word-used-outside-permitted-sense",
+        "scope": "sentence",
+        "question": "Does every controlled word in this sentence carry the single meaning recorded in the vocabulary entry, rather than another dictionary meaning of the same spelling? - quotation",
+        "status": "unchecked",
+        "evidence": "No controlled-vocabulary sense registry was inspected. The normal gate returned no unchecked entries, but that is not evidence of a complete manual controlled-language audit."
+      },
+      {
+        "rule": "ste-words.domain-noun-category-membership",
+        "scope": "sentence",
+        "question": "For each noun in this sentence that is not in the controlled vocabulary, does it name a specified concept inside one of the declared domain-noun categories for this project? - code-span - identifier-fidelity",
+        "status": "unchecked",
+        "evidence": "No project domain-category registry was audited; established API and component names were preserved exactly."
+      },
+      {
+        "rule": "ste-words.unapproved-word-not-a-domain-noun",
+        "scope": "sentence",
+        "question": "Is this out-of-vocabulary word a domain noun, or a word inside a multi-word domain noun? If it is neither, it must be replaced. - code-span - identifier-fidelity - quotation",
+        "status": "unchecked",
+        "evidence": "No vocabulary approval inventory was checked. Correct technical nouns were not replaced merely to imply STE certification."
+      },
+      {
+        "rule": "ste-words.domain-verb-category-membership",
+        "scope": "sentence",
+        "question": "Could this sentence be written with vocabulary verbs alone? If yes, the domain verb is not permitted. If no, does the verb belong to a declared domain-verb category and carry its category meaning in this sentence? - code-span - api-name",
+        "status": "unchecked",
+        "evidence": "No declared domain-verb vocabulary was inspected. Technical verbs retain ordinary code-review meanings; formal vocabulary approval is not claimed."
+      }
+    ],
+    "manual_judgement_partial": [
+      {
+        "rule": "ai-tells-content-shape.fabricated-citations-remainder",
+        "scope": "document",
+        "question": "For each reference in this document, did you fetch it yourself and confirm it says what the sentence claims?",
+        "status": "partial",
+        "evidence": "All 141 source anchors resolve, stay in range and match the cited commit bytes; one invalid endpoint was corrected to line 43. This editorial pass did not independently re-derive all findings or refetch mutable upstream v1 links. It relies on the completed challenged review and reports that limit."
+      },
+      {
+        "rule": "ste-words.domain-noun-not-organization-approved",
+        "scope": "document",
+        "question": "Does the project glossary, API reference, or schema already name this thing? If yes, does the document use that exact name? - quotation",
+        "status": "partial",
+        "evidence": "Component paths were resolved against the supplied source inventories and exact filenames; all 107 checked path-bearing files match the snapshot. A comprehensive project glossary audit is outside this editorial task."
+      }
+    ],
+    "metric_attribution": "Some table-level length/coordination diagnostics report empty matched_text and column 1. Exact internal sentence attribution cannot be recovered from this output; full source-table contexts and messages are preserved. No exact automated-span verification is claimed for them.",
+    "all_suggestion_dispositions": false,
+    "new_runtime_or_full_source_audit": false
+  },
+  "publication_compaction": "Removed repeated raw linter diagnostics and duplicate context. Retained warning rules, affected lines, matched text, sentence context, rationale, judgments and all source/link validation."
+}
