@@ -310,7 +310,9 @@ export const SortingAnnouncesItself: Story = {
     const canvas = within(canvasElement);
     const header = canvas.getByRole('columnheader', { name: /night/i });
     await expect(header).toHaveAttribute('aria-sort', 'descending');
-    await userEvent.click(canvas.getByRole('button', { name: 'Sort by night' }));
+    await userEvent.click(
+      canvas.getByRole('button', { name: 'Sort by night' }),
+    );
     await expect(header).toHaveAttribute('aria-sort', 'ascending');
   },
 };

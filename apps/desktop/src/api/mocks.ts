@@ -2981,8 +2981,7 @@ const mockHandlers = {
         | undefined
     )?.req;
     const rootId = req?.rootId ?? lib.ROOT_RAW;
-    const current =
-      lib.ROOT_CONFIGS[rootId] ?? lib.ROOT_CONFIGS[lib.ROOT_RAW]!;
+    const current = lib.ROOT_CONFIGS[rootId] ?? lib.ROOT_CONFIGS[lib.ROOT_RAW]!;
     const next = {
       reconcileMode: req?.reconcileMode ?? current.reconcileMode,
       detection: {
@@ -3010,8 +3009,7 @@ const mockHandlers = {
 
   inbox_scan: async (_args) => {
     const rootId =
-      (_args as { rootId?: string | null } | undefined)?.rootId ??
-      lib.ROOT_RAW;
+      (_args as { rootId?: string | null } | undefined)?.rootId ?? lib.ROOT_RAW;
     return {
       rootId,
       entries: lib.INBOX_SCAN_ENTRIES,
@@ -3040,9 +3038,7 @@ const mockHandlers = {
   plans_apply_status: async (_args) => {
     const planId =
       (_args as { planId?: string } | undefined)?.planId ?? 'plan-001';
-    return (
-      lib.PLAN_APPLY_STATUS[planId] ?? lib.defaultPlanApplyStatus(planId)
-    );
+    return lib.PLAN_APPLY_STATUS[planId] ?? lib.defaultPlanApplyStatus(planId);
   },
 
   plans_cancel: async (_args) => {
@@ -3154,11 +3150,8 @@ const mockHandlers = {
 
   target_astro_format_batch: async (_args) => {
     const targets =
-      (
-        _args as
-          | { req?: { targets?: Array<{ id: string }> } }
-          | undefined
-      )?.req?.targets ?? [];
+      (_args as { req?: { targets?: Array<{ id: string }> } } | undefined)?.req
+        ?.targets ?? [];
     return {
       formatted: targets.map((t) => ({
         id: t.id,
@@ -3268,8 +3261,8 @@ const mockHandlers = {
     status: 'success',
     contractVersion: '1.0.0',
     requestId:
-      (_args as { req?: { requestId?: string } } | undefined)?.req
-        ?.requestId ?? 'unassign',
+      (_args as { req?: { requestId?: string } } | undefined)?.req?.requestId ??
+      'unassign',
     error: null,
   }),
 
@@ -3478,7 +3471,13 @@ const mockHandlers = {
         errorToken: unknown.value,
       };
     }
-    return { valid: true, warnings: [], errorCode: null, errorMessage: null, errorToken: null };
+    return {
+      valid: true,
+      warnings: [],
+      errorCode: null,
+      errorMessage: null,
+      errorToken: null,
+    };
   },
 
   pattern_preview: async (_args) => {
@@ -3523,15 +3522,15 @@ const mockHandlers = {
 
   projects_framing_list: async (_args) => {
     const projectId =
-      (_args as { req?: { projectId?: string } } | undefined)?.req
-        ?.projectId ?? '';
+      (_args as { req?: { projectId?: string } } | undefined)?.req?.projectId ??
+      '';
     return { framings: lib.FRAMINGS[projectId] ?? [] };
   },
 
   projects_framing_merge: async (_args) => {
     const projectId =
-      (_args as { req?: { projectId?: string } } | undefined)?.req
-        ?.projectId ?? lib.PROJECT_NGC7000_HOO;
+      (_args as { req?: { projectId?: string } } | undefined)?.req?.projectId ??
+      lib.PROJECT_NGC7000_HOO;
     const panels = lib.FRAMINGS[projectId] ?? [];
     const [first, ...rest] = panels;
     if (!first) {
@@ -3556,8 +3555,8 @@ const mockHandlers = {
 
   projects_framing_split: async (_args) => {
     const projectId =
-      (_args as { req?: { projectId?: string } } | undefined)?.req
-        ?.projectId ?? lib.PROJECT_NGC7000_HOO;
+      (_args as { req?: { projectId?: string } } | undefined)?.req?.projectId ??
+      lib.PROJECT_NGC7000_HOO;
     const source = (lib.FRAMINGS[projectId] ?? [])[0];
     if (!source) {
       return mockContractError(
@@ -3588,8 +3587,8 @@ const mockHandlers = {
 
   projects_framing_reassign: async (_args) => {
     const projectId =
-      (_args as { req?: { projectId?: string } } | undefined)?.req
-        ?.projectId ?? lib.PROJECT_NGC7000_HOO;
+      (_args as { req?: { projectId?: string } } | undefined)?.req?.projectId ??
+      lib.PROJECT_NGC7000_HOO;
     const panels = lib.FRAMINGS[projectId] ?? [];
     const targetFraming = panels[0];
     if (!targetFraming) {
@@ -3629,8 +3628,8 @@ const mockHandlers = {
 
   settings_restore_defaults: async (_args) => {
     const keys =
-      (_args as { request?: { keys?: string[] } } | undefined)?.request
-        ?.keys ?? [];
+      (_args as { request?: { keys?: string[] } } | undefined)?.request?.keys ??
+      [];
     const restored = keys.filter((k) =>
       lib.OVERRIDABLE_SETTING_KEYS.includes(k),
     );
@@ -3704,9 +3703,7 @@ const mockHandlers = {
   sourceview_destination_set: async () => ({ ok: true }),
 
   sourceview_generate: async (_args) => {
-    const req = (
-      _args as { req?: { copyOptIn?: boolean } } | undefined
-    )?.req;
+    const req = (_args as { req?: { copyOptIn?: boolean } } | undefined)?.req;
     return {
       planId: 'plan-003',
       // The warning is the honest part: linking is not available on every

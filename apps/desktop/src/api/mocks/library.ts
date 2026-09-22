@@ -269,7 +269,11 @@ export const TARGET_ALIASES: Record<string, TargetAliasDto[]> = {
     { id: 'alias-m31-capture', alias: 'M31_LRGB', kind: 'user' },
   ],
   [TARGET_IC1396]: [
-    { id: 'alias-ic1396-common', alias: "Elephant's Trunk", kind: 'common_name' },
+    {
+      id: 'alias-ic1396-common',
+      alias: "Elephant's Trunk",
+      kind: 'common_name',
+    },
     { id: 'alias-ic1396-sh2', alias: 'Sh2-131', kind: 'designation' },
   ],
   [TARGET_JUPITER]: [],

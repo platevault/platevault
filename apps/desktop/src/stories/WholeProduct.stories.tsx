@@ -231,10 +231,9 @@ export const TheListHoldsItsShapeBesideADetail: Story = {
     // get by someone using it.
     await userEvent.click(canvas.getByRole('radio', { name: 'Right' }));
     await waitFor(async () => {
-      await expect(canvas.getByRole('radio', { name: 'Right' })).toHaveAttribute(
-        'aria-checked',
-        'true',
-      );
+      await expect(
+        canvas.getByRole('radio', { name: 'Right' }),
+      ).toHaveAttribute('aria-checked', 'true');
     }, SETTLE);
 
     const scroller = canvas.getByTestId('masters-virtual-sizer');
@@ -271,7 +270,8 @@ export const TheListHoldsItsShapeBesideADetail: Story = {
       );
     }
     const orderedBy = headings.find((h) => h.getAttribute('aria-sort'));
-    if (!orderedBy) throw new Error('no column reports itself as the sorted one');
+    if (!orderedBy)
+      throw new Error('no column reports itself as the sorted one');
     await expect(orderedBy).toBeVisible();
 
     // Put the placement back, so the next reviewer opens on the automatic rule.
@@ -446,8 +446,8 @@ export const AnUnavailableDriveIsStated: Story = {
 
     // The unreachable drive's own nights stay listed from the last scan, so
     // nothing disappears from the ledger while a drive is detached.
-    await expect(
-      (await selectableRows(canvasElement)).length,
-    ).toBeGreaterThan(0);
+    await expect((await selectableRows(canvasElement)).length).toBeGreaterThan(
+      0,
+    );
   },
 };

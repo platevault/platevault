@@ -266,20 +266,28 @@ export const Settings: Story = {
         canvas.getByRole('navigation', { name: 'Settings categories' }),
       );
       await userEvent.click(list.getByRole('button', { name: paneName }));
-      const open = await waitFor(() => {
-        const marked = list.getByRole('button', { name: paneName });
-        if (marked.getAttribute('aria-current') !== 'page') {
-          throw new Error(`${paneName} did not open`);
-        }
-        const shown = canvas.getByTestId('SettingsPage');
-        if ((shown.textContent ?? '').trim() === '') {
-          throw new Error(`${paneName} rendered nothing`);
-        }
-        return shown;
-      }, { timeout: 15_000 });
+      const open = await waitFor(
+        () => {
+          const marked = list.getByRole('button', { name: paneName });
+          if (marked.getAttribute('aria-current') !== 'page') {
+            throw new Error(`${paneName} did not open`);
+          }
+          const shown = canvas.getByTestId('SettingsPage');
+          if ((shown.textContent ?? '').trim() === '') {
+            throw new Error(`${paneName} rendered nothing`);
+          }
+          return shown;
+        },
+        { timeout: 15_000 },
+      );
 
       const controls = within(open);
-      for (const role of ['checkbox', 'combobox', 'textbox', 'radio'] as const) {
+      for (const role of [
+        'checkbox',
+        'combobox',
+        'textbox',
+        'radio',
+      ] as const) {
         for (const control of controls.queryAllByRole(role)) {
           await expect(
             control,

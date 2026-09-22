@@ -72,10 +72,19 @@ const ALIAS_PREFIX = '@/';
  */
 const ALLOWED_ORPHANS = new Set([]);
 
-/** True for a file the production bundle never includes. */
+/**
+ * True for a file the production bundle never includes.
+ *
+ * Storybook counts: `.storybook/main.ts` is a separate entry point that
+ * compiles `src/stories/**` itself, so a stylesheet reached only from a story
+ * is styled where it is used and is not the silent-unstyled bug this gate
+ * exists to catch.
+ */
 function isTestFile(path) {
   return (
     /\.(test|spec)\.(ts|tsx)$/.test(path) ||
+    /\.stories\.(ts|tsx)$/.test(path) ||
+    path.includes(`${'/'}stories${'/'}`) ||
     path.includes(`${'/'}__tests__${'/'}`) ||
     path.includes(`${'/'}__mocks__${'/'}`) ||
     /(^|\/)__smoke__\.ts$/.test(path)
@@ -175,8 +184,11 @@ function orphanVeModules(root = SRC, entries = ENTRIES) {
     }
   }
 
+  // A stylesheet living in a non-production tree is compiled by that tree's own
+  // entry point (Storybook, the test runner), so it is styled where it is used
+  // and is not the silent-unstyled bug this gate exists to catch.
   const orphans = veModules
-    .filter((f) => !reached.has(f))
+    .filter((f) => !reached.has(f) && !isTestFile(f))
     .map((f) => relative(root, f))
     .sort();
 

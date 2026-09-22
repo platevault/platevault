@@ -60,12 +60,42 @@ export const Status: Story = {
       <Matrix
         entries={[
           ['Observed on disk', <Pill key="p">Observed</Pill>],
-          ['Confirmed', <Pill key="p" variant="ok">Confirmed</Pill>],
-          ['Needs review', <Pill key="p" variant="warn">Needs review</Pill>],
-          ['Refused', <Pill key="p" variant="danger">Destination conflict</Pill>],
-          ['Inferred', <Pill key="p" variant="info">Inferred · 0.71</Pill>],
-          ['Planned, not applied', <Pill key="p" variant="accent">Planned</Pill>],
-          ['Not applicable', <Pill key="p" variant="ghost">—</Pill>],
+          [
+            'Confirmed',
+            <Pill key="p" variant="ok">
+              Confirmed
+            </Pill>,
+          ],
+          [
+            'Needs review',
+            <Pill key="p" variant="warn">
+              Needs review
+            </Pill>,
+          ],
+          [
+            'Refused',
+            <Pill key="p" variant="danger">
+              Destination conflict
+            </Pill>,
+          ],
+          [
+            'Inferred',
+            <Pill key="p" variant="info">
+              Inferred · 0.71
+            </Pill>,
+          ],
+          [
+            'Planned, not applied',
+            <Pill key="p" variant="accent">
+              Planned
+            </Pill>,
+          ],
+          [
+            'Not applicable',
+            <Pill key="p" variant="ghost">
+              —
+            </Pill>,
+          ],
         ]}
       />
     </Frame>
@@ -90,12 +120,13 @@ export const Warnings: Story = {
           until you turn it on in Settings → Target Resolution.
         </Banner>
         <Banner variant="warn">
-          AstroArchive is not attached. Its 1 root and 4 sessions are listed from
-          the last scan and cannot be opened, moved or cleaned up right now.
+          AstroArchive is not attached. Its 1 root and 4 sessions are listed
+          from the last scan and cannot be opened, moved or cleaned up right
+          now.
         </Banner>
         <Banner variant="danger">
-          This plan was drafted against a source that has since changed. Draft it
-          again before approving — nothing has been moved.
+          This plan was drafted against a source that has since changed. Draft
+          it again before approving — nothing has been moved.
         </Banner>
       </Stack>
     </Frame>
@@ -116,13 +147,30 @@ export const Actions: Story = {
     <Frame note="An unavailable action stays visible and says what it is waiting for, rather than disappearing.">
       <Matrix
         entries={[
-          ['Primary', <Btn key="b" variant="primary">Confirm 3 folders</Btn>],
+          [
+            'Primary',
+            <Btn key="b" variant="primary">
+              Confirm 3 folders
+            </Btn>,
+          ],
           ['Secondary', <Btn key="b">Rescan</Btn>],
-          ['Quiet', <Btn key="b" variant="ghost">Cancel</Btn>],
-          ['Reversible', <Btn key="b" variant="danger">Discard plan</Btn>],
+          [
+            'Quiet',
+            <Btn key="b" variant="ghost">
+              Cancel
+            </Btn>,
+          ],
+          [
+            'Reversible',
+            <Btn key="b" variant="danger">
+              Discard plan
+            </Btn>,
+          ],
           [
             'Irreversible',
-            <Btn key="b" variant="destructive">Delete permanently</Btn>,
+            <Btn key="b" variant="destructive">
+              Delete permanently
+            </Btn>,
           ],
           [
             'Waiting on something',
@@ -158,10 +206,41 @@ export const Reading: Story = {
     <Frame>
       <Matrix
         entries={[
-          ['Read from the file', <KV key="k" label="Target" value="NGC 7000" provenance="From the file header" />],
-          ['Corrected by a reviewer', <KV key="k" label="Filter" value="Ha" provenance="Corrected 2026-05-18" />],
-          ['Exact path', <KV key="k" label="Path" value="/astro/raw/2026-04-12/NGC7000" mono />],
-          ['Never measured', <KV key="k" label="Observer site" value={<Pill variant="ghost">Unresolved</Pill>} />],
+          [
+            'Read from the file',
+            <KV
+              key="k"
+              label="Target"
+              value="NGC 7000"
+              provenance="From the file header"
+            />,
+          ],
+          [
+            'Corrected by a reviewer',
+            <KV
+              key="k"
+              label="Filter"
+              value="Ha"
+              provenance="Corrected 2026-05-18"
+            />,
+          ],
+          [
+            'Exact path',
+            <KV
+              key="k"
+              label="Path"
+              value="/astro/raw/2026-04-12/NGC7000"
+              mono
+            />,
+          ],
+          [
+            'Never measured',
+            <KV
+              key="k"
+              label="Observer site"
+              value={<Pill variant="ghost">Unresolved</Pill>}
+            />,
+          ],
           [
             'Coverage against a goal',
             <CoverageBar key="c" label="Ha integration" value={6.5} max={12} />,
@@ -502,7 +581,11 @@ export const AChoiceIsKept: Story = {
       },
     },
   },
-  render: () => <Frame><ChoiceBoard /></Frame>,
+  render: () => (
+    <Frame>
+      <ChoiceBoard />
+    </Frame>
+  ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
 
