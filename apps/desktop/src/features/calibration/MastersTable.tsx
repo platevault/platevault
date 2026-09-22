@@ -398,7 +398,7 @@ export function MastersTable({
 
   if (loading) {
     return (
-      <div className="pv-calib-table__status">
+      <div className="pv-calib-table__status" data-testid="masters-table">
         <Skeleton
           variant="block"
           count={6}
