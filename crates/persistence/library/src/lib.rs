@@ -2015,6 +2015,7 @@ async fn observe_batch(
                     Change::Unchanged => {}
                     Change::Inserted(id) => {
                         changed.regroup.insert(id);
+                        changed.evidence.insert(id);
                     }
                     Change::Refreshed { id, regroup } => {
                         if regroup {
@@ -2048,8 +2049,9 @@ enum Change {
     },
 }
 
-/// Assets a batch changed: `regroup` need capture regrouping; `evidence` had
-/// their recorded observation replaced, invalidating inferences made from it.
+/// Assets a batch changed: `regroup` need capture regrouping; `evidence` are new
+/// members or had their recorded observation replaced, so any inference about
+/// the sessions now holding them was made without their current evidence.
 #[derive(Default)]
 struct BatchChanges {
     regroup: BTreeSet<Uuid>,
