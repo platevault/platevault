@@ -246,8 +246,10 @@ export function computeRemap(catalog: Catalog, disk: Disk, locationId: LocationI
 
 /**
  * Apply a reviewed remap. Verified copies move to the new folder with their
- * asset identity, decisions and View membership intact; copies whose bytes
- * differ or are missing are refused and read Not found in this location.
+ * asset identity, decisions and View membership intact. Refused copies (bytes
+ * differ or missing) keep their original volume, path and fingerprint and
+ * read Not found in this location: nothing binds them to the file at the new
+ * path, so a later rescan reads a differing file there as a new frame (D11).
  */
 export function applyRemap(proof: RemapProof, href: string): CommitResult {
   const state = store.getState()
@@ -291,12 +293,13 @@ export function applyRemap(proof: RemapProof, href: string): CommitResult {
             ),
           }
         }
-        for (const [assetId, entry] of refused) {
+        // Refused copies are not rebound by path: same names are not proof.
+        for (const assetId of refused.keys()) {
           const asset = assets[assetId]
           if (!asset) continue
           assets[assetId] = {
             ...asset,
-            copies: asset.copies.map((copy) => (copy.locationId === proof.locationId ? { ...copy, volumeId: toVolume.id, path: entry.toPath, presence: "absent" } : copy)),
+            copies: asset.copies.map((copy) => (copy.locationId === proof.locationId ? { ...copy, presence: "absent" } : copy)),
           }
         }
         const current = c.locations[proof.locationId]!
