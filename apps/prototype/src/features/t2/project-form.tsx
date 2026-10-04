@@ -1,0 +1,508 @@
+/**
+ * Project editors shared by New Project and the Project page: Target
+ * picker with framing provenance, mosaic panels, checklist items and the
+ * explicit session-linkage picker (PRJ-FR-01-04, D10, D12). Each editor is
+ * controlled: it reports a new value and never writes the catalog itself.
+ */
+import { Link } from "@tanstack/react-router"
+import { Layers, X } from "lucide-react"
+import { type ReactNode, useId, useState } from "react"
+import { type Column, DataTable } from "@/components/app/data-table"
+import { EmptyState, UnknownValue } from "@/components/app/feedback"
+import { Button } from "@/components/ui/button"
+import { Field, FieldError, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { captureSite } from "@/domain/derive"
+import { stableHash } from "@/domain/indexing"
+import type { CalibrationKind, Catalog, ChecklistItem, MosaicPanel, OpticalTrainId, SessionId, TargetId } from "@/domain/types"
+import { formatDec, formatDegrees, formatDuration, formatRa } from "@/lib/format"
+import { useStore } from "@/store/core"
+import { checklistCriterion, currentSessions, knownChannels, sessionRow, type SessionRow } from "./model"
+import { AssociationBadge } from "./parts"
+
+/** Select with a visible label above it. */
+export function LabeledSelect({
+  label,
+  value,
+  items,
+  onChange,
+  placeholder,
+  invalid,
+  describedBy,
+  className = "w-56",
+}: {
+  label: string
+  value: string | null
+  items: ReadonlyArray<{ value: string; label: string; disabled?: boolean }>
+  onChange: (value: string) => void
+  placeholder?: string
+  invalid?: boolean
+  describedBy?: string
+  className?: string
+}) {
+  const id = useId()
+  return (
+    <div className="space-y-1.5">
+      <Label id={id}>{label}</Label>
+      <Select items={items} value={value} onValueChange={(next) => onChange(next as string)}>
+        <SelectTrigger aria-labelledby={id} aria-invalid={invalid || undefined} aria-describedby={describedBy} className={className}>
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((item) => (
+            <SelectItem key={item.value} value={item.value} disabled={item.disabled}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+/** A removable row in an editor list; the remove button names the row. */
+function RemovableRow({ children, label, onRemove, disabledReason }: { children: ReactNode; label: string; onRemove: () => void; disabledReason?: string }) {
+  const reasonId = useId()
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
+      <div className="min-w-0">{children}</div>
+      <span className="flex items-center gap-2">
+        {disabledReason ? (
+          <span id={reasonId} className="text-xs text-muted-foreground">
+            {disabledReason}
+          </span>
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={onRemove}
+          disabled={Boolean(disabledReason)}
+          focusableWhenDisabled
+          aria-describedby={disabledReason ? reasonId : undefined}
+        >
+          <X aria-hidden="true" data-icon="inline-start" />
+          Remove<span className="sr-only"> {label}</span>
+        </Button>
+      </span>
+    </li>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Targets and framing
+// ---------------------------------------------------------------------------
+
+export function TargetsEditor({ targetIds, onChange, error, errorId }: { targetIds: TargetId[]; onChange: (ids: TargetId[]) => void; error?: string; errorId?: string }) {
+  const targets = useStore((s) => s.catalog.targets)
+  const [adding, setAdding] = useState<string | null>(null)
+  const remaining = Object.values(targets)
+    .filter((t) => !targetIds.includes(t.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((t) => ({ value: t.id, label: t.name }))
+  const framingTarget = targetIds.map((id) => targets[id]).find((t) => t && t.ra !== null && t.dec !== null)
+  const SOURCE = { catalog: "catalog coordinates", user: "coordinates entered by you", resolver: "resolver coordinates", unknown: "" } as const
+  return (
+    <div className="space-y-3">
+      {targetIds.length > 0 ? (
+        <ul className="divide-y rounded-lg border px-3">
+          {targetIds.map((id) => (
+            <RemovableRow key={id} label={targets[id]?.name ?? id} onRemove={() => onChange(targetIds.filter((t) => t !== id))}>
+              <Link to="/targets/$targetId" params={{ targetId: id }} className="font-medium underline-offset-2 hover:underline">
+                {targets[id]?.name ?? "Removed Target"}
+              </Link>
+            </RemovableRow>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">No Target yet. Add one, or add a mosaic panel below.</p>
+      )}
+      {remaining.length > 0 ? (
+        <div className="flex flex-wrap items-end gap-2">
+          <LabeledSelect label="Add a Target" value={adding} items={remaining} onChange={setAdding} placeholder="Choose a Target" />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!adding}
+            focusableWhenDisabled
+            onClick={() => {
+              if (!adding) return
+              onChange([...targetIds, adding])
+              setAdding(null)
+            }}
+          >
+            Add Target
+          </Button>
+        </div>
+      ) : null}
+      {error ? (
+        <p id={errorId} role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+      <div className="text-sm">
+        <span className="text-muted-foreground">Framing: </span>
+        {framingTarget ? (
+          <>
+            RA {formatRa(framingTarget.ra!)} · Dec {formatDec(framingTarget.dec!)}
+            {framingTarget.sizeDeg ? ` · ${formatDegrees(framingTarget.sizeDeg.width)} × ${formatDegrees(framingTarget.sizeDeg.height)}` : ""}
+            <span className="text-muted-foreground">
+              {" "}
+              · Source: {framingTarget.name} {SOURCE[framingTarget.coordinateSource]}
+            </span>
+          </>
+        ) : (
+          <UnknownValue label="Position unknown" reason="No chosen Target has coordinates. Panels can still define the framing." />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Mosaic panels (D12)
+// ---------------------------------------------------------------------------
+
+interface PanelForm {
+  name: string
+  ra: string
+  dec: string
+  width: string
+  height: string
+  rotation: string
+}
+
+const EMPTY_PANEL: PanelForm = { name: "", ra: "", dec: "", width: "", height: "", rotation: "0" }
+
+export function PanelsEditor({ panels, onChange, checklist }: { panels: MosaicPanel[]; onChange: (panels: MosaicPanel[]) => void; checklist: ChecklistItem[] }) {
+  const [form, setForm] = useState<PanelForm>(EMPTY_PANEL)
+  const [errors, setErrors] = useState<Partial<Record<keyof PanelForm, string>>>({})
+  const ids = { name: useId(), ra: useId(), dec: useId(), width: useId(), height: useId(), rotation: useId() }
+
+  function add() {
+    const found: Partial<Record<keyof PanelForm, string>> = {}
+    const ra = Number(form.ra)
+    const dec = Number(form.dec)
+    const width = Number(form.width)
+    const height = Number(form.height)
+    const rotation = Number(form.rotation || "0")
+    if (!form.name.trim()) found.name = "Enter a panel name."
+    if (form.ra.trim() === "" || !Number.isFinite(ra) || ra < 0 || ra >= 360) found.ra = "Panel RA must be degrees from 0 up to 360."
+    if (form.dec.trim() === "" || !Number.isFinite(dec) || dec < -90 || dec > 90) found.dec = "Panel Dec must be degrees from −90 to +90."
+    if (!Number.isFinite(width) || width <= 0) found.width = "Width must be more than 0 degrees."
+    if (!Number.isFinite(height) || height <= 0) found.height = "Height must be more than 0 degrees."
+    if (!Number.isFinite(rotation)) found.rotation = "Rotation must be a number of degrees."
+    setErrors(found)
+    if (Object.keys(found).length > 0) return
+    onChange([...panels, { id: `pnl_${stableHash(`${form.name}|${Date.now()}`)}`, name: form.name.trim(), ra, dec, widthDeg: width, heightDeg: height, rotationDeg: rotation }])
+    setForm(EMPTY_PANEL)
+  }
+
+  const field = (key: keyof PanelForm, label: string, mono = true) => (
+    <Field data-invalid={Boolean(errors[key]) || undefined} className="w-auto">
+      <FieldLabel htmlFor={ids[key]}>{label}</FieldLabel>
+      <Input
+        id={ids[key]}
+        value={form[key]}
+        inputMode={key === "name" ? undefined : "decimal"}
+        onChange={(e) => {
+          const value = e.target.value
+          setForm((f) => ({ ...f, [key]: value }))
+          setErrors((er) => ({ ...er, [key]: undefined }))
+        }}
+        aria-invalid={Boolean(errors[key]) || undefined}
+        aria-describedby={errors[key] ? `${ids[key]}-error` : undefined}
+        className={mono ? "w-24 font-mono" : "w-40"}
+      />
+      <FieldError id={`${ids[key]}-error`}>{errors[key]}</FieldError>
+    </Field>
+  )
+
+  return (
+    <div className="space-y-3">
+      {panels.length > 0 ? (
+        <ul className="divide-y rounded-lg border px-3">
+          {panels.map((p) => {
+            const used = checklist.some((item) => item.kind === "panel-coverage" && item.panelId === p.id)
+            return (
+              <RemovableRow
+                key={p.id}
+                label={p.name}
+                onRemove={() => onChange(panels.filter((x) => x.id !== p.id))}
+                disabledReason={used ? "Remove its Panel coverage item first" : undefined}
+              >
+                <span className="font-medium">{p.name}</span>{" "}
+                <span className="text-muted-foreground tabular-nums">
+                  RA {formatRa(p.ra)} · Dec {formatDec(p.dec)} · {formatDegrees(p.widthDeg)} × {formatDegrees(p.heightDeg)} · rotation {formatDegrees(p.rotationDeg)}
+                </span>
+              </RemovableRow>
+            )
+          })}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">No panels. Add panels for a mosaic; each one is a user-defined footprint.</p>
+      )}
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Add a panel</legend>
+        <div className="flex flex-wrap items-start gap-2">
+          {field("name", "Name", false)}
+          {field("ra", "RA (°)")}
+          {field("dec", "Dec (°)")}
+          {field("width", "Width (°)")}
+          {field("height", "Height (°)")}
+          {field("rotation", "Rotation (°)")}
+          <Button type="button" variant="outline" onClick={add} className="mt-6">
+            Add panel
+          </Button>
+        </div>
+      </fieldset>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Checklist (PRJ-FR-03)
+// ---------------------------------------------------------------------------
+
+type ChecklistKind = ChecklistItem["kind"]
+
+const KIND_ITEMS: Array<{ value: ChecklistKind; label: string }> = [
+  { value: "integration", label: "Integration per channel" },
+  { value: "frame-count", label: "Frame count per channel" },
+  { value: "exposure", label: "Exposure preference" },
+  { value: "panel-coverage", label: "Panel coverage" },
+  { value: "equipment", label: "Equipment" },
+  { value: "calibration", label: "Missing calibration" },
+]
+
+const CALIBRATION_ITEMS: Array<{ value: CalibrationKind; label: string }> = [
+  { value: "flat", label: "Flat" },
+  { value: "dark", label: "Dark" },
+  { value: "bias", label: "Bias" },
+  { value: "dark-flat", label: "Dark flat" },
+]
+
+const ANY = "any"
+
+export function ChecklistEditor({
+  checklist,
+  onChange,
+  panels,
+}: {
+  checklist: ChecklistItem[]
+  onChange: (items: ChecklistItem[]) => void
+  panels: MosaicPanel[]
+}) {
+  const catalog = useStore((s) => s.catalog)
+  return (
+    <div className="space-y-3">
+      {checklist.length > 0 ? (
+        <ul className="divide-y rounded-lg border px-3">
+          {checklist.map((item) => {
+            const criterion = checklistCriterion(catalog, { panels }, item)
+            return (
+              <RemovableRow key={item.id} label={criterion} onRemove={() => onChange(checklist.filter((i) => i.id !== item.id))}>
+                {criterion}
+              </RemovableRow>
+            )
+          })}
+        </ul>
+      ) : (
+        <p className="text-sm text-muted-foreground">No checklist items. The checklist is optional; an unmet item never blocks a View.</p>
+      )}
+      <AddChecklistItem catalog={catalog} panels={panels} onAdd={(item) => onChange([...checklist, item])} />
+    </div>
+  )
+}
+
+/** Form for one new checklist item; Add item stays disabled, with its reason, until the criterion is complete. */
+export function AddChecklistItem({ catalog, panels, onAdd }: { catalog: Catalog; panels: MosaicPanel[]; onAdd: (item: ChecklistItem) => void }) {
+  const [kind, setKind] = useState<ChecklistKind>("integration")
+  const [channel, setChannel] = useState<string | null>(null)
+  const [amount, setAmount] = useState("")
+  const [panelId, setPanelId] = useState<string | null>(null)
+  const [trainId, setTrainId] = useState<OpticalTrainId | null>(null)
+  const [calibrationKind, setCalibrationKind] = useState<CalibrationKind>("flat")
+  const [amountError, setAmountError] = useState<string | null>(null)
+  const amountId = useId()
+  const reasonId = useId()
+  const channels = knownChannels(catalog).map((c) => ({ value: c, label: c }))
+  const trains = Object.values(catalog.opticalTrains).map((t) => ({ value: t.id, label: t.name }))
+  const kinds = KIND_ITEMS.map((k) => ({ ...k, disabled: k.value === "panel-coverage" && panels.length === 0 }))
+
+  const needsChannel = kind === "integration" || kind === "frame-count"
+  const needsAmount = kind === "integration" || kind === "frame-count" || kind === "exposure"
+  const amountLabel = kind === "integration" ? "Hours" : kind === "frame-count" ? "Frames" : "Seconds"
+  const missing =
+    needsChannel && (!channel || channel === ANY)
+      ? "Choose a channel"
+      : needsAmount && amount.trim() === ""
+        ? `Enter ${amountLabel.toLowerCase()}`
+        : kind === "panel-coverage" && !panelId
+          ? panels.length === 0
+            ? "Add a panel first"
+            : "Choose a panel"
+          : kind === "equipment" && !trainId
+            ? "Choose an optical train"
+            : null
+
+  function add() {
+    if (missing) return
+    const value = Number(amount)
+    if (needsAmount && (!Number.isFinite(value) || value <= 0 || (kind === "frame-count" && !Number.isInteger(value)))) {
+      setAmountError(kind === "frame-count" ? "Enter a whole number of frames greater than 0." : `Enter ${amountLabel.toLowerCase()} greater than 0.`)
+      return
+    }
+    const id = `chk_${stableHash(`${kind}|${channel}|${amount}|${Date.now()}`)}`
+    const channelOrAny = channel && channel !== ANY ? channel : null
+    const item: ChecklistItem =
+      kind === "integration"
+        ? { id, kind, channel: channel!, goalS: Math.round(value * 3600) }
+        : kind === "frame-count"
+          ? { id, kind, channel: channel!, goalFrames: value }
+          : kind === "exposure"
+            ? { id, kind, channel: channelOrAny, exposureS: value }
+            : kind === "panel-coverage"
+              ? { id, kind, panelId: panelId! }
+              : kind === "equipment"
+                ? { id, kind, opticalTrainId: trainId! }
+                : { id, kind, calibrationKind, channel: calibrationKind === "flat" ? channelOrAny : null }
+    onAdd(item)
+    setAmount("")
+    setAmountError(null)
+  }
+
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">Add a checklist item</legend>
+      <div className="flex flex-wrap items-start gap-2">
+        <LabeledSelect
+          label="Kind"
+          value={kind}
+          items={kinds}
+          onChange={(value) => {
+            setKind(value as ChecklistKind)
+            setAmountError(null)
+          }}
+        />
+        {needsChannel ? <LabeledSelect label="Channel" value={channel === ANY ? null : channel} items={channels} onChange={setChannel} placeholder="Choose a channel" className="w-36" /> : null}
+        {kind === "exposure" || (kind === "calibration" && calibrationKind === "flat") ? (
+          <LabeledSelect label="Channel" value={channel ?? ANY} items={[{ value: ANY, label: "Any channel" }, ...channels]} onChange={setChannel} className="w-36" />
+        ) : null}
+        {kind === "calibration" ? (
+          <LabeledSelect label="Calibration" value={calibrationKind} items={CALIBRATION_ITEMS} onChange={(v) => setCalibrationKind(v as CalibrationKind)} className="w-36" />
+        ) : null}
+        {kind === "panel-coverage" ? (
+          <LabeledSelect label="Panel" value={panelId} items={panels.map((p) => ({ value: p.id, label: p.name }))} onChange={setPanelId} placeholder="Choose a panel" />
+        ) : null}
+        {kind === "equipment" ? <LabeledSelect label="Optical train" value={trainId} items={trains} onChange={setTrainId} placeholder="Choose an optical train" className="w-72" /> : null}
+        {needsAmount ? (
+          <Field data-invalid={Boolean(amountError) || undefined} className="w-auto">
+            <FieldLabel htmlFor={amountId}>{amountLabel}</FieldLabel>
+            <Input
+              id={amountId}
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => {
+                setAmount(e.target.value)
+                setAmountError(null)
+              }}
+              aria-invalid={Boolean(amountError) || undefined}
+              aria-describedby={amountError ? `${amountId}-error` : undefined}
+              className="w-24 font-mono"
+              placeholder={kind === "integration" ? "e.g. 10" : kind === "frame-count" ? "e.g. 120" : "e.g. 300"}
+            />
+            <FieldError id={`${amountId}-error`}>{amountError}</FieldError>
+          </Field>
+        ) : null}
+        <div className="mt-6 flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={add} disabled={Boolean(missing)} focusableWhenDisabled aria-describedby={missing ? reasonId : undefined}>
+            Add item
+          </Button>
+          {missing ? (
+            <span id={reasonId} className="text-xs text-muted-foreground">
+              {missing} to add this item
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </fieldset>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Explicit session linkage (D12, PRJ-FR-08)
+// ---------------------------------------------------------------------------
+
+interface PickerRow extends SessionRow {
+  site: string | null
+}
+
+/**
+ * Candidate light sessions for explicit linkage. Sessions associated with the
+ * Project's Targets come first; nothing is preselected by proximity or a
+ * shared OBJECT label (J20 S3 negative).
+ */
+export function SessionLinkPicker({ selected, onChange, targetIds }: { selected: SessionId[]; onChange: (ids: SessionId[]) => void; targetIds: TargetId[] }) {
+  const rows = useStore((s) =>
+    currentSessions(s.catalog, "light").map((session): PickerRow => ({ ...sessionRow(s, session), site: captureSite(s.catalog, session)?.name ?? null })),
+  )
+  const [showAll, setShowAll] = useState(targetIds.length === 0)
+  const switchId = useId()
+  const forTargets = rows.filter((r) => r.session.target.value && targetIds.includes(r.session.target.value))
+  const shown = showAll ? rows : forTargets
+  const hidden = selected.filter((id) => !shown.some((r) => r.session.id === id)).length
+  const columns: Column<PickerRow>[] = [
+    { id: "session", header: "Session", rowHeader: true, sortValue: (r) => `${r.session.night}|${r.label}`, cell: (r) => r.label },
+    {
+      id: "target",
+      header: "Target",
+      cell: (r) => (
+        <span className="inline-flex items-center gap-2">
+          {r.targetName ?? null}
+          <AssociationBadge association={r.session.target} />
+        </span>
+      ),
+    },
+    { id: "equipment", header: "Equipment", cell: (r) => r.trainName ?? <UnknownValue /> },
+    { id: "integration", header: "Integration", align: "right", sortValue: (r) => r.breakdown.captured.seconds, cell: (r) => formatDuration(r.breakdown.captured.seconds) },
+    { id: "site", header: "Capture site", cell: (r) => r.site ?? <UnknownValue reason="No saved site matches the header coordinates." /> },
+  ]
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm tabular-nums" aria-live="polite">
+          {selected.length} linked{hidden > 0 ? <span className="text-muted-foreground"> · {hidden} not shown by the current filter</span> : null}
+        </p>
+        <div className="flex items-center gap-2">
+          <Switch id={switchId} checked={showAll} onCheckedChange={(value) => setShowAll(value)} />
+          <Label htmlFor={switchId}>Show all sessions</Label>
+        </div>
+      </div>
+      <DataTable
+        label="Sessions to link"
+        rows={shown}
+        columns={columns}
+        getRowId={(r) => r.session.id}
+        selection={{ selected, onChange, rowLabel: (r) => r.label }}
+        initialSort={{ columnId: "session", direction: "desc" }}
+        className="max-h-80"
+        empty={
+          <EmptyState
+            icon={Layers}
+            title="No session is associated with these Targets"
+            description="Sessions are linked only when you choose them. Show every light session to pick from the whole library."
+            action={
+              <Button type="button" size="sm" variant="outline" onClick={() => setShowAll(true)}>
+                Show all sessions
+              </Button>
+            }
+          />
+        }
+      />
+    </div>
+  )
+}
