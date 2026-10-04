@@ -6,6 +6,7 @@
  * Used by the demo seed (synchronously) and by the "index" operation
  * (progressively, a batch per tick), so both produce identical catalogs.
  */
+import { correctedExposureS } from "./corrections"
 import { angularSeparationDeg, normalizeName, SKY_OBJECTS } from "./sky"
 import type {
   Asset,
@@ -102,6 +103,11 @@ function groupingKey(file: DiskFile): string {
   ].join("|")
 }
 
+/**
+ * Key of an existing session, from its effective metadata: a corrected
+ * exposure regroups (LIB-FR-12), so a later file whose header reads the
+ * corrected value joins it. New files group by their observed header.
+ */
 function sessionKeyOf(session: Session): string {
   return [
     session.imageType,
@@ -109,11 +115,22 @@ function sessionKeyOf(session: Session): string {
     session.cameraName ?? "",
     session.telescopeName ?? "",
     session.channel ?? "",
-    session.exposureS,
+    correctedExposureS(session) ?? session.exposureS,
     session.binning,
     session.gain ?? "",
     session.offset ?? "",
   ].join("|")
+}
+
+/**
+ * Id for a new session. The plain key hash comes first, so seed ids stay
+ * stable; an id still in the catalog or named by lineage is never reused, so
+ * superseded and corrected sessions keep theirs (LIB-AC-10, D15).
+ */
+function freshSessionId(key: string, taken: Set<SessionId>): SessionId {
+  let id = `ses_${stableHash(key)}`
+  for (let n = 1; taken.has(id); n += 1) id = `ses_${stableHash(`${key}#${n}`)}`
+  return id
 }
 
 function median(values: number[]): number | null {
@@ -384,8 +401,12 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
     masters: { ...source.masters },
   }
   const keyToSession = new Map<string, SessionId>()
+  const takenSessionIds = new Set<SessionId>()
   for (const session of Object.values(catalog.sessions)) {
     if (!session.supersededBy) keyToSession.set(sessionKeyOf(session), session.id)
+    takenSessionIds.add(session.id)
+    for (const previous of session.previousSessionIds) takenSessionIds.add(previous)
+    if (session.supersededBy) takenSessionIds.add(session.supersededBy)
   }
   const touched = new Set<SessionId>()
 
@@ -433,7 +454,8 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
     const key = groupingKey(file)
     let sessionId = isMaster ? undefined : keyToSession.get(key)
     if (!sessionId && !isMaster) {
-      sessionId = `ses_${stableHash(key)}`
+      sessionId = freshSessionId(key, takenSessionIds)
+      takenSessionIds.add(sessionId)
       keyToSession.set(key, sessionId)
       catalog.sessions[sessionId] = {
         id: sessionId,
