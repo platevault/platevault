@@ -2,11 +2,13 @@
  * Bulk Confirm Target / Confirm equipment for selected sessions (J19 S10).
  * Commits session by session with the revision each had when the dialog
  * opened; the first failure stops the run and names what was and was not
- * saved, with Retry for the remaining sessions (D08).
+ * saved, with Retry for the remaining sessions. A stale refusal offers
+ * Review current revision, which reloads the remaining sessions' revisions
+ * so the next Retry uses them (D08).
  */
 import { Link } from "@tanstack/react-router"
 import { useEffect, useId, useState } from "react"
-import { ActionError, Notice } from "@/components/app/feedback"
+import { ActionError, Notice, SaveState } from "@/components/app/feedback"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -41,6 +43,8 @@ export function BulkConfirmDialog({
   const [pending, setPending] = useState<SessionId[]>(sessionIds)
   const [showFieldError, setShowFieldError] = useState(false)
   const [outcome, setOutcome] = useState<BulkOutcome | null>(null)
+  /** Label of the session whose stale refusal was reviewed; the next Retry uses its current revision. */
+  const [reviewed, setReviewed] = useState<string | null>(null)
   const labelId = useId()
   const errorId = useId()
 
@@ -51,6 +55,7 @@ export function BulkConfirmDialog({
     setRevisions(Object.fromEntries(sessionIds.map((id) => [id, sessions[id]?.revision ?? 0])))
     setPending(sessionIds)
     setOutcome(null)
+    setReviewed(null)
     setShowFieldError(false)
     const values = new Set(sessionIds.map((id) => (mode === "target" ? sessions[id]?.target.value : sessions[id]?.equipment.value) ?? null))
     const [only] = [...values]
@@ -73,6 +78,7 @@ export function BulkConfirmDialog({
       setShowFieldError(true)
       return
     }
+    setReviewed(null)
     const run = confirmMany(pending, revisions, (id, revision) => (mode === "target" ? confirmTarget(id, value, revision) : confirmEquipment(id, value, revision)))
     const done = (outcome?.confirmed ?? []).concat(run.confirmed)
     if (run.failure) {
@@ -85,7 +91,15 @@ export function BulkConfirmDialog({
     onOpenChange(false)
   }
 
+  function review() {
+    const sessions = store.getState().catalog.sessions
+    setRevisions((current) => ({ ...current, ...Object.fromEntries(pending.map((id) => [id, sessions[id]?.revision ?? 0])) }))
+    setReviewed(failedLabel)
+    setOutcome((current) => (current ? { ...current, failure: null } : current))
+  }
+
   const failedLabel = outcome?.failure ? sessionLabel(catalog, catalog.sessions[outcome.failure.sessionId]!) : ""
+  const failedMessage = outcome?.failure ? `Confirmed ${outcome.confirmed.length} of ${sessionIds.length}. ${failedLabel} not saved: ${outcome.failure.result.message}` : ""
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
@@ -177,16 +191,20 @@ export function BulkConfirmDialog({
               <li>Quality decisions and View membership</li>
             </ul>
           </div>
-          {outcome?.failure ? (
-            <ActionError
-              message={`Confirmed ${outcome.confirmed.length} of ${sessionIds.length}. ${failedLabel} not saved: ${outcome.failure.result.message}`}
-            />
+          {outcome?.failure?.result.reason === "stale" ? (
+            <SaveState state="stale" message={failedMessage} onReview={review} />
+          ) : outcome?.failure ? (
+            <ActionError message={failedMessage} />
+          ) : reviewed ? (
+            <p role="status" className="text-sm text-pretty">
+              Reloaded the current revision of {reviewed}. Choose Retry to confirm the {plural(pending.length, "remaining session")}.
+            </p>
           ) : null}
         </div>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
           <Button onClick={confirm} disabled={items.length === 0}>
-            {outcome?.failure ? `Retry ${plural(pending.length, "remaining session")}` : `${verb} for ${plural(sessionIds.length, "session")}`}
+            {outcome ? `Retry ${plural(pending.length, "remaining session")}` : `${verb} for ${plural(sessionIds.length, "session")}`}
           </Button>
         </DialogFooter>
       </DialogContent>

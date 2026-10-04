@@ -189,7 +189,13 @@ export function SessionsPage() {
           <span className="flex flex-wrap items-center gap-1.5 text-xs whitespace-normal text-muted-foreground">
             {isLight ? (
               <span>
-                OBJECT {r.session.objectLabel ? <span className="font-mono text-foreground">{r.session.objectLabel}</span> : "missing"}
+                {r.session.objectLabel ? (
+                  <>
+                    OBJECT <span className="font-mono text-foreground">{r.session.objectLabel}</span>
+                  </>
+                ) : (
+                  "No OBJECT"
+                )}
               </span>
             ) : (
               <span>{IMAGE_TYPE_LABEL[r.session.imageType]}</span>
@@ -266,34 +272,6 @@ export function SessionsPage() {
         }
       />
     )
-  } else if (groupByNight) {
-    const nights = [...new Set(filtered.map((r) => r.session.night))].sort((a, b) => b.localeCompare(a))
-    body =
-      nights.length === 0 ? (
-        <div className="rounded-lg border p-4">{filteredEmpty}</div>
-      ) : (
-        <div className="space-y-5">
-          {nights.map((night) => {
-            const nightRows = filtered.filter((r) => r.session.night === night)
-            return (
-              <section key={night} aria-labelledby={`night-${night}`} className="space-y-2">
-                <h2 id={`night-${night}`} className="text-sm font-semibold">
-                  {formatNight(night, true)} <span className="font-normal text-muted-foreground">· {plural(nightRows.length, "session")}</span>
-                </h2>
-                <DataTable
-                  label={`Sessions on the night of ${formatNight(night, true)}`}
-                  rows={nightRows}
-                  columns={columns}
-                  getRowId={(r) => r.session.id}
-                  selection={selectionProps}
-                  initialSort={{ columnId: "session", direction: "desc" }}
-                  scroll="none"
-                />
-              </section>
-            )
-          })}
-        </div>
-      )
   } else {
     body = (
       <DataTable
@@ -304,6 +282,19 @@ export function SessionsPage() {
         selection={selectionProps}
         initialSort={{ columnId: "session", direction: "desc" }}
         empty={filteredEmpty}
+        groups={
+          groupByNight
+            ? {
+                key: (r) => r.session.night,
+                compare: (a, b) => b.localeCompare(a),
+                label: (night, nightRows) => (
+                  <>
+                    {formatNight(night, true)} <span className="font-normal text-muted-foreground">· {plural(nightRows.length, isLight ? "session" : "calibration set")}</span>
+                  </>
+                ),
+              }
+            : undefined
+        }
       />
     )
   }
