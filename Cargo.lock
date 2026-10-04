@@ -4643,6 +4643,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
+name = "platevault_core"
+version = "0.1.0"
+dependencies = [
+ "fs_pathsafe",
+ "hex",
+ "metadata_core",
+ "metadata_fits",
+ "metadata_xisf",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "simbad-resolver",
+ "skymath 0.7.2",
+ "sqlx",
+ "target-match",
+ "tempfile",
+ "thiserror 2.0.19",
+ "time",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "plist"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
