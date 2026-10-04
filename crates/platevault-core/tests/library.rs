@@ -507,3 +507,209 @@ async fn byte_identical_copies_in_two_locations_are_one_logical_capture() {
         assert_eq!(&support::digest(path), digest, "copies are read-only");
     }
 }
+
+fn m31_frame(start: &str) -> [(&'static str, String); 9] {
+    [
+        ("IMAGETYP", "'LIGHT'".into()),
+        ("FILTER", "'Ha'".into()),
+        ("EXPTIME", "300".into()),
+        ("DATE-OBS", format!("'{start}'")),
+        ("OBJECT", "'M31'".into()),
+        ("RA", "10.684708".into()),
+        ("DEC", "41.26875".into()),
+        ("FOCALLEN", "1".into()),
+        ("XPIXSZ", "3.76".into()),
+    ]
+}
+
+fn write_frame(path: &Path, start: &str) {
+    let fields = m31_frame(start);
+    let fields: Vec<(&str, &str)> =
+        fields.iter().map(|(key, value)| (*key, value.as_str())).collect();
+    support::fits(path, &fields).unwrap();
+}
+
+fn target_of(
+    detail: &persistence_library::SessionDetail,
+) -> Option<(AssociationState, Option<Uuid>)> {
+    detail
+        .associations
+        .iter()
+        .find(|association| association.kind == AssociationKind::Target)
+        .map(|association| (association.state.clone(), association.subject_id))
+}
+
+#[tokio::test]
+async fn a_partial_filter_correction_refreshes_every_successor_session() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("captures");
+    std::fs::create_dir(&root).unwrap();
+    let mut originals = Vec::new();
+    for (index, start) in
+        ["2026-09-18T22:00:00", "2026-09-18T22:05:00", "2026-09-18T22:10:00"].iter().enumerate()
+    {
+        let path = root.join(format!("light_{index}.fits"));
+        write_frame(&path, start);
+        originals.push((path.clone(), support::digest(&path)));
+    }
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let location = library
+        .register_location(NativePath::from_path(&root), "Captured".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+    let catalog = library.catalog();
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let detail = catalog.session(session.id).await.unwrap();
+    let (state, m31) = target_of(&detail).unwrap();
+    assert_eq!(state, AssociationState::Suggested);
+    let m31 = m31.unwrap();
+    let captured = |coverage: &TargetCoverage| summed(coverage, |c| c.captured_seconds);
+    assert!((captured(&catalog.target_coverage(m31).await.unwrap()) - 900.0).abs() < 1e-9);
+
+    // One frame's filter is corrected: the session splits into two successors.
+    let corrected = expected_of(&detail.assets[0]);
+    let correction = CorrectionInput {
+        asset_id: corrected.asset_id,
+        field: "filter".into(),
+        value: serde_json::json!("OIII"),
+    };
+    let preview = catalog
+        .preview_correction(
+            std::slice::from_ref(&corrected),
+            &[correction],
+            platevault_core::grouping::group_assets,
+        )
+        .await
+        .unwrap();
+    let confirmed = library.confirm_correction(preview.id, &[corrected]).await.unwrap();
+    assert!(confirmed.association_refresh.is_none());
+    let successors = confirmed.outcome.lineage.unwrap().successors;
+    assert_eq!(successors.len(), 2, "the remainder and the corrected frame");
+    for successor in successors {
+        let detail = catalog.session(successor).await.unwrap();
+        assert_eq!(
+            target_of(&detail),
+            Some((AssociationState::Suggested, Some(m31))),
+            "successor of {} frame(s) re-derived",
+            detail.assets.len()
+        );
+    }
+    assert!((captured(&catalog.target_coverage(m31).await.unwrap()) - 900.0).abs() < 1e-9);
+    for (path, digest) in &originals {
+        assert_eq!(&support::digest(path), digest);
+    }
+}
+
+/// Two locations holding byte-identical copies of two frames, both indexed, with
+/// the session confirmed as a user target.
+async fn copied_library(temp: &tempfile::TempDir) -> (Arc<Library>, Vec<Location>, Uuid) {
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let mut locations = Vec::new();
+    for name in ["T7", "NAS"] {
+        let root = temp.path().join(name);
+        std::fs::create_dir(&root).unwrap();
+        write_frame(&root.join("light_1.fits"), "2026-09-18T22:00:00");
+        write_frame(&root.join("light_2.fits"), "2026-09-18T22:05:00");
+        let location = library
+            .register_location(NativePath::from_path(&root), name.into(), LocationRole::Captures)
+            .await
+            .unwrap();
+        assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+        locations.push(location);
+    }
+    let catalog = library.catalog();
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let target = TargetCandidate {
+        id: Uuid::new_v4(),
+        designation: "NGC 7000".into(),
+        aliases: Vec::new(),
+        common_name: None,
+        object_type: "nebula".into(),
+        coordinates: None,
+        provenance: Provenance::User,
+        provider_id: None,
+    };
+    let target = catalog.save_target(&target, None).await.unwrap().candidate.id;
+    let expected = ExpectedSession {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        decision_revision: session.decision_revision,
+    };
+    catalog.associate_target(&[expected], target).await.unwrap();
+    (library, locations, target)
+}
+
+async fn copy_named(library: &Library, location: &Location, name: &str) -> Asset {
+    let assets = library.catalog().location_assets(location.id).await.unwrap();
+    assets.into_iter().find(|asset| asset.relative_path.display() == name).unwrap()
+}
+
+#[tokio::test]
+async fn a_missing_copy_stays_inside_its_logical_capture() {
+    let temp = tempfile::tempdir().unwrap();
+    let (library, locations, target) = copied_library(&temp).await;
+    let catalog = library.catalog();
+    let reviewed = copy_named(&library, &locations[0], "light_1.fits").await;
+    catalog.set_quality(&[expected_of(&reviewed)], Quality::Usable, InventoryProbe).await.unwrap();
+    let kept = [
+        temp.path().join("T7/light_2.fits"),
+        temp.path().join("NAS/light_1.fits"),
+        temp.path().join("NAS/light_2.fits"),
+    ];
+    let originals: Vec<String> = kept.iter().map(|path| support::digest(path)).collect();
+
+    // The reviewed T7 copy is deleted and its location rescanned.
+    std::fs::remove_file(temp.path().join("T7/light_1.fits")).unwrap();
+    assert_eq!(scan_to_end(&library, locations[0].id).await.state, ScanState::Completed);
+    assert_eq!(catalog.asset(reviewed.id).await.unwrap().availability, Availability::Missing);
+    let coverage = catalog.target_coverage(target).await.unwrap();
+    assert!((summed(&coverage, |c| c.captured_seconds) - 600.0).abs() < 1e-9, "{coverage:?}");
+    assert!((summed(&coverage, |c| c.usable_seconds) - 300.0).abs() < 1e-9, "{coverage:?}");
+    assert!((summed(&coverage, |c| c.unreviewed_seconds) - 300.0).abs() < 1e-9);
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].clone();
+    let detail = catalog.session(session.session.id).await.unwrap();
+    assert_eq!((session.capture_count, detail.members.len()), (2, 2), "one count everywhere");
+    let member = detail.members.iter().find(|m| m.copies.contains(&reviewed.id)).unwrap();
+    assert_eq!(member.copies.len(), 2, "the Missing copy stays listed in its capture");
+    assert_eq!(member.applicable_quality, ApplicableQuality::Usable);
+    let after: Vec<String> = kept.iter().map(|path| support::digest(path)).collect();
+    assert_eq!(after, originals);
+}
+
+#[tokio::test]
+async fn a_replaced_copy_is_rehashed_before_it_carries_another_copys_decision() {
+    let temp = tempfile::tempdir().unwrap();
+    let (library, locations, target) = copied_library(&temp).await;
+    let catalog = library.catalog();
+    let reviewed = copy_named(&library, &locations[0], "light_1.fits").await;
+    catalog.set_quality(&[expected_of(&reviewed)], Quality::Usable, InventoryProbe).await.unwrap();
+    let replaced = temp.path().join("NAS/light_1.fits");
+    let mut bytes = std::fs::read(&replaced).unwrap();
+    *bytes.last_mut().unwrap() ^= 0xff;
+    rewrite_same_stat(&replaced, &bytes);
+    let kept = [
+        temp.path().join("T7/light_1.fits"),
+        temp.path().join("T7/light_2.fits"),
+        temp.path().join("NAS/light_2.fits"),
+    ];
+    let originals: Vec<String> = kept.iter().map(|path| support::digest(path)).collect();
+    let replaced_digest = support::digest(&replaced);
+
+    // The NAS rescan rehashes the copy that carried the T7 decision.
+    assert_eq!(scan_to_end(&library, locations[1].id).await.state, ScanState::Completed);
+    let copy = copy_named(&library, &locations[1], "light_1.fits").await;
+    assert_eq!(copy.fingerprint.content_sha256.as_deref(), Some(replaced_digest.as_str()));
+    assert!(!copy.verification_pending);
+    // With T7 offline the replaced copy is its own, unreviewed capture.
+    std::fs::rename(temp.path().join("T7"), temp.path().join("T7-unplugged")).unwrap();
+    assert_eq!(scan_to_end(&library, locations[0].id).await.state, ScanState::Failed);
+    std::fs::rename(temp.path().join("T7-unplugged"), temp.path().join("T7")).unwrap();
+    let coverage = catalog.target_coverage(target).await.unwrap();
+    assert!((summed(&coverage, |c| c.captured_seconds) - 900.0).abs() < 1e-9, "{coverage:?}");
+    assert!((summed(&coverage, |c| c.usable_seconds) - 300.0).abs() < 1e-9, "{coverage:?}");
+    assert!((summed(&coverage, |c| c.unreviewed_seconds) - 600.0).abs() < 1e-9);
+    let after: Vec<String> = kept.iter().map(|path| support::digest(path)).collect();
+    assert_eq!(after, originals);
+    assert_eq!(support::digest(&replaced), replaced_digest, "the scan wrote nothing");
+}

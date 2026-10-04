@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
     value INTEGER NOT NULL
 ) STRICT;
 
-INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 2);
+INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 3);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('grouping_revision', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('scan_sequence', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('target_generation', 0);
@@ -115,16 +115,27 @@ CREATE TABLE IF NOT EXISTS assets (
     decision_revision INTEGER NOT NULL CHECK (decision_revision >= 0),
     quality TEXT NOT NULL,
     quality_basis TEXT,
-    -- A decided asset whose rehash in the latest readable scan has not finished.
+    -- A decided asset, or a copy carrying a decided copy's digest, whose rehash in
+    -- the latest readable scan has not finished.
     verification_pending INTEGER NOT NULL DEFAULT 0 CHECK (verification_pending IN (0, 1)),
     last_observed_at TEXT NOT NULL,
     last_operation_id TEXT REFERENCES scan_operations (id),
     session_id TEXT REFERENCES sessions (id),
+    -- Derived from the recorded observation; never written directly.
+    content_sha256 TEXT GENERATED ALWAYS AS (json_extract(fingerprint, '$.contentSha256')) VIRTUAL,
+    capture_start TEXT GENERATED ALWAYS AS (
+        coalesce(json_extract(effective, '$.dateObs'), json_extract(effective, '$.dateLocal'))
+    ) VIRTUAL,
     UNIQUE (location_id, path_key)
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS assets_session ON assets (session_id);
 CREATE INDEX IF NOT EXISTS assets_size_mtime ON assets (location_id, size_bytes, modified_ns);
+-- D16 logical captures: copies by digest, and duplicate candidates by session.
+CREATE INDEX IF NOT EXISTS assets_content ON assets (content_sha256);
+CREATE INDEX IF NOT EXISTS assets_session_location_size
+    ON assets (session_id, location_id, size_bytes);
+CREATE INDEX IF NOT EXISTS assets_pending ON assets (location_id) WHERE verification_pending = 1;
 
 CREATE TABLE IF NOT EXISTS session_members (
     session_id TEXT NOT NULL REFERENCES sessions (id),

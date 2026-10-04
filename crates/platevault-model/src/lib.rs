@@ -551,7 +551,9 @@ impl Asset {
 /// Applicable quality of one logical capture from all of its physical copies
 /// (D16). An applicable decision on any copy applies to the capture. Explicit
 /// decisions that are applicable, or still pending their rehash, and disagree make
-/// it `Conflicting`. A decision whose bytes changed never speaks for these bytes.
+/// it `Conflicting`. A decision whose bytes changed never speaks for these bytes,
+/// and a decision speaks for the shared digest only after every copy carrying it
+/// finished its rehash: until then the capture is verification pending.
 #[must_use]
 pub fn logical_quality(copies: &[&Asset]) -> ApplicableQuality {
     let qualities: Vec<ApplicableQuality> =
@@ -567,9 +569,17 @@ pub fn logical_quality(copies: &[&Asset]) -> ApplicableQuality {
     if explicit(Quality::Usable) && explicit(Quality::Unusable) {
         return ApplicableQuality::Conflicting;
     }
-    for decided in [ApplicableQuality::Usable, ApplicableQuality::Unusable] {
+    let unproven = copies.iter().any(|copy| copy.verification_pending);
+    for (decided, previous) in [
+        (ApplicableQuality::Usable, Quality::Usable),
+        (ApplicableQuality::Unusable, Quality::Unusable),
+    ] {
         if qualities.contains(&decided) {
-            return decided;
+            return if unproven {
+                ApplicableQuality::VerificationPending { previous }
+            } else {
+                decided
+            };
         }
     }
     let pending =
@@ -701,6 +711,12 @@ pub struct ScanProgress {
     pub unsupported: u64,
     pub unreadable: u64,
     pub complete_directories: u64,
+    /// Unhashed cross-location duplicate candidates this scan set out to hash.
+    #[serde(default)]
+    pub duplicate_candidates: u64,
+    /// Duplicate candidates whose digest this scan bound so far.
+    #[serde(default)]
+    pub duplicates_verified: u64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

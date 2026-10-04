@@ -14,6 +14,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 
 use platevault_model::{
@@ -40,7 +42,7 @@ use uuid::Uuid;
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
 
 const SCHEMA: &str = include_str!("schema.sql");
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -154,9 +156,10 @@ pub struct SessionDetail {
     pub lineage: Vec<SessionLineage>,
 }
 
-/// One logical capture of a session (D16): every current physical copy with equal
-/// SHA-256 across registered locations, listed once. An asset without such a copy
-/// is its own member. Every copy stays registered and protected.
+/// One logical capture of a session (D16): every recorded physical copy with equal
+/// SHA-256 across registered locations, Missing ones included, listed once. An
+/// asset without such a copy is its own member. Every copy stays registered and
+/// protected; each copy's availability is on its asset.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionMember {
@@ -765,7 +768,9 @@ impl Catalog {
         Ok(operations)
     }
 
-    /// Hash reviewed frames of a batch off the writer lock, bound to their observation.
+    /// Hash reviewed frames of a batch off the writer lock, bound to their observation,
+    /// plus Unreviewed copies whose recorded digest carries a decided copy's decision
+    /// in another location (D16): their bytes decide whether that decision applies.
     ///
     /// The reviewed asset is found exactly as the transaction will find it, including
     /// a single case/normalization variant on insensitive volumes; the live observed
@@ -779,8 +784,10 @@ impl Catalog {
             let matched =
                 find_asset(&mut conn, &location, &file.relative_path, &file.fingerprint, op.id)
                     .await?;
-            if matches!(&matched, AssetMatch::Existing(asset) if asset.quality != Quality::Unreviewed)
-            {
+            let AssetMatch::Existing(asset) = &matched else {
+                continue;
+            };
+            if asset.quality != Quality::Unreviewed || carries_decision(&mut conn, asset).await? {
                 let key = path_key(&file.relative_path);
                 work.push((key, file.relative_path.clone(), file.fingerprint.clone()));
             }
@@ -909,12 +916,11 @@ impl Catalog {
         .bind(i64::from(query.offset))
         .fetch_all(&mut *conn)
         .await?;
-        let mut sessions = Vec::with_capacity(ids.len());
+        let mut rows = Vec::with_capacity(ids.len());
         for id in ids {
-            let row = load_session_row(&mut conn, parse_uuid(&id)?).await?;
-            sessions.push(summarize(&mut conn, row).await?);
+            rows.push(load_session_row(&mut conn, parse_uuid(&id)?).await?);
         }
-        Ok(sessions)
+        summarize_rows(&mut conn, rows).await
     }
 
     /// # Errors
@@ -924,20 +930,12 @@ impl Catalog {
         let row = load_session_row(&mut conn, id).await?;
         let ids: BTreeSet<Uuid> = row.session.asset_ids.iter().copied().collect();
         let assets = load_assets(&mut conn, &ids).await?;
-        let candidates = duplicate_candidates(&mut conn, None).await?;
-        let mut members = Vec::new();
-        for capture in logical_captures(&mut conn, &assets).await? {
-            let copies: Vec<&Asset> = capture.copies.iter().collect();
-            members.push(SessionMember {
-                copies: capture.copies.iter().map(|asset| asset.id).collect(),
-                content_sha256: capture.content_sha256.clone(),
-                applicable_quality: logical_quality(&copies),
-                duplicate_candidate: capture.present.iter().any(|a| candidates.contains(&a.id)),
-            });
-        }
+        let view = CaptureView::read(&mut conn, &[id], &assets).await?;
+        let members = view.members(&assets);
         let associations = load_associations(&mut conn, id).await?;
         let lineage = session_lineage(&mut conn, id).await?;
-        let summary = summarize(&mut conn, row).await?;
+        let successors = successors_of(&mut conn, &row).await?;
+        let summary = view.summary(row, &assets, successors);
         Ok(SessionDetail { summary, assets, members, associations, lineage })
     }
 
@@ -1435,6 +1433,41 @@ impl Catalog {
         Ok(recorded)
     }
 
+    /// Record that a session's target assessment kept conflicting with concurrent
+    /// changes, so no current assessment could be recorded: an automatic target
+    /// row becomes fail-closed `NeedsReview` naming the conflict, on the current
+    /// members. Confirmations and pending review conflicts stay untouched, and a
+    /// superseded session is left to its successors. Returns the stored row.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown session; `PersistenceFailure` otherwise.
+    pub async fn mark_assessment_conflict(&self, session_id: Uuid) -> Result<Option<Association>> {
+        let marked = write_txn!(self, |conn| {
+            let row = load_session_row(conn, session_id).await?;
+            let existing = load_association(conn, session_id, AssociationKind::Target).await?;
+            if row.superseded_by.is_some() || existing.as_ref().is_some_and(user_owned) {
+                existing
+            } else {
+                let association = Association {
+                    session_id,
+                    kind: AssociationKind::Target,
+                    subject_id: None,
+                    state: AssociationState::NeedsReview,
+                    evidence: vec![EvidenceItem::Unknown {
+                        field: "target assessment conflicted with concurrent changes; rescan"
+                            .into(),
+                    }],
+                    provenance: Provenance::Inferred { rule: ASSESSMENT_CONFLICT_RULE.into() },
+                    observation_basis: member_basis(conn, session_id).await?,
+                    decision_revision: row.session.decision_revision,
+                };
+                upsert_association(conn, &association, &now()?).await?;
+                Some(association)
+            }
+        });
+        Ok(marked)
+    }
+
     async fn confirm_association(
         &self,
         expected: &[ExpectedSession],
@@ -1479,6 +1512,7 @@ impl Catalog {
         .fetch_all(&mut *conn)
         .await?;
         let mut counted = Vec::new();
+        let mut sessions = Vec::new();
         for row in &rows {
             let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
             let evidence: Vec<EvidenceItem> = from_json(&row.try_get::<String, _>("evidence")?)?;
@@ -1487,6 +1521,7 @@ impl Catalog {
             }
             let session_id = parse_uuid(&row.try_get::<String, _>("id")?)?;
             let date_basis: Option<String> = row.try_get("date_basis")?;
+            sessions.push(session_id);
             for asset in current_member_assets(&mut conn, session_id).await? {
                 counted.push((date_basis.clone(), session_id, asset));
             }
@@ -1496,22 +1531,20 @@ impl Catalog {
             .map(|(date, session, asset)| (asset.id, (date.clone(), *session)))
             .collect();
         let assets: Vec<Asset> = counted.into_iter().map(|(_, _, asset)| asset).collect();
-        let candidates = duplicate_candidates(&mut conn, None).await?;
+        let view = CaptureView::read(&mut conn, &sessions, &assets).await?;
         let mut locations = BTreeSet::new();
         let mut by_session: BTreeMap<(Option<String>, Uuid), Vec<(Asset, ApplicableQuality)>> =
             BTreeMap::new();
-        for capture in logical_captures(&mut conn, &assets).await? {
-            locations.extend(capture.present.iter().map(|asset| asset.location_id));
-            let copies: Vec<&Asset> = capture.copies.iter().collect();
-            let quality = logical_quality(&copies);
+        for (key, present) in view.group(&assets) {
+            locations.extend(present.iter().map(|asset| asset.location_id));
             // Each logical capture counts once, on an available copy when there is one.
-            let Some(primary) = capture.present.iter().min_by_key(|asset| {
+            let Some(primary) = present.iter().min_by_key(|asset| {
                 (asset.availability != Availability::Available, asset.location_id, asset.id)
             }) else {
                 continue;
             };
             let place = placement[&primary.id].clone();
-            by_session.entry(place).or_default().push((primary.clone(), quality));
+            by_session.entry(place).or_default().push(((*primary).clone(), view.quality(&key)));
         }
         let mut contributions = Vec::new();
         for ((date_basis, session_id), entries) in &by_session {
@@ -1519,13 +1552,11 @@ impl Catalog {
                 *session_id,
                 date_basis.as_ref(),
                 entries,
-                &candidates,
+                &view.candidates,
             ));
         }
-        let mut provisional = false;
-        for id in &locations {
-            provisional |= location_provisional(&mut conn, *id).await?;
-        }
+        let provisional = locations.iter().any(|id| view.location_provisional(*id))
+            || assets.iter().any(|asset| view.candidates.contains(&asset.id));
         Ok(TargetCoverage {
             target_id,
             covered_location_ids: locations.into_iter().collect(),
@@ -1536,22 +1567,53 @@ impl Catalog {
 }
 
 impl Catalog {
-    /// Hash the unhashed cross-location duplicate candidates that involve this
-    /// location, read-only and off the writer lock, and bind each digest to the
-    /// exact observation it was taken from. A copy that cannot be read stays a
-    /// candidate and keeps its totals provisional. Returns the number bound.
+    /// Record the scan's duplicate-candidate verification work: the unhashed
+    /// cross-location duplicate candidates involving the operation's location that
+    /// are readable now. Their count goes into the scan's progress.
     ///
     /// # Errors
-    /// `PersistenceFailure` when the catalog cannot be read or written.
+    /// `InvalidInput` when the scan is not running; `PersistenceFailure` otherwise.
+    pub async fn duplicate_verification_work(&self, operation_id: Uuid) -> Result<Vec<Uuid>> {
+        let work = write_txn!(self, |conn| {
+            let op = load_operation_row(conn, operation_id).await?;
+            require_running(&op)?;
+            let mut work = Vec::new();
+            for id in candidates_of_location(conn, op.location_id).await? {
+                let asset = load_asset(conn, id).await?;
+                if asset.fingerprint.content_sha256.is_none()
+                    && asset.availability == Availability::Available
+                {
+                    work.push(id);
+                }
+            }
+            let mut progress = op.progress.clone();
+            progress.duplicate_candidates = u64::try_from(work.len()).unwrap_or(u64::MAX);
+            progress.duplicates_verified = 0;
+            record_progress(conn, op.id, &progress).await?;
+            work
+        });
+        Ok(work)
+    }
+
+    /// Hash these duplicate candidates read-only and off the writer lock, stopping
+    /// before the next file once `canceled` is set. Each digest is then bound to the
+    /// exact observation it was taken from (CAS) and counted in the scan's progress,
+    /// so completed work survives a later cancel or crash. A copy that cannot be
+    /// read stays a candidate and keeps its totals provisional.
+    ///
+    /// # Errors
+    /// `InvalidInput` when the scan is not running; `PersistenceFailure` otherwise.
     pub async fn verify_duplicate_candidates<P: SourceProbe>(
         &self,
-        location_id: Uuid,
+        operation_id: Uuid,
+        assets: &[Uuid],
         probe: P,
-    ) -> Result<usize> {
+        canceled: Arc<AtomicBool>,
+    ) -> Result<ScanOperation> {
         let mut conn = self.reader().await?;
-        let mut work = Vec::new();
-        for id in duplicate_candidates(&mut conn, Some(location_id)).await? {
-            let asset = load_asset(&mut conn, id).await?;
+        let mut work = Vec::with_capacity(assets.len());
+        for id in assets {
+            let asset = load_asset(&mut conn, *id).await?;
             if asset.fingerprint.content_sha256.is_none()
                 && asset.availability == Availability::Available
             {
@@ -1565,22 +1627,26 @@ impl Catalog {
             }
         }
         drop(conn);
-        if work.is_empty() {
-            return Ok(0);
-        }
         let hashed = blocking(move || {
-            Ok(work
-                .into_iter()
-                .filter_map(|(id, root, relative, fingerprint)| {
-                    root.verify(&probe).ok()?;
-                    let sha256 = current_digest(&root, &relative, &fingerprint, &probe).ok()?;
-                    Some((id, sha256, fingerprint))
-                })
-                .collect::<Vec<_>>())
+            let mut hashed = Vec::with_capacity(work.len());
+            for (id, root, relative, fingerprint) in work {
+                if canceled.load(Ordering::Acquire) {
+                    break;
+                }
+                if root.verify(&probe).is_err() {
+                    continue;
+                }
+                if let Ok(sha256) = current_digest(&root, &relative, &fingerprint, &probe) {
+                    hashed.push((id, sha256, fingerprint));
+                }
+            }
+            Ok(hashed)
         })
         .await?;
-        let bound = write_txn!(self, |conn| {
-            let mut bound = 0;
+        let status = write_txn!(self, |conn| {
+            let op = load_operation_row(conn, operation_id).await?;
+            require_running(&op)?;
+            let mut bound = 0_u64;
             for (id, sha256, hashed) in &hashed {
                 let asset = load_asset(conn, *id).await?;
                 if asset.fingerprint.content_sha256.is_none()
@@ -1596,9 +1662,12 @@ impl Catalog {
                     bound += 1;
                 }
             }
-            bound
+            let mut progress = op.progress.clone();
+            progress.duplicates_verified += bound;
+            record_progress(conn, op.id, &progress).await?;
+            load_operation(conn, op.id).await?
         });
-        Ok(bound)
+        Ok(status)
     }
 }
 
@@ -1878,8 +1947,12 @@ fn scoped(error: LibraryError, scope: NativePath, identity: Option<Uuid>) -> Lib
 /// Refuse a root that is, contains or lies inside another registered root on the
 /// same volume. Overlap is decided on canonical ancestry and folder identity, never
 /// on the path text the user chose: links anywhere above either root (macOS
-/// `/var` → `/private/var`, a linked home folder) resolve first. A root that cannot
-/// be resolved cannot be ruled out, so it refuses the registration.
+/// `/var` → `/private/var`, a linked home folder) resolve first. The candidate must
+/// resolve. A registered root that no longer resolves (a renamed folder, a volume
+/// remounted under another name) is compared on what the catalog recorded: its
+/// folder identity in the candidate's ancestry, or its stored path. It never
+/// refuses merely because it does not resolve, so its own reselect or remap and
+/// its siblings' recovery stay possible.
 async fn ensure_no_overlap(
     conn: &mut SqliteConnection,
     exclude: Option<Uuid>,
@@ -1895,25 +1968,21 @@ async fn ensure_no_overlap(
     .await?;
     let candidate =
         CanonicalRoot::resolve(path).map_err(|error| scoped(error, path.clone(), None))?;
+    let volume = &identity.volume;
     for row in &rows {
         let other = location_from_row(row)?;
         if Some(other.id) == exclude {
             continue;
         }
         let overlaps = same_root(&other.identity, identity)
-            || CanonicalRoot::resolve(&other.path)
-                .map_err(|error| {
-                    scoped(
-                        LibraryError::IdentityConflict(format!(
-                            "overlap with registered location {:?} cannot be ruled out because \
-                             its root does not resolve ({error}); reselect or remap it first",
-                            other.name
-                        )),
-                        path.clone(),
-                        Some(other.id),
-                    )
-                })?
-                .overlaps(&candidate, &identity.volume);
+            || match CanonicalRoot::resolve(&other.path) {
+                Ok(resolved) => resolved.overlaps(&candidate, volume),
+                Err(_) => {
+                    candidate.descends_from(&other.identity)
+                        || roots_overlap(&other.path, path, volume)
+                        || roots_overlap(&other.path, &candidate.path, volume)
+                }
+            };
         if overlaps {
             return Err(scoped(
                 LibraryError::IdentityConflict(format!(
@@ -1928,11 +1997,12 @@ async fn ensure_no_overlap(
     Ok(())
 }
 
-/// A root resolved through every link to its canonical folder, with the identity
-/// stamp of that folder and of each folder above it.
+/// A root resolved through every link to its canonical folder. On Unix it also
+/// carries the `(device, inode)` of that folder and of each folder above it; other
+/// hosts have no stable folder identity here, so they compare canonical paths only.
 struct CanonicalRoot {
     path: NativePath,
-    ancestry: Vec<Stamp>,
+    ancestry: Option<Vec<(u64, u64)>>,
 }
 
 impl CanonicalRoot {
@@ -1940,22 +2010,51 @@ impl CanonicalRoot {
         let given = root.to_path_buf()?;
         let canonical =
             std::fs::canonicalize(&given).map_err(|error| LibraryError::from_io(&given, &error))?;
-        let mut ancestry = Vec::new();
-        for folder in canonical.ancestors() {
-            ancestry.push(stamp_of(&real_directory(folder)?));
-        }
+        let ancestry = folder_ancestry(&canonical)?;
         Ok(Self { path: NativePath::from_path(&canonical), ancestry })
     }
 
     /// Same folder, ancestor or descendant, by folder identity or canonical path.
     fn overlaps(&self, other: &Self, volume: &VolumeIdentity) -> bool {
-        let (Some(own), Some(theirs)) = (self.ancestry.first(), other.ancestry.first()) else {
-            return true;
+        let by_identity = match (&self.ancestry, &other.ancestry) {
+            (Some(own), Some(theirs)) => match (own.first(), theirs.first()) {
+                (Some(root), Some(their_root)) => theirs.contains(root) || own.contains(their_root),
+                _ => true,
+            },
+            _ => false,
         };
-        other.ancestry.contains(own)
-            || self.ancestry.contains(theirs)
-            || roots_overlap(&self.path, &other.path, volume)
+        by_identity || roots_overlap(&self.path, &other.path, volume)
     }
+
+    /// The recorded root folder is this root or one of its ancestors on its volume.
+    fn descends_from(&self, recorded: &FileIdentity) -> bool {
+        let (Some(ancestry), Some(file_id)) = (&self.ancestry, recorded.file_id.as_deref()) else {
+            return false;
+        };
+        let Some(&(device, _)) = ancestry.first() else {
+            return false;
+        };
+        recorded.volume.file_ids_stable
+            && file_id.parse::<u64>().is_ok_and(|inode| ancestry.contains(&(device, inode)))
+    }
+}
+
+#[cfg(unix)]
+fn folder_ancestry(canonical: &Path) -> Result<Option<Vec<(u64, u64)>>> {
+    let mut ancestry = Vec::new();
+    for folder in canonical.ancestors() {
+        ancestry.push(stamp_of(&real_directory(folder)?));
+    }
+    Ok(Some(ancestry))
+}
+
+// Creation times are not identity: copies and extraction preserve them, FAT/exFAT
+// round them and some filesystems report none. Canonicalization already resolved
+// junctions and links, so the canonical path is the comparison.
+#[cfg(not(unix))]
+fn folder_ancestry(canonical: &Path) -> Result<Option<Vec<(u64, u64)>>> {
+    real_directory(canonical)?;
+    Ok(None)
 }
 
 async fn insert_location(
@@ -2036,30 +2135,27 @@ fn location_from_row(row: &SqliteRow) -> Result<Location> {
 }
 
 /// Provisional until the latest scan completed and every decided asset it covered
-/// finished its rehash.
+/// finished its rehash. Two indexed lookups; duplicate candidates are judged per
+/// read request over the assets it reports.
 async fn location_provisional(conn: &mut SqliteConnection, id: Uuid) -> Result<bool> {
+    count_read("location_provisional");
     let state: Option<String> = sqlx::query_scalar(
         "SELECT state FROM scan_operations WHERE location_id = ?1 ORDER BY sequence DESC LIMIT 1",
     )
     .bind(id.to_string())
     .fetch_optional(&mut *conn)
     .await?;
-    let pending: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM assets WHERE location_id = ?1 AND verification_pending = 1)",
-    )
-    .bind(id.to_string())
-    .fetch_one(&mut *conn)
-    .await?;
-    Ok(state.as_deref() != Some("completed")
-        || pending
-        || !duplicate_candidates(conn, Some(id)).await?.is_empty())
+    let pending: bool =
+        sqlx::query_scalar(PENDING_IN_LOCATION).bind(id.to_string()).fetch_one(&mut *conn).await?;
+    Ok(state.as_deref() != Some("completed") || pending)
 }
 
 /// The first readable pass of an operation (its first verified batch, or its
-/// terminal pass) marks every decided asset in its scope verification pending.
-/// Each successful rehash in this operation clears the mark; a canceled scan or a
-/// failed rehash leaves it. Offline scans never get here, so offline inputs keep
-/// their last-observed quality.
+/// terminal pass) marks every decided asset in its scope verification pending,
+/// and every copy whose recorded digest carries a decided copy's decision in
+/// another location. Each successful rehash in this operation clears the mark; a
+/// canceled scan or a failed rehash leaves it. Offline scans never get here, so
+/// offline inputs keep their last-observed quality.
 async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Result<()> {
     let armed = sqlx::query(
         "UPDATE scan_operations SET verification_armed = 1 WHERE id = ?1 AND verification_armed = 0",
@@ -2073,8 +2169,11 @@ async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Res
     }
     let key = path_key(&op.scope);
     let rows = sqlx::query(
-        "SELECT id, path_key FROM assets WHERE location_id = ?1 AND quality <> 'unreviewed' \
-         AND availability <> 'missing' AND substr(path_key, 1, ?2) = ?3",
+        "SELECT a.id, a.path_key FROM assets a WHERE a.location_id = ?1 \
+         AND a.availability <> 'missing' AND substr(a.path_key, 1, ?2) = ?3 \
+         AND (a.quality <> 'unreviewed' OR (a.content_sha256 IS NOT NULL AND EXISTS ( \
+             SELECT 1 FROM assets d WHERE d.content_sha256 = a.content_sha256 \
+             AND d.location_id <> a.location_id AND d.quality <> 'unreviewed')))",
     )
     .bind(op.location_id.to_string())
     .bind(i64::try_from(key.len()).map_err(|_| LibraryError::InvalidInput("path too long".into()))?)
@@ -2243,7 +2342,8 @@ where
         }
         other => other,
     };
-    finalize_operation(conn, op.id, state, &observation.progress, &complete, &incomplete).await
+    let progress = terminal_progress(&op, &observation.progress);
+    finalize_operation(conn, op.id, state, &progress, &complete, &incomplete).await
 }
 
 async fn finish_unverified(
@@ -2261,7 +2361,17 @@ async fn finish_unverified(
         ScanState::Completed | ScanState::Partial => ScanState::Partial,
         other => other,
     };
-    finalize_operation(conn, op.id, state, &observation.progress, &[], &incomplete).await
+    let progress = terminal_progress(&op, &observation.progress);
+    finalize_operation(conn, op.id, state, &progress, &[], &incomplete).await
+}
+
+/// The walk's terminal counts plus the duplicate verification this scan recorded.
+fn terminal_progress(op: &OperationRow, walked: &ScanProgress) -> ScanProgress {
+    ScanProgress {
+        duplicate_candidates: op.progress.duplicate_candidates,
+        duplicates_verified: op.progress.duplicates_verified,
+        ..walked.clone()
+    }
 }
 
 async fn reconcile_absence(
@@ -3146,6 +3256,7 @@ impl Inheritance<'_> {
 }
 
 const INHERITANCE_RULE: &str = "regroup-confirmation-inheritance";
+const ASSESSMENT_CONFLICT_RULE: &str = "assessment-conflict";
 
 /// A regroup conflict between user confirmations, waiting for the user's review.
 fn pending_inheritance(association: &Association) -> bool {
@@ -3366,28 +3477,34 @@ async fn session_lineage(
         .collect()
 }
 
-async fn summarize(conn: &mut SqliteConnection, row: SessionRow) -> Result<SessionSummary> {
-    let ids: BTreeSet<Uuid> = row.session.asset_ids.iter().copied().collect();
-    let assets = load_assets(conn, &ids).await?;
-    let location_ids: BTreeSet<Uuid> = assets.iter().map(|asset| asset.location_id).collect();
-    let mut provisional = false;
-    for id in &location_ids {
-        provisional |= location_provisional(conn, *id).await?;
+async fn successors_of(conn: &mut SqliteConnection, row: &SessionRow) -> Result<Vec<Uuid>> {
+    match row.superseded_by {
+        Some(lineage) => lineage_successors(conn, lineage).await,
+        None => Ok(Vec::new()),
     }
-    let successors = match row.superseded_by {
-        Some(lineage) => lineage_successors(conn, lineage).await?,
-        None => Vec::new(),
-    };
-    Ok(SessionSummary {
-        asset_count: u64::try_from(assets.len()).unwrap_or(u64::MAX),
-        capture_count: in_session_captures(&assets),
-        availability: session_availability(&assets),
-        last_observed_at: assets.iter().map(|asset| asset.last_observed_at.clone()).max(),
-        provisional,
-        successors,
-        location_ids: location_ids.into_iter().collect(),
-        session: row.session,
-    })
+}
+
+/// Summaries of these sessions with one D16 view for the whole request.
+async fn summarize_rows(
+    conn: &mut SqliteConnection,
+    rows: Vec<SessionRow>,
+) -> Result<Vec<SessionSummary>> {
+    let mut members = Vec::with_capacity(rows.len());
+    let mut all = Vec::new();
+    for row in &rows {
+        let ids: BTreeSet<Uuid> = row.session.asset_ids.iter().copied().collect();
+        let assets = load_assets(conn, &ids).await?;
+        all.extend(assets.iter().cloned());
+        members.push(assets);
+    }
+    let sessions: Vec<Uuid> = rows.iter().map(|row| row.session.id).collect();
+    let view = CaptureView::read(conn, &sessions, &all).await?;
+    let mut summaries = Vec::with_capacity(rows.len());
+    for (row, assets) in rows.into_iter().zip(members) {
+        let successors = successors_of(conn, &row).await?;
+        summaries.push(view.summary(row, &assets, successors));
+    }
+    Ok(summaries)
 }
 
 fn session_availability(assets: &[Asset]) -> Availability {
@@ -4278,102 +4395,239 @@ fn is_light(metadata: &CaptureMetadata) -> Option<bool> {
     Some(image_type.to_ascii_lowercase().contains("light"))
 }
 
-/// Logical captures among one session's assets: equal SHA-256 across locations
-/// counts once.
-fn in_session_captures(assets: &[Asset]) -> u64 {
-    let mut locations: HashMap<&str, BTreeSet<Uuid>> = HashMap::new();
-    for asset in assets {
-        if let Some(digest) = asset.fingerprint.content_sha256.as_deref() {
-            locations.entry(digest).or_default().insert(asset.location_id);
+/// D16 state of one read request: logical captures of its assets, their
+/// duplicate candidates and the provisional state of their locations, each read
+/// with one indexed query (location state once per location).
+struct CaptureView {
+    /// Asset id → capture key: the shared digest, or the asset's own id.
+    key_of: HashMap<Uuid, String>,
+    /// Capture key → every recorded copy, including Missing ones.
+    copies: HashMap<String, Vec<Asset>>,
+    candidates: BTreeSet<Uuid>,
+    provisional: HashMap<Uuid, bool>,
+}
+
+impl CaptureView {
+    async fn read(
+        conn: &mut SqliteConnection,
+        sessions: &[Uuid],
+        assets: &[Asset],
+    ) -> Result<Self> {
+        let candidates = candidates_in_sessions(conn, sessions).await?;
+        let (key_of, copies) = logical_captures(conn, assets).await?;
+        let locations: BTreeSet<Uuid> = assets.iter().map(|asset| asset.location_id).collect();
+        let mut provisional = HashMap::with_capacity(locations.len());
+        for id in locations {
+            provisional.insert(id, location_provisional(conn, id).await?);
+        }
+        Ok(Self { key_of, copies, candidates, provisional })
+    }
+
+    fn key<'a>(&'a self, asset: &'a Asset) -> &'a str {
+        self.key_of.get(&asset.id).map_or("", String::as_str)
+    }
+
+    fn location_provisional(&self, id: Uuid) -> bool {
+        self.provisional.get(&id).copied().unwrap_or(true)
+    }
+
+    /// These assets grouped by logical capture.
+    fn group<'a>(&self, assets: &'a [Asset]) -> BTreeMap<String, Vec<&'a Asset>> {
+        let mut groups: BTreeMap<String, Vec<&Asset>> = BTreeMap::new();
+        for asset in assets {
+            groups.entry(self.key(asset).to_owned()).or_default().push(asset);
+        }
+        groups
+    }
+
+    fn quality(&self, key: &str) -> ApplicableQuality {
+        let copies: Vec<&Asset> =
+            self.copies.get(key).map(|c| c.iter().collect()).unwrap_or_default();
+        logical_quality(&copies)
+    }
+
+    fn members(&self, assets: &[Asset]) -> Vec<SessionMember> {
+        self.group(assets)
+            .into_iter()
+            .map(|(key, present)| SessionMember {
+                copies: self.copies.get(&key).map_or_else(
+                    || present.iter().map(|asset| asset.id).collect(),
+                    |copies| copies.iter().map(|copy| copy.id).collect(),
+                ),
+                content_sha256: present[0].fingerprint.content_sha256.clone(),
+                applicable_quality: self.quality(&key),
+                duplicate_candidate: present
+                    .iter()
+                    .any(|asset| self.candidates.contains(&asset.id)),
+            })
+            .collect()
+    }
+
+    fn summary(&self, row: SessionRow, assets: &[Asset], successors: Vec<Uuid>) -> SessionSummary {
+        let location_ids: BTreeSet<Uuid> = assets.iter().map(|asset| asset.location_id).collect();
+        let provisional = location_ids.iter().any(|id| self.location_provisional(*id))
+            || assets.iter().any(|asset| self.candidates.contains(&asset.id));
+        let captures: BTreeSet<&str> = assets.iter().map(|asset| self.key(asset)).collect();
+        SessionSummary {
+            asset_count: u64::try_from(assets.len()).unwrap_or(u64::MAX),
+            capture_count: u64::try_from(captures.len()).unwrap_or(u64::MAX),
+            availability: session_availability(assets),
+            last_observed_at: assets.iter().map(|asset| asset.last_observed_at.clone()).max(),
+            provisional,
+            successors,
+            location_ids: location_ids.into_iter().collect(),
+            session: row.session,
         }
     }
-    let keys: BTreeSet<String> = assets
-        .iter()
-        .map(|asset| {
-            asset
-                .fingerprint
-                .content_sha256
-                .as_deref()
-                .filter(|digest| locations[digest].len() > 1)
-                .map_or_else(|| asset.id.to_string(), str::to_owned)
-        })
-        .collect();
-    u64::try_from(keys.len()).unwrap_or(u64::MAX)
 }
 
-/// Physical assets grouped into one logical capture (D16).
-struct Capture {
-    content_sha256: Option<String>,
-    /// The grouped input assets.
-    present: Vec<Asset>,
-    /// Every current physical copy in the library.
-    copies: Vec<Asset>,
-}
+/// Every recorded copy, Missing included, of the given digests.
+const COPIES_BY_DIGEST: &str = asset_sql!(
+    "WHERE a.content_sha256 IN (SELECT value FROM json_each(?1)) \
+     AND a.session_id IS NOT NULL ORDER BY a.location_id, a.id"
+);
 
-/// Group assets into logical captures: copies with equal SHA-256 that span at
-/// least two registered locations are one capture listing every current copy.
-/// Any other asset is its own capture.
-async fn logical_captures(conn: &mut SqliteConnection, assets: &[Asset]) -> Result<Vec<Capture>> {
-    let mut copies_of: HashMap<String, Vec<Asset>> = HashMap::new();
-    let mut captures: BTreeMap<String, Capture> = BTreeMap::new();
-    for asset in assets {
-        let mut shared = None;
-        if let Some(digest) = &asset.fingerprint.content_sha256 {
-            if !copies_of.contains_key(digest) {
-                let rows = sqlx::query(asset_sql!(
-                    "WHERE json_extract(a.fingerprint, '$.contentSha256') = ?1 \
-                     AND a.availability <> 'missing' AND a.session_id IS NOT NULL \
-                     ORDER BY a.location_id, a.id"
-                ))
-                .bind(digest.as_str())
-                .fetch_all(&mut *conn)
-                .await?;
-                let copies = rows.iter().map(asset_from_row).collect::<Result<Vec<_>>>()?;
-                copies_of.insert(digest.clone(), copies);
-            }
-            let copies = &copies_of[digest];
-            let locations: BTreeSet<Uuid> = copies.iter().map(|copy| copy.location_id).collect();
-            if locations.len() > 1 {
-                shared = Some(digest.clone());
-            }
-        }
-        let key = shared.clone().unwrap_or_else(|| asset.id.to_string());
-        let capture = captures.entry(key).or_insert_with(|| Capture {
-            content_sha256: asset.fingerprint.content_sha256.clone(),
-            present: Vec::new(),
-            copies: shared
-                .as_ref()
-                .map_or_else(|| vec![asset.clone()], |digest| copies_of[digest].clone()),
-        });
-        capture.present.push(asset.clone());
-    }
-    Ok(captures.into_values().collect())
-}
+/// Duplicate candidates of a session: a copy in the same session (equal capture
+/// key) in another location with equal size and equal (or equally unknown) capture
+/// start time, where either side has no content digest.
+const CANDIDATES_IN_SESSIONS: &str = "SELECT a.id AS id, b.id AS partner \
+     FROM assets a CROSS JOIN assets b ON b.session_id = a.session_id \
+     AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id) \
+     AND b.size_bytes = a.size_bytes \
+     WHERE a.session_id IN (SELECT value FROM json_each(?1)) \
+     AND a.availability <> 'missing' AND b.availability <> 'missing' \
+     AND (a.content_sha256 IS NULL OR b.content_sha256 IS NULL) \
+     AND b.capture_start IS a.capture_start";
 
-/// Current assets with an unhashed duplicate candidate: a copy in the same
-/// session (equal capture key) in another location with equal size and equal
-/// known capture start time, where either side has no content digest. With a
-/// location, only pairs involving it.
-async fn duplicate_candidates(
+/// The same pairs, driven from one location's assets.
+const CANDIDATES_OF_LOCATION: &str = "SELECT a.id AS id, b.id AS partner \
+     FROM assets a CROSS JOIN assets b ON b.session_id = a.session_id \
+     AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id) \
+     AND b.size_bytes = a.size_bytes \
+     WHERE a.location_id = ?1 AND a.session_id IS NOT NULL \
+     AND a.availability <> 'missing' AND b.availability <> 'missing' \
+     AND (a.content_sha256 IS NULL OR b.content_sha256 IS NULL) \
+     AND b.capture_start IS a.capture_start";
+
+const PENDING_IN_LOCATION: &str =
+    "SELECT EXISTS (SELECT 1 FROM assets WHERE location_id = ?1 AND verification_pending = 1)";
+
+/// A decided copy in another location carries this asset's recorded digest.
+const CARRIES_DECISION: &str = "SELECT EXISTS (SELECT 1 FROM assets d \
+     WHERE d.content_sha256 = ?1 AND d.location_id <> ?2 AND d.quality <> 'unreviewed')";
+
+/// Group assets into logical captures (D16): a digest whose recorded copies,
+/// Missing ones included, span at least two registered locations is one capture
+/// listing every copy. Any other asset is its own capture.
+async fn logical_captures(
     conn: &mut SqliteConnection,
-    location: Option<Uuid>,
+    assets: &[Asset],
+) -> Result<(HashMap<Uuid, String>, HashMap<String, Vec<Asset>>)> {
+    let digests: BTreeSet<&str> =
+        assets.iter().filter_map(|asset| asset.fingerprint.content_sha256.as_deref()).collect();
+    let mut by_digest: HashMap<String, Vec<Asset>> = HashMap::new();
+    if !digests.is_empty() {
+        count_read("logical_captures");
+        let rows =
+            sqlx::query(COPIES_BY_DIGEST).bind(to_json(&digests)?).fetch_all(&mut *conn).await?;
+        for row in &rows {
+            let copy = asset_from_row(row)?;
+            if let Some(digest) = copy.fingerprint.content_sha256.clone() {
+                by_digest.entry(digest).or_default().push(copy);
+            }
+        }
+    }
+    let mut key_of = HashMap::with_capacity(assets.len());
+    let mut copies = HashMap::new();
+    for asset in assets {
+        let shared = asset.fingerprint.content_sha256.as_ref().filter(|digest| {
+            by_digest.get(*digest).is_some_and(|group| {
+                group.iter().map(|copy| copy.location_id).collect::<BTreeSet<_>>().len() > 1
+            })
+        });
+        let key = shared.cloned().unwrap_or_else(|| asset.id.to_string());
+        if !copies.contains_key(&key) {
+            let group =
+                shared.map_or_else(|| vec![asset.clone()], |digest| by_digest[digest].clone());
+            copies.insert(key.clone(), group);
+        }
+        key_of.insert(asset.id, key);
+    }
+    Ok((key_of, copies))
+}
+
+async fn candidates_in_sessions(
+    conn: &mut SqliteConnection,
+    sessions: &[Uuid],
 ) -> Result<BTreeSet<Uuid>> {
-    let ids: Vec<String> = sqlx::query_scalar(
-        "SELECT DISTINCT a.id FROM assets a JOIN assets b \
-         ON b.session_id = a.session_id AND b.location_id <> a.location_id \
-         AND b.size_bytes = a.size_bytes \
-         AND json_extract(b.effective, '$.dateObs') = json_extract(a.effective, '$.dateObs') \
-         WHERE a.session_id IS NOT NULL \
-         AND a.availability <> 'missing' AND b.availability <> 'missing' \
-         AND (json_extract(a.fingerprint, '$.contentSha256') IS NULL \
-              OR json_extract(b.fingerprint, '$.contentSha256') IS NULL) \
-         AND (?1 IS NULL OR a.location_id = ?1 OR b.location_id = ?1)",
-    )
-    .bind(location.map(|id| id.to_string()))
-    .fetch_all(&mut *conn)
-    .await?;
+    if sessions.is_empty() {
+        return Ok(BTreeSet::new());
+    }
+    count_read("candidates");
+    let ids: Vec<String> = sqlx::query_scalar(CANDIDATES_IN_SESSIONS)
+        .bind(json_ids(&sessions.iter().copied().collect())?)
+        .fetch_all(&mut *conn)
+        .await?;
     ids.iter().map(|id| parse_uuid(id)).collect()
 }
+
+/// Both sides of every candidate pair involving the location.
+async fn candidates_of_location(
+    conn: &mut SqliteConnection,
+    location: Uuid,
+) -> Result<BTreeSet<Uuid>> {
+    let rows = sqlx::query(CANDIDATES_OF_LOCATION)
+        .bind(location.to_string())
+        .fetch_all(&mut *conn)
+        .await?;
+    let mut ids = BTreeSet::new();
+    for row in &rows {
+        ids.insert(parse_uuid(&row.try_get::<String, _>("id")?)?);
+        ids.insert(parse_uuid(&row.try_get::<String, _>("partner")?)?);
+    }
+    Ok(ids)
+}
+
+/// An Unreviewed asset whose recorded digest a decided copy elsewhere carries: its
+/// bytes decide the logical capture's applicability, so readable rescans rehash it.
+async fn carries_decision(conn: &mut SqliteConnection, asset: &Asset) -> Result<bool> {
+    let Some(digest) = asset.fingerprint.content_sha256.as_deref() else {
+        return Ok(false);
+    };
+    Ok(sqlx::query_scalar(CARRIES_DECISION)
+        .bind(digest)
+        .bind(asset.location_id.to_string())
+        .fetch_one(&mut *conn)
+        .await?)
+}
+
+async fn record_progress(
+    conn: &mut SqliteConnection,
+    operation_id: Uuid,
+    progress: &ScanProgress,
+) -> Result<()> {
+    sqlx::query("UPDATE scan_operations SET progress = ?1, revision = revision + 1 WHERE id = ?2")
+        .bind(to_json(progress)?)
+        .bind(operation_id.to_string())
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+#[cfg(test)]
+thread_local! {
+    static READS: std::cell::RefCell<HashMap<&'static str, usize>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+
+/// Test-only count of the D16 and provisional reads issued on this thread.
+#[cfg(test)]
+fn count_read(name: &'static str) {
+    READS.with(|reads| *reads.borrow_mut().entry(name).or_default() += 1);
+}
+
+#[cfg(not(test))]
+const fn count_read(_name: &'static str) {}
 
 fn contributions_for(
     session_id: Uuid,
@@ -5287,5 +5541,161 @@ mod tests {
         );
         assert!(reopened.list_targets(0, 10).await.unwrap().is_empty());
         assert!(reopened.save_target(&candidate, None).await.is_ok(), "unlimited writer saves");
+    }
+
+    use platevault_model::ImageFormat;
+
+    fn plan_volume(stable_id: &str) -> VolumeIdentity {
+        VolumeIdentity {
+            filesystem: "apfs".into(),
+            stable_id: Some(stable_id.into()),
+            file_ids_stable: false,
+            case: PathSensitivity::Sensitive,
+            normalization: PathSensitivity::Sensitive,
+        }
+    }
+
+    /// Two locations on their own volumes with `sessions` single-frame sessions each.
+    async fn indexed_catalog(dir: &Path, sessions: usize) -> Catalog {
+        let catalog = Catalog::open(&dir.join("catalog.sqlite")).await.unwrap();
+        for index in 0..2 {
+            let root = dir.join(format!("root{index}"));
+            std::fs::create_dir(&root).unwrap();
+            let identity =
+                FileIdentity { volume: plan_volume(&format!("vol-{index}")), file_id: None };
+            let location = catalog
+                .register_location(&LocationRegistration {
+                    name: format!("root{index}"),
+                    path: NativePath::from_path(&root),
+                    role: LocationRole::Captures,
+                    identity: identity.clone(),
+                })
+                .await
+                .unwrap();
+            let files = (0..sessions)
+                .map(|frame| ScanFile {
+                    relative_path: NativePath::from_path(Path::new(&format!("f{frame}.fits"))),
+                    fingerprint: ObservationFingerprint {
+                        identity: identity.clone(),
+                        size_bytes: 2880,
+                        modified_ns: 1,
+                        content_sha256: None,
+                    },
+                    format: ImageFormat::Fits,
+                    metadata: CaptureMetadata {
+                        image_type: Some("LIGHT".into()),
+                        filter: Some(format!("F{frame}")),
+                        exposure_seconds: Some(60.0),
+                        date_obs: Some("2026-09-18T22:00:00".into()),
+                        ..CaptureMetadata::default()
+                    },
+                })
+                .collect();
+            let operation = catalog.begin_scan(location.id, None).await.unwrap();
+            let batch = ScanBatch { files, ..ScanBatch::default() };
+            catalog
+                .apply_scan_batch(operation.id, &identity, &batch, |assets: &[Asset]| {
+                    let mut by_filter: BTreeMap<String, Vec<Uuid>> = BTreeMap::new();
+                    for asset in assets {
+                        let key = format!("{:?}", asset.effective.filter);
+                        by_filter.entry(key).or_default().push(asset.id);
+                    }
+                    GroupingResult {
+                        sessions: by_filter
+                            .into_iter()
+                            .map(|(key, asset_ids)| SessionCandidate {
+                                key: CaptureKey(key),
+                                asset_ids,
+                                provisional: Vec::new(),
+                                date_basis: None,
+                            })
+                            .collect(),
+                    }
+                })
+                .await
+                .unwrap();
+        }
+        catalog
+    }
+
+    fn reads(name: &'static str) -> usize {
+        READS.with(|reads| reads.borrow().get(name).copied().unwrap_or(0))
+    }
+
+    /// The D16 and provisional reads of one request do not grow with its sessions.
+    #[tokio::test]
+    async fn session_reads_compute_d16_and_provisional_state_once_per_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let catalog = indexed_catalog(dir.path(), 20).await;
+        READS.with(|reads| reads.borrow_mut().clear());
+        let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+        assert_eq!(sessions.len(), 20, "each filter is one session across both locations");
+        assert!(sessions.iter().all(|s| s.provisional && s.asset_count == 2), "unhashed pairs");
+        assert_eq!(reads("location_provisional"), 2, "once per location, not per session");
+        assert_eq!(reads("candidates"), 1, "one candidate query for the request");
+        READS.with(|reads| reads.borrow_mut().clear());
+        let detail = catalog.session(sessions[0].session.id).await.unwrap();
+        assert!(detail.members.iter().all(|member| member.duplicate_candidate));
+        assert_eq!((reads("location_provisional"), reads("candidates")), (2, 1));
+    }
+
+    /// Every D16 read is driven by an index; none scans the assets table.
+    #[tokio::test]
+    async fn d16_queries_use_indexes_and_scan_no_asset_table() {
+        let dir = tempfile::tempdir().unwrap();
+        let catalog = indexed_catalog(dir.path(), 3).await;
+        let mut conn = catalog.reader().await.unwrap();
+        let ids = r#"["00000000-0000-0000-0000-000000000000"]"#;
+        for (sql, binds) in [
+            (CANDIDATES_IN_SESSIONS, vec![ids]),
+            (CANDIDATES_OF_LOCATION, vec!["location"]),
+            (COPIES_BY_DIGEST, vec![r#"["digest"]"#]),
+            (PENDING_IN_LOCATION, vec!["location"]),
+            (CARRIES_DECISION, vec!["digest", "location"]),
+        ] {
+            let explain = format!("EXPLAIN QUERY PLAN {sql}");
+            let mut query = sqlx::query(sqlx::AssertSqlSafe(explain));
+            for bind in binds {
+                query = query.bind(bind);
+            }
+            let plan: Vec<String> = query
+                .fetch_all(&mut *conn)
+                .await
+                .unwrap()
+                .iter()
+                .map(|row| row.try_get::<String, _>("detail").unwrap())
+                .collect();
+            let scanned = plan.iter().any(|detail| {
+                ["SCAN a", "SCAN b", "SCAN d", "SCAN assets"]
+                    .iter()
+                    .any(|scan| detail == scan || detail.starts_with(&format!("{scan} ")))
+            });
+            assert!(!scanned, "{sql}\n{plan:#?}");
+            assert!(plan.iter().any(|detail| detail.contains("USING")), "{plan:#?}");
+        }
+    }
+
+    /// Without folder identity (non-Unix hosts) roots compare by canonical path only.
+    #[test]
+    fn roots_without_folder_identity_overlap_only_by_canonical_path() {
+        let volume = plan_volume("vol");
+        let root = |path: &str| CanonicalRoot {
+            path: NativePath::from_path(Path::new(path)),
+            ancestry: None,
+        };
+        assert!(!root("/D/Backup/2024").overlaps(&root("/D/Astro/2024"), &volume));
+        assert!(root("/D/Astro").overlaps(&root("/D/Astro/2024"), &volume));
+        assert!(root("/D/Astro/2024").overlaps(&root("/D/Astro"), &volume));
+        let unix = CanonicalRoot {
+            path: NativePath::from_path(Path::new("/D/x")),
+            ancestry: Some(vec![(1, 2)]),
+        };
+        assert!(!unix.overlaps(&root("/D/y"), &volume), "identity needs it on both sides");
+        let recorded = FileIdentity {
+            volume: VolumeIdentity { file_ids_stable: true, ..volume },
+            file_id: Some("2".into()),
+        };
+        assert!(!root("/D/x").descends_from(&recorded), "no ancestry, no identity claim");
+        assert!(unix.descends_from(&recorded));
     }
 }

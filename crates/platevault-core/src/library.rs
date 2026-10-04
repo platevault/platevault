@@ -34,7 +34,16 @@ pub struct Library {
     saved_targets: Mutex<Option<(u64, Arc<Vec<TargetCandidate>>)>>,
     scans: Mutex<HashMap<Uuid, ScanControl>>,
     progress: broadcast::Sender<ScanOperation>,
+    /// Test-only: the next N assessments are refused as if a concurrent writer
+    /// had committed between the session read and the record.
+    #[cfg(test)]
+    forced_conflicts: std::sync::atomic::AtomicUsize,
 }
+
+/// Re-reads of one session before a conflicting assessment is reported.
+const ASSESSMENT_ATTEMPTS: usize = 3;
+/// Duplicate candidates hashed and bound per catalog transaction.
+const COPY_CHUNK: usize = 16;
 
 struct ScanControl {
     canceled: Arc<AtomicBool>,
@@ -49,12 +58,13 @@ pub struct LibrarySession {
 }
 
 /// A committed metadata correction plus the outcome of re-deriving the target
-/// suggestions of the sessions now holding the corrected assets.
+/// suggestions of the resulting sessions (those holding a corrected asset and every
+/// regroup successor).
 ///
-/// The correction is durable whether or not the refresh succeeds. A failed refresh
-/// leaves the catalog's fail-closed `NeedsReview` state in place, and the next
-/// scan or correction retries it. A session another writer changed after it was
-/// read is skipped the same way rather than reported.
+/// The correction is durable whether or not the refresh succeeds. A failed refresh,
+/// including a session another writer kept changing through every re-read, is
+/// reported here; the catalog's fail-closed `NeedsReview` state stays in place and
+/// the next scan or correction retries it.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfirmedCorrection {
@@ -96,6 +106,8 @@ impl Library {
             scans: Mutex::new(HashMap::new()),
             saved_targets: Mutex::new(None),
             progress,
+            #[cfg(test)]
+            forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         }))
     }
 
@@ -334,7 +346,8 @@ impl Library {
     }
 
     /// Confirm a reviewed correction preview, then re-derive the target suggestion
-    /// of every session that now holds a corrected asset.
+    /// of every resulting session: those holding a corrected asset and every
+    /// successor of the regroup.
     ///
     /// # Errors
     /// Returns the catalog's confirmation errors; a refresh failure after commit is
@@ -352,12 +365,23 @@ impl Library {
         Ok(ConfirmedCorrection { outcome, association_refresh })
     }
 
+    /// Refresh every resulting session; the first failure is reported after the
+    /// others were attempted.
     async fn refresh_sessions(&self, outcome: &CorrectionOutcome) -> Result<(), LibraryError> {
         let saved = self.saved_targets().await?;
-        for session in &outcome.sessions {
-            self.refresh_session_suggestion(session.id, &saved).await?;
+        let mut sessions: Vec<Uuid> = outcome.sessions.iter().map(|session| session.id).collect();
+        for successor in outcome.lineage.iter().flat_map(|lineage| &lineage.successors) {
+            if !sessions.contains(successor) {
+                sessions.push(*successor);
+            }
         }
-        Ok(())
+        let mut failure = None;
+        for session in sessions {
+            if let Err(error) = self.refresh_session_suggestion(session, &saved).await {
+                failure.get_or_insert(error);
+            }
+        }
+        failure.map_or(Ok(()), Err)
     }
 
     async fn refresh_target_suggestions(&self, location_id: Uuid) -> Result<(), LibraryError> {
@@ -376,7 +400,14 @@ impl Library {
             let count = u32::try_from(rows.len())
                 .map_err(|_| LibraryError::PersistenceFailure("session page exceeds u32".into()))?;
             for row in rows {
-                self.refresh_session_suggestion(row.session.id, &saved).await?;
+                match self.refresh_session_suggestion(row.session.id, &saved).await {
+                    // Still conflicting after every re-read: the session is marked for
+                    // review instead of keeping an assessment nobody recorded.
+                    Err(LibraryError::Conflict { .. }) => {
+                        self.catalog.mark_assessment_conflict(row.session.id).await?;
+                    }
+                    other => other?,
+                }
             }
             if count < 1000 {
                 return Ok(());
@@ -387,21 +418,49 @@ impl Library {
         }
     }
 
+    /// Read, assess and record one session. A `Conflict` means a concurrent writer
+    /// (a quality decision, a correction or another location's scan) changed it
+    /// after the read: the session is re-read and re-assessed, at most
+    /// [`ASSESSMENT_ATTEMPTS`] times, and a superseded session hands over to its
+    /// successors. A conflict that persists is returned to the caller.
     async fn refresh_session_suggestion(
         &self,
         session_id: Uuid,
         saved: &[TargetCandidate],
     ) -> Result<(), LibraryError> {
-        let detail = self.catalog.session(session_id).await?;
-        self.record_assessment(&detail, saved).await
+        let mut queue = vec![session_id];
+        let mut visited = Vec::new();
+        while let Some(id) = queue.pop() {
+            if visited.contains(&id) {
+                continue;
+            }
+            visited.push(id);
+            let mut attempt = 0;
+            loop {
+                attempt += 1;
+                let detail = self.catalog.session(id).await?;
+                if !detail.summary.successors.is_empty() {
+                    queue.extend(detail.summary.successors);
+                    break;
+                }
+                match self.record_assessment(&detail, saved).await {
+                    Ok(()) => break,
+                    Err(LibraryError::Conflict { successors, .. }) if !successors.is_empty() => {
+                        queue.extend(successors);
+                        break;
+                    }
+                    Err(LibraryError::Conflict { .. }) if attempt < ASSESSMENT_ATTEMPTS => {}
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Assess one read of a session and record the result against exactly that read.
     ///
-    /// A `Conflict` means a concurrent writer (a quality decision, a correction or
-    /// another location's scan) changed the session after it was read. The stale
-    /// assessment is skipped rather than failing the caller; the next checkpoint
-    /// re-derives the session from its current evidence.
+    /// # Errors
+    /// `Conflict` when the session changed after `detail` was read.
     async fn record_assessment(
         &self,
         detail: &SessionDetail,
@@ -445,6 +504,18 @@ impl Library {
                 crate::Provenance::Inferred { rule: crate::targets::ASSOCIATION_RULE.into() },
             )
         };
+        #[cfg(test)]
+        if self
+            .forced_conflicts
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |left| left.checked_sub(1))
+            .is_ok()
+        {
+            return Err(LibraryError::Conflict {
+                id: session_id,
+                current: detail.summary.session.grouping_revision,
+                successors: Vec::new(),
+            });
+        }
         let recorded = self
             .catalog
             .record_suggestions(&[SuggestedAssociation {
@@ -472,10 +543,36 @@ impl Library {
                 provenance,
             }])
             .await;
-        match recorded {
-            Ok(_) | Err(LibraryError::Conflict { .. }) => Ok(()),
-            Err(error) => Err(error),
+        recorded.map(drop)
+    }
+
+    /// Hash the cross-location duplicate candidates of a scan whose walk finished
+    /// readable, in CAS-bound chunks with a progress event after each, stopping at
+    /// the next file once the scan is canceled. A canceled or failed walk hashes
+    /// nothing; unhashed candidates keep their totals provisional.
+    async fn verify_copies(
+        &self,
+        id: Uuid,
+        state: ScanState,
+        canceled: &Arc<AtomicBool>,
+    ) -> Result<(), LibraryError> {
+        if !matches!(state, ScanState::Completed | ScanState::Partial)
+            || canceled.load(Ordering::Acquire)
+        {
+            return Ok(());
         }
+        let work = self.catalog.duplicate_verification_work(id).await?;
+        for chunk in work.chunks(COPY_CHUNK) {
+            if canceled.load(Ordering::Acquire) {
+                break;
+            }
+            let status = self
+                .catalog
+                .verify_duplicate_candidates(id, chunk, InventoryProbe, Arc::clone(canceled))
+                .await?;
+            let _ = self.progress.send(status);
+        }
+        Ok(())
     }
 
     async fn run_scan(
@@ -523,7 +620,7 @@ impl Library {
             Ok(observation) => {
                 // Cross-location duplicate candidates are hashed before the terminal
                 // state, so totals leave provisional scope with the scan (D16).
-                self.catalog.verify_duplicate_candidates(location.id, InventoryProbe).await?;
+                self.verify_copies(id, observation.state, canceled).await?;
                 let catalog = Arc::clone(&self.catalog);
                 let handle = tokio::runtime::Handle::current();
                 let completed = blocking(move || {
@@ -601,47 +698,71 @@ mod tests {
             .expect("the scan recorded a target assessment")
     }
 
-    /// A writer committing between the session read and the record of its
-    /// assessment is the scan-time race; it is injected here deterministically.
-    #[tokio::test]
-    async fn a_decision_committed_after_the_session_read_skips_the_stale_assessment() {
-        let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().join("captures");
-        std::fs::create_dir(&root).unwrap();
-        let light = root.join("light.fits");
+    async fn scanned_library(
+        temp: &tempfile::TempDir,
+        roots: &[&str],
+    ) -> (Arc<Library>, Vec<Location>, Vec<(std::path::PathBuf, String)>) {
         let fields = [
             ("IMAGETYP", "'LIGHT'"),
             ("FILTER", "'Ha'"),
             ("EXPTIME", "300"),
+            ("DATE-OBS", "'2026-09-18T22:00:00'"),
             ("OBJECT", "'M31'"),
             ("RA", "10.684708"),
             ("DEC", "41.26875"),
+            ("FOCALLEN", "1"),
+            ("XPIXSZ", "3.76"),
         ];
-        super::fixtures::fits(&light, &fields).unwrap();
-        let original = super::fixtures::digest(&light);
         let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
-        let location = library
-            .register_location(
-                NativePath::from_path(&root),
-                "Captured".into(),
-                LocationRole::Captures,
-            )
-            .await
-            .unwrap();
+        let mut locations = Vec::new();
+        let mut originals = Vec::new();
+        for name in roots {
+            let root = temp.path().join(name);
+            std::fs::create_dir(&root).unwrap();
+            let light = root.join("light.fits");
+            super::fixtures::fits(&light, &fields).unwrap();
+            originals.push((light.clone(), super::fixtures::digest(&light)));
+            let location = library
+                .register_location(
+                    NativePath::from_path(&root),
+                    (*name).into(),
+                    LocationRole::Captures,
+                )
+                .await
+                .unwrap();
+            locations.push(location);
+        }
+        (library, locations, originals)
+    }
+
+    async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
         let mut progress = library.subscribe_scan_progress();
-        let started = library.start_scan(location.id, None).await.unwrap();
-        // The terminal event is published only after the scan's own final refresh.
+        let started = library.start_scan(location, None).await.unwrap();
         tokio::time::timeout(Duration::from_secs(20), async {
             loop {
                 let operation = progress.recv().await.unwrap();
                 if operation.id == started.id && operation.state != ScanState::Running {
-                    assert_eq!(operation.state, ScanState::Completed);
-                    return;
+                    return operation;
                 }
             }
         })
         .await
-        .expect("scan must publish its terminal state");
+        .expect("scan must publish its terminal state")
+    }
+
+    fn unchanged(originals: &[(std::path::PathBuf, String)]) {
+        for (path, digest) in originals {
+            assert_eq!(&super::fixtures::digest(path), digest, "{}", path.display());
+        }
+    }
+
+    /// A writer committing between the session read and the record of its
+    /// assessment is the scan-time race; it is injected here deterministically.
+    #[tokio::test]
+    async fn a_decision_committed_after_the_session_read_is_refused_then_re_read() {
+        let temp = tempfile::tempdir().unwrap();
+        let (library, locations, originals) = scanned_library(&temp, &["captures"]).await;
+        assert_eq!(scan_to_end(&library, locations[0].id).await.state, ScanState::Completed);
         let sessions = library.catalog.list_sessions(&SessionQuery::default()).await.unwrap();
         let session_id = sessions[0].session.id;
         let stale = library.catalog.session(session_id).await.unwrap();
@@ -654,10 +775,8 @@ mod tests {
         library.catalog.set_quality(&[expected], Quality::Usable, InventoryProbe).await.unwrap();
 
         let saved = library.saved_targets().await.unwrap();
-        library
-            .record_assessment(&stale, &saved)
-            .await
-            .expect("a concurrent writer skips the stale assessment instead of failing");
+        let refused = library.record_assessment(&stale, &saved).await.unwrap_err();
+        assert!(matches!(refused, LibraryError::Conflict { .. }), "{refused:?}");
         let skipped = library.catalog.session(session_id).await.unwrap();
         assert_eq!(target_basis(&skipped), target_basis(&stale), "nothing recorded");
         assert!(target_basis(&skipped)[&asset.id].content_sha256.is_none());
@@ -666,7 +785,143 @@ mod tests {
         let refreshed = library.catalog.session(session_id).await.unwrap();
         let current = &refreshed.assets[0].fingerprint;
         assert!(current.content_sha256.is_some(), "the decision bound the reviewed bytes");
-        assert_eq!(&target_basis(&refreshed)[&asset.id], current, "next checkpoint re-derives");
-        assert_eq!(super::fixtures::digest(&light), original);
+        assert_eq!(&target_basis(&refreshed)[&asset.id], current, "re-read and re-derived");
+        unchanged(&originals);
+    }
+
+    #[tokio::test]
+    async fn conflicting_assessments_are_retried_then_reported_and_marked_for_review() {
+        let temp = tempfile::tempdir().unwrap();
+        let (library, locations, originals) = scanned_library(&temp, &["captures"]).await;
+        assert_eq!(scan_to_end(&library, locations[0].id).await.state, ScanState::Completed);
+        let session_id =
+            library.catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.id;
+        let saved = library.saved_targets().await.unwrap();
+        let target_state = |detail: &SessionDetail| {
+            detail
+                .associations
+                .iter()
+                .find(|association| association.kind == AssociationKind::Target)
+                .map(|association| (association.state.clone(), association.provenance.clone()))
+        };
+
+        // Two concurrent writers in a row: the third read records the assessment.
+        library.forced_conflicts.store(ASSESSMENT_ATTEMPTS - 1, Ordering::Release);
+        library.refresh_session_suggestion(session_id, &saved).await.unwrap();
+        assert_eq!(library.forced_conflicts.load(Ordering::Acquire), 0, "every attempt used");
+        let recorded = library.catalog.session(session_id).await.unwrap();
+        assert_eq!(target_state(&recorded).unwrap().0, AssociationState::Suggested);
+
+        // Conflicting through every re-read: reported, never silently dropped.
+        library.forced_conflicts.store(ASSESSMENT_ATTEMPTS, Ordering::Release);
+        let error = library.refresh_session_suggestion(session_id, &saved).await.unwrap_err();
+        assert!(matches!(error, LibraryError::Conflict { .. }), "{error:?}");
+        // The scan's final pass marks the session for review instead.
+        library.forced_conflicts.store(ASSESSMENT_ATTEMPTS, Ordering::Release);
+        library.refresh_target_suggestions(locations[0].id).await.unwrap();
+        let marked = library.catalog.session(session_id).await.unwrap();
+        assert_eq!(
+            target_state(&marked).unwrap(),
+            (
+                AssociationState::NeedsReview,
+                crate::Provenance::Inferred { rule: "assessment-conflict".into() }
+            ),
+            "observable instead of a stale Suggested row"
+        );
+
+        // A confirmed correction reports it in associationRefresh.
+        let expected: Vec<ExpectedAsset> = marked
+            .assets
+            .iter()
+            .map(|asset| ExpectedAsset {
+                asset_id: asset.id,
+                decision_revision: asset.decision_revision,
+                fingerprint: asset.fingerprint.clone(),
+            })
+            .collect();
+        let corrections: Vec<crate::CorrectionInput> = expected
+            .iter()
+            .map(|asset| crate::CorrectionInput {
+                asset_id: asset.asset_id,
+                field: "object".into(),
+                value: serde_json::json!("M 31"),
+            })
+            .collect();
+        let preview = library
+            .catalog
+            .preview_correction(&expected, &corrections, group_assets)
+            .await
+            .unwrap();
+        library.forced_conflicts.store(usize::MAX, Ordering::Release);
+        let confirmed = library.confirm_correction(preview.id, &expected).await.unwrap();
+        let reported = confirmed.association_refresh.expect("the conflict is reported");
+        assert_eq!(reported.kind, "conflict");
+        unchanged(&originals);
+    }
+
+    /// Walk a location into a still-running scan operation without finishing it.
+    async fn walk_without_finishing(library: &Arc<Library>, location: &Location) -> Uuid {
+        let operation = library.catalog.begin_scan(location.id, None).await.unwrap();
+        let catalog = Arc::clone(&library.catalog);
+        let handle = tokio::runtime::Handle::current();
+        let walked = location.clone();
+        let id = operation.id;
+        blocking(move || {
+            inventory::scan(
+                &walked,
+                &ScanOptions::default(),
+                |batch| {
+                    let identity = inventory::validate_location_root(&walked)?;
+                    handle.block_on(catalog.apply_scan_batch(
+                        id,
+                        &identity,
+                        &batch,
+                        group_assets,
+                    ))?;
+                    Ok(())
+                },
+                &AtomicBool::new(false),
+            )
+        })
+        .await
+        .unwrap();
+        id
+    }
+
+    async fn hashed(library: &Arc<Library>, locations: &[Location]) -> usize {
+        let mut hashed = 0;
+        for location in locations {
+            for asset in library.catalog.location_assets(location.id).await.unwrap() {
+                hashed += usize::from(asset.fingerprint.content_sha256.is_some());
+            }
+        }
+        hashed
+    }
+
+    #[tokio::test]
+    async fn duplicate_hashing_runs_only_for_readable_uncanceled_walks_and_reports_progress() {
+        let temp = tempfile::tempdir().unwrap();
+        let (library, locations, originals) = scanned_library(&temp, &["T7", "NAS"]).await;
+        assert_eq!(scan_to_end(&library, locations[0].id).await.state, ScanState::Completed);
+        let id = walk_without_finishing(&library, &locations[1]).await;
+        let clear = Arc::new(AtomicBool::new(false));
+        for state in [ScanState::Canceled, ScanState::Failed] {
+            library.verify_copies(id, state, &clear).await.unwrap();
+        }
+        library
+            .verify_copies(id, ScanState::Completed, &Arc::new(AtomicBool::new(true)))
+            .await
+            .unwrap();
+        assert_eq!(hashed(&library, &locations).await, 0, "canceled or failed walks hash nothing");
+
+        let mut progress = library.subscribe_scan_progress();
+        library.verify_copies(id, ScanState::Completed, &clear).await.unwrap();
+        assert_eq!(hashed(&library, &locations).await, 2, "both copies hashed");
+        let event = progress.try_recv().expect("a progress event per bound chunk");
+        assert_eq!(
+            (event.progress.duplicate_candidates, event.progress.duplicates_verified),
+            (2, 2)
+        );
+        unchanged(&originals);
     }
 }

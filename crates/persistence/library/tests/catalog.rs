@@ -1583,19 +1583,70 @@ async fn overlap_follows_canonical_ancestry_through_aliases_and_fails_closed() {
     }
     assert_eq!(catalog.list_locations().await.unwrap().len(), 1);
 
-    // A registered root that no longer resolves cannot be ruled out as an
-    // ancestor or descendant, and neither can a path that does not resolve.
+    // A path that does not resolve is refused. A registered root that no longer
+    // resolves does not block an unrelated root on the volume.
     let elsewhere = fx.temp.path().join("Elsewhere");
     std::fs::create_dir_all(elsewhere.join("Flats")).unwrap();
     std::fs::rename(&link, fx.temp.path().join("renamed-link")).unwrap();
-    let error = catalog.register_location(&registration_at(&elsewhere)).await.unwrap_err();
-    assert_eq!(kind(&error), "identity_conflict");
-    std::fs::rename(fx.temp.path().join("renamed-link"), &link).unwrap();
     let mut unresolved = registration_at(&elsewhere.join("Flats"));
     unresolved.path = NativePath::from_path(&elsewhere.join("Darks"));
     catalog.register_location(&unresolved).await.unwrap_err();
     assert_eq!(catalog.list_locations().await.unwrap().len(), 1, "refusals write nothing");
     catalog.register_location(&registration_at(&elsewhere)).await.unwrap();
+}
+
+#[tokio::test]
+async fn sibling_roots_that_no_longer_resolve_never_block_their_recovery() {
+    let fx = Fixture::new();
+    let volume = fx.temp.path().join("T7");
+    let astro = volume.join("Astro");
+    for name in ["Lights", "Calibration"] {
+        std::fs::create_dir_all(astro.join(name).join("night1")).unwrap();
+    }
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let lights = catalog.register_location(&registration_at(&astro.join("Lights"))).await.unwrap();
+    let calibration =
+        catalog.register_location(&registration_at(&astro.join("Calibration"))).await.unwrap();
+
+    // The folder above both roots is renamed, as when the volume remounts under
+    // another name: neither stored root resolves any more.
+    let moved = volume.join("Astro 1");
+    std::fs::rename(&astro, &moved).unwrap();
+    // A stale root still refuses its recorded folder, a folder below it and a new
+    // folder at its stored path.
+    std::fs::create_dir_all(astro.join("Lights")).unwrap();
+    for path in [moved.join("Calibration"), moved.join("Calibration/night1"), astro.join("Lights")]
+    {
+        let error = catalog.register_location(&registration_at(&path)).await.unwrap_err();
+        assert_eq!(kind(&error), "identity_conflict", "{}", path.display());
+    }
+    std::fs::remove_dir_all(&astro).unwrap();
+
+    // Each root is chosen again at its new path while its sibling is still stale.
+    let path = moved.join("Lights");
+    let reselected = catalog
+        .reselect_location(
+            lights.id,
+            lights.decision_revision,
+            &NativePath::from_path(&path),
+            &folder_identity(&path).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(reselected.path, NativePath::from_path(&path));
+    let path = moved.join("Calibration");
+    catalog
+        .reselect_location(
+            calibration.id,
+            calibration.decision_revision,
+            &NativePath::from_path(&path),
+            &folder_identity(&path).unwrap(),
+        )
+        .await
+        .unwrap();
+    std::fs::create_dir_all(volume.join("Flats")).unwrap();
+    catalog.register_location(&registration_at(&volume.join("Flats"))).await.unwrap();
+    assert_eq!(catalog.list_locations().await.unwrap().len(), 3);
 }
 
 #[tokio::test]
@@ -1841,4 +1892,96 @@ async fn decided_frames_stay_verification_pending_until_their_rehash_finishes() 
     let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
     assert!((usable(&coverage) - 300.0).abs() < 1e-9 && !coverage.provisional, "{coverage:?}");
     assert_eq!(tree(&fx.root), before, "sources unchanged");
+}
+
+/// Real probe that requests cancellation as soon as the first file is probed.
+struct CancelingProbe(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl SourceProbe for CancelingProbe {
+    fn fingerprint(&self, path: &Path) -> Result<ObservationFingerprint, LibraryError> {
+        self.0.store(true, std::sync::atomic::Ordering::Release);
+        file_fingerprint(path)
+    }
+    fn root_identity(&self, location: &Location) -> Result<FileIdentity, LibraryError> {
+        folder_identity(&location.path.to_path_buf()?)
+    }
+}
+
+async fn hashed_assets(catalog: &Catalog, locations: &[&Location]) -> usize {
+    let mut hashed = 0;
+    for location in locations {
+        for asset in catalog.location_assets(location.id).await.unwrap() {
+            hashed += usize::from(asset.fingerprint.content_sha256.is_some());
+        }
+    }
+    hashed
+}
+
+/// Begin a scan of `root` and apply these files in one batch, leaving it running.
+async fn running_scan_of(
+    catalog: &Catalog,
+    location: &Location,
+    root: &Path,
+    names: &[&str],
+) -> Uuid {
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let files = names
+        .iter()
+        .map(|name| ScanFile {
+            relative_path: NativePath::from_path(Path::new(name)),
+            fingerprint: file_fingerprint(&root.join(name)).unwrap(),
+            format: ImageFormat::Fits,
+            metadata: metadata_for(name),
+        })
+        .collect();
+    let root_identity = DiskProbe.root_identity(location).unwrap();
+    let batch = ScanBatch { files, ..ScanBatch::default() };
+    catalog.apply_scan_batch(operation.id, &root_identity, &batch, group).await.unwrap();
+    operation.id
+}
+
+#[tokio::test]
+async fn duplicate_verification_stops_at_cancel_and_keeps_each_bound_digest() {
+    let fx = Fixture::new();
+    let names = ["Ha_001.fits", "Ha_002.fits"];
+    let nas = fx.temp.path().join("NAS");
+    std::fs::create_dir_all(&nas).unwrap();
+    for name in names {
+        fx.write(name, name.as_bytes());
+        std::fs::copy(fx.root.join(name), nas.join(name)).unwrap();
+    }
+    let before = (tree(&fx.root), tree(&nas));
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let t7 = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &t7, &names).await;
+    let nas_location = catalog.register_location(&registration_at(&nas)).await.unwrap();
+    let operation = running_scan_of(&catalog, &nas_location, &nas, &names).await;
+
+    let work = catalog.duplicate_verification_work(operation).await.unwrap();
+    assert_eq!(work.len(), 4, "every unhashed copy on both sides");
+    let recorded = catalog.scan_status(operation).await.unwrap().progress;
+    assert_eq!((recorded.duplicate_candidates, recorded.duplicates_verified), (4, 0));
+    let canceled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let probe = CancelingProbe(std::sync::Arc::clone(&canceled));
+    let status = catalog
+        .verify_duplicate_candidates(operation, &work, probe, std::sync::Arc::clone(&canceled))
+        .await
+        .unwrap();
+    assert_eq!(status.progress.duplicates_verified, 1, "stops before the next file");
+    assert_eq!(hashed_assets(&catalog, &[&t7, &nas_location]).await, 1);
+
+    // The bound digest survives a restart; the next readable scan does the rest.
+    catalog.close().await.unwrap();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    assert_eq!(hashed_assets(&catalog, &[&t7, &nas_location]).await, 1, "persisted per chunk");
+    let operation = running_scan_of(&catalog, &nas_location, &nas, &names).await;
+    let work = catalog.duplicate_verification_work(operation).await.unwrap();
+    assert_eq!(work.len(), 3);
+    let clear = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let status =
+        catalog.verify_duplicate_candidates(operation, &work, DiskProbe, clear).await.unwrap();
+    assert_eq!((status.progress.duplicate_candidates, status.progress.duplicates_verified), (3, 3));
+    assert_eq!(hashed_assets(&catalog, &[&t7, &nas_location]).await, 4);
+    assert!(catalog.duplicate_verification_work(operation).await.unwrap().is_empty());
+    assert_eq!((tree(&fx.root), tree(&nas)), before, "sources unchanged");
 }
