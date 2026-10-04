@@ -892,6 +892,40 @@ async fn ambiguous_case_variant_is_refused_without_adoption_or_absence() {
 }
 
 #[tokio::test]
+async fn target_generation_advances_only_with_committed_target_writes_and_survives_restart() {
+    let fx = Fixture::new();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    assert_eq!(catalog.target_generation().await.unwrap(), 0);
+    let mut seed = target("NGC 7000", "ngc 7000");
+    seed.provenance = Provenance::Seed { dataset: "bundled-seed".into() };
+    catalog.record_seed_target(&seed).await.unwrap();
+    assert_eq!(catalog.target_generation().await.unwrap(), 1);
+    catalog.record_seed_target(&seed).await.unwrap();
+    assert_eq!(catalog.target_generation().await.unwrap(), 1, "no-op seed fact");
+
+    let mut edited = seed.clone();
+    edited.provenance = Provenance::User;
+    let stale = catalog.save_target(&edited, Some(7)).await.unwrap_err();
+    assert_eq!(kind(&stale), "conflict");
+    assert_eq!(catalog.target_generation().await.unwrap(), 1, "refused write");
+    let duplicate = catalog.save_target(&edited, None).await.unwrap_err();
+    assert_eq!(kind(&duplicate), "conflict");
+    assert_eq!(catalog.target_generation().await.unwrap(), 1);
+
+    catalog.save_target(&edited, Some(1)).await.unwrap();
+    assert_eq!(catalog.target_generation().await.unwrap(), 2);
+    catalog.record_seed_target(&seed).await.unwrap();
+    assert_eq!(catalog.target_generation().await.unwrap(), 2, "user record kept");
+    catalog.save_target(&target("IC 5070", "ic 5070"), None).await.unwrap();
+    assert_eq!(catalog.target_generation().await.unwrap(), 3);
+    catalog.close().await.unwrap();
+
+    let reopened = Catalog::open(&fx.db).await.unwrap();
+    assert_eq!(reopened.target_generation().await.unwrap(), 3, "restart persists");
+    assert_eq!(reopened.list_targets(0, 0).await.unwrap().len(), 2);
+}
+
+#[tokio::test]
 async fn overlapping_roots_on_the_same_volume_are_refused() {
     let fx = Fixture::new();
     std::fs::create_dir_all(fx.root.join("night1")).unwrap();

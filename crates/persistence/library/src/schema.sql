@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 1);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('grouping_revision', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('scan_sequence', 0);
+INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('target_generation', 0);
 
 CREATE TABLE IF NOT EXISTS locations (
     id TEXT PRIMARY KEY NOT NULL,

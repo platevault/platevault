@@ -1109,6 +1109,7 @@ impl Catalog {
                     .await?;
             let revision = next_revision(candidate.id, current, expected_revision, "target")?;
             upsert_target(conn, candidate, revision).await?;
+            next_counter(conn, "target_generation").await?;
             load_target(conn, candidate.id).await?
         });
         Ok(record)
@@ -1148,11 +1149,27 @@ impl Catalog {
                 existing => {
                     let revision = existing.map_or(1, |record| record.decision_revision + 1);
                     upsert_target(conn, &stored, revision).await?;
+                    next_counter(conn, "target_generation").await?;
                     load_target(conn, candidate.id).await?
                 }
             }
         });
         Ok(record)
+    }
+
+    /// Monotonic generation of saved target records, advanced in the same
+    /// transaction as every committed target write and unchanged by refusals or
+    /// no-op seed facts. Callers may cache [`Self::list_targets`] pages against it.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn target_generation(&self) -> Result<u64> {
+        let mut conn = self.reader().await?;
+        let value: i64 =
+            sqlx::query_scalar("SELECT value FROM catalog_meta WHERE key = 'target_generation'")
+                .fetch_one(&mut *conn)
+                .await?;
+        revision(value)
     }
 
     /// # Errors
