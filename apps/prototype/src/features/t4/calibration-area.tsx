@@ -4,7 +4,7 @@
  * from accepted assignments until the user accepts them (CAL-FR-02).
  */
 import { Link } from "@tanstack/react-router"
-import { ArrowRight, ChevronDown, FolderSearch } from "lucide-react"
+import { ArrowRight, Ellipsis, FolderSearch } from "lucide-react"
 import { useMemo, useState } from "react"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { ActionError, EmptyState, Notice } from "@/components/app/feedback"
@@ -54,7 +54,7 @@ function InputCell({ row }: { row: RequirementRow }) {
   const others = row.candidates.filter((c) => c.summary.allCompatible && !sameInput(c.source.input, row.input)).length
   return (
     <span className="block whitespace-normal">
-      <span className="block">{row.source.name}</span>
+      <span className="block [overflow-wrap:anywhere]">{row.source.name}</span>
       <span className="block text-xs text-muted-foreground">
         {row.source.isMaster ? "Library master" : `Raw set · ${plural(row.source.frameCount ?? 0, "frame")}`}
         {others > 0 && row.state !== "suggested" ? ` · ${plural(others, "other compatible input")}` : ""}
@@ -105,23 +105,28 @@ export function ViewCalibrationArea() {
       rowHeader: true,
       cell: (row) => (
         <span className="block">
-          <span className="block">{sessionLabel(row.member.session)}</span>
+          {/* Channel and settings are in the group heading; the night and frame count identify the session. */}
+          <span className="block">{formatNight(row.member.session.night)}</span>
           <span className="block text-xs text-muted-foreground">{plural(row.member.included.length, "frame")}</span>
         </span>
       ),
       sortValue: (row) => row.member.session.night,
     },
     { id: "kind", header: "Kind", cell: (row) => KIND_LABEL[row.kind] },
-    { id: "input", header: "Input", cell: (row) => <InputCell row={row} />, className: "min-w-56" },
+    { id: "input", header: "Input", cell: (row) => <InputCell row={row} />, className: "min-w-40" },
     {
       id: "match",
-      header: "Match",
-      cell: (row) =>
-        row.criteria.length === 0 ? (
-          <span className="text-muted-foreground">—</span>
-        ) : (
-          <span className="block max-w-56 whitespace-normal text-xs">{summaryText(row.criteria)}</span>
-        ),
+      header: "Why this match",
+      cell: (row) => {
+        const name = `${KIND_LABEL[row.kind].toLowerCase()} for ${formatNight(row.member.session.night)} ${row.member.session.channel ?? ""}`.trim()
+        // Visible summary first, so the accessible name contains the visible label (WCAG 2.5.3).
+        return (
+          <Button size="sm" variant="link" className="h-auto max-w-48 justify-start px-0 text-left text-xs whitespace-normal" onClick={() => setWhyKey(row.key)}>
+            {row.criteria.length === 0 ? "No candidate" : summaryText(row.criteria)}
+            <span className="sr-only">: why this match, {name}</span>
+          </Button>
+        )
+      },
     },
     { id: "state", header: "State", cell: (row) => <StatusBadge kind="assignment" value={row.state} /> },
     {
@@ -132,13 +137,10 @@ export function ViewCalibrationArea() {
         const name = `${kind} for ${formatNight(row.member.session.night)} ${row.member.session.channel ?? ""}`.trim()
         return (
           <span className="flex items-center gap-1">
-            <Button size="sm" variant="ghost" onClick={() => setWhyKey(row.key)} aria-label={`Why this match: ${name}`}>
-              Why this match
-            </Button>
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button size="sm" variant="outline" disabled={complete} aria-label={`Change ${name}`} />}>
-                Change
-                <ChevronDown aria-hidden="true" data-icon="inline-end" />
+              {/* Icon trigger with a full accessible name keeps every row action inside the 1024 px frame. */}
+              <DropdownMenuTrigger render={<Button size="icon-sm" variant="outline" disabled={complete} aria-label={`Change ${name}`} />}>
+                <Ellipsis aria-hidden="true" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60">
                 {row.state === "suggested" ? (
@@ -191,13 +193,22 @@ export function ViewCalibrationArea() {
         }
         actions={
           <>
-            <Button variant="outline" render={<Link to="/views/$viewId/prepare" params={{ viewId }} />}>
+            <Button variant={suggestedKeys.length > 0 && !complete ? "outline" : "default"} render={<Link to="/views/$viewId/prepare" params={{ viewId }} />}>
               Review preparation
               <ArrowRight aria-hidden="true" data-icon="inline-end" />
             </Button>
-            <Button disabled={selected.length === 0 || complete} aria-describedby={selected.length === 0 ? "accept-reason" : undefined} onClick={acceptSelected}>
-              Accept {plural(selected.length, "suggestion")}
-            </Button>
+            {suggestedKeys.length > 0 && !complete ? (
+              <>
+                {selected.length === 0 ? (
+                  <span id="accept-reason" className="text-xs text-muted-foreground">
+                    Select at least one suggestion.
+                  </span>
+                ) : null}
+                <Button disabled={selected.length === 0} aria-describedby={selected.length === 0 ? "accept-reason" : undefined} onClick={acceptSelected}>
+                  Accept {plural(selected.length, "suggestion")}
+                </Button>
+              </>
+            ) : null}
           </>
         }
       />
@@ -206,15 +217,6 @@ export function ViewCalibrationArea() {
           {announcement}
         </p>
         {error ? <ActionError message={error.message} onRetry={error.retry} /> : null}
-        {selected.length === 0 && suggestedKeys.length > 0 ? (
-          <p id="accept-reason" className="text-xs text-muted-foreground">
-            Select at least one suggestion to accept.
-          </p>
-        ) : selected.length === 0 ? (
-          <p id="accept-reason" className="text-xs text-muted-foreground">
-            No suggestion is waiting for acceptance.
-          </p>
-        ) : null}
         {complete ? (
           <Notice tone="info" title="This View is Complete">
             Calibration decisions are read-only. Reopen the View in its header to change them.

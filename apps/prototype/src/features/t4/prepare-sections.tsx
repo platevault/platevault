@@ -93,7 +93,7 @@ export function ApplicationSection({ view, plan, locked }: { view: View; plan: P
           </div>
           {profile.application === "generic" ? (
             <Notice tone="warning" title="Not a verified preparation profile">
-              Open in… launches the executable you choose with your arguments. PlateVault claims nothing about how it reads inputs, so Linked View and Direct source are refused (D04).
+              Open in… launches the executable you choose with your arguments. PlateVault claims nothing about how it reads inputs, so Linked View and Direct source are refused.
             </Notice>
           ) : null}
           <CapabilityList profile={profile} />
@@ -144,6 +144,7 @@ export function ApplicationSection({ view, plan, locked }: { view: View; plan: P
                 >
                   Save arguments
                 </Button>
+                {args === null || args === profile.launchArgs ? <span className="self-center text-xs text-muted-foreground">Edit the arguments to save them.</span> : null}
               </div>
               <p className="text-xs text-muted-foreground">{"{viewFolder}"} is replaced with the prepared View folder.</p>
             </div>
@@ -319,7 +320,10 @@ export function ModeSection({ view, plan, draft, locked }: { view: View; plan: P
       ) : null}
       {!plan.modes.find((m) => m.mode === plan.mode)?.allowed ? (
         <Notice tone="refusal" title={`${MODE_LABEL[plan.mode]} cannot be used here`}>
-          {plan.modes.find((m) => m.mode === plan.mode)?.reasons.join(" ")} Nothing is written until you choose a supported mode.
+          {plan.modes.find((m) => m.mode === plan.mode)?.reasons.join(" ")}{" "}
+          {plan.modes.some((m) => m.allowed)
+            ? `Choose ${plan.modes.filter((m) => m.allowed).map((m) => MODE_LABEL[m.mode]).join(" or ")}; nothing is written until you choose.`
+            : "No supported mode is available here; choose another location. Nothing is written."}
           <span className="mt-2 flex flex-wrap gap-2">
             {plan.modes
               .filter((m) => m.allowed)
@@ -338,7 +342,7 @@ export function ModeSection({ view, plan, draft, locked }: { view: View; plan: P
         title="Use hard links for this View?"
         description="Hard links make each View entry the same file as its original."
         changes={[
-          "Link type changes from symbolic links to hard links for this preparation",
+          "Change the link type from symbolic links to hard links for this preparation",
           `Eligibility is checked: every source and the View folder must be on ${destination}, which must support hard links, with write permission`,
           "An application that writes into a linked input alters the original file",
         ]}
@@ -368,13 +372,15 @@ export function ModeSection({ view, plan, draft, locked }: { view: View; plan: P
 
 export function LocationSection({ view, plan, draft, locked }: { view: View; plan: PreparationPlan; draft: PrepDraft; locked: boolean }) {
   const disk = useStore((s) => s.disk)
+  const preparations = Object.values(useStore((s) => s.catalog.preparations)).filter((p) => p.viewId === view.id)
   const [picker, setPicker] = useState<"view" | "output" | null>(null)
   const [error, setError] = useState<{ message: string; retry: () => void } | null>(null)
   const [name, setName] = useState<string | null>(null)
   const nameId = useId()
   const nameValue = name ?? plan.folderName
   const parentProblem = plan.parent.problem
-  const collision = plan.viewFolder.exists && plan.viewPath
+  const ownPreparation = plan.viewPath ? preparations.find((p) => p.viewPath === plan.viewPath) : undefined
+  const collision = plan.viewFolder.exists && plan.viewPath && !ownPreparation
   const nameError = !nameValue.trim() ? "Enter a folder name for the View." : /[/:]/.test(nameValue) ? "A folder name cannot contain / or :." : null
 
   function commitName(value: string) {
@@ -390,7 +396,7 @@ export function LocationSection({ view, plan, draft, locked }: { view: View; pla
     attempt()
   }
 
-  const freeName = plan.parent.path && collision ? uniqueName(disk, plan.parent.path, plan.folderName) : null
+  const freeName = plan.parent.path && plan.viewFolder.exists ? uniqueName(disk, plan.parent.path, plan.folderName) : null
 
   return (
     <Section id="prep-locations" title="Locations" level={3} description="A new View folder under a parent you choose, and an output folder for results.">
@@ -398,7 +404,8 @@ export function LocationSection({ view, plan, draft, locked }: { view: View; pla
         <div className="grid gap-x-4 gap-y-1 text-sm lg:grid-cols-[10rem_minmax(0,1fr)_auto] lg:items-center">
           <span className="text-muted-foreground">View folder parent</span>
           <span className="min-w-0">
-            {plan.parent.path ? <PathText path={plan.parent.path} /> : <UnknownValue label="Not set" reason="No parent is assumed on first use. Choose one." />}
+            {plan.parent.path ? <PathText path={plan.parent.path} /> : <UnknownValue label="Not set" />}
+            {plan.parent.path ? null : <span className="block text-xs text-muted-foreground">No parent is assumed on first use. Choose one.</span>}
             {plan.parent.origin === "last-used" ? <span className="block text-xs text-muted-foreground">Suggested: the last parent you chose</span> : null}
           </span>
           <Button size="sm" variant="outline" disabled={locked} onClick={() => setPicker("view")}>
@@ -414,7 +421,7 @@ export function LocationSection({ view, plan, draft, locked }: { view: View; pla
             value={nameValue}
             disabled={locked}
             aria-invalid={nameError || collision ? true : undefined}
-            aria-describedby={`${nameId}-hint`}
+            aria-describedby={collision ? `${nameId}-hint ${nameId}-collision` : `${nameId}-hint`}
             onChange={(event) => setName(event.target.value)}
             onBlur={(event) => commitName(event.target.value)}
             onKeyDown={(event) => {
@@ -429,7 +436,23 @@ export function LocationSection({ view, plan, draft, locked }: { view: View; pla
           <Notice tone={parentProblem.kind === "offline" ? "offline" : "refusal"} title={parentProblem.kind === "offline" ? "Chosen parent unavailable" : "Cannot use this parent"} actions={<Button size="sm" variant="outline" onClick={() => setPicker("view")}>Choose another location…</Button>}>
             {parentProblem.message}
           </Notice>
+        ) : ownPreparation ? (
+          <Notice
+            tone="info"
+            title={`Prepared here for revision ${ownPreparation.membershipRevision}`}
+            actions={
+              freeName ? (
+                <Button size="sm" variant="outline" disabled={locked} onClick={() => updatePrep(view.id, { folderName: freeName })}>
+                  Use {freeName} for a new preparation
+                </Button>
+              ) : null
+            }
+          >
+            <PathText path={`${ownPreparation.viewPath}/`} />
+            <span className="block text-xs">A new preparation never reuses this folder; it needs a new name or location.</span>
+          </Notice>
         ) : collision ? (
+          <div id={`${nameId}-collision`}>
           <Notice
             tone="refusal"
             title="This folder already exists"
@@ -447,8 +470,9 @@ export function LocationSection({ view, plan, draft, locked }: { view: View; pla
             }
           >
             {plan.viewPath} already exists with {plural(plan.viewFolder.items.length, "unrelated item")}
-            {plan.viewFolder.items.length ? ` (${plan.viewFolder.items.slice(0, 3).join(", ")})` : ""}. Choose another name or location. Nothing in it was changed.
+            {plan.viewFolder.items.length ? ` (${plan.viewFolder.items.slice(0, 3).join(", ")}${plan.viewFolder.items.length > 3 ? ", …" : ""})` : ""}. Choose another name or location. Nothing in it was changed.
           </Notice>
+          </div>
         ) : plan.viewPath ? (
           <div className="grid gap-x-4 text-sm lg:grid-cols-[10rem_minmax(0,1fr)]">
             <span className="text-muted-foreground">View folder</span>
@@ -458,7 +482,7 @@ export function LocationSection({ view, plan, draft, locked }: { view: View; pla
         <div className="grid gap-x-4 gap-y-1 border-t pt-3 text-sm lg:grid-cols-[10rem_minmax(0,1fr)_auto] lg:items-center">
           <span className="text-muted-foreground">Output location</span>
           <span className="min-w-0">
-            {plan.outputPath ? <PathText path={`${plan.outputPath}/`} /> : <UnknownValue label="Not set" reason="Follows the View folder; choose a parent first." />}
+            {plan.outputPath ? <PathText path={`${plan.outputPath}/`} /> : <UnknownValue label="Not set: follows the View folder" />}
             <span className="block text-xs text-muted-foreground">
               {plan.outputOverride ? "A View-specific subfolder under the parent you chose." : "Default: output/ inside the View folder."} Recorded on the View for result discovery and cleanup when you prepare.
             </span>

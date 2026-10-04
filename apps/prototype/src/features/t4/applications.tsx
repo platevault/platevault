@@ -70,6 +70,7 @@ function ProfileCard({ profile, onLocate }: { profile: ApplicationProfile; onLoc
             >
               Save arguments
             </Button>
+            {args === null || args === profile.launchArgs ? <span className="self-center text-xs text-muted-foreground">Edit the arguments to save them.</span> : null}
           </div>
           {error ? <ActionError message={error} /> : null}
         </div>

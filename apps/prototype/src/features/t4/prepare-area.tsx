@@ -186,7 +186,7 @@ function ReviewPanel({ view, plan, confirmed, onConfirmChange, onPrepare, error 
                   value:
                     plan.mode === "direct-source"
                       ? "1: write the handoff list with every exact source path; no links or copies"
-                      : `${formatCount(plan.operationCount)}: create the View and output folders, write ${formatCount(plan.entries.length)} entries and ${formatCount(plan.calibrationEntries.length)} calibration ${entryWords}, and the handoff list`,
+                      : `${formatCount(plan.operationCount)} operations: create the View and output folders, write ${formatCount(plan.entries.length)} entries and ${formatCount(plan.calibrationEntries.length)} calibration ${entryWords}, and the handoff list`,
                 },
                 { label: "Footprint", value: `${formatBytes(plan.footprintBytes)}${plan.freeBytes !== null ? ` · ${formatBytes(plan.freeBytes)} free on ${plan.destinationVolume?.name}` : ""}` },
               ]}
@@ -362,6 +362,7 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
   const op = useStore((s) => (prep.operationId ? s.operations[prep.operationId] : undefined))
   const profile = useStore((s) => s.catalog.profiles[prep.profileId])
   const running = useStore((s) => s.slices.t4.running[view.id])
+  const unverified = useStore((s) => s.slices.t4.unverified[prep.id] ?? null)
   const [reveal, setReveal] = useState(false)
   const [locating, setLocating] = useState(false)
   const [message, setMessage] = useState<{ tone: "info" | "refusal" | "warning"; text: string; missing: boolean } | null>(null)
@@ -376,6 +377,8 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
   function open() {
     const outcome = openApplication(view, prep.id)
     if (!outcome.result.ok) return setMessage({ tone: "refusal", text: outcome.result.message, missing: false })
+    // A refused re-verification is shown by the persistent Unverified notice below.
+    if (outcome.outcome === "unverified") return setMessage(null)
     setMessage({ tone: outcome.outcome === "opened" ? "info" : outcome.outcome === "missing-executable" ? "refusal" : "warning", text: outcome.message, missing: outcome.outcome !== "opened" })
   }
 
@@ -390,7 +393,7 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
       title="Preparation"
       level={3}
       description={`${MODE_LABEL[prep.mode]}${prep.linkType ? ` (${prep.linkType === "hardlink" ? "hard links" : "symbolic links"})` : ""} · revision ${prep.membershipRevision} · started ${formatDateTime(prep.createdAt)}`}
-      actions={<StatusBadge kind="preparation" value={prep.state} />}
+      actions={unverified ? <T4Badge value="preparation:unverified" /> : <StatusBadge kind="preparation" value={prep.state} />}
     >
       {stale ? (
         <Notice tone="warning" title="The selection changed after this preparation" actions={<Button size="sm" variant="outline" onClick={onReviewAgain}>Review preparation again</Button>}>
@@ -438,7 +441,12 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
             items={[
               { label: "View folder", value: <PathText path={`${prep.viewPath}/`} /> },
               { label: "Output", value: <PathText path={`${prep.outputPath}/`} /> },
-              { label: "Entries", value: `${formatCount(preparedCount)} of ${formatCount(prep.entryCount)} prepared and verified` },
+              {
+                label: "Entries",
+                value: unverified
+                  ? `${formatCount(preparedCount)} of ${formatCount(prep.entryCount)} prepared; ${plural(unverified.changed.length, "entry", "entries")} changed since preparation`
+                  : `${formatCount(preparedCount)} of ${formatCount(prep.entryCount)} prepared and verified`,
+              },
               { label: "Footprint", value: formatBytes(prep.footprintBytes) },
               {
                 label: "Launches",
@@ -448,6 +456,21 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
               },
             ]}
           />
+          {unverified ? (
+            <Notice tone="refusal" title={`Unverified: ${appName} was not opened`}>
+              <p>
+                {plural(unverified.changed.length, "prepared entry", "prepared entries")} no longer {unverified.changed.length === 1 ? "matches" : "match"} the preparation snapshot (checked {formatDateTime(unverified.at)}). PlateVault wrote nothing to the sources or the entries. Restore the original bytes and choose Open again, or review preparation again for a new preparation.
+              </p>
+              <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">
+                {unverified.changed.map((c) => (
+                  <li key={c.path}>
+                    <PathText path={c.path} />
+                    <span className="block text-xs text-pretty">{c.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </Notice>
+          ) : null}
           {message ? (
             <Notice
               tone={message.tone}
@@ -514,6 +537,8 @@ export function ViewPrepareArea() {
   const revision = plan?.revision?.revision ?? null
   const confirmed = draft.confirmedRevision !== null && draft.confirmedRevision === revision
   const reviewing = draft.reviewing && !busy
+  // Prepared for the current revision: Open in is the next step, so Review preparation steps back.
+  const preparedNow = latest?.state === "prepared" && !busy && latest.membershipRevision === revision
 
   // A confirmation belongs to one revision: a new revision needs a new review.
   useEffect(() => {
@@ -549,6 +574,7 @@ export function ViewPrepareArea() {
         meta={latest ? <StatusBadge kind="preparation" value={latest.state} /> : null}
         actions={
           <Button
+            variant={preparedNow ? "outline" : "default"}
             disabled={locked || !plan.revision}
             aria-describedby="review-disabled"
             onClick={() => {
@@ -571,7 +597,7 @@ export function ViewPrepareArea() {
             Save the View first: Review preparation uses a saved revision.
           </p>
         ) : null}
-        <Readiness view={view} plan={plan} />
+        {preparedNow ? null : <Readiness view={view} plan={plan} />}
         {latest ? <Outcome view={view} prep={latest} latestRevision={revision} onReviewAgain={() => updatePrep(viewId, { reviewing: true, confirmedRevision: null })} /> : null}
         <ApplicationSection view={view} plan={plan} locked={locked} />
         <MetadataSection view={view} plan={plan} draft={draft} locked={locked} />
@@ -588,7 +614,7 @@ export function ViewPrepareArea() {
           />
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            <Button disabled={locked || !plan.revision} onClick={() => updatePrep(viewId, { reviewing: true })}>
+            <Button variant={preparedNow ? "outline" : "default"} disabled={locked || !plan.revision} onClick={() => updatePrep(viewId, { reviewing: true })}>
               Review preparation
             </Button>
             <span className="text-xs text-muted-foreground">Shows the exact list, the checks and what changes before anything is written.</span>

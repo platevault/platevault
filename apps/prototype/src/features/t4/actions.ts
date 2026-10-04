@@ -5,13 +5,13 @@
  */
 import { filesUnder } from "@/domain/disk"
 import { stableHash } from "@/domain/indexing"
-import type { CalibrationAssignment, CalibrationInput, CalibrationMaster, Catalog, Location, MatchCriterion, MetadataDecision, PreparationId, ProfileId, View, ViewId } from "@/domain/types"
+import type { CalibrationAssignment, CalibrationInput, CalibrationMaster, Catalog, Location, MatchCriterion, MetadataDecision, Preparation, PreparationId, ProfileId, View, ViewId } from "@/domain/types"
 import { plural } from "@/lib/format"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
 import { isSettled, startOperation } from "@/store/operations"
 import { emptyPrepDraft, type PrepDraft, type SimulatedApp } from "@/store/slices/t4"
 import { assignmentId, entryPath, type PreparationPlan, type RequirementRow } from "./domain"
-import { ADOPT_PHASES, type AdoptPayload, type PrepareEntry, type PreparePayload } from "./operations"
+import { ADOPT_PHASES, type AdoptPayload, changedPreparedEntries, type PrepareEntry, type PreparePayload } from "./operations"
 
 // ---------------------------------------------------------------------------
 // Slice helpers
@@ -123,9 +123,14 @@ export function setLaunchArgs(profileId: ProfileId, launchArgs: string): CommitR
   return patchProfile(profileId, "Launch arguments", () => ({ launchArgs }))
 }
 
-export type OpenOutcome = { outcome: "opened" | "missing-executable" | "launch-failed"; message: string; result: CommitResult }
+export type OpenOutcome = { outcome: "opened" | "missing-executable" | "launch-failed" | "unverified"; message: string; result: CommitResult }
 
-/** Simulated launch. Launching is not processing; closing never marks Complete (PREP-FR-10). */
+/**
+ * Simulated launch. Every prepared entry is re-verified against its
+ * preparation snapshot first; a changed entry refuses the launch and writes
+ * nothing (PREP-FR-10, PREP-AC-15). Launching is not processing; closing never
+ * marks Complete.
+ */
 export function openApplication(view: View, preparationId: PreparationId): OpenOutcome {
   const state = store.getState()
   const prep = state.catalog.preparations[preparationId]
@@ -133,20 +138,29 @@ export function openApplication(view: View, preparationId: PreparationId): OpenO
   if (!prep || !profile) return { outcome: "missing-executable", message: "No preparation to open.", result: { ok: true } }
   const app = state.slices.t4.world.apps.find((a) => a.path === profile.executablePath)
   const appName = profile.application === "generic" ? (app?.name ?? "the application") : profile.name
-  let outcome: OpenOutcome["outcome"]
+  let outcome: Preparation["launches"][number]["outcome"]
   let message: string
   if (!profile.executablePath || !app?.present) {
     outcome = "missing-executable"
     message = profile.executablePath
       ? `${appName} was not found at ${profile.executablePath}. Choose application or reveal the View folder; the preparation is unchanged.`
       : `No application is located for ${profile.name}. Choose application or reveal the View folder; the preparation is unchanged.`
-  } else if (app.launchFails) {
-    outcome = "launch-failed"
-    message = `${appName} did not start (prototype: simulated launch failure). The View, its preparation and your decisions are unchanged; try again or reveal the View folder.`
-    updateApp(app.id, { launchFails: false })
   } else {
-    outcome = "opened"
-    message = `Opened ${appName} on ${prep.viewPath} (prototype: simulated launch). Launching is not processing; closing ${appName} never marks this View Complete.`
+    const changed = changedPreparedEntries(state, prep)
+    if (changed.length > 0) {
+      const text = `${appName} was not opened: ${plural(changed.length, "prepared entry", "prepared entries")} no longer ${changed.length === 1 ? "matches" : "match"} the preparation snapshot. PlateVault wrote nothing to the sources or the entries.`
+      updateSlice("t4", (slice) => ({ ...slice, unverified: { ...slice.unverified, [preparationId]: { at: nowIso(), changed } } }))
+      recordActivity({ kind: "operation", title: `Open in ${appName} refused`, detail: text, operationId: null, href: `/views/${view.id}/prepare` })
+      return { outcome: "unverified", message: text, result: { ok: true } }
+    }
+    if (app.launchFails) {
+      outcome = "launch-failed"
+      message = `${appName} did not start (prototype: simulated launch failure). The View, its preparation and your decisions are unchanged; try again or reveal the View folder.`
+      updateApp(app.id, { launchFails: false })
+    } else {
+      outcome = "opened"
+      message = `Opened ${appName} on ${prep.viewPath} (prototype: simulated launch). Launching is not processing; closing ${appName} never marks this View Complete.`
+    }
   }
   const at = nowIso()
   const result = commit(
@@ -165,6 +179,7 @@ export function openApplication(view: View, preparationId: PreparationId): OpenO
       }),
     { href: `/views/${view.id}/prepare` },
   )
+  if (result.ok && outcome !== "missing-executable") updateSlice("t4", (slice) => ({ ...slice, unverified: { ...slice.unverified, [preparationId]: null } }))
   if (result.ok && outcome === "opened") updateSlice("t4", (slice) => ({ ...slice, running: { ...slice.running, [view.id]: { profileId: profile.id, at } } }))
   if (result.ok) recordActivity({ kind: "operation", title: outcome === "opened" ? `Opened ${appName}` : `Open in ${appName} did not start`, detail: message, operationId: null, href: `/views/${view.id}/prepare` })
   return { outcome, message, result }
@@ -317,8 +332,8 @@ export function retryPreparation(preparationId: PreparationId): StartResult {
   if (retryIds.length === 0) return { ok: false, message: "No blocked entries are recorded for this preparation." }
   const entries: Record<string, PrepareEntry> = {}
   for (const id of retryIds) if (before.entries[id]) entries[id] = before.entries[id]!
-  // Entries prepared earlier stay recorded; only the journaled items run again.
-  const payload: PreparePayload = { ...before, entries: { ...before.entries }, snapshots: {}, expected: {}, written: { ...before.written } }
+  // Entries prepared earlier stay recorded with their snapshots, so Open can re-verify them; only the journaled items run again.
+  const payload: PreparePayload = { ...before, entries: { ...before.entries }, snapshots: { ...before.snapshots }, expected: { ...before.expected }, written: { ...before.written } }
   const items = retryIds.map((id) => ({ id, label: previous.items.find((i) => i.id === id)?.label ?? id, path: entries[id]?.sourcePath ?? null, status: "pending" as const, phase: null, detail: null }))
   const view = state.catalog.views[prep.viewId]
   const operationId = startOperation({

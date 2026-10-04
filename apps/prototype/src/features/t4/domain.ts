@@ -813,12 +813,12 @@ export function preparationPlan({ disk, catalog, view, lastViewParent, choices }
     if (profile && !profile.capability.inputModes.includes(m)) reasons.push(`${profile.name} has no recorded support for ${MODE_LABEL[m]}.`)
     if ((m === "linked" || m === "direct-source") && profile && !readOnlyProfile) {
       reasons.push(
-        `${profile.name} has ${profile.capability.inputWrite === "write-prone" ? "write-prone" : "unknown"} input-write behaviour, so it could write into your originals (D04). Use Copy or Clone.`,
+        `${profile.name} has ${profile.capability.inputWrite === "write-prone" ? "write-prone" : "unknown"} input-write behaviour, so it could write into your originals. Use Copy or Clone.`,
       )
     }
     if (m === "linked" && destinationVolume) {
       const can = choices.linkType === "hardlink" ? destinationVolume.links.hardlink : destinationVolume.links.symlink
-      if (!can) reasons.push(`Linking is unavailable on ${destinationName}. Choose Clone, Copy or Direct source; nothing is written until you choose.`)
+      if (!can) reasons.push(`Linking is unavailable on ${destinationName}.`)
       else if (choices.linkType === "hardlink" && [...sourceVolumes].some((v) => v !== destinationVolume.id)) {
         reasons.push(`Hard links need every source on ${destinationName}; some sources are on another volume.`)
       }
@@ -894,7 +894,7 @@ export function preparationPlan({ disk, catalog, view, lastViewParent, choices }
     label: "Input mode",
     ok: chosen.allowed,
     blocking: true,
-    detail: chosen.allowed ? `${MODE_LABEL[mode]}${mode === "linked" ? ` (${choices.linkType})` : ""}` : chosen.reasons.join(" "),
+    detail: chosen.allowed ? `${MODE_LABEL[mode]}${mode === "linked" ? ` (${choices.linkType === "hardlink" ? "hard links" : "symbolic links"})` : ""}` : chosen.reasons.join(" "),
   })
   const destinationProblem = !parent.path
     ? "Choose a location for the View folder."

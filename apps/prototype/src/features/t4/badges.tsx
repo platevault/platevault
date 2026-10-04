@@ -1,6 +1,7 @@
 /**
  * T4-local status badges for values the shared STATUS table does not have
- * yet (profile verification, executable state, review checks). Same shape as
+ * yet (profile verification, executable state, review checks, a preparation
+ * whose entries failed re-verification at Open). Same shape as
  * `StatusBadge`: shared `Badge`, shared tone classes, an icon and a label, so
  * state is never colour alone. Requested from the integration owner as
  * STATUS additions; replace with `StatusBadge` once they land.
@@ -24,6 +25,7 @@ const META = {
   "write:read-only": { label: "Read-only inputs", tone: "success", icon: Check },
   "write:unknown": { label: "Input writes unknown", tone: "warning", icon: CircleHelp },
   "write:write-prone": { label: "Writes into inputs", tone: "danger", icon: TriangleAlert },
+  "preparation:unverified": { label: "Unverified", tone: "warning", icon: TriangleAlert },
 } satisfies Record<string, { label: string; tone: Tone; icon: LucideIcon }>
 
 export type T4BadgeValue = keyof typeof META

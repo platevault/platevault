@@ -65,6 +65,40 @@ function sourceProblem(state: PrototypeState, entry: PrepareEntry): string | nul
   return null
 }
 
+/**
+ * Prepared entries that no longer match their preparation snapshot: the
+ * source bytes or availability changed, or the written entry did (PREP-FR-10,
+ * PREP-AC-15). Open runs this before every launch. Reads only.
+ */
+export function changedPreparedEntries(state: PrototypeState, prep: Preparation): Array<{ path: string; reason: string }> {
+  const op = prep.operationId ? state.operations[prep.operationId] : undefined
+  const payload = op?.payload as unknown as PreparePayload | undefined
+  if (!payload?.entries) return []
+  const assets = new Set(prep.preparedAssetIds)
+  const results = new Set(prep.preparedResultIds)
+  const calibration = new Set(payload.calibrationPrepared)
+  const changed: Array<{ path: string; reason: string }> = []
+  for (const [id, entry] of Object.entries(payload.entries)) {
+    const prepared = entry.kind === "calibration" ? calibration.has(id) : entry.resultId ? results.has(entry.resultId) : entry.assetId !== null && assets.has(entry.assetId)
+    const snapshot = payload.snapshots[id]
+    if (!prepared || !snapshot) continue
+    const problem = sourceProblem(state, entry)
+    if (problem) {
+      changed.push({ path: entry.sourcePath, reason: problem })
+      continue
+    }
+    if (fileAt(state.disk, entry.sourcePath)?.sha256 !== snapshot) {
+      changed.push({ path: entry.sourcePath, reason: "Changed since its preparation snapshot: its SHA-256 differs." })
+      continue
+    }
+    if (payload.mode === "direct-source") continue
+    const written = fileAt(state.disk, entry.destPath)
+    const intact = payload.mode === "linked" && payload.linkType === "symlink" ? written?.linkTarget === entry.sourcePath : written?.sha256 === payload.expected[id]
+    if (!intact) changed.push({ path: entry.destPath, reason: "This entry no longer matches what was prepared." })
+  }
+  return changed
+}
+
 interface StepResult {
   state: PrototypeState
   item: OperationItem

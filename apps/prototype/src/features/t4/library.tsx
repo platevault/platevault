@@ -333,6 +333,7 @@ function Detail({ item, viewId }: { item: LibraryItem; viewId: string | undefine
   return (
     <div className="flex min-h-0 flex-col">
       <PageHeader
+        level={2}
         title={s.name}
         eyebrow={<Link to="/calibration" className="hover:underline">Calibration</Link>}
         description={itemLine(item)}
@@ -437,7 +438,7 @@ export function CalibrationLibraryPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {active ? null : header}
+      {header}
       <p className="sr-only" aria-live="polite">{announcement}</p>
       {denied.length > 0 ? (
         <div className="px-6 pt-4">
