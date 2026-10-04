@@ -3,5 +3,8 @@
 
 //! Local-first library records and lossless application contracts.
 
+pub mod grouping;
+pub mod inventory;
 pub mod model;
+pub mod targets;
 pub use model::*;
