@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 platevault_model = { path = "../../platevault-model" }
+fs_pathsafe = { path = "../../fs/pathsafe" }
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
