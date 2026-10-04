@@ -16,8 +16,9 @@ Long after indexing in place, the user chooses to organize some sessions into a
 managed library location by approving exactly the file operations shown. Done
 means: the approved session's files are at the previewed destination paths with
 their original basenames and verified bytes; a collision blocked its item
-without touching the existing file; a failed cross-volume transfer preserved its
-source; and session boundaries and View membership are unchanged.
+without touching the existing file; an item whose reference could not be
+updated, and a failed cross-volume transfer, each preserved its source; and
+session boundaries and View membership are unchanged.
 
 ## Preconditions
 
@@ -25,6 +26,7 @@ source; and session boundaries and View membership are unchanged.
 - P2: Folder `Astro-T7/Library` exists (same volume as the captures) and the disposable volume `Archive` holds `Library/`; both are writable.
 - P3: The J19/P5 manifest is available.
 - P4: A helper outside PlateVault that saves a named file's bytes and nanosecond mtime, then overwrites it in place with a same-size variant whose bytes differ and restores the saved mtime. The helper later restores the saved bytes and mtime.
+- P5: A fault control that makes the affected-reference update of a second named 30 Sep frame fail during filing until it is disarmed (G3).
 
 ## Steps
 
@@ -50,10 +52,10 @@ source; and session boundaries and View membership are unchanged.
 
 ### S4 — Approve the displayed operations {#S4}
 
-- **Do:** With the P4 helper, overwrite one named 30 Sep source frame after the S3 review. Then approve the displayed file operations and reference changes.
-- **Expect:** Item progress and final outcomes are reported; each affected reference reports completed, blocked, or uncertain. The named frame's item is blocked because its bytes differ from the reviewed plan, and the other 47 files move.
-- **Expect (negative):** No operation runs that the plan did not display, and the named frame stays at its source path.
-- **Trace:** flow L · STO-FR-09 · STO-AC-15 · D19
+- **Do:** With the P4 helper, overwrite one named 30 Sep source frame after the S3 review. Arm the P5 fault. Then approve the displayed file operations and reference changes.
+- **Expect:** Item progress and final outcomes are reported; each affected reference reports completed, blocked, or uncertain. The P4 frame's item is blocked because its bytes differ from the reviewed plan. The P5 frame's item is blocked by its named reference, its source is still at its original path with its P3 hash, and `NGC7000 HOO - Siril` still resolves that frame there. The other 46 files move.
+- **Expect (negative):** No operation runs that the plan did not display. Neither blocked frame's source path is removed, and every View reference resolves to an existing path.
+- **Trace:** flow L · STO-FR-09 · STO-AC-15, STO-AC-16 · root FR-011 · D14, D19
 
 ### S4a — File the restored frame {#S4a}
 
@@ -61,6 +63,13 @@ source; and session boundaries and View membership are unchanged.
 - **Expect:** The item re-verifies and moves to its previewed path, and its affected references report completed.
 - **Expect (negative):** No other item moves again.
 - **Trace:** flow L · STO-FR-09 · STO-AC-15 · D19
+
+### S4b — Retry the reference-blocked item {#S4b}
+
+- **Do:** Disarm the P5 fault and click **Retry** for the P5 frame's item.
+- **Expect:** Its destination verifies against the reviewed digest and its affected references report completed; only then is the frame at its previewed path and gone from its source path.
+- **Expect (negative):** No other item moves again.
+- **Trace:** flow L · STO-FR-09 · STO-AC-16 · root FR-011 · D14
 
 ### S5 — Verify the result {#S5}
 
@@ -79,15 +88,17 @@ source; and session boundaries and View membership are unchanged.
 ## Success criteria
 
 - SC1: The collision file is byte-identical after S2 and 0 files are overwritten.
-- SC2: Exactly 48 files move across S4 and S4a, each with its original basename and P3 hash (S5).
+- SC2: Exactly 48 files move across S4, S4a and S4b, each with its original basename and P3 hash (S5).
 - SC3: Sessions stay at exactly 7 light sessions, and View membership stays 208 / 17h 20m (S5, S6).
 - SC4: After S6, every pending, failed or unverified item retains its original source and hash. Every retired source has recorded destination hash and reference verification.
 - SC5: The changed frame moves 0 times while it differs from the reviewed plan (S4).
+- SC6: While its reference update fails, the P5 frame's source path is removed 0 times and the View resolves it (S4); it moves only after S4b verification.
 
 ## Known gaps
 
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D06, D09, D14, and D19; no implementation has been validated against them.
 - G2: Unresolved implementation qualification — the relative layout under the destination (folder structure beyond retained basenames, D14) is not fixed; S1 and S2 rely on the preview rather than a predicted path. Retrying the S6 filing is not exercised. Blocks readiness.
+- G3: Unresolved implementation qualification: no fault control yet fails one item's reference update during filing (P5). The flow also names no same-volume mechanism that keeps a source path until its destination and references verify. S4 and S4b depend on both. Blocks readiness.
 
 ## Delta log
 

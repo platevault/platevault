@@ -281,7 +281,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **See:** matched files, rows with no corresponding file, ambiguous rows, units, and source/method information. Confirm the import mapping.
 
-**Observe:** external measurements appear with their provenance. They do not silently replace native values or import frame-rejection decisions.
+**Observe:** external measurements appear with their provenance and read content unverified, because a file-name match does not prove which bytes they describe. They do not silently replace native values or import frame-rejection decisions. A row whose frame changed since PlateVault last recorded its digest needs review and is not attached.
 
 **Failure branch:** missing units or ambiguous file identity requires review. Unsupported measurement columns remain unavailable rather than being relabeled as equivalent metrics.
 
@@ -582,7 +582,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Do:** click **Review filing**. Approve only the displayed file operations and reference changes. A colliding destination requires another path or a revised plan.
 
-**Observe:** indexing alone has moved nothing. Filing reports item progress and final outcomes. Cross-volume moves use verified transfer; failed verification preserves the source. Changed references follow the reviewed rules in Journey J.
+**Observe:** indexing alone has moved nothing. Filing reports item progress and final outcomes. Every item, same-volume or cross-volume, keeps its source path until its destination and affected references verify; a failed check preserves the source. Cross-volume moves use verified transfer. Changed references follow the reviewed rules in Journey J.
 
 **Trust:** filing never overwrites unrelated files, merges metadata-homogeneous sessions, or changes View membership. Keep index-in-place when no physical organization is needed.
 

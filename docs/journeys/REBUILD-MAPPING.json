@@ -189,7 +189,8 @@
       {
         "id": "J30",
         "blocking": [
-          "G2 destination relative layout; filing retry not exercised"
+          "G2 destination relative layout; filing retry not exercised",
+          "G3 reference-failure fault control and same-volume source-retention mechanism"
         ]
       }
     ]

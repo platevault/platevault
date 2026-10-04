@@ -142,6 +142,7 @@ Owners: STO.
 - Reviewed filing uses a user-chosen destination and previews every relative path.
 - Default naming retains original basenames; collisions block, never overwrite.
 - No inferred target/channel renaming patches headers.
+- Every filing item, same-volume or cross-volume, keeps its source path until its destination and every affected reference verify, as root FR-011 requires. A failure blocks that item and retains its source at its original path, following D06 sequencing.
 
 ### D15
 
@@ -180,7 +181,8 @@ Owners: LIB, PLAN.
 
 Owners: LIB, PRJ, VSEL, PIX, CAL, PREP, RES, STO, PLAN.
 
-- PlateVault counts a recorded file toward a decision- or proof-bound total, or assigns, opens, prepares, reuses, cleans, archives, files or retires it, only against a recorded identity and SHA-256 basis. The basis is recorded when the user reviews, inspects or accepts the file, or when an operation starts and snapshots it. Bases include quality decisions, cached and imported measurements, logical-capture proof, remap reviews, inspected and accepted products, adoption reviews and adopted masters, calibration assignments, retained-original and kept-copy proof, and cleanup, archive and filing plans.
+- PlateVault counts a recorded file toward a decision- or proof-bound total, or assigns, opens, prepares, reuses, cleans, archives, files or retires it, only against a recorded identity and SHA-256 basis. The basis is recorded when the user reviews, inspects or accepts the file, or when an operation starts and snapshots it. Bases include quality decisions, cached measurements, logical-capture proof, remap reviews, inspected and accepted products, adoption reviews and adopted masters, calibration assignments, retained-original and kept-copy proof, and cleanup, archive and filing plans.
+- An observation that nothing ties to the value it supports stays labelled unverified, such as the import-time digest of a measurement matched only by file name. It detects later drift but never makes the value verified.
 - Immediately before each effect, the current identity and SHA-256 must match every basis that applies. Equal size and mtime never substitute.
 - A mismatch blocks that item and names the drift. The basis stays as history beside the current bytes, and nothing is launched, registered, overwritten, removed or retired. Counts exclude the item from applicable totals instead of blocking.
 - Offline or unreadable means unverified, never matched. Counts keep the labelled last-observed state; every other effect blocks.
