@@ -162,8 +162,9 @@ export function DataTable<T>({
     <div
       className={cn(
         // The frame is the scroll container in both axes so the header row
-        // stays pinned while long tables scroll inside it.
-        "relative overflow-auto rounded-lg border",
+        // stays pinned while long tables scroll inside it. Scroll padding the
+        // height of that header keeps a focused row out from under it (WCAG 2.4.11).
+        "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-lg border",
         scroll === "frame" && "max-h-[calc(100dvh-14rem)]",
         className,
       )}
