@@ -114,14 +114,20 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+// Tauri reads only a canonically named config: given `tauri.library.conf.json`
+// it silently embedded the sibling legacy `tauri.conf.json`, splash window
+// included. Each shell config therefore lives in its own directory.
+// `test = true` only skips the dev-mode macOS `Info.plist` embed. That embed
+// defines the global `_EMBED_INFO_PLIST` symbol, and the legacy context in this
+// crate already defines it, so a second embed fails to link.
 #[cfg(feature = "dev-tools")]
 fn context() -> tauri::Context {
-    tauri::generate_context!("tauri.library.dev.conf.json")
+    tauri::generate_context!("library-dev/tauri.conf.json", test = true)
 }
 
 #[cfg(not(feature = "dev-tools"))]
 fn context() -> tauri::Context {
-    tauri::generate_context!("tauri.library.conf.json")
+    tauri::generate_context!("library/tauri.conf.json", test = true)
 }
 
 /// `PV_LIBRARY_DATA_DIR` verbatim, else `<app data>/library-rebuild`, created if absent.
