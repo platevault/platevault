@@ -287,6 +287,7 @@ pub struct FileIdentity {
 pub struct ObservationFingerprint {
     pub identity: FileIdentity,
     pub size_bytes: u64,
+    #[serde(with = "decimal_i128")]
     pub modified_ns: i128,
     #[serde(default)]
     pub content_sha256: Option<String>,
@@ -311,6 +312,19 @@ impl PartialEq for ObservationFingerprint {
     }
 }
 impl Eq for ObservationFingerprint {}
+
+mod decimal_i128 {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(value: &i128, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(value)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i128, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        value.parse().map_err(serde::de::Error::custom)
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

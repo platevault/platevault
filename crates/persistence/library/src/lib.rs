@@ -185,6 +185,13 @@ pub struct SuggestedAssociation {
     pub state: AssociationState,
     pub evidence: Vec<EvidenceItem>,
     pub provenance: Provenance,
+    /// Exact current member observations the evidence was assessed against,
+    /// copied from `SessionDetail.assets` (asset id → fingerprint).
+    pub expected_observations: BTreeMap<Uuid, ObservationFingerprint>,
+    /// Asset id → `decision_revision` (catalog corrections and decisions).
+    pub expected_decisions: BTreeMap<Uuid, Revision>,
+    /// Asset id → `observation_revision` (recorded header evidence sequence).
+    pub expected_observation_revisions: BTreeMap<Uuid, Revision>,
 }
 
 /// Read-only source probing supplied by the inventory owner.
@@ -1288,9 +1295,14 @@ impl Catalog {
 
     /// Record automatic association evidence. Confirmed associations are preserved.
     ///
+    /// Each suggestion must name the exact current members and observation
+    /// fingerprints it was assessed against; evidence computed from older
+    /// observations of the same grouping revision is refused, never re-based.
+    ///
     /// # Errors
     /// `InvalidInput` for a Confirmed suggestion or unknown subject; `Conflict` for a
-    /// stale grouping revision or superseded session. All or nothing.
+    /// stale grouping revision, changed membership or observation, or a superseded
+    /// session. All or nothing.
     pub async fn record_suggestions(
         &self,
         suggestions: &[SuggestedAssociation],
@@ -3611,6 +3623,23 @@ async fn confirm_one(
     Ok(association)
 }
 
+/// The suggestion names exactly the current members with their current
+/// observation, observation sequence and decision revision.
+fn assessed_current(item: &SuggestedAssociation, members: &[Asset]) -> bool {
+    let count = members.len();
+    count == item.expected_observations.len()
+        && count == item.expected_decisions.len()
+        && count == item.expected_observation_revisions.len()
+        && members.iter().all(|asset| {
+            item.expected_observations
+                .get(&asset.id)
+                .is_some_and(|expected| fingerprint_matches(&asset.fingerprint, expected))
+                && item.expected_decisions.get(&asset.id) == Some(&asset.decision_revision)
+                && item.expected_observation_revisions.get(&asset.id)
+                    == Some(&asset.observation_revision)
+        })
+}
+
 async fn record_suggestion(
     conn: &mut SqliteConnection,
     item: &SuggestedAssociation,
@@ -3627,6 +3656,12 @@ async fn record_suggestion(
     if row.session.grouping_revision != item.grouping_revision {
         return Err(conflict(item.session_id, row.session.grouping_revision));
     }
+    let members = current_member_assets(conn, item.session_id).await?;
+    if !assessed_current(item, &members) {
+        return Err(conflict(item.session_id, row.session.grouping_revision));
+    }
+    let basis: BTreeMap<Uuid, ObservationFingerprint> =
+        members.into_iter().map(|asset| (asset.id, asset.fingerprint)).collect();
     if let Some(subject) = item.subject_id {
         require_subject(conn, item.kind, subject).await?;
     }
@@ -3642,7 +3677,7 @@ async fn record_suggestion(
         state: item.state.clone(),
         evidence: item.evidence.clone(),
         provenance: item.provenance.clone(),
-        observation_basis: member_basis(conn, item.session_id).await?,
+        observation_basis: basis,
         decision_revision: row.session.decision_revision,
     };
     upsert_association(conn, &association, updated_at).await?;

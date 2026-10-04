@@ -20,6 +20,19 @@ fn fingerprint() -> ObservationFingerprint {
 }
 
 #[test]
+fn nanosecond_fingerprint_survives_a_javascript_json_roundtrip() {
+    let mut observed = fingerprint();
+    observed.modified_ns = 1_791_107_852_913_670_014;
+    let wire = serde_json::to_value(&observed).unwrap();
+    assert_eq!(wire["modifiedNs"], "1791107852913670014");
+    let echoed: ObservationFingerprint = serde_json::from_value(wire).unwrap();
+    assert_eq!(echoed, observed);
+    observed.modified_ns = -1_234_567_890_123_456_789;
+    let echoed: ObservationFingerprint = serde_json::from_str(&serde_json::to_string(&observed).unwrap()).unwrap();
+    assert_eq!(echoed.modified_ns, observed.modified_ns);
+}
+
+#[test]
 fn changed_content_preserves_prior_rejection_instead_of_reincluding_it() {
     let basis = fingerprint();
     let mut asset = Asset {
