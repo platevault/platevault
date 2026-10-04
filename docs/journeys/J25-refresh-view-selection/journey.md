@@ -17,9 +17,10 @@ saved criteria, accepts some changes and declines others, and keeps the existing
 preparation untouched underneath the external application. Done means: the
 comparison lists each added session with its reason, keeps manual inclusions and
 explicit exclusions recorded, and shows an unreadable member as Unavailable; the
-accepted change exists only as a proposed membership revision that needs its own
-review; and the prepared revision's 208 entries are unchanged throughout. Frames
-of an added session copied to two locations count once.
+accepted change is saved as a new reviewed membership revision that survives
+restart and needs its own preparation review; and the prepared revision's 208
+entries are unchanged throughout. Frames of an added session copied to two
+locations count once.
 
 ## Preconditions
 
@@ -60,14 +61,14 @@ of an added session copied to two locations count once.
 ### S5 — Accept one change and decline another {#S5}
 
 - **Do:** Click **Refresh selection** again. Accept the new Ha session and decline the new OIII session. Click **Save View**.
-- **Expect:** A proposed membership revision exists that adds the new Ha session's 10 available frames, each once with its `Spare` copy named; the new OIII session is not in it. The revision asks for frame and calibration review of the changed inputs and needs a new Review preparation before it can be prepared.
+- **Expect:** A new reviewed membership revision is saved, adding the new Ha session's 10 available frames, each once with its `Spare` copy named; the new OIII session is not in it. After an app restart the View still opens at this saved revision. It asks for frame and calibration review of the changed inputs and needs a new Review preparation before it can be prepared.
 - **Expect (negative):** The prepared revision, its 208 entries, and the inputs Siril reads are unchanged (P1 listing). No new arrival enters any prepared View silently.
-- **Trace:** flow G · VSEL-FR-08, VSEL-FR-12, PREP-FR-11 · VSEL-AC-15 · D02, D08, D09
+- **Trace:** flow G · VSEL-FR-08, VSEL-FR-12, VSEL-FR-13, VSEL-FR-14, PREP-FR-11 · VSEL-AC-12, VSEL-AC-15 · D02, D08, D09
 
 ### S6 — Restore the unreadable member {#S6}
 
 - **Do:** Restore read permission on the 18 Sep subfolder and index `Astro-T7 captures` again.
-- **Expect:** 18 Sep reads 55 frames and is still a member of both the prepared revision and the proposed revision.
+- **Expect:** 18 Sep reads 55 frames and is still a member of both the prepared revision and the saved S5 revision.
 - **Expect (negative):** No duplicate 18 Sep session appears.
 - **Trace:** flow G · LIB-FR-06
 
@@ -75,7 +76,7 @@ of an added session copied to two locations count once.
 
 - SC1: The prepared revision's entries equal the P1 listing at S1, S4, S5, and S6.
 - SC2: S3 lists exactly 2 added sessions, each with a reason, 2 manual inclusions, 6 retained exclusions, and 18 Sep as Unavailable with 0 removals.
-- SC3: After S5 the proposed revision contains the new Ha session's 10 frames once each and not the new OIII session, and reads as needing review before preparation.
+- SC3: After S5 the saved reviewed revision contains the new Ha session's 10 frames once each and not the new OIII session, persists across restart, and reads as needing review before preparation.
 - SC4: After S1 captured Ha has risen by exactly 0h 50m and each new Ha frame lists 2 physical copies.
 
 ## Known gaps
