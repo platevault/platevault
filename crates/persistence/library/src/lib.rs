@@ -238,6 +238,9 @@ pub trait SourceProbe: Send + Sync + 'static {
 pub struct Catalog {
     writer: Mutex<SqliteConnection>,
     readers: SqlitePool,
+    /// Test-only call made on the search thread before each stale-root search.
+    #[cfg(test)]
+    stale_search_hook: Arc<Mutex<Option<Box<dyn FnMut() + Send>>>>,
 }
 
 #[derive(Clone, Copy)]
@@ -322,7 +325,12 @@ impl Catalog {
             .max_connections(READER_CONNECTIONS)
             .connect_with(base.read_only(true))
             .await?;
-        Ok(Self { writer: Mutex::new(writer), readers })
+        Ok(Self {
+            writer: Mutex::new(writer),
+            readers,
+            #[cfg(test)]
+            stale_search_hook: Arc::default(),
+        })
     }
 
     /// Close readers and the writer, flushing the WAL connection cleanly.
@@ -374,22 +382,38 @@ impl Catalog {
 impl Catalog {
     /// Register a root for read-only indexing; nothing is scanned or modified.
     ///
+    /// A registered root on the volume that no longer resolves is searched for in
+    /// the folder before the writer lock is taken, so the search delays no write.
+    ///
     /// # Errors
     /// `InvalidInput` for an empty name or relative path; `IdentityConflict` for an
     /// unqualified volume/root identity, a same/ancestor/descendant root already
     /// registered on the same volume, or a registered root there that no longer
-    /// resolves and is not proven absent from the folder.
+    /// resolves and is not proven absent from the folder; `Conflict` on such a root
+    /// when roots kept changing while the folder was searched.
     pub async fn register_location(&self, input: &LocationRegistration) -> Result<Location> {
         let name = valid_name(&input.name)?;
         require_absolute(&input.path)?;
         require_root_identity(&input.identity)?;
         let id = Uuid::new_v4();
-        let location = write_txn!(self, |conn| {
-            ensure_no_overlap(conn, None, &input.path, &input.identity, StaleRoots::Search).await?;
-            insert_location(conn, id, name, input).await?;
-            load_location(conn, id).await?
-        });
-        Ok(location)
+        let mut attempt = 1;
+        loop {
+            let searched = self.search_stale_roots(None, &input.path, &input.identity).await?;
+            let registered = write_txn!(self, |conn| {
+                if let Some(stale) =
+                    recheck_overlap(conn, None, &input.path, &input.identity, &searched).await?
+                {
+                    Err(stale)
+                } else {
+                    insert_location(conn, id, name, input).await?;
+                    Ok(load_location(conn, id).await?)
+                }
+            });
+            match registered {
+                Ok(location) => return Ok(location),
+                Err(stale) => search_again(&mut attempt, &stale)?,
+            }
+        }
     }
 
     /// Rename a location with a decision-revision check.
@@ -446,7 +470,7 @@ impl Catalog {
                     Some(id),
                 ));
             }
-            ensure_no_overlap(conn, Some(id), path, identity, StaleRoots::Compare).await?;
+            plan_overlap(conn, Some(id), path, identity, StaleRoots::Compare).await?;
             sqlx::query(
                 "UPDATE locations SET path_key = ?1, availability = 'available', \
                  unavailable_reason = NULL, unavailable_at = NULL, \
@@ -1708,15 +1732,14 @@ impl Catalog {
         P: SourceProbe,
     {
         require_absolute(proposed_root)?;
-        let (location, assets, mut blocked) = {
+        let (location, assets) = {
             let mut conn = self.reader().await?;
             let location = load_location(&mut conn, location_id).await?;
             require_revision(location_id, location.decision_revision, expected_revision)?;
             let assets = location_assets(&mut conn, location_id).await?;
-            let blocked =
-                remap_root_blocks(&mut conn, &location, proposed_root, proposed_identity).await?;
-            (location, assets, blocked)
+            (location, assets)
         };
+        let mut blocked = self.remap_root_blocks(&location, proposed_root, proposed_identity).await;
         let roots = RemapRoots::new(&location, proposed_root, proposed_identity)?;
         let (items, asset_blocks) =
             blocking(move || Ok(assess_remap(&roots, &assets, &probe))).await?;
@@ -1775,24 +1798,61 @@ impl Catalog {
         blocking(move || verify_remap(&roots, &checked, &assets, &probe)).await?;
         let new_root =
             RemapRoots::new(&location, &review.proposed_root, &review.proposed_identity)?.candidate;
-        let applied = write_txn!(self, |conn| {
-            let current = load_location(conn, location.id).await?;
-            require_revision(current.id, current.decision_revision, expected_revision)?;
-            require_reviewed(&load_review(conn, review_id).await?.1)?;
-            let assets = location_assets(conn, location.id).await?;
-            require_same_assets(&review, &assets)?;
-            ensure_no_overlap(
-                conn,
-                Some(location.id),
-                &review.proposed_root,
-                &review.proposed_identity,
-                StaleRoots::Search,
-            )
-            .await?;
-            apply_remap_rows(conn, &review, &assets, &new_root).await?;
-            load_location(conn, location.id).await?
-        });
-        Ok(applied)
+        let mut attempt = 1;
+        loop {
+            let searched = self
+                .search_stale_roots(
+                    Some(location.id),
+                    &review.proposed_root,
+                    &review.proposed_identity,
+                )
+                .await?;
+            let applied = write_txn!(self, |conn| {
+                let current = load_location(conn, location.id).await?;
+                require_revision(current.id, current.decision_revision, expected_revision)?;
+                require_reviewed(&load_review(conn, review_id).await?.1)?;
+                let assets = location_assets(conn, location.id).await?;
+                require_same_assets(&review, &assets)?;
+                if let Some(stale) = recheck_overlap(
+                    conn,
+                    Some(location.id),
+                    &review.proposed_root,
+                    &review.proposed_identity,
+                    &searched,
+                )
+                .await?
+                {
+                    Err(stale)
+                } else {
+                    apply_remap_rows(conn, &review, &assets, &new_root).await?;
+                    Ok(load_location(conn, location.id).await?)
+                }
+            });
+            match applied {
+                Ok(location) => return Ok(location),
+                Err(stale) => search_again(&mut attempt, &stale)?,
+            }
+        }
+    }
+
+    /// Blocks on the proposed root itself: an unqualified identity, or overlap with
+    /// another registered root, stale roots searched for off the writer lock.
+    async fn remap_root_blocks(
+        &self,
+        location: &Location,
+        proposed_root: &NativePath,
+        proposed_identity: &FileIdentity,
+    ) -> Vec<RemapBlock> {
+        let (reason, error) = if let Err(error) = require_root_identity(proposed_identity) {
+            (RemapBlockReason::IdentityConflict, error)
+        } else if let Err(error) =
+            self.search_stale_roots(Some(location.id), proposed_root, proposed_identity).await
+        {
+            (RemapBlockReason::Collision, error)
+        } else {
+            return Vec::new();
+        };
+        vec![RemapBlock { asset_id: None, reason, message: error.to_string() }]
     }
 }
 
@@ -1978,16 +2038,27 @@ enum StaleRoots {
     /// catalog recorded instead of blocking the recovery.
     Compare,
     /// Registration and remap: a stale root may sit at a new path below the
-    /// candidate, so beyond that comparison the candidate's folders are searched for
-    /// the root's recorded folder identity. Without a stable folder identity, or
-    /// when the search cannot finish, the change is refused naming the root and the
-    /// way out.
+    /// candidate, so beyond that comparison it is collected for a search of the
+    /// candidate's folders for its recorded folder identity. Without a stable folder
+    /// identity the change is refused, naming the root and the way out.
     Search,
 }
 
-/// Folders read below a candidate root while searching for stale registered roots;
-/// a larger tree is refused as unsearchable.
-const STALE_ROOT_SEARCH_LIMIT: usize = 100_000;
+/// Limits of one search of a candidate's folders for stale registered roots. A
+/// search that reaches either is incomplete, and the change is refused.
+#[derive(Clone, Copy)]
+#[cfg_attr(not(unix), allow(dead_code))]
+struct SearchBounds {
+    folders: usize,
+    time: Duration,
+}
+
+const STALE_ROOT_SEARCH: SearchBounds =
+    SearchBounds { folders: 100_000, time: Duration::from_secs(10) };
+
+/// Searches made for one change before stale roots that keep changing under it are
+/// refused with a `Conflict`, to be retried.
+const STALE_ROOT_SEARCH_ATTEMPTS: usize = 3;
 
 /// A registered root on the candidate's volume whose stored path no longer
 /// resolves, with the `(device, inode)` its recorded folder would have there.
@@ -1997,19 +2068,40 @@ struct StaleRoot {
     error: LibraryError,
 }
 
+/// The overlap of a candidate with the registered roots on its volume, short of
+/// searching the candidate for the stale ones.
+struct OverlapPlan {
+    candidate: CanonicalRoot,
+    stale: Vec<StaleRoot>,
+}
+
+/// A candidate folder as it was searched, with the recorded folders of the stale
+/// roots the search proved absent from it.
+struct Searched {
+    candidate: CanonicalRoot,
+    absent: Vec<(u64, u64)>,
+}
+
+/// A stale root the writer transaction found that the search did not cover.
+struct Unsearched {
+    id: Uuid,
+    revision: Revision,
+}
+
 /// Refuse a root that is, contains or lies inside another registered root on the
 /// same volume. Overlap is decided on canonical ancestry and folder identity, never
 /// on the path text the user chose: links anywhere above either root (macOS
 /// `/var` → `/private/var`, a linked home folder) resolve first. The candidate must
 /// resolve. A registered root that no longer resolves (a renamed, moved or deleted
-/// folder, a volume remounted under another name) is handled by `stale`.
-async fn ensure_no_overlap(
+/// folder, a volume remounted under another name) is handled by `mode`; in `Search`
+/// mode the ones the candidate must still be searched for are returned.
+async fn plan_overlap(
     conn: &mut SqliteConnection,
     exclude: Option<Uuid>,
     path: &NativePath,
     identity: &FileIdentity,
-    stale: StaleRoots,
-) -> Result<()> {
+    mode: StaleRoots,
+) -> Result<OverlapPlan> {
     let rows = sqlx::query(
         "SELECT * FROM locations WHERE volume_filesystem = ?1 AND volume_stable_id = ?2",
     )
@@ -2020,7 +2112,7 @@ async fn ensure_no_overlap(
     let candidate =
         CanonicalRoot::resolve(path).map_err(|error| scoped(error, path.clone(), None))?;
     let volume = &identity.volume;
-    let mut searched = Vec::new();
+    let mut stale = Vec::new();
     for row in &rows {
         let other = location_from_row(row)?;
         if Some(other.id) == exclude {
@@ -2033,11 +2125,11 @@ async fn ensure_no_overlap(
                     let recorded = candidate.descends_from(&other.identity)
                         || roots_overlap(&other.path, path, volume)
                         || roots_overlap(&other.path, &candidate.path, volume);
-                    if !recorded && stale == StaleRoots::Search {
+                    if !recorded && mode == StaleRoots::Search {
                         let Some(folder) = candidate.recorded_folder(&other.identity) else {
                             return Err(unprovable_stale_root(&other, &error, path));
                         };
-                        searched.push(StaleRoot { location: other, folder, error });
+                        stale.push(StaleRoot { location: other, folder, error });
                         continue;
                     }
                     recorded
@@ -2054,15 +2146,87 @@ async fn ensure_no_overlap(
             ));
         }
     }
-    if searched.is_empty() {
-        return Ok(());
+    Ok(OverlapPlan { candidate, stale })
+}
+
+/// Inside the writer transaction: repeat the overlap checks on the current catalog
+/// and filesystem. Every stale root must be one `searched` proved absent from this
+/// same candidate folder; the first that is not is returned, so the candidate is
+/// searched again.
+async fn recheck_overlap(
+    conn: &mut SqliteConnection,
+    exclude: Option<Uuid>,
+    path: &NativePath,
+    identity: &FileIdentity,
+    searched: &Searched,
+) -> Result<Option<Unsearched>> {
+    let plan = plan_overlap(conn, exclude, path, identity, StaleRoots::Search).await?;
+    let same_folder = plan.candidate == searched.candidate;
+    Ok(plan
+        .stale
+        .iter()
+        .find(|stale| !same_folder || !searched.absent.contains(&stale.folder))
+        .map(|stale| Unsearched {
+            id: stale.location.id,
+            revision: stale.location.decision_revision,
+        }))
+}
+
+impl Catalog {
+    /// Plan a candidate's overlap on a reader snapshot, then search its folders for
+    /// every stale root on the blocking pool without the writer lock, so a long walk
+    /// delays no catalog write.
+    async fn search_stale_roots(
+        &self,
+        exclude: Option<Uuid>,
+        path: &NativePath,
+        identity: &FileIdentity,
+    ) -> Result<Searched> {
+        let plan = {
+            let mut conn = self.reader().await?;
+            plan_overlap(&mut conn, exclude, path, identity, StaleRoots::Search).await?
+        };
+        let absent: Vec<(u64, u64)> = plan.stale.iter().map(|stale| stale.folder).collect();
+        if !absent.is_empty() {
+            let root = plan.candidate.path.to_path_buf()?;
+            let wanted = absent.clone();
+            #[cfg(test)]
+            let hook = Arc::clone(&self.stale_search_hook);
+            let search = blocking(move || {
+                #[cfg(test)]
+                if let Some(hook) = hook.blocking_lock().as_mut() {
+                    hook();
+                }
+                Ok(search_folders(&root, &wanted, STALE_ROOT_SEARCH))
+            })
+            .await?;
+            refuse_held_stale_roots(&search, &plan.stale, path)?;
+        }
+        Ok(Searched { candidate: plan.candidate, absent })
     }
-    refuse_held_stale_roots(&candidate, &searched, path).await
+
+    /// Run `hook` on the search thread before each stale-root search.
+    #[cfg(test)]
+    async fn set_stale_search_hook(&self, hook: impl FnMut() + Send + 'static) {
+        *self.stale_search_hook.lock().await = Some(Box::new(hook));
+    }
+}
+
+/// After a writer transaction found a stale root the last search did not cover,
+/// count another search, or refuse with a `Conflict` on that root, to be retried,
+/// once `STALE_ROOT_SEARCH_ATTEMPTS` searches were made.
+fn search_again(attempt: &mut usize, stale: &Unsearched) -> Result<()> {
+    if *attempt >= STALE_ROOT_SEARCH_ATTEMPTS {
+        return Err(conflict(stale.id, stale.revision));
+    }
+    *attempt += 1;
+    Ok(())
 }
 
 /// A root resolved through every link to its canonical folder. On Unix it also
 /// carries the `(device, inode)` of that folder and of each folder above it; other
 /// hosts have no stable folder identity here, so they compare canonical paths only.
+#[derive(PartialEq, Eq)]
 struct CanonicalRoot {
     path: NativePath,
     ancestry: Option<Vec<(u64, u64)>>,
@@ -2127,19 +2291,22 @@ fn folder_ancestry(canonical: &Path) -> Result<Option<Vec<(u64, u64)>>> {
 }
 
 /// A stale root on a volume or host without stable folder identity: nothing proves
-/// the candidate does not hold it at a new path.
+/// the candidate does not hold it at a new path. Reselecting it is the only way out;
+/// a folder made at its stored path would let a renamed or moved root be registered
+/// a second time where it now is.
 fn unprovable_stale_root(
     stale: &Location,
     error: &LibraryError,
     path: &NativePath,
 ) -> LibraryError {
-    let stored = stale.path.display();
     scoped(
         LibraryError::IdentityConflict(format!(
             "registered location {name:?} at {stored} no longer resolves ({error}), and without \
              a stable folder identity this folder cannot be proven not to hold it; reselect \
-             {name:?} at its current folder, or restore a folder at {stored}, then try again",
+             {name:?} at its current folder (where it was renamed or moved to, or where its \
+             volume is now mounted), then try again",
             name = stale.name,
+            stored = stale.path.display(),
         )),
         path.clone(),
         Some(stale.id),
@@ -2147,25 +2314,23 @@ fn unprovable_stale_root(
 }
 
 /// Refuse a candidate whose folders hold a stale root's recorded folder, naming
-/// both, or whose folders cannot all be searched for it.
-async fn refuse_held_stale_roots(
-    candidate: &CanonicalRoot,
+/// both, or whose folders could not all be searched for it.
+fn refuse_held_stale_roots(
+    search: &FolderSearch,
     stale: &[StaleRoot],
     path: &NativePath,
 ) -> Result<()> {
-    let root = candidate.path.to_path_buf()?;
-    let wanted: Vec<(u64, u64)> = stale.iter().map(|root| root.folder).collect();
-    let (held, message) = match blocking(move || Ok(search_folders(&root, &wanted))).await? {
+    let (held, message) = match search {
         FolderSearch::Absent => return Ok(()),
         FolderSearch::Found { index, path: found } => {
-            let held = &stale[index];
+            let held = &stale[*index];
             let message = format!(
                 "registered location {name:?} at {stored} no longer resolves ({error}); its \
                  folder is now {found}, inside this folder, so reselect it there first",
                 name = held.location.name,
                 stored = held.location.path.display(),
                 error = held.error,
-                found = NativePath::from_path(&found).display(),
+                found = NativePath::from_path(found).display(),
             );
             (held, message)
         }
@@ -2186,6 +2351,7 @@ async fn refuse_held_stale_roots(
 }
 
 /// Outcome of searching a root's folders for recorded folder identities.
+#[cfg_attr(not(unix), allow(dead_code))]
 enum FolderSearch {
     Absent,
     /// `index` is the position of the matched identity in the search.
@@ -2197,11 +2363,20 @@ enum FolderSearch {
 }
 
 /// Search `root` and the real folders below it on its own device for any `wanted`
-/// `(device, inode)`, reading at most `STALE_ROOT_SEARCH_LIMIT` folders. Links are
-/// never followed, folders on another device are not entered, and a folder that
-/// cannot be read leaves the search incomplete rather than skipped.
+/// `(device, inode)`, reading at most `bounds.folders` folders within `bounds.time`.
+/// Links are never followed, folders on another device are not entered, and a
+/// folder that cannot be read leaves the search incomplete rather than skipped.
 #[cfg(unix)]
-fn search_folders(root: &Path, wanted: &[(u64, u64)]) -> FolderSearch {
+fn search_folders(root: &Path, wanted: &[(u64, u64)], bounds: SearchBounds) -> FolderSearch {
+    let deadline = std::time::Instant::now() + bounds.time;
+    let too_slow = || {
+        (std::time::Instant::now() >= deadline).then(|| {
+            FolderSearch::Incomplete(format!(
+                "it took longer than {} s to search",
+                bounds.time.as_secs()
+            ))
+        })
+    };
     let unreadable = |folder: &Path, error: &dyn std::fmt::Display| {
         FolderSearch::Incomplete(format!("{} cannot be read ({error})", folder.display()))
     };
@@ -2217,16 +2392,23 @@ fn search_folders(root: &Path, wanted: &[(u64, u64)]) -> FolderSearch {
     let mut read = 0_usize;
     while let Some(folder) = pending.pop() {
         read += 1;
-        if read > STALE_ROOT_SEARCH_LIMIT {
+        if read > bounds.folders {
             return FolderSearch::Incomplete(format!(
-                "it holds more than {STALE_ROOT_SEARCH_LIMIT} folders"
+                "it holds more than {} folders",
+                bounds.folders
             ));
+        }
+        if let Some(incomplete) = too_slow() {
+            return incomplete;
         }
         let entries = match std::fs::read_dir(&folder) {
             Ok(entries) => entries,
             Err(error) => return unreadable(&folder, &error),
         };
         for entry in entries {
+            if let Some(incomplete) = too_slow() {
+                return incomplete;
+            }
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(error) => return unreadable(&folder, &error),
@@ -2258,7 +2440,7 @@ fn search_folders(root: &Path, wanted: &[(u64, u64)]) -> FolderSearch {
 
 // Only reached through a recorded folder identity, which this host never carries.
 #[cfg(not(unix))]
-fn search_folders(_root: &Path, _wanted: &[(u64, u64)]) -> FolderSearch {
+fn search_folders(_root: &Path, _wanted: &[(u64, u64)], _bounds: SearchBounds) -> FolderSearch {
     FolderSearch::Incomplete("this host has no folder identity".into())
 }
 
@@ -5104,39 +5286,6 @@ fn contributions_for(
 // Remap helpers
 // ---------------------------------------------------------------------------
 
-async fn remap_root_blocks(
-    conn: &mut SqliteConnection,
-    location: &Location,
-    proposed_root: &NativePath,
-    proposed_identity: &FileIdentity,
-) -> Result<Vec<RemapBlock>> {
-    let mut blocked = Vec::new();
-    if let Err(error) = require_root_identity(proposed_identity) {
-        blocked.push(RemapBlock {
-            asset_id: None,
-            reason: RemapBlockReason::IdentityConflict,
-            message: error.to_string(),
-        });
-        return Ok(blocked);
-    }
-    if let Err(error) = ensure_no_overlap(
-        conn,
-        Some(location.id),
-        proposed_root,
-        proposed_identity,
-        StaleRoots::Search,
-    )
-    .await
-    {
-        blocked.push(RemapBlock {
-            asset_id: None,
-            reason: RemapBlockReason::Collision,
-            message: error.to_string(),
-        });
-    }
-    Ok(blocked)
-}
-
 fn block(asset_id: Uuid, reason: RemapBlockReason, message: String) -> RemapBlock {
     RemapBlock { asset_id: Some(asset_id), reason, message }
 }
@@ -6148,5 +6297,176 @@ mod tests {
         };
         assert!(!root("/D/x").descends_from(&recorded), "no ancestry, no identity claim");
         assert!(unix.descends_from(&recorded));
+    }
+
+    /// A real folder registered on a volume with remount-stable folder ids.
+    #[cfg(unix)]
+    fn stable_registration(path: &Path) -> LocationRegistration {
+        use std::os::unix::fs::MetadataExt;
+        let inode = std::fs::symlink_metadata(path).unwrap().ino();
+        LocationRegistration {
+            name: path.file_name().unwrap().to_string_lossy().into_owned(),
+            path: NativePath::from_path(path),
+            role: LocationRole::Captures,
+            identity: FileIdentity {
+                volume: VolumeIdentity { file_ids_stable: true, ..plan_volume("search-vol") },
+                file_id: Some(inode.to_string()),
+            },
+        }
+    }
+
+    #[cfg(unix)]
+    fn digest_of(path: &Path) -> String {
+        hex::encode(Sha256::digest(std::fs::read(path).unwrap()))
+    }
+
+    /// The stale-root search runs off the writer lock: while it is held, a target save
+    /// commits, and the registration commits once the search finishes.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_slow_stale_root_search_never_blocks_catalog_writes() {
+        let dir = tempfile::tempdir().unwrap();
+        let catalog = Arc::new(Catalog::open(&dir.path().join("catalog.sqlite")).await.unwrap());
+        let (test, flats) = (dir.path().join("Test"), dir.path().join("Flats"));
+        std::fs::create_dir_all(&test).unwrap();
+        std::fs::create_dir_all(&flats).unwrap();
+        std::fs::write(flats.join("Flat_001.fits"), b"flat frame bytes").unwrap();
+        let original = digest_of(&flats.join("Flat_001.fits"));
+        catalog.register_location(&stable_registration(&test)).await.unwrap();
+        std::fs::remove_dir_all(&test).unwrap();
+
+        // The search signals that it started, then waits until it is released.
+        let (started, searching) = tokio::sync::oneshot::channel::<()>();
+        let (release, released) = std::sync::mpsc::channel::<()>();
+        let mut started = Some(started);
+        catalog
+            .set_stale_search_hook(move || {
+                if let Some(started) = started.take() {
+                    let _ = started.send(());
+                }
+                let _ = released.recv();
+            })
+            .await;
+        let registering = tokio::spawn({
+            let catalog = Arc::clone(&catalog);
+            let registration = stable_registration(&flats);
+            async move { catalog.register_location(&registration).await }
+        });
+        tokio::time::timeout(Duration::from_secs(20), searching).await.unwrap().unwrap();
+
+        let target = TargetCandidate { aliases: Vec::new(), ..large_target() };
+        let saved =
+            tokio::time::timeout(Duration::from_secs(5), catalog.save_target(&target, None)).await;
+        assert!(saved.is_ok(), "a target save waited for the stale-root search");
+        saved.unwrap().unwrap();
+        release.send(()).unwrap();
+        let registered = tokio::time::timeout(Duration::from_secs(20), registering)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(registered.path, NativePath::from_path(&flats));
+        assert_eq!(catalog.list_locations().await.unwrap().len(), 2);
+        assert_eq!(digest_of(&flats.join("Flat_001.fits")), original, "originals unchanged");
+    }
+
+    /// Install a hook that runs `change` on the `n`th stale-root search (from 0) and
+    /// counts the searches.
+    #[cfg(unix)]
+    async fn change_during_searches(
+        catalog: &Catalog,
+        mut change: impl FnMut(usize) + Send + 'static,
+    ) -> Arc<std::sync::atomic::AtomicUsize> {
+        let searches = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = Arc::clone(&searches);
+        catalog.set_stale_search_hook(move || change(counted.fetch_add(1, Ordering::SeqCst))).await;
+        searches
+    }
+
+    /// Roots that change while the candidate is searched are searched again before the
+    /// change commits: a root moved into the candidate during the first search is found
+    /// by the second, and stale roots that keep changing end in a retryable conflict.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn roots_that_change_during_the_search_are_searched_again_before_commit() {
+        let dir = tempfile::tempdir().unwrap();
+        let catalog = Catalog::open(&dir.path().join("catalog.sqlite")).await.unwrap();
+        let folder = |name: &str| {
+            let path = dir.path().join(name);
+            std::fs::create_dir_all(&path).unwrap();
+            path
+        };
+        let (test, darks, archive) = (folder("Test"), folder("Darks"), folder("Archive"));
+        std::fs::write(darks.join("Dark_001.fits"), b"dark frame bytes").unwrap();
+        let original = digest_of(&darks.join("Dark_001.fits"));
+        catalog.register_location(&stable_registration(&test)).await.unwrap();
+        catalog.register_location(&stable_registration(&darks)).await.unwrap();
+        std::fs::remove_dir_all(&test).unwrap();
+
+        // Darks moves into the candidate while the first search runs.
+        let moved = archive.join("Darks");
+        let searches = change_during_searches(&catalog, {
+            let (darks, moved) = (darks.clone(), moved.clone());
+            move |search| {
+                if search == 0 {
+                    std::fs::rename(&darks, &moved).unwrap();
+                }
+            }
+        })
+        .await;
+        let error = catalog.register_location(&stable_registration(&archive)).await.unwrap_err();
+        assert_eq!(searches.load(Ordering::SeqCst), 2, "searched again for the moved root");
+        assert_eq!(error.response(None, None).kind, "identity_conflict");
+        let found = std::fs::canonicalize(&moved).unwrap().display().to_string();
+        let message = error.to_string();
+        assert!(message.contains("\"Darks\"") && message.contains(&found), "{message}");
+        assert_eq!(catalog.list_locations().await.unwrap().len(), 2, "refusals write nothing");
+
+        // Each search, one more registered root stops resolving: after the bounded
+        // searches the change is refused as a conflict on the last of them.
+        let mut others = Vec::new();
+        for name in ["R1", "R2", "R3"] {
+            others.push(
+                catalog.register_location(&stable_registration(&folder(name))).await.unwrap(),
+            );
+        }
+        let gone: Vec<PathBuf> =
+            others.iter().map(|other| other.path.to_path_buf().unwrap()).collect();
+        let searches = change_during_searches(&catalog, move |search| {
+            if let Some(path) = gone.get(search) {
+                std::fs::remove_dir(path).unwrap();
+            }
+        })
+        .await;
+        let flats = folder("Flats");
+        let error = catalog.register_location(&stable_registration(&flats)).await.unwrap_err();
+        assert_eq!(searches.load(Ordering::SeqCst), STALE_ROOT_SEARCH_ATTEMPTS);
+        let response = error.response(None, None);
+        assert_eq!((response.kind.as_str(), response.identity), ("conflict", Some(others[2].id)));
+        assert_eq!(catalog.list_locations().await.unwrap().len(), 5, "refusals write nothing");
+        assert_eq!(digest_of(&moved.join("Dark_001.fits")), original, "originals unchanged");
+    }
+
+    /// A search stops at its folder or time bound and is then incomplete, never absent.
+    #[cfg(unix)]
+    #[test]
+    fn the_stale_root_search_is_bounded_by_folders_and_time() {
+        let dir = tempfile::tempdir().unwrap();
+        for folder in ["a/b", "c"] {
+            std::fs::create_dir_all(dir.path().join(folder)).unwrap();
+        }
+        let wanted = [(0, 0)];
+        let bounds =
+            |folders, seconds| SearchBounds { folders, time: Duration::from_secs(seconds) };
+        let search = |bounds| search_folders(dir.path(), &wanted, bounds);
+        assert!(matches!(search(STALE_ROOT_SEARCH), FolderSearch::Absent));
+        let FolderSearch::Incomplete(reason) = search(bounds(2, 10)) else {
+            panic!("the folder bound was not applied");
+        };
+        assert!(reason.contains("more than 2 folders"), "{reason}");
+        let FolderSearch::Incomplete(reason) = search(bounds(100, 0)) else {
+            panic!("the time bound was not applied");
+        };
+        assert!(reason.contains("longer than 0 s"), "{reason}");
     }
 }

@@ -1796,24 +1796,40 @@ async fn without_folder_identity_a_stale_root_refuses_and_names_the_way_out() {
     };
     let test = volume.join("Test");
     std::fs::create_dir_all(&test).unwrap();
-    catalog.register_location(&unstable(&test)).await.unwrap();
-    std::fs::remove_dir_all(&test).unwrap();
+    std::fs::write(test.join("Ha_001.fits"), b"frame one bytes").unwrap();
+    let test_root = catalog.register_location(&unstable(&test)).await.unwrap();
+    // The root is renamed; nothing on this volume can prove where it went.
+    let renamed = volume.join("Test 1");
+    std::fs::rename(&test, &renamed).unwrap();
+    let frame = sha_of(&renamed.join("Ha_001.fits"));
 
     let flats = volume.join("Flats");
     std::fs::create_dir_all(&flats).unwrap();
     let error = catalog.register_location(&unstable(&flats)).await.unwrap_err();
     assert_eq!(kind(&error), "identity_conflict");
     let message = error.to_string();
-    let way_out = format!("restore a folder at {}", test.display());
-    assert!(
-        message.contains("\"Test\"") && message.contains("reselect") && message.contains(&way_out),
-        "{message}"
-    );
+    assert!(message.contains("\"Test\"") && message.contains("reselect"), "{message}");
+    // A folder made at the stored path would let the renamed root register twice.
+    assert!(!message.contains("restore"), "{message}");
+    // The renamed folder itself is the registered root.
+    let error = catalog.register_location(&unstable(&renamed)).await.unwrap_err();
+    assert!(error.to_string().contains("\"Test\""), "{error}");
     assert_eq!(catalog.list_locations().await.unwrap().len(), 1, "refusals write nothing");
 
-    // The named way out: a folder at the stored path resolves again.
-    std::fs::create_dir_all(&test).unwrap();
+    // The named way out: reselect the root at its current folder.
+    catalog
+        .reselect_location(
+            test_root.id,
+            test_root.decision_revision,
+            &NativePath::from_path(&renamed),
+            &unstable(&renamed).identity,
+        )
+        .await
+        .unwrap();
     catalog.register_location(&unstable(&flats)).await.unwrap();
+    let error = catalog.register_location(&unstable(&renamed)).await.unwrap_err();
+    assert!(error.to_string().contains("folder overlaps"), "{error}");
+    assert_eq!(sha_of(&renamed.join("Ha_001.fits")), frame, "originals unchanged");
 }
 
 #[tokio::test]
