@@ -6,7 +6,7 @@
  * record in use cannot be removed.
  */
 import { Aperture, Camera as CameraIcon, Filter, Plus, Telescope as TelescopeIcon } from "lucide-react"
-import { type ReactNode, useEffect, useId, useRef, useState } from "react"
+import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { ActionError, EmptyState, Notice, UnknownValue } from "@/components/app/feedback"
@@ -22,6 +22,7 @@ import type { Camera, Catalog, FilterDef, OpticalTrain, Telescope } from "@/doma
 import { formatCount } from "@/lib/format"
 import { store, useStore } from "@/store/core"
 import { focusFirstInvalid, parseAliases, parseNumber, TextField } from "../components/form-field"
+import { ROW_MENU_ROW, rowMenuColumn } from "../components/row-menu"
 import { duplicateName, type EquipmentKind, FILTER_CATEGORIES, KIND_COPY, removalRefusal, removeEquipment, saveEquipment, trainUsage } from "../lib/equipment"
 import { ReturnNotice } from "./settings-layout"
 
@@ -127,7 +128,16 @@ function SelectField({ id, label, value, onChange, items }: { id: string; label:
   )
 }
 
-function EquipmentDialog({ editing, onClose }: { editing: { kind: EquipmentKind; record: AnyRecord | null } | null; onClose: () => void }) {
+function EquipmentDialog({
+  editing,
+  onClose,
+  finalFocus,
+}: {
+  editing: { kind: EquipmentKind; record: AnyRecord | null } | null
+  onClose: () => void
+  /** The control that opened the dialog; focus returns there on close. */
+  finalFocus: RefObject<HTMLElement | null>
+}) {
   const kind = editing?.kind ?? "camera"
   const record = editing?.record ?? null
   const [values, setValues] = useState<Values>({})
@@ -165,7 +175,7 @@ function EquipmentDialog({ editing, onClose }: { editing: { kind: EquipmentKind;
   const noun = KIND_COPY[kind].noun
   return (
     <Dialog open={editing !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" finalFocus={finalFocus}>
         <form
           ref={form}
           noValidate
@@ -264,21 +274,9 @@ function EquipmentDialog({ editing, onClose }: { editing: { kind: EquipmentKind;
   )
 }
 
+// The column truncates (DataTable `truncate`); `title` carries the full list. No `text-pretty`: `text-wrap` would re-enable wrapping and grow the row.
 function aliasesCell(aliases: string[]) {
-  return aliases.length ? <span className="text-pretty">{aliases.join(", ")}</span> : <span className="text-muted-foreground">None</span>
-}
-
-function RowActions({ name, onEdit, onRemove }: { name: string; onEdit: () => void; onRemove: () => void }) {
-  return (
-    <div className="flex justify-end gap-1">
-      <Button size="sm" variant="ghost" onClick={onEdit} aria-label={`Edit ${name}`}>
-        Edit
-      </Button>
-      <Button size="sm" variant="ghost" onClick={onRemove} aria-label={`Remove ${name}`}>
-        Remove
-      </Button>
-    </div>
-  )
+  return aliases.length ? <span title={aliases.join(", ")}>{aliases.join(", ")}</span> : <span className="text-muted-foreground">None</span>
 }
 
 export function EquipmentPage() {
@@ -286,6 +284,12 @@ export function EquipmentPage() {
   const [editing, setEditing] = useState<{ kind: EquipmentKind; record: AnyRecord | null } | null>(null)
   const [removing, setRemoving] = useState<{ kind: EquipmentKind; record: AnyRecord } | null>(null)
   const [refusal, setRefusal] = useState<{ kind: EquipmentKind; message: string; trainIds: string[] } | null>(null)
+  const opener = useRef<HTMLElement | null>(null)
+
+  function openEditor(next: { kind: EquipmentKind; record: AnyRecord | null }, from: HTMLElement | null) {
+    opener.current = from
+    setEditing(next)
+  }
 
   function askRemove(kind: EquipmentKind, record: AnyRecord) {
     const refused = removalRefusal(store.getState().catalog, kind, record.id)
@@ -297,12 +301,14 @@ export function EquipmentPage() {
     setRemoving({ kind, record })
   }
 
-  const actionColumn = <T extends AnyRecord>(kind: EquipmentKind): Column<T> => ({
-    id: "actions",
-    header: "Actions",
-    align: "right",
-    cell: (record) => <RowActions name={record.name} onEdit={() => setEditing({ kind, record })} onRemove={() => askRemove(kind, record)} />,
-  })
+  const actionColumn = <T extends AnyRecord>(kind: EquipmentKind): Column<T> =>
+    rowMenuColumn<T>(
+      (record) => record.name,
+      (record) => [
+        { label: "Edit", onSelect: (trigger) => openEditor({ kind, record }, trigger) },
+        { label: "Remove", destructive: true, onSelect: () => askRemove(kind, record) },
+      ],
+    )
   const sourceColumn = <T extends AnyRecord>(): Column<T> => ({ id: "source", header: "Source", cell: (r) => <StatusBadge kind="source" value={r.source} />, sortValue: (r) => r.source })
 
   const trains = Object.values(catalog.opticalTrains)
@@ -319,7 +325,7 @@ export function EquipmentPage() {
         actions={refusal.trainIds.map((trainId) => {
           const train = catalog.opticalTrains[trainId]
           return train ? (
-            <Button key={trainId} size="sm" variant="outline" onClick={() => setEditing({ kind: "train", record: train })}>
+            <Button key={trainId} size="sm" variant="outline" onClick={(event) => openEditor({ kind: "train", record: train }, event.currentTarget)}>
               Edit {train.name}
             </Button>
           ) : null
@@ -332,7 +338,7 @@ export function EquipmentPage() {
 
   function addButton(kind: EquipmentKind) {
     return (
-      <Button size="sm" variant="outline" onClick={() => setEditing({ kind, record: null })}>
+      <Button size="sm" variant="outline" onClick={(event) => openEditor({ kind, record: null }, event.currentTarget)}>
         <Plus aria-hidden="true" data-icon="inline-start" />
         Add {KIND_COPY[kind].noun}
       </Button>
@@ -368,6 +374,7 @@ export function EquipmentPage() {
             scroll="none"
             rows={trains}
             getRowId={(r) => r.id}
+            rowClassName={() => ROW_MENU_ROW}
             initialSort={{ columnId: "name", direction: "asc" }}
             empty={empty("train", Aperture, "Indexing creates detected trains from INSTRUME and TELESCOP headers, or add one yourself.")}
             columns={[
@@ -397,6 +404,7 @@ export function EquipmentPage() {
             scroll="none"
             rows={cameras}
             getRowId={(r) => r.id}
+            rowClassName={() => ROW_MENU_ROW}
             initialSort={{ columnId: "name", direction: "asc" }}
             empty={empty("camera", CameraIcon, "Indexing adds detected cameras from INSTRUME headers, or add one yourself.")}
             columns={[
@@ -421,6 +429,7 @@ export function EquipmentPage() {
             scroll="none"
             rows={telescopes}
             getRowId={(r) => r.id}
+            rowClassName={() => ROW_MENU_ROW}
             initialSort={{ columnId: "name", direction: "asc" }}
             empty={empty("telescope", TelescopeIcon, "Indexing adds detected telescopes from TELESCOP and FOCALLEN headers, or add one yourself.")}
             columns={[
@@ -441,6 +450,7 @@ export function EquipmentPage() {
             scroll="none"
             rows={filters}
             getRowId={(r) => r.id}
+            rowClassName={() => ROW_MENU_ROW}
             initialSort={{ columnId: "name", direction: "asc" }}
             empty={empty("filter", Filter, "Add the filters in your wheel so FILTER headers map to channels.")}
             columns={[
@@ -454,7 +464,7 @@ export function EquipmentPage() {
         </Section>
       </PageBody>
 
-      <EquipmentDialog editing={editing} onClose={() => setEditing(null)} />
+      <EquipmentDialog editing={editing} onClose={() => setEditing(null)} finalFocus={opener} />
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}

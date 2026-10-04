@@ -6,7 +6,7 @@
  * `?add=<role>` starts adding one, `?return=` links back.
  */
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
-import { FolderPlus, MoreHorizontal, Play, RotateCw } from "lucide-react"
+import { MoreHorizontal, Play, RotateCw } from "lucide-react"
 import { type ReactNode, useEffect, useId, useRef, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList, PathText } from "@/components/app/data"
@@ -259,12 +259,6 @@ export function LocationsPage() {
         level={2}
         title="Locations"
         description="Folders PlateVault indexes in place, by role. Registering or indexing a location never changes its files."
-        actions={
-          <Button onClick={() => setAdding({ role: null })}>
-            <FolderPlus aria-hidden="true" data-icon="inline-start" />
-            Add location
-          </Button>
-        }
       />
       <PageBody>
         <ReturnNotice task="Locations" />
@@ -289,6 +283,7 @@ export function LocationsPage() {
             <Section
               key={role}
               id={`locations-${role}`}
+              level={3}
               title={copy.title}
               description={copy.description}
               actions={

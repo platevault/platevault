@@ -55,6 +55,12 @@ export function LocationRow({ location, current, actions, onChooseAgain, onRetry
   const denied = !offline && location.access === "denied"
   const incomplete = !offline && !denied && location.scanScope === "incomplete"
 
+  const facts = [
+    location.lastIndexedAt ? `Last indexed ${formatDateTime(location.lastIndexedAt)}` : null,
+    frames > 0 || location.lastIndexedAt ? `${formatCount(frames)} ${frames === 1 ? "frame" : "frames"} read` : null,
+    location.managed ? "Accepts reviewed filing" : null,
+  ].filter((fact) => fact !== null)
+
   return (
     <li
       aria-current={current ? "true" : undefined}
@@ -80,11 +86,8 @@ export function LocationRow({ location, current, actions, onChooseAgain, onRetry
         {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
 
-      <p className="text-xs text-muted-foreground tabular-nums">
-        {location.lastIndexedAt ? `Last indexed ${formatDateTime(location.lastIndexedAt)}` : "Not indexed yet"}
-        {frames > 0 || location.lastIndexedAt ? ` · ${formatCount(frames)} ${frames === 1 ? "frame" : "frames"} read` : ""}
-        {location.managed ? " · Accepts reviewed filing" : ""}
-      </p>
+      {/* The "Not indexed" badge already says a location was never indexed; this line carries only facts the badges do not. */}
+      {facts.length ? <p className="text-xs text-muted-foreground tabular-nums">{facts.join(" · ")}</p> : null}
 
       {offline ? (
         <Notice

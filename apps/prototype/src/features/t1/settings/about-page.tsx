@@ -47,7 +47,7 @@ export function AboutPage() {
         }
         description="A design prototype of PlateVault. It is not the production app and makes no claim about backend behaviour."
       />
-      <PageBody className="max-w-3xl">
+      <PageBody>
         <Notice tone="info" title="Simulated data only">
           Folders, volumes, files and operations are fixture data held in this browser. Nothing on your computer is read, moved or changed, and no request leaves this
           browser.

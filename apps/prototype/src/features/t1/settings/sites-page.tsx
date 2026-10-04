@@ -4,7 +4,7 @@
  * explicit default site: PlateVault never picks one for you (HLD §14).
  */
 import { MapPin, Plus } from "lucide-react"
-import { useEffect, useId, useRef, useState } from "react"
+import { type RefObject, useEffect, useId, useRef, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { DataTable } from "@/components/app/data-table"
 import { ActionError, EmptyState, Notice, UnknownValue } from "@/components/app/feedback"
@@ -20,10 +20,20 @@ import type { ObservingSite } from "@/domain/types"
 import { formatCount } from "@/lib/format"
 import { store, useStore } from "@/store/core"
 import { FieldMessage, focusFirstInvalid, TextField } from "../components/form-field"
+import { ROW_MENU_ROW, rowMenuColumn } from "../components/row-menu"
 import { deleteSite, formatCoordinates, saveSite, setDefaultSite, type SiteErrors, type SiteValues, siteValues, TIME_ZONES, unmatchedCaptureSites, validateSite } from "../lib/sites"
 import { ReturnNotice } from "./settings-layout"
 
-function SiteDialog({ editing, onClose }: { editing: { site: ObservingSite | null; prefill?: Partial<SiteValues> } | null; onClose: () => void }) {
+function SiteDialog({
+  editing,
+  onClose,
+  finalFocus,
+}: {
+  editing: { site: ObservingSite | null; prefill?: Partial<SiteValues> } | null
+  onClose: () => void
+  /** The control that opened the dialog; focus returns there on close. */
+  finalFocus: RefObject<HTMLElement | null>
+}) {
   const [values, setValues] = useState<SiteValues>(siteValues(null))
   const [makeDefault, setMakeDefault] = useState(false)
   const [errors, setErrors] = useState<SiteErrors>({})
@@ -60,7 +70,7 @@ function SiteDialog({ editing, onClose }: { editing: { site: ObservingSite | nul
 
   return (
     <Dialog open={editing !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-xl" finalFocus={finalFocus}>
         <form
           ref={form}
           noValidate
@@ -155,6 +165,12 @@ export function SitesPage() {
   const [editing, setEditing] = useState<{ site: ObservingSite | null; prefill?: Partial<SiteValues> } | null>(null)
   const [removing, setRemoving] = useState<ObservingSite | null>(null)
   const [defaultError, setDefaultError] = useState<{ site: ObservingSite; message: string } | null>(null)
+  const opener = useRef<HTMLElement | null>(null)
+
+  function openEditor(next: { site: ObservingSite | null; prefill?: Partial<SiteValues> }, from: HTMLElement | null) {
+    opener.current = from
+    setEditing(next)
+  }
 
   function makeDefault(site: ObservingSite) {
     const result = setDefaultSite(site)
@@ -162,7 +178,7 @@ export function SitesPage() {
   }
 
   const addButton = (
-    <Button onClick={() => setEditing({ site: null })}>
+    <Button size="sm" variant="outline" onClick={(event) => openEditor({ site: null }, event.currentTarget)}>
       <Plus aria-hidden="true" data-icon="inline-start" />
       Add site
     </Button>
@@ -170,71 +186,62 @@ export function SitesPage() {
 
   return (
     <div>
-      <PageHeader level={2} title="Observing sites" description="Where you observe from. Plans and reminders use these sites; the default site is never chosen for you." actions={sites.length ? addButton : null} />
+      <PageHeader level={2} title="Observing sites" description="Where you observe from. Plans and reminders use these sites; the default site is never chosen for you." />
       <PageBody>
         <ReturnNotice task="Observing sites" />
-        {sites.length > 0 && !defaultSiteId ? (
-          <Notice tone="info" title="No default site">
-            Notifications for planned Targets use the default site only. Choose Set as default on the site you observe from most.
-          </Notice>
-        ) : null}
-        {defaultError ? <ActionError message={defaultError.message} onRetry={() => makeDefault(defaultError.site)} /> : null}
+        <Section title="Saved sites" level={3} id="sites-saved" actions={sites.length ? addButton : null}>
+          {sites.length > 0 && !defaultSiteId ? (
+            <Notice tone="info" title="No default site">
+              Notifications for planned Targets use the default site only. Choose Set as default on the site you observe from most.
+            </Notice>
+          ) : null}
+          {defaultError ? <ActionError message={defaultError.message} onRetry={() => makeDefault(defaultError.site)} /> : null}
 
-        <DataTable<ObservingSite>
-          label="Observing sites"
-          scroll="none"
-          rows={sites}
-          getRowId={(r) => r.id}
-          initialSort={{ columnId: "name", direction: "asc" }}
-          empty={
-            <EmptyState
-              icon={MapPin}
-              title="No observing sites yet"
-              description="Add the place you observe from to plan windows and turn on reminders."
-              action={addButton}
-              className="border-0"
-            />
-          }
-          columns={[
-            {
-              id: "name",
-              header: "Name",
-              rowHeader: true,
-              sortValue: (r) => r.name,
-              cell: (r) => (
-                <span className="inline-flex flex-wrap items-center gap-1.5">
-                  {r.name}
-                  {defaultSiteId === r.id ? <StatusBadge kind="site" value="default" /> : null}
-                </span>
+          <DataTable<ObservingSite>
+            label="Observing sites"
+            scroll="none"
+            rows={sites}
+            getRowId={(r) => r.id}
+            rowClassName={() => ROW_MENU_ROW}
+            initialSort={{ columnId: "name", direction: "asc" }}
+            empty={
+              <EmptyState
+                icon={MapPin}
+                title="No observing sites yet"
+                description="Add the place you observe from to plan windows and turn on reminders."
+                action={addButton}
+                className="border-0"
+              />
+            }
+            columns={[
+              {
+                id: "name",
+                header: "Name",
+                rowHeader: true,
+                sortValue: (r) => r.name,
+                cell: (r) => (
+                  <span className="inline-flex flex-wrap items-center gap-1.5">
+                    {r.name}
+                    {defaultSiteId === r.id ? <StatusBadge kind="site" value="default" /> : null}
+                  </span>
+                ),
+              },
+              { id: "coords", header: "Coordinates", cell: (r) => <span className="tabular-nums">{formatCoordinates(r.latitude, r.longitude)}</span> },
+              { id: "elevation", header: "Elevation", align: "right", cell: (r) => (r.elevationM === null ? <UnknownValue label="Not set" /> : `${formatCount(r.elevationM)} m`) },
+              { id: "zone", header: "Time zone", cell: (r) => r.timeZone, sortValue: (r) => r.timeZone },
+              { id: "twilight", header: "Darkness", cell: (r) => (r.twilight === "astronomical" ? "Astronomical" : "Nautical") },
+              { id: "alt", header: "Min. altitude", align: "right", cell: (r) => `${r.minAltitudeDeg}°` },
+              rowMenuColumn<ObservingSite>(
+                (r) => r.name,
+                (r) => [
+                  ...(defaultSiteId === r.id ? [] : [{ label: "Set as default", onSelect: () => makeDefault(r) }]),
+                  { label: "Edit", onSelect: (trigger: HTMLElement | null) => openEditor({ site: r }, trigger) },
+                  { label: "Remove", destructive: true, onSelect: () => setRemoving(r) },
+                ],
               ),
-            },
-            { id: "coords", header: "Coordinates", cell: (r) => <span className="tabular-nums">{formatCoordinates(r.latitude, r.longitude)}</span> },
-            { id: "elevation", header: "Elevation", align: "right", cell: (r) => (r.elevationM === null ? <UnknownValue label="Not set" /> : `${formatCount(r.elevationM)} m`) },
-            { id: "zone", header: "Time zone", cell: (r) => r.timeZone, sortValue: (r) => r.timeZone },
-            { id: "twilight", header: "Darkness", cell: (r) => (r.twilight === "astronomical" ? "Astronomical" : "Nautical") },
-            { id: "alt", header: "Min. altitude", align: "right", cell: (r) => `${r.minAltitudeDeg}°` },
-            {
-              id: "actions",
-              header: "Actions",
-              align: "right",
-              cell: (r) => (
-                <div className="flex justify-end gap-1">
-                  {defaultSiteId === r.id ? null : (
-                    <Button size="sm" variant="ghost" onClick={() => makeDefault(r)} aria-label={`Set ${r.name} as default site`}>
-                      Set as default
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => setEditing({ site: r })} aria-label={`Edit ${r.name}`}>
-                    Edit
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setRemoving(r)} aria-label={`Remove ${r.name}`}>
-                    Remove
-                  </Button>
-                </div>
-              ),
-            },
-          ]}
-        />
+            ]}
+          />
+        </Section>
 
         {suggestions.length > 0 ? (
           <Section title="Capture coordinates without a site" level={3} description="Read from SITELAT and SITELONG headers. Adding a site names these sessions' capture site.">
@@ -244,7 +251,11 @@ export function SitesPage() {
                   <span className="tabular-nums">
                     {formatCoordinates(s.latitude, s.longitude)} <span className="text-muted-foreground">· in {s.sessions === 1 ? "1 session" : `${s.sessions} sessions`}</span>
                   </span>
-                  <Button size="sm" variant="outline" onClick={() => setEditing({ site: null, prefill: { latitude: String(s.latitude), longitude: String(s.longitude) } })}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(event) => openEditor({ site: null, prefill: { latitude: String(s.latitude), longitude: String(s.longitude) } }, event.currentTarget)}
+                  >
                     Add as site
                   </Button>
                 </li>
@@ -254,7 +265,7 @@ export function SitesPage() {
         ) : null}
       </PageBody>
 
-      <SiteDialog editing={editing} onClose={() => setEditing(null)} />
+      <SiteDialog editing={editing} onClose={() => setEditing(null)} finalFocus={opener} />
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}

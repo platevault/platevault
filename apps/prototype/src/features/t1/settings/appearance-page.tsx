@@ -55,7 +55,7 @@ export function AppearancePage() {
         title="Appearance"
         description="Applies immediately and is stored in this browser. Resetting prototype data keeps these choices."
       />
-      <PageBody className="max-w-3xl">
+      <PageBody>
         <Section title="Theme" level={3} id={ids.theme}>
           <RadioGroup aria-labelledby={`${ids.theme}-title`} value={preferences.theme} onValueChange={(value) => setTheme(value as ThemePreference)} className="grid-cols-3">
             {THEMES.map((theme) => (

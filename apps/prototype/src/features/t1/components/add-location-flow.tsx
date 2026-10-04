@@ -128,7 +128,8 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
                 aria-describedby={errors.path ? `${ids.path}-error` : undefined}
                 aria-invalid={errors.path ? true : undefined}
                 tabIndex={errors.path ? -1 : undefined}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 outline-none aria-invalid:border-destructive"
+                // Focused only after a failed submit; draw the app's focus outline so the invalid field is located visually too.
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 focus:outline-2 focus:outline-offset-2 focus:outline-ring focus:outline-solid aria-invalid:border-destructive"
               >
                 <PathText path={path} className="min-w-0 flex-1" />
                 <Button type="button" size="sm" variant="ghost" onClick={() => setStep("pick")}>

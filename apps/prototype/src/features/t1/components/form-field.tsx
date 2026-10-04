@@ -25,27 +25,39 @@ export interface TextFieldProps {
   className?: string
   autoFocus?: boolean
   readOnly?: boolean
+  /** A control that acts on this field (e.g. a submit button), laid out beside the input so their edges align. */
+  action?: ReactNode
 }
 
-export function TextField({ id, label, value, onChange, error, description, placeholder, inputMode, mono, className, autoFocus, readOnly }: TextFieldProps) {
+export function TextField({ id, label, value, onChange, error, description, placeholder, inputMode, mono, className, autoFocus, readOnly, action }: TextFieldProps) {
   const describedBy = [description ? `${id}-description` : null, error ? `${id}-error` : null].filter(Boolean).join(" ") || undefined
+  const input = (
+    <Input
+      id={id}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-invalid={error ? true : undefined}
+      aria-describedby={describedBy}
+      placeholder={placeholder}
+      inputMode={inputMode}
+      autoComplete="off"
+      spellCheck={false}
+      autoFocus={autoFocus}
+      readOnly={readOnly}
+      className={cn(mono && "font-mono text-xs md:text-xs", inputMode && inputMode !== "text" && "tabular-nums")}
+    />
+  )
   return (
     <Field className={cn("gap-1.5", className)} data-invalid={error ? true : undefined}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Input
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-        placeholder={placeholder}
-        inputMode={inputMode}
-        autoComplete="off"
-        spellCheck={false}
-        autoFocus={autoFocus}
-        readOnly={readOnly}
-        className={cn(mono && "font-mono text-xs md:text-xs", inputMode && inputMode !== "text" && "tabular-nums")}
-      />
+      {action ? (
+        <div className="flex items-center gap-2">
+          {input}
+          {action}
+        </div>
+      ) : (
+        input
+      )}
       {description ? (
         <FieldDescription id={`${id}-description`} className="text-xs">
           {description}

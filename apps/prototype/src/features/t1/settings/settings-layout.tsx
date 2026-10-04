@@ -62,7 +62,12 @@ export function SettingsLayout() {
         listLabel="Settings sections"
         className="grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]"
         list={<SettingsMenu />}
-        detail={<Outlet />}
+        // One content width for every section, so right edges match across Settings.
+        detail={
+          <div className="max-w-5xl">
+            <Outlet />
+          </div>
+        }
       />
     </div>
   )

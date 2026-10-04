@@ -118,7 +118,7 @@ export function TargetLookupPage() {
         title="Target lookup"
         description="Optional online enrichment for Targets: coordinates, aliases and object type, each labelled with its provider. Capture metadata is never replaced."
       />
-      <PageBody className="max-w-3xl">
+      <PageBody>
         <Notice tone="info" title="Local search always works">
           Searching by name, alias or coordinates uses your {targets === 1 ? "1 Target" : `${targets} Targets`} and the bundled offline catalog of {SKY_OBJECTS.length} objects. It needs no
           account or network.
@@ -168,17 +168,25 @@ export function TargetLookupPage() {
         <Section title="Test a lookup" level={3} id="lookup-test" description="Prototype: the response is fixture data, and no request leaves this browser.">
           <form
             noValidate
-            className="flex flex-wrap items-start gap-2"
+            className="max-w-sm"
             onSubmit={(event) => {
               event.preventDefault()
               runTest()
             }}
           >
-            <TextField id={ids.query} label="Name to look up" value={query} onChange={setQuery} error={queryError} className="w-64" />
-            <Button type="submit" className="mt-5" disabled={running} aria-busy={running || undefined}>
-              <Search aria-hidden="true" data-icon="inline-start" />
-              {running ? "Looking up…" : "Test lookup"}
-            </Button>
+            <TextField
+              id={ids.query}
+              label="Name to look up"
+              value={query}
+              onChange={setQuery}
+              error={queryError}
+              action={
+                <Button type="submit" className="shrink-0" disabled={running} aria-busy={running || undefined}>
+                  <Search aria-hidden="true" data-icon="inline-start" />
+                  {running ? "Looking up…" : "Test lookup"}
+                </Button>
+              }
+            />
           </form>
           <div aria-live="polite">
             {running ? (

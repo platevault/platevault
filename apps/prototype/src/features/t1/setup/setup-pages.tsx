@@ -5,7 +5,7 @@
  */
 import { Link, useNavigate } from "@tanstack/react-router"
 import { ArrowLeft, ArrowRight, Check, FlaskConical, FolderPlus, Play, X } from "lucide-react"
-import { type ReactNode, useId, useState } from "react"
+import { type ReactNode, useEffect, useId, useRef, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { Stat } from "@/components/app/data"
 import { Notice } from "@/components/app/feedback"
@@ -305,6 +305,8 @@ export function SetupIndexingPage() {
   })
   const actions = useLocationActions({ href: "/setup/indexing", onIndexStarted: rememberRun })
   const indexLaterId = useId()
+  const openLibraryButton = useRef<HTMLButtonElement>(null)
+  const [focusOpenLibrary, setFocusOpenLibrary] = useState(false)
 
   const runs = runIds.map((id) => operations[id]).filter((op) => op !== undefined)
   const first = runs[0]
@@ -314,6 +316,13 @@ export function SetupIndexingPage() {
   const counts = first ? indexCounts(first.payload) : null
   // Complete scope only: a blocked or uncertain location is settled but not complete (LIB-FR-03).
   const completeLocations = first ? first.items.filter((i) => i.status === "done").length : 0
+
+  // Start indexing unmounts its own button; hand focus to Open library, which takes its place in the footer.
+  useEffect(() => {
+    if (!focusOpenLibrary || !first) return
+    openLibraryButton.current?.focus()
+    setFocusOpenLibrary(false)
+  }, [focusOpenLibrary, first])
 
   function openLibrary() {
     completeOnboarding()
@@ -380,7 +389,7 @@ export function SetupIndexingPage() {
           {first ? (
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-muted-foreground">{anyRunning ? "You can browse sessions already read while indexing continues." : "Indexing finished. Open the library to review sessions."}</span>
-              <Button onClick={openLibrary}>
+              <Button ref={openLibraryButton} onClick={openLibrary}>
                 Open library
                 <ArrowRight aria-hidden="true" data-icon="inline-end" />
               </Button>
@@ -393,7 +402,13 @@ export function SetupIndexingPage() {
               <Button variant="ghost" aria-describedby={indexLaterId} onClick={openLibrary}>
                 Index later
               </Button>
-              <Button disabled={locations.length === 0} onClick={() => rememberRun(startIndexing(locations.map((l) => l.id)))}>
+              <Button
+                disabled={locations.length === 0}
+                onClick={() => {
+                  rememberRun(startIndexing(locations.map((l) => l.id)))
+                  setFocusOpenLibrary(true)
+                }}
+              >
                 <Play aria-hidden="true" data-icon="inline-start" />
                 Start indexing
               </Button>

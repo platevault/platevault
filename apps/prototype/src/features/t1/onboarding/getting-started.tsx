@@ -101,6 +101,8 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
   const [announcement, setAnnouncement] = useState("")
   const done = items.filter((i) => i.done).length
   const previous = useRef(done)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const popup = useRef<HTMLDivElement>(null)
 
   // Announce progress changes politely, never on first render.
   useEffect(() => {
@@ -118,6 +120,7 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
       </span>
       <PopoverPrimitive.Root open={open} onOpenChange={(next) => setChecklistOpen(next)}>
         <PopoverPrimitive.Trigger
+          ref={trigger}
           data-getting-started-trigger=""
           aria-label={collapsed ? name : undefined}
           title={collapsed ? name : undefined}
@@ -138,8 +141,23 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
           )}
         </PopoverPrimitive.Trigger>
         <PopoverPrimitive.Portal>
-          <PopoverPrimitive.Positioner side="right" align="end" sideOffset={8} className="isolate z-30">
-            <PopoverPrimitive.Popup className="w-80 rounded-lg bg-popover p-3 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-hidden duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
+          {/* Offset from the sidebar's outer edge, not the trigger's, so the flyout never overlaps the sidebar border. */}
+          <PopoverPrimitive.Positioner
+            side="right"
+            align="end"
+            sideOffset={() => {
+              const own = trigger.current?.getBoundingClientRect().right
+              const edge = trigger.current?.closest("aside")?.getBoundingClientRect().right
+              return own !== undefined && edge !== undefined ? edge - own + 8 : 8
+            }}
+            className="isolate z-30"
+          >
+            <PopoverPrimitive.Popup
+              ref={popup}
+              // Focus the first pending step's action, then the Steps toggle, never the options menu.
+              initialFocus={() => popup.current?.querySelector<HTMLElement>("[data-step-jump]") ?? popup.current?.querySelector<HTMLElement>("[data-steps-toggle]") ?? true}
+              className="w-80 rounded-lg bg-popover p-3 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-hidden duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <PopoverPrimitive.Title className="text-sm font-semibold">Getting started</PopoverPrimitive.Title>
@@ -166,7 +184,7 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
                 </DropdownMenu>
               </div>
               <Collapsible open={!listCollapsed} onOpenChange={(next) => setChecklistCollapsed(!next)} className="mt-2">
-                <CollapsibleTrigger className="flex h-7 w-full items-center gap-1 rounded-md px-1 text-xs text-muted-foreground hover:text-foreground">
+                <CollapsibleTrigger data-steps-toggle="" className="flex h-7 w-full items-center gap-1 rounded-md px-1 text-xs text-muted-foreground hover:text-foreground">
                   <ChevronDown aria-hidden="true" className={cn("size-3.5", listCollapsed && "-rotate-90")} />
                   Steps
                 </CollapsibleTrigger>
@@ -186,6 +204,7 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
                             {!item.done && item.jump ? (
                               "tour" in item.jump ? (
                                 <Button
+                                  data-step-jump=""
                                   size="xs"
                                   variant="link"
                                   className="h-auto px-0"
@@ -197,7 +216,7 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
                                   {item.jump.label}
                                 </Button>
                               ) : (
-                                <Button size="sm" variant="link" className="px-0" render={<a href={`#${item.jump.to}`} onClick={() => setChecklistOpen(false)} />}>
+                                <Button data-step-jump="" size="sm" variant="link" className="px-0" render={<a href={`#${item.jump.to}`} onClick={() => setChecklistOpen(false)} />}>
                                   {item.jump.label}
                                 </Button>
                               )
