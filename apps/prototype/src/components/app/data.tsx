@@ -151,33 +151,34 @@ export function ChannelCoverage({ channel, breakdown, goalS }: ChannelCoveragePr
         />
         {goalS ? <div className="absolute inset-y-0 w-0.5 bg-foreground" style={{ left: `calc(${pct(goalS)} - 1px)` }} /> : null}
       </div>
+      {/* Pairs wrap value under label when a cell is narrow (200% text), so nothing spills into the next cell. */}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs tabular-nums sm:grid-cols-4">
-        <div className="flex gap-1.5">
+        <div className="flex min-w-0 flex-wrap gap-x-1.5">
           <dt className="text-muted-foreground">Captured</dt>
           <dd>{formatDuration(breakdown.captured.seconds)}</dd>
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex min-w-0 flex-wrap gap-x-1.5">
           <dt className="text-muted-foreground">Usable</dt>
           <dd>{formatDuration(breakdown.usable.seconds)}</dd>
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex min-w-0 flex-wrap gap-x-1.5">
           <dt className="text-muted-foreground">Unreviewed</dt>
           <dd>{formatDuration(breakdown.unreviewed.seconds)}</dd>
         </div>
         {breakdown.unavailable.frames > 0 ? (
-          <div className="flex gap-1.5 text-warning">
+          <div className="flex min-w-0 flex-wrap gap-x-1.5 text-warning">
             <dt>Unavailable</dt>
             <dd>{formatDuration(breakdown.unavailable.seconds)}</dd>
           </div>
         ) : null}
         {breakdown.changedContent.frames > 0 ? (
-          <div className="flex gap-1.5 text-warning">
+          <div className="flex min-w-0 flex-wrap gap-x-1.5 text-warning">
             <dt>Changed content</dt>
             <dd>{formatDuration(breakdown.changedContent.seconds)}</dd>
           </div>
         ) : null}
         {breakdown.verificationPending.frames > 0 ? (
-          <div className="flex gap-1.5">
+          <div className="flex min-w-0 flex-wrap gap-x-1.5">
             <dt className="text-muted-foreground">Verification pending</dt>
             <dd>{formatDuration(breakdown.verificationPending.seconds)}</dd>
           </div>
