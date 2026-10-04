@@ -138,7 +138,7 @@ export function FiltersPopover({
         Filters
         {activeCount > 0 ? <span className="tabular-nums text-muted-foreground">({activeCount})</span> : null}
       </PopoverTrigger>
-      <PopoverContent align="start" className="max-h-[min(36rem,calc(100dvh-8rem))] w-[34rem] max-w-[calc(100vw-2rem)] gap-4 overflow-y-auto p-4">
+      <PopoverContent align="start" aria-label="Filters" className="max-h-[min(36rem,calc(100dvh-8rem))] w-[34rem] max-w-[calc(100vw-2rem)] gap-4 overflow-y-auto p-4">
         <div className="space-y-0.5">
           <h3 className="text-sm font-semibold">Filters</h3>
           <p className="text-xs text-muted-foreground">Filters change this list, never the selection. They start no measurement.</p>

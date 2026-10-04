@@ -13,7 +13,7 @@ import { nowIso, type PrototypeState, store } from "@/store/core"
 import { type OperationHandler, isSettled, patchOperation, settleOperation, startOperation } from "@/store/operations"
 import { currentFile, pixelScaleFor, sessionLabel } from "./model"
 
-interface MeasurePayload {
+export interface MeasurePayload {
   viewId: ViewId
   verify: AssetId[]
   queue: AssetId[]

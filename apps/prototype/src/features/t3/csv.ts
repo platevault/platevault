@@ -23,16 +23,16 @@ export interface CsvColumn {
 
 export const CSV_COLUMNS: CsvColumn[] = [
   { name: "File", unit: null, maps: null, status: "identity", note: "Frame identity: matched to an indexed copy by path, then by file name" },
-  { name: "Approved", unit: null, maps: null, status: "not-imported", note: "Not imported: rejection decisions stay yours" },
-  { name: "FWHM", unit: "arcsec", maps: "fwhm", status: "mapped", note: "Imported FWHM, shown next to built-in FWHM" },
-  { name: "Eccentricity", unit: "ratio", maps: "eccentricity", status: "mapped", note: "Imported eccentricity" },
-  { name: "Stars", unit: "stars", maps: "star-count", status: "mapped", note: "Imported star count" },
+  { name: "Approved", unit: null, maps: null, status: "not-imported", note: "Rejection decisions stay yours" },
+  { name: "FWHM", unit: "arcsec", maps: "fwhm", status: "mapped", note: "Shown next to built-in FWHM" },
+  { name: "Eccentricity", unit: "ratio", maps: "eccentricity", status: "mapped", note: "Shown next to built-in eccentricity" },
+  { name: "Stars", unit: "stars", maps: "star-count", status: "mapped", note: "Shown next to built-in star count" },
   {
     name: "PSFSignalWeight",
     unit: null,
     maps: null,
     status: "unavailable",
-    note: "Unavailable: no units and no PlateVault equivalent. It is never shown as FWHM or HFR.",
+    note: "No units and no PlateVault equivalent; never shown as FWHM or HFR.",
   },
 ]
 

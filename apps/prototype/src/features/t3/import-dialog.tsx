@@ -141,7 +141,7 @@ export function ImportDialog({ viewId, viewAssetIds, open, onOpenChange }: { vie
                       <th scope="row" className="py-1.5 pr-3 text-left font-mono text-xs font-normal">
                         {c.name}
                       </th>
-                      <td className="py-1.5 pr-3">{c.unit ?? <span className="text-muted-foreground">No unit</span>}</td>
+                      <td className="py-1.5 pr-3 whitespace-nowrap">{c.unit ?? <span className="text-muted-foreground">No unit</span>}</td>
                       <td className="py-1.5">
                         <span className="inline-flex flex-wrap items-center gap-2">
                           {c.status === "mapped" ? <StatusBadge kind="match" value="compatible" label="Imported" /> : null}

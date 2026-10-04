@@ -299,7 +299,7 @@ export function ViewWorkspacePage() {
           }
           meta={
             <>
-              <StatusBadge kind="view" value={status} />
+              {status !== "saved" ? <StatusBadge kind="view" value={status} /> : null}
               <SaveState
                 state={saveState}
                 message={saveFeedback && "message" in saveFeedback ? saveFeedback.message : undefined}
@@ -324,22 +324,24 @@ export function ViewWorkspacePage() {
                 <RefreshCw aria-hidden="true" data-icon="inline-start" />
                 Refresh selection
               </Button>
-              {saveBlocked ? (
-                <span id={`${viewId}-save-reason`} className="text-xs text-muted-foreground">
-                  {saveBlocked}
-                </span>
-              ) : null}
-              <Button
-                size="sm"
-                onClick={save}
-                disabled={saveBlocked !== null}
-                focusableWhenDisabled
-                aria-describedby={saveBlocked ? `${viewId}-save-reason` : undefined}
-                className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
-              >
-                <Save aria-hidden="true" data-icon="inline-start" />
-                Save View
-              </Button>
+              <div className="flex flex-col items-end gap-0.5">
+                <Button
+                  size="sm"
+                  onClick={save}
+                  disabled={saveBlocked !== null}
+                  focusableWhenDisabled
+                  aria-describedby={saveBlocked ? `${viewId}-save-reason` : undefined}
+                  className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+                >
+                  <Save aria-hidden="true" data-icon="inline-start" />
+                  Save View
+                </Button>
+                {saveBlocked ? (
+                  <span id={`${viewId}-save-reason`} className="text-xs text-muted-foreground">
+                    {saveBlocked}
+                  </span>
+                ) : null}
+              </div>
             </>
           }
         />

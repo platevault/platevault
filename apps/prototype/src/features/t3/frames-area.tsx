@@ -28,7 +28,7 @@ import { rejectForProject, resolveImportRow, setFrameUi, setLibraryQuality } fro
 import { SelectField } from "./fields"
 import { FramePreview } from "./frame-preview"
 import { frameName, ImportDialog } from "./import-dialog"
-import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, frameMeasureState, formatMetric, latestMeasureOp, METRIC_LABEL, startMeasurement, unfinishedCount } from "./measure"
+import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, frameMeasureState, formatMetric, latestMeasureOp, type MeasurePayload, METRIC_LABEL, startMeasurement, unfinishedCount } from "./measure"
 import { MeasurementPlot } from "./measurement-plot"
 import { currentFile, excludeFrames, type MemberState, memberState, pixelScaleFor, restoreFrames, sessionLabel } from "./model"
 import { registerFrameCommands } from "./shell"
@@ -111,7 +111,7 @@ function MeasureBar({ op, notMeasured, onMeasure, disabledReason }: { op: Operat
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-card px-3 py-2">
         <Progress value={pct} aria-label="Measurement progress" getAriaValueText={() => `${op.progress.done} of ${op.progress.total} frames`} className="min-w-48 flex-1 gap-1">
           <span className="text-sm tabular-nums" aria-hidden="true">
-            {op.status === "running" ? "Measuring frames" : op.status === "interrupted" ? "Measurement interrupted by a restart" : "Measurement paused"}: {op.progress.done} of {op.progress.total} frames · current frame first
+            {op.status === "running" ? ((op.payload as unknown as MeasurePayload).verify.length > 0 ? "Verifying cached values" : "Measuring frames") : op.status === "interrupted" ? "Measurement interrupted by a restart" : "Measurement paused"}: {op.progress.done} of {op.progress.total} frames · current frame first
           </span>
         </Progress>
         <div className="flex gap-2">
@@ -262,21 +262,44 @@ export function FramesArea() {
 
   function step(delta: number) {
     const next = shown[Math.min(shown.length - 1, Math.max(0, position + delta))]
-    if (next) select(next.asset.id)
+    if (!next) return
+    select(next.asset.id)
+    setAnnouncement(`${next.asset.fileName}, ${next.session ? sessionLabel(next.session) : "no session"}: frame ${shown.indexOf(next) + 1} of ${shown.length}.`)
   }
 
   function toggleExclusion(row: FrameRow) {
     const excluding = row.member !== "excluded"
+    const index = shown.indexOf(row)
+    const successor = shown[index + 1] ?? shown[index - 1]
+    const hadFocus = document.getElementById(`frame-${row.asset.id}`)?.closest("tr")?.contains(document.activeElement) ?? false
     const result = edit(excluding ? `Exclude ${row.asset.fileName} from View` : `Restore ${row.asset.fileName} to View`, (current, state) =>
       excluding ? excludeFrames(current, [row.asset.id]) : restoreFrames(state.disk, state.catalog, current, [row.asset.id]),
     )
-    if (result.ok) setAnnouncement(`${excluding ? "Excluded" : "Restored"} ${row.asset.fileName} ${excluding ? "from" : "to"} this View. Library quality unchanged.`)
+    if (!result.ok) return
+    const where = row.session ? ` (${sessionLabel(row.session)})` : ""
+    setAnnouncement(`${excluding ? "Excluded" : "Restored"} ${row.asset.fileName}${where} ${excluding ? "from" : "to"} this View. Library quality unchanged.`)
+    // The row leaves the table when excluded frames are hidden: keep focus in the table (WCAG 2.4.3).
+    if (excluding && !ui.showExcluded && hadFocus && successor) requestAnimationFrame(() => document.getElementById(`frame-${successor.asset.id}`)?.focus())
   }
 
   const excludeLabel = active?.member === "excluded" ? "Restore to View" : "Exclude from View"
   const latest = { step, toggle: () => active && editable && toggleExclusion(active) }
   const handlers = useRef(latest)
   handlers.current = latest
+
+  // Announce measurement start and finish once through the polite region (WCAG 4.1.3); progress itself stays silent.
+  const opStatus = op?.status
+  const announcedRun = useRef<string | null>(null)
+  useEffect(() => {
+    if (!op) return
+    if (!isSettled(op.status) && announcedRun.current !== op.id) {
+      announcedRun.current = op.id
+      setAnnouncement(`Measurement started: ${plural(op.progress.total, "frame")}.`)
+    } else if (isSettled(op.status) && announcedRun.current === op.id) {
+      announcedRun.current = null
+      setAnnouncement(`Measurement ${op.status === "canceled" ? "canceled" : "finished"}. ${op.summary ?? ""}`)
+    }
+  }, [op?.id, opStatus])
 
   // J/K/X: Review frames only, never while typing, off with single-key shortcuts (HLD §11, WCAG 2.1.4).
   useEffect(() => {
@@ -321,11 +344,19 @@ export function FramesArea() {
       header: "Frame",
       rowHeader: true,
       sortValue: (r) => r.index,
-      cell: (r) => (
-        <button type="button" id={`frame-${r.asset.id}`} className="max-w-48 truncate rounded-sm text-left font-medium hover:underline" title={r.asset.fileName} onClick={() => select(r.asset.id)}>
-          {r.asset.fileName.replace(/\.(fits|xisf)$/i, "")}
-        </button>
-      ),
+      cell: (r) => {
+        // Middle truncation: the frame number at the end stays visible, so rows stay distinguishable.
+        const name = r.asset.fileName.replace(/\.(fits|xisf)$/i, "")
+        const cut = name.lastIndexOf("_") + 1
+        return (
+          <button type="button" id={`frame-${r.asset.id}`} className="flex max-w-48 min-w-0 rounded-sm text-left font-medium hover:underline" title={r.asset.fileName} onClick={() => select(r.asset.id)}>
+            <span className="truncate">{name.slice(0, cut)}</span>
+            <span data-frame-tail className="shrink-0">
+              {name.slice(cut)}
+            </span>
+          </button>
+        )
+      },
     },
     { id: "session", header: "Session", sortValue: (r) => r.session?.startedAt ?? null, cell: (r) => (r.session ? sessionLabel(r.session) : <UnknownValue label="No session" />) },
     {
@@ -494,7 +525,7 @@ export function FramesArea() {
                 onChange={(value) => setFrameUi(view.id, { sessionId: value === "all" ? null : value })}
                 options={[{ value: "all", label: "All sessions" }, ...sessions.map((s) => ({ value: s.id, label: sessionLabel(s) }))]}
               />
-              <div className="flex items-center gap-2 self-end pb-1.5">
+              <div className="ml-1 flex items-center gap-2 self-end pb-1.5">
                 <Switch id={`${view.id}-show-excluded`} checked={ui.showExcluded} onCheckedChange={(on) => setFrameUi(view.id, { showExcluded: on })} />
                 <Label htmlFor={`${view.id}-show-excluded`}>Show excluded ({excludedCount})</Label>
               </div>
@@ -505,7 +536,7 @@ export function FramesArea() {
           {plural(shown.length, "frame")} shown of {memberIds.length} · {sessions.map((s) => `${formatNight(s.night)} ${s.channel}: ${rows.filter((r) => r.asset.sessionId === s.id && r.member === "included").length} of ${s.assetIds.length} in the View`).join(" · ")}
         </p>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_26rem]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_min(22rem,40%)] xl:grid-cols-[minmax(0,1fr)_min(26rem,40%)]">
           <DataTable
             label="Frames in this View"
             rows={shown}
@@ -514,7 +545,7 @@ export function FramesArea() {
             initialSort={{ columnId: "frame", direction: "asc" }}
             activeRowId={active?.asset.id ?? null}
             className="max-h-[40rem] self-start"
-            selection={{ selected: checked, onChange: setCheckedIds, rowLabel: (r) => r.asset.fileName }}
+            selection={{ selected: checked, onChange: setCheckedIds, rowLabel: (r) => `${r.asset.fileName}, ${r.session ? sessionLabel(r.session) : "no session"}` }}
             empty={
               <EmptyState
                 icon={ImageOff}
