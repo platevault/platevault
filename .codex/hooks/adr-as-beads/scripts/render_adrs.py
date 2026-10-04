@@ -218,7 +218,7 @@ def generated_paths(target: Path) -> set[Path]:
             head = path.read_text(encoding="utf-8", errors="replace")[:4096]
         except OSError:
             continue
-        if GENERATED_MARKER in head:
+        if head.startswith(GENERATED_MARKER):
             paths.add(path)
     return paths
 

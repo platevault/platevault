@@ -21,6 +21,8 @@ class HistoricalAdrNumbering(unittest.TestCase):
                 historical.write_text("# Historical frontend boundary\n")
                 second = target / "0002-other-decision.md"
                 second.write_text("# Independent historical decision\n")
+                note = target / "README.md"
+                note.write_text("# Notes\nExample banner: " + renderer.GENERATED_MARKER + "\n")
                 obsolete = target / "0001-new-decision.md"
                 obsolete.write_text(renderer.GENERATED_MARKER + " old projection -->\n")
                 before = {path.name: path.read_bytes() for path in target.iterdir()}
@@ -34,9 +36,19 @@ class HistoricalAdrNumbering(unittest.TestCase):
                     self.assertFalse(obsolete.exists())
                     self.assertEqual(historical.read_bytes(), before[historical.name])
                     self.assertEqual(second.read_bytes(), before[second.name])
+                    self.assertEqual(note.read_bytes(), before[note.name])
                     self.assertIn("number: 3\n", (target / "0003-new-decision.md").read_text())
                     self.assertEqual(renderer.render_all(root), ([], None))
                     self.assertEqual(renderer.render_all(root, write=False), ([], None))
+                with patch.object(renderer, "export_decisions", return_value=[]):
+                    snapshot = {path.name: path.read_bytes() for path in target.iterdir()}
+                    stale, reason = renderer.render_all(root, write=False)
+                    self.assertIsNone(reason)
+                    self.assertEqual({path.name for path in stale}, {"0003-new-decision.md"})
+                    self.assertEqual({path.name: path.read_bytes() for path in target.iterdir()}, snapshot)
+                    renderer.render_all(root)
+                    self.assertEqual({path.name for path in target.iterdir()}, {historical.name, second.name, note.name})
+                    self.assertEqual(note.read_bytes(), before[note.name])
 
 
 if __name__ == "__main__":
