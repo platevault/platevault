@@ -313,7 +313,7 @@ function ResultsArea({ view }: { view: View }) {
           title="Accepted Results"
           description="Accepted products appear on this View, its Project and its Target, and stay in Keep during cleanup."
           actions={
-            <Button size="sm" variant="outline" disabled={accepted.length === 0} onClick={() => {
+            <Button size="sm" variant="outline" disabled={!Object.values(catalog.results).some((r) => r.acceptance === "accepted")} onClick={() => {
               setRehashTrigger((n) => n + 1)
               setPickerOpen(true)
             }}>

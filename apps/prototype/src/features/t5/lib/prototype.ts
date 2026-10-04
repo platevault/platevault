@@ -36,7 +36,9 @@ export function simulateApplicationOutput(view: View): ControlOutcome {
     byChannel.set(channel, [...(byChannel.get(channel) ?? []), asset])
   }
   for (const asset of lights) {
-    const stem = asset.fileName.replace(/\.(fits?|xisf)$/i, "")
+    // The night keeps names unique where file names repeat across nights.
+    const night = (asset.sessionId && state.catalog.sessions[asset.sessionId]?.night) || "night"
+    const stem = `${night}_${asset.fileName.replace(/\.(fits?|xisf)$/i, "")}`
     add(`${out}/calibrated/pp_${stem}.fit`, asset.sizeBytes * 2, "fits")
     add(`${out}/registered/r_pp_${stem}.fit`, asset.sizeBytes * 2, "fits")
   }
