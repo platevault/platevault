@@ -82,6 +82,7 @@ fn mount_unstable_file_numbers_do_not_invalidate_identical_decision_fingerprint(
         identity: FileIdentity { volume, file_id: Some("mount-a".into()) },
         size_bytes: 16,
         modified_ns: 123,
+        content_sha256: None,
     };
     let mut b = a.clone();
     b.identity.file_id = Some("mount-b".into());

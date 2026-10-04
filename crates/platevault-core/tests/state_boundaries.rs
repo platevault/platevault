@@ -15,6 +15,7 @@ fn fingerprint() -> ObservationFingerprint {
         },
         size_bytes: 32,
         modified_ns: 123,
+        content_sha256: Some("original-content".into()),
     }
 }
 
@@ -37,7 +38,7 @@ fn changed_content_preserves_prior_rejection_instead_of_reincluding_it() {
         last_observed_at: "2026-10-04T00:00:00Z".into(),
     };
     assert_eq!(asset.applicable_quality(), ApplicableQuality::Unusable);
-    asset.fingerprint.size_bytes += 1;
+    asset.fingerprint.content_sha256 = Some("rewritten-same-size-and-mtime".into());
     assert_eq!(
         asset.applicable_quality(),
         ApplicableQuality::ChangedContent { previous: Quality::Unusable }

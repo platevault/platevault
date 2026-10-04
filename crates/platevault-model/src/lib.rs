@@ -288,6 +288,8 @@ pub struct ObservationFingerprint {
     pub identity: FileIdentity,
     pub size_bytes: u64,
     pub modified_ns: i128,
+    #[serde(default)]
+    pub content_sha256: Option<String>,
 }
 
 impl ObservationFingerprint {
@@ -297,6 +299,7 @@ impl ObservationFingerprint {
         self.identity.volume == other.identity.volume
             && self.size_bytes == other.size_bytes
             && self.modified_ns == other.modified_ns
+            && self.content_sha256 == other.content_sha256
             && (!self.identity.volume.file_ids_stable
                 || self.identity.file_id == other.identity.file_id)
     }
