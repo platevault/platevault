@@ -36,6 +36,8 @@ pub enum LibraryError {
     NoByteProof(String),
     #[error("operation canceled")]
     Canceled,
+    #[error("{error}")]
+    Context { error: Box<Self>, scope: NativePath, identity: Option<Uuid> },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -62,17 +64,21 @@ impl LibraryError {
     /// Convert filesystem failure while retaining its affected path.
     #[must_use]
     pub fn from_io(path: &Path, error: &std::io::Error) -> Self {
-        let message = format!("{}: {error}", path.display());
-        match error.kind() {
+        let message = error.to_string();
+        let error = match error.kind() {
             std::io::ErrorKind::PermissionDenied => Self::AccessDenied(message),
             std::io::ErrorKind::NotFound => Self::NotFound(message),
             _ => Self::SourceUnavailable(message),
-        }
+        };
+        Self::Context { error: Box::new(error), scope: NativePath::from_path(path), identity: None }
     }
 
     /// Attach affected identity/scope to the stable IPC failure shape.
     #[must_use]
     pub fn response(&self, identity: Option<Uuid>, scope: Option<NativePath>) -> ErrorResponse {
+        if let Self::Context { error, scope: stored_scope, identity: stored_identity } = self {
+            return error.response(stored_identity.or(identity), Some(stored_scope.clone()));
+        }
         let (kind, retry) = match self {
             Self::InvalidInput(_) => ("invalid_input", RetryAction::Review),
             Self::NotFound(_) => ("not_found", RetryAction::Retry),
@@ -86,6 +92,7 @@ impl LibraryError {
             Self::PersistenceFailure(_) => ("persistence_failure", RetryAction::Retry),
             Self::NoByteProof(_) => ("no_byte_proof", RetryAction::Review),
             Self::Canceled => ("canceled", RetryAction::None),
+            Self::Context { .. } => unreachable!("context handled before variant mapping"),
         };
         let (identity, current_revision, successors) = match self {
             Self::Conflict { id, current, successors } => {
@@ -566,6 +573,8 @@ pub enum Provenance {
     Seed { dataset: String },
     User,
     Provider { name: String, id: Option<String> },
+    Observed { fields: Vec<String> },
+    Inferred { rule: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
