@@ -45,6 +45,12 @@ fn changed_content_preserves_prior_rejection_instead_of_reincluding_it() {
     );
     assert_ne!(asset.applicable_quality(), ApplicableQuality::Unreviewed);
     assert_ne!(asset.applicable_quality(), ApplicableQuality::Usable);
+    asset.fingerprint.content_sha256 = None;
+    asset.quality_basis.as_mut().unwrap().content_sha256 = None;
+    assert_eq!(
+        asset.applicable_quality(),
+        ApplicableQuality::ChangedContent { previous: Quality::Unusable }
+    );
 }
 
 #[test]

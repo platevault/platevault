@@ -492,7 +492,9 @@ impl Asset {
     #[must_use]
     pub fn applicable_quality(&self) -> ApplicableQuality {
         if self.quality != Quality::Unreviewed
-            && !self.quality_basis.as_ref().is_some_and(|basis| basis.equivalent(&self.fingerprint))
+            && !self.quality_basis.as_ref().is_some_and(|basis| {
+                basis.content_sha256.is_some() && basis.equivalent(&self.fingerprint)
+            })
         {
             return ApplicableQuality::ChangedContent { previous: self.quality };
         }
