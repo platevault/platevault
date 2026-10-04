@@ -59,8 +59,8 @@ state or existing View.
 
 ### S5 — Confirm the Project had no side effects {#S5}
 
-- **Do:** Recompute the manifest; open the Views list; open Sessions.
-- **Expect:** The manifest equals J19/P5. No View exists. Every frame still reads Unreviewed.
+- **Do:** Recompute the manifest of online fixture folders; open Views and Sessions. Compare Cold-1's manifest entries only after it is remounted, then restore its Offline state for the next step.
+- **Expect:** Online paths and hashes equal their matching J19/P5 entries, and Cold-1 matches after remount. No View exists. Every frame still reads Unreviewed.
 - **Expect (negative):** Creating or editing the Project moved, renamed, or wrote no file, generated no View, and changed no quality state.
 - **Trace:** flow B2 · PRJ-FR-05 · PRJ-AC-02
 

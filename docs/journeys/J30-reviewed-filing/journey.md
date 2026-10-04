@@ -31,7 +31,7 @@ source; and session boundaries and View membership are unchanged.
 
 - **Do:** In Sessions, select 26 Sep and 30 Sep, click **File into library**, and choose `Astro-T7/Library` as destination.
 - **Expect:** The plan previews every relative destination path with original basenames, file counts (35 and 48), collisions (none), transfer footprint, and affected View references, and names the files as already indexed.
-- **Expect (negative):** Indexing alone has moved nothing; the manifest still equals P3.
+- **Expect (negative):** Indexing has moved nothing. Online fixture paths and hashes match their P3 entries; offline Cold-1 entries are compared after remount rather than claimed rehashed while unavailable.
 - **Trace:** flow L · STO-FR-09 · D14
 
 ### S2 — Meet a collision {#S2}

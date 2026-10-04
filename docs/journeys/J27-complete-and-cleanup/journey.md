@@ -24,8 +24,8 @@ location without safe Trash refuses removal with no permanent-delete fallback.
 
 - P1: Fresh replay of J24 and J26 (J25 not run). Siril is not running. `output/` of `NGC7000-HOO-Siril` also holds one file PlateVault does not recognize.
 - P2: `28 Sep Ha copy check` (J24/S16) is Prepared on `Scratch`, which has no OS Trash, and has no Result.
-- P3: Before S1, one 30 Sep original capture that is a member of `NGC7000 HOO - Siril` is deleted outside PlateVault and the OS Trash is emptied, so its prepared hardlink holds the last copy of its bytes.
-- P4: The OS Trash is otherwise empty. A manifest (path, size, SHA-256) of the accepted products, the adopted master and its generated source, and the remaining captures is recorded.
+- P3: In an isolated test OS account or disposable VM containing only these generated fixtures, unlink one named 30 Sep capture directly from its generated source folder, without using or emptying OS Trash. Its prepared hardlink is the fixture's last copy. Record the exact fixture path and its pre-unlink hash; real libraries and unrelated Trash contents are outside this setup.
+- P4: Record a baseline inventory of the isolated account's Trash without deleting anything, plus a manifest of accepted products, adopted master/source and remaining generated captures. Trash checks compare only this journey's newly added entries against that baseline.
 - P5: A second final image saved by the user outside the View, at `Work/Finals/NGC7000-HOO-crop.tif`.
 
 ## Steps

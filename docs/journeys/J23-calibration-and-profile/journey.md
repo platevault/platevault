@@ -109,7 +109,7 @@ source file is created or changed.
 
 ## Success criteria
 
-- SC1: Every calibration input reads suggestion until S3 and accepted afterwards; suggestions and accepted assignments are never shown identically (S1, S3).
+- SC1: Compatible suggestions remain distinct from assignments until S3 explicitly accepts them. The 24 Sep unknown assignment remains unresolved until the scoped exception in S6; unrelated suggestions are not silently accepted.
 - SC2: 24 Sep reads unresolved until S6, and its exception record shows both the unknown criterion and the reason.
 - SC3: The 26 Sep flat evidence is unchanged, and another View shows it unknown with no exception (S7).
 - SC4: PlateVault creates 0 calibration files, and the manifest equals P4 at S11.

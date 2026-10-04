@@ -21,7 +21,7 @@
     },
     {
       "flowStep": "A3",
-      "journeyStep": "J19/S5, J19/S8, J19/S9, J19/S10, J19/S12, J19/S13",
+      "journeyStep": "J19/S5, J19/S8, J19/S9, J19/S10, J19/S12, J19/S13, J19/S15",
       "spec": "064-library-inventory LIB-FR-03, LIB-FR-04, LIB-FR-05, LIB-FR-06; D01, D11, D15",
       "action": "Start indexing, inspect sessions and association evidence, confirm Targets and equipment, and rescan with an unreadable session folder.",
       "expect": "Seven homogeneous sessions appear with the evidence behind each association. Needs review appears where evidence is missing or conflicts. Confirmations are catalog-only.",
@@ -29,7 +29,7 @@
     },
     {
       "flowStep": "A4",
-      "journeyStep": "J19/S5, J19/S6, J19/S7, J19/S15",
+      "journeyStep": "J19/S5, J19/S6, J19/S7, J19/S8, J19/S15",
       "spec": "064-library-inventory LIB-FR-03, LIB-FR-07",
       "action": "Browse while indexing runs, recover a denied location with Retry, and take a location offline.",
       "expect": "Totals are provisional and name their locations. The denied row offers Choose folder again and Retry. The offline location keeps its last-observed metadata.",

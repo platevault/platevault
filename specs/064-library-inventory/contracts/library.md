@@ -16,7 +16,7 @@ Version: 1. Requests/responses are JSON with UUID identities. Angles are degrees
 | library_preview_metadata | expected assets, field, value | Proposed effective values, predecessor/successor session membership and conflicts; no writes. |
 | library_confirm_metadata | previewId, expected assets | Atomic correction plus regroup/lineage, or Conflict with no changes. Original headers remain unchanged. |
 | library_set_quality | expected assets, state | Fingerprint-bound library decision revision; no membership change. Drifted decisions do not count as applicable Usable. |
-| library_search_targets | query, limit | Offline seed/local targets and aliases with source/provenance. |
+| library_search_targets | query?, cone? {raDeg, decDeg, radiusDeg}, limit | Offline seed and saved targets/aliases with distinct provenance; shared math provides cone filtering, never automatic association. |
 | library_resolve_target | query | Qualified provider candidate or ProviderUnavailable; core local use remains available. |
 | library_save_target | target fields, expectedRevision | Explicit durable user/provider target and aliases with provenance. |
 | library_associate_target | expected sessions, targetId | Explicit confirmed association/evidence revision; no capture-key change. |

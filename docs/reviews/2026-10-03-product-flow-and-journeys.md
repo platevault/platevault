@@ -209,7 +209,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Observe:** checking a row adds that metadata-homogeneous session to the draft. Frame membership and exclusions are confirmed in the review area. The summary reports the intended included frames and integration by channel, with unresolved membership named.
 
-**See:** selection reasons such as geometry suggestion or manual inclusion. Unreviewed and library-Unusable counts stay visible. Confirm their intended membership in frame review; the untouched-frame default remains an open decision.
+**See:** geometry suggestions and manual inclusion reasons. Unreviewed and library-Unusable counts stay visible. D02 sets initial membership: available Unreviewed/Usable frames are included, library-Unusable frames start visibly excluded, and unavailable members remain unresolved. Review preparation confirms exact membership.
 
 **See:** **Selected outside current filters: N** after changing filters. **Show selected** reveals all chosen sessions. **Clear selection** removes the draft selection explicitly.
 
@@ -642,7 +642,7 @@ Baseline status records source traces. Full runtime verification remains incompl
 These proposed journeys specify user actions and refusal behavior. They have not been validated against a running implementation.
 
 1. **Geometry and standalone defaults (product decision):** set overlap/coverage/radius defaults and unknown-orientation handling. Define equipment/framing preselection for Views without a Project or Target context.
-2. **Unreviewed membership (product decision):** explicit bulk Usable is confirmed. Define the untouched-frame inclusion default; worked totals represent confirmed membership, not that default.
+2. **Unreviewed membership (settled by D02):** available Unreviewed/Usable frames enter the draft, library-Unusable frames start visibly excluded, and unavailable members remain unresolved. Bulk Usable is explicit; worked totals have confirmed membership. Implementation and runtime evidence remain required.
 3. **Raw/CFA measurement support (engineering contract):** define channel/sample/model semantics and imported-metric identity matching before treating results as comparable.
 4. **Profile and input-mode support (engineering contract):** verify each application's exact membership handoff and result-input capabilities. Define whether a View supports mixed per-item modes; every affected item and mode change must be reviewed.
 5. **Generated master storage (product decision):** choose copy, transfer, or in-place registration when adopting a master. Adoption must not leave reusable data disposable with a processing folder.
