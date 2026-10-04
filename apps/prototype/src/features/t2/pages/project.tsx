@@ -102,8 +102,12 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         </span>
       ),
     },
-    { id: "frames", header: "Frames", align: "right", sortValue: (r) => r.session.assetIds.length, cell: (r) => formatCount(r.session.assetIds.length) },
-    { id: "integration", header: "Integration", align: "right", sortValue: (r) => r.breakdown.captured.seconds, cell: (r) => formatDuration(r.breakdown.captured.seconds) },
+    {
+      id: "frames",
+      header: "Frames · integration",
+      sortValue: (r) => r.breakdown.captured.seconds,
+      cell: (r) => `${formatCount(r.session.assetIds.length)} · ${formatDuration(r.breakdown.captured.seconds)}`,
+    },
     { id: "site", header: "Capture site", sortValue: (r) => r.site, cell: (r) => r.site ?? <UnknownValue reason="No saved site matches the header coordinates." /> },
     {
       id: "availability",
