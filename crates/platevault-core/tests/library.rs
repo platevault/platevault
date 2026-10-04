@@ -804,3 +804,114 @@ async fn candidates_whose_digests_differ_are_conflicting_copies_counted_once() {
         assert_eq!(&support::digest(path), digest);
     }
 }
+
+/// A light frame of one session; `frame` varies the header bytes, not the size.
+fn write_light(path: &Path, frame: usize, start: Option<&str>) {
+    let number = frame.to_string();
+    let start = start.map(|start| format!("'{start}'"));
+    let mut fields =
+        vec![("IMAGETYP", "'LIGHT'"), ("FILTER", "'Ha'"), ("EXPTIME", "300"), ("FRAMENO", &number)];
+    if let Some(start) = &start {
+        fields.push(("DATE-OBS", start));
+    }
+    support::fits(path, &fields).unwrap();
+}
+
+/// Index `frames` lights into T7 and copy them to NAS (`differ` frames get other
+/// pixels there), returning the library, both locations and every original digest.
+async fn two_location_library(
+    temp: &tempfile::TempDir,
+    frames: usize,
+    start: Option<&str>,
+    differ: &[usize],
+) -> (Arc<Library>, Vec<Location>, Vec<(std::path::PathBuf, String)>) {
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let mut locations = Vec::new();
+    let mut originals = Vec::new();
+    for name in ["T7", "NAS"] {
+        let root = temp.path().join(name);
+        std::fs::create_dir(&root).unwrap();
+        for frame in 0..frames {
+            let path = root.join(format!("light_{frame}.fits"));
+            write_light(&path, frame, start);
+            if name == "NAS" && differ.contains(&frame) {
+                let mut bytes = std::fs::read(&path).unwrap();
+                *bytes.last_mut().unwrap() ^= 0xff;
+                std::fs::write(&path, &bytes).unwrap();
+            }
+            originals.push((path.clone(), support::digest(&path)));
+        }
+        let location = library
+            .register_location(NativePath::from_path(&root), name.into(), LocationRole::Captures)
+            .await
+            .unwrap();
+        assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+        locations.push(location);
+    }
+    (library, locations, originals)
+}
+
+async fn only_session(
+    library: &Library,
+) -> (persistence_library::SessionSummary, persistence_library::SessionDetail) {
+    let sessions = library.catalog().list_sessions(&SessionQuery::default()).await.unwrap();
+    assert_eq!(sessions.len(), 1, "one capture key across both locations");
+    let detail = library.catalog().session(sessions[0].session.id).await.unwrap();
+    (sessions[0].clone(), detail)
+}
+
+#[tokio::test]
+async fn copies_without_a_capture_start_join_only_by_equal_digest() {
+    // No DATE-OBS at all, and a date-only DATE-OBS without a time of day.
+    for start in [None, Some("2026-09-18")] {
+        let temp = tempfile::tempdir().unwrap();
+        let (library, _, originals) = two_location_library(&temp, 3, start, &[]).await;
+        let (session, detail) = only_session(&library).await;
+        assert!(detail.members.iter().all(|m| !m.duplicate_candidate), "{start:?}: no match");
+        assert!(
+            detail.assets.iter().all(|asset| asset.fingerprint.content_sha256.is_none()),
+            "{start:?}: an unknown start is no duplicate candidate, so nothing is hashed"
+        );
+        // Every frame is reviewed, so every copy is hashed.
+        for asset in &detail.assets {
+            let asset = library.catalog().asset(asset.id).await.unwrap();
+            library
+                .catalog()
+                .set_quality(&[expected_of(&asset)], Quality::Usable, InventoryProbe)
+                .await
+                .unwrap();
+        }
+        let (after, detail) = only_session(&library).await;
+        assert_eq!((session.asset_count, after.capture_count), (6, 3), "{start:?}: by digest");
+        assert_eq!(detail.members.len(), 3);
+        for member in &detail.members {
+            assert_eq!(member.copies.len(), 2, "{member:?}");
+            assert_eq!(member.applicable_quality, ApplicableQuality::Usable, "{member:?}");
+        }
+        for (path, digest) in &originals {
+            assert_eq!(&support::digest(path), digest);
+        }
+    }
+}
+
+#[tokio::test]
+async fn ambiguous_same_start_matches_never_join_copies() {
+    let temp = tempfile::tempdir().unwrap();
+    // Three same-size frames share one start time; the NAS copy of frame 2 differs.
+    let (library, _, originals) =
+        two_location_library(&temp, 3, Some("2026-09-18T22:00:00"), &[2]).await;
+    let (session, detail) = only_session(&library).await;
+    assert!(detail.assets.iter().all(|asset| asset.fingerprint.content_sha256.is_some()));
+    assert!(!session.provisional, "every candidate was hashed");
+    assert_eq!(session.capture_count, 4, "two identical pairs and two unrelated frames");
+    assert!(
+        detail.members.iter().all(|m| m.applicable_quality != ApplicableQuality::ConflictingCopies),
+        "{:?}",
+        detail.members
+    );
+    let sizes: Vec<usize> = detail.members.iter().map(|member| member.copies.len()).collect();
+    assert_eq!(sizes.iter().filter(|copies| **copies == 2).count(), 2, "{sizes:?}");
+    for (path, digest) in &originals {
+        assert_eq!(&support::digest(path), digest);
+    }
+}

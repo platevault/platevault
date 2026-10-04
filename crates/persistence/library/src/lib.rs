@@ -42,7 +42,7 @@ use uuid::Uuid;
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
 
 const SCHEMA: &str = include_str!("schema.sql");
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -156,18 +156,19 @@ pub struct SessionDetail {
     pub lineage: Vec<SessionLineage>,
 }
 
-/// One logical capture of a session (D16): every recorded physical copy with equal
-/// SHA-256 across registered locations, Missing ones included, listed once. An
-/// asset without such a copy is its own member. Every copy stays registered and
-/// protected; each copy's availability is on its asset.
+/// One logical capture of a session (D16): every recorded physical copy joined by
+/// equal SHA-256 across registered locations or by a recorded copy link, Missing
+/// ones included, listed once. An asset without such a copy is its own member.
+/// Every copy stays registered and protected; each copy's availability is on its
+/// asset.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionMember {
     pub copies: Vec<Uuid>,
     pub content_sha256: Option<String>,
     pub applicable_quality: ApplicableQuality,
-    /// Unhashed and matching a copy in another location by size, capture key and
-    /// start time; totals stay provisional until it is hashed.
+    /// Unhashed and matching a copy in another location by size, capture key and a
+    /// known start time; totals stay provisional until it is hashed.
     pub duplicate_candidate: bool,
 }
 
@@ -383,7 +384,7 @@ impl Catalog {
         require_root_identity(&input.identity)?;
         let id = Uuid::new_v4();
         let location = write_txn!(self, |conn| {
-            ensure_no_overlap(conn, None, &input.path, &input.identity).await?;
+            ensure_no_overlap(conn, None, &input.path, &input.identity, StaleRoots::Refuse).await?;
             insert_location(conn, id, name, input).await?;
             load_location(conn, id).await?
         });
@@ -444,7 +445,7 @@ impl Catalog {
                     Some(id),
                 ));
             }
-            ensure_no_overlap(conn, Some(id), path, identity).await?;
+            ensure_no_overlap(conn, Some(id), path, identity, StaleRoots::Compare).await?;
             sqlx::query(
                 "UPDATE locations SET path_key = ?1, availability = 'available', \
                  unavailable_reason = NULL, unavailable_at = NULL, \
@@ -1569,7 +1570,10 @@ impl Catalog {
 impl Catalog {
     /// Record the scan's duplicate-candidate verification work: the unhashed
     /// cross-location duplicate candidates involving the operation's location that
-    /// are readable now. Their count goes into the scan's progress.
+    /// are readable now. Their count goes into the scan's progress. Each
+    /// unambiguous candidate pair (exactly one partner per other location on both
+    /// sides) is recorded as one logical capture, so differing digests make it a
+    /// pair of conflicting copies rather than two captures (D16).
     ///
     /// # Errors
     /// `InvalidInput` when the scan is not running; `PersistenceFailure` otherwise.
@@ -1577,8 +1581,16 @@ impl Catalog {
         let work = write_txn!(self, |conn| {
             let op = load_operation_row(conn, operation_id).await?;
             require_running(&op)?;
+            let matches = matches_of_location(conn, op.location_id).await?;
+            let mut ids = BTreeSet::new();
+            for found in matches.iter().filter(|found| found.candidate) {
+                ids.extend([found.id, found.partner]);
+            }
+            for (left, right) in unambiguous_candidates(&matches, op.location_id) {
+                record_copy_link(conn, left, right, "candidate").await?;
+            }
             let mut work = Vec::new();
-            for id in candidates_of_location(conn, op.location_id).await? {
+            for id in ids {
                 let asset = load_asset(conn, id).await?;
                 if asset.fingerprint.content_sha256.is_none()
                     && asset.availability == Availability::Available
@@ -1773,6 +1785,7 @@ impl Catalog {
                 Some(location.id),
                 &review.proposed_root,
                 &review.proposed_identity,
+                StaleRoots::Refuse,
             )
             .await?;
             apply_remap_rows(conn, &review, &assets, &new_root).await?;
@@ -1825,6 +1838,18 @@ async fn install_schema(conn: &mut SqliteConnection) -> Result<()> {
         ));
     }
     let mut txn = conn.begin_with("BEGIN IMMEDIATE").await?;
+    // An older catalog is refused before any DDL of this version touches it.
+    if !tables.is_empty() {
+        let recorded: Option<i64> =
+            sqlx::query_scalar("SELECT value FROM catalog_meta WHERE key = 'schema_version'")
+                .fetch_optional(&mut *txn)
+                .await?;
+        if let Some(version) = recorded.filter(|version| *version != SCHEMA_VERSION) {
+            return Err(LibraryError::InvalidInput(format!(
+                "unsupported catalog schema version {version}"
+            )));
+        }
+    }
     sqlx::raw_sql(SCHEMA).execute(&mut *txn).await?;
     let version: i64 =
         sqlx::query_scalar("SELECT value FROM catalog_meta WHERE key = 'schema_version'")
@@ -1944,20 +1969,31 @@ fn scoped(error: LibraryError, scope: NativePath, identity: Option<Uuid>) -> Lib
     LibraryError::Context { error: Box::new(error), scope, identity }
 }
 
+/// How a registered root that no longer resolves is treated by an overlap check.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StaleRoots {
+    /// Reselecting a location: `same_root` already proved the candidate is that
+    /// location's recorded folder, so a stale sibling is compared on what the
+    /// catalog recorded instead of blocking the recovery.
+    Compare,
+    /// Registration and remap: a stale root on the volume could be an ancestor or
+    /// descendant at its new path, so the change is refused, naming that root,
+    /// until it is reselected.
+    Refuse,
+}
+
 /// Refuse a root that is, contains or lies inside another registered root on the
 /// same volume. Overlap is decided on canonical ancestry and folder identity, never
 /// on the path text the user chose: links anywhere above either root (macOS
 /// `/var` → `/private/var`, a linked home folder) resolve first. The candidate must
 /// resolve. A registered root that no longer resolves (a renamed folder, a volume
-/// remounted under another name) is compared on what the catalog recorded: its
-/// folder identity in the candidate's ancestry, or its stored path. It never
-/// refuses merely because it does not resolve, so its own reselect or remap and
-/// its siblings' recovery stay possible.
+/// remounted under another name) is handled by `stale`.
 async fn ensure_no_overlap(
     conn: &mut SqliteConnection,
     exclude: Option<Uuid>,
     path: &NativePath,
     identity: &FileIdentity,
+    stale: StaleRoots,
 ) -> Result<()> {
     let rows = sqlx::query(
         "SELECT * FROM locations WHERE volume_filesystem = ?1 AND volume_stable_id = ?2",
@@ -1977,6 +2013,18 @@ async fn ensure_no_overlap(
         let overlaps = same_root(&other.identity, identity)
             || match CanonicalRoot::resolve(&other.path) {
                 Ok(resolved) => resolved.overlaps(&candidate, volume),
+                Err(error) if stale == StaleRoots::Refuse => {
+                    return Err(scoped(
+                        LibraryError::IdentityConflict(format!(
+                            "registered location {:?} at {} no longer resolves ({error}), so \
+                             overlap with it cannot be ruled out; reselect it first",
+                            other.name,
+                            other.path.display()
+                        )),
+                        path.clone(),
+                        Some(other.id),
+                    ));
+                }
                 Err(_) => {
                     candidate.descends_from(&other.identity)
                         || roots_overlap(&other.path, path, volume)
@@ -2173,10 +2221,9 @@ async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Res
          AND a.availability <> 'missing' AND substr(a.path_key, 1, ?2) = ?3 \
          AND (a.quality <> 'unreviewed' OR (a.content_sha256 IS NOT NULL AND (EXISTS ( \
              SELECT 1 FROM assets d WHERE d.content_sha256 = a.content_sha256 \
-             AND d.location_id <> a.location_id) OR EXISTS ( \
-             SELECT 1 FROM assets b WHERE b.session_id = a.session_id \
-             AND b.location_id <> a.location_id AND b.size_bytes = a.size_bytes \
-             AND b.capture_start IS a.capture_start))))",
+             AND d.location_id <> a.location_id) \
+             OR EXISTS (SELECT 1 FROM copy_links WHERE left_id = a.id) \
+             OR EXISTS (SELECT 1 FROM copy_links WHERE right_id = a.id))))",
     )
     .bind(op.location_id.to_string())
     .bind(i64::try_from(key.len()).map_err(|_| LibraryError::InvalidInput("path too long".into()))?)
@@ -2651,6 +2698,18 @@ async fn refresh_asset(
         .execute(&mut *conn)
         .await?;
         return Ok(Change::Unchanged);
+    }
+    if let Some(previous) = stored.fingerprint.content_sha256.as_deref() {
+        if fingerprint.content_sha256.as_deref() != Some(previous) {
+            // The copy diverges from the bytes it shared with copies elsewhere: record
+            // that they were one capture before the digest is replaced (D16).
+            sqlx::query(LINK_IDENTICAL_COPIES)
+                .bind(stored.id.to_string())
+                .bind(previous)
+                .bind(stored.location_id.to_string())
+                .execute(&mut *conn)
+                .await?;
+        }
     }
     let sequence = stored.observation_revision + 1;
     let effective = effective_metadata(conn, stored.id, &file.metadata).await?;
@@ -4416,8 +4475,8 @@ impl CaptureView {
         sessions: &[Uuid],
         assets: &[Asset],
     ) -> Result<Self> {
-        let (matches, candidates) = matches_in_sessions(conn, sessions).await?;
-        let (key_of, copies) = logical_captures(conn, assets, &matches).await?;
+        let candidates = candidates_in_sessions(conn, sessions).await?;
+        let (key_of, copies) = logical_captures(conn, assets).await?;
         let locations: BTreeSet<Uuid> = assets.iter().map(|asset| asset.location_id).collect();
         let mut provisional = HashMap::with_capacity(locations.len());
         for id in locations {
@@ -4523,41 +4582,55 @@ const COPIES_BY_DIGEST: &str = asset_sql!(
      AND a.session_id IS NOT NULL ORDER BY a.location_id, a.id"
 );
 
-/// Copies of one capture within the request's sessions: an asset in the same
-/// session (equal capture key) in another location with equal size and equal (or
-/// equally unknown) capture start time. A pair is a duplicate candidate while
-/// either side has no content digest and both can still be read.
-const MATCHES_IN_SESSIONS: &str = "SELECT a.id AS id, b.id AS partner, \
-     ((a.content_sha256 IS NULL OR b.content_sha256 IS NULL) \
-      AND a.availability <> 'missing' AND b.availability <> 'missing') AS candidate \
-     FROM assets a CROSS JOIN assets b ON b.session_id = a.session_id \
-     AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id) \
-     AND b.size_bytes = a.size_bytes \
-     WHERE a.session_id IN (SELECT value FROM json_each(?1)) \
-     AND b.capture_start IS a.capture_start";
+const ASSETS_BY_IDS: &str = asset_sql!("WHERE a.id IN (SELECT value FROM json_each(?1))");
 
-/// Duplicate-candidate pairs driven from one location's assets.
-const CANDIDATES_OF_LOCATION: &str = "SELECT a.id AS id, b.id AS partner \
-     FROM assets a CROSS JOIN assets b ON b.session_id = a.session_id \
+/// Recorded copy links touching any of the given assets.
+const LINKS_OF_ASSETS: &str = "SELECT left_id, right_id FROM copy_links \
+     WHERE left_id IN (SELECT value FROM json_each(?1)) \
+     UNION SELECT left_id, right_id FROM copy_links \
+     WHERE right_id IN (SELECT value FROM json_each(?1))";
+
+/// Assets of the request's sessions with a duplicate candidate: an asset in the
+/// same session (equal capture key) in another location with equal size and an
+/// equal, known capture start that has a time of day, where either side has no
+/// content digest and both can still be read. Unknown or date-only starts never
+/// match.
+const CANDIDATES_IN_SESSIONS: &str = "SELECT DISTINCT a.id FROM assets a CROSS JOIN assets b \
+     ON b.session_id = a.session_id AND b.size_bytes = a.size_bytes \
+     AND b.capture_start = a.capture_start \
      AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id) \
-     AND b.size_bytes = a.size_bytes \
-     WHERE a.location_id = ?1 AND a.session_id IS NOT NULL \
+     WHERE a.session_id IN (SELECT value FROM json_each(?1)) \
+     AND instr(a.capture_start, ':') > 0 \
      AND a.availability <> 'missing' AND b.availability <> 'missing' \
-     AND (a.content_sha256 IS NULL OR b.content_sha256 IS NULL) \
-     AND b.capture_start IS a.capture_start";
+     AND (a.content_sha256 IS NULL OR b.content_sha256 IS NULL)";
+
+/// The same matches driven from one location's assets, hashed or not, with each
+/// partner's location; `candidate` marks the duplicate-candidate pairs.
+const MATCHES_OF_LOCATION: &str = "SELECT a.id AS id, b.id AS partner, \
+     b.location_id AS partner_location, \
+     (a.content_sha256 IS NULL OR b.content_sha256 IS NULL) AS candidate \
+     FROM assets a CROSS JOIN assets b ON b.session_id = a.session_id \
+     AND b.size_bytes = a.size_bytes AND b.capture_start = a.capture_start \
+     AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id) \
+     WHERE a.location_id = ?1 AND a.session_id IS NOT NULL \
+     AND instr(a.capture_start, ':') > 0 \
+     AND a.availability <> 'missing' AND b.availability <> 'missing'";
 
 const PENDING_IN_LOCATION: &str =
     "SELECT EXISTS (SELECT 1 FROM assets WHERE location_id = ?1 AND verification_pending = 1)";
 
 /// A hashed asset that is a copy of a logical capture: its digest is recorded in
-/// another location, or another location holds its matching copy.
-const IS_ALIASED_COPY: &str = "SELECT EXISTS (SELECT 1 FROM assets a CROSS JOIN assets d \
-     ON d.content_sha256 = a.content_sha256 AND d.location_id <> a.location_id \
-     WHERE a.id = ?1) \
-     OR EXISTS (SELECT 1 FROM assets a CROSS JOIN assets b ON b.session_id = a.session_id \
-     AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id) \
-     AND b.size_bytes = a.size_bytes \
-     WHERE a.id = ?1 AND a.content_sha256 IS NOT NULL AND b.capture_start IS a.capture_start)";
+/// another location, or a recorded link joins it to a copy there.
+const IS_ALIASED_COPY: &str = "SELECT EXISTS (SELECT 1 FROM assets d \
+     WHERE d.content_sha256 = ?1 AND d.location_id <> ?2) \
+     OR EXISTS (SELECT 1 FROM copy_links WHERE left_id = ?3) \
+     OR EXISTS (SELECT 1 FROM copy_links WHERE right_id = ?3)";
+
+/// Record that an asset whose digest is about to change was byte-identical to its
+/// copies in other locations, so the pair stays one capture once they diverge.
+const LINK_IDENTICAL_COPIES: &str = "INSERT OR IGNORE INTO copy_links (left_id, right_id, cause) \
+     SELECT min(?1, d.id), max(?1, d.id), 'identical' FROM assets d \
+     WHERE d.content_sha256 = ?2 AND d.location_id <> ?3";
 
 fn find_root(parent: &HashMap<Uuid, Uuid>, id: Uuid) -> Uuid {
     let mut root = id;
@@ -4574,48 +4647,39 @@ fn join_copies(parent: &mut HashMap<Uuid, Uuid>, left: Uuid, right: Uuid) {
     }
 }
 
-/// Group assets into logical captures (D16). Copies are joined when their digest
-/// is recorded in at least two registered locations, Missing copies included, or
-/// when they match across locations (duplicate candidates, and aliased copies
-/// whose digests have since diverged). Any other asset is its own capture.
+/// Group assets into logical captures (D16). Copies are joined only when their
+/// digest is recorded in at least two registered locations (Missing copies
+/// included) or a recorded link proves the pair: once byte-identical, or an
+/// unambiguous duplicate-candidate pair. A size/start match alone never joins. Any
+/// other asset is its own capture. Linked copies and their digest copies are
+/// followed until the capture is closed, so every entry point sees the same copies.
 async fn logical_captures(
     conn: &mut SqliteConnection,
     assets: &[Asset],
-    matches: &[(Uuid, Uuid)],
 ) -> Result<(HashMap<Uuid, String>, HashMap<String, Vec<Asset>>)> {
-    let digests: BTreeSet<&str> =
-        assets.iter().filter_map(|asset| asset.fingerprint.content_sha256.as_deref()).collect();
-    let mut nodes: HashMap<Uuid, Asset> =
-        assets.iter().map(|asset| (asset.id, asset.clone())).collect();
+    count_read("logical_captures");
+    let mut nodes: HashMap<Uuid, Asset> = HashMap::new();
     let mut parent = HashMap::new();
-    if !digests.is_empty() {
-        count_read("logical_captures");
-        let rows =
-            sqlx::query(COPIES_BY_DIGEST).bind(to_json(&digests)?).fetch_all(&mut *conn).await?;
-        let mut by_digest: HashMap<String, Vec<Asset>> = HashMap::new();
-        for row in &rows {
-            let copy = asset_from_row(row)?;
-            if let Some(digest) = copy.fingerprint.content_sha256.clone() {
-                by_digest.entry(digest).or_default().push(copy);
+    let mut fresh: Vec<Asset> = assets.to_vec();
+    let mut seen_digests: BTreeSet<String> = BTreeSet::new();
+    while !fresh.is_empty() {
+        let mut digests = BTreeSet::new();
+        let mut ids = BTreeSet::new();
+        for asset in fresh.drain(..) {
+            if nodes.contains_key(&asset.id) {
+                continue;
             }
-        }
-        for group in by_digest.into_values() {
-            let spans =
-                group.iter().map(|copy| copy.location_id).collect::<BTreeSet<_>>().len() > 1;
-            if spans {
-                for pair in group.windows(2) {
-                    join_copies(&mut parent, pair[0].id, pair[1].id);
+            if let Some(digest) = &asset.fingerprint.content_sha256 {
+                if seen_digests.insert(digest.clone()) {
+                    digests.insert(digest.clone());
                 }
             }
-            for copy in group {
-                nodes.entry(copy.id).or_insert(copy);
-            }
+            ids.insert(asset.id);
+            nodes.insert(asset.id, asset);
         }
-    }
-    for (left, right) in matches {
-        if nodes.contains_key(left) && nodes.contains_key(right) {
-            join_copies(&mut parent, *left, *right);
-        }
+        let mut found = copies_by_digest(conn, &digests, &mut parent).await?;
+        found.extend(linked_copies(conn, &ids, &nodes, &mut parent).await?);
+        fresh = found.into_iter().filter(|copy| !nodes.contains_key(&copy.id)).collect();
     }
     let mut components: HashMap<Uuid, Vec<Asset>> = HashMap::new();
     for (id, asset) in nodes {
@@ -4636,57 +4700,152 @@ async fn logical_captures(
     Ok((key_of, copies))
 }
 
-/// Cross-location matches of the sessions' assets and the duplicate candidates
-/// among them, in one query.
-async fn matches_in_sessions(
+/// Every copy of these digests that spans two or more locations, joined.
+async fn copies_by_digest(
+    conn: &mut SqliteConnection,
+    digests: &BTreeSet<String>,
+    parent: &mut HashMap<Uuid, Uuid>,
+) -> Result<Vec<Asset>> {
+    let mut found = Vec::new();
+    if digests.is_empty() {
+        return Ok(found);
+    }
+    let rows = sqlx::query(COPIES_BY_DIGEST).bind(to_json(digests)?).fetch_all(&mut *conn).await?;
+    let mut by_digest: BTreeMap<String, Vec<Asset>> = BTreeMap::new();
+    for row in &rows {
+        let copy = asset_from_row(row)?;
+        if let Some(digest) = copy.fingerprint.content_sha256.clone() {
+            by_digest.entry(digest).or_default().push(copy);
+        }
+    }
+    for group in by_digest.into_values() {
+        if group.iter().map(|copy| copy.location_id).collect::<BTreeSet<_>>().len() > 1 {
+            for pair in group.windows(2) {
+                join_copies(parent, pair[0].id, pair[1].id);
+            }
+            found.extend(group);
+        }
+    }
+    Ok(found)
+}
+
+/// The copies recorded links join to these assets, joined; returns those not yet seen.
+async fn linked_copies(
+    conn: &mut SqliteConnection,
+    ids: &BTreeSet<Uuid>,
+    nodes: &HashMap<Uuid, Asset>,
+    parent: &mut HashMap<Uuid, Uuid>,
+) -> Result<Vec<Asset>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let rows = sqlx::query(LINKS_OF_ASSETS).bind(json_ids(ids)?).fetch_all(&mut *conn).await?;
+    let mut linked = BTreeSet::new();
+    for row in &rows {
+        let left = parse_uuid(&row.try_get::<String, _>("left_id")?)?;
+        let right = parse_uuid(&row.try_get::<String, _>("right_id")?)?;
+        join_copies(parent, left, right);
+        linked.extend([left, right].into_iter().filter(|id| !nodes.contains_key(id)));
+    }
+    if linked.is_empty() {
+        return Ok(Vec::new());
+    }
+    let rows = sqlx::query(ASSETS_BY_IDS).bind(json_ids(&linked)?).fetch_all(&mut *conn).await?;
+    rows.iter().map(asset_from_row).collect()
+}
+
+/// Assets of these sessions with a duplicate candidate, in one query.
+async fn candidates_in_sessions(
     conn: &mut SqliteConnection,
     sessions: &[Uuid],
-) -> Result<(Vec<(Uuid, Uuid)>, BTreeSet<Uuid>)> {
-    let mut matches = Vec::new();
-    let mut candidates = BTreeSet::new();
+) -> Result<BTreeSet<Uuid>> {
     if sessions.is_empty() {
-        return Ok((matches, candidates));
+        return Ok(BTreeSet::new());
     }
     count_read("candidates");
-    let rows = sqlx::query(MATCHES_IN_SESSIONS)
+    let ids: Vec<String> = sqlx::query_scalar(CANDIDATES_IN_SESSIONS)
         .bind(json_ids(&sessions.iter().copied().collect())?)
         .fetch_all(&mut *conn)
         .await?;
-    for row in &rows {
-        let id = parse_uuid(&row.try_get::<String, _>("id")?)?;
-        let partner = parse_uuid(&row.try_get::<String, _>("partner")?)?;
-        if row.try_get::<bool, _>("candidate")? {
-            candidates.insert(id);
-        }
-        matches.push((id, partner));
-    }
-    Ok((matches, candidates))
+    ids.iter().map(|id| parse_uuid(id)).collect()
 }
 
-/// Both sides of every candidate pair involving the location.
-async fn candidates_of_location(
+/// One known-start match between an asset of the scanned location and a copy in
+/// another location.
+struct CopyMatch {
+    id: Uuid,
+    partner: Uuid,
+    partner_location: Uuid,
+    candidate: bool,
+}
+
+async fn matches_of_location(
     conn: &mut SqliteConnection,
     location: Uuid,
-) -> Result<BTreeSet<Uuid>> {
-    let rows = sqlx::query(CANDIDATES_OF_LOCATION)
-        .bind(location.to_string())
-        .fetch_all(&mut *conn)
-        .await?;
-    let mut ids = BTreeSet::new();
-    for row in &rows {
-        ids.insert(parse_uuid(&row.try_get::<String, _>("id")?)?);
-        ids.insert(parse_uuid(&row.try_get::<String, _>("partner")?)?);
+) -> Result<Vec<CopyMatch>> {
+    let rows =
+        sqlx::query(MATCHES_OF_LOCATION).bind(location.to_string()).fetch_all(&mut *conn).await?;
+    rows.iter()
+        .map(|row| {
+            Ok(CopyMatch {
+                id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+                partner: parse_uuid(&row.try_get::<String, _>("partner")?)?,
+                partner_location: parse_uuid(&row.try_get::<String, _>("partner_location")?)?,
+                candidate: row.try_get("candidate")?,
+            })
+        })
+        .collect()
+}
+
+/// Candidate pairs where each side has exactly one match in the other's location;
+/// several same-size frames with one start time are ambiguous and never paired.
+fn unambiguous_candidates(matches: &[CopyMatch], location: Uuid) -> Vec<(Uuid, Uuid)> {
+    let mut ours: HashMap<(Uuid, Uuid), usize> = HashMap::new();
+    let mut theirs: HashMap<Uuid, usize> = HashMap::new();
+    for found in matches {
+        *ours.entry((found.id, found.partner_location)).or_default() += 1;
+        *theirs.entry(found.partner).or_default() += 1;
     }
-    Ok(ids)
+    matches
+        .iter()
+        .filter(|found| {
+            found.candidate
+                && found.partner_location != location
+                && ours[&(found.id, found.partner_location)] == 1
+                && theirs[&found.partner] == 1
+        })
+        .map(|found| (found.id.min(found.partner), found.id.max(found.partner)))
+        .collect()
+}
+
+async fn record_copy_link(
+    conn: &mut SqliteConnection,
+    left: Uuid,
+    right: Uuid,
+    cause: &str,
+) -> Result<()> {
+    let (left, right) = (left.min(right), left.max(right));
+    sqlx::query("INSERT OR IGNORE INTO copy_links (left_id, right_id, cause) VALUES (?1, ?2, ?3)")
+        .bind(left.to_string())
+        .bind(right.to_string())
+        .bind(cause)
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
 }
 
 /// A copy of a logical capture (D19): readable rescans rehash it even when its
 /// stats match, because its bytes decide what the capture counts as.
 async fn aliased_copy(conn: &mut SqliteConnection, asset: &Asset) -> Result<bool> {
-    if asset.fingerprint.content_sha256.is_none() {
+    let Some(digest) = asset.fingerprint.content_sha256.as_deref() else {
         return Ok(false);
-    }
-    Ok(sqlx::query_scalar(IS_ALIASED_COPY).bind(asset.id.to_string()).fetch_one(&mut *conn).await?)
+    };
+    Ok(sqlx::query_scalar(IS_ALIASED_COPY)
+        .bind(digest)
+        .bind(asset.location_id.to_string())
+        .bind(asset.id.to_string())
+        .fetch_one(&mut *conn)
+        .await?)
 }
 
 async fn record_progress(
@@ -4803,8 +4962,14 @@ async fn remap_root_blocks(
         });
         return Ok(blocked);
     }
-    if let Err(error) =
-        ensure_no_overlap(conn, Some(location.id), proposed_root, proposed_identity).await
+    if let Err(error) = ensure_no_overlap(
+        conn,
+        Some(location.id),
+        proposed_root,
+        proposed_identity,
+        StaleRoots::Refuse,
+    )
+    .await
     {
         blocked.push(RemapBlock {
             asset_id: None,
@@ -5730,19 +5895,22 @@ mod tests {
         assert_eq!((reads("location_provisional"), reads("candidates")), (2, 1));
     }
 
-    /// Every D16 read is driven by an index; none scans the assets table.
+    /// Every D16 read is driven by an index; none scans the assets or link tables,
+    /// and the copy-pair queries seek the session/size/start index.
     #[tokio::test]
     async fn d16_queries_use_indexes_and_scan_no_asset_table() {
         let dir = tempfile::tempdir().unwrap();
         let catalog = indexed_catalog(dir.path(), 3).await;
         let mut conn = catalog.reader().await.unwrap();
         let ids = r#"["00000000-0000-0000-0000-000000000000"]"#;
-        for (sql, binds) in [
-            (MATCHES_IN_SESSIONS, vec![ids]),
-            (CANDIDATES_OF_LOCATION, vec!["location"]),
-            (COPIES_BY_DIGEST, vec![r#"["digest"]"#]),
-            (PENDING_IN_LOCATION, vec!["location"]),
-            (IS_ALIASED_COPY, vec!["asset"]),
+        for (sql, binds, pair) in [
+            (CANDIDATES_IN_SESSIONS, vec![ids], true),
+            (MATCHES_OF_LOCATION, vec!["location"], true),
+            (COPIES_BY_DIGEST, vec![r#"["digest"]"#], false),
+            (ASSETS_BY_IDS, vec![ids], false),
+            (LINKS_OF_ASSETS, vec![ids], false),
+            (PENDING_IN_LOCATION, vec!["location"], false),
+            (IS_ALIASED_COPY, vec!["digest", "location", "asset"], false),
         ] {
             let explain = format!("EXPLAIN QUERY PLAN {sql}");
             let mut query = sqlx::query(sqlx::AssertSqlSafe(explain));
@@ -5757,13 +5925,48 @@ mod tests {
                 .map(|row| row.try_get::<String, _>("detail").unwrap())
                 .collect();
             let scanned = plan.iter().any(|detail| {
-                ["SCAN a", "SCAN b", "SCAN d", "SCAN assets"]
+                ["SCAN a", "SCAN b", "SCAN d", "SCAN assets", "SCAN copy_links"]
                     .iter()
                     .any(|scan| detail == scan || detail.starts_with(&format!("{scan} ")))
             });
             assert!(!scanned, "{sql}\n{plan:#?}");
             assert!(plan.iter().any(|detail| detail.contains("USING")), "{plan:#?}");
+            if pair {
+                let seek = "USING INDEX assets_session_size_start \
+                            (session_id=? AND size_bytes=? AND capture_start=? AND location_id=?)";
+                assert!(plan.iter().any(|detail| detail.contains(seek)), "{sql}\n{plan:#?}");
+            }
         }
+    }
+
+    /// An older catalog is refused with the documented error before any DDL of
+    /// this version runs against it, and the file is left as it was.
+    #[tokio::test]
+    async fn an_older_catalog_is_refused_as_an_unsupported_schema_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("catalog.sqlite");
+        let options = SqliteConnectOptions::new().filename(&path).create_if_missing(true);
+        let mut conn = SqliteConnection::connect_with(&options).await.unwrap();
+        // The v2 shape: version 2 recorded, assets without the derived digest column.
+        sqlx::raw_sql(
+            "CREATE TABLE catalog_meta (key TEXT PRIMARY KEY NOT NULL, value INTEGER NOT NULL) \
+             STRICT; INSERT INTO catalog_meta VALUES ('schema_version', 2); \
+             CREATE TABLE assets (id TEXT PRIMARY KEY NOT NULL, fingerprint TEXT NOT NULL) STRICT;",
+        )
+        .execute(&mut conn)
+        .await
+        .unwrap();
+        conn.close().await.unwrap();
+        let error = Catalog::open(&path).await.err().expect("an older catalog is refused");
+        assert_eq!(error.response(None, None).kind, "invalid_input", "{error}");
+        assert_eq!(error.to_string(), "invalid input: unsupported catalog schema version 2");
+        let mut conn = SqliteConnection::connect_with(&options).await.unwrap();
+        let tables: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+                .fetch_all(&mut conn)
+                .await
+                .unwrap();
+        assert_eq!(tables, ["assets", "catalog_meta"], "no DDL of this version was applied");
     }
 
     /// Without folder identity (non-Unix hosts) roots compare by canonical path only.

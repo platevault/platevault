@@ -1583,15 +1583,20 @@ async fn overlap_follows_canonical_ancestry_through_aliases_and_fails_closed() {
     }
     assert_eq!(catalog.list_locations().await.unwrap().len(), 1);
 
-    // A path that does not resolve is refused. A registered root that no longer
-    // resolves does not block an unrelated root on the volume.
+    // A path that does not resolve is refused. While a registered root on the
+    // volume no longer resolves, a new registration is refused naming that root;
+    // once the root resolves again the unrelated folder registers.
     let elsewhere = fx.temp.path().join("Elsewhere");
     std::fs::create_dir_all(elsewhere.join("Flats")).unwrap();
     std::fs::rename(&link, fx.temp.path().join("renamed-link")).unwrap();
     let mut unresolved = registration_at(&elsewhere.join("Flats"));
     unresolved.path = NativePath::from_path(&elsewhere.join("Darks"));
     catalog.register_location(&unresolved).await.unwrap_err();
+    let error = catalog.register_location(&registration_at(&elsewhere)).await.unwrap_err();
+    assert_eq!(kind(&error), "identity_conflict");
+    assert!(error.to_string().contains("\"Captures\"") && error.to_string().contains("reselect"));
     assert_eq!(catalog.list_locations().await.unwrap().len(), 1, "refusals write nothing");
+    std::fs::rename(fx.temp.path().join("renamed-link"), &link).unwrap();
     catalog.register_location(&registration_at(&elsewhere)).await.unwrap();
 }
 
@@ -1612,15 +1617,22 @@ async fn sibling_roots_that_no_longer_resolve_never_block_their_recovery() {
     // another name: neither stored root resolves any more.
     let moved = volume.join("Astro 1");
     std::fs::rename(&astro, &moved).unwrap();
-    // A stale root still refuses its recorded folder, a folder below it and a new
-    // folder at its stored path.
+    // A stale root refuses its recorded folder, a folder below it, a new folder at
+    // its stored path and the renamed ancestor that now holds it, naming the root.
     std::fs::create_dir_all(astro.join("Lights")).unwrap();
-    for path in [moved.join("Calibration"), moved.join("Calibration/night1"), astro.join("Lights")]
-    {
+    for path in [
+        moved.clone(),
+        moved.join("Calibration"),
+        moved.join("Calibration/night1"),
+        astro.join("Lights"),
+    ] {
         let error = catalog.register_location(&registration_at(&path)).await.unwrap_err();
         assert_eq!(kind(&error), "identity_conflict", "{}", path.display());
     }
+    let error = catalog.register_location(&registration_at(&moved)).await.unwrap_err();
+    assert!(error.to_string().contains("no longer resolves"), "{error}");
     std::fs::remove_dir_all(&astro).unwrap();
+    assert_eq!(catalog.list_locations().await.unwrap().len(), 2, "refusals write nothing");
 
     // Each root is chosen again at its new path while its sibling is still stale.
     let path = moved.join("Lights");
@@ -1634,6 +1646,10 @@ async fn sibling_roots_that_no_longer_resolve_never_block_their_recovery() {
         .await
         .unwrap();
     assert_eq!(reselected.path, NativePath::from_path(&path));
+    // A new registration still waits for the remaining stale root.
+    std::fs::create_dir_all(volume.join("Flats")).unwrap();
+    let error = catalog.register_location(&registration_at(&volume.join("Flats"))).await;
+    assert!(error.unwrap_err().to_string().contains("\"Calibration\""));
     let path = moved.join("Calibration");
     catalog
         .reselect_location(
@@ -1644,7 +1660,10 @@ async fn sibling_roots_that_no_longer_resolve_never_block_their_recovery() {
         )
         .await
         .unwrap();
-    std::fs::create_dir_all(volume.join("Flats")).unwrap();
+    // Once both resolve, the ancestor holding them overlaps and an unrelated folder
+    // registers.
+    let error = catalog.register_location(&registration_at(&moved)).await.unwrap_err();
+    assert!(error.to_string().contains("folder overlaps"), "{error}");
     catalog.register_location(&registration_at(&volume.join("Flats"))).await.unwrap();
     assert_eq!(catalog.list_locations().await.unwrap().len(), 3);
 }

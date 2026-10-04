@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
     value INTEGER NOT NULL
 ) STRICT;
 
-INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 3);
+INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 4);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('grouping_revision', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('scan_sequence', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('target_generation', 0);
@@ -131,11 +131,25 @@ CREATE TABLE IF NOT EXISTS assets (
 
 CREATE INDEX IF NOT EXISTS assets_session ON assets (session_id);
 CREATE INDEX IF NOT EXISTS assets_size_mtime ON assets (location_id, size_bytes, modified_ns);
--- D16 logical captures: copies by digest, and duplicate candidates by session.
+-- D16 logical captures: copies by digest, and duplicate candidates by session,
+-- size and known capture start.
 CREATE INDEX IF NOT EXISTS assets_content ON assets (content_sha256);
-CREATE INDEX IF NOT EXISTS assets_session_location_size
-    ON assets (session_id, location_id, size_bytes);
+CREATE INDEX IF NOT EXISTS assets_session_size_start
+    ON assets (session_id, size_bytes, capture_start, location_id);
 CREATE INDEX IF NOT EXISTS assets_pending ON assets (location_id) WHERE verification_pending = 1;
+
+-- Recorded proof that two copies in different locations are one logical capture
+-- (D16): they were byte-identical when one of them diverged, or they were an
+-- unambiguous duplicate-candidate pair. Joins never rest on a bare size/start match.
+CREATE TABLE IF NOT EXISTS copy_links (
+    left_id TEXT NOT NULL REFERENCES assets (id),
+    right_id TEXT NOT NULL REFERENCES assets (id),
+    cause TEXT NOT NULL CHECK (cause IN ('identical', 'candidate')),
+    PRIMARY KEY (left_id, right_id),
+    CHECK (left_id < right_id)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS copy_links_right ON copy_links (right_id);
 
 CREATE TABLE IF NOT EXISTS session_members (
     session_id TEXT NOT NULL REFERENCES sessions (id),
