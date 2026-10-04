@@ -9,7 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 metadata_core = { path = "../core" }
-xisf-header = "0.4.3"
+xisf-header = "0.4.4"
 
 [lints]
 workspace = true

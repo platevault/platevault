@@ -8767,9 +8767,9 @@ dependencies = [
 
 [[package]]
 name = "xisf-header"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5946a5236693506e10bf909a69d249b62affc50d0fcc5e37fa08b12ee614e033"
+checksum = "63302fc2304740b741a7f5cc136a2c27ae14b18b18c3614acb786a9d29281348"
 dependencies = [
  "quick-xml",
  "skymath 0.6.0",
