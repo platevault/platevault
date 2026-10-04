@@ -1,6 +1,8 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
+import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
+import { isValidElement } from "react"
 
 const buttonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none active:not-aria-[haspopup]:translate-y-px active:not-aria-[haspopup]:brightness-90 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -39,19 +41,36 @@ const buttonVariants = cva(
   }
 )
 
-function Button({
-  className,
-  variant = "default",
-  size = "default",
+type ButtonProps = ButtonPrimitive.Props & VariantProps<typeof buttonVariants>
+
+/**
+ * A `render` target that navigates (`<Link to>`, `<a href>`) stays a link
+ * with only the button's look: Base UI's Button warns that it is not a
+ * native button, and its non-native mode adds `role="button"`, which
+ * announces navigation as an action. Links cannot be disabled. Any other
+ * target (a Base UI trigger) keeps the Button behaviour.
+ */
+function Button({ className, variant = "default", size = "default", ...props }: ButtonProps) {
+  const classes = cn(buttonVariants({ variant, size, className }))
+  if (isLinkElement(props.render)) return <ButtonLink {...props} render={props.render} className={classes} />
+  return <ButtonPrimitive data-slot="button" className={classes} {...props} />
+}
+
+function isLinkElement(render: ButtonProps["render"]): render is React.ReactElement {
+  if (!isValidElement(render)) return false
+  const linkProps = render.props as { href?: unknown; to?: unknown }
+  return linkProps.href !== undefined || linkProps.to !== undefined
+}
+
+function ButtonLink({
+  render,
+  ref,
+  disabled: _disabled,
+  focusableWhenDisabled: _focusable,
+  nativeButton: _native,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
-  return (
-    <ButtonPrimitive
-      data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
-  )
+}: Omit<ButtonPrimitive.Props, "render" | "className"> & { render: React.ReactElement; className: string }) {
+  return useRender({ render, ref, props: { "data-slot": "button", ...props } })
 }
 
 export { Button, buttonVariants }

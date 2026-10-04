@@ -1,7 +1,7 @@
 /**
  * Store bootstrap: hydration, persistence and reset (foundation-owned).
  */
-import { createSeed } from "@/domain/seed"
+import { createSeed, defaultFaults } from "@/domain/seed"
 import type { SeedName } from "@/domain/types"
 import { type PrototypeState, recordActivity, SCHEMA_VERSION, store } from "./core"
 import { ensureTicker, interruptRunningOperations, registerOperationHandlers } from "./operations"
@@ -32,7 +32,8 @@ function load(): PrototypeState | null {
     for (const id of Object.keys(versions) as SliceId[]) {
       if (parsed.sliceVersions?.[id] !== versions[id]) Object.assign(slices, { [id]: initial[id] })
     }
-    return { ...parsed, sliceVersions: versions, slices }
+    // Faults added since the data was saved start at their defaults.
+    return { ...parsed, faults: { ...defaultFaults(), ...parsed.faults }, sliceVersions: versions, slices }
   } catch {
     return null
   }

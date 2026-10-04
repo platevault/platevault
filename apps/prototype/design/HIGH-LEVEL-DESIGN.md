@@ -436,6 +436,10 @@ Base UI usage notes (verified in the running build):
   minus 2rem and the safe-area insets, and scroll inside; their footers are
   sticky, so a tall dialog's actions stay reachable. A footer with `m-0` in an
   unpadded dialog passes `bottom-0` (FolderPicker does).
+- `Button render={<Link to … />}` (or `<a href>`) renders a plain link with
+  the button's look: no `role="button"`, no `type`, and no Base UI
+  `nativeButton` warning; Enter follows it, Space does not. Such a link
+  cannot be disabled. Any other `render` target keeps button behaviour.
 
 Shell components (`src/app/*`): `AppShell`, `SetupShell`, sidebar, status area,
 `CommandPalette`, `ShortcutsDialog`, `SimulationSheet` / `SimulationControls`,
@@ -659,13 +663,17 @@ exact need. It does not edit the file or work around it.
   adoption), fail the next Target resolver lookup (LIB-AC-12), set the
   PlateVault clock (`faults.clockOffsetMs`, honoured by `nowIso()` and kept
   across a reload, J29 P4), choose the next notification permission answer,
-  reset to the empty or demo seed. Operations honour these: writes into a
+  index slowly (`faults.slowIndexing`: 2 files per tick instead of 14, so
+  provisional browsing can be driven at human speed, J19 S6), reset to the
+  empty or demo seed. Operations honour these: writes into a
   `readOnlyPaths` entry fail, a handler that verifies hashes consumes
   `faults.failNextHashVerification`, and a resolver lookup consumes
-  `faults.failNextResolverLookup`.
-- Indexing that stops early (Cancel, or the volume goes offline) leaves the
-  location and its provisional sessions `incomplete`, never complete
-  (LIB-FR-03).
+  `faults.failNextResolverLookup`. Saved data missing a newer fault loads it
+  at its default.
+- Indexing can be paused between batches; Resume continues from the files not
+  yet read. Indexing that stops early (Cancel, from running or paused, or the
+  volume goes offline) leaves the location and its provisional sessions
+  `incomplete`, never complete (LIB-FR-03).
 - Production computes measurements and planning windows in Rust (PIX, PLAN-FR-08);
   the prototype uses `src/domain/measurement.ts` and track-owned simplified
   calculations, labelled "prototype calculation".

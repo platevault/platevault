@@ -213,6 +213,8 @@ interface IndexPayload {
 }
 
 const BATCH = 14
+/** Files per tick while `faults.slowIndexing` is on. */
+const SLOW_BATCH = 2
 
 function startNextLocation(state: PrototypeState, op: Operation, payload: IndexPayload): { state: PrototypeState; payload: IndexPayload } {
   let next = state
@@ -261,7 +263,7 @@ const indexHandler: OperationHandler = {
     const current = payload.current!
     const location = next.catalog.locations[current.locationId]!
     const volumeMounted = next.disk.volumes[location.volumeId]?.mounted
-    const batchPaths = volumeMounted ? current.pending.slice(0, BATCH) : []
+    const batchPaths = volumeMounted ? current.pending.slice(0, next.faults.slowIndexing ? SLOW_BATCH : BATCH) : []
     const files = batchPaths.map((p) => next.disk.files[fileKey(location.volumeId, p)]).filter((f) => f !== undefined)
     if (files.length > 0) next = { ...next, catalog: readFiles(next.catalog, location, files, nowIso()) }
     const observed = [...current.observed, ...batchPaths]
@@ -338,6 +340,8 @@ export function startIndexing(locationIds: LocationId[]): OperationId {
     unit: "files",
     items: locations.map((l) => ({ id: l.id, label: l.displayName, path: l.path, status: "pending", phase: null, detail: null })),
     payload: payload as unknown as Record<string, unknown>,
+    // Pause stops between batches; Resume continues from `current.pending`.
+    canPause: true,
     canCancel: true,
   })
   return id
