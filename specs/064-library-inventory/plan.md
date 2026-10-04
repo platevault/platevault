@@ -15,20 +15,20 @@ Implement the full LIB contract in a clean Rust backend and catalog. The first a
 - Storage: fresh SQLite catalog, WAL, foreign keys, FULL synchronous user-decision commits; no legacy data migration.
 - Platform: desktop Tauri 2 on macOS, Windows and Linux. Host proof is macOS; other-platform gates remain explicit.
 - Testing: focused Rust behavior tests and generated FITS/XISF integration, then `cargo test --workspace` after integration; real development Tauri MCP application scenarios.
-- Performance: parse bounded headers, progressive batching, no eager full-image hashing or source copies during indexing. Long work stays off the UI thread.
+- Performance: bounded headers and progressive batches; no source copies. New Unreviewed indexing does not hash full images. Explicit quality review, readable rescans/reuse of previously decided assets and cross-location duplicate candidates hash bytes off the UI thread, even when stats match. A decided asset is verification pending, outside applicable totals, until its rehash finishes. Unavailable inputs keep last-observed quality with availability labels.
 - Scale: user-selected roots and file inventory, not an assumed workspace. Preserve non-UTF8 path errors rather than silently skip them.
 
 ## Constitution Check
 
-Local-first custody: indexing has no filesystem writes. Mutation requires reviewed operations in later features. No calibration, debayering, registration or integration is introduced. Scientific work is Rust-owned. UI/core contracts include request, response, errors, revision and operation states. User decisions commit durably; interrupted operations retain recoverable intent. Research and contracts precede code. The human specification waiver does not waive analysis or verification.
+Local-first custody: indexing writes no source files. Mutations require reviewed operations in later features. No calibration, debayering, registration or integration is introduced. Scientific work is Rust-owned. UI/core contracts include requests, responses, errors, revisions and operation states. User decisions commit durably; interrupted operations retain recoverable intent. Research and contracts precede code. The all-human-gate waiver leaves analysis and verification mandatory.
 
 ## Project Structure
 
 - `crates/platevault-core/Cargo.toml`: clean backend crate.
-- `crates/platevault-core/src/model.rs`: shared types and immutable IDs; one integration owner.
+- `crates/platevault-model/src/lib.rs`: canonical shared types and immutable IDs; one integration owner. Core consumes this crate; persistence never depends on the application core.
 - `crates/platevault-core/src/inventory.rs`: read-only scan observations, explicit complete/incomplete scope and progress.
 - `crates/platevault-core/src/grouping.rs`: pure homogeneous capture grouping and revision rules.
-- `crates/platevault-core/src/catalog.rs`: sole clean-schema and SQLite writer owner, user corrections and revision checks.
+- `crates/persistence/library/src/lib.rs` and `schema.sql`: sole clean-schema and SQLite writer owner, user corrections and revision checks. The existing SQL boundary remains unchanged.
 - `crates/platevault-core/src/targets.rs`: local seed/search, provenance, provider adapter and geometry evidence.
 - `crates/platevault-core/src/library.rs`: integrates observations, reconciliation, corrections and coverage.
 - `crates/platevault-core/tests/library.rs`: consumer-visible fixture/restart/negative behavior.
@@ -46,4 +46,4 @@ Workers skip repository-wide builds/tests/lint/formatters. The lead runs focused
 
 ## Complexity Tracking
 
-No constitutional exception. One clean backend crate avoids repeating the old many-layer orchestration and database facade conventions. The archived baseline remains available for selective adoption and comparison.
+The application core composes inventory, grouping and target logic. A shared model crate breaks the persistence/application dependency cycle; all SQL remains under `crates/persistence`. The archived baseline remains available for selective adoption and comparison.

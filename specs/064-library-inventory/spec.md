@@ -6,7 +6,7 @@
 
 **Created**: 2026-10-03
 
-**Status**: Draft; product defaults recorded in D01 through D18 under the user-authorized specification-gate waiver. Requirements analysis, implementation and verification remain pending.
+**Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 
@@ -35,6 +35,8 @@ Register locations and index them in place. Form metadata-homogeneous sessions, 
 - **LIB-AC-11**: Given two named copies with identical names but differing bytes, when remap is attempted, then the differing copy is refused. A byte-verified copy can be remapped without losing frame identities, quality decisions, or View membership.
 - **LIB-AC-12**: Given a saved local target and a successful external resolver response, when enrichment is reviewed, then aliases, coordinates and provider provenance remain distinguishable from capture metadata. A resolver failure leaves the local target and indexed sessions usable.
 - **LIB-AC-13**: Given the development app is running with its MCP bridge, when the test client connects and invokes indexing, queries sessions and controls navigation, then real persisted outcomes and the actual app surface are observed. The release configuration does not enable the unauthenticated development bridge.
+- **LIB-AC-14**: Given a Usable frame replaced in place with its size and mtime preserved, when its location is rescanned, then the rehash marks it ChangedContent and keeps the previous decision as history. It leaves applicable usable totals, appears under the ChangedContent filter, and fixed View membership is unchanged. Restoring the reviewed bytes and rescanning returns the frame to applicable Usable totals without a new decision.
+- **LIB-AC-15**: Given byte-identical copies of one session in two registered Captures locations, when indexing completes, then Sessions lists each frame once with both physical copies and captured integration counts it once. Both copies remain registered, protected and unchanged.
 
 ### Edge Cases
 
@@ -51,8 +53,8 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **LIB-FR-05**: Target and equipment associations show the evidence used. Agreeing evidence permits association; unknown or conflicting evidence shows Needs review. A missing OBJECT with insufficient other evidence leaves the association unresolved. Confirm Target and Confirm equipment are available. Corrections change the catalog only, never source headers.
 - **LIB-FR-06**: An incomplete or unreadable scan never marks unobserved files Missing. Readable siblings still reconcile.
 - **LIB-FR-07**: An offline location keeps its last-observed metadata and quality decisions. Access denied names the failure and offers Choose folder again or Retry; other locations continue. Locate/remap to another verified location preserves asset identities using the same-asset proof in D11 of the root decision register.
-- **LIB-FR-08**: Target search opens a Target page showing captured integration, library-wide usable integration, and Unreviewed integration by channel. Availability is a separate state. Offline contributions show their last observation and are not offered as available inputs. Usable totals come only from library-scope quality decisions.
-- **LIB-FR-09**: Quality state model: Unreviewed, Usable, or Unusable. Every frame starts Unreviewed. Measurements never set Usable.
+- **LIB-FR-08**: Target search opens a Target page showing captured integration, library-wide usable integration, and Unreviewed integration by channel. Availability is a separate state. Offline contributions show their last observation and are not offered as available inputs. Usable totals come only from library-scope quality decisions. Content-identical copies in different locations count once as one logical capture that names every physical copy.
+- **LIB-FR-09**: Persisted quality decisions are Unreviewed, Usable or Unusable; new frames start Unreviewed and measurement never sets Usable. Applicability is separate: ChangedContent preserves the previous decision when bytes differ or its historical review basis is absent. It exposes a distinct filter outside applicable Usable/Unreviewed totals until reconfirmed or the reviewed bytes return. Offline/unreadable inputs retain labelled last-observed quality, not an inferred content change.
 - **LIB-FR-10**: PV-LIB owns local-first Targets as default home, Sessions, Settings, shared main navigation and Activity operation outcomes. Core indexing and inspection need no account or network.
 - **LIB-FR-11**: Failed catalog writes remain unsaved with Retry. Version checks detect external changes before overwriting app-written entries; stale edits are refused rather than merged silently. Only durable commits report saved success.
 - **LIB-FR-12**: Catalog metadata corrections include Target, equipment and grouping values. Original observed evidence remains separate; regrouping creates a traceable revision and never mutates fixed View asset membership or source headers.
@@ -88,7 +90,7 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 
 - [Product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the confirmed interactions and illustrative worked example.
 - This feature is independently specified; dependencies on other feature contracts are resolved in planning.
-- Conservative product defaults and human specification-gate waivers are authorized for this run. The root decision register applies; tests, requirements analysis, independent review and delivery checks remain mandatory.
+- Conservative defaults and all human-approval gate waivers follow the root autonomous objective and decision register. Tests, requirements analysis, independent review and delivery evidence remain mandatory.
 
 ## Decisions before feature approval
 
