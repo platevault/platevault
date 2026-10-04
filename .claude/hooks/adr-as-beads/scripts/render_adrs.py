@@ -253,11 +253,20 @@ def render_all(repo: Path, *, write: bool = True) -> tuple[list[Path], str | Non
     if write:
         target.mkdir(parents=True, exist_ok=True)
 
+    reserved = {
+        int(path.name.split("-", 1)[0])
+        for path in target.glob("*.md")
+        if path not in existing and path.name.split("-", 1)[0].isdigit()
+    }
+    number = 0
     changed = []
     desired = set()
-    for index, bead in enumerate(closed, start=1):
-        body = render_one(bead, index)
-        path = target / f"{index:04d}-{slugify(bead.get('title') or '')}.md"
+    for bead in closed:
+        number += 1
+        while number in reserved:
+            number += 1
+        body = render_one(bead, number)
+        path = target / f"{number:04d}-{slugify(bead.get('title') or '')}.md"
         desired.add(path)
         # Compare before writing, so an unrelated commit does not restage every ADR.
         if path.is_file() and path.read_text(encoding="utf-8") == body:

@@ -1,7 +1,7 @@
 <!-- Generated from a beads decision bead. Edit the bead, not this file:
      bd show astro-plan-trutg -->
 ---
-number: 1
+number: 3
 title: "Use Rust scientific execution and a clean local catalog for the PlateVault rebuild"
 status: accepted
 date: 2026-10-04

@@ -3,7 +3,7 @@
 Date: 2026-10-03
 Authority: the user approved conservative product defaults and, on 2026-10-04, authorized resolving all repository human-approval gates with no human signoff. These choices settle authorization, not implementation verification. Requirements review, tests, exact-head independent review, Sniff and original-file protection still apply.
 
-The [accepted Rust computation boundary](../../docs/adr/0001-use-rust-scientific-execution-and-a-clean-local-catalog-for-the-platevault-rebuild.md), generated from decision `astro-plan-trutg`, governs specs 063 through 072 and supersedes historical ADR-0001. The retained frontend-astronomy decision records the earlier spec-044 boundary.
+The [accepted Rust computation boundary](../../docs/adr/0003-use-rust-scientific-execution-and-a-clean-local-catalog-for-the-platevault-rebuild.md), generated from decision `astro-plan-trutg`, governs specs 063 through 072 and supersedes historical ADR-0001. The retained frontend-astronomy decision records the earlier spec-044 boundary.
 
 ## Decision register
 

@@ -20,7 +20,7 @@ Implement the full LIB contract in a clean Rust backend and catalog. The first a
 
 ## Constitution Check
 
-Local-first custody: indexing has no filesystem writes. Mutation requires reviewed operations in later features. No calibration, debayering, registration or integration is introduced. Scientific work is Rust-owned. UI/core contracts include request, response, errors, revision and operation states. User decisions commit durably; interrupted operations retain recoverable intent. Research and contracts precede code. The human specification waiver does not waive analysis or verification.
+Local-first custody: indexing writes no source files. Mutations require reviewed operations in later features. No calibration, debayering, registration or integration is introduced. Scientific work is Rust-owned. UI/core contracts include requests, responses, errors, revisions and operation states. User decisions commit durably; interrupted operations retain recoverable intent. Research and contracts precede code. The all-human-gate waiver leaves analysis and verification mandatory.
 
 ## Project Structure
 

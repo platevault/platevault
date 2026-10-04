@@ -20,7 +20,7 @@ Feature: [Specification](../spec.md)
 
 ## Feature readiness
 
-- [x] The user-authorized human specification-approval waiver is recorded in the objective and decision register; native gates require corresponding resolution records.
-- [ ] Planning and analysis gates are satisfied before product implementation.
+- [x] The user's all-human-gate waiver is quoted in the autonomous objective and decision register; native gates cite the resolution decision.
+- [ ] Planning and analysis artifacts are verified before product implementation.
 
 The root is a shared contract. PV-LIB owns the usable navigation and catalog trust rules. Product implementation still requires each feature's research, plan, contracts, tasks and analysis; the human approval waiver does not certify those artifacts.

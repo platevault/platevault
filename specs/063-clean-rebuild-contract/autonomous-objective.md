@@ -28,6 +28,12 @@ Implement the full PlateVault rebuild backend against specs 064 through 072. Sel
 - Native isolation stays disabled. Repository work uses linked worktrees.
 - Production MCP, if separately implemented, requires authenticated safe enablement/password/interface/port configuration. Never expose unauthenticated development control in production.
 
+### Human authorization record
+
+Direct user instruction, 2026-10-04: "you are allowed to unblock all human gates. work fully autonomously. no signoff or gating is required."
+
+Native human gate records cite this decision. It removes human approval waits; automated evidence, technical safety constraints and the full success criteria remain required.
+
 ## Stop conditions
 
 - No global time limit.
