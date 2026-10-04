@@ -82,13 +82,14 @@ export function Section({ title, description, actions, children, className, leve
   return (
     <section aria-labelledby={id ? `${id}-title` : undefined} className={cn("space-y-3", className)}>
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <div className="space-y-0.5">
+        {/* Like PageHeader: the heading block takes the free space and wraps its description, so actions stay beside it. */}
+        <div className="min-w-0 flex-1 space-y-0.5">
           <Heading id={id ? `${id}-title` : undefined} className={cn("font-semibold", level === 2 ? "text-base" : "text-sm")}>
             {title}
           </Heading>
           {description ? <p className="text-sm text-pretty text-muted-foreground">{description}</p> : null}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap items-center gap-2 self-start">{actions}</div> : null}
       </div>
       {children}
     </section>
