@@ -8,6 +8,14 @@
 //! nested-volume boundaries. Each platform asks the operating system for the
 //! volume UUID or serial through a bounded read-only query. Anything that
 //! cannot be qualified fails closed with `IdentityConflict`.
+//!
+//! A root folder is qualified only by a remount-stable file ID that no other
+//! live entry on the volume can hold: APFS/HFS+ object IDs, ext*/XFS/btrfs/
+//! F2FS inode numbers and NTFS file reference numbers (which embed a reuse
+//! sequence). FAT, `exFAT` and `ReFS` (whose 128-bit IDs have no safe query here)
+//! cannot qualify a folder, so their roots are refused. An ext*/XFS inode can
+//! be reused once the original folder is deleted; that residual is not
+//! claimed as collision proof.
 
 use std::fs::{self, Metadata};
 use std::path::Path;
@@ -56,19 +64,41 @@ pub(super) fn stamp(meta: &Metadata) -> Stamp {
 
 /// Remount-stable file ID of an entry, recorded only where the volume
 /// qualifies its file IDs as stable.
-pub(super) fn file_id(meta: &Metadata, volume: &VolumeIdentity) -> Option<String> {
+///
+/// Unix uses the decimal inode number. Windows opens the entry itself (never
+/// a reparse target) and uses the 64-bit file index as 16 hex digits after
+/// checking the handle's volume serial against the qualified volume.
+// Only the Windows branch can fail; the shared signature keeps callers uniform.
+#[cfg_attr(unix, allow(clippy::unnecessary_wraps))]
+pub(super) fn file_id(
+    path: &Path,
+    meta: &Metadata,
+    volume: &VolumeIdentity,
+) -> std::io::Result<Option<String>> {
     if !volume.file_ids_stable {
-        return None;
+        return Ok(None);
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        Some(meta.ino().to_string())
+        let _ = path;
+        Ok(Some(meta.ino().to_string()))
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        let _ = meta;
-        None
+        let info = windows_handle::information(path)?;
+        if Some(windows_handle::serial(&info)) != volume.stable_id {
+            return Err(std::io::Error::other("entry is not on the qualified volume"));
+        }
+        if !meta.is_dir() && info.file_size() != meta.len() {
+            return Err(std::io::Error::other("entry changed while its file ID was read"));
+        }
+        Ok(Some(format!("{:016X}", info.file_index())))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = (path, meta);
+        Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
     }
 }
 
@@ -85,7 +115,20 @@ fn unqualified(root: &Path, why: &str) -> LibraryError {
 }
 
 /// Observe the identity of a location root without following a link.
+///
+/// The root must be absolute without `..`, so its meaning never depends on
+/// the working directory. Linked ancestors (such as macOS `/var`) are allowed:
+/// the recorded volume and folder ID bind the folder they resolved to, so a
+/// retargeted ancestor fails the comparison instead of being trusted.
 pub(super) fn observe(root: &Path) -> Result<RootObservation, LibraryError> {
+    if !root.is_absolute()
+        || root.components().any(|part| matches!(part, std::path::Component::ParentDir))
+    {
+        return Err(scoped(
+            LibraryError::InvalidInput("location root must be an absolute path without ..".into()),
+            root,
+        ));
+    }
     let meta = fs::symlink_metadata(root).map_err(|error| {
         let error = match error.kind() {
             std::io::ErrorKind::NotFound => LibraryError::SourceUnavailable(
@@ -111,7 +154,18 @@ pub(super) fn observe(root: &Path) -> Result<RootObservation, LibraryError> {
         ));
     }
     let volume = volume_of(root, &meta)?;
-    let file_id = file_id(&meta, &volume);
+    let file_id = file_id(root, &meta, &volume)
+        .map_err(|error| unqualified(root, &format!("root folder ID {error}")))?;
+    if file_id.is_none() {
+        return Err(scoped(
+            LibraryError::IdentityConflict(format!(
+                "the {} filesystem has no remount-stable folder ID; a replacement folder \
+                 at this path could not be told apart, so it cannot be a location root",
+                volume.filesystem
+            )),
+            root,
+        ));
+    }
     Ok(RootObservation { identity: FileIdentity { volume, file_id }, stamp: stamp(&meta) })
 }
 
@@ -123,9 +177,6 @@ pub(super) fn volume_of(path: &Path, meta: &Metadata) -> Result<VolumeIdentity, 
 }
 
 /// Refuse an observed root that is not the registered volume and folder.
-///
-/// The root file ID is compared only where the registered volume qualifies
-/// file IDs as remount-stable; elsewhere the stable volume UUID/serial guards.
 pub(super) fn compare(
     recorded: &FileIdentity,
     observed: &FileIdentity,
@@ -149,8 +200,9 @@ pub(super) fn compare(
             root,
         ));
     }
-    if recorded.volume.file_ids_stable
-        && (recorded.file_id.is_none() || recorded.file_id != observed.file_id)
+    if !recorded.volume.file_ids_stable
+        || recorded.file_id.is_none()
+        || recorded.file_id != observed.file_id
     {
         return Err(scoped(
             LibraryError::IdentityConflict(
@@ -363,9 +415,20 @@ fn probe_volume(root: &Path, _meta: &Metadata) -> Result<VolumeIdentity, Library
     let volume: Volume = serde_json::from_slice(output.trim_ascii())
         .map_err(|error| unqualified(root, &format!("Win32_Volume answer {error}")))?;
     let filesystem = volume.file_system.unwrap_or_default().trim().to_ascii_lowercase();
+    let stable_id = volume.serial_number.map(|serial| format!("{serial:08X}"));
+
+    // The CIM answer must describe the volume the entry itself is on: the
+    // no-follow handle's serial has to agree with it.
+    let info = windows_handle::information(root)
+        .map_err(|error| unqualified(root, &format!("volume handle {error}")))?;
+    if stable_id.as_deref() != Some(windows_handle::serial(&info).as_str()) {
+        return Err(unqualified(root, "Win32_Volume does not describe the entry's volume"));
+    }
+
     // Windows stores names without Unicode normalization and compares case
-    // insensitively on these filesystems. Stable Rust exposes no per-file
-    // index, so file IDs are not recorded and the volume serial guards roots.
+    // insensitively on these filesystems. Only NTFS file reference numbers
+    // (64-bit, with a reuse sequence) qualify as stable file IDs; ReFS uses
+    // 128-bit IDs and FAT/exFAT derive IDs from directory-entry positions.
     let (case, normalization) = match filesystem.as_str() {
         "ntfs" | "refs" | "fat" | "fat32" | "exfat" => {
             (PathSensitivity::Insensitive, PathSensitivity::Sensitive)
@@ -373,12 +436,46 @@ fn probe_volume(root: &Path, _meta: &Metadata) -> Result<VolumeIdentity, Library
         _ => (PathSensitivity::Unknown, PathSensitivity::Unknown),
     };
     Ok(VolumeIdentity {
+        file_ids_stable: filesystem == "ntfs",
         filesystem,
-        stable_id: volume.serial_number.map(|serial| format!("{serial:08X}")),
-        file_ids_stable: false,
+        stable_id,
         case,
         normalization,
     })
+}
+
+/// No-follow handle queries through the safe `winapi-util` wrapper.
+#[cfg(windows)]
+mod windows_handle {
+    use std::fs::OpenOptions;
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::path::Path;
+
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u64 = 0x0400;
+
+    /// `GetFileInformationByHandle` for the entry itself, never a reparse
+    /// target, opened without read or write access.
+    pub(super) fn information(path: &Path) -> std::io::Result<winapi_util::file::Information> {
+        let handle = OpenOptions::new()
+            .access_mode(0)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path)?;
+        let info = winapi_util::file::information(&handle)?;
+        if info.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "entry is a reparse point; links and junctions are not followed",
+            ));
+        }
+        Ok(info)
+    }
+
+    /// Volume serial in the `Win32_Volume.SerialNumber` encoding.
+    pub(super) fn serial(info: &winapi_util::file::Information) -> String {
+        format!("{:08X}", info.volume_serial_number())
+    }
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]

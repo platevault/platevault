@@ -18,10 +18,12 @@
 //!
 //! # Identity
 //!
-//! The registered root identity is verified with a remount-stable volume query
-//! before the walk and again before the final batch. Before every batch the
-//! root's same-session continuity stamp is rechecked; a change ends the scan
-//! as `Failed`, discarding the undelivered batch.
+//! A location root must be an absolute folder on a volume with a remount-stable
+//! volume ID and folder ID; roots without a qualified folder ID (FAT, `exFAT`,
+//! `ReFS`) are refused before any batch. The registered root identity is
+//! verified before the walk and again before the final batch. Before every
+//! batch the root's same-session continuity stamp is rechecked; a change ends
+//! the scan as `Failed`, discarding the undelivered batch.
 
 #[path = "inventory/identity.rs"]
 mod identity;
@@ -48,8 +50,9 @@ use identity::Stamp;
 ///
 /// # Errors
 /// `SourceUnavailable`/`AccessDenied` when the root cannot be inspected,
-/// `InvalidInput` for a link or junction root, and `IdentityConflict` when the
-/// volume identity cannot be qualified on this host.
+/// `InvalidInput` for a relative path, `..`, a link or a junction root, and
+/// `IdentityConflict` when the volume or the root folder ID cannot be
+/// qualified on this host and filesystem.
 pub fn observe_root_identity(root: &Path) -> Result<FileIdentity, LibraryError> {
     identity::observe(root).map(|observation| observation.identity)
 }
@@ -83,13 +86,20 @@ pub fn probe_fingerprint(path: &Path) -> Result<ObservationFingerprint, LibraryE
         ));
     }
     let volume = identity::volume_of(path, &meta)?;
+    let file_id = identity::file_id(path, &meta, &volume).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::InvalidInput {
+            identity::scoped(LibraryError::InvalidInput(error.to_string()), path)
+        } else {
+            LibraryError::from_io(path, &error)
+        }
+    })?;
     let modified_ns = meta.modified().ok().and_then(nanos_since_epoch).ok_or_else(|| {
         identity::scoped(
             LibraryError::SourceUnavailable("modification time unavailable".into()),
             path,
         )
     })?;
-    Ok(fingerprint(&meta, &volume, modified_ns))
+    Ok(fingerprint(file_id, &meta, &volume, modified_ns))
 }
 
 /// Whether an unobserved relative path may be reconciled as absent.
@@ -478,10 +488,22 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
             self.exclude(relative, reason.into(), Availability::Unreadable);
             return;
         };
+        let file_id = match identity::file_id(path, before, self.volume) {
+            Ok(file_id) => file_id,
+            Err(error) => {
+                self.totals.unreadable += 1;
+                self.exclude(
+                    relative,
+                    format!("file ID unreadable: {error}"),
+                    Availability::Unreadable,
+                );
+                return;
+            }
+        };
         self.totals.metadata_read += 1;
         self.pending.files.push(ScanFile {
             relative_path: NativePath::from_path(relative),
-            fingerprint: fingerprint(before, self.volume, modified_ns),
+            fingerprint: fingerprint(file_id, before, self.volume, modified_ns),
             format,
             metadata: CaptureMetadata::from(&raw),
         });
@@ -594,12 +616,13 @@ impl ListingFailure {
 /// Ordinary observations carry no content digest; the catalog hashes lazily
 /// for explicitly reviewed decisions and custody work.
 fn fingerprint(
+    file_id: Option<String>,
     meta: &Metadata,
     volume: &VolumeIdentity,
     modified_ns: i128,
 ) -> ObservationFingerprint {
     ObservationFingerprint {
-        identity: FileIdentity { volume: volume.clone(), file_id: identity::file_id(meta, volume) },
+        identity: FileIdentity { volume: volume.clone(), file_id },
         size_bytes: meta.len(),
         modified_ns,
         content_sha256: None,
