@@ -361,9 +361,9 @@ export function ScopeProblemNotices({ kind }: { kind: SessionKind }) {
             </Button>
           ))}
         >
-          Its sessions stay listed with values last observed
-          {offline[0]!.location.lastIndexedAt ? ` ${formatDateTime(offline[0]!.location.lastIndexedAt)}` : ""}. They count in captured totals and are not
-          available as inputs until it is reconnected.
+          {offline.length === 1 ? "Its" : "Their"} sessions stay listed with values last observed
+          {offline.length === 1 && offline[0]!.location.lastIndexedAt ? ` ${formatDateTime(offline[0]!.location.lastIndexedAt)}` : " at the last scan"}. They count in captured
+          totals and are not available as inputs until {offline.length === 1 ? "it is" : "they are"} reconnected.
         </Notice>
       ) : null}
     </>

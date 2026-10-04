@@ -11,6 +11,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { normalizeName } from "@/domain/sky"
 import type { Target, TargetId } from "@/domain/types"
 import { type CommitResult, store } from "@/store/core"
 import { createTarget, type TargetInput, updateTarget } from "./actions"
@@ -42,19 +43,19 @@ function validate(values: FormValues, exceptId: TargetId | undefined): { input: 
   if (!name) errors.name = "Enter a Target name."
   else {
     const clash = findTargetByName(store.getState().catalog, name, exceptId)
-    if (clash) errors.name = `${clash.name} already uses the name or alias “${name}”.`
+    if (clash) errors.name = normalizeName(clash.name) === normalizeName(name) ? `A Target named ${clash.name} already exists.` : `${clash.name} already has the alias “${name}”.`
   }
   const raText = values.ra.trim()
   const decText = values.dec.trim()
   let ra: number | null = null
   let dec: number | null = null
   if (raText || decText) {
-    if (!raText || !decText) errors.coordinates = "Enter both RA and Dec, or leave both empty."
+    if (!raText || !decText) errors.coordinates = "Enter both RA and Dec, or neither."
     else {
       ra = Number(raText)
       dec = Number(decText)
-      if (!Number.isFinite(ra) || ra < 0 || ra >= 360) errors.ra = "RA must be a number of degrees from 0 up to 360."
-      if (!Number.isFinite(dec) || dec < -90 || dec > 90) errors.dec = "Dec must be a number of degrees from −90 to +90."
+      if (!Number.isFinite(ra) || ra < 0 || ra >= 360) errors.ra = "RA must be between 0 and 360 degrees."
+      if (!Number.isFinite(dec) || dec < -90 || dec > 90) errors.dec = "Dec must be between −90 and +90 degrees."
     }
   }
   if (Object.keys(errors).length > 0) return { input: null, errors }
