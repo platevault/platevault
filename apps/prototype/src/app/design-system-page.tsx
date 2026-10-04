@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner"
 import { emptyBreakdown, sessionBreakdown } from "@/domain/derive"
 import type { Session } from "@/domain/types"
-import { formatDuration, formatExposure, formatNight } from "@/lib/format"
+import { formatDuration, formatExposure, formatNight, plural } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { startIndexing } from "@/store/operations"
 
@@ -56,7 +56,7 @@ const Z_SCALE = [
   ["z-50", "Portalled layers: dialogs, sheets, menus, popovers, tooltips (DOM order decides)"],
 ] as const
 
-function SessionTable({ loading, empty }: { loading: boolean; empty: boolean }) {
+function SessionTable({ loading, empty, grouped }: { loading: boolean; empty: boolean; grouped: boolean }) {
   const sessions = useStore((s) => Object.values(s.catalog.sessions).filter((x) => x.imageType === "light"))
   const disk = useStore((s) => s.disk)
   const catalog = useStore((s) => s.catalog)
@@ -96,6 +96,11 @@ function SessionTable({ loading, empty }: { loading: boolean; empty: boolean }) 
         getRowId={(s) => s.id}
         loading={loading}
         initialSort={{ columnId: "night", direction: "asc" }}
+        groups={
+          grouped
+            ? { key: (s) => s.channel ?? "No filter", label: (channel, rows) => `${channel} · ${plural(rows.length, "session")}` }
+            : undefined
+        }
         selection={{ selected, onChange: setSelected, rowLabel: (s) => `${formatNight(s.night)} ${s.channel ?? ""} session` }}
         activeRowId={shown[0]?.id ?? null}
         empty={
@@ -173,6 +178,7 @@ function SampleFolderPicker() {
 export function DesignSystemPage() {
   const [tableLoading, setTableLoading] = useState(false)
   const [tableEmpty, setTableEmpty] = useState(false)
+  const [tableGrouped, setTableGrouped] = useState(false)
   const [chips, setChips] = useState([
     { id: "ha", label: "Channel: Ha" },
     { id: "object", label: "Missing OBJECT" },
@@ -366,7 +372,7 @@ export function DesignSystemPage() {
 
         <Section
           title="Data table"
-          description="Sort, select, ↑/↓ between rows. Selection is controlled by the caller and survives filtering."
+          description="Sort, select, ↑/↓ between rows. Selection is controlled by the caller and survives filtering. Groups are header rows in one table, so columns line up across groups."
           actions={
             <>
               <Button size="sm" variant="outline" aria-pressed={tableLoading} onClick={() => setTableLoading((v) => !v)}>
@@ -375,10 +381,13 @@ export function DesignSystemPage() {
               <Button size="sm" variant="outline" aria-pressed={tableEmpty} onClick={() => setTableEmpty((v) => !v)}>
                 Empty state
               </Button>
+              <Button size="sm" variant="outline" aria-pressed={tableGrouped} onClick={() => setTableGrouped((v) => !v)}>
+                Group by channel
+              </Button>
             </>
           }
         >
-          <SessionTable loading={tableLoading} empty={tableEmpty} />
+          <SessionTable loading={tableLoading} empty={tableEmpty} grouped={tableGrouped} />
         </Section>
 
         <Section title="Confirmation" description="Destructive or scope-changing actions always confirm in an AlertDialog that names the scope.">
