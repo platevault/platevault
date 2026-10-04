@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-03
 
-**Status**: Draft; conservative product decisions and human specification-gate waivers are authorized. Requirements analysis and implementation verification remain pending.
+**Status**: Draft; conservative product decisions and all human-approval gate waivers are authorized. Requirements analysis and implementation verification remain required.
 
 **Input**: Rebuild PlateVault cleanly, preserve the old code as a recoverable reference, and reuse code where it satisfies the agreed product contract.
 
@@ -118,6 +118,7 @@ The user chooses a planning site, reviews observing windows, and explicitly opts
 - **FR-014**: Planning-site selection, capture sites, and Project membership MUST remain independent. Reminders MUST require opt-in and name the default site.
 - **FR-015**: Core library use MUST remain local-first without an account. External applications own calibration, registration, integration, and final image production.
 - **FR-016**: The old application and existing uncommitted work MUST remain recoverable during rebuilding. Source-code reuse MUST NOT imply importing old catalog decisions.
+- **FR-017**: Counting a recorded file toward a decision- or proof-bound total, and assigning, opening, preparing, reusing, cleaning, archiving, filing or retiring it, MUST re-verify its recorded identity and SHA-256 immediately before the effect. On any mismatch it MUST name the drift and block that item, or exclude it from applicable totals when counting. Metadata-only captured totals of Unreviewed captures, and labelled last-observed counts of offline or unreadable inputs of locations that are not retired, MUST stay visible as D19 scopes them.
 
 ### Feature ownership
 
@@ -168,7 +169,7 @@ The stable feature keys identify contract owners. They are not a chronological i
 
 ## Scoped decisions before feature approval
 
-The user authorized conservative product defaults and waived human specification-approval gates for this autonomous run. The [decision register](decisions.md) records defaults and implementation evidence still required. Waivers do not waive analysis, tests, independent exact-head review, Sniff, or original-file protection.
+The user authorized conservative product defaults and, on 2026-10-04, waived every repository human-approval gate with no human signoff. The [autonomous objective](autonomous-objective.md) records the instruction; the [decision register](decisions.md) records defaults. Analysis, tests, independent exact-head review, Sniff and original-file protection remain required.
 
 | Decision area | Consuming owners |
 | --- | --- |
@@ -182,6 +183,7 @@ The user authorized conservative product defaults and waived human specification
 | Draft persistence and concurrent edits | PV-VSEL |
 | View revisions, retries, reopening, and completion blockers | PV-VSEL, PV-PREP, PV-RES, PV-STO |
 | Quality precedence and Project progress | PV-LIB, PV-PRJ, PV-VSEL |
+| Content-bound consumption of recorded files | All feature owners |
 
 The existing constitution prohibits debayering. A raw/CFA review specification must define supported read-only channel handling or seek an explicit constitutional amendment before adding debayered preview behavior.
 
