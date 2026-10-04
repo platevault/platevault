@@ -815,14 +815,14 @@ impl Catalog {
         .fetch_all(&mut *conn)
         .await?;
         drop(conn);
-        let mut issued = HashSet::with_capacity(recorded.len());
+        let mut issue_paths = HashSet::with_capacity(recorded.len());
         let mut recorded_issues = HashSet::with_capacity(recorded.len());
         for row in &recorded {
             let key: Vec<u8> = row.try_get("path_key")?;
             let reason: String = row.try_get("reason")?;
             let availability: String = row.try_get("availability")?;
             recorded_issues.insert((key.clone(), reason, availability));
-            issued.insert(key);
+            issue_paths.insert(key);
         }
         let files = observation
             .files
@@ -834,7 +834,7 @@ impl Catalog {
                         && asset.observed == file.metadata
                         && fingerprint_matches(&asset.fingerprint, &file.fingerprint)
                 });
-                !proven && !issued.contains(&key)
+                !proven && !issue_paths.contains(&key)
             })
             .collect();
         let mut issues = Vec::new();
