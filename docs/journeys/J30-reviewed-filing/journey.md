@@ -64,7 +64,7 @@ source; and session boundaries and View membership are unchanged.
 ### S6 — Interrupt a cross-volume filing {#S6}
 
 - **Do:** Select 24 Sep, click **File into library**, choose `Archive/Library`, approve, and unplug `Archive` during the transfer.
-- **Expect:** The outcome reports the transfer as unverified or failed per item; the 24 Sep sources remain at their original paths and match P3.
+- **Expect:** Each item reports its verified, pending, blocked or failed phase. Pending, failed and unverified 24 Sep items remain at their source paths with P3 hashes. Already verified items may have retired their sources only after destination and reference verification.
 - **Expect (negative):** No source is retired after failed verification. Session boundaries and View membership are unchanged.
 - **Trace:** flow L, J · STO-FR-07, STO-FR-09 · D06
 
@@ -73,7 +73,7 @@ source; and session boundaries and View membership are unchanged.
 - SC1: The collision file is byte-identical after S2 and 0 files are overwritten.
 - SC2: Exactly 48 files move in S4, each with its original basename and P3 hash (S5).
 - SC3: Sessions stay at exactly 7 light sessions, and View membership stays 208 / 17h 20m (S5, S6).
-- SC4: After S6, 100% of 24 Sep sources remain at their original paths.
+- SC4: After S6, every pending, failed or unverified item retains its original source and hash. Every retired source has recorded destination hash and reference verification.
 
 ## Known gaps
 

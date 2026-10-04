@@ -11,7 +11,7 @@ This document specifies the proposed application. It does not describe shipped b
 
 Each journey names what the user sees, enters, clicks, and observes. Trust conditions name what must remain unchanged. Open decisions remain listed at the end; they are not accepted ambiguities.
 
-The [engineering review](2026-10-02-engineering-review.md) describes the audited application. The [earlier concept](2026-10-02-carte-blanche-product-redesign.md) records exploration; this flow supersedes its conflicting workflow recommendations. Existing [product journeys](../journeys/INDEX.md) remain unchanged because they document the existing product.
+The audited application is preserved at baseline commit `94a3dc958c13e297baf501aa2721efa2c2628622`. Earlier engineering reviews and concept exploration remain in the retained `review/application-local-20261002` branch/worktree and are not published artifacts of this contract. This flow supersedes their conflicting workflow recommendations. Baseline [product journeys](../journeys/INDEX.md) and their run history remain recoverable; J19 through J30 describe the rebuild.
 
 ## Product vocabulary
 
