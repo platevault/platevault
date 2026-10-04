@@ -5,9 +5,12 @@ import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { useCloseUnmountFallback } from "@/components/ui/use-close-unmount-fallback"
 
-function AlertDialog({ ...props }: AlertDialogPrimitive.Root.Props) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
+/** Unmounts on close even when a background tab pauses the exit animation (see useCloseUnmountFallback). */
+function AlertDialog({ open, defaultOpen, onOpenChange, onOpenChangeComplete, actionsRef, ...props }: AlertDialogPrimitive.Root.Props) {
+  const closeProps = useCloseUnmountFallback({ open, defaultOpen, onOpenChange, onOpenChangeComplete, actionsRef })
+  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} {...closeProps} />
 }
 
 function AlertDialogTrigger({ ...props }: AlertDialogPrimitive.Trigger.Props) {
