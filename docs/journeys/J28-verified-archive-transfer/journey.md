@@ -5,9 +5,9 @@ version: 1
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
-surfaces: [archive, storage, view-review, preparation]
+surfaces: [archive, storage, view-review, preparation, locations]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 071-storage-custody, D06, D09, D11, specs/063-clean-rebuild-contract/decisions.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 071-storage-custody, D02, D06, D09, D11, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer]
 ---
 
 ## Goal
@@ -20,7 +20,8 @@ every source retired was retired only after destination and reference
 verification, while it still matched its copied snapshot; an interrupted,
 failing or drifted item keeps its source and its recorded phase; and the View's
 membership and exclusions are unchanged, with archived inputs reading Offline
-when `Archive` is unplugged.
+when `Archive` is unplugged. When the archive location is later retired, its
+copies read Retired, leave totals, change no file and stay named in the View.
 
 ## Preconditions
 
@@ -112,6 +113,27 @@ when `Archive` is unplugged.
 - **Expect (negative):** Unavailable inputs are not omitted from the handoff.
 - **Trace:** flow J · STO-FR-08 · STO-AC-05
 
+### S11 — Review retiring the lost archive {#S11}
+
+- **Do:** With `Archive` still unplugged, open Locations, choose the Offline location that holds `Archive/NGC7000`, and click **Retire location**.
+- **Expect:** The review names the location, its root and Offline state, the five sessions and their 214 copies, View `NGC7000 HOO - Siril`, Project `NGC 7000 HOO` and any Result that references them. It states that retiring deletes, moves or modifies no file.
+- **Expect (negative):** Nothing is retired before confirmation.
+- **Trace:** flow A4, cross-flow "Location offline" · LIB-FR-15 · LIB-AC-16 · D11
+
+### S12 — Retire the location {#S12}
+
+- **Do:** Confirm **Retire location**. Open Sessions, NGC 7000 and `NGC7000 HOO - Siril`, and click **Open in Siril**.
+- **Expect:** The location reads Retired, and its 214 copies read Retired. NGC 7000 captured integration falls by exactly 17h 50m, and its usable integration reads 0h 00m. The View still lists its 208 members and six exclusions and reads Complete; each member is named unresolved and Retired. Opening is refused and names the retired inputs.
+- **Expect (negative):** No copy reads Missing. The View's membership, exclusions and prepared revision are unchanged, and no retired copy is offered as an input.
+- **Trace:** flow A4 · LIB-FR-15, VSEL-FR-09 · LIB-AC-16 · D02, D11
+
+### S13 — Register the archive folder again {#S13}
+
+- **Do:** Plug `Archive` back in. In Locations, try to reselect the retired location. Then add `Archive/NGC7000` as a Captures location and index it.
+- **Expect:** Reselect is not offered for the retired location. The new location registers without an overlap conflict, and the 214 archived lights appear as its Unreviewed assets beside the retired copies. NGC 7000 captured integration rises by exactly 17h 50m.
+- **Expect (negative):** No retired copy is counted again and no retired decision transfers, so usable integration still reads 0h 00m. `NGC7000 HOO - Siril` still names its members unresolved and Retired. The archived files match P3.
+- **Trace:** flow A4 · LIB-FR-15 · LIB-AC-16 · D11
+
 ## Success criteria
 
 - SC1: 0 sources are retired before their destination hash and all affected references verify (S6, S8, S9).
@@ -121,6 +143,7 @@ when `Archive` is unplugged.
 - SC5: The impostor volume blocks approval (S2).
 - SC6: With `Archive` unplugged, Open is refused and 0 inputs are omitted (S10).
 - SC7: The drifted source is retired 0 times while it differs from its snapshot (S7a, S8); it retires only after re-verification (S9a).
+- SC8: Retiring changes 0 files and 0 copies read Missing (S12); after S13 captured integration equals its S10 value, so no capture is counted twice.
 
 ## Known gaps
 

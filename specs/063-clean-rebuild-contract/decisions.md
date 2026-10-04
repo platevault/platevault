@@ -116,6 +116,7 @@ Owners: LIB.
 - Equipment definitions are explicit camera/optical-train records with confirmed versus observed evidence.
 - Identity remap requires verified byte identity and location/volume evidence; same names or a reused mount path are insufficient.
 - Offline evidence remains last-observed, not current verification.
+- A location that cannot be re-verified leaves the library only through a reviewed Retire location that changes no file. Its copies read Retired, never Missing, leave integration totals and stay named unresolved in fixed Views. Reselect is refused afterwards, but registering the same folder again is allowed.
 
 ### D12
 
@@ -187,7 +188,7 @@ Owners: LIB, PRJ, VSEL, PIX, CAL, PREP, RES, STO, PLAN.
 - A mismatch blocks that item and names the drift. The basis stays as history beside the current bytes, and nothing is launched, registered, overwritten, removed or retired. Counts exclude the item from applicable totals instead of blocking.
 - Offline or unreadable means unverified, never matched. Counts keep the labelled last-observed state; every other effect blocks.
 - Drift resolves only when bytes matching the basis return, the user explicitly reviews or accepts the current bytes, or the item is explicitly excluded. Nothing resolves it automatically.
-- D05 and D06 apply this rule to adoption and archive. Metadata-only indexing and captured totals of Unreviewed captures stay as LIB specifies. Calendar export consumes no recorded file. Verification ends at launch; PlateVault claims nothing about inputs while an external application runs.
+- D05 and D06 apply this rule to adoption and archive. Metadata-only indexing and captured totals of Unreviewed captures stay as LIB specifies; copies of a retired location (D11) leave totals instead of keeping a last-observed count. Calendar export consumes no recorded file. Verification ends at launch; PlateVault claims nothing about inputs while an external application runs.
 
 ## Verification still required
 

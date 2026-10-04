@@ -592,7 +592,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 | Situation | Required observation and recovery |
 |---|---|
 | Unsaved catalog write fails | The edited value remains visibly unsaved/error; Retry is available; never show Saved |
-| Location offline | Retain last-observed metadata; reconnect or choose another verified location |
+| Location offline | Retain last-observed metadata; reconnect or choose another verified location. A location that cannot return is retired only after a review that changes no file; its copies read Retired and stay named in fixed Views |
 | Partial scan | Name incomplete scope; do not infer missing files under unreadable paths |
 | Missing OBJECT | Geometry matching and manual selection remain available |
 | Missing geometry | Show Unknown; allow manual session selection without invented distance/overlap |

@@ -4,7 +4,7 @@ Shared model, exported ports, Cargo dependencies and fixture writers have one fo
 
 ## Paths and identity
 
-`NativePath` is `{encoding: unix-bytes|windows-utf16, payload: number[], display: string}`. Payload is lossless; display is never a lookup key. Relative paths reject absolute/root/parent traversal. IDs are UUIDs. `FileIdentity` records volume/filesystem ID and file ID; locations retain both volume and root identity. Mismatch reports Offline/IdentityConflict and prevents absence reconciliation. Overlapping same-volume roots are refused at registration.
+`NativePath` is `{encoding: unix-bytes|windows-utf16, payload: number[], display: string}`. Payload is lossless; display is never a lookup key. Relative paths reject absolute/root/parent traversal. IDs are UUIDs. `FileIdentity` records volume/filesystem ID and file ID; locations retain both volume and root identity. Mismatch reports Offline/IdentityConflict and prevents absence reconciliation. Overlapping same-volume roots of Active locations are refused at registration; Retired locations do not block.
 
 `ObservationFingerprint` includes qualified stable volume/file identity, size/nanosecond mtime and optional content SHA-256. Quality/content-sensitive decisions bind reviewed bytes to SHA-256; readable rescans/reuse recheck decided assets even when stats match, and a decision stays verification pending, outside applicable totals, until its recheck finishes. A mismatched digest or absent historical review basis makes quality ChangedContent, never Unreviewed. Unreadable/offline inputs retain last-observed digest/quality with unavailable/unverified scope. ExpectedAsset carries assetId/decisionRevision/fingerprint; ExpectedSession carries sessionId/groupingRevision/decisionRevision, with Conflict plus successor IDs on supersession. Batch edits commit all or nothing.
 
@@ -24,7 +24,7 @@ A `ScanBatch` includes observed files/errors plus progress; the integration owne
 
 `persistence_library::Catalog::open(path: &Path) -> Result<Catalog, LibraryError>` initializes the clean schema with one serialized writer connection and separate readers. Foreign keys, WAL/FULL and macOS fullfsync/checkpoint_fullfsync apply to the writer. SQL stays under `crates/persistence`; canonical records live in `platevault_model`. No legacy schema is imported.
 
-Operations: register/update/reselect location, begin/apply batch/finish/retry scan, list/status operations, assets/sessions/coverage, metadata preview/confirm, quality decisions, target save/association, equipment save/confirmation and reviewed remap. Reads return persisted scope and revisions.
+Operations: register/update/reselect location, reviewed retire location, begin/apply batch/finish/retry scan, list/status operations, assets/sessions/coverage, metadata preview/confirm, quality decisions, target save/association, equipment save/confirmation and reviewed remap. Reads return persisted scope and revisions.
 
 `apply_correction_and_regroup(expected, corrections, compute_grouping)` validates current observations/decision revisions, applies corrections, calls a supplied pure grouping callback on effective assets and stores grouping/lineage in one transaction. Library supplies the real grouping callback; catalog compiles independently against the shared model/closure contract and implements no stub grouping. Its focused tests exercise real atomic corrections and a simple behavioral grouping calculation, not a mock success echo.
 
