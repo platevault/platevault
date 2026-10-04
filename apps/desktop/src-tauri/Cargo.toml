@@ -3,6 +3,7 @@ name = "desktop_shell"
 version = "0.6.0"
 edition.workspace = true
 license.workspace = true
+default-run = "desktop_shell"
 
 [lib]
 path = "src/lib.rs"
@@ -15,6 +16,8 @@ tauri-build = { workspace = true }
 
 [dependencies]
 app_core = { path = "../../../crates/app/core" }
+platevault_core = { path = "../../../crates/platevault-core" }
+persistence_library = { path = "../../../crates/persistence/library" }
 camino = { workspace = true }
 workflow_profiles = { path = "../../../crates/workflow/profiles" }
 audit = { path = "../../../crates/audit" }

@@ -1430,9 +1430,11 @@ dependencies = [
  "futures-util",
  "persistence_core",
  "persistence_inbox",
+ "persistence_library",
  "persistence_lifecycle",
  "persistence_plans",
  "persistence_targets",
+ "platevault_core",
  "semver",
  "serde",
  "serde_json",
@@ -4477,6 +4479,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "persistence_library"
+version = "0.1.0"
+dependencies = [
+ "fs_pathsafe",
+ "hex",
+ "platevault_model",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "skymath 0.7.2",
+ "sqlx",
+ "tempfile",
+ "time",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "persistence_lifecycle"
 version = "0.1.0"
 dependencies = [
@@ -4651,6 +4671,7 @@ dependencies = [
  "metadata_core",
  "metadata_fits",
  "metadata_xisf",
+ "persistence_library",
  "platevault_model",
  "serde",
  "serde_json",

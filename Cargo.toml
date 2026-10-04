@@ -4,6 +4,7 @@ members = [
   "apps/desktop/src-tauri",
   "crates/platevault-core",
   "crates/platevault-model",
+  "crates/persistence/library",
   "crates/app/cache",
   "crates/app/calibration",
   "crates/app/core",

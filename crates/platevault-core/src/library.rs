@@ -1,0 +1,354 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! Application operations over the clean catalog. Image paths are read-only.
+
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use serde::Serialize;
+use tokio::sync::{broadcast, Mutex};
+use uuid::Uuid;
+
+use crate::grouping::group_assets;
+use crate::inventory;
+use crate::targets::{
+    SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
+};
+use crate::{
+    Availability, FileIdentity, LibraryError, Location, LocationRole, NativePath,
+    ObservationFingerprint, RemapReview, Revision, ScanOperation, ScanOptions, ScanState,
+    TargetCandidate,
+};
+use persistence_library::{Catalog, LocationRegistration, SessionDetail};
+
+pub struct Library {
+    catalog: Arc<Catalog>,
+    targets: Arc<TargetIndex>,
+    provider: Option<SimbadTargetResolver>,
+    scans: Mutex<HashMap<Uuid, Arc<AtomicBool>>>,
+    progress: broadcast::Sender<ScanOperation>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibrarySession {
+    pub detail: SessionDetail,
+    pub target_assessments: Vec<TargetAssessment>,
+}
+
+pub struct InventoryProbe;
+
+impl persistence_library::SourceProbe for InventoryProbe {
+    fn fingerprint(&self, path: &Path) -> Result<ObservationFingerprint, LibraryError> {
+        inventory::probe_fingerprint(path)
+    }
+
+    fn root_identity(&self, location: &Location) -> Result<FileIdentity, LibraryError> {
+        inventory::validate_location_root(location)
+    }
+}
+
+impl Library {
+    /// Open a fresh-schema catalog and load the offline target dataset.
+    /// Interrupted scan recovery is owned by the catalog.
+    ///
+    /// # Errors
+    /// Returns catalog persistence, seed validation or provider configuration errors.
+    pub async fn open(
+        path: &Path,
+        provider: Option<&SimbadConfig>,
+    ) -> Result<Arc<Self>, LibraryError> {
+        let catalog = Arc::new(Catalog::open(path).await?);
+        let targets = blocking(TargetIndex::bundled).await?;
+        let provider = provider.map(SimbadTargetResolver::simbad).transpose()?;
+        let (progress, _) = broadcast::channel(128);
+        Ok(Arc::new(Self {
+            catalog,
+            targets: Arc::new(targets),
+            provider,
+            scans: Mutex::new(HashMap::new()),
+            progress,
+        }))
+    }
+
+    #[must_use]
+    pub fn catalog(&self) -> &Catalog {
+        &self.catalog
+    }
+
+    #[must_use]
+    pub fn subscribe_scan_progress(&self) -> broadcast::Receiver<ScanOperation> {
+        self.progress.subscribe()
+    }
+
+    #[must_use]
+    pub fn seed_target(&self, id: Uuid) -> Option<TargetCandidate> {
+        self.targets.candidate(id)
+    }
+
+    /// Review replacement paths without changing originals or registered paths.
+    ///
+    /// # Errors
+    /// Refuses inaccessible/unqualified roots, stale revisions or missing byte proof.
+    pub async fn review_remap(
+        &self,
+        location_id: Uuid,
+        expected: Revision,
+        proposed: NativePath,
+    ) -> Result<RemapReview, LibraryError> {
+        let root = proposed.to_path_buf()?;
+        let identity = blocking(move || inventory::observe_root_identity(&root)).await?;
+        self.catalog.review_remap(location_id, expected, &proposed, &identity, InventoryProbe).await
+    }
+
+    /// Register a qualified native root without scanning or modifying its files.
+    ///
+    /// # Errors
+    /// Refuses invalid roots, unknown identity, overlap or persistence failure.
+    pub async fn register_location(
+        &self,
+        path: NativePath,
+        name: String,
+        role: LocationRole,
+    ) -> Result<Location, LibraryError> {
+        let root = path.to_path_buf()?;
+        let identity = blocking(move || inventory::observe_root_identity(&root)).await?;
+        self.catalog.register_location(&LocationRegistration { name, path, role, identity }).await
+    }
+
+    /// Restore a location only when its registered volume and folder still match.
+    ///
+    /// # Errors
+    /// Returns access, identity, stale revision or persistence errors.
+    pub async fn reselect_location(
+        &self,
+        id: Uuid,
+        expected: Revision,
+        path: NativePath,
+    ) -> Result<Location, LibraryError> {
+        let root = path.to_path_buf()?;
+        let identity = blocking(move || inventory::observe_root_identity(&root)).await?;
+        self.catalog.reselect_location(id, expected, &path, &identity).await
+    }
+
+    /// Return only after the Running operation is durably recorded.
+    ///
+    /// # Errors
+    /// Refuses an unknown location, overlapping active scan or failed durable write.
+    pub async fn start_scan(
+        self: &Arc<Self>,
+        location_id: Uuid,
+        relative_scope: Option<NativePath>,
+    ) -> Result<ScanOperation, LibraryError> {
+        let operation = self.catalog.begin_scan(location_id, relative_scope.clone()).await?;
+        self.supervise_scan(&operation, relative_scope).await;
+        Ok(operation)
+    }
+
+    /// Supervise a new scan confined to the reviewed relative subtree.
+    ///
+    /// # Errors
+    /// Refuses invalid scope, unknown location, concurrent scan or persistence failure.
+    pub async fn retry_scope(
+        self: &Arc<Self>,
+        location_id: Uuid,
+        scope: NativePath,
+    ) -> Result<ScanOperation, LibraryError> {
+        let operation = self.catalog.retry_scope(location_id, scope.clone()).await?;
+        self.supervise_scan(&operation, Some(scope)).await;
+        Ok(operation)
+    }
+
+    async fn supervise_scan(
+        self: &Arc<Self>,
+        operation: &ScanOperation,
+        relative_scope: Option<NativePath>,
+    ) {
+        let canceled = Arc::new(AtomicBool::new(false));
+        self.scans.lock().await.insert(operation.id, Arc::clone(&canceled));
+        let library = Arc::clone(self);
+        let id = operation.id;
+        tokio::spawn(async move {
+            let outcome = library.run_scan(id, relative_scope, &canceled).await;
+            if let Err(error) = outcome {
+                // A commit failure must not become a terminal-success event.
+                // If even this write fails, durable status remains Running and
+                // catalog reopen recovers the interrupted operation.
+                if let Ok(recorded) = library.catalog.scan_status(id).await {
+                    if recorded.state == ScanState::Running {
+                        if let Ok(failed) = library
+                            .catalog
+                            .abort_scan(id, ScanState::Failed, &error.to_string())
+                            .await
+                        {
+                            let _ = library.progress.send(failed);
+                        }
+                    } else {
+                        let _ = library.progress.send(recorded);
+                    }
+                }
+            }
+            library.scans.lock().await.remove(&id);
+        });
+    }
+
+    /// Request cancellation without claiming that the worker already stopped.
+    ///
+    /// # Errors
+    /// Returns unknown operation, missing supervisor or persistence errors.
+    pub async fn cancel_scan(&self, id: Uuid) -> Result<ScanOperation, LibraryError> {
+        let operation = self.catalog.scan_status(id).await?;
+        if operation.state == ScanState::Running {
+            let scans = self.scans.lock().await;
+            let flag = scans.get(&id).ok_or_else(|| {
+                LibraryError::SourceUnavailable(
+                    "scan supervisor is not active; reload durable status".into(),
+                )
+            })?;
+            flag.store(true, Ordering::Release);
+            drop(scans);
+        }
+        // Acknowledges the request; the durable operation may still be Running.
+        Ok(operation)
+    }
+
+    /// Rank the complete saved and seed candidate set using shared normalization.
+    ///
+    /// # Errors
+    /// Returns invalid query/cone/limit or catalog read errors.
+    pub async fn search_targets(
+        &self,
+        query: &TargetQuery,
+    ) -> Result<Vec<TargetSearchHit>, LibraryError> {
+        let saved = self.saved_targets().await?;
+        self.targets.search(query, &saved)
+    }
+
+    /// Return explicit provider evidence; local search does not require a provider.
+    ///
+    /// # Errors
+    /// Returns invalid/unknown/ambiguous queries or `ProviderUnavailable`.
+    pub async fn resolve_target(&self, query: &str) -> Result<TargetCandidate, LibraryError> {
+        let provider = self.provider.as_ref().ok_or_else(|| {
+            LibraryError::ProviderUnavailable(
+                "no online provider configured; local target search remains available".into(),
+            )
+        })?;
+        provider.resolve(query).await
+    }
+
+    /// Inspect recorded membership and non-confirming target evidence.
+    ///
+    /// # Errors
+    /// Returns `NotFound` or catalog read errors; never measures or modifies sources.
+    pub async fn session(&self, id: Uuid) -> Result<LibrarySession, LibraryError> {
+        let detail = self.catalog.session(id).await?;
+        let frames = detail.assets.iter().map(|asset| asset.effective.clone()).collect::<Vec<_>>();
+        let saved = self.saved_targets().await?;
+        let target_assessments = self.targets.candidates_for_frames(&frames, &saved);
+        Ok(LibrarySession { detail, target_assessments })
+    }
+
+    async fn saved_targets(&self) -> Result<Vec<TargetCandidate>, LibraryError> {
+        const PAGE: u32 = 1000;
+        let mut offset = 0_u32;
+        let mut saved = Vec::new();
+        loop {
+            let page = self.catalog.list_targets(offset, PAGE).await?;
+            let count = u32::try_from(page.len())
+                .map_err(|_| LibraryError::PersistenceFailure("target page exceeds u32".into()))?;
+            saved.extend(page.into_iter().map(|record| record.candidate));
+            if count < PAGE {
+                return Ok(saved);
+            }
+            offset = offset.checked_add(count).ok_or_else(|| {
+                LibraryError::PersistenceFailure("target index exceeds u32".into())
+            })?;
+        }
+    }
+
+    async fn run_scan(
+        &self,
+        id: Uuid,
+        relative_scope: Option<NativePath>,
+        canceled: &Arc<AtomicBool>,
+    ) -> Result<(), LibraryError> {
+        let operation = self.catalog.scan_status(id).await?;
+        let location = self.catalog.location(operation.location_id).await?;
+        let catalog = Arc::clone(&self.catalog);
+        let progress = self.progress.clone();
+        let flag = Arc::clone(canceled);
+        let handle = tokio::runtime::Handle::current();
+        let scan_location = location.clone();
+        let observation = blocking(move || {
+            let options = ScanOptions { relative_scope, ..ScanOptions::default() };
+            inventory::scan(
+                &scan_location,
+                &options,
+                |batch| {
+                    // The platform probe runs outside the writer lock. Catalog
+                    // compares it with both registration and scan-begin identity.
+                    let identity = inventory::validate_location_root(&scan_location)?;
+                    let applied = handle.block_on(catalog.apply_scan_batch(
+                        id,
+                        &identity,
+                        &batch,
+                        group_assets,
+                    ))?;
+                    let _ = progress.send(applied);
+                    Ok(())
+                },
+                &flag,
+            )
+        })
+        .await;
+        match observation {
+            Ok(observation) => {
+                let catalog = Arc::clone(&self.catalog);
+                let handle = tokio::runtime::Handle::current();
+                let completed = blocking(move || {
+                    handle.block_on(catalog.finish_scan(
+                        id,
+                        &observation,
+                        inventory::validate_location_root,
+                        group_assets,
+                    ))
+                })
+                .await?;
+                let _ = self.progress.send(completed);
+                Ok(())
+            }
+            Err(error) => {
+                if let Some(availability) = root_failure(&error) {
+                    self.catalog
+                        .mark_location_unavailable(location.id, availability, &error.to_string())
+                        .await?;
+                }
+                Err(error)
+            }
+        }
+    }
+}
+
+async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, LibraryError> + Send + 'static,
+) -> Result<T, LibraryError> {
+    tokio::task::spawn_blocking(work).await.map_err(|error| {
+        LibraryError::SourceUnavailable(format!("library worker interrupted: {error}"))
+    })?
+}
+
+fn root_failure(error: &LibraryError) -> Option<Availability> {
+    match error {
+        LibraryError::Context { error, .. } => root_failure(error),
+        LibraryError::IdentityConflict(_) => Some(Availability::IdentityConflict),
+        LibraryError::AccessDenied(_) => Some(Availability::Unreadable),
+        LibraryError::SourceUnavailable(_) | LibraryError::NotFound(_) => {
+            Some(Availability::Offline)
+        }
+        _ => None,
+    }
+}
