@@ -555,8 +555,13 @@ exact need. It does not edit the file or work around it.
    `viewStatus`, `captureSite`, `sessionLocationIds`, `sessionFootprint`,
    `coverageFraction` with `MIN_FOOTPRINT_OVERLAP` (0.5, the prototype value
    for J21 G2) and `projectProgress` (captured, library-usable and
-   Project-accepted totals per checklist item). Site removal goes through
-   `removeSite` (`src/domain/sites.ts`).
+   Project-accepted totals per checklist item). Every total counts
+   `effectiveExposureS` (the session's latest exposure correction, else the
+   observed EXPTIME; `latestCorrection` and `correctedExposureS` live in
+   `src/domain/corrections.ts`). Indexing groups existing sessions by their
+   corrected values and new files by their observed header, and gives a new
+   session an id that no current, superseded or lineage-referenced session
+   uses. Site removal goes through `removeSite` (`src/domain/sites.ts`).
 4. Durable catalog writes go through `commit(label, mutate, { expect, href })`.
    Report success only on `{ ok: true }`; otherwise keep the edit on screen with
    `SaveState` and Retry. `expect` refuses stale edits and, on success, bumps the
