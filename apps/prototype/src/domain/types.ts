@@ -217,6 +217,12 @@ export interface QualityDecision {
   decidedAt: IsoDateTime | null
   /** Content fingerprint the decision was made against. */
   basisSha256: string | null
+  /**
+   * Set when a readable rescan starts over a decided asset and cleared once
+   * its bytes are re-read. Until then the decision is outside applicable
+   * totals; a canceled or failed rescan leaves it set (LIB-FR-09, LIB-AC-14).
+   */
+  verificationPending?: boolean
 }
 
 /**

@@ -12,7 +12,7 @@
  * never infers progress from file names (D09).
  */
 import { fileKey } from "@/domain/disk"
-import { listLocation, markScanStopped, readFiles, settleLocationScan } from "@/domain/indexing"
+import { listLocation, markScanStopped, markVerificationPending, readFiles, settleLocationScan } from "@/domain/indexing"
 import type { LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus } from "@/domain/types"
 import { nowIso, type PrototypeState, store } from "./core"
 
@@ -229,6 +229,7 @@ function startNextLocation(state: PrototypeState, op: Operation, payload: IndexP
     })
     next = patchOperation(next, op.id, { items })
     if (listing.offline) continue
+    next = { ...next, catalog: markVerificationPending(next.catalog, locationId) }
     return {
       state: next,
       payload: {

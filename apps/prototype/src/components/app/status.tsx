@@ -78,6 +78,7 @@ export const STATUS = {
     usable: s("Usable", "success", Check),
     unusable: s("Unusable", "neutral", Ban),
     "changed-content": s("Changed content", "warning", FileDiff),
+    "verification-pending": s("Verification pending", "info", Hourglass),
     "project-rejected": s("Rejected for Project", "neutral", CircleSlash),
     excluded: s("Excluded from View", "neutral", CircleSlash),
   },
@@ -187,6 +188,12 @@ export const STATUS = {
   },
   site: {
     default: s("Default site", "info", CircleDot),
+  },
+  checklist: {
+    met: s("Met", "success", Check),
+    partial: s("Partial", "warning", TriangleAlert),
+    missing: s("Missing", "danger", CircleX),
+    unknown: s("Unknown", "muted", CircleHelp),
   },
 } satisfies Record<string, Record<string, StatusMeta>>
 

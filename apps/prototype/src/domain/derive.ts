@@ -86,11 +86,13 @@ export function captureSite(catalog: Catalog, session: Session): ObservingSite |
 
 /**
  * LIB-FR-09: a decision made against different bytes, or without a recorded
- * basis, is "changed content" and leaves applicable Usable/Unreviewed totals.
+ * basis, is "changed content"; a decision awaiting its rescan rehash is
+ * "verification pending". Both leave applicable Usable/Unreviewed totals.
  */
-export function qualityApplicability(asset: Asset): "applicable" | "changed-content" {
+export function qualityApplicability(asset: Asset): "applicable" | "changed-content" | "verification-pending" {
   if (asset.quality.value === "unreviewed") return "applicable"
-  return asset.quality.basisSha256 === asset.sha256 ? "applicable" : "changed-content"
+  if (asset.quality.basisSha256 !== asset.sha256) return "changed-content"
+  return asset.quality.verificationPending ? "verification-pending" : "applicable"
 }
 
 /** A cached measurement applies only to the bytes it measured (PIX-AC-10). */
@@ -116,19 +118,31 @@ export interface QualityBreakdown {
   unreviewed: FrameTotals
   unusable: FrameTotals
   changedContent: FrameTotals
+  /** Decided frames whose rescan rehash has not finished (LIB-AC-14). */
+  verificationPending: FrameTotals
   /** Captured frames with no available copy right now (offline, unreadable or absent). */
   unavailable: FrameTotals
 }
 
 export function emptyBreakdown(): QualityBreakdown {
-  return { captured: zero(), usable: zero(), unreviewed: zero(), unusable: zero(), changedContent: zero(), unavailable: zero() }
+  return {
+    captured: zero(),
+    usable: zero(),
+    unreviewed: zero(),
+    unusable: zero(),
+    changedContent: zero(),
+    verificationPending: zero(),
+    unavailable: zero(),
+  }
 }
 
 /** Adds one logical asset. Copies never count twice. */
 export function addToBreakdown(breakdown: QualityBreakdown, disk: Disk, catalog: Catalog, asset: Asset) {
   add(breakdown.captured, asset)
   if (assetAvailability(disk, catalog, asset) !== "available") add(breakdown.unavailable, asset)
-  if (qualityApplicability(asset) === "changed-content") add(breakdown.changedContent, asset)
+  const applicability = qualityApplicability(asset)
+  if (applicability === "changed-content") add(breakdown.changedContent, asset)
+  else if (applicability === "verification-pending") add(breakdown.verificationPending, asset)
   else if (asset.quality.value === "usable") add(breakdown.usable, asset)
   else if (asset.quality.value === "unusable") add(breakdown.unusable, asset)
   else add(breakdown.unreviewed, asset)
