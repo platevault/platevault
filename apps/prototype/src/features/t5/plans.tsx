@@ -23,10 +23,10 @@ import { Switch } from "@/components/ui/switch"
 import { projectProgress, targetCoverage } from "@/domain/derive"
 import type { CalendarExport, ObservingSite, ObservingWindow, PlanCriteria, Target } from "@/domain/types"
 import { formatDateTime, formatDuration, formatNight, formatTime, plural } from "@/lib/format"
-import { nowIso, store, useStore } from "@/store/core"
+import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import { resetClock, setClockTo } from "@/store/simulation"
 import { disableNotifications, enableNotifications, type EnableOutcome, saveCalendarExport, savePlan, setPlanningSite } from "./lib/actions"
-import { calendarFile, computeWindows, criteriaSummary, defaultCriteria, downloadText, nightAt, PLAN_NIGHTS, zoneAbbreviation } from "./lib/planning"
+import { calendarFile, computeWindows, criteriaSummary, defaultCriteria, downloadText, nightAt, PLAN_NIGHTS, reminderKey, zoneAbbreviation } from "./lib/planning"
 import { PrototypeControls } from "./shared"
 
 const LEAD_TIMES = [
@@ -376,10 +376,18 @@ function TargetPlan({ target }: { target: Target }) {
   )
 }
 
+/**
+ * The .ics is generated once, when the export is saved, and kept with the
+ * export: renaming a site or Target later never changes Download again (PLAN-AC-03).
+ */
 function downloadSnapshot(record: CalendarExport) {
-  const { catalog } = store.getState()
+  const { catalog, slices } = store.getState()
+  const saved = slices.t5.calendarFiles[record.id]
+  if (saved) return downloadText(record.fileName, saved)
   const names = Object.fromEntries(Object.values(catalog.targets).map((t) => [t.id, t.name]))
-  downloadText(record.fileName, calendarFile(record, catalog.sites[record.siteId]?.name ?? record.siteId, names))
+  const text = calendarFile(record, catalog.sites[record.siteId]?.name ?? record.siteId, names)
+  updateSlice("t5", (s) => ({ ...s, calendarFiles: { ...s.calendarFiles, [record.id]: text } }))
+  downloadText(record.fileName, text)
 }
 
 function NumberField({ id, label, value, error, hint, onChange }: { id: string; label: string; value: string; error?: string; hint?: string; onChange: (text: string) => void }) {
@@ -511,7 +519,7 @@ function RemindersSection({
           {upcoming.length > 0 ? (
             <ul className="divide-y rounded-lg border text-sm">
               {upcoming.map((w) => {
-                const delivered = reminders.deliveredWindowKeys.includes(w.key)
+                const delivered = reminders.deliveredWindowKeys.includes(reminderKey(w, reminderSite!))
                 const at = new Date(Date.parse(w.start) - (reminders.leadTimeMin ?? 0) * 60_000).toISOString()
                 return (
                   <li key={w.key} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
@@ -571,14 +579,14 @@ function RemindersSection({
               {outcome.message}
             </Notice>
           ) : null}
-          {outcome && !outcome.ok && outcome.reason === "denied" ? (
+          {status === "denied" ? (
             <Notice
               tone="refusal"
               title="Notification permission denied"
               actions={
                 <>
                   <Button size="sm" variant="outline" onClick={() => openPanel("simulation")}>
-                    Settings
+                    System Settings
                   </Button>
                   <Button size="sm" variant="outline" onClick={enable}>
                     Retry
@@ -586,7 +594,7 @@ function RemindersSection({
                 </>
               }
             >
-              {outcome.message} Notifications are not enabled and nothing was scheduled. Prototype: Settings opens Prototype controls, where “Next notification permission answer” stands in for System Settings.
+              {outcome && !outcome.ok && outcome.reason === "denied" ? outcome.message : "Notification permission denied. PlateVault cannot show reminders until notifications are allowed in System Settings."} Notifications are not enabled and nothing was scheduled. Prototype: System Settings opens Prototype controls, where “Next notification permission answer” stands in for the operating system.
             </Notice>
           ) : null}
           {outcome && !outcome.ok && (outcome.reason === "no-lead-time" || outcome.reason === "write-failed" || outcome.reason === "stale") ? (
@@ -605,7 +613,7 @@ function RemindersSection({
             size="sm"
             variant="outline"
             onClick={() => {
-              const first = upcoming.find((w) => !reminders.deliveredWindowKeys.includes(w.key)) ?? upcoming[0]!
+              const first = upcoming.find((w) => !reminders.deliveredWindowKeys.includes(reminderKey(w, reminderSite!))) ?? upcoming[0]!
               const at = Date.parse(first.start) - ((reminders.leadTimeMin ?? 60) * 60_000) / 2
               setClockTo(new Date(at).toISOString())
               setClockMessage({ ok: true, message: `Clock set to ${formatDateTime(new Date(at).toISOString(), reminderSite?.timeZone)}.` })
@@ -744,8 +752,8 @@ export function PlansPage() {
     })
     .filter((r) => r.target)
   const delivered = reminders.deliveredWindowKeys.map((key) => {
-    const [targetId, siteId, start] = key.split("/")
-    return { key, target: catalog.targets[targetId ?? ""]?.name ?? targetId, site: catalog.sites[siteId ?? ""], start: start ?? "" }
+    const [targetId, siteId, night] = key.split("/")
+    return { key, target: catalog.targets[targetId ?? ""]?.name ?? targetId, site: catalog.sites[siteId ?? ""], night: night ?? "" }
   })
 
   return (
@@ -825,7 +833,7 @@ export function PlansPage() {
                   <span>
                     {d.target} at {d.site?.name ?? "a removed site"}
                   </span>
-                  <span className="text-xs text-muted-foreground">Window starting {d.site ? formatDateTime(d.start, d.site.timeZone) : formatDateTime(d.start)}</span>
+                  <span className="text-xs text-muted-foreground">Night of {formatNight(d.night)}</span>
                 </li>
               ))}
             </ul>

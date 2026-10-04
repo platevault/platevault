@@ -49,6 +49,8 @@ export interface T5State {
   cleanup: Record<ViewId, CleanupDraft>
   /** The latest inspection of each Result candidate; Accept Result re-verifies against it. */
   inspections: Record<ResultId, Inspection>
+  /** The .ics text of each calendar export as generated when it was saved; Download again serves it unchanged. */
+  calendarFiles: Record<string, string>
   archive: TransferDraft
   filing: TransferDraft
   notifications: SimulatedNotification[]
@@ -56,7 +58,7 @@ export interface T5State {
 
 export const t5Slice: SliceDefinition<T5State> = {
   id: "t5",
-  version: 4,
-  initial: () => ({ cleanup: {}, inspections: {}, archive: emptyDraft(), filing: emptyDraft(), notifications: [] }),
+  version: 5,
+  initial: () => ({ cleanup: {}, inspections: {}, calendarFiles: {}, archive: emptyDraft(), filing: emptyDraft(), notifications: [] }),
   operations: t5OperationHandlers,
 }

@@ -7,7 +7,8 @@
  */
 import { fakeSha256, fileAt, fileKey, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
-import type { DiskFile, FrameHeader, View } from "@/domain/types"
+import type { Disk, DiskFile, FrameHeader, View } from "@/domain/types"
+import { plural } from "@/lib/format"
 import { nowIso, store } from "@/store/core"
 import { baseName, latestPreparation, parentFolder } from "./files"
 
@@ -102,24 +103,37 @@ export function saveExternalImage(path: string): ControlOutcome {
   return { ok: true, message: `Saved ${baseName(path)} in ${parentFolder(path)}.` }
 }
 
+/** The file at `path` and every other hardlink to its bytes (same volume and inode); a symlink is only itself. */
+function linkedFiles(disk: Disk, file: DiskFile): DiskFile[] {
+  if (file.linkTarget) return [file]
+  return Object.values(disk.files).filter((f) => !f.linkTarget && f.volumeId === file.volumeId && f.inode === file.inode)
+}
+
 /**
  * J26/J28 P5 helper: overwrite a file in place with same-size bytes and put
  * its modification time back, so size and mtime match while content differs.
+ * Every hardlink to the inode shows the new bytes. A second overwrite is
+ * refused until the saved bytes are restored, so they are never lost.
  */
 export function overwriteKeepingStat(path: string): ControlOutcome {
-  const file = fileAt(store.getState().disk, path)
+  const disk = store.getState().disk
+  const file = fileAt(disk, path)
   if (!file) return { ok: false, message: `No file at ${path}.` }
-  const variant: DiskFile = { ...file, previousSha256: file.sha256, sha256: fakeSha256(path, Number.parseInt(file.sha256.slice(0, 3), 16) + 7) }
-  store.setState((s) => ({ ...s, disk: writeFiles(s.disk, [variant]) }))
-  return { ok: true, message: `Overwrote ${baseName(path)}: same size and modification time, different bytes.` }
+  if (file.previousSha256) return { ok: false, message: `${baseName(path)} is already overwritten. Restore its saved bytes first; a second overwrite would lose them.` }
+  const sha256 = fakeSha256(path, Number.parseInt(file.sha256.slice(0, 3), 16) + 7)
+  const links = linkedFiles(disk, file)
+  store.setState((s) => ({ ...s, disk: writeFiles(s.disk, links.map((f) => ({ ...f, previousSha256: f.sha256, sha256 }))) }))
+  const others = links.length - 1
+  return { ok: true, message: `Overwrote ${baseName(path)}${others > 0 ? ` and ${plural(others, "other hardlink")} to the same bytes` : ""}: same size and modification time, different bytes.` }
 }
 
-/** Put back the saved bytes and modification time (J26 S7a, J28 S9a). */
+/** Put back the saved bytes and modification time (J26 S7a, J28 S9a), on every hardlink that shares them. */
 export function restoreKeepingStat(path: string): ControlOutcome {
-  const file = fileAt(store.getState().disk, path)
+  const disk = store.getState().disk
+  const file = fileAt(disk, path)
   if (!file?.previousSha256) return { ok: false, message: `${baseName(path)} has no saved bytes to restore.` }
-  const restored: DiskFile = { ...file, sha256: file.previousSha256, previousSha256: null }
-  store.setState((s) => ({ ...s, disk: writeFiles(s.disk, [restored]) }))
+  const links = linkedFiles(disk, file).filter((f) => f.previousSha256)
+  store.setState((s) => ({ ...s, disk: writeFiles(s.disk, links.map((f): DiskFile => ({ ...f, sha256: f.previousSha256!, previousSha256: null }))) }))
   return { ok: true, message: `Restored the saved bytes of ${baseName(path)}.` }
 }
 

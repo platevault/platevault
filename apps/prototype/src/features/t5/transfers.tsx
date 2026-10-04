@@ -377,7 +377,7 @@ function ReferenceSummary({ plan, editable, kind }: { plan: TransferPlan; editab
     <Section id="t5-transfer-refs" title="Affected View references" description="Each View's current and proposed reference mode. No mode is chosen for you.">
       <ul className="space-y-3">
         {plan.references.map((ref) => (
-          <li key={ref.viewId} className="space-y-2 rounded-lg border p-3">
+          <li key={ref.preparationId} className="space-y-2 rounded-lg border p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium">{ref.viewName}</span>
               <span className="text-xs text-muted-foreground tabular-nums">
