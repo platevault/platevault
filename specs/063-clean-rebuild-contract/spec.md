@@ -124,7 +124,7 @@ The user chooses a planning site, reviews observing windows, and explicitly opts
 The stable feature keys identify contract owners. They are not a chronological implementation order.
 
 | Feature key | Owned behavior | Primary journey steps |
-|---|---|---|
+| --- | --- | --- |
 | PV-LIB | Locations, indexing, homogeneous sessions, Target/equipment evidence, coverage | A1, A2, A3, A4, B1 |
 | PV-PRJ | Optional Projects and capture checklists | B2 |
 | PV-VSEL | Selection workspace, geometry, scoped quality, saved membership, refresh | B4, C1, C2, C3, C4, C5, C6, D4, D5, G |
@@ -171,7 +171,7 @@ The stable feature keys identify contract owners. They are not a chronological i
 The user authorized conservative product defaults and waived human specification-approval gates for this autonomous run. The [decision register](decisions.md) records defaults and implementation evidence still required. Waivers do not waive analysis, tests, independent exact-head review, Sniff, or original-file protection.
 
 | Decision area | Consuming owners |
-|---|---|
+| --- | --- |
 | Geometry and standalone preselection defaults | PV-VSEL, PV-PRJ |
 | Untouched-frame inclusion default | PV-VSEL |
 | Raw/CFA and imported measurement semantics | PV-PIX |

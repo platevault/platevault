@@ -23,7 +23,7 @@ Source baseline: `94a3dc958c13e297baf501aa2721efa2c2628622`
 The fixtures are disposable and synthetic. These observations do not establish production performance, complete format coverage, or Windows/Linux behavior.
 
 | Candidate | Observed result | Adoption implication |
-|---|---|---|
+| --- | --- | --- |
 | fitsio-pure 0.13.4 | Physical BZERO u16, negative/out-of-unit f32, precise f64, and an image extension preserved; malformed/truncated inputs refused | Pure-Rust candidate; compressed-format coverage and platform checks remain |
 | fitsio 0.21.10 | Bundled CFITSIO build succeeded; typed/scaled inputs, extension selection, ROI, and malformed-input refusal passed | Conditional native candidate; Windows build and literal-path handling need proof |
 | fitsrs 0.4.1 | Stored sample types preserved; caller scaling worked; truncated input returned only 2 of 6 samples without an error | Reject as the primary reader without fixing short-read integrity |
