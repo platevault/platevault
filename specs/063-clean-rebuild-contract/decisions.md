@@ -1,7 +1,9 @@
 # Autonomous rebuild decisions
 
 Date: 2026-10-03
-Authority: the user approved conservative product defaults and waived human specification-approval gates for this run. These choices settle product behavior, not implementation verification. Requirements review, tests, exact-head independent review, Sniff, and original-file protection still apply.
+Authority: the user approved conservative product defaults and, on 2026-10-04, authorized resolving all repository human-approval gates with no human signoff. These choices settle authorization, not implementation verification. Requirements review, tests, exact-head independent review, Sniff and original-file protection still apply.
+
+The [accepted Rust computation boundary](../../docs/adr/0003-use-rust-scientific-execution-and-a-clean-local-catalog-for-the-platevault-rebuild.md), generated from decision `astro-plan-trutg`, governs specs 063 through 072 and supersedes historical ADR-0001. The retained frontend-astronomy decision records the earlier spec-044 boundary.
 
 ## Decision register
 
@@ -52,6 +54,8 @@ Owners: CAL, STO.
 
 - Adoption requires an explicit durable calibration-library destination.
 - Copy and re-read/hash verification precede registering an adopted master; the generated source remains until separately reviewed cleanup.
+- Adoption review records the candidate's identity and SHA-256. The copied bytes, the destination re-read and the source immediately before registration must all match that digest; any mismatch blocks adoption and registers nothing.
+- An existing entry at the destination path blocks adoption and is never overwritten; the path is checked again immediately before writing.
 - No master becomes reusable merely by discovery.
 
 ### D06
@@ -60,7 +64,7 @@ Owners: STO.
 
 - Archive journals per-item durable copy, destination verification, reference verification and source retirement.
 - Failure stops retirement of the affected item; already verified items retain their recorded phases.
-- Source retirement requires verified destination and all affected references.
+- Retire a source only when its current identity and digest match the copied snapshot, the destination re-verifies and every affected reference passes immediately before retirement. Any failure blocks that item and retains its source; source drift retains both versions for review.
 - Retry revalidates identities and destination volume.
 
 ### D07
@@ -70,7 +74,7 @@ Owners: PLAN.
 - Notifications start disabled.
 - A default site and explicit criteria/lead time are required before enabling them; the UI names those values.
 - No app-closed delivery is claimed without an installed, tested scheduler.
-- Resume recomputes upcoming windows and suppresses repeats by target/site/window identity.
+- Resume or restart recomputes upcoming windows and suppresses repeats of durably recorded delivered target/site/window identities.
 - Permission denial remains visible and offers Settings/Retry.
 
 ### D08
@@ -87,7 +91,7 @@ Owners: LIB, VSEL.
 
 Owners: VSEL, PREP, RES, STO.
 
-- Refresh creates a proposed membership revision; accepting it never mutates an existing prepared revision or an external application's inputs.
+- Refresh proposes a membership revision. Accepting changes and choosing Save View commits them as a new reviewed membership revision that survives restart; it never mutates an existing prepared revision or an external application's inputs.
 - Reprepare needs review.
 - Retry resumes recorded items, never filename-based inference.
 - Replaced prepared entries use reviewed STO cleanup even before Complete.
@@ -149,10 +153,11 @@ Owners: LIB, VSEL, PREP.
 
 ### D16
 
-Owners: LIB, STO.
+Owners: LIB, VSEL, STO.
 
 - Storage shows registered locations and availability, View footprints, archive transfers, and library-wide duplicate candidates based on content identity.
 - Candidate display does not authorize disposal.
+- Content-identical copies count once in totals and View membership while every physical copy stays registered and protected.
 - Whole-library duplicate removal and application-managed restore remain outside View cleanup.
 
 ### D17
@@ -170,6 +175,17 @@ Owners: LIB, PLAN.
 - Core library functionality needs neither an account nor a network connection.
 - Optional external target enrichment records provider provenance and failures; it never prevents indexing or replaces observed capture evidence.
 - Reusable coordinate math, resolver, target matching and format-header functions belong in the named shared packages where the existing contracts fit.
+
+### D19
+
+Owners: LIB, PRJ, VSEL, PIX, CAL, PREP, RES, STO, PLAN.
+
+- PlateVault counts a recorded file toward a decision- or proof-bound total, or assigns, opens, prepares, reuses, cleans, archives, files or retires it, only against a recorded identity and SHA-256 basis. The basis is recorded when the user reviews, inspects or accepts the file, or when an operation starts and snapshots it. Bases include quality decisions, cached and imported measurements, logical-capture proof, remap reviews, inspected and accepted products, adoption reviews and adopted masters, calibration assignments, retained-original and kept-copy proof, and cleanup, archive and filing plans.
+- Immediately before each effect, the current identity and SHA-256 must match every basis that applies. Equal size and mtime never substitute.
+- A mismatch blocks that item and names the drift. The basis stays as history beside the current bytes, and nothing is launched, registered, overwritten, removed or retired. Counts exclude the item from applicable totals instead of blocking.
+- Offline or unreadable means unverified, never matched. Counts keep the labelled last-observed state; every other effect blocks.
+- Drift resolves only when bytes matching the basis return, the user explicitly reviews or accepts the current bytes, or the item is explicitly excluded. Nothing resolves it automatically.
+- D05 and D06 apply this rule to adoption and archive. Metadata-only indexing and captured totals of Unreviewed captures stay as LIB specifies. Calendar export consumes no recorded file. Verification ends at launch; PlateVault claims nothing about inputs while an external application runs.
 
 ## Verification still required
 
