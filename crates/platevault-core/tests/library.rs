@@ -915,3 +915,54 @@ async fn ambiguous_same_start_matches_never_join_copies() {
         assert_eq!(&support::digest(path), digest);
     }
 }
+
+/// Unix hosts carry folder identity, so the catalog can prove an unrelated sibling
+/// does not hold a stale root. Without that identity it keeps refusing and names
+/// the way out (persistence `catalog.rs`).
+#[cfg(unix)]
+#[tokio::test]
+async fn a_deleted_or_moved_root_never_blocks_an_unrelated_sibling() {
+    let temp = tempfile::tempdir().unwrap();
+    let astro = temp.path().join("Astro");
+    let (test, darks, captures) = (astro.join("Test"), astro.join("Darks"), astro.join("Captures"));
+    for folder in [&test, &darks, &captures] {
+        std::fs::create_dir_all(folder).unwrap();
+    }
+    write_frame(&darks.join("dark_1.fits"), "2026-09-18T21:00:00");
+    write_frame(&captures.join("light_1.fits"), "2026-09-18T22:00:00");
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let register = |path: &Path, name: &str| {
+        library.register_location(NativePath::from_path(path), name.into(), LocationRole::Captures)
+    };
+    register(&test, "Test").await.unwrap();
+    let dark_root = register(&darks, "Darks").await.unwrap();
+
+    // Test is deleted and Darks moves into an archive folder on the same volume.
+    std::fs::remove_dir_all(&test).unwrap();
+    let archive = temp.path().join("Archive");
+    let moved = archive.join("Darks");
+    std::fs::create_dir_all(&archive).unwrap();
+    std::fs::rename(&darks, &moved).unwrap();
+    let originals = [moved.join("dark_1.fits"), captures.join("light_1.fits")]
+        .map(|path| support::digest(&path));
+
+    // The unrelated sibling registers and scans.
+    let sibling = register(&captures, "Captures").await.unwrap();
+    assert_eq!(scan_to_end(&library, sibling.id).await.state, ScanState::Completed);
+
+    // The folder now holding the moved root is refused, naming the root and where it
+    // is; reselecting it there is the way out.
+    let error = register(&archive, "Archive").await.unwrap_err();
+    assert_eq!(error.response(None, None).kind, "identity_conflict");
+    let found = std::fs::canonicalize(&moved).unwrap().display().to_string();
+    let message = error.to_string();
+    assert!(message.contains("\"Darks\"") && message.contains(&found), "{message}");
+    library
+        .reselect_location(dark_root.id, dark_root.decision_revision, NativePath::from_path(&moved))
+        .await
+        .unwrap();
+    assert_eq!(library.catalog().list_locations().await.unwrap().len(), 3);
+    let after = [moved.join("dark_1.fits"), captures.join("light_1.fits")]
+        .map(|path| support::digest(&path));
+    assert_eq!(after, originals, "sources are read-only");
+}

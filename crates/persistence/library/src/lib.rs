@@ -376,15 +376,16 @@ impl Catalog {
     ///
     /// # Errors
     /// `InvalidInput` for an empty name or relative path; `IdentityConflict` for an
-    /// unqualified volume/root identity or a same/ancestor/descendant root already
-    /// registered on the same volume.
+    /// unqualified volume/root identity, a same/ancestor/descendant root already
+    /// registered on the same volume, or a registered root there that no longer
+    /// resolves and is not proven absent from the folder.
     pub async fn register_location(&self, input: &LocationRegistration) -> Result<Location> {
         let name = valid_name(&input.name)?;
         require_absolute(&input.path)?;
         require_root_identity(&input.identity)?;
         let id = Uuid::new_v4();
         let location = write_txn!(self, |conn| {
-            ensure_no_overlap(conn, None, &input.path, &input.identity, StaleRoots::Refuse).await?;
+            ensure_no_overlap(conn, None, &input.path, &input.identity, StaleRoots::Search).await?;
             insert_location(conn, id, name, input).await?;
             load_location(conn, id).await?
         });
@@ -1785,7 +1786,7 @@ impl Catalog {
                 Some(location.id),
                 &review.proposed_root,
                 &review.proposed_identity,
-                StaleRoots::Refuse,
+                StaleRoots::Search,
             )
             .await?;
             apply_remap_rows(conn, &review, &assets, &new_root).await?;
@@ -1976,18 +1977,32 @@ enum StaleRoots {
     /// location's recorded folder, so a stale sibling is compared on what the
     /// catalog recorded instead of blocking the recovery.
     Compare,
-    /// Registration and remap: a stale root on the volume could be an ancestor or
-    /// descendant at its new path, so the change is refused, naming that root,
-    /// until it is reselected.
-    Refuse,
+    /// Registration and remap: a stale root may sit at a new path below the
+    /// candidate, so beyond that comparison the candidate's folders are searched for
+    /// the root's recorded folder identity. Without a stable folder identity, or
+    /// when the search cannot finish, the change is refused naming the root and the
+    /// way out.
+    Search,
+}
+
+/// Folders read below a candidate root while searching for stale registered roots;
+/// a larger tree is refused as unsearchable.
+const STALE_ROOT_SEARCH_LIMIT: usize = 100_000;
+
+/// A registered root on the candidate's volume whose stored path no longer
+/// resolves, with the `(device, inode)` its recorded folder would have there.
+struct StaleRoot {
+    location: Location,
+    folder: (u64, u64),
+    error: LibraryError,
 }
 
 /// Refuse a root that is, contains or lies inside another registered root on the
 /// same volume. Overlap is decided on canonical ancestry and folder identity, never
 /// on the path text the user chose: links anywhere above either root (macOS
 /// `/var` → `/private/var`, a linked home folder) resolve first. The candidate must
-/// resolve. A registered root that no longer resolves (a renamed folder, a volume
-/// remounted under another name) is handled by `stale`.
+/// resolve. A registered root that no longer resolves (a renamed, moved or deleted
+/// folder, a volume remounted under another name) is handled by `stale`.
 async fn ensure_no_overlap(
     conn: &mut SqliteConnection,
     exclude: Option<Uuid>,
@@ -2005,6 +2020,7 @@ async fn ensure_no_overlap(
     let candidate =
         CanonicalRoot::resolve(path).map_err(|error| scoped(error, path.clone(), None))?;
     let volume = &identity.volume;
+    let mut searched = Vec::new();
     for row in &rows {
         let other = location_from_row(row)?;
         if Some(other.id) == exclude {
@@ -2013,22 +2029,18 @@ async fn ensure_no_overlap(
         let overlaps = same_root(&other.identity, identity)
             || match CanonicalRoot::resolve(&other.path) {
                 Ok(resolved) => resolved.overlaps(&candidate, volume),
-                Err(error) if stale == StaleRoots::Refuse => {
-                    return Err(scoped(
-                        LibraryError::IdentityConflict(format!(
-                            "registered location {:?} at {} no longer resolves ({error}), so \
-                             overlap with it cannot be ruled out; reselect it first",
-                            other.name,
-                            other.path.display()
-                        )),
-                        path.clone(),
-                        Some(other.id),
-                    ));
-                }
-                Err(_) => {
-                    candidate.descends_from(&other.identity)
+                Err(error) => {
+                    let recorded = candidate.descends_from(&other.identity)
                         || roots_overlap(&other.path, path, volume)
-                        || roots_overlap(&other.path, &candidate.path, volume)
+                        || roots_overlap(&other.path, &candidate.path, volume);
+                    if !recorded && stale == StaleRoots::Search {
+                        let Some(folder) = candidate.recorded_folder(&other.identity) else {
+                            return Err(unprovable_stale_root(&other, &error, path));
+                        };
+                        searched.push(StaleRoot { location: other, folder, error });
+                        continue;
+                    }
+                    recorded
                 }
             };
         if overlaps {
@@ -2042,7 +2054,10 @@ async fn ensure_no_overlap(
             ));
         }
     }
-    Ok(())
+    if searched.is_empty() {
+        return Ok(());
+    }
+    refuse_held_stale_roots(&candidate, &searched, path).await
 }
 
 /// A root resolved through every link to its canonical folder. On Unix it also
@@ -2076,14 +2091,20 @@ impl CanonicalRoot {
 
     /// The recorded root folder is this root or one of its ancestors on its volume.
     fn descends_from(&self, recorded: &FileIdentity) -> bool {
-        let (Some(ancestry), Some(file_id)) = (&self.ancestry, recorded.file_id.as_deref()) else {
-            return false;
-        };
-        let Some(&(device, _)) = ancestry.first() else {
-            return false;
-        };
-        recorded.volume.file_ids_stable
-            && file_id.parse::<u64>().is_ok_and(|inode| ancestry.contains(&(device, inode)))
+        match (&self.ancestry, self.recorded_folder(recorded)) {
+            (Some(ancestry), Some(folder)) => ancestry.contains(&folder),
+            _ => false,
+        }
+    }
+
+    /// The `(device, inode)` the recorded root folder has on this root's device, when
+    /// this host carries folder identity and the recorded id is remount-stable.
+    fn recorded_folder(&self, recorded: &FileIdentity) -> Option<(u64, u64)> {
+        let &(device, _) = self.ancestry.as_ref()?.first()?;
+        if !recorded.volume.file_ids_stable {
+            return None;
+        }
+        Some((device, recorded.file_id.as_deref()?.parse().ok()?))
     }
 }
 
@@ -2103,6 +2124,142 @@ fn folder_ancestry(canonical: &Path) -> Result<Option<Vec<(u64, u64)>>> {
 fn folder_ancestry(canonical: &Path) -> Result<Option<Vec<(u64, u64)>>> {
     real_directory(canonical)?;
     Ok(None)
+}
+
+/// A stale root on a volume or host without stable folder identity: nothing proves
+/// the candidate does not hold it at a new path.
+fn unprovable_stale_root(
+    stale: &Location,
+    error: &LibraryError,
+    path: &NativePath,
+) -> LibraryError {
+    let stored = stale.path.display();
+    scoped(
+        LibraryError::IdentityConflict(format!(
+            "registered location {name:?} at {stored} no longer resolves ({error}), and without \
+             a stable folder identity this folder cannot be proven not to hold it; reselect \
+             {name:?} at its current folder, or restore a folder at {stored}, then try again",
+            name = stale.name,
+        )),
+        path.clone(),
+        Some(stale.id),
+    )
+}
+
+/// Refuse a candidate whose folders hold a stale root's recorded folder, naming
+/// both, or whose folders cannot all be searched for it.
+async fn refuse_held_stale_roots(
+    candidate: &CanonicalRoot,
+    stale: &[StaleRoot],
+    path: &NativePath,
+) -> Result<()> {
+    let root = candidate.path.to_path_buf()?;
+    let wanted: Vec<(u64, u64)> = stale.iter().map(|root| root.folder).collect();
+    let (held, message) = match blocking(move || Ok(search_folders(&root, &wanted))).await? {
+        FolderSearch::Absent => return Ok(()),
+        FolderSearch::Found { index, path: found } => {
+            let held = &stale[index];
+            let message = format!(
+                "registered location {name:?} at {stored} no longer resolves ({error}); its \
+                 folder is now {found}, inside this folder, so reselect it there first",
+                name = held.location.name,
+                stored = held.location.path.display(),
+                error = held.error,
+                found = NativePath::from_path(&found).display(),
+            );
+            (held, message)
+        }
+        FolderSearch::Incomplete(reason) => {
+            let held = &stale[0];
+            let message = format!(
+                "registered location {name:?} at {stored} no longer resolves ({error}), and this \
+                 folder cannot be searched for it: {reason}; reselect {name:?} at its current \
+                 folder first, or choose a folder that can be searched completely",
+                name = held.location.name,
+                stored = held.location.path.display(),
+                error = held.error,
+            );
+            (held, message)
+        }
+    };
+    Err(scoped(LibraryError::IdentityConflict(message), path.clone(), Some(held.location.id)))
+}
+
+/// Outcome of searching a root's folders for recorded folder identities.
+enum FolderSearch {
+    Absent,
+    /// `index` is the position of the matched identity in the search.
+    Found {
+        index: usize,
+        path: PathBuf,
+    },
+    Incomplete(String),
+}
+
+/// Search `root` and the real folders below it on its own device for any `wanted`
+/// `(device, inode)`, reading at most `STALE_ROOT_SEARCH_LIMIT` folders. Links are
+/// never followed, folders on another device are not entered, and a folder that
+/// cannot be read leaves the search incomplete rather than skipped.
+#[cfg(unix)]
+fn search_folders(root: &Path, wanted: &[(u64, u64)]) -> FolderSearch {
+    let unreadable = |folder: &Path, error: &dyn std::fmt::Display| {
+        FolderSearch::Incomplete(format!("{} cannot be read ({error})", folder.display()))
+    };
+    let metadata = match real_directory(root) {
+        Ok(metadata) => metadata,
+        Err(error) => return unreadable(root, &error),
+    };
+    let device = device_of(&metadata);
+    if let Some(index) = wanted.iter().position(|folder| *folder == stamp_of(&metadata)) {
+        return FolderSearch::Found { index, path: root.to_path_buf() };
+    }
+    let mut pending = vec![root.to_path_buf()];
+    let mut read = 0_usize;
+    while let Some(folder) = pending.pop() {
+        read += 1;
+        if read > STALE_ROOT_SEARCH_LIMIT {
+            return FolderSearch::Incomplete(format!(
+                "it holds more than {STALE_ROOT_SEARCH_LIMIT} folders"
+            ));
+        }
+        let entries = match std::fs::read_dir(&folder) {
+            Ok(entries) => entries,
+            Err(error) => return unreadable(&folder, &error),
+        };
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) => return unreadable(&folder, &error),
+            };
+            // The entry's own type: a link to a folder is a link, never followed.
+            match entry.file_type() {
+                Ok(kind) if kind.is_dir() => {}
+                Ok(_) => continue,
+                Err(error) => return unreadable(&entry.path(), &error),
+            }
+            let path = entry.path();
+            let metadata = match lstat(&path) {
+                Ok(metadata) => metadata,
+                Err(error) => return unreadable(&path, &error),
+            };
+            if fs_pathsafe::is_link_or_junction_metadata(&metadata) || !metadata.is_dir() {
+                continue;
+            }
+            if let Some(index) = wanted.iter().position(|folder| *folder == stamp_of(&metadata)) {
+                return FolderSearch::Found { index, path };
+            }
+            if device_of(&metadata) == device {
+                pending.push(path);
+            }
+        }
+    }
+    FolderSearch::Absent
+}
+
+// Only reached through a recorded folder identity, which this host never carries.
+#[cfg(not(unix))]
+fn search_folders(_root: &Path, _wanted: &[(u64, u64)]) -> FolderSearch {
+    FolderSearch::Incomplete("this host has no folder identity".into())
 }
 
 async fn insert_location(
@@ -4967,7 +5124,7 @@ async fn remap_root_blocks(
         Some(location.id),
         proposed_root,
         proposed_identity,
-        StaleRoots::Refuse,
+        StaleRoots::Search,
     )
     .await
     {

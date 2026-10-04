@@ -1584,19 +1584,25 @@ async fn overlap_follows_canonical_ancestry_through_aliases_and_fails_closed() {
     assert_eq!(catalog.list_locations().await.unwrap().len(), 1);
 
     // A path that does not resolve is refused. While a registered root on the
-    // volume no longer resolves, a new registration is refused naming that root;
-    // once the root resolves again the unrelated folder registers.
+    // volume no longer resolves, the folder that now holds it is refused, naming the
+    // root and where it was found, and an unrelated folder registers.
     let elsewhere = fx.temp.path().join("Elsewhere");
     std::fs::create_dir_all(elsewhere.join("Flats")).unwrap();
     std::fs::rename(&link, fx.temp.path().join("renamed-link")).unwrap();
     let mut unresolved = registration_at(&elsewhere.join("Flats"));
     unresolved.path = NativePath::from_path(&elsewhere.join("Darks"));
     catalog.register_location(&unresolved).await.unwrap_err();
-    let error = catalog.register_location(&registration_at(&elsewhere)).await.unwrap_err();
+    let error = catalog.register_location(&registration_at(&volume_root)).await.unwrap_err();
     assert_eq!(kind(&error), "identity_conflict");
-    assert!(error.to_string().contains("\"Captures\"") && error.to_string().contains("reselect"));
+    let found = std::fs::canonicalize(&fx.root).unwrap().display().to_string();
+    let message = error.to_string();
+    assert!(
+        message.contains("\"Captures\"")
+            && message.contains(&found)
+            && message.contains("reselect"),
+        "{message}"
+    );
     assert_eq!(catalog.list_locations().await.unwrap().len(), 1, "refusals write nothing");
-    std::fs::rename(fx.temp.path().join("renamed-link"), &link).unwrap();
     catalog.register_location(&registration_at(&elsewhere)).await.unwrap();
 }
 
@@ -1646,10 +1652,13 @@ async fn sibling_roots_that_no_longer_resolve_never_block_their_recovery() {
         .await
         .unwrap();
     assert_eq!(reselected.path, NativePath::from_path(&path));
-    // A new registration still waits for the remaining stale root.
-    std::fs::create_dir_all(volume.join("Flats")).unwrap();
-    let error = catalog.register_location(&registration_at(&volume.join("Flats"))).await;
+    // While its sibling is still stale, a folder inside that sibling is refused and an
+    // unrelated folder registers.
+    let inside = moved.join("Calibration/night1");
+    let error = catalog.register_location(&registration_at(&inside)).await;
     assert!(error.unwrap_err().to_string().contains("\"Calibration\""));
+    std::fs::create_dir_all(volume.join("Flats")).unwrap();
+    catalog.register_location(&registration_at(&volume.join("Flats"))).await.unwrap();
     let path = moved.join("Calibration");
     catalog
         .reselect_location(
@@ -1660,12 +1669,151 @@ async fn sibling_roots_that_no_longer_resolve_never_block_their_recovery() {
         )
         .await
         .unwrap();
-    // Once both resolve, the ancestor holding them overlaps and an unrelated folder
-    // registers.
+    // Once both resolve, the ancestor holding them overlaps.
     let error = catalog.register_location(&registration_at(&moved)).await.unwrap_err();
     assert!(error.to_string().contains("folder overlaps"), "{error}");
-    catalog.register_location(&registration_at(&volume.join("Flats"))).await.unwrap();
     assert_eq!(catalog.list_locations().await.unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn a_deleted_or_moved_root_blocks_only_the_folders_that_hold_it() {
+    use std::os::unix::fs::PermissionsExt;
+    struct Restore(PathBuf);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755));
+        }
+    }
+
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"frame one bytes");
+    fx.write("Ha_002.fits", b"frame two bytes");
+    let volume = fx.root.parent().unwrap().to_path_buf();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let captures = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &captures, &["Ha_001.fits", "Ha_002.fits"]).await;
+    let (test, darks) = (volume.join("Test"), volume.join("Darks"));
+    std::fs::create_dir_all(&test).unwrap();
+    std::fs::create_dir_all(darks.join("night1")).unwrap();
+    std::fs::write(darks.join("night1/Dark_001.fits"), b"dark frame bytes").unwrap();
+    catalog.register_location(&registration_at(&test)).await.unwrap();
+    let dark_root = catalog.register_location(&registration_at(&darks)).await.unwrap();
+    let originals = tree(&fx.root);
+    let dark_frames = tree(&darks);
+
+    // One root is deleted and the other moves into an archive folder: neither stored
+    // root resolves, and the deleted one can never be reselected.
+    std::fs::remove_dir_all(&test).unwrap();
+    let archive = volume.join("Archive");
+    let moved = archive.join("Darks");
+    std::fs::create_dir_all(&archive).unwrap();
+    std::fs::rename(&darks, &moved).unwrap();
+
+    // An unrelated sibling registers.
+    let flats = volume.join("Flats");
+    std::fs::create_dir_all(flats.join("night1")).unwrap();
+    catalog.register_location(&registration_at(&flats)).await.unwrap();
+
+    // The folder now holding the moved root is refused, naming the root and where
+    // it is.
+    let error = catalog.register_location(&registration_at(&archive)).await.unwrap_err();
+    assert_eq!(kind(&error), "identity_conflict");
+    let found = std::fs::canonicalize(&moved).unwrap().display().to_string();
+    let message = error.to_string();
+    assert!(
+        message.contains("\"Darks\"") && message.contains(&found) && message.contains("reselect"),
+        "{message}"
+    );
+
+    // A folder that cannot be searched completely is refused, naming the way out.
+    let lights = volume.join("Lights");
+    std::fs::create_dir_all(lights.join("private")).unwrap();
+    std::fs::set_permissions(lights.join("private"), std::fs::Permissions::from_mode(0o000))
+        .unwrap();
+    let restore = Restore(lights.join("private"));
+    if std::fs::read_dir(lights.join("private")).is_ok() {
+        eprintln!("permission denial is not enforceable for this user; unsearchable case skipped");
+    } else {
+        let error = catalog.register_location(&registration_at(&lights)).await.unwrap_err();
+        assert_eq!(kind(&error), "identity_conflict");
+        let message = error.to_string();
+        assert!(
+            message.contains("cannot be searched") && message.contains("reselect"),
+            "{message}"
+        );
+    }
+    drop(restore);
+    catalog.register_location(&registration_at(&lights)).await.unwrap();
+
+    // The scanned location is remapped onto a verified copy on the same volume.
+    let copy = volume.join("Captures copy");
+    std::fs::create_dir_all(&copy).unwrap();
+    for name in ["Ha_001.fits", "Ha_002.fits"] {
+        std::fs::copy(fx.root.join(name), copy.join(name)).unwrap();
+    }
+    let captures = catalog.location(captures.id).await.unwrap();
+    let review = catalog
+        .review_remap(
+            captures.id,
+            captures.decision_revision,
+            &NativePath::from_path(&copy),
+            &folder_identity(&copy).unwrap(),
+            DiskProbe,
+        )
+        .await
+        .unwrap();
+    assert!(review.blocked.is_empty(), "{:?}", review.blocked);
+    let remapped =
+        catalog.apply_remap(review.id, captures.decision_revision, DiskProbe).await.unwrap();
+    assert_eq!(remapped.path, NativePath::from_path(&copy));
+
+    // The moved root is chosen again where it now is.
+    let reselected = catalog
+        .reselect_location(
+            dark_root.id,
+            dark_root.decision_revision,
+            &NativePath::from_path(&moved),
+            &folder_identity(&moved).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(reselected.path, NativePath::from_path(&moved));
+    assert_eq!(catalog.list_locations().await.unwrap().len(), 5);
+    assert_eq!(tree(&fx.root), originals, "originals unchanged");
+    assert_eq!(tree(&moved), dark_frames, "moved originals unchanged");
+}
+
+#[tokio::test]
+async fn without_folder_identity_a_stale_root_refuses_and_names_the_way_out() {
+    let fx = Fixture::new();
+    let volume = fx.root.parent().unwrap().to_path_buf();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    // A volume that records file ids but does not keep them stable.
+    let unstable = |path: &Path| {
+        let mut registration = registration_at(path);
+        registration.identity.volume.file_ids_stable = false;
+        registration
+    };
+    let test = volume.join("Test");
+    std::fs::create_dir_all(&test).unwrap();
+    catalog.register_location(&unstable(&test)).await.unwrap();
+    std::fs::remove_dir_all(&test).unwrap();
+
+    let flats = volume.join("Flats");
+    std::fs::create_dir_all(&flats).unwrap();
+    let error = catalog.register_location(&unstable(&flats)).await.unwrap_err();
+    assert_eq!(kind(&error), "identity_conflict");
+    let message = error.to_string();
+    let way_out = format!("restore a folder at {}", test.display());
+    assert!(
+        message.contains("\"Test\"") && message.contains("reselect") && message.contains(&way_out),
+        "{message}"
+    );
+    assert_eq!(catalog.list_locations().await.unwrap().len(), 1, "refusals write nothing");
+
+    // The named way out: a folder at the stored path resolves again.
+    std::fs::create_dir_all(&test).unwrap();
+    catalog.register_location(&unstable(&flats)).await.unwrap();
 }
 
 #[tokio::test]
