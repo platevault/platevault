@@ -458,13 +458,16 @@ export function TransferPage() {
   ]
   const views = (op.scope.viewIds ?? []).map((id) => catalog.views[id]).filter((v): v is View => v !== undefined)
   const held = op.status === "paused" && payload.held ? records.find((r) => r.assetId === payload.holdAssetId) : undefined
+  // J28 S9a: a drifted item keeps the same prototype control, so its saved bytes can be put back before Retry.
+  const controlled = held ?? records.find((r) => r.blocked?.kind === "drift")
+  const keptLocal = records.some((r) => r.references.some((ref) => ref.action === "keep-local"))
   const retryable = records.filter((r) => r.blocked && r.blocked.kind !== "drift").map((r) => r.id)
   const evidence = records.find((r) => r.id === evidenceFor) ?? null
 
   const columns: Column<TransferRecord>[] = [
     { id: "file", header: "File", rowHeader: true, sortValue: (r) => r.fileName, cell: (r) => <span className="font-mono text-xs">{r.fileName}</span> },
     { id: "phase", header: "Phase", sortValue: (r) => r.phase, cell: (r) => <span className="text-xs">{PHASE_LABEL[r.phase]}</span> },
-    { id: "status", header: "Status", cell: (r) => <StatusBadge kind="item" value={recordStatus(r)} /> },
+    { id: "status", header: "Status", cell: (r) => <StatusBadge kind="item" value={recordStatus(r, op.status === "running")} /> },
     {
       id: "detail",
       header: "Detail",
@@ -530,19 +533,31 @@ export function TransferPage() {
               { label: "Destination", value: payload.destination, mono: true },
               { label: "Destination identity", value: payload.destinationVolumeUuid, mono: true },
               { label: "Expected reclaim", value: payload.sameVolume ? "None: same-volume move" : formatBytes(payload.expectedReclaimBytes) },
-              { label: "Observed reclaim", value: payload.sameVolume ? "None: same-volume move" : formatBytes(payload.observedReclaimBytes), source: "Hardlinks kept locally still hold bytes" },
+              {
+                label: "Observed reclaim",
+                value: payload.sameVolume ? "None: same-volume move" : formatBytes(payload.observedReclaimBytes),
+                ...(keptLocal ? { source: "Hardlinks kept locally still hold bytes" } : {}),
+              },
               ...(payload.revalidated ? [{ label: "Last revalidation", value: payload.revalidated }] : []),
             ]}
           />
         </Section>
 
-        {held ? (
-          <PrototypeControls outcome={outcome} title="Prototype: held item" description={`J28 P5: ${held.fileName} is verified and awaiting retirement. Change its source now, then Resume above.`}>
-            <PathText path={held.sourcePath} className="w-full" />
-            <Button size="sm" variant="outline" onClick={() => setOutcome(overwriteKeepingStat(held.sourcePath))}>
+        {controlled ? (
+          <PrototypeControls
+            outcome={outcome}
+            title={held ? "Prototype: held item" : "Prototype: drifted item"}
+            description={
+              held
+                ? `J28 P5: ${held.fileName} is verified and awaiting retirement. Change its source now, then Resume above.`
+                : `J28 P5: ${controlled.fileName} is blocked by source drift. Put back its saved bytes, then open Review evidence and retry it.`
+            }
+          >
+            <PathText path={controlled.sourcePath} className="w-full" />
+            <Button size="sm" variant="outline" onClick={() => setOutcome(overwriteKeepingStat(controlled.sourcePath))}>
               Overwrite source (same size and mtime)
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setOutcome(restoreKeepingStat(held.sourcePath))}>
+            <Button size="sm" variant="outline" onClick={() => setOutcome(restoreKeepingStat(controlled.sourcePath))}>
               Restore saved bytes
             </Button>
           </PrototypeControls>

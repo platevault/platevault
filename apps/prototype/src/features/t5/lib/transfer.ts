@@ -416,20 +416,21 @@ export function isTerminal(record: TransferRecord): boolean {
   return record.phase === "retired" || record.blocked !== null
 }
 
-export function recordStatus(record: TransferRecord): OperationItem["status"] {
+/** `live` is false while the transfer is paused, interrupted or settled: an unfinished item is then waiting, not running. */
+export function recordStatus(record: TransferRecord, live: boolean): OperationItem["status"] {
   if (record.blocked) return "blocked"
   if (record.phase === "retired") return "done"
   if (record.uncertain) return "uncertain"
-  if (record.phase === "pending") return "pending"
+  if (record.phase === "pending" || !live) return "pending"
   return "running"
 }
 
-function toItems(records: TransferRecord[]): OperationItem[] {
+function toItems(records: TransferRecord[], live: boolean): OperationItem[] {
   return records.map((r) => ({
     id: r.id,
     label: r.fileName,
     path: r.sourcePath,
-    status: recordStatus(r),
+    status: recordStatus(r, live),
     phase: PHASE_LABEL[r.phase],
     detail: r.blocked?.reason ?? r.uncertain ?? null,
   }))
@@ -505,7 +506,7 @@ export function stepTransfer(state: PrototypeState, op: Operation): PrototypeSta
     const done = records.filter(isTerminal).length
     return patchOperation(next, op.id, {
       ...opPatch,
-      items: toItems(records),
+      items: toItems(records, (opPatch.status ?? op.status) === "running"),
       progress: { done, total: records.length, unit: "files" },
       payload: { ...payload, records, held, observedReclaimBytes, revalidated, lastStepAt: now, ...patch } as unknown as Record<string, unknown>,
     })
@@ -705,7 +706,7 @@ export function retryRecords(state: PrototypeState, opId: string, ids: string[])
     status: "running",
     summary: null,
     settledAt: null,
-    items: toItems(records),
+    items: toItems(records, true),
     payload: { ...payload, records, lastStepAt: null } as unknown as Record<string, unknown>,
   })
 }
