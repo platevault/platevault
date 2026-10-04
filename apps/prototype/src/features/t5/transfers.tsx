@@ -594,7 +594,7 @@ export function TransferPage() {
       </PageBody>
 
       <Dialog open={evidence !== null} onOpenChange={(open) => !open && setEvidenceFor(null)}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
           {evidence ? (
             <>
               <DialogHeader>
