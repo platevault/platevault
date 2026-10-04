@@ -398,7 +398,9 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
       const copies = known
         ? existing.copies.map((c) => (c.locationId === location.id && c.path === file.path ? copy : c))
         : [...existing.copies, copy]
-      catalog.assets[existing.id] = { ...existing, sha256: file.sha256, sizeBytes: file.sizeBytes, copies }
+      // Re-reading the bytes finishes any pending verification of this decision.
+      const quality = existing.quality.verificationPending ? { ...existing.quality, verificationPending: false } : existing.quality
+      catalog.assets[existing.id] = { ...existing, sha256: file.sha256, sizeBytes: file.sizeBytes, copies, quality }
       continue
     }
     const id = assetIdForPath(file.path)
@@ -479,6 +481,21 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
   }
   for (const sessionId of touched) catalog.sessions[sessionId] = rebuildSession(catalog, catalog.sessions[sessionId]!, now)
   return catalog
+}
+
+/**
+ * A readable rescan of `locationId` starts: every decided asset with a copy
+ * there waits for its rehash before its decision counts again (LIB-AC-14).
+ */
+export function markVerificationPending(source: Catalog, locationId: string): Catalog {
+  let assets: Catalog["assets"] | null = null
+  for (const asset of Object.values(source.assets)) {
+    if (asset.quality.value === "unreviewed" || asset.quality.verificationPending) continue
+    if (!asset.copies.some((c) => c.locationId === locationId)) continue
+    assets ??= { ...source.assets }
+    assets[asset.id] = { ...asset, quality: { ...asset.quality, verificationPending: true } }
+  }
+  return assets ? { ...source, assets } : source
 }
 
 /** Sessions with at least one asset copy in `locationId`. */

@@ -136,7 +136,10 @@ export function ChannelCoverage({ channel, breakdown, goalS }: ChannelCoveragePr
       <div aria-hidden="true" className="relative flex h-2 overflow-hidden rounded-full bg-muted">
         <div className="h-full bg-primary" style={{ width: pct(breakdown.usable.seconds) }} />
         <div className="h-full bg-primary/35" style={{ width: pct(breakdown.unreviewed.seconds) }} />
-        <div className="h-full bg-foreground/25" style={{ width: pct(breakdown.unusable.seconds + breakdown.changedContent.seconds) }} />
+        <div
+          className="h-full bg-foreground/25"
+          style={{ width: pct(breakdown.unusable.seconds + breakdown.changedContent.seconds + breakdown.verificationPending.seconds) }}
+        />
         {goalS ? <div className="absolute inset-y-0 w-0.5 bg-foreground" style={{ left: `calc(${pct(goalS)} - 1px)` }} /> : null}
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs tabular-nums sm:grid-cols-4">
@@ -162,6 +165,12 @@ export function ChannelCoverage({ channel, breakdown, goalS }: ChannelCoveragePr
           <div className="flex gap-1.5 text-warning">
             <dt>Changed content</dt>
             <dd>{formatDuration(breakdown.changedContent.seconds)}</dd>
+          </div>
+        ) : null}
+        {breakdown.verificationPending.frames > 0 ? (
+          <div className="flex gap-1.5">
+            <dt className="text-muted-foreground">Verification pending</dt>
+            <dd>{formatDuration(breakdown.verificationPending.seconds)}</dd>
           </div>
         ) : null}
       </dl>
