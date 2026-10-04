@@ -111,6 +111,7 @@ inputs reading Offline when `Archive` is unplugged.
 - G2: Unresolved implementation qualification — no fault fixture yet produces a destination hash mismatch; the hash-failure branch is not exercised. Blocks readiness.
 - G3: Unresolved implementation qualification — the prepared View layout that P4 depends on is unspecified, and the method of source retirement after verification is not named by the flow. Blocks readiness.
 - G4: Out of scope for this journey — Direct-source configuration paths affected by a move are not exercised because no journey prepares a Direct-source View. Blocks readiness until covered by a step or a journey.
+- G5: Unqualified source-drift fixture (STO-AC-14) blocks readiness. The implementation must expose an observable pause after destination verification but before retirement, so a disposable source can be rewritten externally. Validation must observe the item blocked with drift named, both versions retained and other items' phases unchanged. Existing S6/S8 fault cases do not cover this boundary; no source-retirement acceptance is complete until this case is exercised.
 
 ## Delta log
 
