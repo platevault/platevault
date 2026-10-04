@@ -229,6 +229,13 @@ validation. Agent judgment bridges anything unmapped.
 | `crates/calibration/**` | calibration |
 | `crates/targeting/**` | targets |
 | `crates/audit/**` | audit |
+| `crates/platevault-core/src/model.rs` | locations, indexing, sessions, targets, equipment, activity |
+| `crates/platevault-core/src/inventory.rs` | locations, indexing, sessions |
+| `crates/platevault-core/src/grouping.rs` | indexing, sessions |
+| `crates/platevault-core/src/catalog.rs` | locations, indexing, sessions, targets, equipment, activity |
+| `crates/platevault-core/src/targets.rs` | targets, sessions |
+| `crates/platevault-core/src/library.rs` | locations, indexing, sessions, targets, equipment, activity |
+| `apps/desktop/src-tauri/src/commands/library.rs` | locations, indexing, sessions, targets, equipment, activity |
 
 (Globs verified against the tree 2026-07-15; the Cleanup/AuditLog/Equipment
 pages live as files inside `features/settings/`, so those rows are

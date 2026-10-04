@@ -1,0 +1,40 @@
+# Library data model
+
+## Durable entities
+
+- Location: UUID, display name, native root path, role, decision revision, recorded volume/filesystem identity and root file identity, last successful observation, access/availability. Registration is read-only and rejects same/ancestor/descendant roots already registered on the same volume. Case/Unicode display variations do not create a second root identity.
+- Asset: UUID, location ID, lossless native relative path, stable volume/file identity, size and nanosecond mtime observation fingerprint, format, availability and observation sequence. File identity recognizes path-only case/normalization changes. Replaced content retains the path relationship but records drift, invalidating decisions' applicability until explicit reconfirmation.
+- Observation: asset ID, original header values, extraction outcome/error, scan ID and sequence. Unknown values remain null; zero is never a missing-value substitute. Effective catalog corrections are separate from this original evidence.
+- Correction: per-asset field/value, independent decision revision and manual provenance. Preview names expected per-record decision revisions and current observation fingerprints. Confirmation atomically commits corrections and recomputed grouping; stale input refuses the whole batch.
+- Session: UUID, deterministic CaptureKey, grouping revision, exact asset IDs, unresolved evidence and observed date basis. OBJECT/Target are outside identity. A current session ID stays stable while identical capture evidence adds assets; grouping changes preserve the predecessor record.
+- SessionLineage: correction ID, predecessor session IDs, successor session IDs, grouping revision and moved asset IDs. Fixed View memberships continue referencing asset IDs and their recorded revisions.
+- Association: session ID, kind Target/Equipment, Unresolved/NeedsReview/Suggested/Confirmed, evidence items, provenance, decision revision and observation basis. Rescans preserve confirmed/manual associations. Coverage counts Confirmed or evidence-qualified Suggested associations and labels their provenance; unresolved/conflicting candidates do not count. A regroup successor inherits a confirmation only if all its assets share it, otherwise NeedsReview.
+- Target: UUID, designation/normalized aliases, coordinates/frame, provider/seed/user provenance and decision revision. Catalog owns storage; targets.rs owns shared-library normalization and pure candidate/provider logic. Saving/adopting is explicit.
+- Equipment: UUID, camera/optical-train evidence, observed/confirmed state and decision revision. Confirmation does not alter capture grouping without a separately reviewed grouping correction.
+- Quality: asset ID, Unreviewed/Usable/Unusable decision, independent decision revision and the observation fingerprint reviewed. Drift preserves historical decisions but reports them as decisions on changed content and excludes them from applicable Usable totals until reconfirmed.
+- Digest evidence: optional SHA-256 plus exact observation fingerprint. Hashing is lazy, explicitly requested by identity/custody work. A changed fingerprint invalidates the digest. Remap hashes readable originals and candidates; an offline original without valid prior digest refuses with no byte proof available.
+- Scan operation: UUID, location ID, Running/Completed/Partial/Failed/Canceled, counters, complete/incomplete scopes and item errors. Activity lists persisted operations after restart, even without a remembered operationId.
+
+## Location and absence proof
+
+Before every batch and final reconciliation, validate the registered stable volume identifier and root file identity. A session-local device number alone does not prove remount identity. Missing/unqualified evidence, a readable empty replacement directory, disconnection or a different volume is Offline/IdentityConflict; no assets are created/reused and none become Missing. Absence applies only within positively complete scopes on the same identity, excluding unreadable/skipped-link scopes.
+
+Registration compares canonical filesystem identity and ancestry, without case-folding all platforms. Scan discovery deduplicates by volume/file identity before minting an asset. Where reliable identity is unavailable, report uncertainty and refuse identity-dependent mutations rather than guessing.
+
+Remap reviews are durable catalog plans with original/candidate identities, SHA-256 evidence and expected revisions; review writes no image files. Apply is all-or-nothing for a location. Every asset must pass current byte and identity checks before the root changes. A refused candidate or NoByteProof leaves all asset paths, decisions and original location unchanged. Lazy prior digest evidence must match its observation fingerprint; readable originals/candidates are rehashed at apply.
+
+## CaptureKey
+
+Canonical CaptureKey values include frame type, header-derived night/date basis, camera, optical train, filter, exposure, gain, offset, binning, dimensions, readout and cooler setpoint. Finite decimals use parsed numeric values with canonical round-trip encoding, normalizing negative zero; invalid values retain raw evidence and are unknown in keys. Measured temperature, mechanical-rotation jitter and pointing remain diagnostics, not exact identity fields. Intentional equipment/rotator changes require a reviewed grouping correction.
+
+Night derives only from header DATE-LOC with a noon boundary, or capture time plus recorded longitude with an explicitly labelled mean-solar noon boundary. Without either, use labelled UTC date with provisional night evidence. No wall-clock or app-site/equipment-setting change alters capture identity. Corrections create reviewed grouping lineage.
+
+## Atomicity and durability
+
+One serialized writer owns the SQLite connection; readers use separate connections. Every writer connection uses WAL, foreign keys and FULL synchronous mode, with fullfsync/checkpoint_fullfsync on macOS. Scan batches are short. Corrections, their regroup and lineage commit in one transaction using current observed evidence. Decision revisions are independent of scan observation sequences.
+
+Multi-record commands use `{id, expectedDecisionRevision, expectedObservationFingerprint}` lists and apply all or nothing. Unchanged rescans do not invalidate decision CAS. Restart restores committed records and marks interrupted scans incomplete. A disposable SQLite `max_page_count` fixture forces SQLITE_FULL to prove PersistenceFailure and no saved acknowledgment; no failure switch is compiled into release and no custom userspace WAL is introduced.
+
+## Progress
+
+Captured integration sums effective corrected-or-observed exposure for known light assets, including offline last-observed contributions. Usable counts only applicable fingerprint-bound library decisions. Unreviewed, drifted decisions and unknown exposure counts remain visible separately. Scope identifies covered location IDs and provisional/complete state. Calibration assets never inflate light integration.
