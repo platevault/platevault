@@ -75,7 +75,7 @@ export function ImportDialog({ viewId, viewAssetIds, open, onOpenChange }: { vie
 
   return (
     <Dialog open={open} onOpenChange={reset}>
-      <DialogContent className="max-h-[calc(100dvh-4rem)] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Import measurements</DialogTitle>
           <DialogDescription>
