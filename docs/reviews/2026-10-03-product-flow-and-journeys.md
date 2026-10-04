@@ -271,7 +271,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Observe:** library quality state changes for those frames. Target usable coverage updates without confusing it with View membership.
 
-**Alternative:** choose **Reject for Project** for a Project-owned View, or **Mark unusable in library** for the broader library decision. Each confirmation names the affected scope. Project-progress and existing-View propagation rules remain open.
+**Alternative:** choose **Reject for Project** for a Project-owned View, or **Mark unusable in library** for the broader library decision. Each confirmation names the scope. D10 separates Project progress from library quality and preserves existing fixed View membership; those boundaries still need runtime verification.
 
 **Trust:** preparing the View alone does not mark every included frame usable. Excluded frames stay View-specific unless the user chooses a broader decision.
 
@@ -387,7 +387,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Trust:** a start acknowledgment is not success. No processing application is opened with a falsely verified incomplete selection.
 
-**Failure branch:** inspect succeeded and blocked entries, then choose **Review preparation again** or keep the partial View unchanged. Retry/resume behavior for those entries needs the lifecycle contract below. Sources remain untouched; removing prepared entries follows Journey I, including retained-copy proof and Trash.
+**Failure branch:** inspect succeeded and blocked entries, then choose **Review preparation again** or keep the partial View unchanged. D09 requires reviewed repreparation and retry from recorded item state, not filename inference; retry and revision-storage behavior still need qualification. Sources remain untouched; removing prepared entries follows Journey I, including retained-copy proof and Trash.
 
 ### F6. Open the application
 
@@ -550,7 +550,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Recovery branch:** after interruption, the user sees destination-verified, source-retained, reference-updated, and pending work. Retry resumes recorded work without guessing from filename presence alone.
 
-**Open sequencing detail:** failure during reference rebuilding must not silently strand a View. The precise rollback versus pause/source-retention policy needs an implementation contract before this journey becomes executable.
+**Sequencing, D06:** a reference-update failure blocks retirement of that item's source. Retain its verified destination and recorded phase for resumable retry. Completed items may retire only after destination hashes and affected references pass; the implementation must qualify each phase.
 
 ## Journey K: observing plans and reminders
 
@@ -639,17 +639,17 @@ Baseline status records source traces. Full runtime verification remains incompl
 
 ## Recorded decisions and implementation readiness
 
-These proposed journeys remain unvalidated. The authorized autonomous run records conservative product choices in D01 through D18; those choices are settled, while the following implementation evidence is still required.
+These proposed journeys remain unvalidated. D01 through D18 record settled conservative choices. The list below identifies their remaining implementation evidence and the per-item mode/refresh questions those decisions do not settle.
 
 1. **Geometry, D01/D12:** qualify footprint/equipment evidence and the visible configured overlap criterion. Unknown geometry remains manual, never zero distance.
 2. **Membership, D02:** available Unreviewed/Usable frames enter the draft; library-Unusable starts visibly excluded; unavailable members stay unresolved. Verify exact preparation confirmation and explicit bulk quality scope.
 3. **Raw/CFA, D03:** qualify read-only mosaic/channel and numerical metric/import semantics; no debayering.
-4. **Profiles, D04:** verify exact input/layout/product capabilities and safe mode eligibility for each required application. Unknown/write-prone inputs refuse Linked/Direct-source use; every alternative needs review.
+4. **Profiles, D04:** verify exact input/layout/product capabilities and safe mode eligibility for each required application. Unknown/write-prone inputs refuse Linked/Direct-source use; every alternative needs review. D04 does not settle mixed per-item modes within one preparation; that capability needs an explicit contract.
 5. **Master adoption, D05:** verify a durable chosen library copy and its hashes before reuse; preserve generated source until reviewed cleanup.
 6. **Archive, D06:** verify per-item retained phases, affected-item retirement blocking and resumable retries. Destination and reference verification precede each source retirement; no reopened rollback-versus-retention choice.
 7. **Reminders, D07:** qualify explicit site/criteria/lead-time controls, repeat suppression, permission recovery and actual scheduler capability. No app-closed claim without tested delivery.
 8. **Drafts, D08:** verify explicit Save, committed restart recovery and stale-edit refusal; failed writes remain unsaved.
-9. **View lifecycle, D09:** qualify immutable preparation revisions, safe retry and explicit reopening. Identity-preserving cleanup/reference repair does not reopen Complete or alter membership.
+9. **View lifecycle, D09:** qualify immutable preparation revisions, safe retry and explicit reopening. Identity-preserving cleanup/reference repair does not reopen Complete or alter membership. D09 does not settle manual-inclusion pins across refresh or new-folder versus reviewed-replacement revision storage; flow decision 9 remains open for those questions.
 10. **Quality/progress, D10/D15:** verify fingerprint-and-digest-bound library decisions, independent Project rejection/progress and fixed View membership; source corrections stay catalog-only.
 
 Readiness check: user actions and expected outcomes are stated; negative assertions guard file changes and quality-scope changes. Existing product code and source verification do not establish that these redesigned flows run. Formal journey conversion and independent running-product validation follow implementation and intent approval.
