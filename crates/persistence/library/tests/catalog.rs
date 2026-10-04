@@ -18,9 +18,9 @@ use platevault_model::{
     ApplicableQuality, Asset, AssociationKind, AssociationState, Availability, CaptureKey,
     CaptureMetadata, CorrectionInput, EvidenceItem, ExpectedAsset, ExpectedSession, FileIdentity,
     GroupingResult, ImageFormat, LibraryError, Location, LocationRole, NativePath,
-    ObservationFingerprint, PathSensitivity, Provenance, Quality, RemapBlockReason, ScanBatch,
-    ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState, Session,
-    SessionCandidate, TargetAlias, TargetCandidate, VolumeIdentity,
+    ObservationFingerprint, PathSensitivity, Provenance, Quality, RemapBlockReason, Revision,
+    ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState,
+    Session, SessionCandidate, TargetAlias, TargetCandidate, VolumeIdentity,
 };
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -686,6 +686,7 @@ async fn seed_facts_are_recorded_without_adoption_and_qualified_suggestions_coun
     assert_eq!(catalog.record_seed_target(&seed).await.unwrap().decision_revision, 1, "idempotent");
 
     let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let assessed = assessment(&catalog, session.id).await;
     let alias = EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true };
     let suggestion = |evidence: Vec<EvidenceItem>| SuggestedAssociation {
         session_id: session.id,
@@ -695,6 +696,9 @@ async fn seed_facts_are_recorded_without_adoption_and_qualified_suggestions_coun
         state: AssociationState::Suggested,
         evidence,
         provenance: Provenance::Inferred { rule: "alias-and-coordinates".into() },
+        expected_observations: assessed.observations.clone(),
+        expected_decisions: assessed.decisions.clone(),
+        expected_observation_revisions: assessed.sequences.clone(),
     };
     catalog.record_suggestions(&[suggestion(vec![alias.clone()])]).await.unwrap();
     let label_only = catalog.target_coverage(seed.id).await.unwrap();
@@ -726,6 +730,207 @@ async fn seed_facts_are_recorded_without_adoption_and_qualified_suggestions_coun
     assert_eq!(kept.candidate.provenance, Provenance::User, "user record never overwritten");
     assert_eq!(kept.candidate.common_name.as_deref(), Some("My North America"));
     assert_eq!(kept.decision_revision, 3);
+}
+
+/// Member snapshot exactly as a consumer reads it from `SessionDetail.assets`.
+#[derive(Clone)]
+struct Assessed {
+    observations: BTreeMap<Uuid, ObservationFingerprint>,
+    decisions: BTreeMap<Uuid, Revision>,
+    sequences: BTreeMap<Uuid, Revision>,
+}
+
+async fn assessment(catalog: &Catalog, session_id: Uuid) -> Assessed {
+    let assets = catalog.session(session_id).await.unwrap().assets;
+    Assessed {
+        observations: assets.iter().map(|a| (a.id, a.fingerprint.clone())).collect(),
+        decisions: assets.iter().map(|a| (a.id, a.decision_revision)).collect(),
+        sequences: assets.iter().map(|a| (a.id, a.observation_revision)).collect(),
+    }
+}
+
+async fn saved_equipment(catalog: &Catalog) -> platevault_model::Equipment {
+    let equipment = platevault_model::Equipment {
+        id: Uuid::new_v4(),
+        name: "ASI2600MM on RedCat".into(),
+        camera: Some("ASI2600MM".into()),
+        telescope: None,
+        focal_length_mm: Some(250.0),
+        pixel_size_um: Some(3.76),
+        decision_revision: 0,
+        state: AssociationState::Unresolved,
+        provenance: Provenance::User,
+    };
+    catalog.save_equipment(&equipment, None).await.unwrap()
+}
+
+#[tokio::test]
+async fn stale_assessment_of_same_grouping_revision_is_refused_and_confirmation_kept() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"OBJECT = 'NGC 7000'");
+    fx.write("Ha_002.fits", b"OBJECT = 'NGC 7000' second");
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &["Ha_001.fits", "Ha_002.fits"]).await;
+    let mut seed = target("NGC 7000", "ngc 7000");
+    seed.provenance = Provenance::Seed { dataset: "bundled-seed".into() };
+    catalog.record_seed_target(&seed).await.unwrap();
+    let equipment = saved_equipment(&catalog).await;
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let assessed = assessment(&catalog, session.id).await;
+    let qualified = vec![
+        EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true },
+        EvidenceItem::Coordinates { ra_deg: 314.75, dec_deg: 44.33, qualified: true },
+    ];
+    let suggest = |kind, subject, basis: &Assessed| SuggestedAssociation {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        kind,
+        subject_id: Some(subject),
+        state: AssociationState::Suggested,
+        evidence: qualified.clone(),
+        provenance: Provenance::Inferred { rule: "alias-and-coordinates".into() },
+        expected_observations: basis.observations.clone(),
+        expected_decisions: basis.decisions.clone(),
+        expected_observation_revisions: basis.sequences.clone(),
+    };
+
+    // The header changes on disk; capture identity and grouping revision stay the same.
+    let path = fx.root.join("Ha_001.fits");
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    std::fs::write(&path, b"OBJECT = 'M 31' rewritten header").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(modified + std::time::Duration::from_secs(5))
+        .unwrap();
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let mut files = vec![fx.scan_file("Ha_001.fits"), fx.scan_file("Ha_002.fits")];
+    files[0].metadata.object = Some("M 31".into());
+    let root = DiskProbe.root_identity(&location).unwrap();
+    let batch = ScanBatch { files, ..ScanBatch::default() };
+    catalog.apply_scan_batch(operation.id, &root, &batch, group).await.unwrap();
+    let after = catalog.session(session.id).await.unwrap().summary.session;
+    assert_eq!(after.grouping_revision, session.grouping_revision, "same grouping revision");
+    assert!(catalog.session(session.id).await.unwrap().summary.successors.is_empty());
+
+    let fresh = assessment(&catalog, session.id).await;
+    let stale = catalog
+        .record_suggestions(&[
+            suggest(AssociationKind::Equipment, equipment.id, &fresh),
+            suggest(AssociationKind::Target, seed.id, &assessed),
+        ])
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&stale), "conflict");
+    assert!(catalog.associations(session.id).await.unwrap().is_empty(), "all or nothing");
+    assert!(catalog.target_coverage(seed.id).await.unwrap().contributions.is_empty());
+
+    let mut partial = fresh.clone();
+    partial.observations.pop_first();
+    let missing_member = catalog
+        .record_suggestions(&[suggest(AssociationKind::Target, seed.id, &partial)])
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&missing_member), "conflict");
+
+    let recorded = catalog
+        .record_suggestions(&[suggest(AssociationKind::Target, seed.id, &fresh)])
+        .await
+        .unwrap();
+    assert_eq!(recorded[0].observation_basis, fresh.observations);
+    assert_eq!(recorded[0].state, AssociationState::Suggested);
+    let counted: f64 = catalog
+        .target_coverage(seed.id)
+        .await
+        .unwrap()
+        .contributions
+        .iter()
+        .map(|contribution| contribution.captured_seconds)
+        .sum();
+    assert!((counted - 600.0).abs() < 1e-9);
+
+    let current = catalog.session(session.id).await.unwrap().summary.session;
+    let confirmed = catalog.associate_target(&[expected_session(&current)], seed.id).await.unwrap();
+    let other = catalog.save_target(&target("IC 5070", "ic 5070"), None).await.unwrap();
+    let kept = catalog
+        .record_suggestions(&[suggest(AssociationKind::Target, other.candidate.id, &fresh)])
+        .await
+        .unwrap();
+    assert_eq!(kept[0].state, AssociationState::Confirmed);
+    assert_eq!(kept[0].subject_id, Some(seed.id));
+    let stored = catalog.associations(session.id).await.unwrap();
+    assert_eq!(
+        stored[0].decision_revision, confirmed[0].decision_revision,
+        "confirmation untouched"
+    );
+    assert_eq!(stored[0].subject_id, Some(seed.id));
+}
+
+#[tokio::test]
+async fn stale_assessment_after_correction_or_metadata_only_observation_is_refused() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"frame one");
+    fx.write("Ha_002.fits", b"frame two");
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &["Ha_001.fits", "Ha_002.fits"]).await;
+    let mut seed = target("NGC 7000", "ngc 7000");
+    seed.provenance = Provenance::Seed { dataset: "bundled-seed".into() };
+    catalog.record_seed_target(&seed).await.unwrap();
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let suggest = |basis: &Assessed| SuggestedAssociation {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        kind: AssociationKind::Target,
+        subject_id: Some(seed.id),
+        state: AssociationState::Suggested,
+        evidence: vec![
+            EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true },
+            EvidenceItem::Coordinates { ra_deg: 314.75, dec_deg: 44.33, qualified: true },
+        ],
+        provenance: Provenance::Inferred { rule: "alias-and-coordinates".into() },
+        expected_observations: basis.observations.clone(),
+        expected_decisions: basis.decisions.clone(),
+        expected_observation_revisions: basis.sequences.clone(),
+    };
+    let assessed = assessment(&catalog, session.id).await;
+
+    // A catalog OBJECT correction changes effective evidence, not capture identity.
+    let asset = catalog.session(session.id).await.unwrap().assets[0].clone();
+    let correction = CorrectionInput {
+        asset_id: asset.id,
+        field: "object".into(),
+        value: serde_json::json!("M 31"),
+    };
+    catalog.apply_correction_and_regroup(&[expected(&asset)], &[correction], group).await.unwrap();
+    let detail = catalog.session(session.id).await.unwrap();
+    assert_eq!(detail.summary.session.grouping_revision, session.grouping_revision);
+    assert!(detail.summary.successors.is_empty());
+    let corrected = assessment(&catalog, session.id).await;
+    assert_eq!(corrected.observations, assessed.observations, "fingerprints cannot detect it");
+    let error = catalog.record_suggestions(&[suggest(&assessed)]).await.unwrap_err();
+    assert_eq!(kind(&error), "conflict");
+    assert!(catalog.associations(session.id).await.unwrap().is_empty());
+
+    // Same bytes, newly recorded header evidence: only the observation sequence moves.
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let mut files = vec![fx.scan_file("Ha_001.fits"), fx.scan_file("Ha_002.fits")];
+    files[1].metadata.ra_deg = Some(314.7);
+    let root = DiskProbe.root_identity(&location).unwrap();
+    let batch = ScanBatch { files, ..ScanBatch::default() };
+    catalog.apply_scan_batch(operation.id, &root, &batch, group).await.unwrap();
+    let observed = assessment(&catalog, session.id).await;
+    assert_eq!(observed.observations, corrected.observations);
+    assert_ne!(observed.sequences, corrected.sequences);
+    let error = catalog.record_suggestions(&[suggest(&corrected)]).await.unwrap_err();
+    assert_eq!(kind(&error), "conflict");
+    assert!(catalog.associations(session.id).await.unwrap().is_empty());
+
+    let recorded = catalog.record_suggestions(&[suggest(&observed)]).await.unwrap();
+    assert_eq!(recorded[0].state, AssociationState::Suggested);
+    assert_eq!(recorded[0].observation_basis, observed.observations);
 }
 
 /// Recorded capabilities of a case- and normalization-insensitive volume.
