@@ -394,7 +394,12 @@ if ($null -eq $v) { exit 3 }
 
 #[cfg(windows)]
 fn probe_volume(root: &Path, _meta: &Metadata) -> Result<VolumeIdentity, LibraryError> {
+    use std::os::windows::process::CommandExt;
     use std::process::Command;
+
+    /// The desktop release build is a GUI-subsystem process; without this
+    /// flag every console child it spawns opens a visible console window.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -409,7 +414,8 @@ fn probe_volume(root: &Path, _meta: &Metadata) -> Result<VolumeIdentity, Library
     let mut query = Command::new(shell);
     query
         .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_VOLUME_QUERY])
-        .env("PLATEVAULT_IDENTITY_PATH", root);
+        .env("PLATEVAULT_IDENTITY_PATH", root)
+        .creation_flags(CREATE_NO_WINDOW);
     let output = run_bounded(query, std::time::Duration::from_secs(30))
         .map_err(|why| unqualified(root, &format!("Win32_Volume query {why}")))?;
     let volume: Volume = serde_json::from_slice(output.trim_ascii())
