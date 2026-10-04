@@ -21,6 +21,12 @@ export interface T1State {
   setupOperationIds: OperationId[]
   /** J18 S15: the checklist steps collapsed inside the Getting started flyout. */
   checklistCollapsed: boolean
+  /**
+   * When each Getting started item first read done (item id → ISO time). A
+   * completed item never regresses on its own (J18 SC8); Restore reseeds it
+   * from the catalog.
+   */
+  checklistDone: Record<string, string>
   /** Orientation tour position. `replaying` opens it again after it ran once (J18 S5). */
   tour: { replaying: boolean; stop: number }
   /** Last simulated Target lookup on Settings › Target lookup. */
@@ -29,10 +35,11 @@ export interface T1State {
 
 export const t1Slice: SliceDefinition<T1State> = {
   id: "t1",
-  version: 2,
+  version: 3,
   initial: () => ({
     setupOperationIds: [],
     checklistCollapsed: false,
+    checklistDone: {},
     tour: { replaying: false, stop: 0 },
     lastLookupTest: null,
   }),

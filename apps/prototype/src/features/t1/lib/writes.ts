@@ -34,9 +34,10 @@ export function completeOnboarding() {
   setOnboarding({ completedAt: nowIso() })
 }
 
-/** Settings › About: reopen the setup steps; locations and data stay. */
+/** Settings › About: reopen the setup steps; locations and data stay. Earlier setup runs no longer describe this setup. */
 export function restartSetup() {
   setOnboarding({ completedAt: null })
+  updateSlice("t1", (slice) => ({ ...slice, setupOperationIds: [] }))
 }
 
 export function setRoleDeferred(role: LocationRole, deferred: boolean) {
@@ -60,8 +61,17 @@ export function replayTour() {
   updateSlice("t1", (slice) => ({ ...slice, tour: { replaying: true, stop: 0 } }))
 }
 
+/** Restoring reseeds every tick from the catalog; hiding keeps them. */
 export function setChecklistHidden(hidden: boolean) {
   setOnboarding({ checklistHidden: hidden })
+  if (!hidden) updateSlice("t1", (slice) => ({ ...slice, checklistDone: {} }))
+}
+
+/** Record items that read done for the first time, so they never untick on their own (J18 SC8). */
+export function recordChecklistDone(ids: string[]) {
+  if (ids.length === 0) return
+  const at = nowIso()
+  updateSlice("t1", (slice) => ({ ...slice, checklistDone: { ...slice.checklistDone, ...Object.fromEntries(ids.map((id) => [id, at])) } }))
 }
 
 export function setChecklistCollapsed(collapsed: boolean) {

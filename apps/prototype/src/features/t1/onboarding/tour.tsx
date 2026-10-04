@@ -12,12 +12,14 @@ import { useNavigate, useRouterState } from "@tanstack/react-router"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { useStore } from "@/store/core"
+import { isSettled } from "@/store/operations"
 import { endTour, setTourStop } from "../lib/writes"
 
 interface Stop {
   title: string
   body: string
-  route: string
+  /** Page the stop opens; sidebar-only stops have none and stay on the current page (J18 S2). */
+  route?: string
   anchor: string
 }
 
@@ -28,12 +30,11 @@ const STOPS: Stop[] = [
   { title: "Calibration", route: "/calibration", anchor: 'nav[aria-label="Main"] [href$="#/calibration"]', body: "Masters and raw calibration sets, grouped by camera, settings and channel. PlateVault shows compatibility; it never builds masters." },
   { title: "Projects", route: "/projects", anchor: 'nav[aria-label="Main"] [href$="#/projects"]', body: "Optional goals with a capture checklist. A Project never moves files and never blocks creating a View." },
   { title: "Views", route: "/views", anchor: 'nav[aria-label="Main"] [href$="#/views"]', body: "A View is a named, reviewed set of frames. Review frames, accept calibration and prepare inputs for PixInsight, Siril or another app." },
-  { title: "Getting started", route: "/targets", anchor: "[data-getting-started-trigger]", body: "This checklist ticks itself from what you do. Open it any time, or remove it from its menu." },
+  { title: "Getting started", anchor: "[data-getting-started-trigger]", body: "This checklist ticks itself from what you do. Open it any time, or remove it from its menu." },
 ]
 
 const REMOVED_LAST_STOP: Stop = {
   title: "Settings",
-  route: "/targets",
   anchor: 'aside [href$="#/settings"]',
   body: "Settings holds locations, equipment, sites and appearance. You removed Getting started; restore it in Settings › About this prototype.",
 }
@@ -48,7 +49,11 @@ export function OrientationTour() {
   const checklistHidden = useStore((s) => s.settings.onboarding.checklistHidden)
   const tour = useStore((s) => s.slices.t1.tour)
   const inSetup = pathname.startsWith("/welcome") || pathname.startsWith("/setup")
-  const open = !inSetup && ((completedAt !== null && tourCompletedAt === null) || tour.replaying)
+  // While the setup scan still runs the user may go straight to Sessions (J19 S6), so the one-time
+  // tour waits for it to settle and opens on Targets; once started it follows its own stops.
+  const setupRunning = useStore((s) => s.slices.t1.setupOperationIds.some((id) => { const op = s.operations[id]; return op !== undefined && !isSettled(op.status) && op.status !== "interrupted" }))
+  const firstRun = completedAt !== null && tourCompletedAt === null && (tour.stop > 0 || (pathname === "/targets" && !setupRunning))
+  const open = !inSetup && (firstRun || tour.replaying)
   const index = Math.min(tour.stop, STOPS.length - 1)
   const stop = index === STOPS.length - 1 && checklistHidden ? REMOVED_LAST_STOP : STOPS[index]!
   const last = index === STOPS.length - 1
@@ -56,9 +61,8 @@ export function OrientationTour() {
   const popup = useRef<HTMLDivElement>(null)
   const next = useRef<HTMLButtonElement>(null)
 
-  // Next brings the stop's page into view (J18 S2).
   useEffect(() => {
-    if (open && pathname !== stop.route) void navigate({ to: stop.route })
+    if (open && stop.route && pathname !== stop.route) void navigate({ to: stop.route })
   }, [open, stop.route])
 
   useLayoutEffect(() => {
