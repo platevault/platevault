@@ -4651,6 +4651,7 @@ dependencies = [
  "metadata_core",
  "metadata_fits",
  "metadata_xisf",
+ "platevault_model",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4662,6 +4663,19 @@ dependencies = [
  "thiserror 2.0.19",
  "time",
  "tokio",
+ "unicode-normalization",
+ "uuid",
+]
+
+[[package]]
+name = "platevault_model"
+version = "0.1.0"
+dependencies = [
+ "metadata_core",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.19",
  "unicode-normalization",
  "uuid",
 ]

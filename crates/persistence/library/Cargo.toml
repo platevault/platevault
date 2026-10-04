@@ -1,28 +1,20 @@
 [package]
-name = "platevault_core"
+name = "persistence_library"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-platevault_model = { path = "../platevault-model" }
-metadata_core = { path = "../metadata/core" }
-metadata_fits = { path = "../metadata/fits" }
-metadata_xisf = { path = "../metadata/xisf" }
-fs_pathsafe = { path = "../fs/pathsafe" }
+platevault_model = { path = "../../platevault-model" }
 serde.workspace = true
 serde_json.workspace = true
-thiserror.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 uuid = { workspace = true, features = ["v5"] }
 time.workspace = true
 sha2.workspace = true
 hex.workspace = true
-unicode-normalization.workspace = true
-simbad-resolver = "0.5.0"
 skymath = "0.7.2"
-target-match = "0.5.1"
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "apps/desktop/src-tauri",
   "crates/platevault-core",
+  "crates/platevault-model",
   "crates/app/cache",
   "crates/app/calibration",
   "crates/app/core",
