@@ -167,7 +167,7 @@ export function enableNotifications(leadTimeMin: number | null, targetId: Target
   const state = store.getState()
   const siteId = state.settings.defaultSiteId
   if (!siteId || !state.catalog.sites[siteId]) {
-    return { ok: false, reason: "no-default-site", message: "Set a default site first. Reminders use the default site only, so none were scheduled." }
+    return { ok: false, reason: "no-default-site", message: "Reminders use the default site only, so none were scheduled. Choose one in Settings › Observing sites." }
   }
   if (!leadTimeMin) return { ok: false, reason: "no-lead-time", message: "Lead time: choose how long before a window the reminder arrives." }
   const granted = state.faults.notificationResponse === "grant"

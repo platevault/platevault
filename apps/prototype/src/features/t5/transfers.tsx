@@ -155,13 +155,18 @@ function TransferPlanner({ kind }: { kind: TransferKind }) {
       requestAnimationFrame(() => blockersRef.current?.focus())
       return
     }
-    setDraft(kind, { stage: "review" })
+    setDraft(kind, { stage: "review", reviewedShas: Object.fromEntries(plan.items.map((i) => [i.assetId, i.sha256])) })
   }
 
   const alreadyIndexed = plan.items.length
   const header = <PageHeader eyebrow={copy.eyebrow} title={copy.title} description={copy.description} />
 
   if (draft.stage === "review" && plan.blockers.length === 0) {
+    // Rows show the digests frozen at review; a source changed since then is flagged and will be blocked, never silently re-planned.
+    const reviewedRows = plan.items.map((i) => {
+      const reviewed = draft.reviewedShas?.[i.assetId]
+      return reviewed && reviewed !== i.sha256 ? { ...i, sha256: reviewed, problem: "Source changed since review: this item will be blocked and its source kept" } : i
+    })
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         {header}
@@ -191,7 +196,7 @@ function TransferPlanner({ kind }: { kind: TransferKind }) {
               ]}
             />
             <ReferenceSummary plan={plan} editable={false} kind={kind} />
-            <DataTable label="Operations to approve" rows={plan.items} columns={itemColumns} getRowId={(i) => i.assetId} />
+            <DataTable label="Operations to approve" rows={reviewedRows} columns={itemColumns} getRowId={(i) => i.assetId} />
             <FixedByPlan views={plan.affectedViews} />
           </Section>
         </PageBody>

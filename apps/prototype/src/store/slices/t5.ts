@@ -41,7 +41,7 @@ export interface T5State {
 
 export const t5Slice: SliceDefinition<T5State> = {
   id: "t5",
-  version: 2,
+  version: 3,
   initial: () => ({ cleanup: {}, archive: emptyDraft(), filing: emptyDraft(), notifications: [] }),
   operations: t5OperationHandlers,
 }

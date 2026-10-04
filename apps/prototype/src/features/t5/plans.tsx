@@ -512,7 +512,7 @@ function RemindersSection({
                       {target.name} at {reminderSite?.name}: {formatNight(nightAt(Date.parse(w.start), reminderSite!))} {windowTimes(w, reminderSite!)}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {delivered ? `Delivered (reminder at ${formatTime(at, reminderSite!.timeZone)})` : `Scheduled for ${formatDateTime(at, reminderSite!.timeZone)}, not delivered yet`}
+                      {delivered ? `Delivered · scheduled for ${formatTime(at, reminderSite!.timeZone)}` : `Scheduled for ${formatDateTime(at, reminderSite!.timeZone)}, not delivered yet`}
                     </span>
                   </li>
                 )

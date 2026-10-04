@@ -70,7 +70,7 @@ export function PrototypeControls({ title = "Prototype controls", description, c
         <FlaskConical aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="space-y-0.5">
           <h3 className="text-sm font-semibold">{title}</h3>
-          <p className="text-xs text-pretty text-muted-foreground">Prototype: changes the simulated disk outside PlateVault. {description}</p>
+          <p className="text-xs text-pretty text-muted-foreground">Prototype: stands in for a change outside PlateVault. {description}</p>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">{children}</div>

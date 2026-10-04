@@ -21,7 +21,7 @@ import type {
   Volume,
   VolumeId,
 } from "@/domain/types"
-import { formatBytes, formatNight } from "@/lib/format"
+import { formatBytes, formatDateTime, formatNight } from "@/lib/format"
 import { nowIso, type PrototypeState } from "@/store/core"
 import { patchOperation, settleOperation } from "@/store/operations"
 import { baseName, type EntryKind, latestPreparation, parentFolder, preparedEntries } from "./files"
@@ -39,10 +39,12 @@ export interface TransferDraft {
   stage: "plan" | "review"
   /** Prototype fault (J28 P5): hold this asset after verification, before retirement. */
   holdAssetId: AssetId | null
+  /** Source SHA-256 per item, frozen when Review opened. Approval runs against these, so a source changed after review is blocked (STO-AC-15). */
+  reviewedShas: Record<AssetId, string> | null
 }
 
 export function emptyDraft(): TransferDraft {
-  return { sessionIds: [], destination: null, intendedVolumeUuid: null, referenceModes: {}, stage: "plan", holdAssetId: null }
+  return { sessionIds: [], destination: null, intendedVolumeUuid: null, referenceModes: {}, stage: "plan", holdAssetId: null, reviewedShas: null }
 }
 
 export interface PlanItem {
@@ -393,7 +395,7 @@ export function buildPayload(plan: TransferPlan, draft: TransferDraft): Transfer
       sourcePath: item.sourcePath,
       sourceVolumeId: item.sourceVolumeId,
       sourceInode: item.sourceInode,
-      planSha: item.sha256,
+      planSha: draft.reviewedShas?.[item.assetId] ?? item.sha256,
       snapshotSha: null,
       sizeBytes: item.sizeBytes,
       destinationPath: item.destinationPath,
@@ -544,7 +546,7 @@ export function stepTransfer(state: PrototypeState, op: Operation): PrototypeSta
       }
       return r
     })
-    revalidated = `Revalidated ${destVolume.name} identity ${destVolume.volumeUuid} and ${records.filter((r) => !isTerminal(r)).length} recorded items at ${now}.`
+    revalidated = `Revalidated ${destVolume.name} identity ${destVolume.volumeUuid} and ${records.filter((r) => !isTerminal(r)).length} recorded items at ${formatDateTime(now)}.`
   }
 
   let budget = STEP_BUDGET
