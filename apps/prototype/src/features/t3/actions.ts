@@ -18,6 +18,7 @@ import {
   type SessionFilters,
 } from "@/store/slices/t3"
 import { type CsvRow, importedMetrics, type MappedRow } from "./csv"
+import { historyEntry } from "./measure"
 import { contentEquals, contentOf, deriveCriteria, emptyContent, latestRevision, viewContext } from "./model"
 
 const sessionsHref = (viewId: ViewId) => `/views/${viewId}/sessions`
@@ -99,13 +100,18 @@ export function createView(input: NewViewInput): { result: CommitResult; viewId:
 /**
  * Edit the working membership. The draft starts from the latest revision; a
  * draft that ends up equal to it is dropped, so "no unsaved changes" is true
- * state for every reader (T4 gates preparation on `draft === null`).
+ * state for every reader (T4 gates preparation on `draft === null`). Every
+ * entry point is refused on a Complete View and on a recovered draft the user
+ * has not resumed (wireframe D09, D08), whatever control called it.
  */
 export function updateDraft(
   viewId: ViewId,
   label: string,
   change: (content: MembershipContent, state: PrototypeState) => MembershipContent,
 ): CommitResult {
+  const view = store.getState().catalog.views[viewId]
+  if (view?.completedAt) return { ok: false, reason: "write-failed", message: `${label} was refused: this View is Complete. Reopen it to change membership.` }
+  if (view?.draft && !touched.has(viewId)) return { ok: false, reason: "write-failed", message: `${label} was refused: resume or discard the recovered changes first.` }
   const result = commit(
     label,
     (s) => {
@@ -249,15 +255,19 @@ export function rejectForProject(projectId: ProjectId, assetIds: AssetId[], href
 // Imported measurements (PIX-FR-06, PIX-FR-07)
 // ---------------------------------------------------------------------------
 
-/** Add imported metrics next to built-in ones; an earlier import of the same metric is replaced, a built-in value never. */
+/**
+ * Add imported metrics next to built-in ones; an earlier import of the same metric is replaced, a built-in value never.
+ * The import is stamped with the frame's current digest when the mapping is confirmed (PIX-FR-06): a record of other
+ * bytes moves to history with its values, and the import starts a record of the current bytes.
+ */
 function withImported(catalog: Catalog, assetId: AssetId, row: Pick<CsvRow, "index" | "file" | "values">, path: string): FrameMeasurement {
   const record = catalog.measurements[assetId]
+  const sha256 = catalog.assets[assetId]?.sha256 ?? null
   const metrics = importedMetrics({ ...row, approved: true, psfSignalWeight: 0 }, path)
   const keys = new Set(metrics.map((m) => m.key))
-  const kept = (record?.metrics ?? []).filter((m) => m.source === "built-in" || !keys.has(m.key))
-  return record
-    ? { ...record, metrics: [...kept, ...metrics] }
-    : { assetId, state: "unavailable", inputSha256: null, metrics, computedAt: null, history: [] }
+  if (record && record.inputSha256 === sha256) return { ...record, metrics: [...record.metrics.filter((m) => m.source === "built-in" || !keys.has(m.key)), ...metrics] }
+  const earlier = record ? historyEntry(record) : null
+  return { assetId, state: "unavailable", inputSha256: sha256, metrics, computedAt: nowIso(), history: [...(earlier ? [earlier] : []), ...(record?.history ?? [])] }
 }
 
 export function importMeasurements(viewId: ViewId, path: string, mapped: MappedRow[], viewAssetIds: Set<AssetId>): CommitResult {

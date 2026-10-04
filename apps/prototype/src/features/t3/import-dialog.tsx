@@ -43,6 +43,7 @@ export function ImportDialog({ viewId, viewAssetIds, open, onOpenChange }: { vie
   const matched = mapped.filter((m) => m.status === "matched" || m.status === "matched-by-name")
   const unresolved = mapped.filter((m) => m.status === "ambiguous" || m.status === "unmatched")
   const outside = matched.filter((m) => !viewAssetIds.has(m.assetId!)).length
+  const byName = matched.filter((m) => m.status === "matched-by-name").length
   const blockedId = useId()
   const blocked =
     step === "choose"
@@ -158,7 +159,7 @@ export function ImportDialog({ viewId, viewAssetIds, open, onOpenChange }: { vie
             <section className="space-y-1.5">
               <h3 className="text-xs font-medium text-muted-foreground">Rows</h3>
               <p className="tabular-nums">
-                {plural(matched.length, "row")} matched to indexed frames by path
+                {plural(matched.length, "row")} matched to indexed frames ({matched.length - byName} by path, {byName} by unique file name)
                 {outside > 0 ? ` (${outside} outside this View; their values still attach to the frame)` : ""} · {unresolved.length} attach to no frame until reviewed
               </p>
               <ul className="space-y-2">
