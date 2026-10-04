@@ -18,16 +18,19 @@ use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
 };
 use crate::{
-    Availability, FileIdentity, LibraryError, Location, LocationRole, NativePath,
-    ObservationFingerprint, RemapReview, Revision, ScanOperation, ScanOptions, ScanState,
-    TargetCandidate,
+    AssociationKind, AssociationState, Availability, FileIdentity, LibraryError, Location,
+    LocationRole, NativePath, ObservationFingerprint, RemapReview, Revision, ScanOperation,
+    ScanOptions, ScanState, TargetCandidate,
 };
-use persistence_library::{Catalog, LocationRegistration, SessionDetail};
+use persistence_library::{
+    Catalog, LocationRegistration, SessionDetail, SessionQuery, SuggestedAssociation,
+};
 
 pub struct Library {
     catalog: Arc<Catalog>,
     targets: Arc<TargetIndex>,
     provider: Option<SimbadTargetResolver>,
+    saved_targets: Mutex<Option<(u64, Arc<Vec<TargetCandidate>>)>>,
     scans: Mutex<HashMap<Uuid, Arc<AtomicBool>>>,
     progress: broadcast::Sender<ScanOperation>,
 }
@@ -70,6 +73,7 @@ impl Library {
             targets: Arc::new(targets),
             provider,
             scans: Mutex::new(HashMap::new()),
+            saved_targets: Mutex::new(None),
             progress,
         }))
     }
@@ -252,26 +256,134 @@ impl Library {
         Ok(LibrarySession { detail, target_assessments })
     }
 
-    async fn saved_targets(&self) -> Result<Vec<TargetCandidate>, LibraryError> {
+    async fn saved_targets(&self) -> Result<Arc<Vec<TargetCandidate>>, LibraryError> {
         const PAGE: u32 = 1000;
+        let mut cached = self.saved_targets.lock().await;
+        let generation = self.catalog.target_generation().await?;
+        if let Some((recorded, candidates)) = &*cached {
+            if *recorded == generation {
+                return Ok(Arc::clone(candidates));
+            }
+        }
+        for _ in 0..4 {
+            let before = self.catalog.target_generation().await?;
+            let mut offset = 0_u32;
+            let mut saved = Vec::new();
+            loop {
+                let page = self.catalog.list_targets(offset, PAGE).await?;
+                let count = u32::try_from(page.len()).map_err(|_| {
+                    LibraryError::PersistenceFailure("target page exceeds u32".into())
+                })?;
+                saved.extend(page.into_iter().map(|record| record.candidate));
+                if count < PAGE {
+                    break;
+                }
+                offset = offset.checked_add(count).ok_or_else(|| {
+                    LibraryError::PersistenceFailure("target index exceeds u32".into())
+                })?;
+            }
+            if self.catalog.target_generation().await? == before {
+                let candidates = Arc::new(saved);
+                *cached = Some((before, Arc::clone(&candidates)));
+                drop(cached);
+                return Ok(candidates);
+            }
+        }
+        Err(LibraryError::PersistenceFailure(
+            "target catalog changed repeatedly during search; retry".into(),
+        ))
+    }
+
+    async fn refresh_target_suggestions(&self, location_id: Uuid) -> Result<(), LibraryError> {
+        let saved = self.saved_targets().await?;
         let mut offset = 0_u32;
-        let mut saved = Vec::new();
         loop {
-            let page = self.catalog.list_targets(offset, PAGE).await?;
-            let count = u32::try_from(page.len())
-                .map_err(|_| LibraryError::PersistenceFailure("target page exceeds u32".into()))?;
-            saved.extend(page.into_iter().map(|record| record.candidate));
-            if count < PAGE {
-                return Ok(saved);
+            let rows = self
+                .catalog
+                .list_sessions(&SessionQuery {
+                    location_id: Some(location_id),
+                    include_superseded: false,
+                    offset,
+                    limit: 1000,
+                })
+                .await?;
+            let count = u32::try_from(rows.len())
+                .map_err(|_| LibraryError::PersistenceFailure("session page exceeds u32".into()))?;
+            for row in rows {
+                let detail = self.catalog.session(row.session.id).await?;
+                let frames =
+                    detail.assets.iter().map(|asset| asset.effective.clone()).collect::<Vec<_>>();
+                let assessments = self.targets.candidates_for_frames(&frames, &saved);
+                let mut qualified = assessments
+                    .iter()
+                    .filter(|assessment| assessment.state == AssociationState::Suggested);
+                let first = qualified.next();
+                let unique = first.filter(|_| qualified.next().is_none());
+                let (subject_id, state, evidence, provenance) = if let Some(assessment) = unique {
+                    if matches!(assessment.candidate.provenance, crate::Provenance::Seed { .. }) {
+                        self.catalog.record_seed_target(&assessment.candidate).await?;
+                    }
+                    (
+                        Some(assessment.candidate.id),
+                        AssociationState::Suggested,
+                        assessment.evidence.clone(),
+                        assessment.provenance.clone(),
+                    )
+                } else {
+                    let state = if assessments.is_empty() {
+                        AssociationState::Unresolved
+                    } else {
+                        AssociationState::NeedsReview
+                    };
+                    (
+                        None,
+                        state,
+                        vec![crate::EvidenceItem::Unknown {
+                            field: "qualified unique target".into(),
+                        }],
+                        crate::Provenance::Inferred {
+                            rule: crate::targets::ASSOCIATION_RULE.into(),
+                        },
+                    )
+                };
+                self.catalog
+                    .record_suggestions(&[SuggestedAssociation {
+                        session_id: row.session.id,
+                        grouping_revision: row.session.grouping_revision,
+                        expected_observations: detail
+                            .assets
+                            .iter()
+                            .map(|asset| (asset.id, asset.fingerprint.clone()))
+                            .collect(),
+                        expected_decisions: detail
+                            .assets
+                            .iter()
+                            .map(|asset| (asset.id, asset.decision_revision))
+                            .collect(),
+                        expected_observation_revisions: detail
+                            .assets
+                            .iter()
+                            .map(|asset| (asset.id, asset.observation_revision))
+                            .collect(),
+                        kind: AssociationKind::Target,
+                        subject_id,
+                        state,
+                        evidence,
+                        provenance,
+                    }])
+                    .await?;
+            }
+            if count < 1000 {
+                return Ok(());
             }
             offset = offset.checked_add(count).ok_or_else(|| {
-                LibraryError::PersistenceFailure("target index exceeds u32".into())
+                LibraryError::PersistenceFailure("session index exceeds u32".into())
             })?;
         }
     }
 
     async fn run_scan(
-        &self,
+        self: &Arc<Self>,
         id: Uuid,
         relative_scope: Option<NativePath>,
         canceled: &Arc<AtomicBool>,
@@ -283,6 +395,7 @@ impl Library {
         let flag = Arc::clone(canceled);
         let handle = tokio::runtime::Handle::current();
         let scan_location = location.clone();
+        let library = Arc::clone(self);
         let observation = blocking(move || {
             let options = ScanOptions { relative_scope, ..ScanOptions::default() };
             inventory::scan(
@@ -298,6 +411,7 @@ impl Library {
                         &batch,
                         group_assets,
                     ))?;
+                    handle.block_on(library.refresh_target_suggestions(scan_location.id))?;
                     let _ = progress.send(applied);
                     Ok(())
                 },
@@ -318,14 +432,16 @@ impl Library {
                     ))
                 })
                 .await?;
+                self.refresh_target_suggestions(location.id).await?;
                 let _ = self.progress.send(completed);
                 Ok(())
             }
             Err(error) => {
-                if let Some(availability) = root_failure(&error) {
-                    self.catalog
-                        .mark_location_unavailable(location.id, availability, &error.to_string())
-                        .await?;
+                let checked_location = location.clone();
+                if let Err(root_error) = blocking(move || inventory::validate_location_root(&checked_location)).await {
+                    if let Some(availability) = root_failure(&root_error) {
+                        self.catalog.mark_location_unavailable(location.id, availability, &root_error.to_string()).await?;
+                    }
                 }
                 Err(error)
             }

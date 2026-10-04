@@ -11,6 +11,7 @@ pub mod clean_shutdown;
 pub mod commands;
 pub mod data_dir;
 pub mod frame_watcher;
+pub mod library_shell;
 pub mod resolve_cache;
 pub mod watcher;
 
