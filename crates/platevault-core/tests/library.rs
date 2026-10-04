@@ -1,11 +1,12 @@
 mod support;
 
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use persistence_library::{SessionMember, SessionQuery};
-use platevault_core::library::{InventoryProbe, Library};
+use platevault_core::library::{AssetReferences, InventoryProbe, Library, ReferencesFuture};
 use platevault_core::targets::TargetQuery;
 use platevault_core::*;
 use uuid::Uuid;
@@ -965,4 +966,229 @@ async fn a_deleted_or_moved_root_never_blocks_an_unrelated_sibling() {
     let after = [moved.join("dark_1.fits"), captures.join("light_1.fits")]
         .map(|path| support::digest(&path));
     assert_eq!(after, originals, "sources are read-only");
+}
+
+/// Records of a feature that holds library asset ids (VSEL Views and their
+/// prepared revisions, PRJ Projects, Results), served through the seam those
+/// features implement. The library only reads them.
+struct Records {
+    kind: ReferenceKind,
+    held: tokio::sync::Mutex<Vec<AssetReference>>,
+}
+
+impl Records {
+    fn new(kind: ReferenceKind, held: Vec<AssetReference>) -> Arc<Self> {
+        Arc::new(Self { kind, held: tokio::sync::Mutex::new(held) })
+    }
+
+    async fn snapshot(&self) -> Vec<AssetReference> {
+        self.held.lock().await.clone()
+    }
+}
+
+impl AssetReferences for Records {
+    fn kind(&self) -> ReferenceKind {
+        self.kind
+    }
+
+    fn references_to<'a>(&'a self, assets: &'a BTreeSet<Uuid>) -> ReferencesFuture<'a> {
+        Box::pin(async move {
+            Ok(self
+                .snapshot()
+                .await
+                .into_iter()
+                .filter(|record| record.asset_ids.iter().any(|id| assets.contains(id)))
+                .collect())
+        })
+    }
+}
+
+fn record(
+    kind: ReferenceKind,
+    id: u128,
+    name: &str,
+    revision: Revision,
+    assets: &[Uuid],
+) -> AssetReference {
+    AssetReference {
+        kind,
+        id: Uuid::from_u128(id),
+        name: name.into(),
+        revision,
+        asset_ids: assets.to_vec(),
+    }
+}
+
+/// The members a View names unresolved: every asset not currently Available.
+async fn unresolved_members(
+    catalog: &persistence_library::Catalog,
+    members: &[Uuid],
+) -> Vec<(Uuid, Availability)> {
+    let mut unresolved = Vec::new();
+    for id in members {
+        let asset = catalog.asset(*id).await.unwrap();
+        if asset.availability != Availability::Available {
+            unresolved.push((asset.id, asset.availability));
+        }
+    }
+    unresolved
+}
+
+/// The review names the location, its root and availability, every copy, the
+/// session holding them and each View, Project and Result record, and says that
+/// no file changes.
+fn assert_names_every_reference(
+    review: &RetireReview,
+    location: &Location,
+    assets: &[Uuid],
+    session: Uuid,
+) {
+    assert_eq!(
+        (review.location_name.as_str(), &review.root, review.availability),
+        ("Cold-1", &location.path, Availability::Offline)
+    );
+    let named: BTreeSet<Uuid> = review.assets.iter().map(|copy| copy.asset_id).collect();
+    assert_eq!(named, assets.iter().copied().collect());
+    let sessions: Vec<Uuid> = review.sessions.iter().map(|session| session.session_id).collect();
+    assert_eq!(sessions, vec![session]);
+    let referenced: Vec<(ReferenceKind, u128)> = review
+        .references
+        .iter()
+        .map(|reference| (reference.kind, reference.id.as_u128()))
+        .collect();
+    let expected = [
+        (ReferenceKind::View, 0x7000),
+        (ReferenceKind::View, 0x7001),
+        (ReferenceKind::Project, 0x31),
+    ];
+    assert_eq!(referenced, expected);
+    assert_eq!(
+        review.consulted,
+        [ReferenceKind::View, ReferenceKind::Project, ReferenceKind::Result]
+    );
+    assert!(
+        review.statement.contains("deletes, moves or modifies no file"),
+        "{}",
+        review.statement
+    );
+}
+
+/// LIB-AC-16: an offline location whose copies are fixed View members leaves the
+/// library only through a reviewed Retire location, and its folder registers again
+/// counting each capture once.
+#[tokio::test]
+async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_once_again() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("Cold-1");
+    std::fs::create_dir(&root).unwrap();
+    let frames = [root.join("light_1.fits"), root.join("light_2.fits")];
+    write_frame(&frames[0], "2026-09-12T22:00:00");
+    write_frame(&frames[1], "2026-09-12T22:05:00");
+    let originals = frames.clone().map(|path| support::digest(&path));
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let location = library
+        .register_location(NativePath::from_path(&root), "Cold-1".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+    let catalog = library.catalog();
+    let (summary, detail) = only_session(&library).await;
+    let m31 = target_of(&detail).unwrap().1.unwrap();
+    let assets: Vec<Uuid> = detail.assets.iter().map(|asset| asset.id).collect();
+    catalog
+        .set_quality(&[expected_of(&detail.assets[0])], Quality::Usable, InventoryProbe)
+        .await
+        .unwrap();
+    let totals = |coverage: &TargetCoverage| {
+        (
+            summed(coverage, |c| c.captured_seconds),
+            summed(coverage, |c| c.usable_seconds),
+            summed(coverage, |c| c.unreviewed_seconds),
+        )
+    };
+    assert_eq!(totals(&catalog.target_coverage(m31).await.unwrap()), (600.0, 300.0, 300.0));
+
+    // A fixed View membership and its prepared revision, and a Project, hold the copies.
+    let views = Records::new(
+        ReferenceKind::View,
+        vec![
+            record(ReferenceKind::View, 0x7000, "M 31 Ha", 2, &assets),
+            record(ReferenceKind::View, 0x7001, "M 31 Ha prepared", 1, &assets),
+        ],
+    );
+    let projects = Records::new(
+        ReferenceKind::Project,
+        vec![record(ReferenceKind::Project, 0x31, "M 31 mosaic", 5, &assets)],
+    );
+    let results = Records::new(ReferenceKind::Result, Vec::new());
+    for source in [&views, &projects, &results] {
+        library.register_references(Arc::clone(source) as Arc<dyn AssetReferences>).await;
+    }
+    let fixed = views.snapshot().await;
+
+    // Cold-1 goes offline: its last-observed contributions still count.
+    let unplugged = temp.path().join("Cold-1 unplugged");
+    std::fs::rename(&root, &unplugged).unwrap();
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Failed);
+    let location = catalog.location(location.id).await.unwrap();
+    assert_eq!(location.availability, Availability::Offline);
+    assert_eq!(totals(&catalog.target_coverage(m31).await.unwrap()), (600.0, 300.0, 300.0));
+
+    let review = library.review_retire_location(location.id).await.unwrap();
+    assert_names_every_reference(&review, &location, &assets, summary.session.id);
+
+    // A Result that references a copy after the review makes it stale.
+    results.held.lock().await.push(record(
+        ReferenceKind::Result,
+        0x51,
+        "M 31 stack",
+        1,
+        &assets[..1],
+    ));
+    let stale = library.retire_location(review.id, location.id, review.expected_revision).await;
+    assert_eq!(stale.unwrap_err().response(None, None).kind, "conflict");
+    assert_eq!(catalog.location(location.id).await.unwrap().lifecycle, LocationLifecycle::Active);
+    let review = library.review_retire_location(location.id).await.unwrap();
+    assert_eq!(review.references.len(), 4, "{:?}", review.references);
+    let retired =
+        library.retire_location(review.id, location.id, review.expected_revision).await.unwrap();
+    assert_eq!(retired.lifecycle, LocationLifecycle::Retired);
+
+    // Its copies leave totals and Project progress. The fixed View keeps its
+    // membership and prepared revision and names both copies unresolved: they
+    // read Retired, never Missing.
+    let coverage = catalog.target_coverage(m31).await.unwrap();
+    assert!(coverage.contributions.is_empty() && !coverage.provisional, "{coverage:?}");
+    assert_eq!(views.snapshot().await, fixed);
+    let expected: Vec<_> = assets.iter().map(|id| (*id, Availability::Retired)).collect();
+    assert_eq!(unresolved_members(catalog, &fixed[0].asset_ids).await, expected);
+
+    // The folder returns: reselecting the retired location is refused, and
+    // registering the folder again succeeds and counts each capture once.
+    std::fs::rename(&unplugged, &root).unwrap();
+    let refused = library
+        .reselect_location(location.id, retired.decision_revision, NativePath::from_path(&root))
+        .await
+        .unwrap_err();
+    assert_eq!(refused.response(None, None).kind, "invalid_input");
+    assert!(refused.to_string().contains("retired"), "{refused}");
+    let again = library
+        .register_location(NativePath::from_path(&root), "Cold-1".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    assert_eq!(scan_to_end(&library, again.id).await.state, ScanState::Completed);
+    let coverage = catalog.target_coverage(m31).await.unwrap();
+    assert_eq!(totals(&coverage), (600.0, 0.0, 600.0), "{coverage:?}");
+    assert_eq!(coverage.covered_location_ids, vec![again.id]);
+    assert!(!coverage.provisional, "{coverage:?}");
+    let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    assert_eq!(
+        sessions.iter().map(|session| session.capture_count).sum::<u64>(),
+        2,
+        "{sessions:?}"
+    );
+    assert_eq!(views.snapshot().await, fixed, "never changed silently");
+    for (path, digest) in frames.iter().zip(&originals) {
+        assert_eq!(&support::digest(path), digest, "originals unchanged");
+    }
 }

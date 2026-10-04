@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
     value INTEGER NOT NULL
 ) STRICT;
 
-INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 4);
+INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 5);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('grouping_revision', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('scan_sequence', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('target_generation', 0);
@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS locations (
     last_observed_at TEXT,
     unavailable_reason TEXT,
     unavailable_at TEXT,
+    -- Retired through a reviewed Retire location: history only, never reselected,
+    -- rescanned or remapped, and no longer an overlap for registration.
+    lifecycle TEXT NOT NULL DEFAULT 'active' CHECK (lifecycle IN ('active', 'retired')),
     created_at TEXT NOT NULL
 ) STRICT;
 
@@ -275,6 +278,18 @@ CREATE TABLE IF NOT EXISTS remap_reviews (
     proposed_identity TEXT NOT NULL,
     items TEXT NOT NULL,
     blocked TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('reviewed', 'applied')),
+    created_at TEXT NOT NULL,
+    applied_at TEXT
+) STRICT;
+
+-- Durable Retire location reviews; confirmation is single-use and re-reads every
+-- reference the review names.
+CREATE TABLE IF NOT EXISTS retire_reviews (
+    id TEXT PRIMARY KEY NOT NULL,
+    location_id TEXT NOT NULL REFERENCES locations (id),
+    expected_revision INTEGER NOT NULL,
+    review TEXT NOT NULL,
     state TEXT NOT NULL CHECK (state IN ('reviewed', 'applied')),
     created_at TEXT NOT NULL,
     applied_at TEXT

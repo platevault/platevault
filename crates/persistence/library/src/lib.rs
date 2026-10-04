@@ -19,11 +19,12 @@ use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 
 use platevault_model::{
-    logical_quality, ApplicableQuality, Asset, Association, AssociationKind, AssociationState,
-    Availability, CaptureKey, CaptureMetadata, CorrectionInput, CoverageContribution,
-    DigestEvidence, Equipment, EvidenceItem, ExpectedAsset, ExpectedSession, FileIdentity,
-    GroupingResult, LibraryError, Location, LocationRole, NativePath, ObservationFingerprint,
-    PathSensitivity, Provenance, Quality, RemapBlock, RemapBlockReason, RemapItem, RemapReview,
+    logical_quality, ApplicableQuality, Asset, AssetReference, Association, AssociationKind,
+    AssociationState, Availability, CaptureKey, CaptureMetadata, CorrectionInput,
+    CoverageContribution, DigestEvidence, Equipment, EvidenceItem, ExpectedAsset, ExpectedSession,
+    FileIdentity, GroupingResult, LibraryError, Location, LocationLifecycle, LocationRole,
+    NativePath, ObservationFingerprint, PathSensitivity, Provenance, Quality, ReferenceKind,
+    RemapBlock, RemapBlockReason, RemapItem, RemapReview, RetireAsset, RetireReview, RetireSession,
     Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress,
     ScanState, Session, SessionCandidate, SessionLineage, TargetCandidate, TargetCone,
     TargetCoverage, TargetRecord, VolumeIdentity,
@@ -42,7 +43,7 @@ use uuid::Uuid;
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
 
 const SCHEMA: &str = include_str!("schema.sql");
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -68,7 +69,7 @@ macro_rules! asset_sql {
             "SELECT a.id, a.location_id, a.path_key, a.fingerprint, a.format, a.availability, ",
             "a.observed, a.effective, a.observation_revision, a.decision_revision, a.quality, ",
             "a.quality_basis, a.verification_pending, a.last_observed_at, ",
-            "l.availability AS location_availability ",
+            "l.availability AS location_availability, l.lifecycle AS location_lifecycle ",
             "FROM assets a JOIN locations l ON l.id = a.location_id ",
             $tail
         )
@@ -118,6 +119,18 @@ pub struct LocationFailure {
     pub availability: Availability,
     pub reason: String,
     pub recorded_at: String,
+}
+
+/// References to one location's copies, read outside the catalog from the
+/// features that hold asset ids (Views, Projects, Results).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocationReferences {
+    /// The location's assets the references were read for.
+    pub assets: BTreeSet<Uuid>,
+    pub references: Vec<AssetReference>,
+    /// Reference kinds whose records were read.
+    pub consulted: Vec<ReferenceKind>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -447,7 +460,8 @@ impl Catalog {
     ///
     /// # Errors
     /// `Conflict` for a stale revision; `IdentityConflict` when the folder is not the
-    /// registered root (a remap review is required) or overlaps another location.
+    /// registered root (a remap review is required) or overlaps another location;
+    /// `InvalidInput` for a retired location.
     pub async fn reselect_location(
         &self,
         id: Uuid,
@@ -459,6 +473,7 @@ impl Catalog {
         require_root_identity(identity)?;
         let location = write_txn!(self, |conn| {
             let current = load_location(conn, id).await?;
+            require_active(&current, "reselected")?;
             require_revision(id, current.decision_revision, expected_revision)?;
             if !same_root(&current.identity, identity) {
                 return Err(scoped(
@@ -491,7 +506,8 @@ impl Catalog {
     /// location records the same reason as an issue at its root scope.
     ///
     /// # Errors
-    /// `InvalidInput` for an Available/Missing state or an empty reason.
+    /// `InvalidInput` for an Available/Missing state, an empty reason or a retired
+    /// location, which keeps the last-observed state it was retired with.
     pub async fn mark_location_unavailable(
         &self,
         id: Uuid,
@@ -509,6 +525,7 @@ impl Catalog {
         let reason = valid_reason(reason)?;
         let location = write_txn!(self, |conn| {
             let current = load_location(conn, id).await?;
+            require_active(&current, "marked unavailable")?;
             set_location_unavailable(conn, id, availability, reason).await?;
             if let Some(operation) = running_operation(conn, id).await? {
                 let op = load_operation_row(conn, operation).await?;
@@ -571,7 +588,8 @@ impl Catalog {
     /// Record a Running scan of the location (or a relative subtree).
     ///
     /// # Errors
-    /// `InvalidInput` for an escaping scope or when a scan is already running.
+    /// `InvalidInput` for an escaping scope, a retired location or when a scan is
+    /// already running.
     pub async fn begin_scan(
         &self,
         location_id: Uuid,
@@ -580,6 +598,7 @@ impl Catalog {
         let id = Uuid::new_v4();
         let operation = write_txn!(self, |conn| {
             let location = load_location(conn, location_id).await?;
+            require_active(&location, "rescanned")?;
             let scope = scope.unwrap_or_else(|| root_scope(&location.path));
             scope
                 .relative_path()
@@ -1548,8 +1567,11 @@ impl Catalog {
             let session_id = parse_uuid(&row.try_get::<String, _>("id")?)?;
             let date_basis: Option<String> = row.try_get("date_basis")?;
             sessions.push(session_id);
+            // Retired copies stay as history and count toward no total.
             for asset in current_member_assets(&mut conn, session_id).await? {
-                counted.push((date_basis.clone(), session_id, asset));
+                if asset.availability != Availability::Retired {
+                    counted.push((date_basis.clone(), session_id, asset));
+                }
             }
         }
         let placement: HashMap<Uuid, (Option<String>, Uuid)> = counted
@@ -1719,7 +1741,8 @@ impl Catalog {
     /// fingerprint-bound digest or is blocked with `NoByteProof`.
     ///
     /// # Errors
-    /// `Conflict` for a stale location revision; `InvalidInput` for a relative root.
+    /// `Conflict` for a stale location revision; `InvalidInput` for a relative root
+    /// or a retired location.
     pub async fn review_remap<P>(
         &self,
         location_id: Uuid,
@@ -1735,6 +1758,7 @@ impl Catalog {
         let (location, assets) = {
             let mut conn = self.reader().await?;
             let location = load_location(&mut conn, location_id).await?;
+            require_active(&location, "remapped")?;
             require_revision(location_id, location.decision_revision, expected_revision)?;
             let assets = location_assets(&mut conn, location_id).await?;
             (location, assets)
@@ -1769,7 +1793,8 @@ impl Catalog {
     ///
     /// # Errors
     /// `NoByteProof`/`IdentityConflict` for blocked or drifted items; `Conflict` for a
-    /// stale revision or changed asset set; `InvalidInput` for an applied review.
+    /// stale revision or changed asset set; `InvalidInput` for an applied review or a
+    /// retired location.
     pub async fn apply_remap<P>(
         &self,
         review_id: Uuid,
@@ -1784,6 +1809,7 @@ impl Catalog {
             let (review, state) = load_review(&mut conn, review_id).await?;
             require_reviewed(&state)?;
             let location = load_location(&mut conn, review.location_id).await?;
+            require_active(&location, "remapped")?;
             let assets = location_assets(&mut conn, review.location_id).await?;
             (review, location, assets)
         };
@@ -1809,6 +1835,7 @@ impl Catalog {
                 .await?;
             let applied = write_txn!(self, |conn| {
                 let current = load_location(conn, location.id).await?;
+                require_active(&current, "remapped")?;
                 require_revision(current.id, current.decision_revision, expected_revision)?;
                 require_reviewed(&load_review(conn, review_id).await?.1)?;
                 let assets = location_assets(conn, location.id).await?;
@@ -1853,6 +1880,126 @@ impl Catalog {
             return Vec::new();
         };
         vec![RemapBlock { asset_id: None, reason, message: error.to_string() }]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Retire location
+// ---------------------------------------------------------------------------
+
+impl Catalog {
+    /// Durably review Retire location: the location, its root and availability,
+    /// its recorded copies, the current sessions holding them and the Views,
+    /// Projects and Results `references` read for them. Only the review is written.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a retired location; `Conflict` with the location's current
+    /// revision when its copies changed after `references` were read.
+    pub async fn review_retire_location(
+        &self,
+        location_id: Uuid,
+        references: &LocationReferences,
+    ) -> Result<RetireReview> {
+        let read = canonical_references(references);
+        let review = write_txn!(self, |conn| {
+            let location = load_location(conn, location_id).await?;
+            require_active(&location, "retired again")?;
+            let assets = location_assets(conn, location_id).await?;
+            if assets.iter().map(|asset| asset.id).collect::<BTreeSet<_>>() != read.assets {
+                return Err(conflict(location.id, location.decision_revision));
+            }
+            let review = RetireReview {
+                id: Uuid::new_v4(),
+                location_id,
+                location_name: location.name.clone(),
+                root: location.path.clone(),
+                availability: location.availability,
+                expected_revision: location.decision_revision,
+                assets: retire_assets(&assets),
+                sessions: retire_sessions(conn, location_id).await?,
+                statement: retire_statement(&location, assets.len(), read.references.len()),
+                references: read.references,
+                consulted: read.consulted,
+            };
+            insert_retire_review(conn, &review).await?;
+            review
+        });
+        Ok(review)
+    }
+
+    /// # Errors
+    /// `NotFound` for an unknown review.
+    pub async fn retire_review(&self, id: Uuid) -> Result<RetireReview> {
+        let mut conn = self.reader().await?;
+        Ok(load_retire_review(&mut conn, id).await?.0)
+    }
+
+    /// Confirm a reviewed Retire location. The location becomes Retired with its
+    /// last-observed state; its copies read Retired, stay as history and leave every
+    /// total; its root stops counting as an overlap. No file changes.
+    ///
+    /// The copies, the sessions holding them and `references`, read again by the
+    /// caller, must still be exactly what the review named.
+    ///
+    /// # Errors
+    /// `Conflict` naming the location for a stale revision or review, or naming the
+    /// operation while a scan of the location is Running; `InvalidInput` for a
+    /// review of another location, an applied review or a retired location.
+    pub async fn retire_location(
+        &self,
+        review_id: Uuid,
+        location_id: Uuid,
+        expected_revision: Revision,
+        references: &LocationReferences,
+    ) -> Result<Location> {
+        let read = canonical_references(references);
+        let location = write_txn!(self, |conn| {
+            let (review, state) = load_retire_review(conn, review_id).await?;
+            if review.location_id != location_id {
+                return Err(LibraryError::InvalidInput(format!(
+                    "retire review {review_id} is for location {}",
+                    review.location_id
+                )));
+            }
+            if state != "reviewed" {
+                return Err(LibraryError::InvalidInput(format!(
+                    "retire review {review_id} was already confirmed"
+                )));
+            }
+            let location = load_location(conn, location_id).await?;
+            require_active(&location, "retired again")?;
+            require_revision(location_id, review.expected_revision, expected_revision)?;
+            require_revision(location_id, location.decision_revision, expected_revision)?;
+            if let Some(operation) = running_operation(conn, location_id).await? {
+                let op = load_operation_row(conn, operation).await?;
+                return Err(conflict(op.id, op.revision));
+            }
+            let assets = location_assets(conn, location_id).await?;
+            let unchanged = retire_assets(&assets) == review.assets
+                && assets.iter().map(|asset| asset.id).collect::<BTreeSet<_>>() == read.assets
+                && retire_sessions(conn, location_id).await? == review.sessions
+                && read.references == review.references
+                && read.consulted == review.consulted;
+            if !unchanged {
+                return Err(conflict(location_id, location.decision_revision));
+            }
+            sqlx::query(
+                "UPDATE locations SET lifecycle = 'retired', \
+                 decision_revision = decision_revision + 1 WHERE id = ?1",
+            )
+            .bind(location_id.to_string())
+            .execute(&mut *conn)
+            .await?;
+            sqlx::query(
+                "UPDATE retire_reviews SET state = 'applied', applied_at = ?1 WHERE id = ?2",
+            )
+            .bind(now()?)
+            .bind(review_id.to_string())
+            .execute(&mut *conn)
+            .await?;
+            load_location(conn, location_id).await?
+        });
+        Ok(location)
     }
 }
 
@@ -2030,6 +2177,125 @@ fn scoped(error: LibraryError, scope: NativePath, identity: Option<Uuid>) -> Lib
     LibraryError::Context { error: Box::new(error), scope, identity }
 }
 
+/// Refuse what a retired location never takes again, naming the location.
+fn require_active(location: &Location, refused: &str) -> Result<()> {
+    if location.lifecycle == LocationLifecycle::Active {
+        return Ok(());
+    }
+    Err(scoped(
+        LibraryError::InvalidInput(format!(
+            "location {name:?} is retired and cannot be {refused}; register its folder again \
+             as a new location",
+            name = location.name
+        )),
+        location.path.clone(),
+        Some(location.id),
+    ))
+}
+
+/// One canonical form of references read for a location: each record names only
+/// the location's assets it holds, sorted; records naming none are dropped.
+fn canonical_references(read: &LocationReferences) -> LocationReferences {
+    let mut references: Vec<AssetReference> = read
+        .references
+        .iter()
+        .filter_map(|reference| {
+            let held: BTreeSet<Uuid> =
+                reference.asset_ids.iter().copied().filter(|id| read.assets.contains(id)).collect();
+            (!held.is_empty()).then(|| AssetReference {
+                kind: reference.kind,
+                id: reference.id,
+                name: reference.name.clone(),
+                revision: reference.revision,
+                asset_ids: held.into_iter().collect(),
+            })
+        })
+        .collect();
+    references.sort_by_key(|reference| (reference.kind, reference.id, reference.revision));
+    references.dedup();
+    let consulted: BTreeSet<ReferenceKind> = read.consulted.iter().copied().collect();
+    LocationReferences {
+        assets: read.assets.clone(),
+        references,
+        consulted: consulted.into_iter().collect(),
+    }
+}
+
+fn retire_assets(assets: &[Asset]) -> Vec<RetireAsset> {
+    assets
+        .iter()
+        .map(|asset| RetireAsset { asset_id: asset.id, relative_path: asset.relative_path.clone() })
+        .collect()
+}
+
+/// Current sessions holding a location's copies, each naming those copies.
+async fn retire_sessions(
+    conn: &mut SqliteConnection,
+    location_id: Uuid,
+) -> Result<Vec<RetireSession>> {
+    let rows = sqlx::query(
+        "SELECT a.id AS asset_id, s.id AS session_id, s.grouping_revision FROM assets a \
+         JOIN sessions s ON s.id = a.session_id WHERE a.location_id = ?1 \
+         AND s.superseded_by IS NULL ORDER BY s.id, a.id",
+    )
+    .bind(location_id.to_string())
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut sessions: Vec<RetireSession> = Vec::new();
+    for row in &rows {
+        let session_id = parse_uuid(&row.try_get::<String, _>("session_id")?)?;
+        let asset_id = parse_uuid(&row.try_get::<String, _>("asset_id")?)?;
+        match sessions.last_mut() {
+            Some(last) if last.session_id == session_id => last.asset_ids.push(asset_id),
+            _ => sessions.push(RetireSession {
+                session_id,
+                grouping_revision: revision(row.try_get("grouping_revision")?)?,
+                asset_ids: vec![asset_id],
+            }),
+        }
+    }
+    Ok(sessions)
+}
+
+fn retire_statement(location: &Location, copies: usize, references: usize) -> String {
+    format!(
+        "Retiring {name:?} at {root} deletes, moves or modifies no file. Its {copies} recorded \
+         copies will read Retired and stay as history, leave captured, usable and Unreviewed \
+         totals and Project progress, and stay named unresolved in the {references} Views, \
+         Projects and Results that hold them. Its folder can then be registered again as a \
+         new location; no decision transfers to it.",
+        name = location.name,
+        root = location.path.display(),
+    )
+}
+
+async fn insert_retire_review(conn: &mut SqliteConnection, review: &RetireReview) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO retire_reviews (id, location_id, expected_revision, review, state, \
+         created_at) VALUES (?1, ?2, ?3, ?4, 'reviewed', ?5)",
+    )
+    .bind(review.id.to_string())
+    .bind(review.location_id.to_string())
+    .bind(db_revision(review.expected_revision)?)
+    .bind(to_json(review)?)
+    .bind(now()?)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+async fn load_retire_review(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+) -> Result<(RetireReview, String)> {
+    let row = sqlx::query("SELECT review, state FROM retire_reviews WHERE id = ?1")
+        .bind(id.to_string())
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or_else(|| LibraryError::NotFound(format!("retire review {id}")))?;
+    Ok((from_json(&row.try_get::<String, _>("review")?)?, row.try_get("state")?))
+}
+
 /// How a registered root that no longer resolves is treated by an overlap check.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum StaleRoots {
@@ -2103,7 +2369,8 @@ async fn plan_overlap(
     mode: StaleRoots,
 ) -> Result<OverlapPlan> {
     let rows = sqlx::query(
-        "SELECT * FROM locations WHERE volume_filesystem = ?1 AND volume_stable_id = ?2",
+        "SELECT * FROM locations WHERE volume_filesystem = ?1 AND volume_stable_id = ?2 \
+         AND lifecycle = 'active'",
     )
     .bind(identity.volume.filesystem.as_str())
     .bind(identity.volume.stable_id.as_deref())
@@ -2291,9 +2558,10 @@ fn folder_ancestry(canonical: &Path) -> Result<Option<Vec<(u64, u64)>>> {
 }
 
 /// A stale root on a volume or host without stable folder identity: nothing proves
-/// the candidate does not hold it at a new path. Reselecting it is the only way out;
-/// a folder made at its stored path would let a renamed or moved root be registered
-/// a second time where it now is.
+/// the candidate does not hold it at a new path. The ways out are reselecting it
+/// where it now is, or a reviewed Retire location when it was deleted or cannot be
+/// verified again; a folder made at its stored path would let a renamed or moved
+/// root be registered a second time where it now is.
 fn unprovable_stale_root(
     stale: &Location,
     error: &LibraryError,
@@ -2304,7 +2572,8 @@ fn unprovable_stale_root(
             "registered location {name:?} at {stored} no longer resolves ({error}), and without \
              a stable folder identity this folder cannot be proven not to hold it; reselect \
              {name:?} at its current folder (where it was renamed or moved to, or where its \
-             volume is now mounted), then try again",
+             volume is now mounted), or, if it was deleted or will not be verified again, \
+             review and confirm Retire location for {name:?}, then try again",
             name = stale.name,
             stored = stale.path.display(),
         )),
@@ -2339,7 +2608,8 @@ fn refuse_held_stale_roots(
             let message = format!(
                 "registered location {name:?} at {stored} no longer resolves ({error}), and this \
                  folder cannot be searched for it: {reason}; reselect {name:?} at its current \
-                 folder first, or choose a folder that can be searched completely",
+                 folder first, review and confirm Retire location for {name:?} if it was \
+                 deleted, or choose a folder that can be searched completely",
                 name = held.location.name,
                 stored = held.location.path.display(),
                 error = held.error,
@@ -2372,7 +2642,7 @@ fn search_folders(root: &Path, wanted: &[(u64, u64)], bounds: SearchBounds) -> F
     let too_slow = || {
         (std::time::Instant::now() >= deadline).then(|| {
             FolderSearch::Incomplete(format!(
-                "it took longer than {} s to search",
+                "it took longer than {} s to search, and the search can be retried",
                 bounds.time.as_secs()
             ))
         })
@@ -2518,6 +2788,7 @@ fn location_from_row(row: &SqliteRow) -> Result<Location> {
         decision_revision: revision(row.try_get("decision_revision")?)?,
         availability: from_text(&row.try_get::<String, _>("availability")?)?,
         last_observed_at: row.try_get("last_observed_at")?,
+        lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
     })
 }
 
@@ -3908,7 +4179,14 @@ async fn summarize_rows(
     Ok(summaries)
 }
 
+/// The worst availability among a session's copies that are not retired; Retired
+/// only when every copy is.
 fn session_availability(assets: &[Asset]) -> Availability {
+    let live: Vec<&Asset> =
+        assets.iter().filter(|asset| asset.availability != Availability::Retired).collect();
+    if live.is_empty() && !assets.is_empty() {
+        return Availability::Retired;
+    }
     [
         Availability::Offline,
         Availability::IdentityConflict,
@@ -3916,7 +4194,7 @@ fn session_availability(assets: &[Asset]) -> Availability {
         Availability::Missing,
     ]
     .into_iter()
-    .find(|state| assets.iter().any(|asset| asset.availability == *state))
+    .find(|state| live.iter().any(|asset| asset.availability == *state))
     .unwrap_or(Availability::Available)
 }
 
@@ -3956,9 +4234,13 @@ async fn location_assets(conn: &mut SqliteConnection, location_id: Uuid) -> Resu
 fn asset_from_row(row: &SqliteRow) -> Result<Asset> {
     let stored: Availability = from_text(&row.try_get::<String, _>("availability")?)?;
     let location: Availability = from_text(&row.try_get::<String, _>("location_availability")?)?;
-    let availability = match (location, stored) {
-        (Availability::Available, stored) | (_, stored @ Availability::Missing) => stored,
-        (location, _) => location,
+    let lifecycle: LocationLifecycle = from_text(&row.try_get::<String, _>("location_lifecycle")?)?;
+    // A retired location's copies read Retired, never Missing; the stored state
+    // stays as their last observation.
+    let availability = match (lifecycle, location, stored) {
+        (LocationLifecycle::Retired, _, _) => Availability::Retired,
+        (_, Availability::Available, stored) | (_, _, stored @ Availability::Missing) => stored,
+        (_, location, _) => location,
     };
     let quality_basis: Option<String> = row.try_get("quality_basis")?;
     Ok(Asset {
@@ -4016,6 +4298,16 @@ async fn check_expected_assets(
     let mut assets = Vec::with_capacity(expected.len());
     for item in expected {
         let asset = load_asset(conn, item.asset_id).await?;
+        if asset.availability == Availability::Retired {
+            return Err(scoped(
+                LibraryError::InvalidInput(format!(
+                    "asset {} is a copy of a retired location and takes no new decision",
+                    asset.id
+                )),
+                asset.relative_path,
+                Some(asset.id),
+            ));
+        }
         if asset.decision_revision != item.decision_revision
             || !fingerprint_matches(&asset.fingerprint, &item.fingerprint)
         {
@@ -4816,10 +5108,14 @@ impl CaptureView {
     ) -> Result<Self> {
         let candidates = candidates_in_sessions(conn, sessions).await?;
         let (key_of, copies) = logical_captures(conn, assets).await?;
-        let locations: BTreeSet<Uuid> = assets.iter().map(|asset| asset.location_id).collect();
+        // A retired location is never scanned again, so it keeps no scope provisional.
+        let locations: BTreeMap<Uuid, bool> = assets
+            .iter()
+            .map(|asset| (asset.location_id, asset.availability == Availability::Retired))
+            .collect();
         let mut provisional = HashMap::with_capacity(locations.len());
-        for id in locations {
-            provisional.insert(id, location_provisional(conn, id).await?);
+        for (id, retired) in locations {
+            provisional.insert(id, !retired && location_provisional(conn, id).await?);
         }
         Ok(Self { key_of, copies, candidates, provisional })
     }
@@ -4873,7 +5169,11 @@ impl CaptureView {
         let location_ids: BTreeSet<Uuid> = assets.iter().map(|asset| asset.location_id).collect();
         let provisional = location_ids.iter().any(|id| self.location_provisional(*id))
             || assets.iter().any(|asset| self.candidates.contains(&asset.id));
-        let captures: BTreeSet<&str> = assets.iter().map(|asset| self.key(asset)).collect();
+        let captures: BTreeSet<&str> = assets
+            .iter()
+            .filter(|asset| asset.availability != Availability::Retired)
+            .map(|asset| self.key(asset))
+            .collect();
         SessionSummary {
             asset_count: u64::try_from(assets.len()).unwrap_or(u64::MAX),
             capture_count: u64::try_from(captures.len()).unwrap_or(u64::MAX),
@@ -4915,42 +5215,52 @@ fn capture_quality(copies: &[&Asset]) -> ApplicableQuality {
     }
 }
 
-/// Every recorded copy, Missing included, of the given digests.
+/// Every recorded copy, Missing included, of the given digests in Active
+/// locations: a retired copy is never joined to another (no decision transfers).
 const COPIES_BY_DIGEST: &str = asset_sql!(
     "WHERE a.content_sha256 IN (SELECT value FROM json_each(?1)) \
-     AND a.session_id IS NOT NULL ORDER BY a.location_id, a.id"
+     AND a.session_id IS NOT NULL AND l.lifecycle = 'active' ORDER BY a.location_id, a.id"
 );
 
 const ASSETS_BY_IDS: &str = asset_sql!("WHERE a.id IN (SELECT value FROM json_each(?1))");
 
-/// Recorded copy links touching any of the given assets.
-const LINKS_OF_ASSETS: &str = "SELECT left_id, right_id FROM copy_links \
-     WHERE left_id IN (SELECT value FROM json_each(?1)) \
-     UNION SELECT left_id, right_id FROM copy_links \
-     WHERE right_id IN (SELECT value FROM json_each(?1))";
+/// Recorded copy links touching any of the given assets, between copies of
+/// Active locations only.
+const LINKS_OF_ASSETS: &str = "SELECT k.left_id, k.right_id FROM copy_links k \
+     WHERE k.left_id IN (SELECT value FROM json_each(?1)) AND NOT EXISTS (SELECT 1 \
+     FROM assets r JOIN locations l ON l.id = r.location_id \
+     WHERE r.id IN (k.left_id, k.right_id) AND l.lifecycle = 'retired') \
+     UNION SELECT k.left_id, k.right_id FROM copy_links k \
+     WHERE k.right_id IN (SELECT value FROM json_each(?1)) AND NOT EXISTS (SELECT 1 \
+     FROM assets r JOIN locations l ON l.id = r.location_id \
+     WHERE r.id IN (k.left_id, k.right_id) AND l.lifecycle = 'retired')";
 
 /// Assets of the request's sessions with a duplicate candidate: an asset in the
 /// same session (equal capture key) in another location with equal size and an
 /// equal, known capture start that has a time of day, where either side has no
 /// content digest and both can still be read. Unknown or date-only starts never
-/// match.
+/// match. Copies of retired locations are never candidates.
 const CANDIDATES_IN_SESSIONS: &str = "SELECT DISTINCT a.id FROM assets a CROSS JOIN assets b \
      ON b.session_id = a.session_id AND b.size_bytes = a.size_bytes \
      AND b.capture_start = a.capture_start \
-     AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id) \
+     AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id \
+     AND l.lifecycle = 'active') \
      WHERE a.session_id IN (SELECT value FROM json_each(?1)) \
+     AND a.location_id IN (SELECT l.id FROM locations l WHERE l.lifecycle = 'active') \
      AND instr(a.capture_start, ':') > 0 \
      AND a.availability <> 'missing' AND b.availability <> 'missing' \
      AND (a.content_sha256 IS NULL OR b.content_sha256 IS NULL)";
 
 /// The same matches driven from one location's assets, hashed or not, with each
-/// partner's location; `candidate` marks the duplicate-candidate pairs.
+/// partner's location; `candidate` marks the duplicate-candidate pairs. Partners
+/// in retired locations never match.
 const MATCHES_OF_LOCATION: &str = "SELECT a.id AS id, b.id AS partner, \
      b.location_id AS partner_location, \
      (a.content_sha256 IS NULL OR b.content_sha256 IS NULL) AS candidate \
      FROM assets a CROSS JOIN assets b ON b.session_id = a.session_id \
      AND b.size_bytes = a.size_bytes AND b.capture_start = a.capture_start \
-     AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id) \
+     AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id \
+     AND l.lifecycle = 'active') \
      WHERE a.location_id = ?1 AND a.session_id IS NOT NULL \
      AND instr(a.capture_start, ':') > 0 \
      AND a.availability <> 'missing' AND b.availability <> 'missing'";
@@ -4959,17 +5269,21 @@ const PENDING_IN_LOCATION: &str =
     "SELECT EXISTS (SELECT 1 FROM assets WHERE location_id = ?1 AND verification_pending = 1)";
 
 /// A hashed asset that is a copy of a logical capture: its digest is recorded in
-/// another location, or a recorded link joins it to a copy there.
+/// another Active location, or a recorded link joins it to a copy there.
 const IS_ALIASED_COPY: &str = "SELECT EXISTS (SELECT 1 FROM assets d \
-     WHERE d.content_sha256 = ?1 AND d.location_id <> ?2) \
-     OR EXISTS (SELECT 1 FROM copy_links WHERE left_id = ?3) \
-     OR EXISTS (SELECT 1 FROM copy_links WHERE right_id = ?3)";
+     JOIN locations l ON l.id = d.location_id \
+     WHERE d.content_sha256 = ?1 AND d.location_id <> ?2 AND l.lifecycle = 'active') \
+     OR EXISTS (SELECT 1 FROM copy_links k JOIN assets r ON r.id = k.right_id \
+     JOIN locations l ON l.id = r.location_id WHERE k.left_id = ?3 AND l.lifecycle = 'active') \
+     OR EXISTS (SELECT 1 FROM copy_links k JOIN assets r ON r.id = k.left_id \
+     JOIN locations l ON l.id = r.location_id WHERE k.right_id = ?3 AND l.lifecycle = 'active')";
 
 /// Record that an asset whose digest is about to change was byte-identical to its
-/// copies in other locations, so the pair stays one capture once they diverge.
+/// copies in other Active locations, so the pair stays one capture once they diverge.
 const LINK_IDENTICAL_COPIES: &str = "INSERT OR IGNORE INTO copy_links (left_id, right_id, cause) \
      SELECT min(?1, d.id), max(?1, d.id), 'identical' FROM assets d \
-     WHERE d.content_sha256 = ?2 AND d.location_id <> ?3";
+     JOIN locations l ON l.id = d.location_id \
+     WHERE d.content_sha256 = ?2 AND d.location_id <> ?3 AND l.lifecycle = 'active'";
 
 fn find_root(parent: &HashMap<Uuid, Uuid>, id: Uuid) -> Uuid {
     let mut root = id;
@@ -4990,8 +5304,9 @@ fn join_copies(parent: &mut HashMap<Uuid, Uuid>, left: Uuid, right: Uuid) {
 /// digest is recorded in at least two registered locations (Missing copies
 /// included) or a recorded link proves the pair: once byte-identical, or an
 /// unambiguous duplicate-candidate pair. A size/start match alone never joins. Any
-/// other asset is its own capture. Linked copies and their digest copies are
-/// followed until the capture is closed, so every entry point sees the same copies.
+/// other asset, and every copy of a retired location, is its own capture. Linked
+/// copies and their digest copies are followed until the capture is closed, so
+/// every entry point sees the same copies.
 async fn logical_captures(
     conn: &mut SqliteConnection,
     assets: &[Asset],
@@ -5006,6 +5321,10 @@ async fn logical_captures(
         let mut ids = BTreeSet::new();
         for asset in fresh.drain(..) {
             if nodes.contains_key(&asset.id) {
+                continue;
+            }
+            if asset.availability == Availability::Retired {
+                nodes.insert(asset.id, asset);
                 continue;
             }
             if let Some(digest) = &asset.fingerprint.content_sha256 {
@@ -6447,7 +6766,8 @@ mod tests {
         assert_eq!(digest_of(&moved.join("Dark_001.fits")), original, "originals unchanged");
     }
 
-    /// A search stops at its folder or time bound and is then incomplete, never absent.
+    /// A search stops at its folder or time bound and is then incomplete, never
+    /// absent. A search stopped by the time bound says it can be retried.
     #[cfg(unix)]
     #[test]
     fn the_stale_root_search_is_bounded_by_folders_and_time() {
@@ -6467,6 +6787,9 @@ mod tests {
         let FolderSearch::Incomplete(reason) = search(bounds(100, 0)) else {
             panic!("the time bound was not applied");
         };
-        assert!(reason.contains("longer than 0 s"), "{reason}");
+        assert!(
+            reason.contains("longer than 0 s") && reason.contains("can be retried"),
+            "{reason}"
+        );
     }
 }

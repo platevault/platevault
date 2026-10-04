@@ -18,8 +18,8 @@ use platevault_core::targets::{user_target, TargetQuery, TargetSearchHit, UserTa
 use platevault_core::{
     Asset, Association, AssociationState, CorrectionInput, Equipment, ErrorResponse, ExpectedAsset,
     ExpectedSession, LibraryError, Location, LocationRole, NativePath, Provenance, Quality,
-    RemapReview, Revision, ScanOperation, TargetCandidate, TargetCone, TargetCoverage,
-    TargetRecord,
+    RemapReview, RetireReview, Revision, ScanOperation, TargetCandidate, TargetCone,
+    TargetCoverage, TargetRecord,
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -464,6 +464,41 @@ pub async fn library_reselect_location(
         .reselect_location(location_id, expected_decision_revision, path)
         .await
         .map_err(fail_at(Some(location_id), scope))
+}
+
+/// Durable Retire location review naming the location, root, availability and
+/// decision revision and every asset, session, View, Project and Result that
+/// references its copies. Retiring deletes, moves or modifies no file.
+///
+/// # Errors
+/// `InvalidInput` for a retired location; `Conflict` when its copies changed while
+/// references were read; `NotFound` for an unknown location.
+#[tauri::command]
+pub async fn library_review_retire_location(
+    library: State<'_, Arc<Library>>,
+    location_id: Uuid,
+) -> Reply<RetireReview> {
+    library.review_retire_location(location_id).await.map_err(fail(Some(location_id)))
+}
+
+/// Confirm a reviewed Retire location: copies read Retired and leave integration
+/// totals, fixed Views name them unresolved and the root stops blocking
+/// registration. No file changes.
+///
+/// # Errors
+/// `Conflict` for a stale review or revision, or while a scan of the location is
+/// Running; `InvalidInput` for an applied review or a retired location.
+#[tauri::command]
+pub async fn library_retire_location(
+    library: State<'_, Arc<Library>>,
+    review_id: Uuid,
+    location_id: Uuid,
+    expected_revision: Revision,
+) -> Reply<Location> {
+    library
+        .retire_location(review_id, location_id, expected_revision)
+        .await
+        .map_err(fail(Some(location_id)))
 }
 
 /// Durable scan operations newest first, including interrupted ones.

@@ -92,6 +92,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ipc::library_update_location,
         ipc::library_retry_scope,
         ipc::library_reselect_location,
+        ipc::library_review_retire_location,
+        ipc::library_retire_location,
         ipc::library_list_operations,
     ]);
     #[cfg(feature = "dev-tools")]

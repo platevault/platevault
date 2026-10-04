@@ -3,8 +3,10 @@
 
 //! Application operations over the clean catalog. Image paths are read-only.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -18,14 +20,30 @@ use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
 };
 use crate::{
-    AssociationKind, AssociationState, Availability, FileIdentity, LibraryError, Location,
-    LocationRole, NativePath, ObservationFingerprint, RemapReview, Revision, ScanOperation,
-    ScanOptions, ScanState, TargetCandidate,
+    AssetReference, AssociationKind, AssociationState, Availability, FileIdentity, LibraryError,
+    Location, LocationRole, NativePath, ObservationFingerprint, ReferenceKind, RemapReview,
+    RetireReview, Revision, ScanOperation, ScanOptions, ScanState, TargetCandidate,
 };
 use persistence_library::{
-    Catalog, CorrectionOutcome, LocationRegistration, SessionDetail, SessionQuery,
-    SuggestedAssociation,
+    Catalog, CorrectionOutcome, LocationReferences, LocationRegistration, SessionDetail,
+    SessionQuery, SuggestedAssociation,
 };
+
+/// What [`AssetReferences::references_to`] returns.
+pub type ReferencesFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Vec<AssetReference>, LibraryError>> + Send + 'a>>;
+
+/// The seam VSEL (fixed View memberships and prepared revisions), PRJ (Projects)
+/// and RES (Results) implement for the records that hold library asset ids.
+/// Retire location reads every registered source to name those records in its
+/// review, and reads them again on confirmation, refusing when they changed. The
+/// library never writes them: a retired copy stays in them, reading Retired.
+pub trait AssetReferences: Send + Sync + 'static {
+    /// The kind of record this source holds.
+    fn kind(&self) -> ReferenceKind;
+    /// Every record that holds any of `assets`, each naming which of them.
+    fn references_to<'a>(&'a self, assets: &'a BTreeSet<Uuid>) -> ReferencesFuture<'a>;
+}
 
 pub struct Library {
     catalog: Arc<Catalog>,
@@ -34,6 +52,7 @@ pub struct Library {
     saved_targets: Mutex<Option<(u64, Arc<Vec<TargetCandidate>>)>>,
     scans: Mutex<HashMap<Uuid, ScanControl>>,
     progress: broadcast::Sender<ScanOperation>,
+    references: tokio::sync::RwLock<Vec<Arc<dyn AssetReferences>>>,
     /// Test-only: the next N assessments are refused as if a concurrent writer
     /// had committed between the session read and the record.
     #[cfg(test)]
@@ -106,6 +125,7 @@ impl Library {
             scans: Mutex::new(HashMap::new()),
             saved_targets: Mutex::new(None),
             progress,
+            references: tokio::sync::RwLock::new(Vec::new()),
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         }))
@@ -169,6 +189,53 @@ impl Library {
         let root = path.to_path_buf()?;
         let identity = blocking(move || inventory::observe_root_identity(&root)).await?;
         self.catalog.reselect_location(id, expected, &path, &identity).await
+    }
+
+    /// Register a feature's records that hold asset ids (see [`AssetReferences`]).
+    pub async fn register_references(&self, source: Arc<dyn AssetReferences>) {
+        self.references.write().await.push(source);
+    }
+
+    /// Durably review Retire location, naming the Views, Projects and Results of
+    /// every registered source that hold its copies. No file or record changes.
+    ///
+    /// # Errors
+    /// Returns catalog or reference-source errors; see
+    /// [`Catalog::review_retire_location`].
+    pub async fn review_retire_location(
+        &self,
+        location_id: Uuid,
+    ) -> Result<RetireReview, LibraryError> {
+        let references = self.read_references(location_id).await?;
+        self.catalog.review_retire_location(location_id, &references).await
+    }
+
+    /// Confirm a reviewed Retire location after reading every reference again.
+    ///
+    /// # Errors
+    /// `Conflict` when the review is stale or a scan of the location is Running;
+    /// see [`Catalog::retire_location`].
+    pub async fn retire_location(
+        &self,
+        review_id: Uuid,
+        location_id: Uuid,
+        expected: Revision,
+    ) -> Result<Location, LibraryError> {
+        let references = self.read_references(location_id).await?;
+        self.catalog.retire_location(review_id, location_id, expected, &references).await
+    }
+
+    async fn read_references(&self, location_id: Uuid) -> Result<LocationReferences, LibraryError> {
+        let assets: BTreeSet<Uuid> =
+            self.catalog.location_assets(location_id).await?.iter().map(|asset| asset.id).collect();
+        let sources = self.references.read().await.clone();
+        let mut references = Vec::new();
+        let mut consulted = Vec::with_capacity(sources.len());
+        for source in sources {
+            consulted.push(source.kind());
+            references.extend(source.references_to(&assets).await?);
+        }
+        Ok(LocationReferences { assets, references, consulted })
     }
 
     /// Return only after the Running operation is durably recorded.

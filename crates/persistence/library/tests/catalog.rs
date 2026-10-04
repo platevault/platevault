@@ -6,21 +6,23 @@
 //! the probe reads actual no-follow file and folder metadata.
 #![cfg(unix)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use persistence_library::{
-    Catalog, LocationRegistration, SessionQuery, SourceProbe, SuggestedAssociation,
+    Catalog, LocationReferences, LocationRegistration, SessionQuery, SourceProbe,
+    SuggestedAssociation,
 };
 use platevault_model::{
-    ApplicableQuality, Asset, Association, AssociationKind, AssociationState, Availability,
-    CaptureKey, CaptureMetadata, CorrectionInput, EvidenceItem, ExpectedAsset, ExpectedSession,
-    FileIdentity, GroupingResult, ImageFormat, LibraryError, Location, LocationRole, NativePath,
-    ObservationFingerprint, PathSensitivity, Provenance, Quality, RemapBlockReason, Revision,
-    ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState,
-    Session, SessionCandidate, TargetAlias, TargetCandidate, VolumeIdentity,
+    ApplicableQuality, Asset, AssetReference, Association, AssociationKind, AssociationState,
+    Availability, CaptureKey, CaptureMetadata, CorrectionInput, EvidenceItem, ExpectedAsset,
+    ExpectedSession, FileIdentity, GroupingResult, ImageFormat, LibraryError, Location,
+    LocationLifecycle, LocationRole, NativePath, ObservationFingerprint, PathSensitivity,
+    Provenance, Quality, ReferenceKind, RemapBlockReason, Revision, ScanBatch, ScanFile, ScanIssue,
+    ScanObservation, ScanOperation, ScanProgress, ScanState, Session, SessionCandidate,
+    TargetAlias, TargetCandidate, VolumeIdentity,
 };
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -1830,6 +1832,312 @@ async fn without_folder_identity_a_stale_root_refuses_and_names_the_way_out() {
     let error = catalog.register_location(&unstable(&renamed)).await.unwrap_err();
     assert!(error.to_string().contains("folder overlaps"), "{error}");
     assert_eq!(sha_of(&renamed.join("Ha_001.fits")), frame, "originals unchanged");
+}
+
+/// References read outside the catalog for `assets`: every kind consulted.
+fn read_references(assets: &[Asset], references: Vec<AssetReference>) -> LocationReferences {
+    LocationReferences {
+        assets: assets.iter().map(|asset| asset.id).collect(),
+        references,
+        consulted: vec![ReferenceKind::View, ReferenceKind::Project, ReferenceKind::Result],
+    }
+}
+
+/// A fixed View membership holding `assets` at `revision`.
+fn fixed_view(assets: &[Asset], revision: Revision) -> AssetReference {
+    AssetReference {
+        kind: ReferenceKind::View,
+        id: Uuid::from_u128(0x7000),
+        name: "NGC 7000 Ha".into(),
+        revision,
+        asset_ids: ids_of(assets).into_iter().collect(),
+    }
+}
+
+fn ids_of(assets: &[Asset]) -> BTreeSet<Uuid> {
+    assets.iter().map(|asset| asset.id).collect()
+}
+
+#[tokio::test]
+async fn a_reviewed_retire_names_every_reference_and_changes_no_file() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"frame one bytes");
+    fx.write("Ha_002.fits", b"frame two bytes");
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &["Ha_001.fits", "Ha_002.fits"]).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    catalog.set_quality(&[expected(&assets[0])], Quality::Usable, DiskProbe).await.unwrap();
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
+
+    // The location goes offline; its copies are fixed View members.
+    let unplugged = fx.root.with_extension("unplugged");
+    std::fs::rename(&fx.root, &unplugged).unwrap();
+    let location = catalog
+        .mark_location_unavailable(location.id, Availability::Offline, "unplugged")
+        .await
+        .unwrap();
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let view = fixed_view(&assets, 3);
+    let references = read_references(&assets, vec![view.clone()]);
+    let review = catalog.review_retire_location(location.id, &references).await.unwrap();
+    assert_eq!(
+        (review.location_id, review.location_name.as_str(), &review.root),
+        (location.id, "Astro-T7/Captures", &location.path)
+    );
+    assert_eq!(
+        (review.availability, review.expected_revision),
+        (Availability::Offline, location.decision_revision)
+    );
+    let named: BTreeSet<Uuid> = review.assets.iter().map(|copy| copy.asset_id).collect();
+    assert_eq!(named, ids_of(&assets));
+    assert_eq!(review.sessions.len(), 1, "{:?}", review.sessions);
+    assert_eq!(review.sessions[0].session_id, session.id);
+    assert_eq!(review.sessions[0].grouping_revision, session.grouping_revision);
+    assert_eq!(review.references, vec![view.clone()]);
+    assert_eq!(review.consulted, references.consulted);
+    assert!(
+        review.statement.contains("deletes, moves or modifies no file"),
+        "{}",
+        review.statement
+    );
+    let stored = catalog.retire_review(review.id).await.unwrap();
+    assert_eq!((stored.references, stored.assets.len()), (review.references.clone(), 2), "durable");
+
+    // A stale revision, or a View that changed since the review, is refused.
+    let stale = location.decision_revision + 1;
+    let error = catalog.retire_location(review.id, location.id, stale, &references).await;
+    assert_eq!(kind(&error.unwrap_err()), "conflict");
+    let refreshed = read_references(&assets, vec![fixed_view(&assets, 4)]);
+    let error =
+        catalog.retire_location(review.id, location.id, review.expected_revision, &refreshed);
+    assert_eq!(kind(&error.await.unwrap_err()), "conflict");
+    let unchanged = catalog.location(location.id).await.unwrap();
+    assert_eq!(
+        (unchanged.lifecycle, unchanged.decision_revision),
+        (LocationLifecycle::Active, location.decision_revision),
+        "refusals change nothing"
+    );
+    assert!(catalog
+        .location_assets(location.id)
+        .await
+        .unwrap()
+        .iter()
+        .all(|asset| asset.availability == Availability::Offline));
+
+    let retired = catalog
+        .retire_location(review.id, location.id, review.expected_revision, &references)
+        .await
+        .unwrap();
+    assert_eq!(retired.lifecycle, LocationLifecycle::Retired);
+    assert_eq!(retired.decision_revision, location.decision_revision + 1);
+    assert_eq!(retired.availability, Availability::Offline, "last-observed state kept");
+
+    // Its copies read Retired, never Missing, and keep their decisions as history.
+    let history = catalog.location_assets(location.id).await.unwrap();
+    assert_eq!(ids_of(&history), ids_of(&assets));
+    assert!(history.iter().all(|asset| asset.availability == Availability::Retired));
+    assert_eq!(catalog.asset(assets[0].id).await.unwrap().quality, Quality::Usable);
+
+    // They leave every integration total; the session keeps its exact membership.
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!(
+        coverage.contributions.is_empty()
+            && coverage.covered_location_ids.is_empty()
+            && !coverage.provisional,
+        "{coverage:?}"
+    );
+    let detail = catalog.session(session.id).await.unwrap();
+    assert_eq!(detail.summary.session.asset_ids, session.asset_ids, "membership unchanged");
+    assert_eq!(
+        (detail.summary.capture_count, detail.summary.availability, detail.summary.provisional),
+        (0, Availability::Retired, false)
+    );
+
+    // The review is single-use, and a retired location is never reselected,
+    // rescanned, remapped or decided on, even where its folder returns.
+    let again =
+        catalog.retire_location(review.id, location.id, retired.decision_revision, &references);
+    assert_eq!(kind(&again.await.unwrap_err()), "invalid_input");
+    std::fs::rename(&unplugged, &fx.root).unwrap();
+    refuses_reuse_of_retired(&catalog, &fx, &retired, &history[1]).await;
+    assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
+/// A retired location is never reselected, rescanned, remapped or decided on,
+/// even where its folder returns, and the refusals change nothing.
+async fn refuses_reuse_of_retired(
+    catalog: &Catalog,
+    fx: &Fixture,
+    retired: &Location,
+    copy: &Asset,
+) {
+    let before = tree(&fx.root);
+    let root = NativePath::from_path(&fx.root);
+    let identity = folder_identity(&fx.root).unwrap();
+    let revision = retired.decision_revision;
+    let error =
+        catalog.reselect_location(retired.id, revision, &root, &identity).await.unwrap_err();
+    assert_eq!(kind(&error), "invalid_input");
+    assert!(error.to_string().contains("retired"), "{error}");
+    assert_eq!(kind(&catalog.begin_scan(retired.id, None).await.unwrap_err()), "invalid_input");
+    let night = NativePath::from_path(Path::new("night1"));
+    assert_eq!(kind(&catalog.retry_scope(retired.id, night).await.unwrap_err()), "invalid_input");
+    let remap = catalog.review_remap(retired.id, revision, &root, &identity, DiskProbe).await;
+    assert_eq!(kind(&remap.unwrap_err()), "invalid_input");
+    let decided = catalog.set_quality(&[expected(copy)], Quality::Usable, DiskProbe).await;
+    assert_eq!(kind(&decided.unwrap_err()), "invalid_input");
+    assert_eq!(catalog.location(retired.id).await.unwrap().decision_revision, revision);
+    assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
+#[tokio::test]
+async fn a_retired_folder_registers_again_and_counts_each_capture_once() {
+    let fx = Fixture::new();
+    let names = ["Ha_001.fits", "Ha_002.fits"];
+    fx.write(names[0], b"frame one bytes");
+    fx.write(names[1], b"frame two bytes");
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &names).await;
+    let retired_assets = catalog.location_assets(location.id).await.unwrap();
+    let reviewed = by_name(&retired_assets, names[0]).clone();
+    catalog.set_quality(&[expected(&reviewed)], Quality::Usable, DiskProbe).await.unwrap();
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
+    let totals = |coverage: &platevault_model::TargetCoverage| {
+        (
+            coverage_sum(coverage, |c| c.captured_seconds),
+            coverage_sum(coverage, |c| c.usable_seconds),
+            coverage_sum(coverage, |c| c.unreviewed_seconds),
+        )
+    };
+    assert_eq!(
+        totals(&catalog.target_coverage(saved.candidate.id).await.unwrap()),
+        (600.0, 300.0, 300.0)
+    );
+
+    // The root is lost while a scan runs; that scan settles as Failed.
+    let unplugged = fx.root.with_extension("unplugged");
+    std::fs::rename(&fx.root, &unplugged).unwrap();
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let location = catalog
+        .mark_location_unavailable(location.id, Availability::Offline, "unplugged")
+        .await
+        .unwrap();
+    let references = read_references(&retired_assets, Vec::new());
+    let review = catalog.review_retire_location(location.id, &references).await.unwrap();
+    // Retirement waits for the Running scan of the location, naming it.
+    let error = catalog
+        .retire_location(review.id, location.id, review.expected_revision, &references)
+        .await
+        .unwrap_err();
+    let response = error.response(None, None);
+    assert_eq!((response.kind.as_str(), response.identity), ("conflict", Some(operation.id)));
+    catalog.abort_scan(operation.id, ScanState::Failed, "volume gone").await.unwrap();
+    catalog
+        .retire_location(review.id, location.id, review.expected_revision, &references)
+        .await
+        .unwrap();
+
+    // The same folder returns and registers again as a new location.
+    std::fs::rename(&unplugged, &fx.root).unwrap();
+    let again = catalog.register_location(&fx.registration()).await.unwrap();
+    assert_ne!(again.id, location.id);
+    assert_eq!(again.lifecycle, LocationLifecycle::Active);
+    scan(&catalog, &fx, &again, &names).await;
+    let fresh = catalog.location_assets(again.id).await.unwrap();
+    assert!(ids_of(&fresh).is_disjoint(&ids_of(&retired_assets)), "new asset identities");
+    assert!(
+        fresh.iter().all(|asset| asset.quality == Quality::Unreviewed
+            && asset.availability == Availability::Available),
+        "no retired decision transfers"
+    );
+
+    // Each capture counts once: retired copies are neither totals nor candidates.
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert_eq!(totals(&coverage), (600.0, 0.0, 600.0), "{coverage:?}");
+    assert_eq!(coverage.covered_location_ids, vec![again.id]);
+    assert!(!coverage.provisional, "{coverage:?}");
+    let summaries = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    let counted: u64 = summaries.iter().map(|summary| summary.capture_count).sum();
+    assert_eq!(counted, 2, "{summaries:?}");
+    assert!(summaries.iter().all(|summary| !summary.provisional), "{summaries:?}");
+
+    // A reviewed copy is never joined to its byte-identical retired twin.
+    let renewed = by_name(&fresh, names[0]).clone();
+    let decided = catalog.set_quality(&[expected(&renewed)], Quality::Usable, DiskProbe).await;
+    let digest = decided.unwrap()[0].fingerprint.content_sha256.clone();
+    let twin = catalog.asset(reviewed.id).await.unwrap();
+    assert_eq!(digest, twin.fingerprint.content_sha256, "byte-identical");
+    let holder = summaries
+        .iter()
+        .find(|summary| summary.session.asset_ids.contains(&renewed.id))
+        .unwrap()
+        .session
+        .id;
+    let members = catalog.session(holder).await.unwrap().members;
+    let member = members.iter().find(|member| member.copies.contains(&renewed.id)).unwrap();
+    assert_eq!(member.copies, vec![renewed.id], "{members:?}");
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert_eq!(totals(&coverage), (600.0, 300.0, 300.0), "{coverage:?}");
+    assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
+#[tokio::test]
+async fn a_deleted_root_without_folder_identity_is_freed_by_a_reviewed_retire() {
+    let fx = Fixture::new();
+    let volume = fx.root.parent().unwrap().to_path_buf();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    // No stable folder identity, as on Windows NTFS or exFAT, msdos and SMB volumes.
+    let unstable = |path: &Path| {
+        let mut registration = registration_at(path);
+        registration.identity.volume.file_ids_stable = false;
+        registration
+    };
+    let test = volume.join("Test");
+    std::fs::create_dir_all(&test).unwrap();
+    let test_root = catalog.register_location(&unstable(&test)).await.unwrap();
+    // The root is deleted: no folder can ever be reselected for it.
+    std::fs::remove_dir_all(&test).unwrap();
+    let flats = volume.join("Flats");
+    std::fs::create_dir_all(&flats).unwrap();
+    std::fs::write(flats.join("Flat_001.fits"), b"flat frame bytes").unwrap();
+    let flat = sha_of(&flats.join("Flat_001.fits"));
+
+    // The refusal names both ways out.
+    let error = catalog.register_location(&unstable(&flats)).await.unwrap_err();
+    assert_eq!(kind(&error), "identity_conflict");
+    let message = error.to_string();
+    assert!(
+        message.contains("\"Test\"")
+            && message.contains("reselect")
+            && message.contains("Retire location"),
+        "{message}"
+    );
+    assert!(!message.contains("restore"), "{message}");
+
+    // Recovery: review and confirm Retire location for the deleted root.
+    let references = read_references(&[], Vec::new());
+    let review = catalog.review_retire_location(test_root.id, &references).await.unwrap();
+    assert_eq!((&review.root, review.assets.len()), (&test_root.path, 0));
+    catalog
+        .retire_location(review.id, test_root.id, test_root.decision_revision, &references)
+        .await
+        .unwrap();
+    let flats_root = catalog.register_location(&unstable(&flats)).await.unwrap();
+    // The deleted folder, made again, is a new location.
+    std::fs::create_dir_all(&test).unwrap();
+    let again = catalog.register_location(&unstable(&test)).await.unwrap();
+    assert_ne!(again.id, test_root.id);
+    assert_eq!(catalog.list_locations().await.unwrap().len(), 3);
+    assert_eq!(flats_root.lifecycle, LocationLifecycle::Active);
+    assert_eq!(sha_of(&flats.join("Flat_001.fits")), flat, "originals unchanged");
 }
 
 #[tokio::test]

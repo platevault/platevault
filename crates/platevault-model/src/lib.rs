@@ -341,6 +341,9 @@ pub enum Availability {
     Missing,
     Unreadable,
     IdentityConflict,
+    /// A copy of a retired location: history only. It is never offered as an
+    /// input, counted as available or included in any integration total.
+    Retired,
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -380,6 +383,16 @@ pub enum ImageFormat {
     Unsupported,
 }
 
+/// Whether a location still takes part in the library. A Retired location left
+/// through a reviewed Retire location; it is never reselected, rescanned or
+/// remapped, and its root no longer blocks registering an overlapping folder.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LocationLifecycle {
+    Active,
+    Retired,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
@@ -389,8 +402,10 @@ pub struct Location {
     pub role: LocationRole,
     pub identity: FileIdentity,
     pub decision_revision: Revision,
+    /// Last-observed access state; a retired location keeps the one it had.
     pub availability: Availability,
     pub last_observed_at: Option<String>,
+    pub lifecycle: LocationLifecycle,
 }
 
 /// Serialization adapter over the canonical `metadata_core` extractor contract.
@@ -929,4 +944,68 @@ pub enum RemapBlockReason {
     Collision,
     Drift,
     IdentityConflict,
+}
+
+/// Kind of a record outside the library that holds library asset ids.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReferenceKind {
+    /// A fixed View membership or one of its prepared revisions (VSEL, PREP).
+    View,
+    Project,
+    /// A Result's recorded lineage.
+    Result,
+}
+
+/// One record of another feature naming the library assets it holds. The
+/// library reads these to review Retire location and never writes them.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetReference {
+    pub kind: ReferenceKind,
+    pub id: Uuid,
+    pub name: String,
+    /// The record's own revision, such as a View's membership or prepared revision.
+    pub revision: Revision,
+    /// The referenced assets among those asked about.
+    pub asset_ids: Vec<Uuid>,
+}
+
+/// A recorded copy of a location under a Retire location review.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetireAsset {
+    pub asset_id: Uuid,
+    pub relative_path: NativePath,
+}
+
+/// A current session holding copies of a location under a Retire location review.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetireSession {
+    pub session_id: Uuid,
+    pub grouping_revision: Revision,
+    /// The location's copies among the session's members.
+    pub asset_ids: Vec<Uuid>,
+}
+
+/// Durable review of Retire location (LIB-FR-15): the location, its root and
+/// availability, and every asset, session, View, Project and Result referencing
+/// its copies. Retiring deletes, moves or modifies no file.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetireReview {
+    pub id: Uuid,
+    pub location_id: Uuid,
+    pub location_name: String,
+    pub root: NativePath,
+    pub availability: Availability,
+    pub expected_revision: Revision,
+    pub assets: Vec<RetireAsset>,
+    pub sessions: Vec<RetireSession>,
+    pub references: Vec<AssetReference>,
+    /// Reference kinds whose records were read; a kind not listed was not checked.
+    pub consulted: Vec<ReferenceKind>,
+    /// What retiring does and does not change, for the reviewer.
+    pub statement: String,
 }

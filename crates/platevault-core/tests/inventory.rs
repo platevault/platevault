@@ -301,6 +301,7 @@ fn location(root: &Path) -> Location {
         decision_revision: 1,
         availability: Availability::Available,
         last_observed_at: None,
+        lifecycle: LocationLifecycle::Active,
     }
 }
 
@@ -766,6 +767,7 @@ fn roots_without_stable_folder_ids_are_refused_before_any_batch() {
             decision_revision: 1,
             availability: Availability::Available,
             last_observed_at: None,
+            lifecycle: LocationLifecycle::Active,
         };
         let (scanned, batches) = run(&location, &ScanOptions::default());
         assert_eq!(kind(&scanned.unwrap_err()), "identity_conflict", "{filesystem}");
