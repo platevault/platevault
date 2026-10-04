@@ -1748,3 +1748,97 @@ async fn terminal_pass_reuses_batch_proof_and_reads_each_decided_frame_once_per_
         ApplicableQuality::ChangedContent { previous: Quality::Usable }
     );
 }
+
+fn coverage_sum(
+    coverage: &platevault_model::TargetCoverage,
+    pick: fn(&platevault_model::CoverageContribution) -> f64,
+) -> f64 {
+    coverage.contributions.iter().map(pick).sum()
+}
+
+#[tokio::test]
+async fn decided_frames_stay_verification_pending_until_their_rehash_finishes() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"reviewed frame");
+    fx.write("Ha_002.fits", b"other frame");
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    let names = ["Ha_001.fits", "Ha_002.fits"];
+    scan(&catalog, &fx, &location, &names).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let reviewed = by_name(&assets, "Ha_001.fits").clone();
+    catalog.set_quality(&[expected(&reviewed)], Quality::Usable, DiskProbe).await.unwrap();
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
+    let usable =
+        |coverage: &platevault_model::TargetCoverage| coverage_sum(coverage, |c| c.usable_seconds);
+    let settled = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!((usable(&settled) - 300.0).abs() < 1e-9 && !settled.provisional, "{settled:?}");
+
+    // A readable rescan has begun but has not rehashed the reviewed frame yet.
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let root = DiskProbe.root_identity(&location).unwrap();
+    let first = ScanBatch { files: vec![fx.scan_file("Ha_002.fits")], ..ScanBatch::default() };
+    catalog.apply_scan_batch(operation.id, &root, &first, group).await.unwrap();
+    let pending = |asset: &Asset| {
+        asset.applicable_quality()
+            == ApplicableQuality::VerificationPending { previous: Quality::Usable }
+            && asset.quality == Quality::Usable
+    };
+    let counted = |coverage: &platevault_model::TargetCoverage| {
+        coverage.contributions.iter().map(|c| c.verification_pending).sum::<u64>()
+    };
+    assert!(pending(&catalog.asset(reviewed.id).await.unwrap()));
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!(usable(&coverage).abs() < 1e-9 && coverage.provisional, "{coverage:?}");
+    assert_eq!(counted(&coverage), 1, "coverage reports the pending frame");
+
+    // Canceling before the rehash leaves it pending, across a restart too.
+    catalog.abort_scan(operation.id, ScanState::Canceled, "canceled by user").await.unwrap();
+    catalog.close().await.unwrap();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    assert!(pending(&catalog.asset(reviewed.id).await.unwrap()));
+    assert!(catalog.target_coverage(saved.candidate.id).await.unwrap().provisional);
+
+    // A failed rehash (the bytes no longer match the observed stats) stays pending.
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let mut stale = fx.scan_file("Ha_001.fits");
+    stale.fingerprint.modified_ns += 1;
+    let files = vec![stale, fx.scan_file("Ha_002.fits")];
+    let batch = ScanBatch { files: files.clone(), ..ScanBatch::default() };
+    catalog.apply_scan_batch(operation.id, &root, &batch, group).await.unwrap();
+    let observation = ScanObservation {
+        location_id: location.id,
+        root_identity: root.clone(),
+        files,
+        issues: Vec::new(),
+        complete_scopes: vec![root_scope()],
+        incomplete_scopes: Vec::new(),
+        progress: ScanProgress::default(),
+        state: ScanState::Completed,
+    };
+    let failed = catalog
+        .finish_scan(
+            operation.id,
+            &observation,
+            |location| DiskProbe.root_identity(location),
+            group,
+        )
+        .await
+        .unwrap();
+    assert_eq!(failed.state, ScanState::Partial);
+    assert!(pending(&catalog.asset(reviewed.id).await.unwrap()));
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!(usable(&coverage).abs() < 1e-9 && coverage.provisional, "{coverage:?}");
+    assert_eq!(counted(&coverage), 1);
+
+    // A rescan whose rehash finishes makes the decision applicable again.
+    scan(&catalog, &fx, &location, &names).await;
+    let verified = catalog.asset(reviewed.id).await.unwrap();
+    assert_eq!(verified.applicable_quality(), ApplicableQuality::Usable);
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!((usable(&coverage) - 300.0).abs() < 1e-9 && !coverage.provisional, "{coverage:?}");
+    assert_eq!(tree(&fx.root), before, "sources unchanged");
+}

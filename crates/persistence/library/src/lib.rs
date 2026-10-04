@@ -39,7 +39,7 @@ use uuid::Uuid;
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
 
 const SCHEMA: &str = include_str!("schema.sql");
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -64,7 +64,8 @@ macro_rules! asset_sql {
         concat!(
             "SELECT a.id, a.location_id, a.path_key, a.fingerprint, a.format, a.availability, ",
             "a.observed, a.effective, a.observation_revision, a.decision_revision, a.quality, ",
-            "a.quality_basis, a.last_observed_at, l.availability AS location_availability ",
+            "a.quality_basis, a.verification_pending, a.last_observed_at, ",
+            "l.availability AS location_availability ",
             "FROM assets a JOIN locations l ON l.id = a.location_id ",
             $tail
         )
@@ -593,6 +594,7 @@ impl Catalog {
             drop(writer);
             return Err(scoped(error, location.path, Some(location.id)));
         }
+        arm_verification(&mut txn, &op).await?;
         let changed = observe_batch(&mut txn, &op, &location, &files, &issues, &digests).await?;
         sqlx::query(
             "UPDATE scan_operations SET progress = ?1, revision = revision + 1 WHERE id = ?2",
@@ -1908,6 +1910,8 @@ fn location_from_row(row: &SqliteRow) -> Result<Location> {
     })
 }
 
+/// Provisional until the latest scan completed and every decided asset it covered
+/// finished its rehash.
 async fn location_provisional(conn: &mut SqliteConnection, id: Uuid) -> Result<bool> {
     let state: Option<String> = sqlx::query_scalar(
         "SELECT state FROM scan_operations WHERE location_id = ?1 ORDER BY sequence DESC LIMIT 1",
@@ -1915,7 +1919,50 @@ async fn location_provisional(conn: &mut SqliteConnection, id: Uuid) -> Result<b
     .bind(id.to_string())
     .fetch_optional(&mut *conn)
     .await?;
-    Ok(state.as_deref() != Some("completed"))
+    let pending: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM assets WHERE location_id = ?1 AND verification_pending = 1)",
+    )
+    .bind(id.to_string())
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(state.as_deref() != Some("completed") || pending)
+}
+
+/// The first readable pass of an operation (its first verified batch, or its
+/// terminal pass) marks every decided asset in its scope verification pending.
+/// Each successful rehash in this operation clears the mark; a canceled scan or a
+/// failed rehash leaves it. Offline scans never get here, so offline inputs keep
+/// their last-observed quality.
+async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Result<()> {
+    let armed = sqlx::query(
+        "UPDATE scan_operations SET verification_armed = 1 WHERE id = ?1 AND verification_armed = 0",
+    )
+    .bind(op.id.to_string())
+    .execute(&mut *conn)
+    .await?
+    .rows_affected();
+    if armed == 0 {
+        return Ok(());
+    }
+    let key = path_key(&op.scope);
+    let rows = sqlx::query(
+        "SELECT id, path_key FROM assets WHERE location_id = ?1 AND quality <> 'unreviewed' \
+         AND availability <> 'missing' AND substr(path_key, 1, ?2) = ?3",
+    )
+    .bind(op.location_id.to_string())
+    .bind(i64::try_from(key.len()).map_err(|_| LibraryError::InvalidInput("path too long".into()))?)
+    .bind(key)
+    .fetch_all(&mut *conn)
+    .await?;
+    for row in &rows {
+        if within(&path_from_key(&row.try_get::<Vec<u8>, _>("path_key")?)?, &op.scope) {
+            sqlx::query("UPDATE assets SET verification_pending = 1 WHERE id = ?1")
+                .bind(row.try_get::<String, _>("id")?)
+                .execute(&mut *conn)
+                .await?;
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -2018,6 +2065,7 @@ where
     G: FnMut(&[Asset]) -> GroupingResult,
 {
     let observation = input.observation;
+    arm_verification(conn, op).await?;
     let changed = observe_batch(
         conn,
         op,
@@ -2111,7 +2159,9 @@ async fn reconcile_absence(
             && complete.iter().any(|scope| within(&path, scope))
             && !uncertain
         {
-            sqlx::query("UPDATE assets SET availability = 'missing' WHERE id = ?1")
+            sqlx::query(
+                "UPDATE assets SET availability = 'missing', verification_pending = 0 WHERE id = ?1",
+            )
                 .bind(row.try_get::<String, _>("id")?)
                 .execute(&mut *conn)
                 .await?;
@@ -2344,6 +2394,7 @@ async fn refresh_asset(
         && stored.format == file.format
         && stored.observed == file.metadata;
     if unchanged {
+        clear_verified(conn, stored.id, &fingerprint).await?;
         let mut retained = stored.fingerprint.clone();
         if retained.content_sha256.is_none() {
             retained.content_sha256 = fingerprint.content_sha256;
@@ -2382,7 +2433,23 @@ async fn refresh_asset(
     .execute(&mut *conn)
     .await?;
     insert_observation(conn, stored.id, op.id, sequence, &fingerprint, file, observed_at).await?;
+    clear_verified(conn, stored.id, &fingerprint).await?;
     Ok(Change::Refreshed { id: stored.id, regroup: effective != stored.effective })
+}
+
+/// A content digest taken in this scan finishes the asset's pending rehash.
+async fn clear_verified(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    fingerprint: &ObservationFingerprint,
+) -> Result<()> {
+    if fingerprint.content_sha256.is_some() {
+        sqlx::query("UPDATE assets SET verification_pending = 0 WHERE id = ?1")
+            .bind(id.to_string())
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(())
 }
 
 async fn insert_asset(
@@ -3261,6 +3328,7 @@ fn asset_from_row(row: &SqliteRow) -> Result<Asset> {
         effective: from_json(&row.try_get::<String, _>("effective")?)?,
         quality: from_text(&row.try_get::<String, _>("quality")?)?,
         quality_basis: quality_basis.as_deref().map(from_json).transpose()?,
+        verification_pending: row.try_get::<i64, _>("verification_pending")? == 1,
         last_observed_at: row.try_get("last_observed_at")?,
     })
 }
@@ -3554,7 +3622,7 @@ async fn decide_quality(
     let basis = basis.as_ref().map(to_json).transpose()?;
     sqlx::query(
         "UPDATE assets SET fingerprint = ?1, quality = ?2, quality_basis = ?3, \
-         decision_revision = ?4 WHERE id = ?5",
+         decision_revision = ?4, verification_pending = 0 WHERE id = ?5",
     )
     .bind(to_json(&fingerprint)?)
     .bind(to_text(&quality)?)
@@ -4108,6 +4176,7 @@ fn contributions_for(
                 unreviewed_seconds: 0.0,
                 unknown_exposure_count: 0,
                 drifted_decisions: 0,
+                verification_pending: 0,
                 availability: asset.availability,
                 last_observed_at: asset.last_observed_at.clone(),
             });
@@ -4115,8 +4184,10 @@ fn contributions_for(
             entry.last_observed_at.clone_from(&asset.last_observed_at);
         }
         let quality = asset.applicable_quality();
-        if matches!(quality, ApplicableQuality::ChangedContent { .. }) {
-            entry.drifted_decisions += 1;
+        match quality {
+            ApplicableQuality::ChangedContent { .. } => entry.drifted_decisions += 1,
+            ApplicableQuality::VerificationPending { .. } => entry.verification_pending += 1,
+            _ => {}
         }
         match (light, asset.effective.exposure_seconds) {
             (Some(true), Some(exposure)) => {
@@ -4124,7 +4195,9 @@ fn contributions_for(
                 match quality {
                     ApplicableQuality::Usable => entry.usable_seconds += exposure,
                     ApplicableQuality::Unreviewed => entry.unreviewed_seconds += exposure,
-                    ApplicableQuality::Unusable | ApplicableQuality::ChangedContent { .. } => {}
+                    ApplicableQuality::Unusable
+                    | ApplicableQuality::ChangedContent { .. }
+                    | ApplicableQuality::VerificationPending { .. } => {}
                 }
             }
             _ => entry.unknown_exposure_count += 1,

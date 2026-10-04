@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
     value INTEGER NOT NULL
 ) STRICT;
 
-INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 1);
+INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 2);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('grouping_revision', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('scan_sequence', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('target_generation', 0);
@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS scan_operations (
     incomplete_scopes TEXT NOT NULL,
     identity_verified INTEGER NOT NULL CHECK (identity_verified IN (0, 1)),
     revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+    -- Set once the operation's first readable pass marked decided assets pending.
+    verification_armed INTEGER NOT NULL DEFAULT 0 CHECK (verification_armed IN (0, 1)),
     sequence INTEGER NOT NULL UNIQUE,
     started_at TEXT NOT NULL,
     finished_at TEXT
@@ -113,6 +115,8 @@ CREATE TABLE IF NOT EXISTS assets (
     decision_revision INTEGER NOT NULL CHECK (decision_revision >= 0),
     quality TEXT NOT NULL,
     quality_basis TEXT,
+    -- A decided asset whose rehash in the latest readable scan has not finished.
+    verification_pending INTEGER NOT NULL DEFAULT 0 CHECK (verification_pending IN (0, 1)),
     last_observed_at TEXT NOT NULL,
     last_operation_id TEXT REFERENCES scan_operations (id),
     session_id TEXT REFERENCES sessions (id),

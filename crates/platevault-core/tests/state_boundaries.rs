@@ -28,7 +28,8 @@ fn nanosecond_fingerprint_survives_a_javascript_json_roundtrip() {
     let echoed: ObservationFingerprint = serde_json::from_value(wire).unwrap();
     assert_eq!(echoed, observed);
     observed.modified_ns = -1_234_567_890_123_456_789;
-    let echoed: ObservationFingerprint = serde_json::from_str(&serde_json::to_string(&observed).unwrap()).unwrap();
+    let echoed: ObservationFingerprint =
+        serde_json::from_str(&serde_json::to_string(&observed).unwrap()).unwrap();
     assert_eq!(echoed.modified_ns, observed.modified_ns);
 }
 
@@ -48,6 +49,7 @@ fn changed_content_preserves_prior_rejection_instead_of_reincluding_it() {
         effective: CaptureMetadata::default(),
         quality: Quality::Unusable,
         quality_basis: Some(basis),
+        verification_pending: false,
         last_observed_at: "2026-10-04T00:00:00Z".into(),
     };
     assert_eq!(asset.applicable_quality(), ApplicableQuality::Unusable);

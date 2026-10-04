@@ -75,6 +75,7 @@ fn asset(effective: CaptureMetadata) -> Asset {
         effective,
         quality: Quality::Unreviewed,
         quality_basis: None,
+        verification_pending: false,
         last_observed_at: "2026-10-04T00:00:00Z".into(),
     }
 }

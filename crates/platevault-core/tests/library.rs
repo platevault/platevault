@@ -286,3 +286,108 @@ async fn malformed_headers_are_visible_file_issues_and_valid_siblings_commit() {
     let after: Vec<String> = sources.iter().map(|path| support::digest(path)).collect();
     assert_eq!(after, originals, "sources are read-only");
 }
+
+/// Start a scan and wait for its terminal event, published after scan-time work.
+async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
+    let mut progress = library.subscribe_scan_progress();
+    let started = library.start_scan(location, None).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let operation = progress.recv().await.unwrap();
+            if operation.id == started.id && operation.state != ScanState::Running {
+                return operation;
+            }
+        }
+    })
+    .await
+    .expect("scan must publish its terminal state")
+}
+
+/// Write `bytes` over a file in place, keeping its size and nanosecond mtime.
+fn rewrite_same_stat(path: &Path, bytes: &[u8]) {
+    assert_eq!(std::fs::metadata(path).unwrap().len(), bytes.len() as u64);
+    let modified = std::fs::metadata(path).unwrap().modified().unwrap();
+    let file = std::fs::OpenOptions::new().write(true).truncate(true).open(path).unwrap();
+    std::io::Write::write_all(&mut &file, bytes).unwrap();
+    file.set_modified(modified).unwrap();
+    file.sync_all().unwrap();
+}
+
+fn usable_seconds(coverage: &TargetCoverage) -> f64 {
+    coverage.contributions.iter().map(|contribution| contribution.usable_seconds).sum()
+}
+
+#[tokio::test]
+async fn same_stat_replacement_leaves_usable_totals_until_the_reviewed_bytes_return() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("captures");
+    std::fs::create_dir(&root).unwrap();
+    let light = root.join("light.fits");
+    let fields = [("IMAGETYP", "'LIGHT'"), ("FILTER", "'Ha'"), ("EXPTIME", "300")];
+    support::fits(&light, &fields).unwrap();
+    let reviewed_bytes = std::fs::read(&light).unwrap();
+    let original = support::digest(&light);
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let location = library
+        .register_location(NativePath::from_path(&root), "Captured".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+    let catalog = library.catalog();
+    let asset = catalog.location_assets(location.id).await.unwrap().remove(0);
+    let expected = ExpectedAsset {
+        asset_id: asset.id,
+        decision_revision: asset.decision_revision,
+        fingerprint: asset.fingerprint.clone(),
+    };
+    let decided = catalog.set_quality(&[expected], Quality::Usable, InventoryProbe).await.unwrap();
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let target = TargetCandidate {
+        id: Uuid::new_v4(),
+        designation: "NGC 7000".into(),
+        aliases: Vec::new(),
+        common_name: None,
+        object_type: "nebula".into(),
+        coordinates: None,
+        provenance: Provenance::User,
+        provider_id: None,
+    };
+    let target = catalog.save_target(&target, None).await.unwrap().candidate.id;
+    let expected_session = ExpectedSession {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        decision_revision: session.decision_revision,
+    };
+    catalog.associate_target(&[expected_session], target).await.unwrap();
+    let coverage = catalog.target_coverage(target).await.unwrap();
+    assert!((usable_seconds(&coverage) - 300.0).abs() < 1e-9, "{coverage:?}");
+
+    // A pixel changes in place; size and nanosecond mtime stay the same.
+    let mut replaced = reviewed_bytes.clone();
+    *replaced.last_mut().unwrap() ^= 0xff;
+    rewrite_same_stat(&light, &replaced);
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+    let changed = catalog.asset(asset.id).await.unwrap();
+    assert_eq!(changed.quality, Quality::Usable, "the decision is kept as history");
+    assert_eq!(
+        changed.applicable_quality(),
+        ApplicableQuality::ChangedContent { previous: Quality::Usable }
+    );
+    let coverage = catalog.target_coverage(target).await.unwrap();
+    assert!(usable_seconds(&coverage).abs() < 1e-9, "left usable totals: {coverage:?}");
+    assert_eq!(coverage.contributions.iter().map(|c| c.drifted_decisions).sum::<u64>(), 1);
+    let membership = catalog.session(session.id).await.unwrap().summary;
+    assert!(membership.successors.is_empty() && membership.session.asset_ids == session.asset_ids);
+
+    // The reviewed bytes return: applicable again without a new decision.
+    rewrite_same_stat(&light, &reviewed_bytes);
+    assert_eq!(support::digest(&light), original);
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+    let restored = catalog.asset(asset.id).await.unwrap();
+    assert_eq!(restored.applicable_quality(), ApplicableQuality::Usable);
+    assert_eq!(restored.decision_revision, decided[0].decision_revision, "no new decision");
+    let coverage = catalog.target_coverage(target).await.unwrap();
+    assert!((usable_seconds(&coverage) - 300.0).abs() < 1e-9, "{coverage:?}");
+    assert!(!coverage.provisional);
+    assert_eq!(support::digest(&light), original);
+}

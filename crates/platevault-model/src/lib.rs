@@ -357,7 +357,13 @@ pub enum ApplicableQuality {
     Unreviewed,
     Usable,
     Unusable,
-    ChangedContent { previous: Quality },
+    ChangedContent {
+        previous: Quality,
+    },
+    /// A decided asset whose rehash in a readable scan has not finished.
+    VerificationPending {
+        previous: Quality,
+    },
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -454,8 +460,13 @@ impl From<&RawFileMetadata> for CaptureMetadata {
             evidence.insert("XISF:geometry".into(), geometry.clone());
         }
         let (width, height) = match raw.native_geometry {
-            Some(metadata_core::NativeGeometry::Planar { width, height, .. }) => (Some(width), Some(height)),
-            Some(metadata_core::NativeGeometry::Unsupported | metadata_core::NativeGeometry::Malformed) => (None, None),
+            Some(metadata_core::NativeGeometry::Planar { width, height, .. }) => {
+                (Some(width), Some(height))
+            }
+            Some(
+                metadata_core::NativeGeometry::Unsupported
+                | metadata_core::NativeGeometry::Malformed,
+            ) => (None, None),
             None => (integer(raw.naxis1.as_deref()), integer(raw.naxis2.as_deref())),
         };
         Self {
@@ -507,6 +518,9 @@ pub struct Asset {
     pub effective: CaptureMetadata,
     pub quality: Quality,
     pub quality_basis: Option<ObservationFingerprint>,
+    /// The latest readable scan has not finished rehashing this decided asset.
+    #[serde(default)]
+    pub verification_pending: bool,
     pub last_observed_at: String,
 }
 
@@ -519,6 +533,9 @@ impl Asset {
             })
         {
             return ApplicableQuality::ChangedContent { previous: self.quality };
+        }
+        if self.quality != Quality::Unreviewed && self.verification_pending {
+            return ApplicableQuality::VerificationPending { previous: self.quality };
         }
         match self.quality {
             Quality::Unreviewed => ApplicableQuality::Unreviewed,
@@ -797,6 +814,8 @@ pub struct CoverageContribution {
     pub unreviewed_seconds: f64,
     pub unknown_exposure_count: u64,
     pub drifted_decisions: u64,
+    /// Decided frames outside applicable totals until their rehash finishes.
+    pub verification_pending: u64,
     pub availability: Availability,
     pub last_observed_at: String,
 }
