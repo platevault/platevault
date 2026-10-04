@@ -215,6 +215,14 @@ pub fn v1_normalization_table() -> ImageTypNormalizationTable {
 
 // ── RawFileMetadata ───────────────────────────────────────────────────────────
 
+/// Native structure is distinct from copied header-keyword evidence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NativeGeometry {
+    Planar { width: u32, height: u32, channels: u32 },
+    Unsupported,
+    Malformed,
+}
+
 /// Minimal extracted header values returned by format-specific extractors.
 ///
 /// Fields are `Option<String>` because any header keyword may be absent or
@@ -240,6 +248,10 @@ pub struct RawFileMetadata {
     pub naxis1: Option<String>,
     /// `NAXIS2` (image height in pixels).
     pub naxis2: Option<String>,
+    /// Qualified native structure; present but unusable geometry forbids keyword fallback.
+    pub native_geometry: Option<NativeGeometry>,
+    /// Original native geometry attribute, retained independently of NAXIS keywords.
+    pub native_geometry_raw: Option<String>,
     /// `INSTRUME` (camera/instrument identifier).
     pub instrume: Option<String>,
     /// `CAMERAID` (`vendor_model_serial` camera body identifier). Distinguishes

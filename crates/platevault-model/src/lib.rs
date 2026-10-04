@@ -450,6 +450,14 @@ impl From<&RawFileMetadata> for CaptureMetadata {
                 evidence.insert(key.into(), value.clone());
             }
         }
+        if let Some(geometry) = &raw.native_geometry_raw {
+            evidence.insert("XISF:geometry".into(), geometry.clone());
+        }
+        let (width, height) = match raw.native_geometry {
+            Some(metadata_core::NativeGeometry::Planar { width, height, .. }) => (Some(width), Some(height)),
+            Some(metadata_core::NativeGeometry::Unsupported | metadata_core::NativeGeometry::Malformed) => (None, None),
+            None => (integer(raw.naxis1.as_deref()), integer(raw.naxis2.as_deref())),
+        };
         Self {
             raw: evidence,
             image_type: raw.image_typ.clone(),
@@ -463,8 +471,8 @@ impl From<&RawFileMetadata> for CaptureMetadata {
             offset: raw.offset,
             binning_x: integer(raw.x_binning.as_deref()),
             binning_y: integer(raw.y_binning.as_deref()),
-            width: integer(raw.naxis1.as_deref()),
-            height: integer(raw.naxis2.as_deref()),
+            width,
+            height,
             readout_mode: raw.readout_mode.clone(),
             set_temperature_c: finite(raw.set_temp_c),
             measured_temperature_c: finite(raw.ccd_temp_c),

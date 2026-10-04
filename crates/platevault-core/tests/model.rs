@@ -6,6 +6,30 @@ use platevault_core::{
 };
 
 #[test]
+fn native_geometry_overrides_stale_keywords_and_preserves_unknown_structure() {
+    use metadata_core::{NativeGeometry, RawFileMetadata};
+    let mut raw = RawFileMetadata {
+        naxis1: Some("400".into()),
+        naxis2: Some("300".into()),
+        native_geometry: Some(NativeGeometry::Planar { width: 4, height: 4, channels: 1 }),
+        native_geometry_raw: Some("4:4:1".into()),
+        ..RawFileMetadata::default()
+    };
+    let captured = CaptureMetadata::from(&raw);
+    assert_eq!((captured.width, captured.height), (Some(4), Some(4)));
+    assert_eq!(captured.raw.get("NAXIS1").map(String::as_str), Some("400"));
+    assert_eq!(captured.raw.get("XISF:geometry").map(String::as_str), Some("4:4:1"));
+    for geometry in [NativeGeometry::Unsupported, NativeGeometry::Malformed] {
+        raw.native_geometry = Some(geometry);
+        let captured = CaptureMetadata::from(&raw);
+        assert_eq!((captured.width, captured.height), (None, None));
+    }
+    raw.native_geometry = None;
+    let captured = CaptureMetadata::from(&raw);
+    assert_eq!((captured.width, captured.height), (Some(400), Some(300)));
+}
+
+#[test]
 fn real_fits_and_xisf_metadata_keep_scientific_evidence_and_source_bytes() {
     let dir = tempfile::tempdir().unwrap();
     let fits = dir.path().join("light.fits");
