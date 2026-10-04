@@ -1,0 +1,11 @@
+# The prototype is its own pnpm workspace root so its install never rewrites the
+# repository lockfile or installs the legacy apps/desktop dependencies.
+packages:
+  - "."
+
+allowBuilds:
+  esbuild: true
+  "@tailwindcss/oxide": true
+
+minimumReleaseAgeExclude:
+  - lucide-react@1.52.0

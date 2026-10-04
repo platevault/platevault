@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en-GB" class="dark" data-density="comfortable">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>PlateVault prototype</title>
+  <script>
+    // Pre-paint theme and density so the first frame uses the saved choice.
+    // Dark is the product default; "system" follows prefers-color-scheme.
+    {
+      const root = document.documentElement
+      let theme = "dark"
+      let density = "comfortable"
+      try {
+        theme = localStorage.getItem("platevault.theme") || "dark"
+        density = localStorage.getItem("platevault.density") || "comfortable"
+      } catch { }
+      const dark =
+        theme === "dark" ||
+        (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
+      root.classList.toggle("dark", dark)
+      root.dataset.density = density
+      document.querySelector('meta[name="color-scheme"]').content = dark ? "dark" : "light"
+    }
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>

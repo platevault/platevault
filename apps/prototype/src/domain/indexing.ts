@@ -1,0 +1,525 @@
+/**
+ * Indexing in place (spec 064). Pure functions that read the simulated disk
+ * into the catalog. Indexing records metadata only: it never creates, renames,
+ * moves or deletes source files (LIB-FR-02).
+ *
+ * Used by the demo seed (synchronously) and by the "index" operation
+ * (progressively, a batch per tick), so both produce identical catalogs.
+ */
+import { angularSeparationDeg, normalizeName, SKY_OBJECTS } from "./sky"
+import type {
+  Asset,
+  AssetId,
+  Association,
+  CalibrationKind,
+  Camera,
+  Catalog,
+  Disk,
+  DiskFile,
+  Evidence,
+  IsoDateTime,
+  Location,
+  OpticalTrain,
+  OpticalTrainId,
+  Session,
+  SessionId,
+  Target,
+  TargetId,
+  Telescope,
+} from "./types"
+
+/** Short stable hash for deterministic identities (FNV-1a, base36). */
+export function stableHash(input: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+export function isUnder(path: string, folder: string): boolean {
+  return path === folder || path.startsWith(folder.endsWith("/") ? folder : `${folder}/`)
+}
+
+/** The denied folder that makes `path` unreadable, if any. */
+export function deniedAncestor(disk: Disk, path: string): string | null {
+  return disk.deniedPaths.find((denied) => isUnder(path, denied)) ?? null
+}
+
+export interface LocationListing {
+  offline: boolean
+  /** Readable, supported image files. */
+  readable: DiskFile[]
+  unsupported: DiskFile[]
+  /** Denied folders inside (or covering) the location. */
+  unreadableFolders: string[]
+}
+
+/** What a scan of `location` can observe right now. */
+export function listLocation(disk: Disk, location: Location): LocationListing {
+  const volume = disk.volumes[location.volumeId]
+  if (!volume?.mounted) return { offline: true, readable: [], unsupported: [], unreadableFolders: [] }
+  const unreadableFolders = disk.deniedPaths.filter(
+    (denied) => isUnder(denied, location.path) || isUnder(location.path, denied),
+  )
+  const readable: DiskFile[] = []
+  const unsupported: DiskFile[] = []
+  for (const file of Object.values(disk.files)) {
+    if (file.volumeId !== location.volumeId || !isUnder(file.path, location.path)) continue
+    if (file.linkTarget) continue
+    if (unreadableFolders.some((folder) => isUnder(file.path, folder))) continue
+    if ((file.kind === "fits" || file.kind === "xisf") && file.header) readable.push(file)
+    else unsupported.push(file)
+  }
+  readable.sort((a, b) => a.path.localeCompare(b.path))
+  return { offline: false, readable, unsupported, unreadableFolders }
+}
+
+/** Night of an observation: the date of the evening it started (UTC − 12 h). */
+export function nightOf(dateObs: IsoDateTime): string {
+  return new Date(new Date(dateObs).getTime() - 12 * 3600 * 1000).toISOString().slice(0, 10)
+}
+
+export function assetIdForPath(path: string): AssetId {
+  return `ast_${stableHash(path)}`
+}
+
+function groupingKey(locationId: string, file: DiskFile): string {
+  const h = file.header!
+  return [
+    locationId,
+    h.imageType,
+    nightOf(h.dateObs),
+    h.instrument ?? "",
+    h.telescope ?? "",
+    h.filter ?? "",
+    h.exposureS,
+    h.binning,
+    h.gain ?? "",
+    h.offset ?? "",
+  ].join("|")
+}
+
+function sessionKeyOf(session: Session): string {
+  return [
+    session.locationId,
+    session.imageType,
+    session.night,
+    session.cameraName ?? "",
+    session.telescopeName ?? "",
+    session.channel ?? "",
+    session.exposureS,
+    session.binning,
+    session.gain ?? "",
+    session.offset ?? "",
+  ].join("|")
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted[Math.floor(sorted.length / 2)] ?? null
+}
+
+function mostCommon(values: Array<string | null>): string | null {
+  const counts = new Map<string, number>()
+  for (const value of values) if (value) counts.set(value, (counts.get(value) ?? 0) + 1)
+  let best: string | null = null
+  let bestCount = 0
+  for (const [value, count] of counts) if (count > bestCount) [best, bestCount] = [value, count]
+  return best
+}
+
+function matchesName(name: string, candidates: string[]): boolean {
+  const n = normalizeName(name)
+  return candidates.some((candidate) => normalizeName(candidate) === n)
+}
+
+// ---------------------------------------------------------------------------
+// Associations
+// ---------------------------------------------------------------------------
+
+function ensureTargetFor(catalog: Catalog, name: string, now: IsoDateTime): Target | null {
+  const existing = Object.values(catalog.targets).find((t) => matchesName(name, [t.name, ...t.aliases]))
+  if (existing) return existing
+  const sky = SKY_OBJECTS.find((o) => matchesName(name, [o.name, ...o.aliases]))
+  if (!sky) return null
+  const target: Target = {
+    id: `tgt_${stableHash(sky.name)}`,
+    name: sky.name,
+    aliases: sky.aliases,
+    ra: sky.ra,
+    dec: sky.dec,
+    sizeDeg: { width: sky.widthDeg, height: sky.heightDeg },
+    coordinateSource: "catalog",
+    resolver: null,
+    notes: "",
+    createdAt: now,
+    revision: 1,
+  }
+  catalog.targets[target.id] = target
+  return target
+}
+
+/** The reference object whose extent contains the pointing, nearest first. */
+function objectAtPointing(ra: number, dec: number) {
+  let best: { name: string; separation: number } | null = null
+  for (const sky of SKY_OBJECTS) {
+    const separation = angularSeparationDeg(ra, dec, sky.ra, sky.dec)
+    const reach = Math.max(sky.widthDeg, sky.heightDeg) / 2 + 0.5
+    if (separation <= reach && (!best || separation < best.separation)) best = { name: sky.name, separation }
+  }
+  return best
+}
+
+/**
+ * LIB-FR-05: agreeing evidence permits association; unknown or conflicting
+ * evidence is Needs review; a missing OBJECT with no other evidence stays
+ * unresolved. OBJECT never supplies coordinates.
+ */
+export function associateTarget(catalog: Catalog, session: Session, now: IsoDateTime): Association<TargetId> {
+  const evidence: Evidence[] = []
+  const object = session.objectLabel
+  const pointed = session.pointing ? objectAtPointing(session.pointing.ra, session.pointing.dec) : null
+  const objectTarget = object ? ensureTargetFor(catalog, object, now) : null
+  const pointedTarget = pointed ? ensureTargetFor(catalog, pointed.name, now) : null
+
+  if (object) {
+    evidence.push({
+      source: "header",
+      label: "OBJECT",
+      value: object,
+      agrees: pointedTarget ? objectTarget?.id === pointedTarget.id : objectTarget ? null : false,
+    })
+  } else {
+    evidence.push({ source: "header", label: "OBJECT", value: "Missing", agrees: null })
+  }
+  if (session.pointing && pointed) {
+    evidence.push({
+      source: "pointing",
+      label: "Pointing",
+      value: `${pointed.separation.toFixed(2)}° from ${pointed.name} centre`,
+      agrees: true,
+    })
+  } else if (session.pointing) {
+    evidence.push({ source: "pointing", label: "Pointing", value: "Outside every known Target", agrees: false })
+  } else {
+    evidence.push({ source: "pointing", label: "Pointing", value: "No pointing in header", agrees: null })
+  }
+
+  if (pointedTarget && (!object || objectTarget?.id === pointedTarget.id)) {
+    return { value: pointedTarget.id, status: "associated", evidence, confirmedAt: null }
+  }
+  if (pointedTarget && object) {
+    return { value: pointedTarget.id, status: "needs-review", evidence, confirmedAt: null }
+  }
+  if (objectTarget) {
+    return { value: objectTarget.id, status: "needs-review", evidence, confirmedAt: null }
+  }
+  return { value: null, status: "unresolved", evidence, confirmedAt: null }
+}
+
+function findOrDetectCamera(catalog: Catalog, header: NonNullable<DiskFile["header"]>): Camera | null {
+  if (!header.instrument) return null
+  const existing = Object.values(catalog.cameras).find((c) => matchesName(header.instrument!, [c.name, ...c.aliases]))
+  if (existing) return existing
+  const camera: Camera = {
+    id: `cam_${stableHash(header.instrument)}`,
+    name: header.instrument,
+    aliases: [],
+    source: "detected",
+    widthPx: header.widthPx * header.binning,
+    heightPx: header.heightPx * header.binning,
+    pixelSizeUm: header.pixelSizeUm ?? 0,
+    color: header.bayerPattern !== null,
+  }
+  catalog.cameras[camera.id] = camera
+  return camera
+}
+
+function trainFor(catalog: Catalog, camera: Camera, telescope: Telescope): OpticalTrain {
+  const existing = Object.values(catalog.opticalTrains).find(
+    (t) => t.cameraId === camera.id && t.telescopeId === telescope.id,
+  )
+  if (existing) return existing
+  const train: OpticalTrain = {
+    id: `otr_${stableHash(`${camera.id}|${telescope.id}`)}`,
+    name: `${telescope.name} / ${camera.name}`,
+    cameraId: camera.id,
+    telescopeId: telescope.id,
+    effectiveFocalLengthMm: telescope.focalLengthMm,
+    notes: "",
+  }
+  catalog.opticalTrains[train.id] = train
+  return train
+}
+
+/**
+ * Equipment association (D11): explicit camera/optical-train records with
+ * confirmed versus observed evidence. Unknown header strings are detected as
+ * new records; a focal-length-only match is Needs review, never assumed.
+ */
+export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFile["header"]>): Association<OpticalTrainId> {
+  const evidence: Evidence[] = [
+    { source: "header", label: "INSTRUME", value: header.instrument ?? "Missing", agrees: header.instrument ? true : null },
+    { source: "header", label: "TELESCOP", value: header.telescope ?? "Missing", agrees: header.telescope ? true : null },
+    {
+      source: "header",
+      label: "FOCALLEN",
+      value: header.focalLengthMm ? `${header.focalLengthMm} mm` : "Missing",
+      agrees: header.focalLengthMm ? true : null,
+    },
+  ]
+  const camera = findOrDetectCamera(catalog, header)
+  if (!camera) return { value: null, status: "unresolved", evidence, confirmedAt: null }
+
+  const telescopes = Object.values(catalog.telescopes)
+  const named = header.telescope
+    ? telescopes.find((t) => matchesName(header.telescope!, [t.name, ...t.aliases]))
+    : undefined
+  if (named) {
+    const train = trainFor(catalog, camera, named)
+    evidence.push({ source: "equipment-record", label: "Optical train", value: train.name, agrees: true })
+    return { value: train.id, status: "associated", evidence, confirmedAt: null }
+  }
+  const byFocal = header.focalLengthMm
+    ? telescopes.find((t) => Math.abs(t.focalLengthMm - header.focalLengthMm!) / t.focalLengthMm < 0.02)
+    : undefined
+  if (byFocal) {
+    const train = trainFor(catalog, camera, byFocal)
+    const telescopeEvidence = evidence[1]!
+    telescopeEvidence.agrees = false
+    evidence.push({
+      source: "equipment-record",
+      label: "Optical train",
+      value: `${train.name} (focal length matches, telescope name does not)`,
+      agrees: null,
+    })
+    return { value: train.id, status: "needs-review", evidence, confirmedAt: null }
+  }
+  if (header.telescope && header.focalLengthMm) {
+    const telescope: Telescope = {
+      id: `tel_${stableHash(header.telescope)}`,
+      name: header.telescope,
+      aliases: [],
+      focalLengthMm: header.focalLengthMm,
+      apertureMm: null,
+    }
+    catalog.telescopes[telescope.id] = telescope
+    const train = trainFor(catalog, camera, telescope)
+    evidence.push({ source: "equipment-record", label: "Optical train", value: `${train.name} (detected)`, agrees: true })
+    return { value: train.id, status: "associated", evidence, confirmedAt: null }
+  }
+  return { value: null, status: "needs-review", evidence, confirmedAt: null }
+}
+
+// ---------------------------------------------------------------------------
+// Reading files
+// ---------------------------------------------------------------------------
+
+function siteFor(catalog: Catalog, lat: number | null, lon: number | null) {
+  if (lat === null || lon === null) return null
+  return (
+    Object.values(catalog.sites).find((s) => Math.abs(s.latitude - lat) < 0.1 && Math.abs(s.longitude - lon) < 0.1)
+      ?.id ?? null
+  )
+}
+
+function rebuildSession(catalog: Catalog, session: Session, now: IsoDateTime): Session {
+  const assets = session.assetIds
+    .map((id) => catalog.assets[id])
+    .filter((a): a is Asset => Boolean(a))
+    .sort((a, b) => a.observed.dateObs.localeCompare(b.observed.dateObs))
+  const first = assets[0]!
+  const last = assets[assets.length - 1]!
+  const pointed = assets.filter((a) => a.observed.ra !== null && a.observed.dec !== null)
+  const rotations = pointed.map((a) => a.observed.rotationDeg).filter((r): r is number => r !== null)
+  const next: Session = {
+    ...session,
+    assetIds: assets.map((a) => a.id),
+    startedAt: first.observed.dateObs,
+    endedAt: last.observed.dateObs,
+    objectLabel: mostCommon(assets.map((a) => a.observed.object)),
+    ccdTempC: median(assets.map((a) => a.observed.ccdTempC).filter((t): t is number => t !== null)),
+    pointing:
+      pointed.length > 0
+        ? {
+            ra: pointed.reduce((sum, a) => sum + a.observed.ra!, 0) / pointed.length,
+            dec: pointed.reduce((sum, a) => sum + a.observed.dec!, 0) / pointed.length,
+            rotationDeg: rotations.length === pointed.length ? (median(rotations) ?? null) : null,
+          }
+        : null,
+    captureSiteId: session.captureSiteId ?? siteFor(catalog, first.observed.siteLat, first.observed.siteLon),
+  }
+  if (session.target.status !== "confirmed") next.target = associateTarget(catalog, next, now)
+  if (session.equipment.status !== "confirmed") next.equipment = associateEquipment(catalog, first.observed)
+  return next
+}
+
+/**
+ * Read a batch of files of one location into the catalog. Existing assets
+ * keep their identity, session and decisions; changed bytes update the
+ * fingerprint, which makes earlier quality decisions "changed content".
+ * Returns a new catalog object (collections are shallow-copied).
+ */
+export function readFiles(source: Catalog, location: Location, files: DiskFile[], now: IsoDateTime): Catalog {
+  const catalog: Catalog = {
+    ...source,
+    assets: { ...source.assets },
+    sessions: { ...source.sessions },
+    targets: { ...source.targets },
+    cameras: { ...source.cameras },
+    telescopes: { ...source.telescopes },
+    opticalTrains: { ...source.opticalTrains },
+    masters: { ...source.masters },
+  }
+  const keyToSession = new Map<string, SessionId>()
+  for (const session of Object.values(catalog.sessions)) keyToSession.set(sessionKeyOf(session), session.id)
+  const touched = new Set<SessionId>()
+
+  for (const file of files) {
+    const header = file.header!
+    const id = assetIdForPath(file.path)
+    const existing = catalog.assets[id]
+    if (existing) {
+      catalog.assets[id] = { ...existing, sha256: file.sha256, sizeBytes: file.sizeBytes, lastObservedAt: now, presence: "observed" }
+      continue
+    }
+    const isMaster = header.imageType.startsWith("master-")
+    if (isMaster && location.role === "calibration") {
+      // Masters stored in a Calibration location are library masters.
+      // Generated masters found elsewhere stay candidates until adopted (CAL-FR-06).
+      const masterId = `mst_${stableHash(file.path)}`
+      catalog.masters[masterId] = {
+        id: masterId,
+        kind: header.imageType.slice("master-".length) as CalibrationKind,
+        path: file.path,
+        cameraName: header.instrument,
+        widthPx: header.widthPx,
+        heightPx: header.heightPx,
+        binning: header.binning,
+        gain: header.gain,
+        offset: header.offset,
+        exposureS: header.imageType === "master-dark" ? header.exposureS : null,
+        channel: header.filter,
+        opticalTrainId: null,
+        ccdTempC: header.ccdTempC,
+        frameCount: null,
+        createdAt: header.dateObs,
+        state: "adopted",
+        origin: { kind: "library", viewId: null, sourcePath: file.path },
+        adoption: null,
+      }
+    }
+    const key = groupingKey(location.id, file)
+    let sessionId = isMaster ? undefined : keyToSession.get(key)
+    if (!sessionId && !isMaster) {
+      sessionId = `ses_${stableHash(key)}`
+      keyToSession.set(key, sessionId)
+      catalog.sessions[sessionId] = {
+        id: sessionId,
+        revision: 1,
+        locationId: location.id,
+        night: nightOf(header.dateObs),
+        imageType: header.imageType,
+        channel: header.filter,
+        exposureS: header.exposureS,
+        binning: header.binning,
+        gain: header.gain,
+        offset: header.offset,
+        ccdTempC: header.ccdTempC,
+        cameraName: header.instrument,
+        telescopeName: header.telescope,
+        assetIds: [],
+        startedAt: header.dateObs,
+        endedAt: header.dateObs,
+        objectLabel: header.object,
+        pointing: null,
+        target: { value: null, status: "unresolved", evidence: [], confirmedAt: null },
+        equipment: { value: null, status: "unresolved", evidence: [], confirmedAt: null },
+        captureSiteId: null,
+        corrections: [],
+        previousSessionIds: [],
+        scope: "provisional",
+      }
+    }
+    if (sessionId) {
+      const session = catalog.sessions[sessionId]!
+      catalog.sessions[sessionId] = { ...session, assetIds: [...session.assetIds, id] }
+      touched.add(sessionId)
+    }
+    catalog.assets[id] = {
+      id,
+      locationId: location.id,
+      path: file.path,
+      fileName: file.path.slice(file.path.lastIndexOf("/") + 1),
+      format: file.kind === "xisf" ? "xisf" : "fits",
+      sizeBytes: file.sizeBytes,
+      sha256: file.sha256,
+      observed: header,
+      imageType: header.imageType,
+      sessionId: sessionId ?? null,
+      lastObservedAt: now,
+      presence: "observed",
+      quality: { value: "unreviewed", decidedAt: null, basisSha256: null },
+    }
+  }
+  for (const sessionId of touched) catalog.sessions[sessionId] = rebuildSession(catalog, catalog.sessions[sessionId]!, now)
+  return catalog
+}
+
+/**
+ * Settle a location scan. Unobserved assets under unreadable or offline
+ * scope become "unknown", never absent (LIB-FR-06); only a complete scan of a
+ * readable folder records absence.
+ */
+export function settleLocationScan(
+  source: Catalog,
+  disk: Disk,
+  locationId: string,
+  observedPaths: Set<string>,
+  now: IsoDateTime,
+): Catalog {
+  const location = source.locations[locationId]
+  if (!location) return source
+  const listing = listLocation(disk, location)
+  const catalog: Catalog = { ...source, assets: { ...source.assets }, sessions: { ...source.sessions }, locations: { ...source.locations } }
+  if (listing.offline) return catalog
+
+  const incomplete = listing.unreadableFolders.length > 0
+  const coversWhole = listing.unreadableFolders.some((folder) => isUnder(location.path, folder))
+  const incompleteSessions = new Set<SessionId>()
+  for (const asset of Object.values(catalog.assets)) {
+    if (asset.locationId !== locationId || observedPaths.has(asset.path)) continue
+    const unreadable = listing.unreadableFolders.some((folder) => isUnder(asset.path, folder))
+    catalog.assets[asset.id] = { ...asset, presence: unreadable ? "unknown" : "absent" }
+    if (unreadable && asset.sessionId) incompleteSessions.add(asset.sessionId)
+  }
+  for (const session of Object.values(catalog.sessions)) {
+    if (session.locationId !== locationId) continue
+    catalog.sessions[session.id] = { ...session, scope: incompleteSessions.has(session.id) ? "incomplete" : "complete" }
+  }
+  catalog.locations[locationId] = {
+    ...location,
+    access: coversWhole ? "denied" : "ok",
+    lastIndexedAt: now,
+    scanScope: incomplete ? "incomplete" : "complete",
+    unreadablePaths: listing.unreadableFolders,
+  }
+  return catalog
+}
+
+/** Synchronous full index of the given locations (seed construction). */
+export function indexLocationsSync(source: Catalog, disk: Disk, locationIds: string[], now: IsoDateTime): Catalog {
+  let catalog = source
+  for (const locationId of locationIds) {
+    const location = catalog.locations[locationId]
+    if (!location) continue
+    const listing = listLocation(disk, location)
+    if (listing.offline) continue
+    catalog = readFiles(catalog, location, listing.readable, now)
+    catalog = settleLocationScan(catalog, disk, locationId, new Set(listing.readable.map((f) => f.path)), now)
+  }
+  return catalog
+}
