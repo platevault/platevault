@@ -147,6 +147,9 @@ export function SessionsArea() {
   const chips = filterChips(filters, names)
   const active = rows.find((r) => r.session.id === activeId) ?? shown.find((r) => r.reason) ?? shown[0] ?? null
   const editable = readOnlyReason === null
+  const matchReason = !editable ? "Read-only, see above" : chips.length === 0 ? "Set a filter first" : shown.every((r) => r.reason) ? "Every match is selected" : null
+  // Notices and the Selection bar unmount after these actions: keep focus in the session table (WCAG 2.4.3).
+  const focusTable = () => requestAnimationFrame(() => document.querySelector<HTMLElement>("#t3-sessions-table thead [role=checkbox]")?.focus())
   const readableAgain = content.unresolved.filter((id) => {
     const asset = catalog.assets[id]
     return asset ? assetAvailability(disk, catalog, asset) === "available" : false
@@ -211,7 +214,14 @@ export function SessionsArea() {
       header: "Sky distance",
       align: "right",
       sortValue: (r) => r.geometry.distanceDeg,
-      cell: (r) => (r.geometry.distanceDeg === null ? <UnknownValue label="Position unknown" /> : formatDegrees(r.geometry.distanceDeg, 2)),
+      cell: (r) =>
+        r.geometry.distanceDeg !== null ? (
+          formatDegrees(r.geometry.distanceDeg, 2)
+        ) : ctx.regions.length === 0 && r.session.pointing ? (
+          <UnknownValue label="No framing" reason="This View has no Project or Target framing to measure a distance from." />
+        ) : (
+          <UnknownValue label="Position unknown" />
+        ),
     },
     { id: "footprint", header: "Footprint", sortValue: (r) => r.geometry.coverage, cell: (r) => <FootprintCell row={r} /> },
     { id: "quality", header: "Frames by quality", cell: (r) => <QualityCounts row={r} /> },
@@ -281,7 +291,9 @@ export function SessionsArea() {
                     size="sm"
                     variant="outline"
                     disabled={!editable}
-                    onClick={() => edit(`Remove ${sessionLabel(session)} from the View`, (current, state) => removeSessions(current, state.catalog, [session.id]))}
+                    onClick={() => {
+                      if (edit(`Remove ${sessionLabel(session)} from the View`, (current, state) => removeSessions(current, state.catalog, [session.id])).ok) focusTable()
+                    }}
                   >
                     Remove from draft
                   </Button>
@@ -299,7 +311,14 @@ export function SessionsArea() {
             tone="info"
             title={`${plural(readableAgain, "unresolved frame")} can be read again`}
             actions={
-              <Button size="sm" variant="outline" disabled={!editable} onClick={() => edit("Include readable frames", (current, state) => resolveAvailable(state.disk, state.catalog, current))}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!editable}
+                onClick={() => {
+                  if (edit("Include readable frames", (current, state) => resolveAvailable(state.disk, state.catalog, current)).ok) focusTable()
+                }}
+              >
                 Include {plural(readableAgain, "readable frame")}
               </Button>
             }
@@ -313,7 +332,8 @@ export function SessionsArea() {
           hiddenByFilters={hiddenSelected}
           noun="session"
           onShowSelected={() => setSessionFilters(view.id, { ...defaultSessionFilters(), scope: filters.scope, selectedOnly: true })}
-          onClear={() => setClearOpen(true)}
+          // Read-only Views refuse beside the bar instead of opening a confirmation they would then refuse (D09).
+          onClear={() => (editable ? setClearOpen(true) : edit("Clear selection", (current) => current))}
         />
         {errorNode}
         <TableToolbar
@@ -326,14 +346,24 @@ export function SessionsArea() {
                   {filters.scope === "near" ? "Show all light sessions" : `Show sessions near ${ctx.targetName ?? "the framing"}`}
                 </Button>
               ) : null}
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!editable || shown.every((r) => r.reason)}
-                onClick={() => changeSelection([...new Set([...selectedIds, ...shown.map((r) => r.session.id)])], "with Select matching")}
-              >
-                Select matching ({shown.filter((r) => !r.reason).length})
-              </Button>
+              <span className="inline-flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={matchReason !== null}
+                  focusableWhenDisabled
+                  aria-describedby={matchReason ? `${view.id}-match-reason` : undefined}
+                  className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+                  onClick={() => changeSelection([...new Set([...selectedIds, ...shown.map((r) => r.session.id)])], "with Select matching")}
+                >
+                  Select matching ({shown.filter((r) => !r.reason).length})
+                </Button>
+                {matchReason ? (
+                  <span id={`${view.id}-match-reason`} className="text-xs text-muted-foreground">
+                    {matchReason}
+                  </span>
+                ) : null}
+              </span>
             </>
           }
         />
@@ -349,6 +379,7 @@ export function SessionsArea() {
           onRemove={(id) => setSessionFilters(view.id, chips.find((c) => c.id === id)?.clear ?? {})}
           onClear={() => setSessionFilters(view.id, { ...defaultSessionFilters(), scope: filters.scope })}
         />
+        <div id="t3-sessions-table">
         <DataTable
           label="Candidate sessions"
           rows={shown}
@@ -392,6 +423,7 @@ export function SessionsArea() {
             )
           }
         />
+        </div>
 
         <div className={skyOn ? "grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]" : ""}>
           {active ? <SessionEvidence row={active} ctx={ctx} editable={editable} onToggle={(include) => changeSelection(include ? [...selectedIds, active.session.id] : selectedIds.filter((id) => id !== active.session.id), "from its evidence")} /> : null}
@@ -445,7 +477,11 @@ export function SessionsArea() {
         changes={[`Remove ${plural(selectedIds.length, "session")} and ${plural(content.included.length + content.excluded.length + content.unresolved.length, "frame")} from this draft`]}
         unchanged={["Saved revisions of this View until you choose Save View", "Other Views", "Sessions, frames and library quality"]}
         confirmLabel="Clear selection"
-        onConfirm={() => edit("Clear selection", (current) => ({ ...current, sessions: [], included: [], excluded: [], unresolved: [] }))}
+        onConfirm={() => {
+          const result = edit("Clear selection", (current) => ({ ...current, sessions: [], included: [], excluded: [], unresolved: [] }))
+          if (result.ok) focusTable()
+          return result
+        }}
       />
     </div>
   )
@@ -523,7 +559,14 @@ function SessionEvidence({ row, ctx, editable, onToggle }: { row: CandidateRow; 
             },
             {
               label: "Sky distance",
-              value: geometry.distanceDeg === null ? <UnknownValue label="Position unknown" reason="Unknown geometry is never shown as zero distance." /> : `${formatDegrees(geometry.distanceDeg, 2)} from ${ctx.regions.length > 1 ? "the nearest panel" : "the framing centre"}`,
+              value:
+                geometry.distanceDeg !== null ? (
+                  `${formatDegrees(geometry.distanceDeg, 2)} from ${ctx.regions.length > 1 ? "the nearest panel" : "the framing centre"}`
+                ) : ctx.regions.length === 0 && session.pointing ? (
+                  <UnknownValue label="No framing" reason="This View has no Project or Target framing to measure a distance from." />
+                ) : (
+                  <UnknownValue label="Position unknown" reason="Unknown geometry is never shown as zero distance." />
+                ),
               source: geometry.distanceDeg === null ? undefined : "Orders suggestions; never decides them",
             },
             { label: "OBJECT", value: session.objectLabel ?? <UnknownValue label="Missing OBJECT" />, source: "Header OBJECT: a label, never evidence" },

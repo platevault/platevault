@@ -268,7 +268,7 @@ export function RefreshArea() {
                 void navigate({ to: "/views/$viewId/sessions", params: { viewId: view.id } })
               }}
             >
-              Keep View unchanged
+              Leave without applying
             </Button>
             <Button onClick={apply} disabled={!editable || accepted.length === 0} aria-describedby={`${view.id}-apply-hint`}>
               Apply {plural(accepted.length, "accepted change")}

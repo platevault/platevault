@@ -267,6 +267,8 @@ export function sessionAvailability(disk: Disk, catalog: Catalog, session: Sessi
 export interface ViewSummary extends MembershipSummary {
   /** Included frames with no available copy right now: last-observed, not verified. */
   includedUnavailable: number
+  /** Excluded members whose library quality is Unusable (they start excluded, D02); `unusable` counts included ones. */
+  excludedUnusable: number
   /** Sessions with unresolved or unavailable members, for naming them. */
   unavailableSessions: Array<{ session: Session; members: number; state: AssetAvailability }>
 }
@@ -289,7 +291,8 @@ export function viewSummary(disk: Disk, catalog: Catalog, content: MembershipCon
   const unavailableSessions = [...bySession.entries()]
     .map(([id, entry]) => ({ session: catalog.sessions[id], ...entry }))
     .filter((e): e is { session: Session; members: number; state: AssetAvailability } => e.session !== undefined)
-  return { ...base, includedUnavailable, unavailableSessions }
+  const excludedUnusable = content.excluded.filter((id) => catalog.assets[id]?.quality.value === "unusable").length
+  return { ...base, includedUnavailable, excludedUnusable, unavailableSessions }
 }
 
 export function totalsLine(frames: number, seconds: number) {

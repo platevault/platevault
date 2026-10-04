@@ -4,7 +4,7 @@
  * View, then links to the areas (no forced wizard, VSEL-FR-02). Owns the page
  * h1; areas render level-2 headers. Hosts T4 and T5 areas through <Outlet />.
  */
-import { Link, Outlet, useParams } from "@tanstack/react-router"
+import { Link, Outlet, useNavigate, useParams } from "@tanstack/react-router"
 import { FolderSearch, RefreshCw, Save } from "lucide-react"
 import { createContext, type ReactNode, useContext, useId, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
@@ -81,8 +81,8 @@ function SummaryStrip({ summary, content }: { summary: ViewSummary; content: Mem
     ...summary.byChannel.map((c) => ({ label: c.channel, value: `${c.included.frames} / ${formatDuration(c.included.seconds)}` })),
     { label: "Excluded", value: summary.excluded },
     { label: "Unresolved", value: summary.unresolved, tone: summary.unresolved > 0 ? ("warning" as const) : undefined },
-    { label: "Unreviewed", value: summary.unreviewed },
-    { label: "Unusable", value: summary.unusable },
+    { label: "Unreviewed (included)", value: summary.unreviewed },
+    { label: "Unusable", value: summary.excludedUnusable > 0 ? `${summary.unusable} included · ${summary.excludedUnusable} excluded` : `${summary.unusable} included` },
   ]
   if (summary.includedUnavailable > 0) items.push({ label: "Unavailable now", value: summary.includedUnavailable, tone: "warning" })
   if (content.productInputs.length > 0) items.push({ label: "Result inputs", value: content.productInputs.length })
@@ -132,6 +132,8 @@ function EditDetailsDialog({ view, open, onOpenChange }: { view: View; open: boo
   const [profileId, setProfileId] = useState(view.profileId ?? "none")
   const [nameError, setNameError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // A stale refusal is resolved by loading the current details, never by re-submitting over them (D08).
+  const [stale, setStale] = useState(false)
   const nameId = useId()
   const nameErrorId = useId()
 
@@ -144,6 +146,7 @@ function EditDetailsDialog({ view, open, onOpenChange }: { view: View; open: boo
     const result = editViewDetails(view.id, { name: name.trim(), projectId: projectId === "none" ? null : projectId, profileId: profileId === "none" ? null : profileId }, view.revision)
     if (!result.ok) {
       setError(result.message)
+      setStale(result.reason === "stale")
       return
     }
     onOpenChange(false)
@@ -159,6 +162,7 @@ function EditDetailsDialog({ view, open, onOpenChange }: { view: View; open: boo
           setProfileId(view.profileId ?? "none")
           setNameError(null)
           setError(null)
+          setStale(false)
         }
         onOpenChange(next)
       }}
@@ -208,7 +212,23 @@ function EditDetailsDialog({ view, open, onOpenChange }: { view: View; open: boo
             description="Optional now; Prepare asks for it before handoff."
             options={[{ value: "none", label: "Not chosen" }, ...profiles.map((p) => ({ value: p.id, label: p.name }))]}
           />
-          {error ? <ActionError message={error} onRetry={submit} /> : null}
+          {error ? (
+            <ActionError
+              message={error}
+              retryLabel={stale ? "Use current details" : "Retry"}
+              onRetry={
+                stale
+                  ? () => {
+                      setName(view.name)
+                      setProjectId(view.projectId ?? "none")
+                      setProfileId(view.profileId ?? "none")
+                      setError(null)
+                      setStale(false)
+                    }
+                  : submit
+              }
+            />
+          ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
@@ -221,7 +241,7 @@ function EditDetailsDialog({ view, open, onOpenChange }: { view: View; open: boo
   )
 }
 
-type SaveFeedback = { state: "failed" | "stale"; message: string } | { state: "reviewed"; revision: number } | null
+type SaveFeedback = { state: "failed" | "stale"; message: string } | { state: "reviewed"; note: string } | null
 
 export function ViewWorkspacePage() {
   const { viewId } = useParams({ strict: false }) as { viewId: string }
@@ -232,6 +252,7 @@ export function ViewWorkspacePage() {
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
+  const navigate = useNavigate()
 
   if (!view) {
     return (
@@ -267,11 +288,31 @@ export function ViewWorkspacePage() {
   const hasDraft = view.draft !== null
   const diff = view.draft ? describeDiff(catalog, diffContent(base, view.draft)) : []
   const sincePrepared = framesSincePrepared(catalog, view, content)
-  const saveBlocked = view.completedAt ? "Complete Views cannot be saved." : recovered ? "Resume the recovered changes first." : hasDraft ? null : "No unsaved changes."
+  const saveBlocked = view.completedAt
+    ? "Complete Views cannot be saved."
+    : recovered
+      ? "Resume the recovered changes first."
+      : saveFeedback?.state === "stale"
+        ? "Review the current revision first."
+        : hasDraft
+          ? null
+          : "No unsaved changes."
 
   function save() {
     const result = saveView(viewId)
     setSaveFeedback(result.ok ? null : result.reason === "stale" ? { state: "stale", message: result.message } : { state: "failed", message: result.message })
+  }
+
+  /** After a stale refusal: say what changed elsewhere before Save View is offered again (D08, LIB-AC-08). */
+  function reviewCurrent() {
+    const draftBase = view!.draft?.baseRevision ?? null
+    const latest = base?.revision ?? null
+    const before = view!.revisions.find((r) => r.revision === draftBase) ?? null
+    const note =
+      base && draftBase !== latest
+        ? `Saved membership moved from ${draftBase === null ? "nothing saved" : `revision ${draftBase}`} to revision ${latest} elsewhere: ${describeDiff(catalog, diffContent(before, base)).join("; ") || "no member changed"}. Save View replaces it with your draft.`
+        : `Saved membership is unchanged (${latest === null ? "never saved" : `revision ${latest}`}); only the View record changed elsewhere and is now record revision ${view!.revision}. Your unsaved changes are kept; Save View commits them as revision ${(latest ?? 0) + 1}.`
+    setSaveFeedback({ state: "reviewed", note })
   }
 
   const saveState = saveFeedback?.state === "failed" || saveFeedback?.state === "stale" ? saveFeedback.state : hasDraft || !base ? "unsaved" : "saved"
@@ -304,7 +345,7 @@ export function ViewWorkspacePage() {
                 state={saveState}
                 message={saveFeedback && "message" in saveFeedback ? saveFeedback.message : undefined}
                 onRetry={save}
-                onReview={() => setSaveFeedback({ state: "reviewed", revision: view.revision })}
+                onReview={reviewCurrent}
               />
             </>
           }
@@ -324,8 +365,14 @@ export function ViewWorkspacePage() {
                 <RefreshCw aria-hidden="true" data-icon="inline-start" />
                 Refresh selection
               </Button>
+              {hasDraft && !recovered ? (
+                <Button variant="outline" size="sm" onClick={() => setDiscardOpen(true)}>
+                  Discard…
+                </Button>
+              ) : null}
               <div className="flex flex-col items-end gap-0.5">
                 <Button
+                  id={`${viewId}-save`}
                   size="sm"
                   onClick={save}
                   disabled={saveBlocked !== null}
@@ -349,8 +396,8 @@ export function ViewWorkspacePage() {
         <AreaNav viewId={viewId} />
         <div className="space-y-3 px-6 pt-4 empty:hidden">
           {saveFeedback?.state === "reviewed" ? (
-            <Notice tone="info" title="You are now working on the current version">
-              The View changed elsewhere since you opened it. Your unsaved changes are kept; choose Save View to commit them on top of the current version.
+            <Notice tone="info" title="Reviewed: the View changed elsewhere">
+              {saveFeedback.note}
             </Notice>
           ) : null}
           {recovered ? (
@@ -359,7 +406,15 @@ export function ViewWorkspacePage() {
               title="Recovered unsaved changes"
               actions={
                 <>
-                  <Button size="sm" variant="outline" onClick={() => resumeDraft(viewId)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      resumeDraft(viewId)
+                      // The notice unmounts: hand focus to the next step instead of the page body (WCAG 2.4.3).
+                      requestAnimationFrame(() => document.getElementById(`${viewId}-save`)?.focus())
+                    }}
+                  >
                     Resume editing
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => setDiscardOpen(true)}>
@@ -368,8 +423,9 @@ export function ViewWorkspacePage() {
                 </>
               }
             >
-              {base ? `Saved revision ${base.revision} is shown. ` : "This View was never saved. "}
-              Changes made before PlateVault restarted are kept apart and are not applied: {diff.join("; ")}.
+              {base
+                ? `Saved revision ${base.revision} is shown. Changes made before PlateVault restarted are kept apart and are not applied: ${diff.join("; ")}.`
+                : `This View was never saved. Its draft from before PlateVault restarted is shown read-only until you resume or discard it: ${diff.join("; ")}.`}
             </Notice>
           ) : null}
           {view.completedAt ? (
@@ -409,7 +465,14 @@ export function ViewWorkspacePage() {
         changes={base ? diff : ["Remove the draft View and its unsaved selection"]}
         unchanged={["Sessions, frames and source files", "Library quality decisions", ...(base ? [`Saved revision ${base.revision}`] : []), "Other Views"]}
         confirmLabel={base ? "Discard changes" : "Discard draft View"}
-        onConfirm={() => discardDraft(viewId)}
+        onConfirm={() => {
+          const result = discardDraft(viewId)
+          if (result.ok) {
+            if (!base) void navigate({ to: "/views" })
+            else requestAnimationFrame(() => document.getElementById(`${viewId}-save`)?.focus())
+          }
+          return result
+        }}
       />
     </WorkspaceContext.Provider>
   )
@@ -418,7 +481,11 @@ export function ViewWorkspacePage() {
 function ReopenButton({ view }: { view: View }) {
   return (
     <ConfirmDialog
-      trigger={<Button size="sm" variant="outline" />}
+      trigger={
+        <Button size="sm" variant="outline">
+          Reopen View…
+        </Button>
+      }
       title={`Reopen ${view.name}?`}
       description="Reopen lets you change membership again."
       changes={["Clear Complete on this View"]}
