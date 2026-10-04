@@ -16,7 +16,7 @@ Fingerprint `modifiedNs` is a signed decimal string, preserving nanoseconds acro
 | library_list_sessions | filters, sort, offset, limit | Sessions, coveredLocationIds, provisional scope, counts, date basis, availability and last observation; unknown values stay explicit. Browsing starts no measurement. |
 | library_session | sessionId | Asset identities, observed/corrected metadata and association evidence. |
 | library_preview_metadata | expected assets, field, value | Durable previewId with proposed effective values, predecessor/successor membership and conflicts. No correction or source changes. |
-| library_confirm_metadata | previewId, expected assets | Atomic correction plus regroup/lineage, or Conflict with no changes. Original headers remain unchanged. |
+| library_confirm_metadata | previewId, expected assets | Atomic correction plus regroup/lineage, or Conflict with no changes. After commit, target suggestions of the resulting sessions are re-derived; a refresh failure is reported in `associationRefresh`, and those sessions keep no refreshed Suggested association until the next scan or correction. Original headers remain unchanged. |
 | library_set_quality | expected assets, state | Decision revision bound to freshly hashed reviewed bytes and their observation fingerprint. No membership change; missing or changed digest proof keeps prior quality historical. |
 | library_search_targets | query?, cone? {raDeg, decDeg, radiusDeg}, limit | Offline seed and saved targets/aliases with distinct provenance; shared math provides cone filtering, never automatic association. |
 | library_resolve_target | query | Qualified provider candidate or ProviderUnavailable; core local use remains available. |
