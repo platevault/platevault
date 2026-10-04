@@ -64,6 +64,8 @@ export interface PlanItem {
 
 export interface ReferencePlan {
   viewId: ViewId
+  /** The preparation whose entries these are: the latest one, or an earlier one still on disk. */
+  preparationId: string
   viewName: string
   /** Current mode of the affected entries. */
   mode: EntryKind | "direct-source"
@@ -176,19 +178,21 @@ export function transferPlan(disk: Disk, catalog: Catalog, kind: TransferKind, d
   const bytes = items.reduce((sum, i) => sum + i.sizeBytes, 0)
   const sameVolume = Boolean(volume && items.length > 0 && items.every((i) => i.sourceVolumeId === volume.id))
 
-  // Affected Views: every View whose latest membership includes a moved frame.
+  // Every preparation with an entry for a moved frame, latest or earlier, whatever its View's
+  // current membership: each entry is rebuilt or reported, so none is left dangling (STO-FR-07).
   const moved = new Set(items.map((i) => i.assetId))
-  const affectedViews = Object.values(catalog.views).filter((v) => (v.revisions.at(-1)?.included ?? []).some((id) => moved.has(id)))
   const references: ReferencePlan[] = []
-  for (const view of affectedViews) {
-    const preparation = latestPreparation(catalog, view.id)
-    if (!preparation) continue
+  for (const preparation of Object.values(catalog.preparations).sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    const view = catalog.views[preparation.viewId]
+    if (!view) continue
+    const label = preparation.id === latestPreparation(catalog, view.id)?.id ? view.name : `${view.name} (earlier preparation at ${preparation.viewPath})`
     if (preparation.mode === "direct-source") {
       const entries = preparation.preparedAssetIds.filter((id) => moved.has(id)).map((id) => ({ assetId: id, entryPath: `${preparation.viewPath}/platevault-handoff.txt` }))
       if (entries.length > 0) {
         references.push({
           viewId: view.id,
-          viewName: view.name,
+          preparationId: preparation.id,
+          viewName: label,
           mode: "direct-source",
           entries,
           needsChoice: false,
@@ -219,7 +223,8 @@ export function transferPlan(disk: Disk, catalog: Catalog, kind: TransferKind, d
                 : "A hardlink cannot be rebuilt across volumes. Choose a supported reference mode or keep the local copy."
     references.push({
       viewId: view.id,
-      viewName: view.name,
+      preparationId: preparation.id,
+      viewName: label,
       mode,
       entries: entries.map((e) => ({ assetId: e.assetId!, entryPath: e.file.path })),
       needsChoice,
@@ -227,6 +232,10 @@ export function transferPlan(disk: Disk, catalog: Catalog, kind: TransferKind, d
       effect,
     })
   }
+  // Affected Views: every View whose latest membership includes a moved frame, or that holds an entry for one.
+  const affectedViews = Object.values(catalog.views).filter(
+    (v) => (v.revisions.at(-1)?.included ?? []).some((id) => moved.has(id)) || references.some((r) => r.viewId === v.id),
+  )
 
   const free = volume?.mounted ? freeBytes(disk, volume.id) : null
   let volumeState: VolumeState = "ok"
@@ -317,6 +326,7 @@ export type ReferenceStatus = "pending" | "completed" | "blocked" | "uncertain"
 
 export interface ReferenceRecord {
   viewId: ViewId
+  preparationId: string
   entryPath: string
   action: ReferenceAction
   status: ReferenceStatus
@@ -376,7 +386,7 @@ export function buildPayload(plan: TransferPlan, draft: TransferDraft): Transfer
             : "unchanged"
     for (const entry of ref.entries) {
       const list = refsByAsset.get(entry.assetId) ?? []
-      list.push({ viewId: ref.viewId, entryPath: entry.entryPath, action, status: "pending", detail: null })
+      list.push({ viewId: ref.viewId, preparationId: ref.preparationId, entryPath: entry.entryPath, action, status: "pending", detail: null })
       refsByAsset.set(entry.assetId, list)
     }
   }
@@ -498,7 +508,9 @@ export function stepTransfer(state: PrototypeState, op: Operation): PrototypeSta
   let next = state
   let records = payload.records.map((r) => ({ ...r }))
   let { held, observedReclaimBytes, revalidated } = payload
-  const resumed = !payload.lastStepAt || Date.parse(now) - Date.parse(payload.lastStepAt) > 1_500
+  // Revalidate after anything but this handler wrote the operation: a pause, resume, restart or retry
+  // changes `updatedAt`, so the step knows it is not continuing its own run. Elapsed time proves nothing.
+  const resumed = payload.lastStepAt === null || payload.lastStepAt !== op.updatedAt
   const destVolume = next.disk.volumes[payload.destinationVolumeId]
   const mountedId = volumeForPath(next.disk, payload.destination)
   const mounted = mountedId ? next.disk.volumes[mountedId] : undefined
@@ -506,12 +518,15 @@ export function stepTransfer(state: PrototypeState, op: Operation): PrototypeSta
 
   const persist = (patch: Partial<TransferPayload>, opPatch: Partial<Operation> = {}) => {
     const done = records.filter(isTerminal).length
-    return patchOperation(next, op.id, {
+    const patched = patchOperation(next, op.id, {
       ...opPatch,
       items: toItems(records, (opPatch.status ?? op.status) === "running"),
       progress: { done, total: records.length, unit: "files" },
-      payload: { ...payload, records, held, observedReclaimBytes, revalidated, lastStepAt: now, ...patch } as unknown as Record<string, unknown>,
+      payload: { ...payload, records, held, observedReclaimBytes, revalidated, ...patch } as unknown as Record<string, unknown>,
     })
+    // Stamp the write this step made, so the next step can tell whether anything else wrote since.
+    const written = patched.operations[op.id]!
+    return { ...patched, operations: { ...patched.operations, [op.id]: { ...written, payload: { ...written.payload, lastStepAt: written.updatedAt } } } }
   }
 
   // The destination must be the volume chosen at review (D06, D11).
@@ -539,7 +554,10 @@ export function stepTransfer(state: PrototypeState, op: Operation): PrototypeSta
   if (resumed) {
     records = records.map((r) => {
       if (isTerminal(r)) return r
-      if (r.phase === "copied" || r.phase === "written") return { ...r, phase: "pending", uncertain: null, snapshotSha: null }
+      if (r.phase === "copied" || r.phase === "written") {
+        // Not verified before the stop: it stays uncertain until it is copied and verified again.
+        return { ...r, phase: "pending", uncertain: r.uncertain ?? "Not verified before the transfer stopped: it is copied and verified again.", snapshotSha: null }
+      }
       if (r.phase === "pending") {
         const source = fileAt(next.disk, r.sourcePath)
         if (!source || source.sha256 !== r.planSha) {
@@ -584,7 +602,7 @@ export function stepTransfer(state: PrototypeState, op: Operation): PrototypeSta
             modifiedAt: now,
           })
           next = writeDisk(next, writeFiles(disk, [copy]))
-          record = { ...record, phase: "copied", snapshotSha: source.sha256, wroteDestination: true, uncertain: null }
+          record = { ...record, phase: "copied", snapshotSha: source.sha256, wroteDestination: true }
         }
       }
     } else if (record.phase === "copied") {
@@ -618,7 +636,7 @@ export function stepTransfer(state: PrototypeState, op: Operation): PrototypeSta
                 ],
               },
         )
-        record = { ...record, phase: "verified" }
+        record = { ...record, phase: "verified", uncertain: null }
       }
     } else if (record.phase === "verified") {
       const updated = updateReferences(next, record)
@@ -685,9 +703,26 @@ export function stepTransfer(state: PrototypeState, op: Operation): PrototypeSta
         ? `All ${retired} ${verb}. ${reclaim}`
         : `${retired > 0 ? "Partial" : "Blocked"}: ${retired} ${verb}, ${blocked.length} blocked (${reasons.join(", ")}). Blocked sources are retained. ${reclaim}`
     next = persist({})
+    next = recordRebuiltLinks(next, records)
     return settleOperation(next, op.id, blocked.length === 0 ? "succeeded" : retired > 0 ? "partial" : "failed", summary, href)
   }
   return persist({}, resumed && revalidated ? { summary: revalidated } : {})
+}
+
+/**
+ * After a settled transfer, a hardlinked preparation whose entries were all
+ * rebuilt as symlinks records symlink as its link type, so offline readers
+ * and later handoffs see the entries as they now are (STO-FR-07).
+ */
+function recordRebuiltLinks(state: PrototypeState, records: TransferRecord[]): PrototypeState {
+  const rebuilt = new Set(records.flatMap((r) => r.references.filter((ref) => ref.action === "rebuild-symlink" && ref.status === "completed").map((ref) => ref.preparationId)))
+  let next = state
+  for (const id of rebuilt) {
+    const preparation = next.catalog.preparations[id]
+    if (preparation?.linkType !== "hardlink" || preparedEntries(next.disk, next.catalog, preparation).some((e) => e.kind !== "symlink")) continue
+    next = { ...next, catalog: { ...next.catalog, preparations: { ...next.catalog.preparations, [id]: { ...preparation, linkType: "symlink" } } } }
+  }
+  return next
 }
 
 /** Retry blocked items from their recorded phase (S9, S9a). Drift items re-check the current source. */

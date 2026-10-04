@@ -21,9 +21,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { stableHash } from "@/domain/indexing"
 import type { DiskFile, ResultKind, ResultRecord, View } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime, plural } from "@/lib/format"
-import { nowIso, store, useStore } from "@/store/core"
+import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import { unsettledOperationsForView } from "@/store/operations"
-import { acceptResults, attachResult, markComplete, recordRehash, saveViewNotes } from "./lib/actions"
+import type { Inspection } from "@/store/slices/t5"
+import { type AcceptOutcome, acceptResults, attachResult, markComplete, recordRehash, saveViewNotes } from "./lib/actions"
 import {
   baseName,
   dependentViews,
@@ -31,6 +32,7 @@ import {
   OUTPUT_ROLE_LABEL,
   type OutputRole,
   outputInventory,
+  inspectionDrift,
   outputLocation,
   pathAvailability,
   RESULT_KIND_LABEL,
@@ -38,7 +40,7 @@ import {
   resultRowsForView,
 } from "./lib/files"
 import { type ControlOutcome, finishWriting, overwriteKeepingStat, restoreKeepingStat, saveExternalImage, simulateApplicationOutput } from "./lib/prototype"
-import { FileChooser, PrototypeControls, shortSha } from "./shared"
+import { FileChooser, focusHeading, PrototypeControls, shortSha } from "./shared"
 
 const REUSABLE_KINDS: ResultKind[] = ["linear-integration", "channel-product", "mosaic-panel"]
 const REHASH_MS = 650
@@ -140,8 +142,26 @@ function ResultsArea({ view }: { view: View }) {
   const [completeRefusal, setCompleteRefusal] = useState<string | null>(null)
   const complete = Boolean(view.completedAt)
 
+  const inspections = useStore((s) => s.slices.t5.inspections)
+  const [acceptRefusals, setAcceptRefusals] = useState<AcceptOutcome["refused"]>([])
   const selectedRows = candidates.filter((r) => selected.includes(r.id))
-  const acceptable = (r: ResultRow) => r.processingState === "written" && r.kind !== null && r.availability === "available"
+  // Inspecting records the product's identity and SHA-256; Accept Result re-verifies against it (RES-FR-04, D19).
+  const inspect = (r: ResultRow) => {
+    setActive(r.id)
+    const file = r.file
+    if (r.acceptance !== "candidate" || !file || file.growing) return
+    const inspection: Inspection = { path: file.path, sha256: file.sha256, sizeBytes: file.sizeBytes, modifiedAt: file.modifiedAt, inode: file.inode, at: nowIso() }
+    updateSlice("t5", (s) => ({ ...s, inspections: { ...s.inspections, [r.id]: inspection } }))
+    setAcceptRefusals((list) => list.filter((x) => x.id !== r.id))
+  }
+  const acceptBlock = (r: ResultRow): string | null => {
+    if (r.processingState !== "written") return "still being written"
+    if (r.availability !== "available") return "unavailable"
+    return r.kind === null ? "no kind" : null
+  }
+  const blockedSelection = selectedRows.filter((r) => acceptBlock(r) !== null)
+  // Inspection is checked again at Accept: these are refused there, named, while the rest are accepted (RES-AC-10).
+  const uninspected = selectedRows.filter((r) => acceptBlock(r) === null && inspectionDrift(inspections[r.id], r.file) !== null)
   const activeRow = rows.find((r) => r.id === active) ?? null
 
   const candidateColumns: Column<ResultRow>[] = [
@@ -151,7 +171,7 @@ function ResultsArea({ view }: { view: View }) {
       rowHeader: true,
       sortValue: (r) => r.fileName,
       cell: (r) => (
-        <Button variant="link" size="sm" className="h-auto px-0 font-normal" aria-label={`Inspect ${r.fileName}`} onClick={() => setActive(r.id)}>
+        <Button variant="link" size="sm" className="h-auto px-0 font-normal" aria-label={`Inspect ${r.fileName}`} onClick={() => inspect(r)}>
           {r.fileName}
         </Button>
       ),
@@ -161,6 +181,19 @@ function ResultsArea({ view }: { view: View }) {
     { id: "association", header: "View association", cell: (r) => <AssociationText row={r} /> },
     { id: "lineage", header: "Lineage", cell: (r) => <StatusBadge kind="lineage" value={r.lineage} /> },
     { id: "availability", header: "Availability", cell: (r) => <StatusBadge kind="availability" value={r.availability} /> },
+    {
+      id: "inspection",
+      header: "Inspection",
+      cell: (r) => {
+        const inspection = inspections[r.id]
+        if (!inspection) return <span className="text-xs text-muted-foreground">Not inspected</span>
+        return inspectionDrift(inspection, r.file) ? (
+          <span className="text-xs text-destructive">Changed since inspection</span>
+        ) : (
+          <span className="text-xs">Inspected {formatDateTime(inspection.at)}</span>
+        )
+      },
+    },
     { id: "acceptance", header: "Acceptance", cell: () => <StatusBadge kind="acceptance" value="candidate" /> },
   ]
 
@@ -171,7 +204,7 @@ function ResultsArea({ view }: { view: View }) {
       rowHeader: true,
       sortValue: (r) => r.fileName,
       cell: (r) => (
-        <Button variant="link" size="sm" className="h-auto px-0 font-normal" aria-label={`Inspect ${r.fileName}`} onClick={() => setActive(r.id)}>
+        <Button variant="link" size="sm" className="h-auto px-0 font-normal" aria-label={`Inspect ${r.fileName}`} onClick={() => inspect(r)}>
           {r.fileName}
         </Button>
       ),
@@ -259,7 +292,7 @@ function ResultsArea({ view }: { view: View }) {
                 actions={
                   <Button
                     size="sm"
-                    disabled={selectedRows.length === 0 || !selectedRows.every(acceptable)}
+                    disabled={selectedRows.length === 0 || blockedSelection.length > 0}
                     onClick={() => {
                       setAcceptError(null)
                       setAcceptOpen(true)
@@ -269,8 +302,27 @@ function ResultsArea({ view }: { view: View }) {
                   </Button>
                 }
               />
-              {selectedRows.some((r) => !acceptable(r)) ? (
-                <p className="text-xs text-muted-foreground">Accept Result is unavailable: a selected file is still being written, unavailable, or has no kind.</p>
+              {blockedSelection.length > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Accept Result needs each selected product written, available and with a kind: {blockedSelection.map((r) => `${r.fileName} (${acceptBlock(r)})`).join(", ")}.
+                </p>
+              ) : null}
+              {blockedSelection.length === 0 && uninspected.length > 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Accept Result will refuse {uninspected.map((r) => `${r.fileName} (${inspections[r.id] ? "changed since inspection" : "not inspected"})`).join(", ")}. Inspect{" "}
+                  {uninspected.length === 1 ? "it" : "them"} first to include {uninspected.length === 1 ? "it" : "them"}.
+                </p>
+              ) : null}
+              {acceptRefusals.length > 0 ? (
+                <Notice tone="refusal" title={`${plural(acceptRefusals.length, "product")} not accepted`}>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {acceptRefusals.map((x) => (
+                      <li key={x.id}>
+                        <span className="font-mono text-xs">{x.fileName}</span>: {x.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </Notice>
               ) : null}
               {acceptError ? <ActionError message={acceptError} onRetry={() => setAcceptOpen(true)} /> : null}
               <DataTable
@@ -306,7 +358,9 @@ function ResultsArea({ view }: { view: View }) {
           )}
         </Section>
 
-        {activeRow ? <ResultDetail row={activeRow} verifying={rehash.verifying} onClose={() => setActive(null)} /> : null}
+        {activeRow ? (
+          <ResultDetail row={activeRow} inspection={inspections[activeRow.id]} verifying={rehash.verifying} onInspect={() => inspect(activeRow)} onClose={() => setActive(null)} />
+        ) : null}
 
         <Section
           id="t5-accepted"
@@ -357,7 +411,7 @@ function ResultsArea({ view }: { view: View }) {
 
         <NotesSection view={view} />
 
-        <ResultsPrototypeControls view={view} root={root} accepted={accepted} onChanged={() => setRehashTrigger((n) => n + 1)} />
+        <ResultsPrototypeControls view={view} root={root} products={rows.filter((r) => r.file && !r.file.growing)} onChanged={() => setRehashTrigger((n) => n + 1)} />
       </PageBody>
 
       <ConfirmDialog
@@ -366,6 +420,7 @@ function ResultsArea({ view }: { view: View }) {
         title={`Accept ${selectedRows.length === 1 ? "this Result" : `${selectedRows.length} Results`}?`}
         description={selectedRows.map((r) => `${r.fileName} (${kindLabel(r.kind, r.channel)})`).join(", ")}
         changes={[
+          "Re-check each product against its inspection; a product changed since inspection is refused and needs inspecting again",
           "Record each product's SHA-256 as its acceptance digest",
           "Show the products on this View, its Project and its Target",
           "Keep them protected in cleanup",
@@ -377,10 +432,16 @@ function ResultsArea({ view }: { view: View }) {
         ]}
         confirmLabel={`Accept ${selectedRows.length === 1 ? "Result" : `${selectedRows.length} Results`}`}
         onConfirm={() => {
-          const result = acceptResults(view, selectedRows)
+          const { result, accepted: acceptedIds, refused } = acceptResults(view, selectedRows, inspections)
+          if (refused.length > 0) {
+            // A refused product needs inspecting again before it can be accepted (RES-AC-10).
+            updateSlice("t5", (s) => ({ ...s, inspections: Object.fromEntries(Object.entries(s.inspections).filter(([id]) => !refused.some((x) => x.id === id))) }))
+          }
+          setAcceptRefusals(refused)
           if (result.ok) {
-            setSelected([])
+            setSelected(refused.map((x) => x.id))
             setAcceptError(null)
+            focusHeading(acceptedIds.length > 0 ? "t5-accepted-title" : "t5-candidates-title", 300)
           } else setAcceptError(result.message)
           return result
         }}
@@ -422,10 +483,23 @@ function ResultsArea({ view }: { view: View }) {
   )
 }
 
-function ResultDetail({ row, verifying, onClose }: { row: ResultRow; verifying: boolean; onClose: () => void }) {
+function ResultDetail({
+  row,
+  inspection,
+  verifying,
+  onInspect,
+  onClose,
+}: {
+  row: ResultRow
+  inspection: Inspection | undefined
+  verifying: boolean
+  onInspect: () => void
+  onClose: () => void
+}) {
   const catalog = useStore((s) => s.catalog)
   const dependents = dependentViews(catalog, row.id)
   const state = productState(row, verifying)
+  const drift = row.acceptance === "candidate" && inspection ? inspectionDrift(inspection, row.file) : null
   return (
     <section aria-labelledby="t5-detail-title" className="space-y-3 rounded-lg border bg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -444,6 +518,19 @@ function ResultDetail({ row, verifying, onClose }: { row: ResultRow; verifying: 
           The bytes on disk no longer match the SHA-256 recorded at acceptance. The acceptance and lineage below describe the earlier bytes; this product is not offered for reuse until its accepted bytes are restored.
         </Notice>
       ) : null}
+      {drift ? (
+        <Notice
+          tone="warning"
+          title="Changed since inspection"
+          actions={
+            <Button size="sm" variant="outline" onClick={onInspect}>
+              Inspect again
+            </Button>
+          }
+        >
+          {drift.replace(/ Inspect it again\.$/, "")} Accept Result refuses it until you inspect it again.
+        </Notice>
+      ) : null}
       <KeyValueList
         columns={2}
         items={[
@@ -456,7 +543,12 @@ function ResultDetail({ row, verifying, onClose }: { row: ResultRow; verifying: 
           { label: "View association", value: <AssociationText row={row} /> },
           { label: "Input-frame lineage", value: <StatusBadge kind="lineage" value={row.lineage} />, source: row.lineage === "unknown" ? "No input-frame record was read" : "Recorded by the tool" },
           { label: "SHA-256 now", value: row.currentSha ?? "Unavailable", mono: true },
-          { label: "SHA-256 at acceptance", value: row.acceptedSha ?? "Not accepted", mono: true },
+          ...(row.acceptance === "candidate"
+            ? [
+                { label: "SHA-256 at inspection", value: inspection?.sha256 ?? "Not inspected", mono: true },
+                { label: "Inspected", value: inspection ? formatDateTime(inspection.at) : "Not yet: the file is still being written" },
+              ]
+            : [{ label: "SHA-256 at acceptance", value: row.acceptedSha ?? "Not accepted", mono: true }]),
           { label: "Acceptance", value: row.acceptedAt ? `Accepted ${formatDateTime(row.acceptedAt)}` : "Candidate" },
           { label: "Used by Views", value: dependents.length > 0 ? dependents.map((v) => v.name).join(", ") : "None" },
         ]}
@@ -877,7 +969,7 @@ function ResultPicker({
   )
 }
 
-function ResultsPrototypeControls({ view, root, accepted, onChanged }: { view: View; root: string | null; accepted: ResultRow[]; onChanged: () => void }) {
+function ResultsPrototypeControls({ view, root, products, onChanged }: { view: View; root: string | null; products: ResultRow[]; onChanged: () => void }) {
   const [outcome, setOutcome] = useState<ControlOutcome | null>(null)
   const [externalPath, setExternalPath] = useState("/Volumes/Astro-T7/Work/Finals/NGC7000-HOO.tif")
   const [productPath, setProductPath] = useState<string | null>(null)
@@ -887,7 +979,7 @@ function ResultsPrototypeControls({ view, root, accepted, onChanged }: { view: V
     setOutcome(result)
     onChanged()
   }
-  const productItems = accepted.map((r) => ({ value: r.path, label: r.fileName }))
+  const productItems = products.map((r) => ({ value: r.path, label: `${r.fileName}${r.acceptance === "accepted" ? " (accepted)" : ""}` }))
   return (
     <PrototypeControls outcome={outcome} description="Use these to stand in for the processing application and the journey's P5 helper.">
       <Button size="sm" variant="outline" disabled={!root} onClick={() => run(simulateApplicationOutput(view))}>
@@ -911,11 +1003,11 @@ function ResultsPrototypeControls({ view, root, accepted, onChanged }: { view: V
       <div className="flex w-full flex-wrap items-end gap-2">
         <div className="space-y-1">
           <Label id={productId} className="text-xs">
-            Accepted product
+            Product (P5 helper)
           </Label>
           <Select items={productItems} value={productPath} onValueChange={(v) => setProductPath(v as string)}>
             <SelectTrigger aria-labelledby={productId} size="sm" className="w-72">
-              <SelectValue placeholder="Choose an accepted product" />
+              <SelectValue placeholder="Choose a product" />
             </SelectTrigger>
             <SelectContent>
               {productItems.map((item) => (
@@ -932,7 +1024,7 @@ function ResultsPrototypeControls({ view, root, accepted, onChanged }: { view: V
         <Button size="sm" variant="outline" disabled={!productPath} onClick={() => productPath && run(restoreKeepingStat(productPath))}>
           Restore saved bytes
         </Button>
-        {!productPath ? <span className="text-xs text-muted-foreground">Choose an accepted product first.</span> : null}
+        {!productPath ? <span className="text-xs text-muted-foreground">Choose a product first.</span> : null}
       </div>
     </PrototypeControls>
   )

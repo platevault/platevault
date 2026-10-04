@@ -23,6 +23,7 @@ import type {
   View,
   ViewId,
 } from "@/domain/types"
+import type { Inspection } from "@/store/slices/t5"
 
 export function baseName(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1)
@@ -176,6 +177,20 @@ export interface ResultRow {
   acceptedSha: string | null
   /** SHA-256 of the bytes on disk now; null when unavailable. */
   currentSha: string | null
+}
+
+/** Why a product's bytes no longer match its inspection, or null when they still do (RES-AC-10). */
+export function inspectionDrift(inspection: Inspection | undefined, file: DiskFile | undefined): string | null {
+  if (!inspection) return "Not inspected: inspect it before accepting."
+  if (!file || file.path !== inspection.path) return "Changed since inspection: the file is no longer at the inspected path. Inspect it again."
+  if (file.growing) return "Changed since inspection: the file is being written again. Inspect it again once it is written."
+  if (file.sha256 !== inspection.sha256) {
+    return `Changed since inspection: its bytes no longer match the SHA-256 recorded when you inspected it (${inspection.sha256.slice(0, 12)}… now ${file.sha256.slice(0, 12)}…). Inspect it again.`
+  }
+  if (file.sizeBytes !== inspection.sizeBytes || file.inode !== inspection.inode || file.modifiedAt !== inspection.modifiedAt) {
+    return "Changed since inspection: its size, modification time or file identity changed. Inspect it again."
+  }
+  return null
 }
 
 function rowFromRecord(disk: Disk, record: ResultRecord): ResultRow {

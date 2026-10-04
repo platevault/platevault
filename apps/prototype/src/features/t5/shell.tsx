@@ -10,11 +10,11 @@ import { Button } from "@/components/ui/button"
 import { formatDateTime, formatNight, formatTime } from "@/lib/format"
 import { updateSlice, useStore } from "@/store/core"
 import { recordDelivered } from "./lib/actions"
-import { computeWindows, nightAt, zoneAbbreviation } from "./lib/planning"
+import { computeWindows, nightAt, reminderKey, zoneAbbreviation } from "./lib/planning"
 import { usePlateVaultNow } from "./plans"
 
 /**
- * Delivers each due reminder once per target/site/window identity while
+ * Delivers each due reminder once per Target/site/night identity while
  * PlateVault is open (PLAN-FR-06, PLAN-AC-07). Nothing runs unless the user
  * enabled reminders and the OS allowed notifications (PLAN-AC-05).
  */
@@ -35,9 +35,10 @@ function useReminderScheduler() {
       if (!plan.planned || !target) continue
       for (const w of computeWindows(target, site, plan.criteria, now, 2)) {
         const start = Date.parse(w.start)
-        if (reminders.deliveredWindowKeys.includes(w.key) || now < start - leadMs || now >= start) continue
+        const key = reminderKey(w, site)
+        if (reminders.deliveredWindowKeys.includes(key) || due.some((d) => d.key === key) || now < start - leadMs || now >= start) continue
         due.push({
-          key: w.key,
+          key,
           title: `${target.name} window at ${site.name}`,
           body: `${formatNight(nightAt(start, site))}, ${formatTime(w.start, site.timeZone)}–${formatTime(w.end, site.timeZone)} ${zoneAbbreviation(w.start, site.timeZone)}. Starts in ${Math.max(1, Math.round((start - now) / 60_000))} min.`,
         })

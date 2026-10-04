@@ -82,6 +82,15 @@ export function windowKey(targetId: TargetId, siteId: SiteId, start: string): st
 }
 
 /**
+ * A reminder's delivered identity: Target, site and night (PLAN-AC-07). It
+ * survives criteria edits that move the window's start, so the same night is
+ * never notified twice.
+ */
+export function reminderKey(window: ObservingWindow, site: ObservingSite): string {
+  return `${window.targetId}/${window.siteId}/${nightAt(Date.parse(window.start), site)}`
+}
+
+/**
  * Windows for one Target at one site over the next nights. Every listed window
  * meets every criterion at each sample it covers.
  */

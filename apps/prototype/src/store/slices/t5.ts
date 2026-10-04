@@ -5,17 +5,30 @@
  * operation handlers T5 owns ("cleanup", "archive", "filing"). Durable
  * decisions live in the catalog.
  */
+import type { ReviewSnapshot } from "@/features/t5/lib/cleanup"
 import { t5OperationHandlers } from "@/features/t5/lib/operations"
 import { emptyDraft, type TransferDraft } from "@/features/t5/lib/transfer"
-import type { ViewId } from "@/domain/types"
+import type { ResultId, ViewId } from "@/domain/types"
 import type { SliceDefinition } from "./index"
 
 export interface CleanupDraft {
   /** Selected file keys (`volumeId:path`); null until the user changes the default selection. */
   selected: string[] | null
   stage: "choose" | "review"
+  /** What Review cleanup recorded; execution runs against it, never against the live plan (STO-FR-04). */
+  review: ReviewSnapshot | null
   /** The cleanup run started from this draft. */
   operationId: string | null
+}
+
+/** A product's identity as recorded when the user inspected it (RES-FR-04, D19). */
+export interface Inspection {
+  path: string
+  sha256: string
+  sizeBytes: number
+  modifiedAt: string
+  inode: number
+  at: string
 }
 
 /**
@@ -34,6 +47,10 @@ export interface SimulatedNotification {
 
 export interface T5State {
   cleanup: Record<ViewId, CleanupDraft>
+  /** The latest inspection of each Result candidate; Accept Result re-verifies against it. */
+  inspections: Record<ResultId, Inspection>
+  /** The .ics text of each calendar export as generated when it was saved; Download again serves it unchanged. */
+  calendarFiles: Record<string, string>
   archive: TransferDraft
   filing: TransferDraft
   notifications: SimulatedNotification[]
@@ -41,7 +58,7 @@ export interface T5State {
 
 export const t5Slice: SliceDefinition<T5State> = {
   id: "t5",
-  version: 3,
-  initial: () => ({ cleanup: {}, archive: emptyDraft(), filing: emptyDraft(), notifications: [] }),
+  version: 5,
+  initial: () => ({ cleanup: {}, inspections: {}, calendarFiles: {}, archive: emptyDraft(), filing: emptyDraft(), notifications: [] }),
   operations: t5OperationHandlers,
 }

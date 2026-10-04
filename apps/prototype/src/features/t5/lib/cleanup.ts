@@ -1,6 +1,8 @@
 /**
  * Cleanup plan for one View (spec 071 STO-FR-01..05, STO-FR-10; J27 S4-S11).
  * Derived from the disk and catalog on every render; nothing here writes.
+ * Review cleanup freezes a snapshot of the plan (`reviewSnapshot`); the review
+ * and the execution both check the disk against it (STO-FR-04, D19).
  */
 import { fileKey, filesUnder, volumeForPath } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
@@ -15,6 +17,7 @@ import {
   latestPreparation,
   OUTPUT_ROLE_LABEL,
   type OutputRole,
+  pathAvailability,
   preparedEntries,
   type RetainedProof,
   retainedOriginal,
@@ -95,6 +98,8 @@ export interface CleanupEntry {
   sizeBytes: number
   sha256: string
   inode: number
+  /** The link's target path, recorded without following it; null for a file. */
+  linkTarget: string | null
   linkKind: EntryKind | null
   /** Bytes a removal is expected to free; null when not guaranteed. */
   reclaimBytes: number | null
@@ -107,6 +112,62 @@ export interface CleanupEntry {
   dependents: string[]
   assetId: string | null
   resultId: string | null
+  /** The preparation this entry belongs to; null for a file found in the View folder. */
+  preparationId: string | null
+}
+
+/** A cleanup entry as Review cleanup recorded it, with the bytes of the copy it relies on. */
+export interface ReviewedEntry extends CleanupEntry {
+  /** SHA-256 of the retained original or kept copy (`proof.keptPath`) at review. */
+  keptSha256: string | null
+}
+
+/** What Review cleanup showed: the selected entries and the ones it keeps, frozen at review (STO-FR-04). */
+export interface ReviewSnapshot {
+  at: string
+  viewPath: string
+  selected: ReviewedEntry[]
+  retained: CleanupEntry[]
+}
+
+export function reviewSnapshot(disk: Disk, plan: CleanupPlan, selectedKeys: Set<string>, at: string): ReviewSnapshot {
+  const selected = plan.entries
+    .filter((e) => selectedKeys.has(e.key))
+    .map((e) => ({ ...e, keptSha256: e.proof?.keptPath ? (pathAvailability(disk, e.proof.keptPath).file?.sha256 ?? null) : null }))
+  return { at, viewPath: plan.viewPath, selected, retained: plan.entries.filter((e) => !selectedKeys.has(e.key)) }
+}
+
+export interface ReviewedIdentity {
+  key: string
+  volumeId: VolumeId
+  sha256: string
+  inode: number
+  linkTarget: string | null
+  keptPath: string | null
+  keptSha256: string | null
+}
+
+/**
+ * Why a reviewed entry no longer matches its review, or null (D19): its own
+ * identity, SHA-256 and link target, then the kept copy it relies on. A link
+ * target is compared as a path and never followed. An offline volume is not
+ * drift; the caller reports it.
+ */
+export function reviewDrift(disk: Disk, reviewed: ReviewedIdentity): string | null {
+  if (!disk.volumes[reviewed.volumeId]?.mounted) return null
+  const file = disk.files[reviewed.key]
+  if (!file) return "Changed since review: the file is no longer at its reviewed path."
+  if (file.sha256 !== reviewed.sha256 || file.inode !== reviewed.inode || (file.linkTarget ?? null) !== reviewed.linkTarget) {
+    return reviewed.linkTarget !== null || file.linkTarget
+      ? "Changed since review: the link or its target path no longer matches the review."
+      : "Changed since review: its bytes no longer match the SHA-256 recorded at review."
+  }
+  if (reviewed.keptPath) {
+    const kept = pathAvailability(disk, reviewed.keptPath)
+    if (kept.availability === "offline") return `Kept copy offline since review: ${reviewed.keptPath} cannot be verified now.`
+    if (kept.file?.sha256 !== reviewed.keptSha256) return `Kept copy changed since review: ${reviewed.keptPath} no longer matches the bytes reviewed.`
+  }
+  return null
 }
 
 export interface CleanupPlan {
@@ -166,10 +227,20 @@ export function cleanupPlan(disk: Disk, catalog: Catalog, view: View): CleanupPl
   }
   const sharesInode = (file: DiskFile) => (inodeCount.get(`${file.volumeId}:${file.inode}`) ?? 0) > 1
 
-  function push(file: DiskFile, partial: Omit<CleanupEntry, "key" | "path" | "volumeId" | "sizeBytes" | "sha256" | "inode">) {
+  function push(file: DiskFile, partial: Omit<CleanupEntry, "key" | "path" | "volumeId" | "sizeBytes" | "sha256" | "inode" | "linkTarget" | "preparationId">, preparationId: string | null = null) {
     const key = fileKey(file.volumeId, file.path)
     claimed.add(key)
-    entries.push({ key, path: file.path, volumeId: file.volumeId, sizeBytes: file.sizeBytes, sha256: file.sha256, inode: file.inode, ...partial })
+    entries.push({
+      key,
+      path: file.path,
+      volumeId: file.volumeId,
+      sizeBytes: file.sizeBytes,
+      sha256: file.sha256,
+      inode: file.inode,
+      linkTarget: file.linkTarget ?? null,
+      preparationId,
+      ...partial,
+    })
   }
 
   function addPrepared(prep: Preparation, group: "prepared" | "replaced") {
@@ -195,7 +266,7 @@ export function cleanupPlan(disk: Disk, catalog: Catalog, view: View): CleanupPl
         dependents: [],
         assetId: entry.assetId,
         resultId: entry.resultId,
-      })
+      }, prep.id)
     }
   }
 

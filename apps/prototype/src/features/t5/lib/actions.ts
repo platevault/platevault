@@ -3,23 +3,45 @@
  * stale writes stay visibly unsaved (D08); callers report success only on
  * `{ ok: true }`.
  */
-import type { CalendarExport, PlanCriteria, ResultKind, ResultRecord, SiteId, TargetId, View, ViewId } from "@/domain/types"
+import type { CalendarExport, PlanCriteria, ResultId, ResultKind, ResultRecord, SiteId, TargetId, View, ViewId } from "@/domain/types"
 import { commit, type CommitResult, nowIso, store, withCatalog } from "@/store/core"
 import { unsettledOperationsForView } from "@/store/operations"
-import { type ResultRow, resultIdFor } from "./files"
+import type { Inspection } from "@/store/slices/t5"
+import { inspectionDrift, pathAvailability, type ResultRow, resultIdFor } from "./files"
 
 const viewHref = (viewId: ViewId, area: string) => `/views/${viewId}/${area}`
 
-/** Accept products after inspection (RES-FR-04): records each SHA-256; lineage is never upgraded. */
-export function acceptResults(view: View, rows: ResultRow[]): CommitResult {
+export interface AcceptOutcome {
+  result: CommitResult
+  accepted: ResultId[]
+  /** Products whose bytes changed since inspection; they need inspecting again (RES-AC-10). */
+  refused: Array<{ id: ResultId; fileName: string; reason: string }>
+}
+
+/**
+ * Accept products after inspection (RES-FR-04, D19). Immediately before the
+ * write each product's bytes on disk must still match its inspection; a
+ * changed product is refused and the others are accepted. Records each
+ * SHA-256 as inspected; lineage is never upgraded.
+ */
+export function acceptResults(view: View, rows: ResultRow[], inspections: Record<ResultId, Inspection>): AcceptOutcome {
+  const disk = store.getState().disk
+  const refused: AcceptOutcome["refused"] = []
+  const ready: Array<{ row: ResultRow; sha: string }> = []
+  for (const row of rows) {
+    const { file } = pathAvailability(disk, row.path)
+    const reason = inspectionDrift(inspections[row.id], file)
+    if (reason || !file) refused.push({ id: row.id, fileName: row.fileName, reason: reason ?? "Unavailable: the file cannot be read now." })
+    else ready.push({ row, sha: file.sha256 })
+  }
+  if (ready.length === 0) return { result: { ok: true }, accepted: [], refused }
   const now = nowIso()
-  return commit(
-    `Accept ${rows.length === 1 ? "Result" : `${rows.length} Results`}`,
+  const result = commit(
+    `Accept ${ready.length === 1 ? "Result" : `${ready.length} Results`}`,
     (s) =>
       withCatalog(s, (catalog) => {
         const results = { ...catalog.results }
-        for (const row of rows) {
-          const sha = row.currentSha ?? row.record?.sha256 ?? ""
+        for (const { row, sha } of ready) {
           const base: ResultRecord = row.record ?? {
             id: row.id,
             viewId: row.viewId,
@@ -41,6 +63,7 @@ export function acceptResults(view: View, rows: ResultRow[]): CommitResult {
       }),
     { href: viewHref(view.id, "results") },
   )
+  return { result, accepted: result.ok ? ready.map((r) => r.row.id) : [], refused }
 }
 
 export interface AttachInput {

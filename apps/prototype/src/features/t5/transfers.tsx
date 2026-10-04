@@ -39,7 +39,7 @@ import {
   transferPlan,
   type TransferPlan,
 } from "./lib/transfer"
-import { PrototypeControls, shortSha } from "./shared"
+import { focusHeading, PrototypeControls, shortSha } from "./shared"
 
 const COPY: Record<TransferKind, { title: string; description: string; review: string; approve: string; eyebrow: string; pickerTitle: string }> = {
   archive: {
@@ -156,6 +156,7 @@ function TransferPlanner({ kind }: { kind: TransferKind }) {
       return
     }
     setDraft(kind, { stage: "review", reviewedShas: Object.fromEntries(plan.items.map((i) => [i.assetId, i.sha256])) })
+    focusHeading("t5-transfer-review-title")
   }
 
   const alreadyIndexed = plan.items.length
@@ -177,7 +178,13 @@ function TransferPlanner({ kind }: { kind: TransferKind }) {
             description="Exactly these operations and reference changes. Nothing runs that is not listed here."
             actions={
               <>
-                <Button variant="outline" onClick={() => setDraft(kind, { stage: "plan" })}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDraft(kind, { stage: "plan" })
+                    focusHeading("t5-transfer-sessions-title")
+                  }}
+                >
                   Back to plan
                 </Button>
                 <Button onClick={() => setConfirmOpen(true)}>{copy.approve}</Button>
@@ -370,7 +377,7 @@ function ReferenceSummary({ plan, editable, kind }: { plan: TransferPlan; editab
     <Section id="t5-transfer-refs" title="Affected View references" description="Each View's current and proposed reference mode. No mode is chosen for you.">
       <ul className="space-y-3">
         {plan.references.map((ref) => (
-          <li key={ref.viewId} className="space-y-2 rounded-lg border p-3">
+          <li key={ref.preparationId} className="space-y-2 rounded-lg border p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium">{ref.viewName}</span>
               <span className="text-xs text-muted-foreground tabular-nums">
