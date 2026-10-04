@@ -1,0 +1,359 @@
+{
+  "schemaVersion": 1,
+  "status": "draft-not-executed",
+  "source": "specs/063-clean-rebuild-contract/spec.md",
+  "entries": [
+    {
+      "flowStep": "A1",
+      "journeyStep": "J19/S1, J19/S2, J19/S3",
+      "spec": "064-library-inventory LIB-FR-01, LIB-FR-02",
+      "action": "Read the Locations step, then add Astro-T7/Captures with the native picker and a display name, and a second Captures folder.",
+      "expect": "Captures is required and the optional roles are named. Each row shows the path, role, access state, and Online.",
+      "negative": "Adding a folder starts no indexing and creates, renames, moves, or deletes no file. No workspace root, application, or account is requested."
+    },
+    {
+      "flowStep": "A2",
+      "journeyStep": "J19/S4",
+      "spec": "064-library-inventory LIB-FR-01, LIB-AC-01",
+      "action": "Add a calibration location and leave Results unset.",
+      "expect": "Onboarding continues and Results reads not set.",
+      "negative": "The unset role is not shown as an error or a failed setup."
+    },
+    {
+      "flowStep": "A3",
+      "journeyStep": "J19/S5, J19/S8, J19/S9, J19/S10, J19/S12, J19/S13",
+      "spec": "064-library-inventory LIB-FR-03, LIB-FR-04, LIB-FR-05, LIB-FR-06; D01, D11, D15",
+      "action": "Start indexing, inspect sessions and association evidence, confirm Targets and equipment, and rescan with an unreadable session folder.",
+      "expect": "Seven homogeneous sessions appear with the evidence behind each association. Needs review appears where evidence is missing or conflicts. Confirmations are catalog-only.",
+      "negative": "No session mixes channels, no OBJECT label alone assigns a Target, source headers stay byte-identical, and unreadable files never read Missing."
+    },
+    {
+      "flowStep": "A4",
+      "journeyStep": "J19/S5, J19/S6, J19/S7, J19/S15",
+      "spec": "064-library-inventory LIB-FR-03, LIB-FR-07",
+      "action": "Browse while indexing runs, recover a denied location with Retry, and take a location offline.",
+      "expect": "Totals are provisional and name their locations. The denied row offers Choose folder again and Retry. The offline location keeps its last-observed metadata.",
+      "negative": "No total implies unscanned data. Offline or denied files are not reported Missing or empty."
+    },
+    {
+      "flowStep": "B1",
+      "journeyStep": "J20/S1",
+      "spec": "064-library-inventory LIB-FR-08, LIB-AC-05",
+      "action": "Open NGC 7000 from Target search.",
+      "expect": "Captured, usable, and Unreviewed integration show per channel. Availability is a separate state, and the offline contribution reads Offline.",
+      "negative": "The offline contribution is not offered as an available input."
+    },
+    {
+      "flowStep": "B2",
+      "journeyStep": "J20/S2, J20/S3, J20/S4, J20/S5, J22/S12",
+      "spec": "065-project-goals PRJ-FR-01–PRJ-FR-07; D10, D12",
+      "action": "Create Project NGC 7000 HOO, confirm its Target framing, link sessions explicitly, and set equipment and a checklist; later, meet one item.",
+      "expect": "Progress shows captured and library-usable totals separately. The exposure check shows evidence, not hours. A met item leaves the Project open.",
+      "negative": "Creating the Project changes no file, View, or quality state. Sessions are never linked by proximity or name."
+    },
+    {
+      "flowStep": "B3",
+      "journeyStep": "J20/S6, J20/S7",
+      "spec": "065-project-goals PRJ-FR-06; 072-observing-plans PLAN-FR-01",
+      "action": "Inspect the capture sites, then switch the planning site.",
+      "expect": "Each session keeps its own capture site, and visibility recalculates for the chosen site and time zone.",
+      "negative": "Membership and capture sites do not change, and notifications stay disabled."
+    },
+    {
+      "flowStep": "B4",
+      "journeyStep": "J20/S8, J21/S9",
+      "spec": "066-view-selection VSEL-FR-01",
+      "action": "Create a View from the Project; separately, create a standalone View from Sessions.",
+      "expect": "The workspace opens with Project context even though the checklist is unmet. The standalone View has no Project.",
+      "negative": "Creating a View creates no folder on disk and changes no quality state."
+    },
+    {
+      "flowStep": "C1",
+      "journeyStep": "J21/S1, J21/S2",
+      "spec": "066-view-selection VSEL-FR-02",
+      "action": "Move among the workspace areas, toggle Sky coverage, and name the View.",
+      "expect": "All areas share one selection, and the name and Project show while the profile is unset.",
+      "negative": "No wizard gates movement between areas."
+    },
+    {
+      "flowStep": "C2",
+      "journeyStep": "J21/S3",
+      "spec": "066-view-selection VSEL-FR-03, VSEL-AC-01; D01",
+      "action": "Read the geometric suggestions.",
+      "expect": "Only sessions with confirmed framing, confirmed Project equipment, pointing, orientation, and overlap are preselected, including the one whose label differs. Each candidate shows its evidence.",
+      "negative": "Preselection merges no sessions and rewrites no headers or Targets. Angular separation alone qualifies no session."
+    },
+    {
+      "flowStep": "C3",
+      "journeyStep": "J21/S4",
+      "spec": "066-view-selection VSEL-FR-04, VSEL-AC-02; D01",
+      "action": "Inspect the FOV, pointing-only, and Position unknown evidence, then include those sessions manually.",
+      "expect": "FOV from confirmed equipment lists its inputs. Pointing-only and unknown sessions are selectable only by a manual check.",
+      "negative": "Unknown geometry never shows a distance of 0, and no OBJECT label supplies coordinates."
+    },
+    {
+      "flowStep": "C4",
+      "journeyStep": "J21/S5",
+      "spec": "066-view-selection VSEL-FR-05, VSEL-FR-06; 067-frame-review PIX-AC-06",
+      "action": "Apply the channel, Missing OBJECT, and quality-state filters, open the expanded controls, and sort by sky distance.",
+      "expect": "Filter chips, match counts, and the hidden-selected count show. Measurement columns read Not measured.",
+      "negative": "Filters change no selected IDs, start no measurement, and change no quality state."
+    },
+    {
+      "flowStep": "C5",
+      "journeyStep": "J21/S6, J21/S7, J21/S9, J22/S13a",
+      "spec": "066-view-selection VSEL-FR-06, VSEL-FR-07, VSEL-FR-08; D02, D08",
+      "action": "Show the selection, browse, save explicitly, clear a standalone draft, and see an Unusable frame start excluded.",
+      "expect": "Available Unreviewed and Usable frames are included (214 / 17h 50m), and Unusable frames start visibly excluded. The selection survives sort, paging, and the sky toggle. Save View commits a revision.",
+      "negative": "Inclusion applies no quality action. Clearing one draft changes no other View."
+    },
+    {
+      "flowStep": "C6",
+      "journeyStep": "J21/S8",
+      "spec": "066-view-selection VSEL-FR-09; D02",
+      "action": "Select the offline session, then remove it explicitly.",
+      "expect": "It reads Offline with unverified counts, and its frames are named unresolved members.",
+      "negative": "An offline source is never dropped silently or counted as verified."
+    },
+    {
+      "flowStep": "D1",
+      "journeyStep": "J22/S1, J22/S3, J22/S4",
+      "spec": "067-frame-review PIX-FR-01, PIX-AC-01",
+      "action": "Open Review frames, cancel measurement, and reopen.",
+      "expect": "Pending frames and progress show. After Cancel, unfinished frames read Not measured. Cached values reappear and missing ones resume.",
+      "negative": "Cancel discards no selection or exclusion."
+    },
+    {
+      "flowStep": "D2",
+      "journeyStep": "J22/S2, J22/S5",
+      "spec": "067-frame-review PIX-FR-02, PIX-FR-03, PIX-FR-04; D03",
+      "action": "Select frames from a row and from the plot. Zoom, pan, compare regions, step between frames, and apply and remove a stretch.",
+      "expect": "The selection is highlighted in the list, plot, and preview. Metadata, source, and units appear on disclosure.",
+      "negative": "Stretch changes no measured value or source byte."
+    },
+    {
+      "flowStep": "D3",
+      "journeyStep": "J22/S6, J22/S7",
+      "spec": "067-frame-review PIX-FR-05, PIX-FR-06, PIX-AC-03",
+      "action": "Enable Stars and inspect a fitted star and a saturated star.",
+      "expect": "Fit details and cutouts show, with distinct HFR and FWHM labels and units. The saturated star reads failed fit with a warning.",
+      "negative": "No width number is shown for a failed fit."
+    },
+    {
+      "flowStep": "D4",
+      "journeyStep": "J22/S8, J22/S9, J22/S10",
+      "spec": "066-view-selection VSEL-FR-10, VSEL-AC-04",
+      "action": "Exclude six 30 Sep frames, restore and re-exclude one, and read the totals.",
+      "expect": "The 30 Sep row reads 42 of 48 and the View reads 208 / 17h 20m (Ha 111 / 9h 15m, OIII 97 / 8h 05m).",
+      "negative": "The files stay on disk. Library quality, Target usable totals, other Views, and the Project are unchanged."
+    },
+    {
+      "flowStep": "D5",
+      "journeyStep": "J22/S11, J22/S13",
+      "spec": "066-view-selection VSEL-FR-11, VSEL-AC-05; D10",
+      "action": "Mark the included frames usable with the named scope, mark one frame unusable in the library, and reject another for the Project.",
+      "expect": "Each confirmation names its scope. Only the confirmed frames change state, and Target usable integration rises by the usable total.",
+      "negative": "The Project rejection changes no library total, and no action changes View membership."
+    },
+    {
+      "flowStep": "D6",
+      "journeyStep": "J22/S14, J22/S15",
+      "spec": "067-frame-review PIX-FR-07, PIX-FR-08, PIX-AC-04, PIX-AC-05; D03",
+      "action": "Import a SubframeSelector CSV, confirm the mapping, and inspect the unresolved rows.",
+      "expect": "Matched, unmatched, and ambiguous rows are listed. Imported values show with provenance next to native values.",
+      "negative": "No native value is replaced and no exclusion or quality change is imported. A column without units is not relabeled as FWHM or HFR."
+    },
+    {
+      "flowStep": "E1",
+      "journeyStep": "J23/S1, J23/S2, J23/S3, J23/S4",
+      "spec": "068-calibration-inputs CAL-FR-01–CAL-FR-04; D13",
+      "action": "Open calibration, read Why this match, accept the suggestions explicitly, and inspect the raw flat handoff.",
+      "expect": "Suggestions are grouped and listed separately from accepted assignments. The criteria are listed. Raw flats go to the application to build its own masters.",
+      "negative": "Nothing is accepted implicitly, no temperature tolerance is applied unless shown, and no master is written."
+    },
+    {
+      "flowStep": "E2",
+      "journeyStep": "J23/S5, J23/S6, J23/S7",
+      "spec": "068-calibration-inputs CAL-FR-05, CAL-AC-02, CAL-AC-03; D13",
+      "action": "Find the unresolved 24 Sep flat, record a scoped exception with a reason, and check another View.",
+      "expect": "The exception keeps the unknown criterion and the reason, and another View shows no exception.",
+      "negative": "The flat set's evidence is unchanged and the exception does not make it universally compatible."
+    },
+    {
+      "flowStep": "E3",
+      "journeyStep": "J23/S8, J23/S9",
+      "spec": "069-application-handoff PREP-FR-01, PREP-FR-02; D04",
+      "action": "Choose the Siril profile; separately, try Open in....",
+      "expect": "The profile shows its capability evidence. Open in... reads unverified, blocks Linked and Direct source, and offers Copy or Clone.",
+      "negative": "No unverified capability is claimed, there is no claim that renaming overrides headers, and nothing is launched."
+    },
+    {
+      "flowStep": "E4",
+      "journeyStep": "J23/S10, J23/S11, J24/S14, J24/S16",
+      "spec": "069-application-handoff PREP-FR-03, PREP-AC-06; D15",
+      "action": "Compare the catalog and header values for 28 Sep, accept the source value in the main View, and patch copies in the check View.",
+      "expect": "The effective handoff value is named, and only the isolated copies carry the patched value.",
+      "negative": "No correction is claimed as delivered while the tool reads the original. Originals are byte-identical."
+    },
+    {
+      "flowStep": "F1",
+      "journeyStep": "J24/S1, J24/S2, J24/S3",
+      "spec": "069-application-handoff PREP-FR-04, PREP-FR-05, PREP-AC-04; D04",
+      "action": "Read the input modes, try Direct source, and confirm a hardlink choice.",
+      "expect": "Each mode states its semantics and storage. Direct source passes exact paths or refuses an overinclusive folder. The hardlink limits are named.",
+      "negative": "No overinclusive handoff is accepted, and the link type does not change without confirmation."
+    },
+    {
+      "flowStep": "F2",
+      "journeyStep": "J24/S4, J24/S5, J24/S6",
+      "spec": "069-application-handoff PREP-FR-06, PREP-AC-02",
+      "action": "Choose a colliding folder, lose the parent volume, and choose Work/Processing.",
+      "expect": "The collision and the unavailable parent each prompt another choice. The final path is shown.",
+      "negative": "Unrelated content is untouched and no drive is substituted silently."
+    },
+    {
+      "flowStep": "F3",
+      "journeyStep": "J24/S7, J24/S14",
+      "spec": "069-application-handoff PREP-FR-07",
+      "action": "Keep View/output, and in the check View override the output parent.",
+      "expect": "The default and a View-specific subfolder under the override are recorded.",
+      "negative": "The override parent is never used directly as the output folder."
+    },
+    {
+      "flowStep": "F4",
+      "journeyStep": "J24/S8, J24/S13",
+      "spec": "069-application-handoff PREP-FR-08, PREP-AC-01, PREP-AC-03; D02, D13",
+      "action": "Review preparation, confirm the exact membership, and meet a destination without links.",
+      "expect": "The full review content and checks show, and Clone, Copy, and Direct alternatives appear with footprints.",
+      "negative": "Nothing is written before Prepare, and no omitted or unaccepted input is counted. A link plan never becomes a copy silently."
+    },
+    {
+      "flowStep": "F5",
+      "journeyStep": "J24/S9, J24/S15, J24/S16",
+      "spec": "069-application-handoff PREP-FR-09, PREP-AC-05; D09",
+      "action": "Prepare, prepare with three blocked inputs while trying Mark complete, and Retry.",
+      "expect": "Prepared appears only when the entries match the membership. Partial reads 53/3. Retry completes the journaled entries to 56.",
+      "negative": "An acknowledgment is not success and no verified Open is offered on Partial. Complete is refused while preparation runs. Sources are untouched."
+    },
+    {
+      "flowStep": "F6",
+      "journeyStep": "J24/S10, J24/S11",
+      "spec": "069-application-handoff PREP-FR-10",
+      "action": "Open with a missing executable, then open Siril and quit it.",
+      "expect": "Choose application and Reveal View are offered, and the launch is recorded separately from processing.",
+      "negative": "The View stays Prepared, and quitting Siril does not mark it Complete."
+    },
+    {
+      "flowStep": "G",
+      "journeyStep": "J25/S1–S6",
+      "spec": "066-view-selection VSEL-FR-12, VSEL-AC-06; 069-application-handoff PREP-FR-11; D02, D08, D09",
+      "action": "Index new arrivals, make a member unreadable, Refresh selection, keep the View unchanged, then accept one addition, decline one, and save.",
+      "expect": "Additions show with reasons, manual inclusions and exclusions stay recorded, and the unreadable member reads Unavailable. The accepted change becomes a proposed revision that needs review.",
+      "negative": "Membership never changes without approval. The prepared revision and the inputs Siril reads stay identical."
+    },
+    {
+      "flowStep": "H1",
+      "journeyStep": "J26/S1",
+      "spec": "070-results-reuse RES-FR-01",
+      "action": "Open Results for the View.",
+      "expect": "Typed candidates with availability show. A growing file reads Pending, and intermediates are listed separately.",
+      "negative": "Nothing is auto-accepted or claimed to come from the full selection."
+    },
+    {
+      "flowStep": "H2",
+      "journeyStep": "J26/S2",
+      "spec": "070-results-reuse RES-FR-02, RES-FR-03, RES-AC-02",
+      "action": "Attach a TIFF saved elsewhere as a Final image.",
+      "expect": "The lineage reads User-linked.",
+      "negative": "The lineage is never shown as Tool-recorded without tool evidence."
+    },
+    {
+      "flowStep": "H3",
+      "journeyStep": "J26/S3",
+      "spec": "070-results-reuse RES-FR-04, RES-AC-03",
+      "action": "Inspect and accept three products.",
+      "expect": "They appear on the View, Project, and Target and read Keep.",
+      "negative": "Acceptance upgrades no lineage and claims no use of all frames."
+    },
+    {
+      "flowStep": "H3a",
+      "journeyStep": "J26/S4, J26/S5, J26/S6, J26/S7",
+      "spec": "070-results-reuse RES-FR-05, RES-AC-04, RES-AC-05; D04",
+      "action": "Create View from results, choose a product-capable profile, prepare and open the View, then change a product's bytes.",
+      "expect": "Two product inputs with their originating View. Unsupported product kinds are refused by name. Drift is flagged for review.",
+      "negative": "No raw integration is added and nothing is converted, combined, or replaced silently."
+    },
+    {
+      "flowStep": "H4",
+      "journeyStep": "J26/S8, J26/S9",
+      "spec": "068-calibration-inputs CAL-FR-06, CAL-FR-07, CAL-AC-04, CAL-AC-05; D05, D13",
+      "action": "See the detected master and adopt it into a durable calibration destination.",
+      "expect": "The master is registered with provenance only after a verified copy, then appears as a suggestion awaiting acceptance.",
+      "negative": "It is never preselected before adoption, and its generated source is not removed."
+    },
+    {
+      "flowStep": "I1",
+      "journeyStep": "J27/S1, J27/S2, J27/S3, J24/S15",
+      "spec": "070-results-reuse RES-FR-06, RES-AC-06; D09",
+      "action": "Mark Complete on a View without a Result and on the main View, then try edits on the Complete View.",
+      "expect": "Complete is recorded and Clean up View is offered separately. Membership edits need an explicit Reopen; notes can be edited.",
+      "negative": "Completion removes nothing and claims no external success. Complete is refused while a PlateVault operation is running. Complete is refused only while a running PlateVault mutation affects this View; notes, Result acceptance, reviewed cleanup and archive/filing repair do not reopen it."
+    },
+    {
+      "flowStep": "I2",
+      "journeyStep": "J27/S4, J27/S6",
+      "spec": "071-storage-custody STO-FR-01, STO-AC-01; D05, D16",
+      "action": "Open Clean up View and select a protected product.",
+      "expect": "Only recognized intermediates and temporary files are preselected. Keep holds products and masters. A protected selection names its dependent View.",
+      "negative": "No original is a candidate and the defaults never cover the whole directory."
+    },
+    {
+      "flowStep": "I3",
+      "journeyStep": "J27/S5",
+      "spec": "071-storage-custody STO-FR-02, STO-FR-03",
+      "action": "Inspect groups, deselect a file, select the prepared inputs, and leave the unknown file.",
+      "expect": "Path, role, references, retained-original evidence, and bytes show for each file.",
+      "negative": "Link sizes are not promised as reclaimed bytes, and Keep stays unselected."
+    },
+    {
+      "flowStep": "I4",
+      "journeyStep": "J27/S7",
+      "spec": "071-storage-custody STO-FR-04, STO-AC-04",
+      "action": "Review cleanup.",
+      "expect": "The exact entries show with Send to OS Trash, movable and blocked counts per location, and a last-copy hardlink blocked.",
+      "negative": "Nothing with stale identity, missing proof, an unavailable source, or ambiguous ownership is approved."
+    },
+    {
+      "flowStep": "I5",
+      "journeyStep": "J27/S8, J27/S9, J27/S10",
+      "spec": "071-storage-custody STO-FR-05, STO-AC-03",
+      "action": "Send to Trash, put one file back, and try a location without Trash.",
+      "expect": "Per-item outcomes and a partial summary show. The removed entries are in the OS Trash. The unsupported location offers Keep files and Reveal location.",
+      "negative": "Link targets are not followed, protected files are unchanged, and no permanent-delete fallback exists."
+    },
+    {
+      "flowStep": "J",
+      "journeyStep": "J28/S1–S10",
+      "spec": "071-storage-custody STO-FR-06, STO-FR-07, STO-FR-08, STO-AC-05; D06, D09, D11; D09",
+      "action": "Plan an archive, meet an impostor volume, choose the reference mode, approve, interrupt, retry, repair a blocked reference, and unplug the archive later.",
+      "expect": "Per-item journaled phases. Sources are retired only after destination and reference verification. Fixed membership; archived inputs read Offline.",
+      "negative": "No source is retired on failure or uncertainty. Hardlinks are not converted implicitly. Retry does not infer from filenames, and Open never omits unavailable inputs."
+    },
+    {
+      "flowStep": "K",
+      "journeyStep": "J29/S1–S10",
+      "spec": "072-observing-plans PLAN-FR-01–PLAN-FR-05, PLAN-AC-01–PLAN-AC-05; D07, D18",
+      "action": "Plan windows, switch site, try reminders without a default site, set the default and lead time, deny then grant permission, restart, and export and re-check the .ics.",
+      "expect": "Windows name their site and time zone. Reminders only after opt-in, naming Backyard. Visible denial with Settings and Retry. No duplicate reminders. The .ics holds exactly the selected windows.",
+      "negative": "No weather or readiness claims, no reminder for the second site, no indexing, no provider account, and the saved .ics never changes."
+    },
+    {
+      "flowStep": "L",
+      "journeyStep": "J30/S1–S6",
+      "spec": "071-storage-custody STO-FR-09, STO-AC-06; D06, D14; D09",
+      "action": "Propose filing, meet a collision, revise the plan, approve, verify, and interrupt a cross-volume filing.",
+      "expect": "Every relative path is previewed with its original basename. Only the displayed operations run. Hashes verify, and references report outcomes.",
+      "negative": "Nothing is overwritten, merged, or patched. A source is kept after failed verification, and membership is unchanged."
+    }
+  ]
+}

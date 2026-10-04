@@ -1,0 +1,193 @@
+{
+  "status": "draft-rebuild-not-executed",
+  "legacyPreserved": true,
+  "mapping": [
+    {
+      "old": "J01",
+      "successor": "J19",
+      "recommendation": "Deprecate with a pointer to J19 once intent is recorded."
+    },
+    {
+      "old": "J02",
+      "successor": "none (the inbox move flow was removed; J30 filing is the closest)",
+      "recommendation": "Leave unchanged pending a decision; if deprecated, point to J30 and say it is not equivalent."
+    },
+    {
+      "old": "J03",
+      "successor": "J19",
+      "recommendation": "Deprecate with a pointer to J19 once intent is recorded."
+    },
+    {
+      "old": "J04",
+      "successor": "J19, J21",
+      "recommendation": "Deprecate with a pointer to J19/J21 once intent is recorded."
+    },
+    {
+      "old": "J05",
+      "successor": "J20, J24, J26, J27",
+      "recommendation": "Deprecate with pointers once intent is recorded."
+    },
+    {
+      "old": "J06",
+      "successor": "J27 (raw sub-frame cleanup is outside View cleanup, STO-FR-03)",
+      "recommendation": "Deprecate with a pointer to J27 and say raw-sub reclaim has no successor."
+    },
+    {
+      "old": "J07",
+      "successor": "J28 (permanent delete has no successor)",
+      "recommendation": "Deprecate with a pointer to J28 and say permanent delete was removed."
+    },
+    {
+      "old": "J08",
+      "successor": "J23, J26/S8–S9",
+      "recommendation": "Deprecate with pointers once intent is recorded."
+    },
+    {
+      "old": "J09",
+      "successor": "J20/S1, J29",
+      "recommendation": "Deprecate with pointers once intent is recorded."
+    },
+    {
+      "old": "J10",
+      "successor": "none",
+      "recommendation": "Leave unchanged; settings, appearance, and i18n are outside flow A–L."
+    },
+    {
+      "old": "J11",
+      "successor": "partial: J19/S10, J23/S6",
+      "recommendation": "Leave unchanged pending a decision; inbox mistake recovery has no successor."
+    },
+    {
+      "old": "J12",
+      "successor": "distributed across the J19, J24, J27, and J28 failure branches",
+      "recommendation": "Leave unchanged pending a decision."
+    },
+    {
+      "old": "J13",
+      "successor": "none (Activity is a secondary utility)",
+      "recommendation": "Leave unchanged."
+    },
+    {
+      "old": "J14",
+      "successor": "J20",
+      "recommendation": "Deprecate with a pointer to J20 once intent is recorded."
+    },
+    {
+      "old": "J15",
+      "successor": "partial: J19/S10 (equipment record, D11), J20/P2 and J29/S5 (sites)",
+      "recommendation": "Leave unchanged pending a decision; the record-creation controls are unspecified."
+    },
+    {
+      "old": "J16",
+      "successor": "none",
+      "recommendation": "Leave unchanged."
+    },
+    {
+      "old": "J17",
+      "successor": "none",
+      "recommendation": "Leave unchanged (it is the only active legacy journey)."
+    },
+    {
+      "old": "J18",
+      "successor": "J19/S1–S4",
+      "recommendation": "Deprecate with a pointer to J19 once intent is recorded."
+    }
+  ],
+  "readiness": {
+    "common": {
+      "goalObservableDone": "pass (all 12)",
+      "expectsFalsifiable": "pass (all 12)",
+      "successCriteriaConcrete": "pass (all 12; each SC has a count, value, or state)",
+      "negativesAtTrustPoints": "pass (all 12; every mutation, deletion, transfer, patch, and quality step has an Expect (negative))",
+      "actorsSurfacesInterfacesTrace": "pass, with the README surface and interface confirmation pending (see readmeUpdates)",
+      "preconditionsEstablishable": "fail where a G entry names an unresolved implementation qualification",
+      "errorBranchesScoped": "pass, either as steps or as G entries scoped out of the journey",
+      "statusOutcome": "All 12 remain status: draft. G1 in each says the rebuilt application does not exist and nothing has been validated. Promotion needs a fresh validation run in which every step passes."
+    },
+    "perJourney": [
+      {
+        "id": "J19",
+        "blocking": [
+          "G2 equipment-record control; locate/remap not exercised",
+          "G3 catalog-write fault fixture",
+          "G4 re-index control",
+          "G5 indexing duration for S6"
+        ]
+      },
+      {
+        "id": "J20",
+        "blocking": [
+          "G2 mosaic panels not exercised",
+          "G3 session-linkage and site-saving controls"
+        ]
+      },
+      {
+        "id": "J21",
+        "blocking": [
+          "G2 overlap criterion value",
+          "G3 stale-overwrite concurrency not exercised"
+        ]
+      },
+      {
+        "id": "J22",
+        "blocking": [
+          "G2 PIX numerical method and tolerance qualification; CFA not exercised"
+        ]
+      },
+      {
+        "id": "J23",
+        "blocking": [
+          "G2 Siril capability probe (D04); other profiles not exercised"
+        ]
+      },
+      {
+        "id": "J24",
+        "blocking": [
+          "G2 Siril handoff and input-write probe",
+          "G3 mixed per-item modes not settled by D01–D18",
+          "G4 Cancel/Pause phases"
+        ]
+      },
+      {
+        "id": "J25",
+        "blocking": [
+          "G2 manual-inclusion pins and the folder for a new revision not settled by D01–D18"
+        ]
+      },
+      {
+        "id": "J26",
+        "blocking": [
+          "G2 Siril product-input capability",
+          "G3 mixed raw/product and Add accepted results not exercised"
+        ]
+      },
+      {
+        "id": "J27",
+        "blocking": [
+          "G2 Direct-source cleanup not exercised",
+          "G3 cleanup of replaced entries not exercised"
+        ]
+      },
+      {
+        "id": "J28",
+        "blocking": [
+          "G2 hash-mismatch fault fixture",
+          "G3 View layout for P4 and the source-retirement method",
+          "G4 Direct-source path updates not exercised"
+        ]
+      },
+      {
+        "id": "J29",
+        "blocking": [
+          "G2 reminder observability and the scheduler (D07)"
+        ]
+      },
+      {
+        "id": "J30",
+        "blocking": [
+          "G2 destination relative layout; filing retry not exercised"
+        ]
+      }
+    ]
+  }
+}
