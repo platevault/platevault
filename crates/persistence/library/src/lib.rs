@@ -1114,6 +1114,47 @@ impl Catalog {
         Ok(record)
     }
 
+    /// Durably record a bundled seed catalog fact without any user adoption.
+    ///
+    /// Only `Provenance::Seed` candidates are accepted and the stored record keeps
+    /// that provenance. An identical stored fact is returned unchanged; a changed
+    /// seed fact is refreshed with the next revision; a user, provider or other
+    /// record with the same id is returned unchanged and never overwritten.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a non-seed candidate or invalid fields.
+    pub async fn record_seed_target(&self, candidate: &TargetCandidate) -> Result<TargetRecord> {
+        if !matches!(candidate.provenance, Provenance::Seed { .. }) {
+            return Err(LibraryError::InvalidInput(
+                "seed facts need seed provenance; user and provider targets use save_target".into(),
+            ));
+        }
+        validate_target(candidate)?;
+        let mut stored = candidate.clone();
+        stored.designation = stored.designation.trim().to_owned();
+        let record = write_txn!(self, |conn| {
+            let existing = match load_target(conn, candidate.id).await {
+                Ok(record) => Some(record),
+                Err(LibraryError::NotFound(_)) => None,
+                Err(error) => return Err(error),
+            };
+            match existing {
+                Some(record)
+                    if record.candidate == stored
+                        || !matches!(record.candidate.provenance, Provenance::Seed { .. }) =>
+                {
+                    record
+                }
+                existing => {
+                    let revision = existing.map_or(1, |record| record.decision_revision + 1);
+                    upsert_target(conn, &stored, revision).await?;
+                    load_target(conn, candidate.id).await?
+                }
+            }
+        });
+        Ok(record)
+    }
+
     /// # Errors
     /// `NotFound` for an unknown target.
     pub async fn target(&self, id: Uuid) -> Result<TargetRecord> {

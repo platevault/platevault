@@ -11,14 +11,16 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use persistence_library::{Catalog, LocationRegistration, SessionQuery, SourceProbe};
+use persistence_library::{
+    Catalog, LocationRegistration, SessionQuery, SourceProbe, SuggestedAssociation,
+};
 use platevault_model::{
-    ApplicableQuality, Asset, AssociationState, Availability, CaptureKey, CaptureMetadata,
-    CorrectionInput, ExpectedAsset, ExpectedSession, FileIdentity, GroupingResult, ImageFormat,
-    LibraryError, Location, LocationRole, NativePath, ObservationFingerprint, PathSensitivity,
-    Provenance, Quality, RemapBlockReason, ScanBatch, ScanFile, ScanIssue, ScanObservation,
-    ScanOperation, ScanProgress, ScanState, Session, SessionCandidate, TargetAlias,
-    TargetCandidate, VolumeIdentity,
+    ApplicableQuality, Asset, AssociationKind, AssociationState, Availability, CaptureKey,
+    CaptureMetadata, CorrectionInput, EvidenceItem, ExpectedAsset, ExpectedSession, FileIdentity,
+    GroupingResult, ImageFormat, LibraryError, Location, LocationRole, NativePath,
+    ObservationFingerprint, PathSensitivity, Provenance, Quality, RemapBlockReason, ScanBatch,
+    ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState, Session,
+    SessionCandidate, TargetAlias, TargetCandidate, VolumeIdentity,
 };
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -662,6 +664,68 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
     );
     assert_eq!(moved[0].applicable_quality(), ApplicableQuality::Usable, "decision kept");
     assert_eq!(tree(&fx.root), original_tree, "no source writes");
+}
+
+#[tokio::test]
+async fn seed_facts_are_recorded_without_adoption_and_qualified_suggestions_count() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"frame one");
+    fx.write("Ha_002.fits", b"frame two");
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &["Ha_001.fits", "Ha_002.fits"]).await;
+    let mut seed = target("NGC 7000", "ngc 7000");
+    seed.provenance = Provenance::Seed { dataset: "bundled-seed".into() };
+
+    let mut user = seed.clone();
+    user.provenance = Provenance::User;
+    assert_eq!(kind(&catalog.record_seed_target(&user).await.unwrap_err()), "invalid_input");
+    assert!(catalog.list_targets(0, 0).await.unwrap().is_empty(), "refusal writes nothing");
+    let recorded = catalog.record_seed_target(&seed).await.unwrap();
+    assert_eq!(recorded.decision_revision, 1);
+    assert_eq!(catalog.record_seed_target(&seed).await.unwrap().decision_revision, 1, "idempotent");
+
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let alias = EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true };
+    let suggestion = |evidence: Vec<EvidenceItem>| SuggestedAssociation {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        kind: AssociationKind::Target,
+        subject_id: Some(seed.id),
+        state: AssociationState::Suggested,
+        evidence,
+        provenance: Provenance::Inferred { rule: "alias-and-coordinates".into() },
+    };
+    catalog.record_suggestions(&[suggestion(vec![alias.clone()])]).await.unwrap();
+    let label_only = catalog.target_coverage(seed.id).await.unwrap();
+    assert!(label_only.contributions.is_empty(), "an agreeing label alone does not count");
+    let coordinates = EvidenceItem::Coordinates { ra_deg: 314.75, dec_deg: 44.33, qualified: true };
+    catalog.record_suggestions(&[suggestion(vec![alias, coordinates])]).await.unwrap();
+    let coverage = catalog.target_coverage(seed.id).await.unwrap();
+    let captured: f64 = coverage.contributions.iter().map(|c| c.captured_seconds).sum();
+    let unreviewed: f64 = coverage.contributions.iter().map(|c| c.unreviewed_seconds).sum();
+    assert!((captured - 600.0).abs() < 1e-9 && (unreviewed - 600.0).abs() < 1e-9);
+    assert_eq!(coverage.covered_location_ids, vec![location.id]);
+    let associations = catalog.associations(session.id).await.unwrap();
+    assert_eq!(associations[0].state, AssociationState::Suggested, "never auto-confirmed");
+    catalog.close().await.unwrap();
+
+    let reopened = Catalog::open(&fx.db).await.unwrap();
+    let listed = reopened.list_targets(0, 0).await.unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].candidate.provenance, Provenance::Seed { dataset: "bundled-seed".into() });
+    let mut refreshed = seed.clone();
+    refreshed.common_name = Some("North America Nebula".into());
+    assert_eq!(reopened.record_seed_target(&refreshed).await.unwrap().decision_revision, 2);
+
+    let mut adopted = refreshed.clone();
+    adopted.provenance = Provenance::User;
+    adopted.common_name = Some("My North America".into());
+    reopened.save_target(&adopted, Some(2)).await.unwrap();
+    let kept = reopened.record_seed_target(&seed).await.unwrap();
+    assert_eq!(kept.candidate.provenance, Provenance::User, "user record never overwritten");
+    assert_eq!(kept.candidate.common_name.as_deref(), Some("My North America"));
+    assert_eq!(kept.decision_revision, 3);
 }
 
 #[tokio::test]
