@@ -6,7 +6,7 @@
 import { stableHash } from "@/domain/indexing"
 import { removeSite } from "@/domain/sites"
 import type { Catalog, ObservingSite, SiteId } from "@/domain/types"
-import { type CommitResult, nowIso, withCatalog } from "@/store/core"
+import { type CommitResult, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { parseNumber } from "../components/form-field"
 import { save } from "./writes"
 
@@ -86,16 +86,36 @@ export function saveSite(values: SiteValues, id: SiteId | null, makeDefault: boo
     },
     (s) => {
       const next = withCatalog(s, (c) => ({ ...c, sites: { ...c.sites, [siteId]: site } }))
-      return makeDefault ? { ...next, settings: { ...next.settings, defaultSiteId: siteId } } : next
+      return makeDefault ? withDefaultSite(next, siteId) : next
     },
   )
 }
 
+/** Whether moving the default to `siteId` also moves enabled reminders; the page confirms it first. */
+export function remindersMoveWith(state: PrototypeState, siteId: SiteId): boolean {
+  return state.catalog.reminders.enabled && state.catalog.reminders.siteId !== siteId
+}
+
+/**
+ * Reminders always use the displayed default site (PLAN-FR-03, HLD seam 7),
+ * so moving the default rebinds enabled reminders too.
+ */
+function withDefaultSite(s: PrototypeState, siteId: SiteId): PrototypeState {
+  const next = { ...s, settings: { ...s.settings, defaultSiteId: siteId } }
+  return remindersMoveWith(s, siteId) ? withCatalog(next, (c) => ({ ...c, reminders: { ...c.reminders, siteId } })) : next
+}
+
 export function setDefaultSite(site: ObservingSite): CommitResult {
-  return save({ label: `Default site ${site.name}`, saved: `${site.name} is the default site`, detail: "Only the default pointer moved; no site's fields changed.", href: HREF }, (s) => ({
-    ...s,
-    settings: { ...s.settings, defaultSiteId: site.id },
-  }))
+  const moves = remindersMoveWith(store.getState(), site.id)
+  return save(
+    {
+      label: `Default site ${site.name}`,
+      saved: `${site.name} is the default site`,
+      detail: moves ? `Reminders now use ${site.name}; no site's fields changed.` : "Only the default pointer moved; no site's fields changed.",
+      href: HREF,
+    },
+    (s) => withDefaultSite(s, site.id),
+  )
 }
 
 export function deleteSite(site: ObservingSite): CommitResult {

@@ -60,26 +60,45 @@ export function removalRefusal(catalog: Catalog, kind: EquipmentKind, id: string
     }
   }
   if (kind === "train") {
-    const sessions = activeSessions(catalog).filter((s) => s.equipment.value === id).length
-    const projects = Object.values(catalog.projects).filter(
-      (p) => p.equipmentId === id || p.checklist.some((item) => item.kind === "equipment" && item.opticalTrainId === id),
-    ).length
-    if (sessions === 0 && projects === 0) return null
-    const parts = [sessions ? `${sessions} ${sessions === 1 ? "session" : "sessions"}` : null, projects ? `${projects} ${projects === 1 ? "Project" : "Projects"}` : null].filter(Boolean)
+    const parts = trainUsageParts(trainUsage(catalog, id))
+    if (parts.length === 0) return null
     return {
-      message: `${catalog.opticalTrains[id]?.name} is associated with ${parts.join(" and ")}. Removing it would leave them without equipment evidence; edit the train instead.`,
+      message: `${catalog.opticalTrains[id]?.name} is used by ${parts.join(", ")}. Removing it would leave them without equipment evidence; edit the train instead.`,
       trainIds: [],
     }
   }
   return null
 }
 
-/** Sessions and Projects that use a train, for the "Used by" column. */
-export function trainUsage(catalog: Catalog, id: string): { sessions: number; projects: number } {
+export interface TrainUsage {
+  sessions: number
+  /** Projects whose equipment or checklist names the train. */
+  projects: number
+  /** Calibration masters recorded with the train as flat evidence. */
+  masters: number
+  /** Views whose criteria select the train. */
+  views: number
+}
+
+/** Everything that references a train; the "Used by" column and the removal refusal both read it, so they never disagree. */
+export function trainUsage(catalog: Catalog, id: string): TrainUsage {
   return {
     sessions: activeSessions(catalog).filter((s) => s.equipment.value === id).length,
-    projects: Object.values(catalog.projects).filter((p) => p.equipmentId === id).length,
+    projects: Object.values(catalog.projects).filter((p) => p.equipmentId === id || p.checklist.some((item) => item.kind === "equipment" && item.opticalTrainId === id)).length,
+    masters: Object.values(catalog.masters).filter((m) => m.opticalTrainId === id).length,
+    views: Object.values(catalog.views).filter((v) => v.criteria?.opticalTrainIds.includes(id)).length,
   }
+}
+
+/** "23 sessions", "2 Projects", "4 calibration masters", "1 View"; empty when nothing uses the train. */
+export function trainUsageParts(usage: TrainUsage): string[] {
+  const count = (n: number, one: string, many: string) => (n ? `${n} ${n === 1 ? one : many}` : null)
+  return [
+    count(usage.sessions, "session", "sessions"),
+    count(usage.projects, "Project", "Projects"),
+    count(usage.masters, "calibration master", "calibration masters"),
+    count(usage.views, "View", "Views"),
+  ].filter((part) => part !== null)
 }
 
 /** Create or update a record from a Settings form; the record becomes Manual. */

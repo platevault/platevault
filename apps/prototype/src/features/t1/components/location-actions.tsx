@@ -48,7 +48,7 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
 
   function chosen(location: Location, mode: "again" | "locate", path: string) {
     if (mode === "locate") return review(location, path)
-    // Choose folder again: the same folder re-grants access and retries.
+    // Choose folder again: the same folder retries; access comes back only where it was restored.
     if (path === location.path) return index(location)
     const { catalog } = store.getState()
     if (framesInLocation(catalog, location.id) > 0) return review(location, path)
@@ -114,7 +114,7 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
         description={
           picker?.mode === "locate"
             ? "Prototype folder chooser. Choose the folder that now holds these frames; frames are matched by content hash, never by name."
-            : "Prototype folder chooser. Choosing the same folder grants access again and retries; a different folder replaces this registration's folder."
+            : "Prototype folder chooser. Choosing the same folder retries it, and it reads Access denied until access is restored (Prototype: Simulation controls › Folder access). A different folder replaces this registration's folder."
         }
         initialPath={picker?.location.path}
         chooseVerb={picker?.mode === "locate" ? "Review" : "Choose"}

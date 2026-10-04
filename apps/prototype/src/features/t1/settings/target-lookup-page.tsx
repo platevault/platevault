@@ -4,7 +4,7 @@
  * indexing never depend on it. The test lookup is a prototype fixture response
  * and honours the "Fail next Target resolver lookup" simulation fault.
  */
-import { Search } from "lucide-react"
+import { Loader2, Search } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
 import { KeyValueList } from "@/components/app/data"
 import { ActionError, DetailSkeleton, Notice } from "@/components/app/feedback"
@@ -67,6 +67,8 @@ export function TargetLookupPage() {
   }
 
   function runTest() {
+    // Loading keeps the button enabled and focused (HLD §14); a second press while busy does nothing.
+    if (running) return
     const text = query.trim()
     if (!text) {
       setQueryError("Name to look up: enter a Target name or alias, for example NGC 7000.")
@@ -181,8 +183,8 @@ export function TargetLookupPage() {
               onChange={setQuery}
               error={queryError}
               action={
-                <Button type="submit" className="shrink-0" disabled={running} aria-busy={running || undefined}>
-                  <Search aria-hidden="true" data-icon="inline-start" />
+                <Button type="submit" className="shrink-0" aria-busy={running || undefined}>
+                  {running ? <Loader2 aria-hidden="true" data-icon="inline-start" className="motion-safe:animate-spin" /> : <Search aria-hidden="true" data-icon="inline-start" />}
                   {running ? "Looking up…" : "Test lookup"}
                 </Button>
               }
