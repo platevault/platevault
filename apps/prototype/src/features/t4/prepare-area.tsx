@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { membershipSummary, sessionLocationIds } from "@/domain/derive"
-import { filesUnder } from "@/domain/disk"
+import { fileAt, filesUnder } from "@/domain/disk"
 import type { Preparation, View } from "@/domain/types"
 import type { CommitResult } from "@/store/core"
 import { formatBytes, formatCount, formatDateTime, formatDuration, formatNight, plural } from "@/lib/format"
@@ -544,6 +544,10 @@ export function ViewPrepareArea() {
   useEffect(() => {
     if (draft.confirmedRevision !== null && revision !== null && draft.confirmedRevision !== revision) updatePrep(viewId, { confirmedRevision: null })
   }, [draft.confirmedRevision, revision, viewId])
+  // J24 P8: one prepared 26 Sep frame (else the first light frame), changed in place to exercise Open's re-verification.
+  const p8Path = latest?.state === "prepared" ? ((plan?.entries.find((e) => e.kind === "light" && e.sourcePath.includes("/2026-09-26/")) ?? plan?.entries.find((e) => e.kind === "light"))?.sourcePath ?? null) : null
+  const p8Changed = useStore((s) => (p8Path ? Boolean(fileAt(s.disk, p8Path)?.previousSha256) : false))
+  const latestUnverified = useStore((s) => (latest ? (s.slices.t4.unverified[latest.id] ?? null) : null))
 
   if (!view || !plan) return <ViewNotFound />
   const complete = Boolean(view.completedAt)
@@ -571,7 +575,7 @@ export function ViewPrepareArea() {
         level={2}
         title="Prepare and open"
         description="Turn this View's saved membership into one verified input layout for an external application. PlateVault never runs processing."
-        meta={latest ? <StatusBadge kind="preparation" value={latest.state} /> : null}
+        meta={latest ? latestUnverified ? <T4Badge value="preparation:unverified" /> : <StatusBadge kind="preparation" value={latest.state} /> : null}
         actions={
           <Button
             variant={preparedNow ? "outline" : "default"}
@@ -670,6 +674,15 @@ export function ViewPrepareArea() {
             </Button>
             <span className="text-xs text-muted-foreground">J24 S15: the last {lastThree.length} light frames of this View.</span>
           </div>
+          {p8Path ? (
+            <div className="space-y-1.5 rounded-md border px-3 py-2">
+              <p className="text-xs text-muted-foreground">J24 P8 (S10a, S11): a prepared frame changed in place, outside PlateVault.</p>
+              <PathText path={p8Path} />
+              <Button size="sm" variant="outline" onClick={() => (p8Changed ? restoreFileExternally(p8Path) : modifyFileExternally(p8Path))}>
+                {p8Changed ? "Restore this frame's original bytes" : "Overwrite this frame with a same-size variant"}
+              </Button>
+            </div>
+          ) : null}
           {app ? (
             <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" variant="outline" onClick={() => updateApp(app.id, { present: !app.present })}>

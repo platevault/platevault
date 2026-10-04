@@ -7,7 +7,7 @@
  * shape changes.
  */
 import { t4OperationHandlers } from "@/features/t4/operations"
-import type { InputMode, MetadataDecision, ProfileId, ViewId } from "@/domain/types"
+import type { InputMode, MetadataDecision, PreparationId, ProfileId, ViewId } from "@/domain/types"
 import type { SliceDefinition } from "./index"
 
 /** Preparation choices for one View. They persist across reloads (PREP-AC-10) and touch no file. */
@@ -58,6 +58,11 @@ export interface T4State {
   }
   /** Simulated running application per View (launch is not processing). */
   running: Record<ViewId, { profileId: ProfileId; at: string } | null>
+  /**
+   * Prepared entries that no longer matched their preparation snapshot at the
+   * last Open (PREP-FR-10, PREP-AC-15). Cleared when a later Open re-verifies.
+   */
+  unverified: Record<PreparationId, { at: string; changed: Array<{ path: string; reason: string }> } | null>
 }
 
 export function emptyPrepDraft(): PrepDraft {
@@ -66,7 +71,7 @@ export function emptyPrepDraft(): PrepDraft {
 
 export const t4Slice: SliceDefinition<T4State> = {
   id: "t4",
-  version: 2,
+  version: 3,
   initial: () => ({
     prep: {},
     adoption: {},
@@ -81,6 +86,7 @@ export const t4Slice: SliceDefinition<T4State> = {
       pauseBeforeRegister: false,
     },
     running: {},
+    unverified: {},
   }),
   operations: t4OperationHandlers,
 }

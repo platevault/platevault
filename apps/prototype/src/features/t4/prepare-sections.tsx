@@ -163,7 +163,9 @@ export function ApplicationSection({ view, plan, locked }: { view: View; plan: P
 // ---------------------------------------------------------------------------
 
 export function MetadataSection({ view, plan, draft, locked }: { view: View; plan: PreparationPlan; draft: PrepDraft; locked: boolean }) {
-  const appName = plan.profile?.name ?? "The application"
+  const appName = plan.profile?.name ?? "the application"
+  /** Sentence-initial form. */
+  const AppName = plan.profile?.name ?? "The application"
   const isolated = plan.mode === "copy" || plan.mode === "clone"
   return (
     <Section
@@ -203,7 +205,7 @@ export function MetadataSection({ view, plan, draft, locked }: { view: View; pla
                 <dl className="grid grid-cols-[10rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
                   <dt className="text-muted-foreground">Catalog value</dt>
                   <dd className="tabular-nums">{diff.catalogValue}</dd>
-                  <dt className="text-muted-foreground">{appName} reads</dt>
+                  <dt className="text-muted-foreground">{AppName} reads</dt>
                   <dd className="tabular-nums">{diff.sourceValue ?? <UnknownValue label={`Absent (no ${FIELD_KEYWORD[diff.field]})`} />}</dd>
                 </dl>
                 <fieldset disabled={locked}>
@@ -221,7 +223,7 @@ export function MetadataSection({ view, plan, draft, locked }: { view: View; pla
                           <span className="block text-xs text-pretty text-muted-foreground">
                             {option === "configuration"
                               ? configSupported
-                                ? `${appName} reads the corrected value from its configuration.`
+                                ? `${AppName} reads the corrected value from its configuration.`
                                 : `Not supported: ${appName} cannot read corrected values through configuration.`
                               : option === "patched-copy"
                                 ? isolated
