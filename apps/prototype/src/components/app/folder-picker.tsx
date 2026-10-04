@@ -181,7 +181,7 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
             </div>
           </div>
         </div>
-        <DialogFooter className="m-0 items-center rounded-b-xl sm:justify-between">
+        <DialogFooter className="bottom-0 m-0 items-center rounded-b-xl sm:justify-between">
           <PathText path={current} className="min-w-0 text-muted-foreground" />
           <div className="flex shrink-0 gap-2">
             <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
