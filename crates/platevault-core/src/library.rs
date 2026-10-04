@@ -193,7 +193,11 @@ impl Library {
                         true
                     }
                     _ => {
-                        if let Ok(failed) = library.catalog.abort_scan(id, ScanState::Failed, &error.to_string()).await {
+                        if let Ok(failed) = library
+                            .catalog
+                            .abort_scan(id, ScanState::Failed, &error.to_string())
+                            .await
+                        {
                             let _ = library.progress.send(failed);
                             true
                         } else {
@@ -417,6 +421,7 @@ impl Library {
         let library = Arc::clone(self);
         let observation = blocking(move || {
             let options = ScanOptions { relative_scope, ..ScanOptions::default() };
+            let mut next_assessment = u64::try_from(options.batch_size).unwrap_or(u64::MAX);
             inventory::scan(
                 &scan_location,
                 &options,
@@ -430,8 +435,11 @@ impl Library {
                         &batch,
                         group_assets,
                     ))?;
-                    handle.block_on(library.refresh_target_suggestions(scan_location.id))?;
                     let _ = progress.send(applied);
+                    if batch.progress.metadata_read >= next_assessment {
+                        handle.block_on(library.refresh_target_suggestions(scan_location.id))?;
+                        next_assessment = batch.progress.metadata_read.saturating_mul(2);
+                    }
                     Ok(())
                 },
                 &flag,
