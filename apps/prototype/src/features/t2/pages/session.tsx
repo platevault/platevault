@@ -25,7 +25,7 @@ import { formatCount, formatDateTime, formatDec, formatDegrees, formatDuration, 
 import { store, useStore } from "@/store/core"
 import { startIndexing } from "@/store/operations"
 import { confirmEquipment, confirmTarget, correctFilter, type FilterCorrectionPreview, previewFilterCorrection, setLibraryQuality } from "../actions"
-import { type FrameQuality, frameQuality, knownChannels, projectsLinking, sessionLabel, sessionRow } from "../model"
+import { type FrameQuality, frameQuality, groupingRevision, knownChannels, projectsLinking, sessionLabel, sessionRow } from "../model"
 import { AssociationBadge, FlowStatus, useCommitFlow } from "../parts"
 
 export function SessionPage() {
@@ -63,6 +63,12 @@ function SessionInspector({ sessionId }: { sessionId: string }) {
   const offlineLocations = row.locations.filter((l) => l.availability === "offline")
   const unreadableLocations = row.locations.filter((l) => l.location.unreadablePaths.length > 0 || l.location.access === "denied")
   const replacement = session.supersededBy ? catalog.sessions[session.supersededBy] : undefined
+  // Every frame offline or unreadable: nothing here can be filed or used as a View input (LIB-AC-05).
+  const noInput = session.assetIds.length > 0 && row.availability.available === 0
+  const noInputId = useId()
+  // One base revision for the whole inspector (D08): your own saves move it, so only another writer's change is refused.
+  const [base, setBase] = useState(session.revision)
+  const revision: BaseRevision = { base, refresh: () => setBase(store.getState().catalog.sessions[sessionId]?.revision ?? session.revision) }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -89,15 +95,33 @@ function SessionInspector({ sessionId }: { sessionId: string }) {
             {row.availability.offline > 0 ? <StatusBadge kind="availability" value="offline" /> : null}
           </>
         }
-        description={`${plural(session.assetIds.length, "frame")} · ${formatDuration(row.breakdown.captured.seconds)} · grouping revision ${session.revision}`}
+        description={`${plural(session.assetIds.length, "frame")} · ${formatDuration(row.breakdown.captured.seconds)} · grouping revision ${groupingRevision(catalog, session)}`}
         actions={
           current && isLight ? (
-            <>
-              <Button variant="outline" render={<Link to="/storage/filing" search={{ sessionIds: session.id }} />}>
-                File into library
-              </Button>
-              <Button render={<Link to="/views/new" search={{ from: "sessions", sessionIds: session.id }} />}>Create View</Button>
-            </>
+            noInput ? (
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex gap-2">
+                  <Button variant="outline" disabled focusableWhenDisabled aria-describedby={noInputId}>
+                    File into library
+                  </Button>
+                  <Button disabled focusableWhenDisabled aria-describedby={noInputId}>
+                    Create View
+                  </Button>
+                </div>
+                <p id={noInputId} className="text-xs text-muted-foreground">
+                  {offlineLocations.length > 0
+                    ? `Every frame is offline. Reconnect ${offlineLocations.map((l) => l.location.displayName).join(", ")} to file this session or use it in a View.`
+                    : "No frame can be read, so this session cannot be filed or used in a View."}
+                </p>
+              </div>
+            ) : (
+              <>
+                <Button variant="outline" render={<Link to="/storage/filing" search={{ sessionIds: session.id }} />}>
+                  File into library
+                </Button>
+                <Button render={<Link to="/views/new" search={{ from: "sessions", sessionIds: session.id }} />}>Create View</Button>
+              </>
+            )
           ) : undefined
         }
       />
@@ -105,7 +129,7 @@ function SessionInspector({ sessionId }: { sessionId: string }) {
         {replacement ? (
           <Notice
             tone="info"
-            title={`Replaced by grouping revision ${replacement.revision}`}
+            title={`Replaced by grouping revision ${groupingRevision(catalog, replacement)}`}
             actions={
               <Button size="sm" variant="outline" render={<Link to="/sessions/$sessionId" params={{ sessionId: replacement.id }} />}>
                 Open current session
@@ -170,8 +194,8 @@ function SessionInspector({ sessionId }: { sessionId: string }) {
           <MetadataList session={session} catalog={catalog} />
         </Section>
 
-        {isLight ? <TargetSection session={session} catalog={catalog} editable={current} /> : null}
-        <EquipmentSection session={session} catalog={catalog} editable={current} />
+        {isLight ? <TargetSection session={session} catalog={catalog} editable={current} revision={revision} /> : null}
+        <EquipmentSection session={session} catalog={catalog} editable={current} revision={revision} />
         <CorrectionsSection session={session} catalog={catalog} editable={current} />
         <CopiesSection sessionId={sessionId} />
         <FramesSection session={session} editable={current && isLight} />
@@ -189,7 +213,8 @@ function MetadataList({ session, catalog }: { session: Session; catalog: Catalog
   const header = first?.observed
   const site = captureSite(catalog, session)
   const filterCorrection = [...session.corrections].reverse().find((c) => c.field === "filter")
-  const missing = (keyword: string) => <UnknownValue label="Missing" reason={`The headers have no ${keyword} keyword.`} />
+  // "Missing" is reserved for absent files; an absent header keyword reads "Not in headers".
+  const missing = (keyword: string) => <UnknownValue label="Not in headers" reason={`The headers have no ${keyword} keyword.`} />
   const items: KeyValueItem[] = [
     { label: "Night", value: formatNight(session.night, true), source: "From DATE-OBS" },
     {
@@ -199,7 +224,7 @@ function MetadataList({ session, catalog }: { session: Session; catalog: Catalog
     {
       label: "Channel",
       value: session.channel ?? "No filter",
-      source: filterCorrection ? `Catalog correction (header FILTER ${filterCorrection.observedValue ?? "missing"})` : "Header FILTER",
+      source: filterCorrection ? `Catalog correction (header FILTER ${filterCorrection.observedValue ?? "not recorded"})` : "Header FILTER",
     },
     { label: "Exposure", value: formatExposure(session.exposureS), source: "Header EXPTIME" },
     { label: "Frames", value: formatCount(session.assetIds.length) },
@@ -207,7 +232,7 @@ function MetadataList({ session, catalog }: { session: Session; catalog: Catalog
     { label: "Camera", value: session.cameraName ?? missing("INSTRUME"), source: "Header INSTRUME" },
     { label: "Telescope", value: session.telescopeName ?? missing("TELESCOP"), source: "Header TELESCOP" },
     { label: "Focal length", value: header?.focalLengthMm ? `${header.focalLengthMm} mm` : missing("FOCALLEN"), source: "Header FOCALLEN" },
-    { label: "Gain / offset", value: `${session.gain ?? "Missing"} / ${session.offset ?? "Missing"}`, source: "Header GAIN, OFFSET" },
+    { label: "Gain / offset", value: `${session.gain ?? "Not recorded"} / ${session.offset ?? "Not recorded"}`, source: "Header GAIN, OFFSET" },
     { label: "Sensor temperature", value: session.ccdTempC === null ? missing("CCD-TEMP") : `${session.ccdTempC} °C (median)`, source: "Header CCD-TEMP" },
     { label: "Binning", value: `${session.binning}×${session.binning}`, source: "Header XBINNING" },
     {
@@ -273,14 +298,15 @@ function ConfirmedLine({ session, field }: { session: Session; field: "target" |
   )
 }
 
-function useBaseRevision(session: Session) {
-  const [base, setBase] = useState(session.revision)
-  return { base, refresh: () => setBase(store.getState().catalog.sessions[session.id]?.revision ?? session.revision) }
+/** The session revision the inspector's edits were started from, and how to move it to the current one. */
+interface BaseRevision {
+  base: number
+  refresh: () => void
 }
 
-function TargetSection({ session, catalog, editable }: { session: Session; catalog: Catalog; editable: boolean }) {
+function TargetSection({ session, catalog, editable, revision }: { session: Session; catalog: Catalog; editable: boolean; revision: BaseRevision }) {
   const flow = useCommitFlow()
-  const { base, refresh } = useBaseRevision(session)
+  const { base, refresh } = revision
   const [choice, setChoice] = useState<string | null>(session.target.value)
   const [fieldError, setFieldError] = useState(false)
   const labelId = useId()
@@ -297,8 +323,12 @@ function TargetSection({ session, catalog, editable }: { session: Session; catal
       setFieldError(true)
       return
     }
-    const result = flow.run(() => confirmTarget(session.id, choice, base))
-    if (result.ok) refresh()
+    // Refresh inside the action, so a successful Retry moves the base too.
+    flow.run(() => {
+      const result = confirmTarget(session.id, choice, base)
+      if (result.ok) refresh()
+      return result
+    })
   }
 
   return (
@@ -380,9 +410,9 @@ function TargetSection({ session, catalog, editable }: { session: Session; catal
 
 const SOURCE_WORD = { manual: "Manual", detected: "Detected", "built-in": "Built-in" } as const
 
-function EquipmentSection({ session, catalog, editable }: { session: Session; catalog: Catalog; editable: boolean }) {
+function EquipmentSection({ session, catalog, editable, revision }: { session: Session; catalog: Catalog; editable: boolean; revision: BaseRevision }) {
   const flow = useCommitFlow()
-  const { base, refresh } = useBaseRevision(session)
+  const { base, refresh } = revision
   const [choice, setChoice] = useState<string | null>(session.equipment.value)
   const [fieldError, setFieldError] = useState(false)
   const labelId = useId()
@@ -400,8 +430,11 @@ function EquipmentSection({ session, catalog, editable }: { session: Session; ca
       setFieldError(true)
       return
     }
-    const result = flow.run(() => confirmEquipment(session.id, choice, base))
-    if (result.ok) refresh()
+    flow.run(() => {
+      const result = confirmEquipment(session.id, choice, base)
+      if (result.ok) refresh()
+      return result
+    })
   }
 
   return (
@@ -472,7 +505,7 @@ function EquipmentSection({ session, catalog, editable }: { session: Session; ca
               <p className="text-sm text-muted-foreground">No optical train record exists yet.</p>
             )}
             <Button variant="ghost" size="sm" render={<Link to="/settings/equipment" search={{ return: returnTo }} />} className="w-fit">
-              {items.length > 0 ? "Missing a record? Add an optical train" : "Add an optical train"}
+              {items.length > 0 ? "No matching record? Add an optical train" : "Add an optical train"}
             </Button>
           </div>
         ) : null}
@@ -505,12 +538,12 @@ function CorrectionsSection({ session, catalog, editable }: { session: Session; 
     >
       {previous.length > 0 ? (
         <p className="text-sm">
-          <span className="text-muted-foreground">Grouping revision {session.revision} replaced </span>
+          <span className="text-muted-foreground">Grouping revision {groupingRevision(catalog, session)} replaced </span>
           {previous.map((p, index) => (
             <span key={p.id}>
               {index > 0 ? ", " : ""}
               <Link to="/sessions/$sessionId" params={{ sessionId: p.id }} className="text-primary underline-offset-2 hover:underline">
-                {sessionLabel(catalog, p)} (revision {p.revision})
+                {sessionLabel(catalog, p)} (grouping revision {groupingRevision(catalog, p)})
               </Link>
             </span>
           ))}
@@ -621,7 +654,7 @@ function FilterCorrectionDialog({ open, onOpenChange, session, catalog }: { open
           <div className="space-y-4 text-sm">
             <KeyValueList
               items={[
-                { label: "Observed FILTER", value: catalog.assets[session.assetIds[0] ?? ""]?.observed.filter ?? "Missing", source: "Header" },
+                { label: "Observed FILTER", value: catalog.assets[session.assetIds[0] ?? ""]?.observed.filter ?? "Not recorded", source: "Header" },
                 { label: "Catalog channel now", value: session.channel ?? "No filter" },
               ]}
             />
@@ -665,7 +698,7 @@ function FilterCorrectionDialog({ open, onOpenChange, session, catalog }: { open
                     : `${plural(preview.frames, "frame")} move to a new ${formatNight(session.night)} · ${filter} · ${formatExposure(session.exposureS)} session`}
                 </li>
                 <li>Keep {label} inspectable as replaced; it stops counting in totals</li>
-                <li>Record the correction: FILTER {preview.observedFilter ?? "missing"} → {filter}</li>
+                <li>Record the correction: FILTER {preview.observedFilter ?? "not recorded"} → {filter}</li>
                 {preview.projectNames.length > 0 ? <li>Link the new session in {preview.projectNames.join(", ")} instead of this one</li> : null}
               </ul>
             </div>

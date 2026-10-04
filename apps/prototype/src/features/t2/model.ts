@@ -76,6 +76,20 @@ export function sessionLabel(catalog: Catalog, session: Session): string {
   return clash && session.cameraName ? `${base} · ${session.cameraName}` : base
 }
 
+/**
+ * Grouping revision of a session (D15): 1 as indexed, and one more than the
+ * sessions it replaced after a regrouping correction. It is not the record
+ * revision that every revision-checked save bumps (D08).
+ */
+export function groupingRevision(catalog: Catalog, session: Session): number {
+  let replaced = 0
+  for (const id of session.previousSessionIds) {
+    const previous = catalog.sessions[id]
+    replaced = Math.max(replaced, previous ? groupingRevision(catalog, previous) : 1)
+  }
+  return replaced + 1
+}
+
 export interface LocationPresence {
   location: Location
   availability: "online" | "offline"

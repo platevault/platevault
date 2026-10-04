@@ -26,7 +26,7 @@ import { formatDateTime, plural } from "@/lib/format"
 import { type CommitResult, commit, nowIso, recordActivity, store, withCatalog } from "@/store/core"
 import { setFault } from "@/store/simulation"
 import type { ProjectDraft } from "@/store/slices/t2"
-import { sessionLabel } from "./model"
+import { groupingRevision, sessionLabel } from "./model"
 
 function recordSaved(title: string, detail: string, href: string) {
   recordActivity({ kind: "saved", title, detail, operationId: null, href })
@@ -68,7 +68,7 @@ export function confirmTarget(sessionId: SessionId, targetId: TargetId, expectRe
         const correction: CatalogCorrection[] =
           current.target.value === targetId
             ? []
-            : [{ id: correctionId(sessionId), field: "target", observedValue: previous, correctedValue: target.name, at, revision: current.revision + 1 }]
+            : [{ id: correctionId(sessionId), field: "target", observedValue: previous, correctedValue: target.name, at, revision: groupingRevision(c, current) }]
         const next: Session = {
           ...current,
           target: { value: targetId, status: "confirmed", evidence: confirmedEvidence(current.target.evidence, "Confirm Target", target.name), confirmedAt: at },
@@ -99,7 +99,7 @@ export function confirmEquipment(sessionId: SessionId, trainId: OpticalTrainId, 
         const correction: CatalogCorrection[] =
           current.equipment.value === trainId
             ? []
-            : [{ id: correctionId(sessionId), field: "equipment", observedValue: previous, correctedValue: train.name, at, revision: current.revision + 1 }]
+            : [{ id: correctionId(sessionId), field: "equipment", observedValue: previous, correctedValue: train.name, at, revision: groupingRevision(c, current) }]
         const next: Session = {
           ...current,
           equipment: { value: trainId, status: "confirmed", evidence: confirmedEvidence(current.equipment.evidence, "Confirm equipment", train.name), confirmedAt: at },
@@ -151,7 +151,7 @@ export interface FilterCorrectionPreview {
   /** An existing current session the corrected frames join. */
   joins: Session | null
   frames: number
-  /** Revision number the correction creates. */
+  /** Grouping revision the correction creates (not the record revision). */
   revision: number
   projectNames: string[]
   /** Views whose saved or draft membership includes these frames; membership stays unchanged. */
@@ -172,7 +172,7 @@ export function previewFilterCorrection(sessionId: SessionId, filter: string): F
   return {
     joins,
     frames: session.assetIds.length,
-    revision: Math.max(session.revision, joins?.revision ?? 0) + 1,
+    revision: Math.max(groupingRevision(catalog, session), joins ? groupingRevision(catalog, joins) : 0) + 1,
     projectNames: Object.values(catalog.projects)
       .filter((p) => p.linkedSessionIds.includes(sessionId))
       .map((p) => p.name),
@@ -217,7 +217,8 @@ export function correctFilter(sessionId: SessionId, filter: string, expectRevisi
         const replacement: Session = {
           ...current,
           id: newSessionId,
-          revision: preview.revision,
+          // A new record: its grouping revision derives from previousSessionIds.
+          revision: 1,
           channel: filter,
           assetIds,
           startedAt: joined && joined.startedAt < current.startedAt ? joined.startedAt : current.startedAt,
@@ -378,8 +379,9 @@ export function resolveTargetLookup(targetId: TargetId): LookupOutcome {
   if (!target) return { kind: "no-match", message: "This Target no longer exists in the catalog." }
   if (faults.failNextResolverLookup) {
     setFault("failNextResolverLookup", false)
-    const message = `${provider} did not respond, as if the network were unavailable. ${target.name} and its sessions stay usable; nothing was changed.`
-    recordActivity({ kind: "refusal", title: `${target.name} lookup failed`, detail: message, operationId: null, href: `/targets/${targetId}` })
+    const message = `${provider} did not respond. ${target.name} and its sessions stay usable; nothing was changed.`
+    // A failed lookup, not a refusal: no enrichment was saved (Activity "Not saved").
+    recordActivity({ kind: "write-failed", title: `${target.name} lookup failed`, detail: message, operationId: null, href: `/targets/${targetId}` })
     return { kind: "failed", message }
   }
   const names = [target.name, ...target.aliases].map(normalizeName)

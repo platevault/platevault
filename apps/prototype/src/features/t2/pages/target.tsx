@@ -241,7 +241,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
                 {
                   id: "object",
                   header: "OBJECT",
-                  cell: (r) => (r.session.objectLabel ? <span className="font-mono text-xs">{r.session.objectLabel}</span> : <span className="text-muted-foreground">Missing</span>),
+                  cell: (r) => (r.session.objectLabel ? <span className="font-mono text-xs">{r.session.objectLabel}</span> : <span className="text-muted-foreground">No OBJECT</span>),
                 },
                 {
                   id: "evidence",
