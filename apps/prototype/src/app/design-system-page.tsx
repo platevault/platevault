@@ -7,6 +7,7 @@
 import { Inbox, Play } from "lucide-react"
 import { useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
+import { FolderPicker } from "@/components/app/folder-picker"
 import { ChannelCoverage, EvidenceList, FilterChips, KeyValueList, PathText, Stat } from "@/components/app/data"
 import { type Column, DataTable, SelectionBar, TableToolbar } from "@/components/app/data-table"
 import { ActionError, DetailSkeleton, EmptyState, Notice, SaveState, TableSkeleton, UnknownValue } from "@/components/app/feedback"
@@ -149,6 +150,26 @@ function SampleOperation() {
   )
 }
 
+function SampleFolderPicker() {
+  const [open, setOpen] = useState(false)
+  const [chosen, setChosen] = useState<string | null>(null)
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        Choose a folder…
+      </Button>
+      {chosen ? <PathText path={chosen} className="text-muted-foreground" /> : <span className="text-sm text-muted-foreground">No folder chosen yet.</span>}
+      <FolderPicker
+        open={open}
+        onOpenChange={setOpen}
+        title="Choose a capture folder"
+        initialPath="/Volumes/Astro-T7"
+        onChoose={(path) => setChosen(path)}
+      />
+    </div>
+  )
+}
+
 export function DesignSystemPage() {
   const [tableLoading, setTableLoading] = useState(false)
   const [tableEmpty, setTableEmpty] = useState(false)
@@ -278,7 +299,7 @@ export function DesignSystemPage() {
                 12 Sep counts in captured integration with last-observed values. It is not offered as an available input.
               </Notice>
               <Notice tone="warning" title="Scan scope is incomplete">
-                Access denied: /Volumes/Astro-T7/Captures/M33/2026-08-30. Files there are unknown, not missing.
+                Access denied: /Volumes/Astro-T7/Imaging/M33/2026-08-30. Files there are unknown, not missing.
               </Notice>
               <Notice tone="refusal" title="Direct source refused" actions={<Button size="sm" variant="outline">Review Copy or Clone</Button>}>
                 SETI Astro Suite Pro consumes the whole folder, which contains 6 excluded frames.
@@ -370,6 +391,10 @@ export function DesignSystemPage() {
             confirmLabel="Mark 208 frames usable"
             onConfirm={() => undefined}
           />
+        </Section>
+
+        <Section title="Folder picker" description="Simulated OS folder chooser. Volumes and folders, including empty ones, come from the simulated disk; offline volumes and denied folders show why.">
+          <SampleFolderPicker />
         </Section>
 
         <Section title="Operation" description="Running with progress, per-item outcomes and one settled status. Uses a real indexing run.">

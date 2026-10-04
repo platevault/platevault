@@ -1,7 +1,7 @@
 /**
  * Information architecture (foundation-owned): sidebar groups, go-to
  * shortcuts and the static route table the command palette lists.
- * Route paths are fixed in HIGH-LEVEL-DESIGN.md §5 and must not drift.
+ * Route paths are fixed in HIGH-LEVEL-DESIGN.md §4 and must not drift.
  */
 import {
   Activity,

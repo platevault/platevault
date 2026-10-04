@@ -9,6 +9,7 @@
 import { angularSeparationDeg, normalizeName, SKY_OBJECTS } from "./sky"
 import type {
   Asset,
+  AssetCopy,
   AssetId,
   Association,
   CalibrationKind,
@@ -85,10 +86,10 @@ export function assetIdForPath(path: string): AssetId {
   return `ast_${stableHash(path)}`
 }
 
-function groupingKey(locationId: string, file: DiskFile): string {
+/** Session identity: metadata only, never the location, so copies elsewhere join the same session. */
+function groupingKey(file: DiskFile): string {
   const h = file.header!
   return [
-    locationId,
     h.imageType,
     nightOf(h.dateObs),
     h.instrument ?? "",
@@ -103,7 +104,6 @@ function groupingKey(locationId: string, file: DiskFile): string {
 
 function sessionKeyOf(session: Session): string {
   return [
-    session.locationId,
     session.imageType,
     session.night,
     session.cameraName ?? "",
@@ -243,9 +243,11 @@ function trainFor(catalog: Catalog, camera: Camera, telescope: Telescope): Optic
     (t) => t.cameraId === camera.id && t.telescopeId === telescope.id,
   )
   if (existing) return existing
+  // Trains created from headers stay "detected" until Confirm equipment promotes them (D11).
   const train: OpticalTrain = {
     id: `otr_${stableHash(`${camera.id}|${telescope.id}`)}`,
     name: `${telescope.name} / ${camera.name}`,
+    source: "detected",
     cameraId: camera.id,
     telescopeId: telescope.id,
     effectiveFocalLengthMm: telescope.focalLengthMm,
@@ -303,6 +305,7 @@ export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFil
       id: `tel_${stableHash(header.telescope)}`,
       name: header.telescope,
       aliases: [],
+      source: "detected",
       focalLengthMm: header.focalLengthMm,
       apertureMm: null,
     }
@@ -317,14 +320,6 @@ export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFil
 // ---------------------------------------------------------------------------
 // Reading files
 // ---------------------------------------------------------------------------
-
-function siteFor(catalog: Catalog, lat: number | null, lon: number | null) {
-  if (lat === null || lon === null) return null
-  return (
-    Object.values(catalog.sites).find((s) => Math.abs(s.latitude - lat) < 0.1 && Math.abs(s.longitude - lon) < 0.1)
-      ?.id ?? null
-  )
-}
 
 function rebuildSession(catalog: Catalog, session: Session, now: IsoDateTime): Session {
   const assets = session.assetIds
@@ -350,7 +345,6 @@ function rebuildSession(catalog: Catalog, session: Session, now: IsoDateTime): S
             rotationDeg: rotations.length === pointed.length ? (median(rotations) ?? null) : null,
           }
         : null,
-    captureSiteId: session.captureSiteId ?? siteFor(catalog, first.observed.siteLat, first.observed.siteLon),
   }
   if (session.target.status !== "confirmed") next.target = associateTarget(catalog, next, now)
   if (session.equipment.status !== "confirmed") next.equipment = associateEquipment(catalog, first.observed)
@@ -358,9 +352,24 @@ function rebuildSession(catalog: Catalog, session: Session, now: IsoDateTime): S
 }
 
 /**
+ * The asset a file belongs to: the asset with a copy at this path in this
+ * location, else a byte-identical asset of the same image type (a copy or a
+ * move elsewhere, LIB-AC-15), else none.
+ */
+function assetForFile(catalog: Catalog, location: Location, file: DiskFile): Asset | undefined {
+  let sameBytes: Asset | undefined
+  for (const asset of Object.values(catalog.assets)) {
+    if (asset.copies.some((c) => c.locationId === location.id && c.path === file.path)) return asset
+    if (!sameBytes && asset.sha256 === file.sha256 && asset.imageType === file.header!.imageType) sameBytes = asset
+  }
+  return sameBytes
+}
+
+/**
  * Read a batch of files of one location into the catalog. Existing assets
  * keep their identity, session and decisions; changed bytes update the
- * fingerprint, which makes earlier quality decisions "changed content".
+ * fingerprint, which makes earlier quality decisions "changed content". A
+ * byte-identical file found elsewhere becomes another copy of its asset.
  * Returns a new catalog object (collections are shallow-copied).
  */
 export function readFiles(source: Catalog, location: Location, files: DiskFile[], now: IsoDateTime): Catalog {
@@ -375,17 +384,24 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
     masters: { ...source.masters },
   }
   const keyToSession = new Map<string, SessionId>()
-  for (const session of Object.values(catalog.sessions)) keyToSession.set(sessionKeyOf(session), session.id)
+  for (const session of Object.values(catalog.sessions)) {
+    if (!session.supersededBy) keyToSession.set(sessionKeyOf(session), session.id)
+  }
   const touched = new Set<SessionId>()
 
   for (const file of files) {
     const header = file.header!
-    const id = assetIdForPath(file.path)
-    const existing = catalog.assets[id]
+    const copy: AssetCopy = { locationId: location.id, volumeId: file.volumeId, path: file.path, sha256: file.sha256, presence: "observed", lastObservedAt: now }
+    const existing = assetForFile(catalog, location, file)
     if (existing) {
-      catalog.assets[id] = { ...existing, sha256: file.sha256, sizeBytes: file.sizeBytes, lastObservedAt: now, presence: "observed" }
+      const known = existing.copies.some((c) => c.locationId === location.id && c.path === file.path)
+      const copies = known
+        ? existing.copies.map((c) => (c.locationId === location.id && c.path === file.path ? copy : c))
+        : [...existing.copies, copy]
+      catalog.assets[existing.id] = { ...existing, sha256: file.sha256, sizeBytes: file.sizeBytes, copies }
       continue
     }
+    const id = assetIdForPath(file.path)
     const isMaster = header.imageType.startsWith("master-")
     if (isMaster && location.role === "calibration") {
       // Masters stored in a Calibration location are library masters.
@@ -412,7 +428,7 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
         adoption: null,
       }
     }
-    const key = groupingKey(location.id, file)
+    const key = groupingKey(file)
     let sessionId = isMaster ? undefined : keyToSession.get(key)
     if (!sessionId && !isMaster) {
       sessionId = `ses_${stableHash(key)}`
@@ -420,7 +436,6 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
       catalog.sessions[sessionId] = {
         id: sessionId,
         revision: 1,
-        locationId: location.id,
         night: nightOf(header.dateObs),
         imageType: header.imageType,
         channel: header.filter,
@@ -438,9 +453,9 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
         pointing: null,
         target: { value: null, status: "unresolved", evidence: [], confirmedAt: null },
         equipment: { value: null, status: "unresolved", evidence: [], confirmedAt: null },
-        captureSiteId: null,
         corrections: [],
         previousSessionIds: [],
+        supersededBy: null,
         scope: "provisional",
       }
     }
@@ -451,8 +466,6 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
     }
     catalog.assets[id] = {
       id,
-      locationId: location.id,
-      path: file.path,
       fileName: file.path.slice(file.path.lastIndexOf("/") + 1),
       format: file.kind === "xisf" ? "xisf" : "fits",
       sizeBytes: file.sizeBytes,
@@ -460,8 +473,7 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
       observed: header,
       imageType: header.imageType,
       sessionId: sessionId ?? null,
-      lastObservedAt: now,
-      presence: "observed",
+      copies: [copy],
       quality: { value: "unreviewed", decidedAt: null, basisSha256: null },
     }
   }
@@ -469,8 +481,34 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
   return catalog
 }
 
+/** Sessions with at least one asset copy in `locationId`. */
+function sessionsInLocation(catalog: Catalog, locationId: string): Set<SessionId> {
+  const ids = new Set<SessionId>()
+  for (const asset of Object.values(catalog.assets)) {
+    if (asset.sessionId && asset.copies.some((c) => c.locationId === locationId)) ids.add(asset.sessionId)
+  }
+  return ids
+}
+
 /**
- * Settle a location scan. Unobserved assets under unreadable or offline
+ * A scan of `locationId` stopped before it finished (canceled, or the volume
+ * went offline): provisional sessions and the location read "incomplete",
+ * never complete (LIB-FR-03). Unobserved copies keep their last presence.
+ */
+export function markScanStopped(source: Catalog, locationId: string, now: IsoDateTime): Catalog {
+  const location = source.locations[locationId]
+  if (!location) return source
+  const catalog: Catalog = { ...source, sessions: { ...source.sessions }, locations: { ...source.locations } }
+  for (const id of sessionsInLocation(catalog, locationId)) {
+    const session = catalog.sessions[id]!
+    if (session.scope === "provisional") catalog.sessions[id] = { ...session, scope: "incomplete" }
+  }
+  catalog.locations[locationId] = { ...location, lastIndexedAt: now, scanScope: "incomplete" }
+  return catalog
+}
+
+/**
+ * Settle a location scan. Unobserved copies under unreadable or offline
  * scope become "unknown", never absent (LIB-FR-06); only a complete scan of a
  * readable folder records absence.
  */
@@ -484,21 +522,26 @@ export function settleLocationScan(
   const location = source.locations[locationId]
   if (!location) return source
   const listing = listLocation(disk, location)
+  if (listing.offline) return markScanStopped(source, locationId, now)
   const catalog: Catalog = { ...source, assets: { ...source.assets }, sessions: { ...source.sessions }, locations: { ...source.locations } }
-  if (listing.offline) return catalog
 
   const incomplete = listing.unreadableFolders.length > 0
   const coversWhole = listing.unreadableFolders.some((folder) => isUnder(location.path, folder))
   const incompleteSessions = new Set<SessionId>()
   for (const asset of Object.values(catalog.assets)) {
-    if (asset.locationId !== locationId || observedPaths.has(asset.path)) continue
-    const unreadable = listing.unreadableFolders.some((folder) => isUnder(asset.path, folder))
-    catalog.assets[asset.id] = { ...asset, presence: unreadable ? "unknown" : "absent" }
-    if (unreadable && asset.sessionId) incompleteSessions.add(asset.sessionId)
+    let changed = false
+    const copies = asset.copies.map((copy) => {
+      if (copy.locationId !== locationId || observedPaths.has(copy.path)) return copy
+      const unreadable = listing.unreadableFolders.some((folder) => isUnder(copy.path, folder))
+      if (unreadable && asset.sessionId) incompleteSessions.add(asset.sessionId)
+      changed = true
+      return { ...copy, presence: unreadable ? ("unknown" as const) : ("absent" as const) }
+    })
+    if (changed) catalog.assets[asset.id] = { ...asset, copies }
   }
-  for (const session of Object.values(catalog.sessions)) {
-    if (session.locationId !== locationId) continue
-    catalog.sessions[session.id] = { ...session, scope: incompleteSessions.has(session.id) ? "incomplete" : "complete" }
+  for (const id of sessionsInLocation(catalog, locationId)) {
+    const session = catalog.sessions[id]!
+    catalog.sessions[id] = { ...session, scope: incompleteSessions.has(id) ? "incomplete" : "complete" }
   }
   catalog.locations[locationId] = {
     ...location,

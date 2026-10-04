@@ -1,11 +1,11 @@
 /**
  * Route table (foundation-owned). Every path is fixed here and in
- * HIGH-LEVEL-DESIGN.md §5; tracks provide only the page components through
+ * HIGH-LEVEL-DESIGN.md §4; tracks provide only the page components through
  * `src/features/<track>/routes.tsx`. Hash history keeps the static build
  * portable (Tauri in production).
  *
  * Search params are loose string maps so tracks can add keys without a
- * foundation change; the documented keys are listed in HLD §5.
+ * foundation change; the documented keys are listed in HLD §4.
  */
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
 import type { ReactNode } from "react"
@@ -30,17 +30,17 @@ function looseSearch(search: Record<string, unknown>): SearchParams {
   return out
 }
 
-/** Routes reachable before any location is registered (first run). */
+/** Routes reachable before onboarding completes (first run, and setup resumed after a reload). */
 const FIRST_RUN_ALLOWED = ["/welcome", "/setup", "/settings"]
 
 const rootRoute = createRootRoute({
   component: RootLayout,
   notFoundComponent: NotFoundPage,
   beforeLoad: ({ location }) => {
-    const empty = isLibraryEmpty(store.getState().catalog)
-    if (empty && !FIRST_RUN_ALLOWED.some((prefix) => location.pathname === prefix || location.pathname.startsWith(`${prefix}/`))) {
-      throw redirect({ to: "/welcome" })
-    }
+    const { catalog, settings } = store.getState()
+    if (settings.onboarding.completedAt || FIRST_RUN_ALLOWED.some((prefix) => location.pathname === prefix || location.pathname.startsWith(`${prefix}/`))) return
+    // No location yet: start at Welcome. A location but unfinished setup: resume at the setup steps.
+    throw redirect({ to: isLibraryEmpty(catalog) ? "/welcome" : "/setup/locations" })
   },
 })
 

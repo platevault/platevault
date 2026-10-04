@@ -1,8 +1,9 @@
 /**
  * Simulation controls (foundation-owned, prototype only). Reach offline,
- * unreadable, drift, collision, new-arrival, failed-write and permission
- * states without a real filesystem. Opened from the header "Prototype"
- * button; T1 may embed `SimulationControls` in Settings › About.
+ * unreadable, drift, restore, copy, collision, new-arrival, failed-write,
+ * resolver, clock and permission states without a real filesystem. Opened
+ * from the header "Prototype" button; T1 may embed `SimulationControls` in
+ * Settings › About.
  */
 import { FlaskConical, RotateCcw } from "lucide-react"
 import { useId, useMemo, useRef, useState } from "react"
@@ -14,15 +15,21 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Switch } from "@/components/ui/switch"
+import { fileAt } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
+import { formatDateTime } from "@/lib/format"
 import { store, useStore } from "@/store/core"
 import { resetPrototype } from "@/store"
 import {
+  copyFolderExternally,
   copyNewCaptures,
   createExternalFile,
   deleteFileExternally,
   modifyFileExternally,
   newCapturesArrived,
+  resetClock,
+  restoreFileExternally,
+  setClockTo,
   setFault,
   setFolderAccess,
   setPathReadOnly,
@@ -50,27 +57,34 @@ export function SimulationControls() {
   const denied = useStore((s) => s.disk.deniedPaths)
   const readOnlyPaths = useStore((s) => s.disk.readOnlyPaths)
   const files = useStore((s) => s.disk.files)
+  const explicitFolders = useStore((s) => s.disk.folders)
   const locations = useStore((s) => s.catalog.locations)
   const faults = useStore((s) => s.faults)
   const seed = useStore((s) => s.seed)
   const arrived = useStore(() => newCapturesArrived())
   const [folderQuery, setFolderQuery] = useState("")
   const [path, setPath] = useState("")
+  const [destination, setDestination] = useState("")
+  const [clock, setClock] = useState("")
   const [pathMessage, setPathMessage] = useState<string | null>(null)
+  const [clockMessage, setClockMessage] = useState<string | null>(null)
   const [confirmSeed, setConfirmSeed] = useState<"empty" | "demo" | null>(null)
   const folderInput = useId()
   const pathInput = useId()
+  const destinationInput = useId()
+  const clockInput = useId()
 
-  // Folders that hold files, under any volume root, plus denied ones.
+  // Folders that hold files or exist explicitly, under any volume root, plus denied ones.
   const folders = useMemo(() => {
     const set = new Set<string>(denied)
+    for (const folder of explicitFolders) set.add(folder.path)
     for (const file of Object.values(files)) {
       if (file.linkTarget) continue
       const parts = file.path.split("/")
       for (let depth = 4; depth < parts.length; depth += 1) set.add(parts.slice(0, depth).join("/"))
     }
     return [...set].filter((p) => !p.includes("/Work/Processing/") && !p.includes("/output")).sort()
-  }, [files, denied])
+  }, [files, explicitFolders, denied])
   const shownFolders = folders.filter((f) => f.toLowerCase().includes(folderQuery.toLowerCase())).slice(0, 60)
 
   return (
@@ -127,9 +141,9 @@ export function SimulationControls() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!files[path]) return setPathMessage(`No file at ${path || "(empty path)"}. Enter the full path of an existing file.`)
+                  if (!fileAt(store.getState().disk, path)) return setPathMessage(`No file at ${path || "(empty path)"}. Enter the full path of an existing file.`)
                   modifyFileExternally(path)
-                  setPathMessage(`Overwrote ${path} with new bytes.`)
+                  setPathMessage(`Overwrote ${path} with new bytes. Restore original bytes puts them back.`)
                 }}
               >
                 Overwrite existing file
@@ -138,9 +152,21 @@ export function SimulationControls() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (files[path]) return setPathMessage(`A file already exists at ${path}.`)
+                  if (!fileAt(store.getState().disk, path)) return setPathMessage(`No file at ${path || "(empty path)"}. Enter the full path of an existing file.`)
+                  setPathMessage(
+                    restoreFileExternally(path) ? `Restored the original bytes of ${path}.` : `${path} has not been overwritten, so there is nothing to restore.`,
+                  )
+                }}
+              >
+                Restore original bytes
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (fileAt(store.getState().disk, path)) return setPathMessage(`A file already exists at ${path}.`)
                   createExternalFile(path)
-                  setPathMessage(store.getState().disk.files[path] ? `Created ${path}.` : `Could not create ${path}: no mounted volume holds that path.`)
+                  setPathMessage(fileAt(store.getState().disk, path) ? `Created ${path}.` : `Could not create ${path}: no mounted volume holds that path.`)
                 }}
               >
                 Create unrelated file
@@ -149,12 +175,35 @@ export function SimulationControls() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!files[path]) return setPathMessage(`No file at ${path || "(empty path)"}. Enter the full path of an existing file.`)
+                  if (!fileAt(store.getState().disk, path)) return setPathMessage(`No file at ${path || "(empty path)"}. Enter the full path of an existing file.`)
                   deleteFileExternally(path)
                   setPathMessage(`Deleted ${path} outside PlateVault. It is not in the OS Trash.`)
                 }}
               >
                 Delete outside PlateVault
+              </Button>
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-64 flex-1 space-y-1.5">
+                <Label htmlFor={destinationInput}>Copy into folder</Label>
+                <Input
+                  id={destinationInput}
+                  className="font-mono text-xs"
+                  placeholder="/Volumes/Spare/Captures"
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (!path || !destination) return setPathMessage("Enter the file or folder to copy and the folder to copy it into.")
+                  const outcome = copyFolderExternally(path, destination)
+                  setPathMessage(outcome.ok ? `Copied ${outcome.copied} file${outcome.copied === 1 ? "" : "s"} byte for byte to ${outcome.destination}.` : outcome.message)
+                }}
+              >
+                Copy byte for byte
               </Button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -224,7 +273,52 @@ export function SimulationControls() {
             checked={faults.staleNextWrite}
             onChange={(value) => setFault("staleNextWrite", value)}
           />
+          <ToggleRow
+            label="Fail the next Target resolver lookup"
+            detail="As if the network were unavailable"
+            checked={faults.failNextResolverLookup}
+            onChange={(value) => setFault("failNextResolverLookup", value)}
+          />
         </div>
+      </Section>
+
+      <Section
+        title="Clock"
+        level={3}
+        description={`PlateVault time: ${formatDateTime(new Date(Date.now() + faults.clockOffsetMs).toISOString())}${faults.clockOffsetMs ? " (set by this control; kept after reload)" : " (system clock)"}.`}
+      >
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1.5">
+            <Label htmlFor={clockInput}>Set PlateVault time</Label>
+            <Input id={clockInput} type="datetime-local" className="w-56" value={clock} onChange={(e) => setClock(e.target.value)} />
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (!clock || Number.isNaN(new Date(clock).getTime())) return setClockMessage("Enter a date and time first.")
+              setClockTo(new Date(clock).toISOString())
+              setClockMessage(`PlateVault time set to ${formatDateTime(new Date(clock).toISOString())}. It keeps running from there.`)
+            }}
+          >
+            Set time
+          </Button>
+          {faults.clockOffsetMs !== 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                resetClock()
+                setClockMessage("PlateVault uses the system clock again.")
+              }}
+            >
+              Use system clock
+            </Button>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          {clockMessage}
+        </p>
       </Section>
 
       <Section title="Prototype data" level={3} description={`Current seed: ${seed === "demo" ? "demo library" : "empty library (first run)"}. Theme and density are kept.`}>

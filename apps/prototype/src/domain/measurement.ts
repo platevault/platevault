@@ -1,9 +1,11 @@
 /**
  * Prototype measurement simulation (spec 067). Values derive from the
- * simulated pixel truth of the source file so they stay deterministic and
+ * simulated pixel totals of the source file so they stay deterministic and
  * plausible. Measurements use the linear data basis only; display stretch
- * never reaches this function (PIX-FR-04). A saturated star fit fails and
- * yields no width value (PIX-AC-03).
+ * never reaches this function (PIX-FR-04). The fixture has frame totals, not
+ * per-star records: saturated stars and invalid samples are reported as
+ * warnings on the frame's metrics. Each result records the bytes it measured
+ * (`inputSha256`), so a changed file never reuses it (PIX-AC-10).
  */
 import type { Asset, DiskFile, FrameMeasurement, IsoDateTime, Metric } from "./types"
 
@@ -17,7 +19,7 @@ export function simulateMeasurement(
   now: IsoDateTime,
 ): FrameMeasurement {
   const truth = file?.pixelTruth
-  if (!file || !truth) return { assetId: asset.id, state: "unavailable", metrics: [], computedAt: null }
+  if (!file || !truth) return { assetId: asset.id, state: "unavailable", inputSha256: null, metrics: [], computedAt: null, history: [] }
   const basis = asset.observed.bayerPattern ? `linear, CFA ${asset.observed.bayerPattern} mosaic plane` : "linear, mono"
   const metric = (key: Metric["key"], value: number | null, unit: string, state: Metric["state"] = "valid", warning: string | null = null): Metric => ({
     key,
@@ -39,8 +41,12 @@ export function simulateMeasurement(
     metric("background", Math.round(truth.background), "ADU"),
     metric("snr", Number((truth.starCount / 60).toFixed(1)), "ratio"),
   ]
-  if (truth.invalidSamples > 0) {
-    for (const m of metrics) m.warning = `${truth.invalidSamples} invalid samples (NaN or ±∞) masked from this metric`
+  const warnings = [
+    truth.invalidSamples > 0 ? `${truth.invalidSamples} invalid samples (NaN or ±∞) masked from this metric` : null,
+    truth.saturatedStars > 0 ? `${truth.saturatedStars} saturated stars excluded from the fit` : null,
+  ].filter((w): w is string => w !== null)
+  if (warnings.length > 0) {
+    for (const m of metrics) m.warning = warnings.join("; ")
   }
-  return { assetId: asset.id, state: "valid", metrics, computedAt: now }
+  return { assetId: asset.id, state: "valid", inputSha256: file.sha256, metrics, computedAt: now, history: [] }
 }

@@ -7,8 +7,9 @@
  * - Read with `useStore((s) => …)`. Selectors may return new objects; the
  *   result is cached per state version and selector identity.
  * - Write durable catalog changes through `commit()`, which honours the
- *   simulated failed-write fault and stale-revision refusal (D08). Never
- *   report success unless `commit()` returned `{ ok: true }`.
+ *   simulated failed-write fault and stale-revision refusal (D08), and bumps
+ *   the `expect` entity's revision on success. Never report success unless
+ *   `commit()` returned `{ ok: true }`.
  * - Keep track-local UI state in your slice (`updateSlice`).
  * - Slice modules must not call store functions at module top level.
  */
@@ -17,7 +18,7 @@ import type { SeedData } from "@/domain/seed"
 import type { ActivityEvent, Catalog } from "@/domain/types"
 import type { SliceId, SliceStates } from "./slices"
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export interface PrototypeState extends SeedData {
   schemaVersion: number
@@ -92,7 +93,12 @@ export type CommitResult =
   | { ok: false; reason: "write-failed" | "stale"; message: string }
 
 export interface CommitOptions {
-  /** Refuse the write when the entity changed since it was read (D08). */
+  /**
+   * Refuse the write when the entity changed since it was read (D08). On
+   * success the entity's revision is bumped once, so mutators never bump it
+   * themselves and patch only the fields they own on the entity as read
+   * inside `mutate`.
+   */
   expect?: { collection: RevisionedCollection; id: string; revision: number }
   /** Hash route that owns the outcome, recorded with failures. */
   href?: string
@@ -133,7 +139,15 @@ export function commit(label: string, mutate: (state: PrototypeState) => Prototy
     recordActivity({ kind: "write-failed", title: `${label} not saved`, detail: message, operationId: null, href: options.href ?? null })
     return { ok: false, reason: "write-failed", message }
   }
-  store.setState(mutate)
+  store.setState((s) => {
+    const next = mutate(s)
+    if (!options.expect) return next
+    const { collection, id, revision } = options.expect
+    const records = next.catalog[collection] as Catalog[RevisionedCollection]
+    const entity = records[id]
+    if (!entity || entity.revision !== revision) return next
+    return { ...next, catalog: { ...next.catalog, [collection]: { ...records, [id]: { ...entity, revision: revision + 1 } } } }
+  })
   return { ok: true }
 }
 
@@ -147,7 +161,11 @@ export function updateSlice<K extends SliceId>(id: K, update: (slice: SliceState
   store.setState((s) => ({ ...s, slices: { ...s.slices, [id]: update(s.slices[id]) } }))
 }
 
-/** Current time as ISO string; one seam so operations and commits agree. */
+/**
+ * Current time as ISO string; one seam so operations and commits agree. It
+ * honours the simulated clock offset (`faults.clockOffsetMs`), which is
+ * persisted, so a set clock survives a reload (J29 P4).
+ */
 export function nowIso(): string {
-  return new Date().toISOString()
+  return new Date(Date.now() + (state?.faults.clockOffsetMs ?? 0)).toISOString()
 }

@@ -134,11 +134,13 @@ export interface PixelTruth {
 }
 
 export interface DiskFile {
-  /** Absolute POSIX path, unique key. */
+  /** Absolute POSIX path. Unique per volume; see `fileKey` in disk.ts. */
   path: string
   volumeId: VolumeId
   sizeBytes: number
   sha256: string
+  /** Bytes before the last external overwrite, so the prototype can restore them (J22 S15b, LIB-AC-14). */
+  previousSha256: string | null
   /** Files sharing an inode share bytes (hardlinks). */
   inode: number
   kind: DiskFileKind
@@ -158,9 +160,21 @@ export interface TrashedFile {
   trashedAt: IsoDateTime
 }
 
+/** An explicit folder (it may be empty). Folders that hold files also exist implicitly. */
+export interface DiskFolder {
+  volumeId: VolumeId
+  path: string
+}
+
 export interface Disk {
   volumes: Record<VolumeId, Volume>
+  /**
+   * Keyed by `fileKey(volumeId, path)`: two volumes mounted at one path (the
+   * impostor Archive) never overwrite each other's records. Look a path up
+   * with `fileAt(disk, path)`, which resolves the volume mounted there.
+   */
   files: Record<string, DiskFile>
+  folders: DiskFolder[]
   /** Folders whose access is denied. Descendants are unreadable. */
   deniedPaths: string[]
   /** Folders or files that can be read but not written (write permission removed). */
@@ -212,20 +226,34 @@ export interface QualityDecision {
  */
 export type Presence = "observed" | "unknown" | "absent"
 
+/** One physical copy of an asset's bytes in a registered location (LIB-AC-15, D16). */
+export interface AssetCopy {
+  locationId: LocationId
+  volumeId: VolumeId
+  path: string
+  /** Bytes observed at this copy; differs from `Asset.sha256` when this copy changed. */
+  sha256: string
+  presence: Presence
+  lastObservedAt: IsoDateTime
+}
+
+/**
+ * One logical frame. Identity comes from its bytes, not its path: indexing a
+ * byte-identical file elsewhere adds a copy instead of a new asset, and a move
+ * keeps the asset (LIB-FR-08 counts it once).
+ */
 export interface Asset {
   id: AssetId
-  locationId: LocationId
-  path: string
   fileName: string
   format: "fits" | "xisf"
   sizeBytes: number
-  /** Content identity at the last observation. */
+  /** Content identity at the last observation of any copy. */
   sha256: string
   observed: FrameHeader
   imageType: ImageType
   sessionId: SessionId | null
-  lastObservedAt: IsoDateTime
-  presence: Presence
+  /** Physical copies, in the order they were found. Never empty. */
+  copies: AssetCopy[]
   /** Library-scope quality decision (Unreviewed, Usable, Unusable). */
   quality: QualityDecision
 }
@@ -249,7 +277,7 @@ export interface Association<T extends string> {
   confirmedAt: IsoDateTime | null
 }
 
-export type CorrectionField = "target" | "equipment" | "filter" | "exposure"
+export type CorrectionField = "target" | "equipment" | "filter" | "exposure" | "focal-length"
 
 /** Catalog-only correction. Source headers are never changed. */
 export interface CatalogCorrection {
@@ -262,11 +290,15 @@ export interface CatalogCorrection {
   revision: number
 }
 
+/**
+ * Metadata-homogeneous group of frames. A session is not tied to one
+ * location: its frames may have copies in several (see `sessionLocationIds`).
+ * The capture site is derived from header coordinates (`captureSite`).
+ */
 export interface Session {
   id: SessionId
   /** Grouping revision; corrections create a new revision. */
   revision: number
-  locationId: LocationId
   night: NightDate
   imageType: ImageType
   /** Effective channel (filter), after catalog corrections. */
@@ -286,11 +318,15 @@ export interface Session {
   pointing: { ra: number; dec: number; rotationDeg: number | null } | null
   target: Association<TargetId>
   equipment: Association<OpticalTrainId>
-  captureSiteId: SiteId | null
   corrections: CatalogCorrection[]
   /** Sessions this one replaced through a regrouping revision. */
   previousSessionIds: SessionId[]
-  /** "provisional" while a scan runs; "incomplete" when part was unreadable. */
+  /**
+   * Set when a regrouping revision replaced this session (LIB-AC-10, D15).
+   * Superseded sessions stay for traceability and never count in totals.
+   */
+  supersededBy: SessionId | null
+  /** "provisional" while a scan runs; "incomplete" when part was unreadable or the scan stopped. */
   scope: "complete" | "provisional" | "incomplete"
 }
 
@@ -309,11 +345,14 @@ export interface Target {
   revision: number
 }
 
+/** Where an equipment record came from: entered by the user, detected from headers, or shipped. */
+export type RecordSource = "manual" | "detected" | "built-in"
+
 export interface Camera {
   id: CameraId
   name: string
   aliases: string[]
-  source: "manual" | "detected"
+  source: RecordSource
   widthPx: number
   heightPx: number
   pixelSizeUm: number
@@ -324,6 +363,7 @@ export interface Telescope {
   id: TelescopeId
   name: string
   aliases: string[]
+  source: RecordSource
   focalLengthMm: number
   apertureMm: number | null
 }
@@ -331,6 +371,8 @@ export interface Telescope {
 export interface OpticalTrain {
   id: OpticalTrainId
   name: string
+  /** "detected" until the user confirms it (Confirm equipment promotes it to "manual"). */
+  source: RecordSource
   cameraId: CameraId | null
   telescopeId: TelescopeId | null
   effectiveFocalLengthMm: number
@@ -342,6 +384,7 @@ export interface FilterDef {
   name: string
   category: "narrowband" | "broadband" | "dual-band" | "other"
   aliases: string[]
+  source: RecordSource
 }
 
 export interface ObservingSite {
@@ -410,9 +453,10 @@ export interface Project {
 export type ViewOrigin = "project" | "target" | "sessions" | "results"
 
 /**
+ * Derived by `viewStatus()` in derive.ts, never stored:
  * - draft: never saved; membership lives in `draft` only.
  * - saved: has a committed membership revision.
- * - prepared: the latest preparation of the current revision is verified.
+ * - prepared: the latest preparation of the latest revision is verified.
  * - complete: the user marked the processing attempt complete.
  */
 export type ViewStatus = "draft" | "saved" | "prepared" | "complete"
@@ -463,7 +507,6 @@ export interface View {
   targetId: TargetId | null
   origin: ViewOrigin
   profileId: ProfileId | null
-  status: ViewStatus
   /** Committed membership revisions, oldest first. */
   revisions: MembershipRevision[]
   /** Unsaved working copy; null when there are no unsaved changes. */
@@ -475,6 +518,7 @@ export interface View {
   /** Output location; defaults to `<View folder>/output/`. */
   outputPath: string | null
   notes: string
+  /** Set by Mark complete (T5), cleared by Reopen (T3). */
   completedAt: IsoDateTime | null
   createdAt: IsoDateTime
   revision: number
@@ -495,11 +539,28 @@ export interface Metric {
   warning: string | null
 }
 
+/** One earlier measurement of an asset, kept when its bytes or method changed. */
+export interface MeasurementRecord {
+  inputSha256: string
+  state: "valid" | "failed" | "unavailable"
+  metrics: Metric[]
+  computedAt: IsoDateTime
+}
+
+/**
+ * Cached measurement of one asset (PIX-FR-01, PIX-AC-10). It applies only
+ * while `inputSha256` equals the asset's current bytes (`measurementApplies`);
+ * "verifying" means the bytes are being re-checked before reuse.
+ */
 export interface FrameMeasurement {
   assetId: AssetId
-  state: "valid" | "pending" | "failed" | "unavailable"
+  state: "valid" | "pending" | "verifying" | "failed" | "unavailable"
+  /** Bytes the metrics were computed from; null before the first run. */
+  inputSha256: string | null
   metrics: Metric[]
   computedAt: IsoDateTime | null
+  /** Earlier measurements, newest first. */
+  history: MeasurementRecord[]
 }
 
 // ---------------------------------------------------------------------------
@@ -599,6 +660,22 @@ export interface ApplicationProfile {
 
 export type PreparationState = "running" | "prepared" | "partial" | "failed" | "canceled" | "paused"
 
+/** A prepared or blocked input: a frame, or an accepted Result for a View created from results. */
+export type PreparationInput = { kind: "asset"; assetId: AssetId } | { kind: "result"; resultId: ResultId }
+
+/**
+ * How a corrected metadata value reaches the application for one input
+ * (PREP-FR-03, PREP-AC-06): through its configuration, a patched copy, by
+ * accepting the source value, or by excluding the input.
+ */
+export interface MetadataDecision {
+  assetId: AssetId
+  field: CorrectionField
+  observed: string | null
+  corrected: string
+  decision: "configuration" | "patched-copy" | "accept-source" | "excluded"
+}
+
 export interface Preparation {
   id: PreparationId
   viewId: ViewId
@@ -613,8 +690,10 @@ export interface Preparation {
   state: PreparationState
   operationId: OperationId | null
   preparedAssetIds: AssetId[]
-  blocked: Array<{ assetId: AssetId; path: string; reason: string }>
-  headerPatches: Array<{ assetId: AssetId; field: CorrectionField; from: string | null; to: string }>
+  /** Accepted Result inputs written for a View created from results (RES-AC-04/05). */
+  preparedResultIds: ResultId[]
+  blocked: Array<{ input: PreparationInput; path: string; reason: string }>
+  metadataDecisions: MetadataDecision[]
   launches: Array<{ at: IsoDateTime; outcome: "opened" | "missing-executable" | "launch-failed" }>
   createdAt: IsoDateTime
   settledAt: IsoDateTime | null
@@ -725,7 +804,11 @@ export interface OperationItem {
 }
 
 export interface OperationScope {
-  viewId?: ViewId
+  /**
+   * Every View the operation can affect. Archive and filing record the Views
+   * whose members they move, so Mark complete sees them (RES-AC-07, D09).
+   */
+  viewIds?: ViewId[]
   locationIds?: LocationId[]
   sessionIds?: SessionId[]
   targetId?: TargetId
@@ -789,6 +872,10 @@ export interface SimulationFaults {
   failNextHashVerification: boolean
   /** The next revision-checked save finds the record changed elsewhere (D08). */
   staleNextWrite: boolean
+  /** The next Target resolver lookup fails as if offline (LIB-AC-12, D18). */
+  failNextResolverLookup: boolean
+  /** Simulated clock offset; `nowIso()` adds it, and it survives a reload (J29). */
+  clockOffsetMs: number
 }
 
 export interface Catalog {

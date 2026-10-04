@@ -11,7 +11,8 @@
  * their recorded items intact; Retry resumes from the recorded state and
  * never infers progress from file names (D09).
  */
-import { listLocation, readFiles, settleLocationScan } from "@/domain/indexing"
+import { fileKey } from "@/domain/disk"
+import { listLocation, markScanStopped, readFiles, settleLocationScan } from "@/domain/indexing"
 import type { LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus } from "@/domain/types"
 import { nowIso, type PrototypeState, store } from "./core"
 
@@ -137,8 +138,12 @@ export function cancelOperation(id: OperationId) {
     const op = s.operations[id]
     if (!op || isSettled(op.status) || !op.canCancel) return s
     const done = op.items.filter((i) => i.status === "done").length
+    let next = s
+    // A canceled index leaves the location it was reading incomplete, never provisional (LIB-FR-03).
+    const current = op.kind === "index" ? (op.payload as unknown as IndexPayload).current : null
+    if (current) next = { ...next, catalog: markScanStopped(next.catalog, current.locationId, nowIso()) }
     return settleOperation(
-      s,
+      next,
       id,
       "canceled",
       `Canceled. ${done} of ${op.items.length || op.progress.total} items finished before cancel; nothing else was changed.`,
@@ -146,9 +151,13 @@ export function cancelOperation(id: OperationId) {
   })
 }
 
-/** Running operations that affect a View (RES-AC-07, D09). */
-export function runningOperationsForView(state: PrototypeState, viewId: string): Operation[] {
-  return Object.values(state.operations).filter((op) => op.scope.viewId === viewId && op.status === "running")
+/**
+ * Unsettled operations (running, paused or interrupted) that affect a View;
+ * Mark complete waits for them (RES-AC-07, D09). Archive and filing list
+ * every View whose members they move in `scope.viewIds`.
+ */
+export function unsettledOperationsForView(state: PrototypeState, viewId: string): Operation[] {
+  return Object.values(state.operations).filter((op) => op.scope.viewIds?.includes(viewId) && !isSettled(op.status))
 }
 
 let timer: number | null = null
@@ -252,7 +261,7 @@ const indexHandler: OperationHandler = {
     const location = next.catalog.locations[current.locationId]!
     const volumeMounted = next.disk.volumes[location.volumeId]?.mounted
     const batchPaths = volumeMounted ? current.pending.slice(0, BATCH) : []
-    const files = batchPaths.map((p) => next.disk.files[p]).filter((f) => f !== undefined)
+    const files = batchPaths.map((p) => next.disk.files[fileKey(location.volumeId, p)]).filter((f) => f !== undefined)
     if (files.length > 0) next = { ...next, catalog: readFiles(next.catalog, location, files, nowIso()) }
     const observed = [...current.observed, ...batchPaths]
     const pending = current.pending.slice(batchPaths.length)
@@ -303,7 +312,8 @@ function finishIndex(state: PrototypeState, id: OperationId, payload: IndexPaylo
   ]
     .filter(Boolean)
     .join(" · ")
-  return settleOperation(state, id, blocked ? "partial" : "succeeded", summary, "/activity")
+  // Indexing outcomes belong to the locations they scanned (seam 16).
+  return settleOperation(state, id, blocked ? "partial" : "succeeded", summary, "/settings/locations")
 }
 
 /**

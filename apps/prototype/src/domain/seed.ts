@@ -1,12 +1,14 @@
 /**
  * Seeds: `empty` (first run; onboarding starts) and `demo` (a realistic
- * indexed library). Both share the same simulated disk so the empty seed can
- * be indexed into the same library through onboarding (J19).
+ * indexed library for browsing). Both share the same simulated disk so the
+ * empty seed can be indexed into the same library through onboarding (J19).
+ * Journeys J18-J30 run in order from the empty seed; the demo is not a
+ * journey checkpoint.
  *
  * All names, paths and counts are illustrative fixtures, matching the worked
  * example in the product flow (NGC 7000 HOO, 208 lights, 17h 20m).
  */
-import { fakeSha256, makeFile } from "./disk"
+import { fakeSha256, fileAt, fileKey, makeFile, writeFiles } from "./disk"
 import { indexLocationsSync, stableHash } from "./indexing"
 import { simulateMeasurement } from "./measurement"
 import { pixelScaleArcsec } from "./sky"
@@ -38,6 +40,7 @@ export const VOLUME_IDS = {
   scratch: "vol_scratch",
   archive: "vol_archive",
   impostor: "vol_archive_impostor",
+  spare: "vol_spare",
 } as const
 
 const TB = 1_000_000_000_000
@@ -50,6 +53,8 @@ function buildVolumes(coldMounted: boolean): Record<VolumeId, Volume> {
     { id: VOLUME_IDS.scratch, name: "Scratch", mountPath: "/Volumes/Scratch", volumeUuid: "5C7A-0001", mounted: true, writable: true, trash: "unsupported", capacityBytes: 0.5 * TB, links: { symlink: false, hardlink: false, clone: false } },
     { id: VOLUME_IDS.archive, name: "Archive", mountPath: "/Volumes/Archive", volumeUuid: "A7C4-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 8 * TB, links: { symlink: true, hardlink: true, clone: false } },
     { id: VOLUME_IDS.impostor, name: "Archive", mountPath: "/Volumes/Archive", volumeUuid: "A7C4-9999", mounted: false, writable: true, trash: "supported", capacityBytes: 1 * TB, links: { symlink: true, hardlink: true, clone: false } },
+    // J25 P4: a disposable writable volume with an empty Captures folder.
+    { id: VOLUME_IDS.spare, name: "Spare", mountPath: "/Volumes/Spare", volumeUuid: "5BA2-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 1 * TB, links: allLinks },
   ]
   return Object.fromEntries(list.map((v) => [v.id, v]))
 }
@@ -59,6 +64,7 @@ const MOUNT: Record<VolumeId, string> = {
   [VOLUME_IDS.cold]: "/Volumes/Cold-1",
   [VOLUME_IDS.scratch]: "/Volumes/Scratch",
   [VOLUME_IDS.archive]: "/Volumes/Archive",
+  [VOLUME_IDS.spare]: "/Volumes/Spare",
 }
 
 const SITE_COORDS = {
@@ -202,28 +208,30 @@ function masterFile(name: string, imageType: ImageType, exposureS: number, filte
 function baseFiles(): DiskFile[] {
   const rot = 90
   return [
+    // Demo-only history lives outside Captures, so J19's Captures folder holds exactly its seven sessions.
     // Mosaic panel case: Heart and Soul, two explicit panels.
-    ...light(A, "Captures/HeartSoul/2026-09-14/Ha", "Light_HeartP1_300s_Ha", 20, "2026-09-14T20:40:00Z", 300, "Ha", "Heart Panel 1", { ra: 38.2, dec: 61.45, rotationDeg: 0 }),
-    ...light(A, "Captures/HeartSoul/2026-09-15/Ha", "Light_HeartP2_300s_Ha", 18, "2026-09-15T20:40:00Z", 300, "Ha", "Heart Panel 2", { ra: 42.8, dec: 60.43, rotationDeg: 0 }),
+    ...light(A, "Imaging/HeartSoul/2026-09-14/Ha", "Light_HeartP1_300s_Ha", 20, "2026-09-14T20:40:00Z", 300, "Ha", "Heart Panel 1", { ra: 38.2, dec: 61.45, rotationDeg: 0 }),
+    ...light(A, "Imaging/HeartSoul/2026-09-15/Ha", "Light_HeartP2_300s_Ha", 18, "2026-09-15T20:40:00Z", 300, "Ha", "Heart Panel 2", { ra: 42.8, dec: 60.43, rotationDeg: 0 }),
     // M 31 across nights: LRGB plus Ha and OIII.
-    ...light(A, "Captures/M31/2026-09-02/L", "Light_M31_120s_L", 60, "2026-09-02T21:00:00Z", 120, "L", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
-    ...light(A, "Captures/M31/2026-09-03/R", "Light_M31_120s_R", 20, "2026-09-03T21:00:00Z", 120, "R", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
-    ...light(A, "Captures/M31/2026-09-03/G", "Light_M31_120s_G", 20, "2026-09-03T21:50:00Z", 120, "G", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
-    ...light(A, "Captures/M31/2026-09-03/B", "Light_M31_120s_B", 20, "2026-09-03T22:40:00Z", 120, "B", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
-    ...light(A, "Captures/M31/2026-09-04/Ha", "Light_M31_300s_Ha", 30, "2026-09-04T21:10:00Z", 300, "Ha", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
-    ...light(A, "Captures/M31/2026-09-05/OIII", "Light_M31_300s_OIII", 24, "2026-09-05T21:10:00Z", 300, "OIII", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
-    ...light(A, "Captures/M33/2026-08-30/L", "Light_M33_120s_L", 40, "2026-08-30T22:00:00Z", 120, "L", "M33", { ra: 23.462, dec: 30.66, rotationDeg: 0 }),
+    ...light(A, "Imaging/M31/2026-09-02/L", "Light_M31_120s_L", 60, "2026-09-02T21:00:00Z", 120, "L", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
+    ...light(A, "Imaging/M31/2026-09-03/R", "Light_M31_120s_R", 20, "2026-09-03T21:00:00Z", 120, "R", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
+    ...light(A, "Imaging/M31/2026-09-03/G", "Light_M31_120s_G", 20, "2026-09-03T21:50:00Z", 120, "G", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
+    ...light(A, "Imaging/M31/2026-09-03/B", "Light_M31_120s_B", 20, "2026-09-03T22:40:00Z", 120, "B", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
+    ...light(A, "Imaging/M31/2026-09-04/Ha", "Light_M31_300s_Ha", 30, "2026-09-04T21:10:00Z", 300, "Ha", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
+    ...light(A, "Imaging/M31/2026-09-05/OIII", "Light_M31_300s_OIII", 24, "2026-09-05T21:10:00Z", 300, "OIII", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
+    ...light(A, "Imaging/M33/2026-08-30/L", "Light_M33_120s_L", 40, "2026-08-30T22:00:00Z", 120, "L", "M33", { ra: 23.462, dec: 30.66, rotationDeg: 0 }),
     // NGC 7000: the worked example.
     ...light(VOLUME_IDS.cold, "Captures/NGC7000/2026-09-12/OIII", "Light_NGC7000_300s_OIII", 24, "2026-09-12T21:30:00Z", 300, "OIII", "NGC 7000", { ...NGC7000, rotationDeg: rot }, { site: SITE_COORDS.lapalma }),
     ...light(A, "Captures/NGC7000/2026-09-18/Ha", "Light_NGC7000_300s_Ha", 55, "2026-09-18T20:20:00Z", 300, "Ha", "NGC 7000", { ra: 314.7, dec: 44.5, rotationDeg: null }),
-    ...captureSet({ volumeId: A, dir: "Captures/NGC7000/2026-09-21/OSC", prefix: "Light_NGC7000_120s_LeXtreme", count: 40, start: "2026-09-21T20:30:00Z", imageType: "light", exposureS: 120, filter: "L-eXtreme", object: "NGC 7000", rig: SAMYANG, pointing: { ...NGC7000, rotationDeg: 0 }, site: SITE_COORDS.backyard }),
+    ...captureSet({ volumeId: A, dir: "Captures/NGC7000/2026-09-21/OSC", prefix: "Light_NGC7000_120s_Ha", count: 40, start: "2026-09-21T20:30:00Z", imageType: "light", exposureS: 120, filter: "Ha", object: "NGC 7000", rig: SAMYANG, pointing: { ...NGC7000, rotationDeg: 0 }, site: SITE_COORDS.backyard }),
     ...light(A, "Captures/NGC7000/2026-09-24/OIII", "Light_300s_OIII", 20, "2026-09-24T20:10:00Z", 300, "OIII", null, null),
     ...light(A, "Captures/NGC7000/2026-09-26/OIII", "Light_Cygnus_300s_OIII", 35, "2026-09-26T19:55:00Z", 300, "OIII", "Cygnus field", { ra: 314.8, dec: 44.6, rotationDeg: rot }),
+    // J19 P2: 28 Sep has no telescope or focal-length keywords, so its equipment needs review.
     ...light(A, "Captures/NGC7000/2026-09-28/Ha", "Light_NGC7000_300s_Ha", 56, "2026-09-28T19:50:00Z", 300, "Ha", "NGC 7000", { ...NGC7000, rotationDeg: rot }, {
-      overrides: { telescope: "Telescope" },
+      overrides: { telescope: null, focalLengthMm: null },
       truth: (i) => (i === 30 ? { invalidSamples: 140 } : i === 5 ? { saturatedStars: 9 } : {}),
     }),
-    ...light(A, "Captures/NGC7000/2026-09-30/OIII", "Light_300s_OIII", 48, "2026-09-30T19:45:00Z", 300, "OIII", null, { ra: 314.76, dec: 44.52, rotationDeg: rot }, {
+    ...light(A, "Captures/NGC7000/2026-09-30/OIII", "Light_300s_OIII", 48, "2026-09-30T19:45:00Z", 300, "OIII", "NGC 7000", { ra: 314.76, dec: 44.52, rotationDeg: rot }, {
       truth: (i) => (i >= 12 && i <= 17 ? { trailed: true, eccentricity: 0.78, fwhmPx: 4.1 } : {}),
     }),
     makeFile({ path: "/Volumes/Astro-T7/Captures/NGC7000/observing-notes.txt", volumeId: A, sizeBytes: 2_140, kind: "text", modifiedAt: "2026-09-30T23:10:00Z" }),
@@ -342,14 +350,14 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
 
 function builtInFilters(): Record<string, FilterDef> {
   const list: FilterDef[] = [
-    { id: "flt_ha", name: "Ha", category: "narrowband", aliases: ["H-alpha", "Halpha"] },
-    { id: "flt_oiii", name: "OIII", category: "narrowband", aliases: ["O3", "O-III"] },
-    { id: "flt_sii", name: "SII", category: "narrowband", aliases: ["S2", "S-II"] },
-    { id: "flt_l", name: "L", category: "broadband", aliases: ["Lum", "Luminance"] },
-    { id: "flt_r", name: "R", category: "broadband", aliases: ["Red"] },
-    { id: "flt_g", name: "G", category: "broadband", aliases: ["Green"] },
-    { id: "flt_b", name: "B", category: "broadband", aliases: ["Blue"] },
-    { id: "flt_lextreme", name: "L-eXtreme", category: "dual-band", aliases: ["LeXtreme"] },
+    { id: "flt_ha", name: "Ha", category: "narrowband", aliases: ["H-alpha", "Halpha"], source: "built-in" },
+    { id: "flt_oiii", name: "OIII", category: "narrowband", aliases: ["O3", "O-III"], source: "built-in" },
+    { id: "flt_sii", name: "SII", category: "narrowband", aliases: ["S2", "S-II"], source: "built-in" },
+    { id: "flt_l", name: "L", category: "broadband", aliases: ["Lum", "Luminance"], source: "built-in" },
+    { id: "flt_r", name: "R", category: "broadband", aliases: ["Red"], source: "built-in" },
+    { id: "flt_g", name: "G", category: "broadband", aliases: ["Green"], source: "built-in" },
+    { id: "flt_b", name: "B", category: "broadband", aliases: ["Blue"], source: "built-in" },
+    { id: "flt_lextreme", name: "L-eXtreme", category: "dual-band", aliases: ["LeXtreme"], source: "built-in" },
   ]
   return Object.fromEntries(list.map((f) => [f.id, f]))
 }
@@ -388,7 +396,14 @@ export function defaultSettings(): AppSettings {
 }
 
 export function defaultFaults(): SimulationFaults {
-  return { failNextCatalogWrite: false, notificationResponse: "grant", failNextHashVerification: false, staleNextWrite: false }
+  return {
+    failNextCatalogWrite: false,
+    notificationResponse: "grant",
+    failNextHashVerification: false,
+    staleNextWrite: false,
+    failNextResolverLookup: false,
+    clockOffsetMs: 0,
+  }
 }
 
 export interface SeedData {
@@ -401,8 +416,25 @@ export interface SeedData {
   faults: SimulationFaults
 }
 
+/** Empty folders the journeys need before anything writes into them. */
+const EXPLICIT_FOLDERS = [
+  { volumeId: A, path: "/Volumes/Astro-T7/Work/Processing" }, // J24 P3
+  { volumeId: A, path: "/Volumes/Astro-T7/Work/Outputs" }, // J24 P3
+  { volumeId: A, path: "/Volumes/Astro-T7/Library" }, // J30 P2
+  { volumeId: VOLUME_IDS.archive, path: "/Volumes/Archive/Library" }, // J30 P2
+  { volumeId: VOLUME_IDS.archive, path: "/Volumes/Archive/NGC7000" }, // J28 destination
+  { volumeId: VOLUME_IDS.spare, path: "/Volumes/Spare/Captures" }, // J25 P4
+]
+
 function diskOf(files: DiskFile[], coldMounted: boolean, deniedPaths: string[]): Disk {
-  return { volumes: buildVolumes(coldMounted), files: Object.fromEntries(files.map((f) => [f.path, f])), deniedPaths, readOnlyPaths: [], trash: [] }
+  return {
+    volumes: buildVolumes(coldMounted),
+    files: Object.fromEntries(files.map((f) => [fileKey(f.volumeId, f.path), f])),
+    folders: EXPLICIT_FOLDERS.map((f) => ({ ...f })),
+    deniedPaths,
+    readOnlyPaths: [],
+    trash: [],
+  }
 }
 
 /** First run: the disk exists, the catalog is empty, onboarding starts. */
@@ -440,12 +472,12 @@ function demoSeed(): SeedData {
     cam_533: { id: "cam_533", name: "ASI533MC Pro", aliases: ["ZWO ASI533MC Pro"], source: "manual", widthPx: 3008, heightPx: 3008, pixelSizeUm: 3.76, color: true },
   }
   catalog.telescopes = {
-    tel_redcat: { id: "tel_redcat", name: "RedCat 51", aliases: ["William Optics RedCat 51"], focalLengthMm: 250, apertureMm: 51 },
-    tel_samyang: { id: "tel_samyang", name: "Samyang 135", aliases: ["Samyang 135mm f/2"], focalLengthMm: 135, apertureMm: 67 },
+    tel_redcat: { id: "tel_redcat", name: "RedCat 51", aliases: ["William Optics RedCat 51"], source: "manual", focalLengthMm: 250, apertureMm: 51 },
+    tel_samyang: { id: "tel_samyang", name: "Samyang 135", aliases: ["Samyang 135mm f/2"], source: "manual", focalLengthMm: 135, apertureMm: 67 },
   }
   catalog.opticalTrains = {
-    otr_redcat: { id: "otr_redcat", name: "RedCat 51 / ASI2600MM", cameraId: "cam_2600", telescopeId: "tel_redcat", effectiveFocalLengthMm: 250, notes: "" },
-    otr_samyang: { id: "otr_samyang", name: "Samyang 135 / ASI533MC", cameraId: "cam_533", telescopeId: "tel_samyang", effectiveFocalLengthMm: 135, notes: "" },
+    otr_redcat: { id: "otr_redcat", name: "RedCat 51 / ASI2600MM", source: "manual", cameraId: "cam_2600", telescopeId: "tel_redcat", effectiveFocalLengthMm: 250, notes: "" },
+    otr_samyang: { id: "otr_samyang", name: "Samyang 135 / ASI533MC", source: "manual", cameraId: "cam_533", telescopeId: "tel_samyang", effectiveFocalLengthMm: 135, notes: "" },
   }
   catalog.sites = {
     site_backyard: { id: "site_backyard", name: "Backyard", latitude: 52.09, longitude: 5.12, elevationM: 5, timeZone: "Europe/Amsterdam", twilight: "astronomical", minAltitudeDeg: 25 },
@@ -453,6 +485,7 @@ function demoSeed(): SeedData {
   }
   catalog.locations = {
     loc_captures: location("loc_captures", "Astro-T7 captures", "/Volumes/Astro-T7/Captures", A, "captures"),
+    loc_imaging: location("loc_imaging", "Astro-T7 imaging", "/Volumes/Astro-T7/Imaging", A, "captures"),
     loc_cold: location("loc_cold", "Cold-1 captures", "/Volumes/Cold-1/Captures", VOLUME_IDS.cold, "captures"),
     loc_calibration: location("loc_calibration", "Astro-T7 calibration", "/Volumes/Astro-T7/Calibration", A, "calibration"),
     loc_finals: location("loc_finals", "Finals", "/Volumes/Astro-T7/Work/Finals", A, "results"),
@@ -463,8 +496,8 @@ function demoSeed(): SeedData {
   // Cold-1 was indexed on 13 Sep while connected.
   catalog = indexLocationsSync(catalog, disk, ["loc_cold"], "2026-09-13T08:00:00.000Z")
   // The 1 Oct scan of Astro-T7 hit an access-denied folder (partial scan).
-  disk.deniedPaths = ["/Volumes/Astro-T7/Captures/M33/2026-08-30"]
-  catalog = indexLocationsSync(catalog, disk, ["loc_captures", "loc_calibration", "loc_finals", "loc_library", "loc_archive"], "2026-10-01T08:00:00.000Z")
+  disk.deniedPaths = ["/Volumes/Astro-T7/Imaging/M33/2026-08-30"]
+  catalog = indexLocationsSync(catalog, disk, ["loc_captures", "loc_imaging", "loc_calibration", "loc_finals", "loc_library", "loc_archive"], "2026-10-01T08:00:00.000Z")
   disk.volumes[VOLUME_IDS.cold] = { ...disk.volumes[VOLUME_IDS.cold]!, mounted: false }
 
   const m31Night = (night: string, channel: string) =>
@@ -504,16 +537,17 @@ function demoSeed(): SeedData {
   // One drifted-content asset: an M 31 L frame changed on disk after review.
   const driftedId = m31.L.assetIds[6]!
   const drifted = catalog.assets[driftedId]!
-  const driftedSha = fakeSha256(drifted.path, 1)
-  disk.files[drifted.path] = { ...disk.files[drifted.path]!, sha256: driftedSha, modifiedAt: "2026-09-20T22:14:00.000Z" }
-  catalog.assets[driftedId] = { ...drifted, sha256: driftedSha }
+  const driftedPath = drifted.copies[0]!.path
+  const driftedSha = fakeSha256(driftedPath, 1)
+  disk.files[fileKey(A, driftedPath)] = { ...fileAt(disk, driftedPath)!, sha256: driftedSha, modifiedAt: "2026-09-20T22:14:00.000Z" }
+  catalog.assets[driftedId] = { ...drifted, sha256: driftedSha, copies: drifted.copies.map((c) => ({ ...c, sha256: driftedSha })) }
 
   // Cached measurements for the M 31 broadband frames.
   const scale = pixelScaleArcsec(3.76, 250)
   for (const s of [m31.L, m31.R, m31.G, m31.B]) {
     for (const id of s.assetIds) {
       const asset = catalog.assets[id]!
-      catalog.measurements[id] = simulateMeasurement(asset, disk.files[asset.path], scale, "2026-09-06T11:00:00.000Z")
+      catalog.measurements[id] = simulateMeasurement(asset, fileAt(disk, asset.copies[0]!.path), scale, "2026-09-06T11:00:00.000Z")
     }
   }
 
@@ -550,7 +584,8 @@ function demoSeed(): SeedData {
       panels: [
         { id: "pnl_1", name: "Panel 1 (Heart)", ra: 38.2, dec: 61.45, widthDeg: 5.4, heightDeg: 3.6, rotationDeg: 0 },
         { id: "pnl_2", name: "Panel 2 (Soul)", ra: 42.8, dec: 60.43, widthDeg: 5.4, heightDeg: 3.6, rotationDeg: 0 },
-        { id: "pnl_3", name: "Panel 3 (bridge)", ra: 40.5, dec: 61.0, widthDeg: 5.4, heightDeg: 3.6, rotationDeg: 0 },
+        // East of Panel 2: no linked session's footprint reaches the coverage threshold (uncovered).
+        { id: "pnl_3", name: "Panel 3 (east)", ra: 50.4, dec: 59.6, widthDeg: 5.4, heightDeg: 3.6, rotationDeg: 0 },
       ],
       equipmentId: "otr_redcat",
       linkedSessionIds: [heart1.id, heart2.id],
@@ -575,7 +610,7 @@ function demoSeed(): SeedData {
   for (const id of included) {
     const asset = catalog.assets[id]!
     const stem = asset.fileName.replace(/\.fits$/, "")
-    viewFiles.push(makeFile({ path: `${viewPath}/lights/${asset.fileName}`, volumeId: A, sizeBytes: 0, kind: "fits", linkTarget: asset.path, modifiedAt: "2026-09-07T18:00:00.000Z" }))
+    viewFiles.push(makeFile({ path: `${viewPath}/lights/${asset.fileName}`, volumeId: A, sizeBytes: 0, kind: "fits", linkTarget: asset.copies[0]!.path, modifiedAt: "2026-09-07T18:00:00.000Z" }))
     viewFiles.push(makeFile({ path: `${viewPath}/output/calibrated/${stem}_c.xisf`, volumeId: A, sizeBytes: 104_390_000, kind: "xisf", modifiedAt: "2026-09-07T19:00:00.000Z" }))
     viewFiles.push(makeFile({ path: `${viewPath}/output/registered/${stem}_c_r.xisf`, volumeId: A, sizeBytes: 104_390_000, kind: "xisf", modifiedAt: "2026-09-07T19:40:00.000Z" }))
   }
@@ -587,7 +622,7 @@ function demoSeed(): SeedData {
   )
   const finalTif = makeFile({ path: "/Volumes/Astro-T7/Work/Finals/M31-LRGB.tif", volumeId: A, sizeBytes: 156_500_000, kind: "tiff", modifiedAt: "2026-09-09T21:00:00.000Z" })
   const log = makeFile({ path: `${viewPath}/output/logs/WBPP_2026-09-07.log`, volumeId: A, sizeBytes: 84_000, kind: "log", modifiedAt: "2026-09-07T20:31:00.000Z" })
-  for (const file of [...viewFiles, ...masterLights, ...masterFlats, finalTif, log]) disk.files[file.path] = file
+  disk.files = writeFiles(disk, [...viewFiles, ...masterLights, ...masterFlats, finalTif, log]).files
 
   catalog.views = {
     view_m31: {
@@ -597,7 +632,6 @@ function demoSeed(): SeedData {
       targetId: m31Target,
       origin: "project",
       profileId: PROFILE_IDS.pixinsight,
-      status: "complete",
       revisions: [
         {
           revision: 1,
@@ -646,7 +680,8 @@ function demoSeed(): SeedData {
       operationId: null,
       preparedAssetIds: included,
       blocked: [],
-      headerPatches: [],
+      preparedResultIds: [],
+      metadataDecisions: [],
       launches: [{ at: "2026-09-07T18:05:00.000Z", outcome: "opened" }],
       createdAt: "2026-09-07T18:00:00.000Z",
       settledAt: "2026-09-07T18:01:00.000Z",
@@ -686,7 +721,7 @@ function demoSeed(): SeedData {
       at: "2026-10-01T08:02:00.000Z",
       kind: "operation",
       title: "Indexing finished with incomplete scope",
-      detail: "Access denied: /Volumes/Astro-T7/Captures/M33/2026-08-30. Other folders were indexed.",
+      detail: "Access denied: /Volumes/Astro-T7/Imaging/M33/2026-08-30. Other folders were indexed.",
       operationId: null,
       href: "/settings/locations",
     },

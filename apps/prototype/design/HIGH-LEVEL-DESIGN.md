@@ -40,7 +40,8 @@ Five trust rules shape every screen (063 FR-001 to FR-016):
 
 ```mermaid
 erDiagram
-  LOCATION ||--o{ ASSET : "indexes in place"
+  LOCATION ||--o{ ASSET_COPY : "indexes in place"
+  ASSET ||--|{ ASSET_COPY : "physical copies (same bytes)"
   SESSION ||--|{ ASSET : "groups (metadata-homogeneous)"
   TARGET ||--o{ SESSION : "association (evidence)"
   PROJECT }o--o{ TARGET : "optional goal"
@@ -58,11 +59,27 @@ The prototype models two worlds (`src/domain/types.ts`):
 
 - **Disk**: the simulated filesystem outside PlateVault: volumes (mounted,
   identity uuid, OS Trash support, link support), files with header evidence
-  and content hashes, denied folders, OS Trash.
+  and content hashes, explicit (possibly empty) folders, denied and read-only
+  paths, OS Trash. Files are keyed by volume and path (`fileKey`), so the
+  impostor Archive never overwrites the real Archive's records; look a path up
+  with `fileAt(disk, path)` and list folders with `listFolders`.
 - **Catalog**: what PlateVault has indexed and decided.
 
 Indexing (`src/domain/indexing.ts`) reads the disk into the catalog. Prototype
 controls change the disk; PlateVault observes the change on its next read.
+
+Identity rules (LIB-AC-10, LIB-AC-15, D15, D16):
+
+- An **Asset** is one logical frame identified by its bytes. It has one or
+  more `copies` (location, volume, path, sha256, presence). Indexing a file
+  first matches a copy at the same path, then a byte-identical asset of the
+  same image type (a copy or a move), and only then creates an asset. Totals
+  count each asset once; availability is the best copy's.
+- A **Session** is grouped by metadata only, never by location; its locations
+  are derived (`sessionLocationIds`), as is its capture site (`captureSite`
+  matches header coordinates against the saved sites when read).
+- A regrouping revision sets `supersededBy` on the replaced session; superseded
+  sessions stay inspectable and never count in totals or progress.
 
 ## 2. Information architecture and navigation
 
@@ -113,9 +130,11 @@ Left: sidebar toggle and the palette trigger. Right, the status area:
 - **Prototype** button: opens the simulation controls (§13);
 - theme menu: Dark (default), Light, Match system.
 
-First-run gating: while the catalog has no location, every route except
-`/welcome`, `/setup/*` and `/settings/*` redirects to `/welcome` (root
-`beforeLoad`). Onboarding uses a focused shell with no sidebar.
+First-run gating: until `settings.onboarding.completedAt` is set, every route
+except `/welcome`, `/setup/*` and `/settings/*` redirects to `/welcome` when no
+location exists, or to `/setup/locations` when setup was left unfinished
+(root `beforeLoad`). T1 sets `completedAt` on Open library and on any "set up
+later" exit. Onboarding uses a focused shell with no sidebar.
 
 ## 3. End-to-end user process
 
@@ -138,6 +157,8 @@ flowchart TD
   VP -->|Open in app| EXT((External application\nprocesses outside PlateVault))
   EXT --> VR[/views/$id/results discover, Attach, Accept,\nMark processing complete/]
   VR -->|Create View from results| VN
+  VR -->|Add accepted results to a View| VS
+  VR -.->|before Complete: clean up replaced preparation entries, STO-FR-10, D09| VCL
   VR -->|adopt generated master| CAL[/calibration/$id Add to calibration library/]
   VR -->|Clean up View| VCL[/views/$id/cleanup groups, review,\nSend to OS Trash, partial summary/]
   VS -.->|later: new captures| VRF[/views/$id/refresh diff, accept or decline/]
@@ -231,7 +252,7 @@ URLs read `#/targets/…`.
 |---|---|---|
 | `/views/$viewId/results` | Results | H1-H3a: candidates vs intermediates, Pending, Attach Result, lineage, Accept Result, Create View from results; I1 Mark processing complete; drift |
 | `/views/$viewId/cleanup` | Clean up View | I2-I5: groups, Keep, Inspect files, Review cleanup, Trash support per location, Send selected files to Trash, partial summary |
-| `/storage` | Storage | Locations and availability, View footprints, duplicate candidates, transfers (STO-FR-11) |
+| `/storage` | Storage | Locations and availability, View footprints, duplicate candidates, transfers (STO-FR-11); per View: Clean up View (→ `/views/$id/cleanup`); offline or moved copies: Locate or remap (→ `/settings/locations?locationId=`) |
 | `/storage/archive` | Archive | J: plan from `?sessionIds=` or `?viewId=`, destination identity, free space, reference modes, Review transfer |
 | `/storage/filing` | File into library | L: layout preview, collisions, Review filing (`?sessionIds=`) |
 | `/storage/transfers/$operationId` | Transfer | Phases per item, interruption, Retry, reference outcomes |
@@ -258,7 +279,10 @@ Search params are loose string maps, so a track may add keys. These are fixed:
 | `/views/new` | `sessionIds`, `resultIds` | Comma-separated ids |
 | `/storage/archive` | `sessionIds` or `viewId` | Archive scope |
 | `/storage/filing` | `sessionIds` | Sessions to file |
-| `/settings/sites`, `/settings/equipment`, `/settings/locations` | `return` | Hash route to return to after the task (for example from a Plan or a session) |
+| `/settings/sites`, `/settings/equipment`, `/settings/locations`, `/settings/applications` | `return` | Route to return to after the task, without `#` (for example `/targets/<id>/plan`) |
+| `/settings/locations` | `locationId` | Location to open (C6, remap) |
+| `/calibration/$masterId` | `viewId` | View whose assignment opened the master |
+| `/views/new` | `viewId` | Existing View to add accepted Results to (H3a alternative); with `resultIds` |
 | `/views/$viewId/frames` | `assetId` | Frame to select |
 
 ## 5. Cross-track handoffs (seams)
@@ -270,20 +294,20 @@ params, the shared catalog, and foundation core actions.
 |---|---|---|---|
 | 1 | T1 setup → library | Start indexing / Open library | T1 calls `startIndexing(ids)`; renders `OperationPanel`; Open library → `/targets`; sets `settings.onboarding.completedAt` |
 | 2 | T1 Settings › Locations ↔ T2 | Rescan, Retry, Choose folder again | `startIndexing`; T2 surfaces read `location.scanScope`, `unreadablePaths`, `access` and session `scope` |
-| 3 | T2 evidence → T1 equipment | Confirm equipment with no record | Link `/settings/equipment?return=#/sessions/<id>`; records in `catalog.opticalTrains` |
+| 3 | T2 evidence → T1 equipment | Confirm equipment with no record | Link `/settings/equipment?return=/sessions/<id>`; records in `catalog.opticalTrains`; Confirm equipment promotes a `detected` train to `manual` |
 | 4 | T2 Target → T2 Project | New Project | `/projects/new?targetId=` |
 | 5 | T2 Target, Project, Sessions → T3 | Create View | `/views/new?from=target|project|sessions&…`; T3 creates the draft |
 | 6 | T2 Target → T5 Plan | Plan | `/targets/$id/plan` |
-| 7 | T5 Plan → T1 sites | Enable notifications with no default site | `/settings/sites?return=#/targets/<id>/plan`; `settings.defaultSiteId` |
-| 8 | T3 workspace → T4 areas | Calibration and Prepare tabs | Same layout; T4 reads the latest saved revision; Review preparation needs a saved revision; T4 writes `view.calibration`, `catalog.preparations`, `view.status = prepared` |
+| 7 | T5 Plan → T1 sites | Enable notifications with no default site | `/settings/sites?return=/targets/<id>/plan`; `settings.defaultSiteId` |
+| 8 | T3 workspace → T4 areas | Calibration and Prepare tabs | Same layout and one shared selection: the Calibration area reads `view.draft`, else the latest revision (C1, VSEL-AC-07). Only Review preparation and Prepare require a saved revision with no unsaved draft. T4 writes `view.calibration` and `catalog.preparations`; Prepared is derived (`viewStatus`) |
 | 9 | T4 Prepared → T5 Results | Open in…, then Results tab | T5 discovers files under `preparation.outputPath` |
 | 10 | T5 Results → T3 | Create View from results | `/views/new?from=results&resultIds=`; T3 records `productInputs` and shows them apart from raw sessions |
 | 11 | T5 Results → T4 | Generated master in output | T4 detects candidates in recorded output locations; T5 links the file to `/calibration/<masterId>` |
 | 12 | T3 frames → T2 coverage, T2 Project | Mark usable, Reject for Project | T3 writes `asset.quality` (library scope) or `project.rejections`; T2 recomputes through `src/domain/derive.ts` |
-| 13 | T5 Complete ↔ T3 | Mark processing complete, Reopen | T5 sets `status = complete` (blocked by `runningOperationsForView`); T3 owns Reopen and refuses membership edits while Complete |
+| 13 | T5 Complete ↔ T3 | Mark processing complete, Reopen | T5 sets `completedAt` (blocked while `unsettledOperationsForView` returns any operation; archive and filing list affected Views in `scope.viewIds`); T3's Reopen clears it and refuses membership edits while Complete |
 | 14 | T2 Sessions → T5 filing | File into library | `/storage/filing?sessionIds=` |
-| 15 | T5 archive, filing → T3, T4 | Verified transfer | T5 updates asset `path`/`locationId` keeping identity, and rebuilds preparation entries; membership never changes |
-| 16 | Any → T2 Activity | Every operation | `settleOperation` records the outcome with an `href` to the owning surface |
+| 15 | T5 archive, filing → T3, T4 | Verified transfer | T5 adds the destination to `asset.copies` (same bytes, same asset) and marks the source copy absent after a verified move; it rebuilds preparation entries; membership never changes |
+| 16 | Any → T2 Activity | Every operation | `settleOperation` records the outcome with an `href` to the owning surface, a route without `#` (indexing → `/settings/locations`) |
 
 ## 6. Layout patterns
 
@@ -393,6 +417,7 @@ Overlays have no backdrop blur.
 | `SelectionBar` | data-table.tsx | count, "Selected outside current filters: N", Show selected, Clear selection, bulk actions | selected; renders nothing when empty |
 | `ConfirmDialog` | confirm-dialog.tsx | changes, unchanged, tone, CommitResult error | default, focus-visible, error (stays open with Retry); loading N/A: commits are synchronous |
 | `OperationPanel` | operation-panel.tsx | Pause, Resume, Retry, Cancel by kind; progressbar keeps a stable name, the count is its `aria-valuetext` | loading (running), error (failed/blocked items), empty (no items), success, partial, interrupted |
+| `FolderPicker` | folder-picker.tsx | simulated OS folder chooser: volumes (offline shown with reason), breadcrumb, Up, child folders including empty ones, denied folders marked; returns a path, writes nothing | default, hover, focus-visible, active, disabled (offline volume, Up at a volume root), empty (no subfolders), error (access denied: listed with a Notice, still choosable), selected (current volume `aria-current`); loading N/A: the simulated disk is synchronous |
 
 Base UI usage notes (verified in the running build):
 
@@ -523,12 +548,23 @@ exact need. It does not edit the file or work around it.
 
 1. No imports between `src/features/*` folders.
 2. Navigate with the fixed routes and documented search params (§4).
-3. Read state with `useStore(selector)`; derived numbers (coverage, availability,
-   membership totals, changed content) come from `src/domain/derive.ts` so every
-   surface agrees.
+3. Read state with `useStore(selector)`; derived values come from
+   `src/domain/derive.ts` so every surface agrees: coverage, asset and copy
+   availability, membership totals, changed content, `measurementApplies`,
+   `viewStatus`, `captureSite`, `sessionLocationIds`, `sessionFootprint`,
+   `coverageFraction` with `MIN_FOOTPRINT_OVERLAP` (0.5, the prototype value
+   for J21 G2) and `projectProgress` (captured, library-usable and
+   Project-accepted totals per checklist item). Site removal goes through
+   `removeSite` (`src/domain/sites.ts`).
 4. Durable catalog writes go through `commit(label, mutate, { expect, href })`.
    Report success only on `{ ok: true }`; otherwise keep the edit on screen with
-   `SaveState` and Retry. `expect` refuses stale edits.
+   `SaveState` and Retry. `expect` refuses stale edits and, on success, bumps the
+   entity's revision once: mutators never bump it, and patch only the fields
+   they own on the entity as read inside `mutate`. View membership edits stay
+   in `view.draft` (a commit without `expect`); Save View is the revisioned
+   commit. A draft that survives a reload is shown as "Recovered unsaved
+   changes" with Save and Discard. Slice state persists UI state only, never
+   domain data.
 5. Long work is an `Operation`. A track owns a kind by adding an
    `OperationHandler` to its slice's `operations` (T3 `measure`,
    `import-measurements`; T4 `prepare`, `adopt-master`; T5 `cleanup`,
@@ -545,49 +581,79 @@ exact need. It does not edit the file or work around it.
 
 ### Entity writers
 
-| Entity | Writer | Readers |
+| Entity / field | Writer | Readers |
 |---|---|---|
-| Location | T1 (register, edit); foundation `index` (scan scope, access) | all |
-| Asset, Session (evidence, corrections, grouping revisions) | foundation `index`; T2 | all |
-| Asset quality (library scope) | T2, T3 (scoped confirmation) | all |
+| Location (register, edit, display name, role, `managed` "Accepts reviewed filing") | T1 | all |
+| Location `scanScope`, `access`, `unreadablePaths`, `lastIndexedAt` | foundation `index` | all |
+| Asset (identity, `copies` observed by scans), Session (grouping, evidence) | foundation `index` | all |
+| Session corrections, grouping revisions, `supersededBy`, Confirm Target | T2 | all |
+| Session `equipment` (Confirm equipment) | T2, promoting the train to `manual` | all |
+| Asset `copies` after a verified transfer | T5 (archive, filing); T1 remap with same-asset proof | all |
+| Asset `quality` (library scope) | T2, T3 (scoped confirmation) | all |
 | Target | foundation `index` (catalog records); T2 (local records, enrichment) | all |
-| Camera, Telescope, OpticalTrain, FilterDef, ObservingSite, AppSettings | T1 | all |
-| Project (goals, linkage) | T2; T3 writes `rejections` only | T2, T3, T5 |
-| View (membership, drafts, criteria, Reopen) | T3 | all |
-| View `calibration`, `profileId`, `locationParent`, `outputPath`, `status = prepared` | T4 | T3, T5 |
-| View `status = complete`, `completedAt`, `notes` | T5 | T3, T4 |
+| Camera, Telescope, OpticalTrain, FilterDef | T1 (manual records); foundation `index` (`detected` records) | all |
+| ObservingSite, `settings.defaultSiteId` | T1, through `removeSite` for deletion | all |
+| `settings.onboarding`, `settings.planningSiteId` (Settings) | T1 | all |
+| `settings.planningSiteId` (Plan selector) | T5 | T1 |
+| `settings.lastViewParent` | T4 (View folder parent, PREP-FR-06) | T4 |
+| Project goals, linkage, checklist | T2 | T2, T3, T5 |
+| Project `rejections` | T3 | T2, T5 |
+| View membership, drafts, criteria, `profileId` (workspace header, C1), Reopen (clears `completedAt`) | T3 | all |
+| View `calibration`, `locationParent`, `outputPath` | T4 | T3, T5 |
+| View `completedAt`, `notes` | T5 | T3, T4 |
+| View status | derived (`viewStatus`); nobody stores it | all |
 | FrameMeasurement | T3 | T3 |
-| CalibrationMaster, ApplicationProfile, Preparation | T4 (T5 removes prepared entries through cleanup) | T3, T5 |
+| CalibrationMaster, ApplicationProfile, Preparation | T4; T5 rebuilds entries after a transfer and removes them through cleanup | T3, T5 |
 | ResultRecord | T5 | T2, T3, T4 |
-| ObservingPlan, ReminderSettings, CalendarExport | T5 | T2 |
+| ObservingPlan, ReminderSettings, CalendarExport | T5 (`removeSite` turns reminders off when their site is deleted) | T2 |
+| Operations | their kind's owner through `startOperation`/handlers; foundation `index` | all |
+| ActivityEvent | `settleOperation`, `commit` failures, `recordActivity` | T2 |
+| SimulationFaults, clock | simulation controls; handlers consume one-shot faults | all |
 | Disk | simulation controls; operations of their owners | all |
 
 ## 13. Prototype simulation model
 
-- **Seeds** (`src/domain/seed.ts`). `empty`: full simulated disk, empty catalog;
-  Astro-T7/Calibration starts access-denied and Cold-1 is connected (J19).
-  `demo`: indexed library at the end of J19 plus history: M 31 LRGB + Ha/OIII
-  (Project, Complete View with symlink preparation, accepted Results, candidate
-  generated master flats), NGC 7000 worked example (12 Sep on offline Cold-1,
-  18/24/26/28/30 Sep), the 21 Sep other-camera OSC session, Heart and Soul
-  two-panel mosaic Project with a third panel uncovered, a partial scan
-  (M 33 folder denied), one drifted-content asset (an M 31 L frame changed after
-  review), two observing sites and no default site.
+- **Seeds** (`src/domain/seed.ts`). Journeys J18-J30 run in order from the
+  `empty` seed; J27, J28 and J30 replay J19-J24/J26 first, as they state. The
+  demo is a browsing library, not a journey checkpoint.
+  `empty`: full simulated disk, empty catalog; Astro-T7/Calibration starts
+  access-denied and Cold-1 is connected. `Astro-T7/Captures` holds exactly the
+  seven J19 light sessions (18/21/24/26/28/30 Sep plus 12 Sep on Cold-1); the
+  21 Sep other-camera session is Ha. Empty folders exist for J24
+  (`Work/Processing`, `Work/Outputs`), J25 (`Spare/Captures` on the Spare
+  volume), J28 (`Archive/NGC7000`) and J30 (`Astro-T7/Library`,
+  `Archive/Library`).
+  `demo`: the same disk plus demo-only history under `Astro-T7/Imaging`:
+  M 31 LRGB + Ha/OIII (Project, Complete View with symlink preparation,
+  accepted Results, candidate generated master flats), the NGC 7000 sessions
+  indexed but not reviewed (12 Sep on offline Cold-1), Heart and Soul two-panel
+  mosaic Project whose third panel is uncovered (21% by `coverageFraction`),
+  a partial scan (`Imaging/M33` denied), one drifted-content asset (an M 31 L
+  frame changed after review), two observing sites and no default site.
 - **Store**: one state tree, persisted to `localStorage` under
   `platevault.prototype.v1`; theme, density and sidebar are separate keys and
   survive Reset. Reload restores the last committed state; running operations
   become Interrupted.
 - **Simulation controls** (header › Prototype, embeddable in Settings › About):
-  mount or unmount volumes (including the impostor Archive with the same name),
-  deny or restore read access to a folder or file, remove or restore write
-  permission (`disk.readOnlyPaths`), copy the 2 Oct NGC 7000 captures (J25),
-  overwrite a file (drift), create an unrelated file (collision), delete a file
-  outside PlateVault (the original behind a last-copy hardlink, J27), fail the
-  next catalog write, make the next revision-checked save stale, fail the next
-  hash verification (archive, adoption), choose the next notification
-  permission answer, reset to the empty or demo seed. Operations honour these:
-  writes into a `readOnlyPaths` entry fail, and a handler that verifies hashes
-  consumes `faults.failNextHashVerification`.
+  mount or unmount volumes (including the impostor Archive with the same name,
+  and Spare), deny or restore read access to a folder or file, remove or
+  restore write permission (`disk.readOnlyPaths`), copy the 2 Oct NGC 7000
+  captures (J25), copy a file or folder byte for byte into another folder
+  (J25 S1, J27 P6; same sha256, new inode), overwrite a file (drift) and
+  restore its original bytes (J22 S15b, J24 S16, J26 S7a), create an unrelated
+  file (collision), delete a file outside PlateVault (the original behind a
+  last-copy hardlink, J27), fail the next catalog write, make the next
+  revision-checked save stale, fail the next hash verification (archive,
+  adoption), fail the next Target resolver lookup (LIB-AC-12), set the
+  PlateVault clock (`faults.clockOffsetMs`, honoured by `nowIso()` and kept
+  across a reload, J29 P4), choose the next notification permission answer,
+  reset to the empty or demo seed. Operations honour these: writes into a
+  `readOnlyPaths` entry fail, a handler that verifies hashes consumes
+  `faults.failNextHashVerification`, and a resolver lookup consumes
+  `faults.failNextResolverLookup`.
+- Indexing that stops early (Cancel, or the volume goes offline) leaves the
+  location and its provisional sessions `incomplete`, never complete
+  (LIB-FR-03).
 - Production computes measurements and planning windows in Rust (PIX, PLAN-FR-08);
   the prototype uses `src/domain/measurement.ts` and track-owned simplified
   calculations, labelled "prototype calculation".
@@ -600,10 +666,16 @@ exact need. It does not edit the file or work around it.
 | Primitives | shadcn base-nova on Base UI only | Brief; `command` (cmdk, Radix) and `sonner` removed |
 | `cn` import | Generated files import `cn`; Vite and TS alias it to `src/lib/utils.ts` (clsx + tailwind-merge) | Keeps `shadcn add` output unmodified |
 | Navigation | Adds Views and Plans to the spec's main navigation | §2 |
-| 24 Sep Target | Unresolved (LIB-AC-03), with Confirm Target | J19 says Needs review; the spec wins |
+| 24 Sep Target | Status Unresolved (LIB-AC-03) with a Needs review prompt and Confirm Target | J19 S9 and LIB-AC-03 agree: an unresolved Target that needs the user's review |
+| J19 fixtures | `Astro-T7/Captures` holds only the J19 sessions; demo-only history lives in `Astro-T7/Imaging`; 30 Sep OBJECT reads NGC 7000; 28 Sep has no TELESCOP or FOCALLEN; the other-camera session is Ha | J19 P2 and S8 (exactly seven light sessions); J21 S5 (Missing OBJECT matches only 24 Sep) |
+| Seeds | Two seeds only; journeys run in order from `empty`, and the demo is a browsing library | Brief fixes two seeds. Checkpoint seeds would duplicate journey steps and drift from them |
+| 24 Sep flats | T4 suggests the 30 Sep OIII flats for 24 Sep (compatible under D13); the E2 exception (CAL-AC-02) is shown by choosing the 26 Sep set, whose optical train is unknown. No date criterion is added | D13 and CAL-FR-05 win over J23 P2's "only flat candidate" |
 | Default site | No automatic default; Set as default is explicit | J20 and J29 need two sites with no default; J15 (legacy) auto-defaults |
 | J18 tour | Stops follow the current IA (Targets, Sessions, Calibration, Projects, Views, Getting started) | J18 names the legacy Inbox |
-| Equipment detection | Unknown INSTRUME/TELESCOP strings create Detected records; a focal-length-only match is Needs review | D11, J15 Manual vs Auto-detected |
+| Equipment detection | Unknown INSTRUME/TELESCOP strings create records with `source: "detected"` that associate from their own header evidence and read "Detected"; Confirm equipment promotes the train to `manual`; a focal-length-only match is Needs review | D11, J15 Manual vs Auto-detected |
+| Settings scope | Language: out of scope (spec 061 is not in 063-072), English only. Audit Log: Activity (`saved`, `write-failed`, `write-refused` events). Advanced restore defaults: appearance defaults plus Reset prototype data in About. Telescopes, optical trains and filters carry `source` (Manual, Detected, Built-in). Deleting the default site clears it and never picks another (`removeSite`). Settings › Locations has "Accepts reviewed filing" (`managed`) | J10 and J15 intent within 063-072 |
+| J18 checklist | Getting started items tick from catalog state: Add a capture location (a Captures location exists), Index it (a location has `lastIndexedAt`), Review a session (a confirmed Target or equipment, or any quality decision), Create a View (a View exists), Take the tour (`onboarding.tourCompletedAt`). J18 P1's "empty library after setup" does not apply, because setup indexes (J19) | J18 triggers name the legacy Inbox |
+| Per-star data | The pixel fixture holds frame totals; T3 derives per-star records deterministically from `pixelTruth` (failed fits with a saturation warning and no FWHM for `saturatedStars`, PIX-AC-03) | The foundation keeps one fixture shape |
 | Masters | Masters in a Calibration location are library masters; generated masters elsewhere stay candidates until adopted | CAL-FR-06, D05 |
 | Pointing-only | 18 Sep has pointing without rotation: no footprint, listed by radius, never preselected | VSEL-FR-04 |
 | Neutrals | Neutral greys with chroma 0, white light surfaces | Brief: "a neutral base, one accent". A tinted-neutral suggestion from critique was declined for that reason |
@@ -623,12 +695,17 @@ its key empty, error, offline and refusal states, walked at 1280 and 1024.
 
 ## 16. Open items for tracks
 
-- T1: simulated folder picker content (volumes and folders from the disk);
-  orientation tour copy for the current IA.
+- T1: orientation tour copy for the current IA; locations, remap and the
+  equipment folder fields use `FolderPicker` (`src/components/app/folder-picker.tsx`).
 - T3: "Selected outside current filters" and sky coverage rendering; the
-  `measure` handler can use `simulateMeasurement`.
+  `measure` handler can use `simulateMeasurement` and keeps earlier results in
+  `history`; the Stars overlay derives per-star records (§14 Per-star data).
 - T4: candidate master detection from recorded output folders; mixed per-item
-  modes stay out of scope (D04 does not settle them).
-- T5: "Simulate application output" as a labelled prototype control on Results;
+  modes stay out of scope (D04 does not settle them). View folder parents use
+  `FolderPicker`; per-input metadata handling goes in
+  `preparation.metadataDecisions`.
+- T5: archive and filing destinations use `FolderPicker`; Result inputs of a
+  View created from results go in `preparation.preparedResultIds`;
+  "Simulate application output" as a labelled prototype control on Results;
   `.ics` export is a browser download in the prototype (the production app uses
   the native save dialog).
