@@ -95,4 +95,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 ## Decisions before feature approval
 
 - Root decisions D01, D08, D10, D11, D15, D16, D17 and D18 define geometry evidence, failed-write recovery, quality, equipment/remap proof, grouping revisions, location availability, development MCP and target enrichment. Their implementation still requires fixture and platform evidence.
-- Root decision D19 binds usable totals, logical-capture proof and remap to a re-verified identity and SHA-256.
+- Root decision D19 binds usable totals, logical-capture proof and remap to their recorded identity and SHA-256. Metadata-only captured totals and labelled last-observed offline or unreadable counts stay as LIB-FR-07 and LIB-FR-08 specify.

@@ -246,9 +246,9 @@
     {
       "flowStep": "G",
       "journeyStep": "J25/S1–S7",
-      "spec": "066-view-selection VSEL-FR-08, VSEL-FR-12, VSEL-AC-06, VSEL-AC-15; 064-library-inventory LIB-FR-08, LIB-AC-15; 069-application-handoff PREP-FR-11; D02, D08, D09, D16, D19",
+      "spec": "066-view-selection VSEL-FR-08, VSEL-FR-12, VSEL-FR-13, VSEL-FR-14, VSEL-AC-06, VSEL-AC-12, VSEL-AC-15; 064-library-inventory LIB-FR-08, LIB-AC-15; 069-application-handoff PREP-FR-11; D02, D08, D09, D16, D19",
       "action": "Index new arrivals, one session also copied to a second Captures location, make a member unreadable, Refresh selection, keep the View unchanged, then accept one addition, decline one, and save. Finally change one copy of a copied frame and rescan.",
-      "expect": "The copied session's frames count once and name both copies. Additions show with reasons, manual inclusions and exclusions stay recorded, and the unreadable member reads Unavailable. The accepted change becomes a proposed revision that needs review. A changed copy reads as conflicting copies.",
+      "expect": "The copied session's frames count once and name both copies. Additions show with reasons, manual inclusions and exclusions stay recorded, and the unreadable member reads Unavailable. Refresh proposes the changes; Save View commits the accepted change as a new reviewed membership revision that survives restart and needs its own Review preparation. A changed copy reads as conflicting copies.",
       "negative": "Membership never changes without approval, and no copied frame enters it twice. The prepared revision and the inputs Siril reads stay identical. A conflicting copy is not counted twice or substituted."
     },
     {

@@ -91,7 +91,7 @@ Owners: LIB, VSEL.
 
 Owners: VSEL, PREP, RES, STO.
 
-- Refresh creates a proposed membership revision; accepting it never mutates an existing prepared revision or an external application's inputs.
+- Refresh proposes a membership revision. Accepting changes and choosing Save View commits them as a new reviewed membership revision that survives restart; it never mutates an existing prepared revision or an external application's inputs.
 - Reprepare needs review.
 - Retry resumes recorded items, never filename-based inference.
 - Replaced prepared entries use reviewed STO cleanup even before Complete.
@@ -180,7 +180,7 @@ Owners: LIB, PLAN.
 
 Owners: LIB, PRJ, VSEL, PIX, CAL, PREP, RES, STO, PLAN.
 
-- PlateVault counts, assigns, opens, prepares, reuses, cleans, archives, files or retires a recorded file only against a recorded identity and SHA-256 basis. The basis is recorded when the user reviews, inspects or accepts the file, or when an operation starts and snapshots it. Bases include quality decisions, cached and imported measurements, logical-capture proof, remap reviews, inspected and accepted products, adoption reviews and adopted masters, calibration assignments, retained-original and kept-copy proof, and cleanup, archive and filing plans.
+- PlateVault counts a recorded file toward a decision- or proof-bound total, or assigns, opens, prepares, reuses, cleans, archives, files or retires it, only against a recorded identity and SHA-256 basis. The basis is recorded when the user reviews, inspects or accepts the file, or when an operation starts and snapshots it. Bases include quality decisions, cached and imported measurements, logical-capture proof, remap reviews, inspected and accepted products, adoption reviews and adopted masters, calibration assignments, retained-original and kept-copy proof, and cleanup, archive and filing plans.
 - Immediately before each effect, the current identity and SHA-256 must match every basis that applies. Equal size and mtime never substitute.
 - A mismatch blocks that item and names the drift. The basis stays as history beside the current bytes, and nothing is launched, registered, overwritten, removed or retired. Counts exclude the item from applicable totals instead of blocking.
 - Offline or unreadable means unverified, never matched. Counts keep the labelled last-observed state; every other effect blocks.

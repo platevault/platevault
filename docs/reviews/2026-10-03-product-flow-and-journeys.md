@@ -411,7 +411,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Do:** accept selected changes, decline others, or keep the existing View unchanged. Revisit image and calibration review for changed inputs.
 
-**Observe:** preparing the revised selection requires a new review. Keep the previous preparation when a comparison is wanted. New arrivals do not silently change an already prepared View.
+**Observe:** **Save View** commits the accepted changes as a new reviewed membership revision that survives restart. Preparing the revised selection requires a new review. Keep the previous preparation when a comparison is wanted. New arrivals do not silently change an already prepared View.
 
 **Trust:** no changed membership or preparation revision takes effect without approval. Whether repeated refresh keeps manual inclusions pinned, and whether revisions use new folders or reviewed replacement, need explicit lifecycle rules.
 
@@ -651,6 +651,6 @@ These proposed journeys remain unvalidated. D01 through D19 record settled conse
 8. **Drafts, D08:** verify explicit Save, committed restart recovery and stale-edit refusal; failed writes remain unsaved.
 9. **View lifecycle, D09:** qualify immutable preparation revisions, safe retry and explicit reopening. Identity-preserving cleanup/reference repair does not reopen Complete or alter membership. D09 does not settle manual-inclusion pins across refresh or new-folder versus reviewed-replacement revision storage; flow decision 9 remains open for those questions.
 10. **Quality/progress, D10/D15:** verify fingerprint-and-digest-bound library decisions, independent Project rejection/progress and fixed View membership; source corrections stay catalog-only.
-11. **Content-bound consumption, D19:** verify that every count, assignment, Open, preparation, reuse, cleanup, archive, filing and retirement re-verifies its recorded identity and SHA-256 immediately before the effect. Drift blocks the item by name or leaves applicable totals, and never resolves automatically.
+11. **Content-bound consumption, D19:** verify that every decision- or proof-bound count, assignment, Open, preparation, reuse, cleanup, archive, filing and retirement re-verifies its recorded identity and SHA-256 immediately before the effect. Drift blocks the item by name or leaves applicable totals, and never resolves automatically. Metadata-only captured totals and labelled last-observed counts stay visible.
 
 Readiness check: user actions and expected outcomes are stated; negative assertions guard file changes and quality-scope changes. Existing product code and source verification do not establish that these redesigned flows run. Formal journey conversion and independent running-product validation follow implementation and intent approval.
