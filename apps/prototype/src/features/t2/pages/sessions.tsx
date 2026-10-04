@@ -186,7 +186,7 @@ export function SessionsPage() {
           <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium underline-offset-2 hover:underline">
             {r.label}
           </Link>
-          <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="flex flex-wrap items-center gap-1.5 text-xs whitespace-normal text-muted-foreground">
             {isLight ? (
               <span>
                 OBJECT {r.session.objectLabel ? <span className="font-mono text-foreground">{r.session.objectLabel}</span> : "missing"}

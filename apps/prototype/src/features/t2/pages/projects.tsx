@@ -4,19 +4,20 @@
  */
 import { Link } from "@tanstack/react-router"
 import { Goal } from "lucide-react"
+import { Fragment } from "react"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { EmptyState } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import { projectProgress } from "@/domain/derive"
 import type { Project } from "@/domain/types"
-import { formatDateTime, formatNight } from "@/lib/format"
+import { formatCount, formatDateTime, formatNight } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { acceptedResultsForViews } from "../model"
 
 interface ProjectRow {
   project: Project
-  targets: string
+  targets: string[]
   met: number
   items: number
   views: number
@@ -30,7 +31,7 @@ export function ProjectsPage() {
       const views = Object.values(s.catalog.views).filter((v) => v.projectId === project.id)
       return {
         project,
-        targets: [...project.targetIds.map((id) => s.catalog.targets[id]?.name ?? "Removed Target"), ...project.panels.map((p) => p.name)].join(", "),
+        targets: [...project.targetIds.map((id) => s.catalog.targets[id]?.name ?? "Removed Target"), ...project.panels.map((p) => p.name)],
         met: progress.filter((p) => p.state === "met").length,
         items: progress.length,
         views: views.length,
@@ -44,6 +45,7 @@ export function ProjectsPage() {
       id: "name",
       header: "Project",
       rowHeader: true,
+      className: "min-w-36 whitespace-normal",
       sortValue: (r) => r.project.name,
       cell: (r) => (
         <Link to="/projects/$projectId" params={{ projectId: r.project.id }} className="font-medium underline-offset-2 hover:underline">
@@ -51,11 +53,27 @@ export function ProjectsPage() {
         </Link>
       ),
     },
-    { id: "targets", header: "Targets and panels", truncate: true, cell: (r) => <span title={r.targets}>{r.targets || "None"}</span> },
+    {
+      id: "targets",
+      header: "Targets",
+      className: "whitespace-normal",
+      cell: (r) =>
+        r.targets.length > 0 ? (
+          // Each name stays whole; the list wraps after a comma.
+          r.targets.map((name, i) => (
+            <Fragment key={`${name}-${i}`}>
+              {i > 0 ? ", " : null}
+              <span className="whitespace-nowrap">{name}</span>
+            </Fragment>
+          ))
+        ) : (
+          <span className="text-muted-foreground">None</span>
+        ),
+    },
     { id: "checklist", header: "Checklist", sortValue: (r) => r.met, cell: (r) => (r.items > 0 ? `${r.met} of ${r.items} met` : <span className="text-muted-foreground">No checklist</span>) },
-    { id: "linked", header: "Linked sessions", align: "right", sortValue: (r) => r.project.linkedSessionIds.length, cell: (r) => r.project.linkedSessionIds.length },
+    { id: "linked", header: "Sessions", align: "right", sortValue: (r) => r.project.linkedSessionIds.length, cell: (r) => r.project.linkedSessionIds.length },
     { id: "views", header: "Views", align: "right", sortValue: (r) => r.views, cell: (r) => r.views },
-    { id: "products", header: "Accepted products", align: "right", sortValue: (r) => r.products, cell: (r) => r.products },
+    { id: "products", header: "Products", align: "right", sortValue: (r) => r.products, cell: (r) => `${formatCount(r.products)} accepted` },
     {
       id: "created",
       header: "Created",

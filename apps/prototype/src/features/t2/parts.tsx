@@ -5,7 +5,7 @@
  */
 import { Link } from "@tanstack/react-router"
 import { ChevronDown } from "lucide-react"
-import { useRef, useState } from "react"
+import { Fragment, useRef, useState } from "react"
 import { PathText } from "@/components/app/data"
 import { Notice, SaveState, UnknownValue } from "@/components/app/feedback"
 import { StatusBadge } from "@/components/app/status"
@@ -99,7 +99,7 @@ export function LocationsCell({ row }: { row: SessionRow }) {
   return (
     <span className="inline-flex max-w-40 flex-wrap items-center gap-x-2 gap-y-0.5 py-0.5 whitespace-normal">
       {row.locations.map(({ location, availability }) => (
-        <span key={location.id} className="inline-flex items-center gap-1.5">
+        <span key={location.id} className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           {location.displayName}
           {availability === "offline" ? <StatusBadge kind="availability" value="offline" /> : null}
         </span>
@@ -121,7 +121,16 @@ export function QualityCounts({ breakdown }: { breakdown: QualityBreakdown }) {
   if (breakdown.unreviewed.frames) parts.push({ key: "unreviewed", text: `${formatCount(breakdown.unreviewed.frames)} Unreviewed` })
   return (
     <span className="inline-flex max-w-44 flex-wrap items-center gap-x-2 gap-y-0.5 py-0.5 whitespace-normal">
-      {parts.length > 0 ? <span>{parts.map((p) => p.text).join(" · ")}</span> : null}
+      {parts.length > 0 ? (
+        <span>
+          {parts.map((p, i) => (
+            <Fragment key={p.key}>
+              {i > 0 ? " · " : null}
+              <span className="whitespace-nowrap">{p.text}</span>
+            </Fragment>
+          ))}
+        </span>
+      ) : null}
       {breakdown.changedContent.frames ? (
         <StatusBadge kind="quality" value="changed-content" label={`Changed content · ${formatCount(breakdown.changedContent.frames)}`} />
       ) : null}

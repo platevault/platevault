@@ -96,7 +96,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
       id: "target",
       header: "Target",
       cell: (r) => (
-        <span className="inline-flex items-center gap-2">
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 py-0.5 whitespace-normal">
           {r.targetName}
           <AssociationBadge association={r.session.target} />
         </span>

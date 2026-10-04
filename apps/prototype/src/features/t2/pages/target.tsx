@@ -84,9 +84,12 @@ function TargetDetail({ targetId }: { targetId: string }) {
       rowHeader: true,
       sortValue: (r) => `${r.session.night}|${r.label}`,
       cell: (r) => (
-        <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium underline-offset-2 hover:underline">
-          {r.label}
-        </Link>
+        <span className="flex flex-col items-start gap-0.5 py-1">
+          <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium underline-offset-2 hover:underline">
+            {r.label}
+          </Link>
+          <ScopeCell scope={r.session.scope} />
+        </span>
       ),
     },
     { id: "association", header: "Association", cell: (r) => <AssociationBadge association={r.session.target} /> },
@@ -96,6 +99,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
     {
       id: "availability",
       header: "Availability",
+      className: "whitespace-normal",
       sortValue: (r) => r.breakdown.unavailable.frames,
       cell: (r) =>
         r.availability.offline > 0 ? (
@@ -111,7 +115,6 @@ function TargetDetail({ targetId }: { targetId: string }) {
           <span className="text-muted-foreground">Available</span>
         ),
     },
-    { id: "scope", header: "Scope", cell: (r) => <ScopeCell scope={r.session.scope} /> },
   ]
 
   return (

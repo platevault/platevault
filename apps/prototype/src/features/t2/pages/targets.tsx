@@ -5,12 +5,11 @@
  * LIB-FR-10, LIB-FR-13, LIB-AC-09).
  */
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
-import { CalendarClock, Crosshair } from "lucide-react"
+import { CalendarClock, Crosshair, TriangleAlert } from "lucide-react"
 import { useId, useState } from "react"
 import { type Column, DataTable, TableToolbar } from "@/components/app/data-table"
 import { EmptyState, Notice, TableSkeleton } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
-import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -65,37 +64,55 @@ export function TargetsPage() {
       id: "target",
       header: "Target",
       rowHeader: true,
+      className: "whitespace-normal",
       sortValue: (r) => r.target.name,
       cell: (r) => (
         <span className="flex min-w-0 flex-col py-0.5 leading-tight">
           <Link to="/targets/$targetId" params={{ targetId: r.target.id }} className="font-medium underline-offset-2 hover:underline">
             {r.target.name}
           </Link>
-          {r.target.aliases.length > 0 ? <span className="max-w-64 truncate text-xs text-muted-foreground">{r.target.aliases.slice(0, 2).join(" · ")}</span> : null}
+          {r.target.aliases.length > 0 ? (
+            <span className={`${coords ? "max-w-28" : "max-w-36"} truncate text-xs text-muted-foreground`} title={r.target.aliases.slice(0, 2).join(" · ")}>
+              {r.target.aliases.slice(0, 2).join(" · ")}
+            </span>
+          ) : null}
         </span>
       ),
     },
     ...(coords
       ? [{ id: "distance", header: "Distance", align: "right" as const, sortValue: (r: TargetSummary) => r.separationDeg, cell: (r: TargetSummary) => `${formatDegrees(r.separationDeg ?? 0)} away` }]
       : []),
-    { id: "channels", header: "Channels", cell: (r) => (r.channels.length > 0 ? r.channels.join(" · ") : <span className="text-muted-foreground">No captures</span>) },
-    { id: "captured", header: "Captured", align: "right", sortValue: (r) => r.breakdown.captured.seconds, cell: (r) => formatDuration(r.breakdown.captured.seconds) },
+    {
+      id: "channels",
+      header: "Channels",
+      className: "whitespace-normal",
+      cell: (r) => (
+        <span className="flex flex-col items-start gap-0.5 py-0.5">
+          {r.channels.length > 0 ? <span>{r.channels.join(" · ")}</span> : <span className="text-muted-foreground">No captures</span>}
+          {r.needsReview > 0 ? (
+            <span className="inline-flex items-start gap-1 text-xs text-warning">
+              <TriangleAlert aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
+              {plural(r.needsReview, "session")} {r.needsReview === 1 ? "needs" : "need"} review
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
+    {
+      id: "captured",
+      header: "Captured",
+      align: "right",
+      className: "whitespace-normal",
+      sortValue: (r) => r.breakdown.captured.seconds,
+      cell: (r) => (
+        <span className="flex flex-col items-end gap-0.5 py-0.5">
+          <span className="whitespace-nowrap">{formatDuration(r.breakdown.captured.seconds)}</span>
+          {r.breakdown.unavailable.frames > 0 ? <span className="text-xs text-warning">{formatDuration(r.breakdown.unavailable.seconds)} unavailable</span> : null}
+        </span>
+      ),
+    },
     { id: "usable", header: "Usable", align: "right", sortValue: (r) => r.breakdown.usable.seconds, cell: (r) => formatDuration(r.breakdown.usable.seconds) },
     { id: "unreviewed", header: "Unreviewed", align: "right", sortValue: (r) => r.breakdown.unreviewed.seconds, cell: (r) => formatDuration(r.breakdown.unreviewed.seconds) },
-    {
-      id: "availability",
-      header: "Unavailable",
-      align: "right",
-      sortValue: (r) => r.breakdown.unavailable.seconds,
-      cell: (r) => (r.breakdown.unavailable.frames > 0 ? <span className="text-warning">{formatDuration(r.breakdown.unavailable.seconds)}</span> : null),
-    },
-    {
-      id: "review",
-      header: "Needs review",
-      sortValue: (r) => r.needsReview,
-      cell: (r) =>
-        r.needsReview > 0 ? <StatusBadge kind="association" value="needs-review" label={`Needs review · ${plural(r.needsReview, "session")}`} /> : null,
-    },
     { id: "projects", header: "Projects", align: "right", sortValue: (r) => r.projects, cell: (r) => (r.projects > 0 ? r.projects : null) },
     {
       id: "plan",

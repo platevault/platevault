@@ -801,17 +801,19 @@ function FramesSection({ session, editable }: { session: Session; editable: bool
     {
       id: "availability",
       header: "Availability",
+      className: "whitespace-normal",
       sortValue: (r) => r.availability,
-      cell: (r) =>
-        r.availability === "available" ? <span className="text-muted-foreground">Available</span> : <StatusBadge kind="availability" value={r.availability} />,
+      cell: (r) => {
+        const observed = r.asset.copies.map((c) => c.lastObservedAt).sort().at(-1) ?? r.asset.observed.dateObs
+        return (
+          <span className="flex flex-col items-start gap-0.5 py-0.5">
+            {r.availability === "available" ? <span className="text-muted-foreground">Available</span> : <StatusBadge kind="availability" value={r.availability} />}
+            <span className="text-xs text-muted-foreground">Last observed {formatDateTime(observed)}</span>
+          </span>
+        )
+      },
     },
     { id: "copies", header: "Copies", align: "right", sortValue: (r) => r.asset.copies.length, cell: (r) => formatCount(r.asset.copies.length) },
-    {
-      id: "observed",
-      header: "Last observed",
-      sortValue: (r) => r.asset.copies.map((c) => c.lastObservedAt).sort().at(-1) ?? null,
-      cell: (r) => formatDateTime(r.asset.copies.map((c) => c.lastObservedAt).sort().at(-1) ?? r.asset.observed.dateObs),
-    },
   ]
 
   const affected = [target ? `usable totals for ${target.name}` : null, projects.length > 0 ? `progress of ${projects.map((p) => p.name).join(", ")}` : null].filter(Boolean)
