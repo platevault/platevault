@@ -465,7 +465,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Do:** inspect type, camera/settings, channel, source evidence, and origin. Confirm adoption explicitly.
 
-**Observe:** the master becomes a reusable calibration candidate with its actual provenance. Detection alone does not authorize automatic future reuse.
+**Observe:** the master becomes a reusable calibration candidate with its actual provenance only after its copy and its source still match the digest recorded at review. Detection alone does not authorize automatic future reuse.
 
 ## Journey I: completion and selectable cleanup
 

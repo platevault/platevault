@@ -54,6 +54,7 @@ Owners: CAL, STO.
 
 - Adoption requires an explicit durable calibration-library destination.
 - Copy and re-read/hash verification precede registering an adopted master; the generated source remains until separately reviewed cleanup.
+- Adoption review records the candidate's identity and SHA-256. The copied bytes, the destination re-read and the source immediately before registration must all match that digest; any mismatch blocks adoption and registers nothing.
 - An existing entry at the destination path blocks adoption and is never overwritten; the path is checked again immediately before writing.
 - No master becomes reusable merely by discovery.
 

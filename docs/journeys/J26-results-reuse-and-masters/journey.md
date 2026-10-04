@@ -29,6 +29,7 @@ automatically.
 - P3: A final TIFF saved by the user outside the View, at `Work/Finals/NGC7000-HOO.tif`.
 - P4: The J19/P5 manifest is available.
 - P5: A helper outside PlateVault that saves a file's bytes and nanosecond mtime, then overwrites it in place with a same-size variant whose pixel bytes differ and restores the saved mtime. The helper later restores the saved bytes and mtime.
+- P6: A fault control pauses adoption after the destination copy re-reads and verifies and before the master is registered (G4).
 
 ## Steps
 
@@ -102,12 +103,26 @@ automatically.
 - **Expect (negative):** The unrelated file still matches its recorded SHA-256. No copy is written, no master is registered, and the generated source remains in `output/`.
 - **Trace:** flow H4, cross-flow "Destination collision" · CAL-FR-07 · CAL-AC-08 · D05
 
+### S8b — Change the master after review {#S8b}
+
+- **Do:** Enter a free file name under `Astro-T7/Calibration` and read the review, which shows the master flat's SHA-256. With the P5 helper, save the master flat, overwrite it with its same-size variant, and restore its mtime. Then confirm.
+- **Expect:** Adoption is blocked: the source's bytes differ from the reviewed digest, and a new review is required. Any copy it wrote is named as unregistered.
+- **Expect (negative):** No master is registered, `28 Sep Ha copy check` shows no adopted-master suggestion, and no copy is offered for reuse. PlateVault does not write to the generated source.
+- **Trace:** flow H4, cross-flow "External changes" · CAL-FR-07 · CAL-AC-09 · D05
+
+### S8c — Change the master before registration {#S8c}
+
+- **Do:** With the P5 helper, restore the master flat's saved bytes and mtime. Review adoption again with another free file name, arm the P6 pause, and confirm. When the pause reports the copy verified and awaiting registration, save the master flat with the P5 helper, overwrite it with its variant, restore its mtime, and release the pause.
+- **Expect:** Adoption is blocked with source drift named, and a new review is required. The verified copy is named as unregistered.
+- **Expect (negative):** No master is registered or suggested, and the unregistered copy is not offered for reuse. PlateVault does not write to the generated source.
+- **Trace:** flow H4 · CAL-FR-07 · CAL-AC-09 · D05
+
 ### S9 — Adopt the master {#S9}
 
-- **Do:** Choose another file name under `Astro-T7/Calibration` and confirm. Then reopen the Calibration area of `28 Sep Ha copy check`.
-- **Expect:** PlateVault copies the master, re-reads and hash-verifies the copy, and only then registers it in Calibration with origin `NGC7000 HOO - Siril` and its provenance. In `28 Sep Ha copy check` it appears as a compatible suggestion awaiting acceptance.
-- **Expect (negative):** The generated source in `output/` remains in place, and the S8a file is unchanged. The adopted master is not handed off before it is accepted.
-- **Trace:** flow H4 · CAL-FR-06, CAL-FR-07 · CAL-AC-05, CAL-AC-07, CAL-AC-08 · D05, D13
+- **Do:** With the P5 helper, restore the master flat's saved bytes and mtime. Review adoption again with another free file name under `Astro-T7/Calibration` and confirm. Then reopen the Calibration area of `28 Sep Ha copy check`.
+- **Expect:** The review shows the current SHA-256. PlateVault copies the master, re-reads and hash-verifies the copy, revalidates the source against the reviewed digest, and only then registers it in Calibration with origin `NGC7000 HOO - Siril` and its provenance. In `28 Sep Ha copy check` it appears as a compatible suggestion awaiting acceptance.
+- **Expect (negative):** The generated source in `output/` remains in place, and the S8a file is unchanged. Neither S8b nor S8c copy is registered or suggested. The adopted master is not handed off before it is accepted.
+- **Trace:** flow H4 · CAL-FR-06, CAL-FR-07 · CAL-AC-05, CAL-AC-07, CAL-AC-08, CAL-AC-09 · D05, D13
 
 ## Success criteria
 
@@ -118,12 +133,14 @@ automatically.
 - SC5: Same-stat drift is flagged for review and the drifted product is offered for reuse 0 times (S7); after S7a it is offered again with 0 new acceptances.
 - SC6: The master is offered to 0 Views before adoption (S8); it is registered only after a verified copy, and its source remains (S9).
 - SC7: The occupied adoption path is refused and its file changes 0 bytes (S8a).
+- SC8: 0 masters are registered while the source differs from its reviewed digest (S8b, S8c); exactly 1 is registered after a fresh review (S9).
 
 ## Known gaps
 
 - G1: Not validated — the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D04, D05, D09, and D13; no implementation has been validated against them.
 - G2: Unresolved implementation qualification — Siril's product-input capability (D04) decides which S5 branch applies; S6 runs only on the supported branch. Blocks readiness.
 - G3: Out of scope for this journey — mixed raw/product inputs in one View and **Add accepted results** in an existing View's workspace are not exercised. Blocks readiness until covered by a step or a journey.
+- G4: Unresolved implementation qualification: no fault control yet pauses adoption between destination verification and registration (P6). S8c depends on it. Blocks readiness.
 
 ## Delta log
 

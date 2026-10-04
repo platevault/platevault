@@ -285,11 +285,11 @@
     },
     {
       "flowStep": "H4",
-      "journeyStep": "J26/S8, J26/S8a, J26/S9",
-      "spec": "068-calibration-inputs CAL-FR-06, CAL-FR-07, CAL-AC-04, CAL-AC-05, CAL-AC-07, CAL-AC-08; D05, D13",
-      "action": "See the detected master, meet an occupied destination path, and adopt it into a durable calibration destination.",
-      "expect": "The occupied path is refused. The master is registered with provenance only after a verified copy, then appears as a suggestion awaiting acceptance.",
-      "negative": "It is never preselected before adoption, the occupying file is unchanged, and its generated source is not removed."
+      "journeyStep": "J26/S8, J26/S8a, J26/S8b, J26/S8c, J26/S9",
+      "spec": "068-calibration-inputs CAL-FR-06, CAL-FR-07, CAL-AC-04, CAL-AC-05, CAL-AC-07, CAL-AC-08, CAL-AC-09; D05, D13",
+      "action": "See the detected master, meet an occupied destination path, change the master after review and again before registration, then adopt it into a durable calibration destination.",
+      "expect": "The occupied path is refused, and both source changes block adoption with drift named. The master is registered with provenance only after its copy and source match the reviewed digest, then appears as a suggestion awaiting acceptance.",
+      "negative": "It is never preselected before adoption, the occupying file is unchanged, no copy of changed or unreviewed bytes is registered, and its generated source is not removed."
     },
     {
       "flowStep": "I1",
