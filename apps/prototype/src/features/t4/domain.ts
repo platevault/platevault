@@ -4,6 +4,7 @@
  * and the preparation plan with its live checks (PREP-FR-04 to PREP-FR-08).
  * Nothing here writes state.
  */
+import { correctedExposureS, latestCorrection } from "@/domain/corrections"
 import { assetAvailability, preferredCopy, type AssetAvailability } from "@/domain/derive"
 import { fileAt, filesUnder, freeBytes, listFolders, volumeForPath } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
@@ -230,7 +231,7 @@ export function lightGeometry(catalog: Catalog, session: Session): LightGeometry
     binning: session.binning,
     gain: session.gain,
     offset: session.offset,
-    exposureS: session.exposureS,
+    exposureS: correctedExposureS(session) ?? session.exposureS,
     channel: session.channel,
     opticalTrainId: train,
     ccdTempC: session.ccdTempC,
@@ -500,9 +501,10 @@ export function metadataDiffs(catalog: Catalog, members: MemberSession[]): Metad
   for (const member of members) {
     const { session } = member
     const seen = new Set<CorrectionField>()
-    for (const correction of [...session.corrections].reverse()) {
-      if (seen.has(correction.field) || correction.observedValue === correction.correctedValue) continue
-      seen.add(correction.field)
+    for (const field of new Set(session.corrections.map((c) => c.field))) {
+      const correction = latestCorrection(session, field)
+      if (!correction || correction.observedValue === correction.correctedValue) continue
+      seen.add(field)
       out.push({
         key: `${session.id}:${correction.field}`,
         session,
