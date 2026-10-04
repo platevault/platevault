@@ -885,6 +885,8 @@ export interface SimulationFaults {
   staleNextWrite: boolean
   /** The next Target resolver lookup fails as if offline (LIB-AC-12, D18). */
   failNextResolverLookup: boolean
+  /** Indexing reads a few files per tick, so provisional results can be browsed at human speed (J19 S6). */
+  slowIndexing: boolean
   /** Simulated clock offset; `nowIso()` adds it, and it survives a reload (J29). */
   clockOffsetMs: number
 }

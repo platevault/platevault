@@ -321,6 +321,12 @@ export function SimulationControls() {
             checked={faults.failNextResolverLookup}
             onChange={(value) => setFault("failNextResolverLookup", value)}
           />
+          <ToggleRow
+            label="Index slowly"
+            detail="Reads 2 files at a time instead of 14, so partial results can be browsed while indexing runs"
+            checked={faults.slowIndexing}
+            onChange={(value) => setFault("slowIndexing", value)}
+          />
         </div>
       </Section>
 

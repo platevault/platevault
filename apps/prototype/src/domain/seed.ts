@@ -403,6 +403,7 @@ export function defaultFaults(): SimulationFaults {
     failNextHashVerification: false,
     staleNextWrite: false,
     failNextResolverLookup: false,
+    slowIndexing: false,
     clockOffsetMs: 0,
   }
 }
