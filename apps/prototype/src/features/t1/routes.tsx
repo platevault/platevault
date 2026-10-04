@@ -33,6 +33,9 @@ export const t1Pages = {
   settingsSites: () => (
     <PlaceholderPage level={2} title="Observing sites" route="/settings/sites" owner={owner} covers="J15 sites; PLAN-FR-01 default site" />
   ),
+  settingsTargets: () => (
+    <PlaceholderPage level={2} title="Target lookup" route="/settings/targets" owner={owner} covers="LIB-AC-12, D18 online Target resolution provider" />
+  ),
   settingsAbout: () => (
     <PlaceholderPage level={2} title="About this prototype" route="/settings/about" owner={owner} covers="Prototype label, seed switch, Reset, simulation controls" />
   ),

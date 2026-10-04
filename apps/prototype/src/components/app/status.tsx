@@ -180,6 +180,14 @@ export const STATUS = {
     supported: s("OS Trash supported", "success", Check),
     unsupported: s("OS Trash unsupported", "danger", Ban),
   },
+  source: {
+    manual: s("Manual", "neutral", Wrench),
+    detected: s("Detected", "info", CircleDot),
+    "built-in": s("Built-in", "muted", ShieldCheck),
+  },
+  site: {
+    default: s("Default site", "info", CircleDot),
+  },
 } satisfies Record<string, Record<string, StatusMeta>>
 
 export type StatusKind = keyof typeof STATUS

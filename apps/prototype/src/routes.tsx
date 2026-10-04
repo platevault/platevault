@@ -77,6 +77,7 @@ const settingsChildren = [
   createRoute({ getParentRoute: () => settingsRoute, path: "locations", component: t1Pages.settingsLocations, validateSearch: looseSearch }),
   createRoute({ getParentRoute: () => settingsRoute, path: "equipment", component: t1Pages.settingsEquipment, validateSearch: looseSearch }),
   createRoute({ getParentRoute: () => settingsRoute, path: "sites", component: t1Pages.settingsSites, validateSearch: looseSearch }),
+  createRoute({ getParentRoute: () => settingsRoute, path: "targets", component: t1Pages.settingsTargets, validateSearch: looseSearch }),
   createRoute({ getParentRoute: () => settingsRoute, path: "applications", component: t4Pages.settingsApplications, validateSearch: looseSearch }),
   createRoute({ getParentRoute: () => settingsRoute, path: "about", component: t1Pages.settingsAbout, validateSearch: looseSearch }),
 ]

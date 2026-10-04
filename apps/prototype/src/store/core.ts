@@ -18,7 +18,7 @@ import type { SeedData } from "@/domain/seed"
 import type { ActivityEvent, Catalog } from "@/domain/types"
 import type { SliceId, SliceStates } from "./slices"
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export interface PrototypeState extends SeedData {
   schemaVersion: number

@@ -64,6 +64,7 @@ export const STATIC_DESTINATIONS: Array<{ to: string; label: string; keywords: s
   { to: "/settings/locations", label: "Settings: Locations", keywords: "folders captures calibration results archive" },
   { to: "/settings/equipment", label: "Settings: Equipment", keywords: "camera telescope optical train filter" },
   { to: "/settings/sites", label: "Settings: Observing sites", keywords: "site default location latitude" },
+  { to: "/settings/targets", label: "Settings: Target lookup", keywords: "simbad sesame resolver online provider" },
   { to: "/settings/applications", label: "Settings: Applications", keywords: "pixinsight siril seti profile executable" },
   { to: "/settings/about", label: "Settings: About this prototype", keywords: "reset demo seed prototype version" },
   { to: "/welcome", label: "Welcome and setup", keywords: "onboarding first run" },

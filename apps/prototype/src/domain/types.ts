@@ -861,6 +861,11 @@ export interface AppSettings {
   }
   /** Last chosen View parent folder; no root is assumed on first use. */
   lastViewParent: string | null
+  /** Online Target resolution (LIB-AC-12, D18). Local search always works. */
+  targetLookup: {
+    enabled: boolean
+    provider: "cds-sesame" | "simbad"
+  }
 }
 
 export interface SimulationFaults {

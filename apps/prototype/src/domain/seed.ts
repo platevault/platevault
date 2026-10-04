@@ -392,6 +392,7 @@ export function defaultSettings(): AppSettings {
     planningSiteId: null,
     onboarding: { completedAt: null, deferredRoles: [], tourCompletedAt: null, checklistHidden: false },
     lastViewParent: null,
+    targetLookup: { enabled: true, provider: "cds-sesame" },
   }
 }
 

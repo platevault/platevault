@@ -210,6 +210,7 @@ URLs read `#/targets/…`.
 | `/settings/locations` | Locations | Registered locations by role; display names; access and online state; Index now, Rescan, Choose folder again, Retry; remap with same-asset proof (D11) |
 | `/settings/equipment` | Equipment | Cameras, telescopes, optical trains, filters; Manual vs Detected; in-use deletion refused |
 | `/settings/sites` | Observing sites | Sites (lat, lon, elevation, IANA zone, twilight, minimum altitude); explicit default site (no automatic default, §14) |
+| `/settings/targets` | Target lookup | Online Target resolution on/off and provider (`settings.targetLookup`); local search always works; resolver failure stays visible (LIB-AC-12, D18) |
 | `/settings/about` | About this prototype | "Prototype" label, version, seed and Reset, `SimulationControls`, replay orientation |
 
 ### T2: library (specs 064, 065; J19, J20)
