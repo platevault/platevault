@@ -4,6 +4,7 @@
  * surface reports the same numbers (spec 063 SC-004, LIB-FR-08, VSEL-FR-08,
  * PRJ-FR-04). Nothing here writes state.
  */
+import { correctedExposureS } from "./corrections"
 import { deniedAncestor } from "./indexing"
 import { fieldOfView } from "./sky"
 import type {
@@ -107,9 +108,19 @@ export interface FrameTotals {
 
 const zero = (): FrameTotals => ({ frames: 0, seconds: 0 })
 
-function add(totals: FrameTotals, asset: Asset) {
+function add(totals: FrameTotals, seconds: number) {
   totals.frames += 1
-  totals.seconds += asset.observed.exposureS
+  totals.seconds += seconds
+}
+
+/**
+ * Exposure that counts for an asset: its session's latest exposure correction,
+ * else the observed EXPTIME. Every total reads this; the header never changes
+ * (LIB-FR-05, LIB-FR-12).
+ */
+export function effectiveExposureS(catalog: Catalog, asset: Asset): number {
+  const session = asset.sessionId ? catalog.sessions[asset.sessionId] : undefined
+  return (session && correctedExposureS(session)) ?? asset.observed.exposureS
 }
 
 export interface QualityBreakdown {
@@ -138,14 +149,15 @@ export function emptyBreakdown(): QualityBreakdown {
 
 /** Adds one logical asset. Copies never count twice. */
 export function addToBreakdown(breakdown: QualityBreakdown, disk: Disk, catalog: Catalog, asset: Asset) {
-  add(breakdown.captured, asset)
-  if (assetAvailability(disk, catalog, asset) !== "available") add(breakdown.unavailable, asset)
+  const seconds = effectiveExposureS(catalog, asset)
+  add(breakdown.captured, seconds)
+  if (assetAvailability(disk, catalog, asset) !== "available") add(breakdown.unavailable, seconds)
   const applicability = qualityApplicability(asset)
-  if (applicability === "changed-content") add(breakdown.changedContent, asset)
-  else if (applicability === "verification-pending") add(breakdown.verificationPending, asset)
-  else if (asset.quality.value === "usable") add(breakdown.usable, asset)
-  else if (asset.quality.value === "unusable") add(breakdown.unusable, asset)
-  else add(breakdown.unreviewed, asset)
+  if (applicability === "changed-content") add(breakdown.changedContent, seconds)
+  else if (applicability === "verification-pending") add(breakdown.verificationPending, seconds)
+  else if (asset.quality.value === "usable") add(breakdown.usable, seconds)
+  else if (asset.quality.value === "unusable") add(breakdown.unusable, seconds)
+  else add(breakdown.unreviewed, seconds)
 }
 
 export function sessionBreakdown(disk: Disk, catalog: Catalog, session: Session): QualityBreakdown {
@@ -212,9 +224,10 @@ export function membershipSummary(catalog: Catalog, content: MembershipContent):
     const session = asset.sessionId ? catalog.sessions[asset.sessionId] : undefined
     const channel = session?.channel ?? asset.observed.filter ?? "No filter"
     const totals = byChannel.get(channel) ?? zero()
-    add(totals, asset)
+    const seconds = effectiveExposureS(catalog, asset)
+    add(totals, seconds)
     byChannel.set(channel, totals)
-    add(included, asset)
+    add(included, seconds)
     if (asset.quality.value === "unreviewed") unreviewed += 1
     if (asset.quality.value === "unusable") unusable += 1
   }
@@ -361,10 +374,11 @@ function channelTotals(catalog: Catalog, project: Project, sessions: Session[]) 
     for (const id of session.assetIds) {
       const asset = catalog.assets[id]
       if (!asset) continue
-      add(totals.captured, asset)
+      const seconds = effectiveExposureS(catalog, asset)
+      add(totals.captured, seconds)
       if (asset.quality.value !== "usable" || qualityApplicability(asset) !== "applicable") continue
-      add(totals.libraryUsable, asset)
-      if (!project.rejections[asset.id]) add(totals.projectAccepted, asset)
+      add(totals.libraryUsable, seconds)
+      if (!project.rejections[asset.id]) add(totals.projectAccepted, seconds)
     }
   }
   return totals
@@ -391,7 +405,7 @@ export function projectProgress(catalog: Catalog, project: Project): ChecklistPr
         }
       }
       case "exposure": {
-        const sessions = lights.filter((s) => s.exposureS === item.exposureS && (item.channel === null || s.channel === item.channel))
+        const sessions = lights.filter((s) => (correctedExposureS(s) ?? s.exposureS) === item.exposureS && (item.channel === null || s.channel === item.channel))
         return { ...base, evidenceSessionIds: sessions.map((s) => s.id), state: sessions.length > 0 ? "met" : "missing", reason: sessions.length > 0 ? null : "No linked session uses this exposure" }
       }
       case "panel-coverage": {
