@@ -1303,7 +1303,9 @@ impl Catalog {
         self.confirm_association(expected, AssociationKind::Equipment, equipment_id).await
     }
 
-    /// Record automatic association evidence. Confirmed associations are preserved.
+    /// Record automatic association evidence. Confirmed associations and the
+    /// regroup conflicts between confirmations that wait for the user's review are
+    /// preserved: automatic suggestions replace only automatic rows.
     ///
     /// Each suggestion must name the exact current members and observation
     /// fingerprints it was assessed against; evidence computed from older
@@ -2740,36 +2742,53 @@ impl Inheritance<'_> {
         old_session_of: &HashMap<Uuid, Uuid>,
         observation_basis: BTreeMap<Uuid, ObservationFingerprint>,
     ) -> Option<Association> {
-        let sources: Vec<Option<&Association>> = self
-            .members
-            .iter()
-            .map(|asset| {
-                old_session_of
-                    .get(asset)
-                    .and_then(|session| self.prior.get(&(*session, kind_text(kind))))
-                    .filter(|association| association.state == AssociationState::Confirmed)
-            })
-            .collect();
-        let confirmed: Vec<&Association> = sources.iter().flatten().copied().collect();
-        let first = *confirmed.first()?;
-        if confirmed.len() == sources.len()
-            && confirmed.iter().all(|association| association.subject_id == first.subject_id)
-        {
+        let mut first: Option<&Association> = None;
+        let mut shared = true;
+        let mut user_decided = false;
+        let mut values = BTreeSet::new();
+        for asset in self.members {
+            let prior = old_session_of
+                .get(asset)
+                .and_then(|session| self.prior.get(&(*session, kind_text(kind))));
+            match prior {
+                Some(association) if association.state == AssociationState::Confirmed => {
+                    user_decided = true;
+                    values.insert(
+                        association
+                            .subject_id
+                            .map_or_else(|| "none".to_owned(), |id| id.to_string()),
+                    );
+                    let first = *first.get_or_insert(association);
+                    shared &= association.subject_id == first.subject_id;
+                }
+                // A conflict still waiting for the user's review is carried
+                // forward with its values; it never dissolves into a fresh guess.
+                Some(association) if pending_inheritance(association) => {
+                    user_decided = true;
+                    shared = false;
+                    for item in &association.evidence {
+                        if let EvidenceItem::Conflict { values: pending, .. } = item {
+                            values.extend(pending.iter().cloned());
+                        }
+                    }
+                }
+                _ => {
+                    shared = false;
+                    values.insert("unconfirmed".to_owned());
+                }
+            }
+        }
+        if !user_decided {
+            return None;
+        }
+        if shared {
+            let first = first?;
             return Some(Association {
                 session_id: self.session_id,
                 observation_basis,
                 decision_revision: 0,
                 ..first.clone()
             });
-        }
-        let mut values: BTreeSet<String> = confirmed
-            .iter()
-            .map(|association| {
-                association.subject_id.map_or_else(|| "none".to_owned(), |id| id.to_string())
-            })
-            .collect();
-        if confirmed.len() < sources.len() {
-            values.insert("unconfirmed".to_owned());
         }
         Some(Association {
             session_id: self.session_id,
@@ -2780,11 +2799,25 @@ impl Inheritance<'_> {
                 field: kind_text(kind).to_owned(),
                 values: values.into_iter().collect(),
             }],
-            provenance: Provenance::Inferred { rule: "regroup-confirmation-inheritance".into() },
+            provenance: Provenance::Inferred { rule: INHERITANCE_RULE.into() },
             observation_basis,
             decision_revision: 0,
         })
     }
+}
+
+const INHERITANCE_RULE: &str = "regroup-confirmation-inheritance";
+
+/// A regroup conflict between user confirmations, waiting for the user's review.
+fn pending_inheritance(association: &Association) -> bool {
+    association.state == AssociationState::NeedsReview
+        && matches!(&association.provenance, Provenance::Inferred { rule } if rule == INHERITANCE_RULE)
+}
+
+/// Rows only an explicit confirmation may replace: user confirmations and the
+/// review conflicts they produced. Automatic assessments replace only automatic rows.
+fn user_owned(association: &Association) -> bool {
+    association.state == AssociationState::Confirmed || pending_inheritance(association)
 }
 
 async fn insert_session(
@@ -3760,7 +3793,7 @@ async fn record_suggestion(
         require_subject(conn, item.kind, subject).await?;
     }
     if let Some(existing) = load_association(conn, item.session_id, item.kind).await? {
-        if existing.state == AssociationState::Confirmed {
+        if user_owned(&existing) {
             return Ok(existing);
         }
     }

@@ -1423,3 +1423,125 @@ async fn overlapping_roots_on_the_same_volume_are_refused() {
     }
     assert_eq!(catalog.list_locations().await.unwrap().len(), 1);
 }
+
+/// Rescan of exactly these observed files through one batch and the terminal pass.
+async fn rescan_files(catalog: &Catalog, location: &Location, files: Vec<ScanFile>) {
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let root = DiskProbe.root_identity(location).unwrap();
+    let batch = ScanBatch { files: files.clone(), ..ScanBatch::default() };
+    catalog.apply_scan_batch(operation.id, &root, &batch, group).await.unwrap();
+    let observation = ScanObservation {
+        location_id: location.id,
+        root_identity: root,
+        files,
+        issues: Vec::new(),
+        complete_scopes: vec![root_scope()],
+        incomplete_scopes: Vec::new(),
+        progress: ScanProgress::default(),
+        state: ScanState::Completed,
+    };
+    let finished = catalog
+        .finish_scan(
+            operation.id,
+            &observation,
+            |location| DiskProbe.root_identity(location),
+            group,
+        )
+        .await
+        .unwrap();
+    assert_eq!(finished.state, ScanState::Completed);
+}
+
+fn inheritance_conflict(association: &Association) -> bool {
+    association.state == AssociationState::NeedsReview
+        && association.provenance
+            == Provenance::Inferred { rule: "regroup-confirmation-inheritance".into() }
+        && matches!(association.evidence.as_slice(), [EvidenceItem::Conflict { .. }])
+}
+
+#[tokio::test]
+async fn inherited_confirmation_conflicts_survive_automatic_rescans_and_regroups() {
+    let fx = Fixture::new();
+    let names = ["Ha_001.fits", "Ha_002.fits", "OIII_001.fits"];
+    for name in names {
+        fx.write(name, name.as_bytes());
+    }
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &names).await;
+    let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    let ha = sessions.iter().find(|s| s.session.asset_ids.len() == 2).unwrap().session.clone();
+    let oiii = sessions.iter().find(|s| s.session.asset_ids.len() == 1).unwrap().session.clone();
+    let ngc = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    let ic = catalog.save_target(&target("IC 5070", "ic 5070"), None).await.unwrap();
+    let equipment = saved_equipment(&catalog).await;
+    catalog.associate_target(&[expected_session(&ha)], ngc.candidate.id).await.unwrap();
+    catalog.associate_target(&[expected_session(&oiii)], ic.candidate.id).await.unwrap();
+    let ha = catalog.session(ha.id).await.unwrap().summary.session;
+    catalog.confirm_equipment(&[expected_session(&ha)], equipment.id).await.unwrap();
+
+    // Correcting the OIII frame to Ha merges frames the user confirmed as two
+    // different targets, and frames with and without an equipment confirmation.
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let moved = by_name(&assets, "OIII_001.fits").clone();
+    let correction =
+        vec![CorrectionInput { asset_id: moved.id, field: "filter".into(), value: "Ha".into() }];
+    let outcome = catalog
+        .apply_correction_and_regroup(&[expected(&moved)], &correction, group)
+        .await
+        .unwrap();
+    let merged = outcome.sessions[0].id;
+    let pending = catalog.associations(merged).await.unwrap();
+    assert_eq!(pending.len(), 2, "{pending:?}");
+    assert!(pending.iter().all(inheritance_conflict), "{pending:?}");
+
+    // An unchanged rescan and its automatic assessments keep both review conflicts.
+    let files: Vec<ScanFile> = names.iter().map(|name| fx.scan_file(name)).collect();
+    rescan_files(&catalog, &location, files.clone()).await;
+    let current = catalog.session(merged).await.unwrap().summary.session;
+    let assessed = assessment(&catalog, merged).await;
+    let suggest = |kind, subject| SuggestedAssociation {
+        session_id: merged,
+        grouping_revision: current.grouping_revision,
+        kind,
+        subject_id: Some(subject),
+        state: AssociationState::Suggested,
+        evidence: vec![
+            EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true },
+            EvidenceItem::Coordinates { ra_deg: 314.75, dec_deg: 44.33, qualified: true },
+        ],
+        provenance: Provenance::Inferred { rule: "alias-and-coordinates".into() },
+        expected_observations: assessed.observations.clone(),
+        expected_decisions: assessed.decisions.clone(),
+        expected_observation_revisions: assessed.sequences.clone(),
+    };
+    catalog
+        .record_suggestions(&[
+            suggest(AssociationKind::Target, ngc.candidate.id),
+            suggest(AssociationKind::Equipment, equipment.id),
+        ])
+        .await
+        .unwrap();
+    let kept = catalog.associations(merged).await.unwrap();
+    assert_eq!(kept.len(), 2);
+    assert!(kept.iter().all(inheritance_conflict), "automatic rows never replace them: {kept:?}");
+    for target in [ngc.candidate.id, ic.candidate.id] {
+        let coverage = catalog.target_coverage(target).await.unwrap();
+        assert!(coverage.contributions.is_empty(), "frames under review never count");
+    }
+
+    // A rescan that moves one frame out regroups the merged session; every
+    // successor still waits for the user's review.
+    let mut regrouped = files;
+    regrouped[1].metadata.filter = Some("OIII".into());
+    rescan_files(&catalog, &location, regrouped).await;
+    let successors = catalog.session(merged).await.unwrap().summary.successors;
+    assert_eq!(successors.len(), 2, "merged session superseded");
+    for successor in successors {
+        let associations = catalog.associations(successor).await.unwrap();
+        assert_eq!(associations.len(), 2, "{associations:?}");
+        assert!(associations.iter().all(inheritance_conflict), "{associations:?}");
+    }
+    assert_eq!(tree(&fx.root), before, "headers unchanged");
+}
