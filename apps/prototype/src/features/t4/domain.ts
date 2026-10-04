@@ -298,11 +298,17 @@ export function summarize(criteria: MatchCriterion[]): MatchSummary {
   return { compatible, incompatible, unknown, allCompatible: incompatible === 0 && unknown === 0 }
 }
 
-/** "8 compatible", or the criteria that are not: "Optical train unknown". */
+/** "All 8 criteria compatible", or the criteria that are not: "Optical train unknown". */
 export function summaryText(criteria: MatchCriterion[]): string {
   const bad = criteria.filter((c) => c.result !== "compatible")
-  if (bad.length === 0) return `${criteria.length} compatible`
+  if (bad.length === 0) return `All ${criteria.length} criteria compatible`
   return bad.map((c) => `${CRITERION_LABEL[c.name]} ${c.result}`).join(", ")
+}
+
+/** The one phrase every surface uses for the handed-off set: "6 inputs for 15 requirements (1 with an exception)". */
+export function handoffCountText(calibration: CalibrationPlan, inputs: number): string {
+  const exceptions = calibration.counts.exception
+  return `${plural(inputs, "input")} for ${plural(calibration.rows.length, "requirement")}${exceptions ? ` (${exceptions} with an exception)` : ""}`
 }
 
 export interface Candidate {
@@ -380,7 +386,7 @@ function groupOf(catalog: Catalog, session: Session): { key: string; label: stri
     session.channel ?? "No filter",
     // A train name already names its camera.
     train ?? `Optical train unknown · ${g.cameraName ?? "camera unknown"}`,
-    g.widthPx && g.heightPx ? `${g.widthPx} × ${g.heightPx}` : "Dimensions unknown",
+    g.widthPx && g.heightPx ? `${g.widthPx}\u00a0×\u00a0${g.heightPx}` : "Dimensions unknown",
     `bin ${g.binning}`,
     `gain ${g.gain ?? "unknown"} / offset ${g.offset ?? "unknown"}`,
   ]
@@ -863,7 +869,7 @@ export function preparationPlan({ disk, catalog, view, lastViewParent, choices }
       members.length === 0
         ? "No light sessions in this View."
         : calibration.blocking.length === 0
-          ? `${plural(calibrationSources.length, "input")} accepted${calibration.counts.exception ? `, ${plural(calibration.counts.exception, "exception")}` : ""}`
+          ? handoffCountText(calibration, calibrationSources.length)
           : `${plural(calibration.blocking.length, "requirement")} not resolved: ${calibration.blocking
               .slice(0, 3)
               .map((r) => `${formatNight(r.member.session.night)} ${KIND_LABEL[r.kind].toLowerCase()} ${r.state}`)
@@ -905,7 +911,7 @@ export function preparationPlan({ disk, catalog, view, lastViewParent, choices }
         : viewFolder.exists
           ? `${viewPath} already exists with ${plural(viewFolder.items.length, "item")}${viewFolder.items.length ? ` (${viewFolder.items.slice(0, 3).join(", ")})` : ""}. Choose another name or location. Nothing in it was changed.`
           : null
-  checks.push({ id: "destination", label: "Destination", ok: destinationProblem === null, blocking: true, detail: destinationProblem ?? `${viewPath} is free` })
+  checks.push({ id: "destination", label: "Destination", ok: destinationProblem === null, blocking: true, detail: destinationProblem ?? `${viewPath} is free; write permission checked` })
   if (outputOverride && choices.outputParent && outputPath) {
     const occupied = pathOccupied(disk, outputPath)
     const outVolumeId = volumeForPath(disk, choices.outputParent)

@@ -5,7 +5,7 @@
  * Nothing is written before Prepare View is confirmed.
  */
 import { Link } from "@tanstack/react-router"
-import { ArrowRight, FolderOpen } from "lucide-react"
+import { ArrowRight, ChevronRight, FolderOpen } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList, PathText } from "@/components/app/data"
@@ -15,6 +15,7 @@ import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { membershipSummary, sessionLocationIds } from "@/domain/derive"
 import { fileAt, filesUnder } from "@/domain/disk"
@@ -27,7 +28,7 @@ import { modifyFileExternally, restoreFileExternally, setFolderAccess } from "@/
 import { openApplication, quitApplication, retryPreparation, startPrepare, updateApp, updatePrep, updateWorld } from "./actions"
 import { T4Badge } from "./badges"
 import { ViewNotFound } from "./calibration-area"
-import { CRITERION_LABEL, FIELD_LABEL, KIND_LABEL, METADATA_CHOICE_LABEL, MODE_LABEL, type PreparationPlan, sessionLabel } from "./domain"
+import { CRITERION_LABEL, FIELD_LABEL, handoffCountText, KIND_LABEL, METADATA_CHOICE_LABEL, MODE_LABEL, type PreparationPlan, sessionLabel } from "./domain"
 import { usePrepDraft, usePreparationPlan, useRouteView } from "./hooks"
 import { ApplicationSection, LocationSection, MetadataSection, ModeSection } from "./prepare-sections"
 import { LocateApplicationDialog } from "./profile-parts"
@@ -58,7 +59,7 @@ function Readiness({ view, plan }: { view: View; plan: PreparationPlan }) {
     title: plan.calibration.blocking.length === 0 ? "Calibration decided" : `${plural(plan.calibration.blocking.length, "calibration requirement")} not resolved`,
     detail:
       plan.calibration.blocking.length === 0
-        ? `${plural(plan.calibrationSources.length, "input")} handed off${plan.calibration.counts.exception ? `, including ${plural(plan.calibration.counts.exception, "scoped exception")}` : ""}.`
+        ? `${handoffCountText(plan.calibration, plan.calibrationSources.length)} handed off.`
         : plan.calibration.blocking
             .map((r) => `${formatNight(r.member.session.night)} ${r.member.session.channel ?? ""} ${KIND_LABEL[r.kind].toLowerCase()}: ${r.state === "suggested" ? "suggested, not accepted" : r.state}`)
             .join("; "),
@@ -155,7 +156,7 @@ function ReviewPanel({ view, plan, confirmed, onConfirmChange, onPrepare, error 
           </section>
           <section aria-labelledby="review-sources" className="space-y-2">
             <h4 id="review-sources" className="text-sm font-semibold">Source references</h4>
-            <ul className="divide-y rounded-md border text-sm">
+            <ul className="divide-y border-y text-sm">
               {plan.members.map((m) => {
                 const locations = sessionLocationIds(catalog, m.session).map((id) => catalog.locations[id]?.displayName ?? id)
                 return (
@@ -246,7 +247,7 @@ function ReviewPanel({ view, plan, confirmed, onConfirmChange, onPrepare, error 
 
       <section aria-labelledby="review-checks" className="space-y-2">
         <h4 id="review-checks" className="text-sm font-semibold">Checks</h4>
-        <ul className="divide-y rounded-md border text-sm">
+        <ul className="divide-y border-y text-sm">
           {plan.checks.map((check) => (
             <li key={check.id} className="grid grid-cols-[9rem_8.5rem_minmax(0,1fr)] items-start gap-3 px-3 py-1.5">
               <span>{check.label}</span>
@@ -400,7 +401,8 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
           Prepared for revision {prep.membershipRevision}; the View is at revision {latestRevision}. A new review creates a new preparation. These entries stay unchanged unless you clean them up.
         </Notice>
       ) : null}
-      {op ? <OperationPanel operationId={op.id} onRetry={retry} /> : null}
+      {/* Once prepared, Open in leads; the per-entry outcome follows it as detail. */}
+      {op && !(prepared && settled) ? <OperationPanel operationId={op.id} onRetry={retry} /> : null}
       {retryError ? <ActionError message={retryError} /> : null}
       {settled && (prep.state === "partial" || prep.state === "failed") ? (
         <Notice
@@ -510,6 +512,7 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
           </p>
         </div>
       ) : null}
+      {op && prepared && settled ? <OperationPanel operationId={op.id} onRetry={retry} /> : null}
       <RevealDialog prep={prep} open={reveal} onOpenChange={setReveal} />
       {locating && profile ? <LocateApplicationDialog profile={profile} onOpenChange={(o) => !o && setLocating(false)} onLocated={() => setMessage(null)} /> : null}
     </Section>
@@ -603,10 +606,29 @@ export function ViewPrepareArea() {
         ) : null}
         {preparedNow ? null : <Readiness view={view} plan={plan} />}
         {latest ? <Outcome view={view} prep={latest} latestRevision={revision} onReviewAgain={() => updatePrep(viewId, { reviewing: true, confirmedRevision: null })} /> : null}
-        <ApplicationSection view={view} plan={plan} locked={locked} />
-        <MetadataSection view={view} plan={plan} draft={draft} locked={locked} />
-        <ModeSection view={view} plan={plan} draft={draft} locked={locked} />
-        <LocationSection view={view} plan={plan} draft={draft} locked={locked} />
+        {preparedNow ? (
+          // Prepared: Open in is the next step, so the settings that would start a new preparation stay folded.
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger render={<Button variant="ghost" className="w-full justify-start rounded-lg [&[data-panel-open]>svg]:rotate-90" />}>
+              <ChevronRight aria-hidden="true" data-icon="inline-start" />
+              Change preparation settings
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-6 border-t px-4 py-4">
+              <p className="text-xs text-pretty text-muted-foreground">Changes apply to a new preparation after Review preparation. The prepared entries above stay as they are.</p>
+              <ApplicationSection view={view} plan={plan} locked={locked} />
+              <MetadataSection view={view} plan={plan} draft={draft} locked={locked} />
+              <ModeSection view={view} plan={plan} draft={draft} locked={locked} />
+              <LocationSection view={view} plan={plan} draft={draft} locked={locked} />
+            </CollapsibleContent>
+          </Collapsible>
+        ) : (
+          <>
+            <ApplicationSection view={view} plan={plan} locked={locked} />
+            <MetadataSection view={view} plan={plan} draft={draft} locked={locked} />
+            <ModeSection view={view} plan={plan} draft={draft} locked={locked} />
+            <LocationSection view={view} plan={plan} draft={draft} locked={locked} />
+          </>
+        )}
         {reviewing ? (
           <ReviewPanel
             view={view}

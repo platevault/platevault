@@ -57,7 +57,7 @@ function InputCell({ row }: { row: RequirementRow }) {
       <span className="block [overflow-wrap:anywhere]">{row.source.name}</span>
       <span className="block text-xs text-muted-foreground">
         {row.source.isMaster ? "Library master" : `Raw set · ${plural(row.source.frameCount ?? 0, "frame")}`}
-        {others > 0 && row.state !== "suggested" ? ` · ${plural(others, "other compatible input")}` : ""}
+        {others > 0 && row.state !== "suggested" ? ` · ${plural(others, "compatible alternative")}` : ""}
       </span>
     </span>
   )
@@ -261,7 +261,11 @@ export function ViewCalibrationArea() {
                       const groupSuggested = group.rows.filter((r) => r.state === "suggested").map((r) => r.key)
                       setDeselected((current) => [...current.filter((key) => !groupSuggested.includes(key)), ...groupSuggested.filter((key) => !ids.includes(key))])
                     },
-                    rowLabel: (row) => `${KIND_LABEL[row.kind].toLowerCase()} suggestion for ${sessionLabel(row.member.session)}`,
+                    // The shared table prefixes "Select" and disables decided rows; the name says why, matching the State column.
+                    rowLabel: (row) =>
+                      row.state === "suggested"
+                        ? `${KIND_LABEL[row.kind].toLowerCase()} suggestion for ${sessionLabel(row.member.session)}`
+                        : `${KIND_LABEL[row.kind].toLowerCase()} for ${sessionLabel(row.member.session)} (${row.state}, nothing to accept)`,
                     isSelectable: (row) => row.state === "suggested" && !complete,
                   }}
                 />

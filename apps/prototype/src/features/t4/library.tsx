@@ -62,13 +62,27 @@ function itemLine(item: LibraryItem): string {
   return parts.join(" · ")
 }
 
+/** Characters kept at the end of a truncated name: the filter or temperature suffix that tells masters apart. */
+const NAME_TAIL = 9
+
+/** Truncates in the middle so the distinguishing end of a file name stays visible; the full name stays in the text. */
+function MiddleTruncate({ text, className }: { text: string; className?: string }) {
+  if (text.length <= NAME_TAIL * 2) return <span className={cn("truncate", className)}>{text}</span>
+  return (
+    <span className={cn("flex min-w-0", className)} title={text}>
+      <span className="truncate">{text.slice(0, -NAME_TAIL)}</span>
+      <span className="shrink-0">{text.slice(-NAME_TAIL)}</span>
+    </span>
+  )
+}
+
 function LibraryList({ items, activeId }: { items: LibraryItem[]; activeId: string | null }) {
   const candidates = items.filter((i) => i.candidate)
   const reusable = items.filter((i) => !i.candidate && i.source)
   const groups = new Map<string, LibraryItem[]>()
   for (const item of reusable.sort((a, b) => KIND_ORDER.indexOf(a.source!.kind) - KIND_ORDER.indexOf(b.source!.kind) || (a.source!.night ?? "").localeCompare(b.source!.night ?? ""))) {
     const s = item.source!
-    const key = [s.cameraName ?? "Camera unknown", s.widthPx && s.heightPx ? `${s.widthPx} × ${s.heightPx}` : "dimensions unknown", `bin ${s.binning}`, `gain ${s.gain ?? "?"} / offset ${s.offset ?? "?"}`].join(" · ")
+    const key = [s.cameraName ?? "Camera unknown", s.widthPx && s.heightPx ? `${s.widthPx}\u00a0×\u00a0${s.heightPx}` : "dimensions unknown", `bin ${s.binning}`, `gain ${s.gain ?? "?"} / offset ${s.offset ?? "?"}`].join(" · ")
     groups.set(key, [...(groups.get(key) ?? []), item])
   }
   const renderItem = (item: LibraryItem) => (
@@ -83,7 +97,7 @@ function LibraryList({ items, activeId }: { items: LibraryItem[]; activeId: stri
         )}
       >
         <span className="flex items-center justify-between gap-2">
-          <span className="truncate font-medium">{item.source?.name}</span>
+          <MiddleTruncate text={item.source?.name ?? ""} className="font-medium" />
           {item.master ? <StatusBadge kind="master" value={item.master.state} /> : null}
         </span>
         <span className="block truncate text-xs text-muted-foreground">{itemLine(item)}</span>
