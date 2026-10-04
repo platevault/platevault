@@ -55,9 +55,10 @@ export function LocationRow({ location, current, actions, onChooseAgain, onRetry
   const denied = !offline && location.access === "denied"
   const incomplete = !offline && !denied && location.scanScope === "incomplete"
 
+  // A scan that could not read the folder is an attempt, never an index; a denied folder with nothing read shows no frame count.
   const facts = [
-    location.lastIndexedAt ? `Last indexed ${formatDateTime(location.lastIndexedAt)}` : null,
-    frames > 0 || location.lastIndexedAt ? `${formatCount(frames)} ${frames === 1 ? "frame" : "frames"} read` : null,
+    location.lastIndexedAt ? `${denied ? "Last attempt" : "Last indexed"} ${formatDateTime(location.lastIndexedAt)}` : null,
+    frames > 0 || (location.lastIndexedAt && !denied) ? `${formatCount(frames)} ${frames === 1 ? "frame" : "frames"} read` : null,
     location.managed ? "Accepts reviewed filing" : null,
   ].filter((fact) => fact !== null)
 

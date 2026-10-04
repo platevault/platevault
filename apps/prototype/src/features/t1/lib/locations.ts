@@ -72,16 +72,16 @@ export function validateLocation(catalog: Catalog, draft: LocationDraft, exceptI
   const same = others.find((l) => l.path === draft.path)
   const container = others.find((l) => l.path !== draft.path && isUnder(draft.path, l.path))
   const inside = others.find((l) => l.path !== draft.path && isUnder(l.path, draft.path))
-  if (same) errors.path = `Path: ${draft.path} is already registered as ${same.displayName}.`
-  else if (container) errors.path = `Path: inside ${container.displayName}, which already indexes this folder. Choose a folder outside registered locations.`
-  else if (inside) errors.path = `Path: contains ${inside.displayName}. Choose a folder that does not hold a registered location.`
+  if (same) errors.path = `Folder: ${draft.path} is already registered as ${same.displayName}.`
+  else if (container) errors.path = `Folder: inside ${container.displayName}, which already indexes this folder. Choose a folder outside registered locations.`
+  else if (inside) errors.path = `Folder: contains ${inside.displayName}. Choose a folder that does not hold a registered location.`
   return errors
 }
 
 export function registerLocation(draft: LocationDraft, href: string): { result: CommitResult; id: LocationId | null } {
   const state = store.getState()
   const volumeId = volumeForPath(state.disk, draft.path)
-  if (!volumeId) return { result: { ok: false, reason: "write-failed", message: `Path: ${draft.path} is not on a known volume.` }, id: null }
+  if (!volumeId) return { result: { ok: false, reason: "write-failed", message: `Folder: ${draft.path} is not on a known volume.` }, id: null }
   const id: LocationId = `loc_${stableHash(`${volumeId}|${draft.path}`)}`
   const displayName = draft.displayName.trim()
   const location: Location = {
@@ -136,7 +136,7 @@ export function repointLocation(id: LocationId, path: string, href: string): Com
   const state = store.getState()
   const location = state.catalog.locations[id]
   const volumeId = volumeForPath(state.disk, path)
-  if (!location || !volumeId) return { ok: false, reason: "write-failed", message: `Path: ${path} is not on a known volume.` }
+  if (!location || !volumeId) return { ok: false, reason: "write-failed", message: `Folder: ${path} is not on a known volume.` }
   return save(
     { label: `Folder change for ${location.displayName}`, saved: `${location.displayName} now points to ${path}`, detail: "No indexed frame referenced the previous folder.", href },
     (s) =>
@@ -246,8 +246,10 @@ export function computeRemap(catalog: Catalog, disk: Disk, locationId: LocationI
 
 /**
  * Apply a reviewed remap. Verified copies move to the new folder with their
- * asset identity, decisions and View membership intact; copies whose bytes
- * differ or are missing are refused and read Not found in this location.
+ * asset identity, decisions and View membership intact. Refused copies (bytes
+ * differ or missing) keep their original volume, path and fingerprint and
+ * read Not found in this location: nothing binds them to the file at the new
+ * path, so a later rescan reads a differing file there as a new frame (D11).
  */
 export function applyRemap(proof: RemapProof, href: string): CommitResult {
   const state = store.getState()
@@ -291,12 +293,13 @@ export function applyRemap(proof: RemapProof, href: string): CommitResult {
             ),
           }
         }
-        for (const [assetId, entry] of refused) {
+        // Refused copies are not rebound by path: same names are not proof.
+        for (const assetId of refused.keys()) {
           const asset = assets[assetId]
           if (!asset) continue
           assets[assetId] = {
             ...asset,
-            copies: asset.copies.map((copy) => (copy.locationId === proof.locationId ? { ...copy, volumeId: toVolume.id, path: entry.toPath, presence: "absent" } : copy)),
+            copies: asset.copies.map((copy) => (copy.locationId === proof.locationId ? { ...copy, presence: "absent" } : copy)),
           }
         }
         const current = c.locations[proof.locationId]!

@@ -94,7 +94,16 @@ export function AboutPage() {
                   {onboarding.checklistHidden ? "Removed from the sidebar. Restoring it shows progress from your current library." : "Getting started is shown in the sidebar."}
                 </p>
               </div>
-              <Button variant="outline" disabled={!onboarding.checklistHidden} aria-describedby={ids.restore} onClick={() => setChecklistHidden(false)}>
+              <Button
+                variant="outline"
+                disabled={!onboarding.checklistHidden}
+                aria-describedby={ids.restore}
+                onClick={() => {
+                  setChecklistHidden(false)
+                  // This button disables itself; move focus to the restored sidebar entry so it is not lost.
+                  requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-getting-started-trigger]")?.focus())
+                }}
+              >
                 Restore Getting started
               </Button>
             </li>

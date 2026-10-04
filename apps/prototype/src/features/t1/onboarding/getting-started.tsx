@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { type PrototypeState, useStore } from "@/store/core"
-import { replayTour, setChecklistCollapsed, setChecklistHidden } from "../lib/writes"
+import { recordChecklistDone, replayTour, setChecklistCollapsed, setChecklistHidden } from "../lib/writes"
 
 export interface ChecklistEntry {
   id: string
@@ -26,18 +26,22 @@ export interface ChecklistEntry {
   jump: { to: string; label: string } | { tour: true; label: string } | null
 }
 
-/** The five HLD §14 items, derived from catalog state only. */
+/**
+ * The five HLD §14 items. Each ticks from catalog state, and once ticked it
+ * stays ticked (`slices.t1.checklistDone`, J18 SC8) until Restore reseeds it.
+ */
 export function checklist(state: PrototypeState): ChecklistEntry[] {
   const { catalog, settings } = state
   const locations = Object.values(catalog.locations)
   const hasCaptures = locations.some((l) => l.role === "captures")
-  const indexed = locations.some((l) => l.lastIndexedAt !== null)
+  // A scan that could not read the folder is not an index of your captures.
+  const indexed = locations.some((l) => l.role === "captures" && l.lastIndexedAt !== null && l.access !== "denied")
   const sessions = Object.values(catalog.sessions).filter((s) => !s.supersededBy && s.imageType === "light")
   const reviewed =
     sessions.some((s) => s.target.status === "confirmed" || s.equipment.status === "confirmed") || Object.values(catalog.assets).some((a) => a.quality.value !== "unreviewed")
   const locationsJump = { to: "/settings/locations", label: "Go to Locations" }
   const sessionsJump = { to: "/sessions", label: "Go to Sessions" }
-  return [
+  const items: ChecklistEntry[] = [
     { id: "capture", label: "Add a capture location", hint: "Register a folder of light frames. Nothing in it changes.", done: hasCaptures, gate: null, jump: { to: "/settings/locations?add=captures", label: "Add a capture location" } },
     { id: "index", label: "Index your captures", hint: "Reads metadata in place and builds sessions.", done: indexed, gate: hasCaptures ? null : "Add a capture location first.", jump: locationsJump },
     {
@@ -58,6 +62,7 @@ export function checklist(state: PrototypeState): ChecklistEntry[] {
     },
     { id: "tour", label: "Take the tour", hint: "Six stops through the main pages.", done: settings.onboarding.tourCompletedAt !== null, gate: null, jump: { tour: true, label: "Start the tour" } },
   ]
+  return items.map((item) => (!item.done && item.id in state.slices.t1.checklistDone ? { ...item, done: true } : item))
 }
 
 // Flyout open state is shared with the command palette entry; it is not persisted.
@@ -96,6 +101,7 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
   const hidden = useStore((s) => s.settings.onboarding.checklistHidden)
   const items = useStore(checklist)
   const listCollapsed = useStore((s) => s.slices.t1.checklistCollapsed)
+  const recorded = useStore((s) => s.slices.t1.checklistDone)
   const open = useChecklistOpen()
   const [confirmRemove, setConfirmRemove] = useState(false)
   const [announcement, setAnnouncement] = useState("")
@@ -103,6 +109,7 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
   const previous = useRef(done)
   const trigger = useRef<HTMLButtonElement>(null)
   const popup = useRef<HTMLDivElement>(null)
+  const focusSettings = useRef(false)
 
   // Announce progress changes politely, never on first render.
   useEffect(() => {
@@ -110,7 +117,34 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
     previous.current = done
   }, [done, items.length])
 
-  if (hidden) return null
+  useEffect(() => {
+    recordChecklistDone(items.filter((i) => i.done && !(i.id in recorded)).map((i) => i.id))
+  }, [items, recorded])
+
+  // Removing unmounts the trigger and the flyout that opened the confirm; focus the Settings link, where Getting started is restored.
+  useEffect(() => {
+    if (confirmRemove || !focusSettings.current) return
+    focusSettings.current = false
+    window.setTimeout(() => document.querySelector<HTMLElement>('aside [href$="#/settings"]')?.focus(), 0)
+  }, [confirmRemove])
+
+  // Rendered while hidden too: confirming Remove hides the trigger, and the dialog must outlive it to close and move focus.
+  const removeConfirm = (
+    <ConfirmDialog
+      open={confirmRemove}
+      onOpenChange={setConfirmRemove}
+      title="Remove Getting started?"
+      description="The checklist and its sidebar entry go away until you restore them."
+      changes={["Hide the Getting started entry and its checklist"]}
+      unchanged={["Your library and everything you did", "Restore it any time in Settings › About this prototype"]}
+      confirmLabel="Remove Getting started"
+      onConfirm={() => {
+        focusSettings.current = true
+        setChecklistHidden(true)
+      }}
+    />
+  )
+  if (hidden) return removeConfirm
   const name = `Getting started, ${done} of ${items.length} done`
 
   return (
@@ -205,9 +239,9 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
                               "tour" in item.jump ? (
                                 <Button
                                   data-step-jump=""
-                                  size="xs"
+                                  size="sm"
                                   variant="link"
-                                  className="h-auto px-0"
+                                  className="px-0"
                                   onClick={() => {
                                     setChecklistOpen(false)
                                     replayTour()
@@ -232,16 +266,7 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
           </PopoverPrimitive.Positioner>
         </PopoverPrimitive.Portal>
       </PopoverPrimitive.Root>
-      <ConfirmDialog
-        open={confirmRemove}
-        onOpenChange={setConfirmRemove}
-        title="Remove Getting started?"
-        description="The checklist and its sidebar entry go away until you restore them."
-        changes={["Hide the Getting started entry and its checklist"]}
-        unchanged={["Your library and everything you did", "Restore it any time in Settings › About this prototype"]}
-        confirmLabel="Remove Getting started"
-        onConfirm={() => setChecklistHidden(true)}
-      />
+      {removeConfirm}
     </>
   )
 }

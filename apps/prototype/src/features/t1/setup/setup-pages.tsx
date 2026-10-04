@@ -14,14 +14,14 @@ import { PageHeader, StepIndicator } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { isLibraryEmpty } from "@/domain/derive"
-import type { Location, LocationRole, OperationId } from "@/domain/types"
+import type { Location, LocationRole, Operation, OperationId } from "@/domain/types"
 import { formatCount, plural } from "@/lib/format"
 import { resetPrototype } from "@/store"
 import { updateSlice, useStore } from "@/store/core"
 import { isSettled, resumeOperation, startIndexing } from "@/store/operations"
 import { AddLocationFlow } from "../components/add-location-flow"
 import { useLocationActions } from "../components/location-actions"
-import { LocationRow } from "../components/location-row"
+import { latestIndexRun, LocationRow } from "../components/location-row"
 import { framesInLocation, removeLocation, ROLE_COPY } from "../lib/locations"
 import { completeOnboarding, setRoleDeferred } from "../lib/writes"
 
@@ -159,6 +159,7 @@ export function SetupLocationsPage() {
   const locations = useStore((s) => Object.values(s.catalog.locations).sort((a, b) => a.registeredAt.localeCompare(b.registeredAt)))
   const deferred = useStore((s) => s.settings.onboarding.deferredRoles)
   const catalog = useStore((s) => s.catalog)
+  const operations = useStore((s) => s.operations)
   const [adding, setAdding] = useState<LocationRole | null>(null)
   const [removing, setRemoving] = useState<Location | null>(null)
   const actions = useLocationActions({ href: "/setup/locations", onIndexStarted: rememberRun })
@@ -219,7 +220,7 @@ export function SetupLocationsPage() {
                       onRetry={actions.retry}
                       feedback={actions.feedbackFor(location)}
                       actions={
-                        framesInLocation(catalog, location.id) === 0 ? (
+                        framesInLocation(catalog, location.id) === 0 && !queuedOrRunning(operations, location.id) ? (
                           <Button size="sm" variant="ghost" onClick={() => setRemoving(location)} aria-label={`Remove ${location.displayName}`}>
                             Remove
                           </Button>
@@ -273,6 +274,12 @@ export function SetupLocationsPage() {
   )
 }
 
+/** A location waiting in or being read by an unsettled run cannot be removed from under it (J19 S5). */
+function queuedOrRunning(operations: Record<string, Operation>, locationId: string): boolean {
+  const run = latestIndexRun(operations, locationId)
+  return run !== null && !isSettled(run.op.status) && run.op.status !== "interrupted" && (run.item?.status === "pending" || run.item?.status === "running")
+}
+
 // ---------------------------------------------------------------------------
 // /setup/indexing
 // ---------------------------------------------------------------------------
@@ -311,11 +318,22 @@ export function SetupIndexingPage() {
   const runs = runIds.map((id) => operations[id]).filter((op) => op !== undefined)
   const first = runs[0]
   const latest = runs.at(-1)
-  const anyRunning = runs.some((op) => !isSettled(op.status))
-  // The first run is the full setup scan; later runs retry single locations.
-  const counts = first ? indexCounts(first.payload) : null
-  // Complete scope only: a blocked or uncertain location is settled but not complete (LIB-FR-03).
-  const completeLocations = first ? first.items.filter((i) => i.status === "done").length : 0
+  const anyRunning = runs.some((op) => op.status === "running" || op.status === "paused")
+  // The grid counts the run shown below it; a Retry is its own run, so the counts follow it (J19 S7).
+  const counts = latest ? indexCounts(latest.payload) : null
+  // Complete scope is current catalog state, so a retried location counts once it is complete (LIB-FR-03).
+  const completeLocations = locations.filter((l) => l.access !== "denied" && l.scanScope === "complete").length
+  // Registered after the last run (Back, Add another location) or never reached: still indexable here.
+  const unindexed = locations.filter((l) => l.scanScope === "never" && !queuedOrRunning(operations, l.id))
+  const footer = anyRunning
+    ? "You can browse sessions already read while indexing continues."
+    : latest?.status === "interrupted"
+      ? "Indexing was interrupted. Continue it above, or open the library to browse sessions already read."
+      : latest?.status === "canceled"
+        ? "Indexing was canceled. Sessions already read are kept; rescan the rest here or later in Settings › Locations."
+        : unindexed.length > 0
+          ? `${plural(unindexed.length, "location")} not indexed yet. Index ${unindexed.length === 1 ? "it" : "them"} now, or later in Settings › Locations.`
+          : "Indexing finished. Open the library to review sessions."
 
   // Start indexing unmounts its own button; hand focus to Open library, which takes its place in the footer.
   useEffect(() => {
@@ -342,26 +360,20 @@ export function SetupIndexingPage() {
             <h2 id="index-progress" className="sr-only">
               Indexing progress
             </h2>
-            {counts ? (
-              <dl className="grid grid-cols-5 gap-4 rounded-lg border bg-card p-4">
-                {[
-                  { label: "Files discovered", value: formatCount(counts.discovered) },
-                  { label: "Metadata read", value: formatCount(counts.read) },
-                  { label: "Unsupported", value: formatCount(counts.unsupported), hint: counts.unsupported ? "Skipped, left as they are" : undefined },
-                  { label: "Unreadable folders", value: formatCount(counts.unreadableFolders), hint: counts.unreadableFolders ? "Read Unknown, never missing" : undefined },
-                  { label: "Complete scope", value: `${completeLocations} of ${first.items.length}`, hint: "locations" },
-                ].map((stat) => (
-                  <div key={stat.label}>
-                    <dt className="sr-only">{stat.label}</dt>
-                    <dd>
-                      <Stat label={stat.label} value={stat.value} hint={stat.hint} />
-                    </dd>
-                  </div>
-                ))}
-              </dl>
+            {counts && latest ? (
+              <div className="space-y-3 rounded-lg border bg-card p-4">
+                <p className="text-xs text-muted-foreground">{runs.length > 1 ? `Latest run: ${latest.title}` : "Setup scan"}</p>
+                <div className="grid grid-cols-5 gap-4">
+                  <Stat label="Files discovered" value={formatCount(counts.discovered)} />
+                  <Stat label="Metadata read" value={formatCount(counts.read)} />
+                  <Stat label="Unsupported" value={formatCount(counts.unsupported)} hint={counts.unsupported ? "Skipped, left as they are" : undefined} />
+                  <Stat label="Unreadable folders" value={formatCount(counts.unreadableFolders)} hint={counts.unreadableFolders ? "Read Unknown, never missing" : undefined} />
+                  <Stat label="Complete scope" value={`${completeLocations} of ${locations.length}`} hint="locations, now" />
+                </div>
+              </div>
             ) : null}
             <p className="text-sm tabular-nums" aria-live="polite">
-              Library so far: {plural(library.sessions, "light session")} · {plural(library.frames, "frame")}
+              Library so far: {plural(library.sessions, "light session")} · {plural(library.frames, "frame")} (lights and calibration)
               {library.covered.length ? ` · covers ${library.covered.join(", ")}` : ""}{" "}
               {library.provisional || anyRunning ? <StatusBadge kind="scanScope" value="provisional" /> : null}
             </p>
@@ -388,7 +400,13 @@ export function SetupIndexingPage() {
           </Button>
           {first ? (
             <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm text-muted-foreground">{anyRunning ? "You can browse sessions already read while indexing continues." : "Indexing finished. Open the library to review sessions."}</span>
+              <span className="text-sm text-muted-foreground">{footer}</span>
+              {unindexed.length > 0 ? (
+                <Button variant="outline" onClick={() => rememberRun(startIndexing(unindexed.map((l) => l.id)))}>
+                  <Play aria-hidden="true" data-icon="inline-start" />
+                  Index {plural(unindexed.length, "new location")}
+                </Button>
+              ) : null}
               <Button ref={openLibraryButton} onClick={openLibrary}>
                 Open library
                 <ArrowRight aria-hidden="true" data-icon="inline-end" />

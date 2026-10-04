@@ -23,7 +23,7 @@ import { formatCount } from "@/lib/format"
 import { store, useStore } from "@/store/core"
 import { focusFirstInvalid, parseAliases, parseNumber, TextField } from "../components/form-field"
 import { ROW_MENU_ROW, rowMenuColumn } from "../components/row-menu"
-import { duplicateName, type EquipmentKind, FILTER_CATEGORIES, KIND_COPY, removalRefusal, removeEquipment, saveEquipment, trainUsage } from "../lib/equipment"
+import { duplicateName, type EquipmentKind, FILTER_CATEGORIES, KIND_COPY, removalRefusal, removeEquipment, saveEquipment, trainUsage, trainUsageParts } from "../lib/equipment"
 import { ReturnNotice } from "./settings-layout"
 
 type AnyRecord = OpticalTrain | Camera | Telescope | FilterDef
@@ -387,8 +387,7 @@ export function EquipmentPage() {
                 id: "used",
                 header: "Used by",
                 cell: (r) => {
-                  const usage = trainUsage(catalog, r.id)
-                  const parts = [usage.sessions ? `${usage.sessions} ${usage.sessions === 1 ? "session" : "sessions"}` : null, usage.projects ? `${usage.projects} ${usage.projects === 1 ? "Project" : "Projects"}` : null].filter(Boolean)
+                  const parts = trainUsageParts(trainUsage(catalog, r.id))
                   return parts.length ? parts.join(" · ") : <span className="text-muted-foreground">Not used</span>
                 },
               },
@@ -469,7 +468,7 @@ export function EquipmentPage() {
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
         title={`Remove ${removing?.record.name ?? ""}?`}
-        description={`Removes this ${removing ? KIND_COPY[removing.kind].noun : "record"} from the catalog. Nothing else uses it.`}
+        description={`Removes this ${removing ? KIND_COPY[removing.kind].noun : "record"} from the catalog.`}
         changes={[`Remove the ${removing ? KIND_COPY[removing.kind].noun : "record"} ${removing?.record.name ?? ""}`]}
         unchanged={["Observed header evidence on every session", "Every file on disk"]}
         confirmLabel={`Remove ${removing ? KIND_COPY[removing.kind].noun : "record"}`}

@@ -21,7 +21,7 @@ import { formatCount } from "@/lib/format"
 import { store, useStore } from "@/store/core"
 import { FieldMessage, focusFirstInvalid, TextField } from "../components/form-field"
 import { ROW_MENU_ROW, rowMenuColumn } from "../components/row-menu"
-import { deleteSite, formatCoordinates, saveSite, setDefaultSite, type SiteErrors, type SiteValues, siteValues, TIME_ZONES, unmatchedCaptureSites, validateSite } from "../lib/sites"
+import { deleteSite, formatCoordinates, remindersMoveWith, saveSite, setDefaultSite, type SiteErrors, type SiteValues, siteValues, TIME_ZONES, unmatchedCaptureSites, validateSite } from "../lib/sites"
 import { ReturnNotice } from "./settings-layout"
 
 function SiteDialog({
@@ -41,7 +41,9 @@ function SiteDialog({
   const form = useRef<HTMLFormElement>(null)
   const id = useId()
   const defaultSiteId = useStore((s) => s.settings.defaultSiteId)
+  const reminderSite = useStore((s) => (s.catalog.reminders.enabled ? s.catalog.reminders.siteId : null))
   const site = editing?.site ?? null
+  const isDefault = site !== null && site.id === defaultSiteId
 
   useEffect(() => {
     if (!editing) return
@@ -138,13 +140,23 @@ function SiteDialog({
             </FieldSet>
             <TextField id={`${id}-alt`} label="Minimum altitude (°)" value={values.minAltitude} onChange={set("minAltitude")} error={errors.minAltitude} inputMode="decimal" description="0 to 90." />
           </div>
-          <label htmlFor={`${id}-default`} className="flex items-start gap-2 text-sm">
-            <Checkbox id={`${id}-default`} checked={makeDefault} onCheckedChange={(checked) => setMakeDefault(checked)} className="mt-0.5" />
-            <span>
-              Set as default site
-              <span className="block text-xs text-muted-foreground">Notifications for planned Targets use the default site only.</span>
-            </span>
-          </label>
+          {isDefault ? (
+            // The default is cleared only by choosing another site, so an unchecked box would promise a change that never happens.
+            <p className="text-sm">
+              This is the default site.
+              <span className="block text-xs text-muted-foreground">Notifications for planned Targets use it. Choose Set as default on another site to change it.</span>
+            </p>
+          ) : (
+            <label htmlFor={`${id}-default`} className="flex items-start gap-2 text-sm">
+              <Checkbox id={`${id}-default`} checked={makeDefault} onCheckedChange={(checked) => setMakeDefault(checked)} className="mt-0.5" />
+              <span>
+                Set as default site
+                <span className="block text-xs text-muted-foreground">
+                  Notifications for planned Targets use the default site only.{reminderSite && reminderSite !== site?.id ? " Reminders move to this site too." : ""}
+                </span>
+              </span>
+            </label>
+          )}
           {writeError ? <ActionError message={writeError} onRetry={submit} /> : null}
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
@@ -165,6 +177,7 @@ export function SitesPage() {
   const [editing, setEditing] = useState<{ site: ObservingSite | null; prefill?: Partial<SiteValues> } | null>(null)
   const [removing, setRemoving] = useState<ObservingSite | null>(null)
   const [defaultError, setDefaultError] = useState<{ site: ObservingSite; message: string } | null>(null)
+  const [confirmDefault, setConfirmDefault] = useState<ObservingSite | null>(null)
   const opener = useRef<HTMLElement | null>(null)
 
   function openEditor(next: { site: ObservingSite | null; prefill?: Partial<SiteValues> }, from: HTMLElement | null) {
@@ -173,8 +186,14 @@ export function SitesPage() {
   }
 
   function makeDefault(site: ObservingSite) {
+    // Reminders follow the default site; moving them is scope-changing, so it is confirmed first (HLD §9, PLAN-FR-03).
+    if (remindersMoveWith(store.getState(), site.id) && confirmDefault === null) {
+      setConfirmDefault(site)
+      return
+    }
     const result = setDefaultSite(site)
     setDefaultError(result.ok ? null : { site, message: result.message })
+    return result
   }
 
   const addButton = (
@@ -281,6 +300,19 @@ export function SitesPage() {
         confirmLabel="Remove site"
         tone="destructive"
         onConfirm={() => (removing ? deleteSite(removing) : undefined)}
+      />
+      <ConfirmDialog
+        open={confirmDefault !== null}
+        onOpenChange={(open) => !open && setConfirmDefault(null)}
+        title={`Make ${confirmDefault?.name ?? "this site"} the default site?`}
+        description="Reminders always use the default site, so they move with it."
+        changes={[
+          `${confirmDefault?.name ?? "This site"} becomes the default site`,
+          `Reminders switch from ${sites.find((s) => s.id === reminders.siteId)?.name ?? "the previous site"} to ${confirmDefault?.name ?? "this site"}`,
+        ]}
+        unchanged={["Every site's coordinates and settings", "Reminder lead time and notification permission"]}
+        confirmLabel="Make default"
+        onConfirm={() => (confirmDefault ? makeDefault(confirmDefault) : undefined)}
       />
     </div>
   )

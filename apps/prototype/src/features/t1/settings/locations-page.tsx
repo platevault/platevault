@@ -192,9 +192,11 @@ export function LocationsPage() {
       .filter((op) => op.kind === "index")
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0],
   )
-  const [adding, setAdding] = useState<{ role: LocationRole | null } | null>(
-    search.add && (ROLE_ORDER as string[]).includes(search.add) ? { role: search.add as LocationRole } : null,
-  )
+  const [adding, setAdding] = useState<{ role: LocationRole | null } | null>(null)
+  // The palette command and the checklist link set ?add= while this page may already be open; the route stays mounted, so follow the search.
+  useEffect(() => {
+    if (search.add && (ROLE_ORDER as string[]).includes(search.add)) setAdding({ role: search.add as LocationRole })
+  }, [search.add])
   const [editing, setEditing] = useState<Location | null>(null)
   const [removing, setRemoving] = useState<Location | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
@@ -241,8 +243,9 @@ export function LocationsPage() {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => actions.chooseAgain(location)}>Choose folder again</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" disabled={frames > 0} onClick={() => setRemoving(location)}>
-              {frames > 0 ? `Remove (holds ${plural(frames, "frame")})` : "Remove"}
+            <DropdownMenuItem variant="destructive" disabled={frames > 0} onClick={() => setRemoving(location)} className={frames > 0 ? "flex-col items-start gap-0.5" : undefined}>
+              Remove
+              {frames > 0 ? <span className="text-xs text-muted-foreground">Holds {plural(frames, "indexed frame")}. Use Locate or remap instead.</span> : null}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -301,6 +304,7 @@ export function LocationsPage() {
                   {rows.map((location) => (
                     <LocationRow
                       key={location.id}
+                      headingLevel={4}
                       location={location}
                       current={highlight === location.id || search.locationId === location.id}
                       actions={rowActions(location)}
