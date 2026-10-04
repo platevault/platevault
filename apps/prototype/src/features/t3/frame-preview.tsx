@@ -21,7 +21,7 @@ import type { Asset, DiskFile, FrameHeader, FrameMeasurement, Metric, MetricKey 
 import { HEADER_KEYWORDS } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { builtInMetrics, type FrameMeasureState, formatMetric, importedMetricsOf, METRIC_LABEL } from "./measure"
+import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, formatMetric, METRIC_LABEL } from "./measure"
 import { type CutoutKind, detectedStars, renderCutout, renderWindow, type StarField, type StarRecord, starField, type Stretch, type ViewWindow } from "./raster"
 
 type Zoom = "fit" | "1" | "2"
@@ -115,7 +115,7 @@ function StarDetail({ field, star, scaleArcsec }: { field: StarField; star: Star
 
 function MetricTable({ record, state, applies }: { record: FrameMeasurement | undefined; state: FrameMeasureState; applies: boolean }) {
   const builtIn = applies ? builtInMetrics(record) : []
-  const imported = importedMetricsOf(record)
+  const imported = currentImportedMetrics(record, applies)
   const byKey = (list: Metric[], key: MetricKey) => list.find((m) => m.key === key)
   const warning = builtIn.find((m) => m.warning)?.warning
   return (
@@ -443,11 +443,11 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
         <CollapsibleContent className="space-y-4 border-t p-3">
           <section className="space-y-1.5">
             <h4 className="text-xs font-medium text-muted-foreground">Measurement provenance</h4>
-            {[...(applies ? builtInMetrics(record) : []), ...importedMetricsOf(record)].length === 0 ? (
+            {[...(applies ? builtInMetrics(record) : []), ...currentImportedMetrics(record, applies)].length === 0 ? (
               <p className="text-sm text-muted-foreground">No measurement applies to this frame's current bytes.</p>
             ) : (
               <ul className="space-y-1.5 text-xs">
-                {[...(applies ? builtInMetrics(record) : []), ...importedMetricsOf(record)].map((m) => (
+                {[...(applies ? builtInMetrics(record) : []), ...currentImportedMetrics(record, applies)].map((m) => (
                   <li key={`${m.source}-${m.key}`} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
                     <span className="text-muted-foreground">
                       {METRIC_LABEL[m.key]} ({m.source})

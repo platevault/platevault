@@ -62,9 +62,18 @@ export function importedMetricsOf(record: FrameMeasurement | undefined): Metric[
   return record?.metrics.filter((m) => m.source === "imported") ?? []
 }
 
+/**
+ * Imported metrics that describe the frame's current bytes (PIX-AC-10): those
+ * of a record that applies, or of a record no built-in run has pinned to bytes yet.
+ */
+export function currentImportedMetrics(record: FrameMeasurement | undefined, applies: boolean): Metric[] {
+  return applies || record?.inputSha256 === null ? importedMetricsOf(record) : []
+}
+
+/** History entry for a record: built-in and imported values stay with the bytes they describe. */
 function snapshot(record: FrameMeasurement): MeasurementRecord | null {
   if (!record.inputSha256 || !record.computedAt || record.state === "pending" || record.state === "verifying") return null
-  return { inputSha256: record.inputSha256, state: record.state, metrics: builtInMetrics(record), computedAt: record.computedAt }
+  return { inputSha256: record.inputSha256, state: record.state, metrics: record.metrics, computedAt: record.computedAt }
 }
 
 /**
@@ -133,12 +142,12 @@ function verifyOne(state: PrototypeState, id: AssetId, payload: MeasurePayload):
     state: "valid",
     inputSha256: earlier.inputSha256,
     computedAt: earlier.computedAt,
-    metrics: [...earlier.metrics, ...importedMetricsOf(record)],
+    metrics: earlier.metrics,
     history: [...(current ? [current] : []), ...record.history.filter((h) => h !== earlier)],
   }
 }
 
-/** Measure one frame from its current bytes; the earlier record becomes history, imported values stay. */
+/** Measure one frame from its current bytes; the earlier record, imported values included, becomes history. */
 function measureOne(state: PrototypeState, id: AssetId, payload: MeasurePayload): FrameMeasurement | null {
   const asset = state.catalog.assets[id]
   const file = asset ? currentFile(state.disk, state.catalog, asset) : undefined
@@ -153,7 +162,7 @@ function measureOne(state: PrototypeState, id: AssetId, payload: MeasurePayload)
   payload.measured += 1
   return {
     ...result,
-    metrics: [...result.metrics, ...importedMetricsOf(previous)],
+    metrics: earlier ? result.metrics : [...result.metrics, ...importedMetricsOf(previous)],
     history: [...(earlier ? [earlier] : []), ...(previous?.history ?? [])],
   }
 }

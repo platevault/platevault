@@ -28,7 +28,7 @@ import { rejectForProject, resolveImportRow, setFrameUi, setLibraryQuality } fro
 import { SelectField } from "./fields"
 import { FramePreview } from "./frame-preview"
 import { frameName, ImportDialog } from "./import-dialog"
-import { builtInMetrics, type FrameMeasureState, frameMeasureState, formatMetric, importedMetricsOf, latestMeasureOp, METRIC_LABEL, startMeasurement, unfinishedCount } from "./measure"
+import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, frameMeasureState, formatMetric, latestMeasureOp, METRIC_LABEL, startMeasurement, unfinishedCount } from "./measure"
 import { MeasurementPlot } from "./measurement-plot"
 import { currentFile, excludeFrames, type MemberState, memberState, pixelScaleFor, restoreFrames, sessionLabel } from "./model"
 import { registerFrameCommands } from "./shell"
@@ -77,7 +77,7 @@ function buildRows(catalog: Catalog, ids: AssetId[], content: { included: AssetI
       state,
       applies,
       builtIn: applies ? byKey(builtInMetrics(record)) : {},
-      imported: byKey(importedMetricsOf(record)),
+      imported: byKey(currentImportedMetrics(record, applies)),
       rejected: asset.id in projectRejections,
     }
   })
