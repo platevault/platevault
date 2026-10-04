@@ -668,6 +668,11 @@ impl Catalog {
 
     /// Terminate a Running scan as Failed or Canceled with a durable reason.
     ///
+    /// The reason is recorded on the operation scope only; the location and its
+    /// assets keep their state. A Failed scope on an available location reads as
+    /// Unreadable, a known location failure (Offline, `IdentityConflict`) is kept,
+    /// and a cancellation makes no availability claim about its scope.
+    ///
     /// # Errors
     /// `InvalidInput` for another state, an empty reason or a finished scan.
     pub async fn abort_scan(
@@ -686,7 +691,11 @@ impl Catalog {
             let op = load_operation_row(conn, operation_id).await?;
             require_running(&op)?;
             let location = load_location(conn, op.location_id).await?;
-            add_issue(conn, op.id, &op.scope, reason, location.availability).await?;
+            let availability = match (state, location.availability) {
+                (ScanState::Failed, Availability::Available) => Availability::Unreadable,
+                (_, availability) => availability,
+            };
+            add_issue(conn, op.id, &op.scope, reason, availability).await?;
             let mut incomplete = op.incomplete.clone();
             push_unique(&mut incomplete, op.scope.clone());
             finalize_operation(conn, op.id, state, &op.progress, &[], &incomplete).await?;
@@ -3245,6 +3254,7 @@ where
         }
     }
     let lineage = regroup(conn, &changed, grouping, Cause::Correction(correction_id)).await?;
+    invalidate_inferences(conn, &changed).await?;
     let ids: BTreeSet<Uuid> = by_asset.keys().copied().collect();
     let assets = load_assets(conn, &ids).await?;
     let current: BTreeSet<Uuid> = current_session_of(conn, &ids).await?.into_values().collect();
@@ -3255,6 +3265,36 @@ where
         None => Vec::new(),
     };
     Ok(CorrectionOutcome { correction_id, assets, sessions, predecessors, lineage })
+}
+
+/// Inferred (non-Confirmed) associations of the current sessions holding changed
+/// assets were assessed on pre-correction evidence; they are kept for history
+/// but marked `NeedsReview` in the correction transaction so coverage never
+/// counts them. Confirmed associations are explicit decisions and stay intact.
+async fn invalidate_inferences(
+    conn: &mut SqliteConnection,
+    changed: &BTreeSet<Uuid>,
+) -> Result<()> {
+    if changed.is_empty() {
+        return Ok(());
+    }
+    let sessions: BTreeSet<Uuid> = current_session_of(conn, changed).await?.into_values().collect();
+    let updated_at = now()?;
+    for session in sessions {
+        let basis = member_basis(conn, session).await?;
+        for mut association in load_associations(conn, session).await? {
+            if matches!(
+                association.state,
+                AssociationState::Confirmed | AssociationState::NeedsReview
+            ) {
+                continue;
+            }
+            association.state = AssociationState::NeedsReview;
+            association.observation_basis.clone_from(&basis);
+            upsert_association(conn, &association, &updated_at).await?;
+        }
+    }
+    Ok(())
 }
 
 async fn load_preview(conn: &mut SqliteConnection, id: Uuid) -> Result<CorrectionPreview> {
