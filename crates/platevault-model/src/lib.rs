@@ -668,6 +668,8 @@ pub struct ScanObservation {
 #[serde(rename_all = "camelCase")]
 pub struct ScanOperation {
     pub id: Uuid,
+    #[serde(default)]
+    pub revision: Revision,
     pub location_id: Uuid,
     pub state: ScanState,
     pub progress: ScanProgress,
