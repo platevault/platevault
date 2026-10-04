@@ -3301,9 +3301,10 @@ where
 }
 
 /// Inferred (non-Confirmed) associations of the current sessions holding changed
-/// assets were assessed on pre-correction evidence; they are kept for history
-/// but marked `NeedsReview` in the correction transaction so coverage never
-/// counts them. Confirmed associations are explicit decisions and stay intact.
+/// assets were assessed on other evidence; they are marked `NeedsReview` in the
+/// same transaction so coverage never counts them. Their recorded basis stays
+/// the historical one they were assessed against until a fresh assessment is
+/// recorded. Confirmed and already invalidated associations are left untouched.
 async fn invalidate_inferences(
     conn: &mut SqliteConnection,
     changed: &BTreeSet<Uuid>,
@@ -3314,7 +3315,6 @@ async fn invalidate_inferences(
     let sessions: BTreeSet<Uuid> = current_session_of(conn, changed).await?.into_values().collect();
     let updated_at = now()?;
     for session in sessions {
-        let basis = member_basis(conn, session).await?;
         for mut association in load_associations(conn, session).await? {
             if matches!(
                 association.state,
@@ -3323,7 +3323,6 @@ async fn invalidate_inferences(
                 continue;
             }
             association.state = AssociationState::NeedsReview;
-            association.observation_basis.clone_from(&basis);
             upsert_association(conn, &association, &updated_at).await?;
         }
     }
