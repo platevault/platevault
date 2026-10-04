@@ -19,19 +19,28 @@ export interface KeyValueItem {
   source?: string
 }
 
+/**
+ * Label/value pairs with optional source notes. Layout follows the space the
+ * list actually has (a container query, so it also follows text zoom): two
+ * columns of pairs from 46rem when `columns={2}`, label beside value from
+ * 22rem, and label above value below that. Nothing scrolls sideways at 200%
+ * text (WCAG 1.4.4, 1.4.10). Source notes use the data face and wrap.
+ */
 export function KeyValueList({ items, className, columns = 1 }: { items: KeyValueItem[]; className?: string; columns?: 1 | 2 }) {
   return (
-    <dl className={cn("grid gap-x-6 gap-y-2 text-sm", columns === 2 ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1", className)}>
-      {items.map((item) => (
-        <div key={item.label} className="grid min-w-0 grid-cols-[10rem_minmax(0,1fr)] items-baseline gap-3">
-          <dt className="text-muted-foreground">{item.label}</dt>
-          <dd className={cn("min-w-0 tabular-nums", item.mono && "font-mono text-xs break-all")}>
-            {item.value}
-            {item.source ? <span className="ml-2 text-xs text-muted-foreground">{item.source}</span> : null}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <div className={cn("@container/kv min-w-0", className)}>
+      <dl className={cn("grid grid-cols-1 gap-x-6 gap-y-2 text-sm", columns === 2 && "@min-[46rem]/kv:grid-cols-2")}>
+        {items.map((item) => (
+          <div key={item.label} className="grid min-w-0 grid-cols-1 gap-0.5 @min-[22rem]/kv:grid-cols-[10rem_minmax(0,1fr)] @min-[22rem]/kv:items-baseline @min-[22rem]/kv:gap-3">
+            <dt className="text-muted-foreground">{item.label}</dt>
+            <dd className={cn("min-w-0 tabular-nums [overflow-wrap:anywhere]", item.mono && "font-mono text-xs break-all")}>
+              {item.value}
+              {item.source ? <span className="ml-2 font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">{item.source}</span> : null}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   )
 }
 
@@ -142,33 +151,34 @@ export function ChannelCoverage({ channel, breakdown, goalS }: ChannelCoveragePr
         />
         {goalS ? <div className="absolute inset-y-0 w-0.5 bg-foreground" style={{ left: `calc(${pct(goalS)} - 1px)` }} /> : null}
       </div>
+      {/* Pairs wrap value under label when a cell is narrow (200% text), so nothing spills into the next cell. */}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs tabular-nums sm:grid-cols-4">
-        <div className="flex gap-1.5">
+        <div className="flex min-w-0 flex-wrap gap-x-1.5">
           <dt className="text-muted-foreground">Captured</dt>
           <dd>{formatDuration(breakdown.captured.seconds)}</dd>
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex min-w-0 flex-wrap gap-x-1.5">
           <dt className="text-muted-foreground">Usable</dt>
           <dd>{formatDuration(breakdown.usable.seconds)}</dd>
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex min-w-0 flex-wrap gap-x-1.5">
           <dt className="text-muted-foreground">Unreviewed</dt>
           <dd>{formatDuration(breakdown.unreviewed.seconds)}</dd>
         </div>
         {breakdown.unavailable.frames > 0 ? (
-          <div className="flex gap-1.5 text-warning">
+          <div className="flex min-w-0 flex-wrap gap-x-1.5 text-warning">
             <dt>Unavailable</dt>
             <dd>{formatDuration(breakdown.unavailable.seconds)}</dd>
           </div>
         ) : null}
         {breakdown.changedContent.frames > 0 ? (
-          <div className="flex gap-1.5 text-warning">
+          <div className="flex min-w-0 flex-wrap gap-x-1.5 text-warning">
             <dt>Changed content</dt>
             <dd>{formatDuration(breakdown.changedContent.seconds)}</dd>
           </div>
         ) : null}
         {breakdown.verificationPending.frames > 0 ? (
-          <div className="flex gap-1.5">
+          <div className="flex min-w-0 flex-wrap gap-x-1.5">
             <dt className="text-muted-foreground">Verification pending</dt>
             <dd>{formatDuration(breakdown.verificationPending.seconds)}</dd>
           </div>
