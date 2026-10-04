@@ -150,10 +150,17 @@ function TargetPlan({ target }: { target: Target }) {
         description="Astronomical windows from a planning site you choose. Planning changes no library, Project or session data and starts no indexing."
         meta={plan?.planned ? <StatusBadge kind="association" value="confirmed" label="Planned" /> : null}
         actions={
-          <Button variant="outline" disabled={windows.length === 0} onClick={() => setExportOpen(true)}>
-            <CalendarDays aria-hidden="true" data-icon="inline-start" />
-            Export calendar
-          </Button>
+          <>
+            {windows.length === 0 ? (
+              <span id="t5-export-reason" className="text-xs text-muted-foreground">
+                No windows to export: choose a planning site or relax the criteria.
+              </span>
+            ) : null}
+            <Button variant="outline" disabled={windows.length === 0} aria-describedby={windows.length === 0 ? "t5-export-reason" : undefined} onClick={() => setExportOpen(true)}>
+              <CalendarDays aria-hidden="true" data-icon="inline-start" />
+              Export calendar
+            </Button>
+          </>
         }
       />
       <PageBody>
@@ -344,7 +351,7 @@ function TargetPlan({ target }: { target: Target }) {
                 setPlannedError(result.ok ? null : result.message)
               }}
             />
-            <Label htmlFor="t5-planned">{target.name} is Planned</Label>
+            <Label htmlFor="t5-planned">Planned</Label>
             {plannedError ? <ActionError message={plannedError} className="w-full" /> : null}
           </div>
         </Section>

@@ -144,7 +144,7 @@ function TransferPlanner({ kind }: { kind: TransferKind }) {
         ) : i.collision ? (
           <span className="text-xs text-destructive">Blocked: destination already exists; nothing is overwritten</span>
         ) : (
-          <span className="text-xs text-muted-foreground">Ready</span>
+          <span className="text-xs text-muted-foreground">{i.destinationPath ? "Ready" : "Needs a destination"}</span>
         ),
     },
   ]
@@ -452,14 +452,14 @@ export function TransferPage() {
   const payload = op.payload as unknown as TransferPayload
   const records = payload.records
   const count = (fn: (r: TransferRecord) => boolean) => records.filter(fn).length
+  // Exclusive buckets: every item is in exactly one, so the counts add up to the item total.
   const phases = [
-    { label: "Destination verified", value: count((r) => !r.blocked && (r.phase === "verified" || r.phase === "referenced" || r.phase === "retired")) },
-    { label: "Reference updated", value: count((r) => !r.blocked && (r.phase === "referenced" || r.phase === "retired")) },
+    { label: "Pending", value: count((r) => !r.blocked && r.uncertain === null && (r.phase === "pending" || r.phase === "copied" || r.phase === "written")) },
+    { label: "Uncertain", value: count((r) => !r.blocked && r.uncertain !== null) },
+    { label: "Destination verified", value: count((r) => !r.blocked && r.phase === "verified") },
+    { label: "Reference updated", value: count((r) => !r.blocked && r.phase === "referenced") },
     { label: "Source retired", value: count((r) => r.phase === "retired") },
-    { label: "Source retained", value: count((r) => r.phase !== "retired") },
-    { label: "Pending", value: count((r) => !r.blocked && r.phase === "pending") },
     { label: "Blocked", value: count((r) => r.blocked !== null) },
-    { label: "Uncertain", value: count((r) => r.uncertain !== null && !r.blocked) },
   ]
   const views = (op.scope.viewIds ?? []).map((id) => catalog.views[id]).filter((v): v is View => v !== undefined)
   const held = op.status === "paused" && payload.held ? records.find((r) => r.assetId === payload.holdAssetId) : undefined
@@ -523,8 +523,8 @@ export function TransferPage() {
           </Notice>
         ) : null}
 
-        <Section id="t5-transfer-phases" title="Recorded phases" description="Every item's phase is journaled. Retry resumes this record and never trusts a file name alone.">
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+        <Section id="t5-transfer-phases" title="Recorded phases" description="Every item is in exactly one phase, and every phase is journaled. Retry resumes this record and never trusts a file name alone.">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {phases.map((p) => (
               <div key={p.label} className="rounded-md border px-3 py-2">
                 <dt className="text-xs text-muted-foreground">{p.label}</dt>
@@ -535,6 +535,7 @@ export function TransferPage() {
           <KeyValueList
             columns={2}
             items={[
+              { label: "Sources retained", value: `${formatCount(count((r) => r.phase !== "retired"))} of ${formatCount(records.length)}` },
               { label: "Destination", value: payload.destination, mono: true },
               { label: "Destination identity", value: payload.destinationVolumeUuid, mono: true },
               { label: "Expected reclaim", value: payload.sameVolume ? "None: same-volume move" : formatBytes(payload.expectedReclaimBytes) },
@@ -642,12 +643,31 @@ function EvidenceBody({ record, payload, disk }: { record: TransferRecord; paylo
           { label: "Snapshot copied", value: record.snapshotSha ?? "Not copied yet", mono: true },
           {
             label: "Source now",
-            value: record.phase === "retired" ? "Retired after verification" : source ? `${source.sha256}${sourceMatches === false ? " (differs from snapshot)" : sourceMatches ? " (matches snapshot)" : ""}` : "Not found",
+            value:
+              record.phase === "retired" ? (
+                "Retired after verification"
+              ) : source ? (
+                <>
+                  {source.sha256}
+                  {sourceMatches === false ? <span className="font-sans font-medium text-destructive"> (differs from snapshot)</span> : sourceMatches ? " (matches snapshot)" : ""}
+                </>
+              ) : (
+                "Not found"
+              ),
             mono: true,
           },
           {
             label: "Destination now",
-            value: !destinationMounted ? "Offline" : destination ? `${destination.sha256}${destination.sha256 === record.snapshotSha ? " (matches snapshot)" : " (does not match)"}` : "Not written",
+            value: !destinationMounted ? (
+              "Offline"
+            ) : destination ? (
+              <>
+                {destination.sha256}
+                {destination.sha256 === record.snapshotSha ? " (matches snapshot)" : <span className="font-sans font-medium text-destructive"> (does not match)</span>}
+              </>
+            ) : (
+              "Not written"
+            ),
             mono: true,
           },
           { label: "Source path", value: record.sourcePath, mono: true },

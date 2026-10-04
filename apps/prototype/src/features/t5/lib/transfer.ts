@@ -523,10 +523,12 @@ export function stepTransfer(state: PrototypeState, op: Operation): PrototypeSta
     )
     const retained = records.filter((r) => r.phase !== "retired").length
     const verified = records.filter((r) => !r.blocked && (r.phase === "verified" || r.phase === "referenced")).length
+    // A Retry that finds the volume still missing says so, instead of silently re-reading the same summary.
+    const retried = resumed && payload.lastStepAt !== null ? `Retry at ${formatDateTime(now)} found the destination still unavailable. ` : ""
     const why =
       mounted && mounted.volumeUuid !== payload.destinationVolumeUuid
-        ? `A different volume is mounted at ${mounted.mountPath} (identity ${mounted.volumeUuid}, expected ${payload.destinationVolumeUuid}).`
-        : `${destVolume?.name ?? "The destination"} disconnected during the transfer.`
+        ? `${retried}A different volume is mounted at ${mounted.mountPath} (identity ${mounted.volumeUuid}, expected ${payload.destinationVolumeUuid}).`
+        : `${retried}${destVolume?.name ?? "The destination"} ${retried ? "is still disconnected" : "disconnected during the transfer"}.`
     return persist({}, {
       status: "interrupted",
       summary: `${why} ${verified} ${verified === 1 ? "item keeps" : "items keep"} a verified destination; ${retained} ${retained === 1 ? "source is" : "sources are"} retained. Retry revalidates the volume identity and each recorded item before resuming.`,

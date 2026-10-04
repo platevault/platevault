@@ -70,6 +70,17 @@ function ReminderOverlay() {
     if (visible.length > 0 && !open) el.showPopover()
     if (visible.length === 0 && open) el.hidePopover()
   }, [visible.length])
+  useEffect(() => {
+    if (visible.length === 0) return
+    // WCAG 2.4.11: Escape hides the stack without moving focus, so a focused control is never left covered.
+    // A dialog's own Escape wins: while one is open the stack stays.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || document.querySelector('[role="dialog"], [role="alertdialog"]')) return
+      updateSlice("t5", (s) => ({ ...s, notifications: s.notifications.map((x) => (x.dismissed ? x : { ...x, dismissed: true })) }))
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [visible.length])
   return (
     <div
       ref={ref}
@@ -83,7 +94,7 @@ function ReminderOverlay() {
             <div className="flex items-start gap-2">
               <Bell aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1 space-y-0.5">
-                <p className="text-xs text-muted-foreground">Simulated OS notification · PlateVault · {formatDateTime(n.at)}</p>
+                <p className="text-xs text-muted-foreground">Simulated OS notification · PlateVault · {formatDateTime(n.at)} · Esc hides</p>
                 <p className="font-medium text-pretty">{n.title}</p>
                 <p className="text-pretty text-muted-foreground">{n.body}</p>
               </div>
