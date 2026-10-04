@@ -8,10 +8,10 @@
  */
 import { Link, useParams } from "@tanstack/react-router"
 import { Goal } from "lucide-react"
-import { useEffect, useId, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { PathText } from "@/components/app/data"
 import { type Column, DataTable } from "@/components/app/data-table"
-import { ActionError, EmptyState, UnknownValue } from "@/components/app/feedback"
+import { ActionError, EmptyState, SaveState, UnknownValue } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
@@ -22,11 +22,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { captureSite, type ChecklistProgress, MIN_FOOTPRINT_OVERLAP, projectProgress, viewStatus } from "@/domain/derive"
 import type { Catalog, Project, SessionId } from "@/domain/types"
 import { formatCount, formatDuration, formatExposure, plural } from "@/lib/format"
-import { store, useStore } from "@/store/core"
+import { type CommitResult, store, useStore } from "@/store/core"
 import { type ProjectPatch, updateProject } from "../actions"
 import { acceptedResultsForViews, checklistCriterion, sessionLabel, sessionRow, type SessionRow } from "../model"
-import { AssociationBadge, FlowStatus, useCommitFlow } from "../parts"
-import { AddChecklistItem, LabeledSelect, PanelsEditor, SessionLinkPicker, TargetsEditor } from "../project-form"
+import { AssociationBadge, type CommitFlow, FlowStatus, useCommitFlow } from "../parts"
+import { AddChecklistItem, LabeledSelect, PanelsEditor, removeKeepingFocus, SessionLinkPicker, TargetsEditor } from "../project-form"
 
 export function ProjectPage() {
   const { projectId = "" } = useParams({ strict: false }) as { projectId?: string }
@@ -68,26 +68,52 @@ function ProjectDetail({ projectId }: { projectId: string }) {
       .filter((x) => x !== undefined)
       .map((session): LinkedRow => ({ ...sessionRow(s, session), site: captureSite(s.catalog, session)?.name ?? null })),
   )
-  const flow = useCommitFlow()
+  // One status per edited section, shown beside the edit (D08).
+  const checklistFlow = useCommitFlow()
+  const linkedFlow = useCommitFlow()
+  const framingFlow = useCommitFlow()
   const [editOpen, setEditOpen] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const views = Object.values(catalog.views).filter((v) => v.projectId === projectId)
   const products = acceptedResultsForViews(catalog, views)
   const train = project.equipmentId ? catalog.opticalTrains[project.equipmentId] : undefined
   const rejected = Object.keys(project.rejections).length
+  const lockedReason = project.targetIds.length + project.panels.length === 1 ? "A Project needs a Target or a panel" : undefined
 
   const linkSessionsId = useId()
   const [linkageNote, setLinkageNote] = useState("")
 
-  function edit(patch: ProjectPatch, what: string) {
-    return flow.run(() => updateProject(projectId, patch, store.getState().catalog.projects[projectId]?.revision ?? project.revision, what))
+  // The Project revision your edits started from (D08). Your own saves move it,
+  // so only a change made elsewhere is refused; Retry re-sends the same base.
+  const base = useRef(project.revision)
+  function refreshBase() {
+    base.current = store.getState().catalog.projects[projectId]?.revision ?? base.current
+  }
+
+  /** `onSaved` runs inside the action, so a successful Retry also clears the editor that asked for the change. */
+  function edit(flow: CommitFlow, patch: ProjectPatch, what: string, onSaved?: () => void): CommitResult {
+    const expected = base.current
+    return flow.run(() => {
+      const result = updateProject(projectId, patch, expected, what)
+      if (result.ok) {
+        refreshBase()
+        onSaved?.()
+      }
+      return result
+    })
+  }
+
+  /** Review current revision: the page already shows the record as it is now; later edits start from it, and typed input stays. */
+  function review(flow: CommitFlow) {
+    refreshBase()
+    flow.reset()
   }
 
   /** Unlink, then keep focus in the table: the neighbouring Unlink, or Link sessions… after the last row (WCAG 2.4.3). */
   function unlink(button: HTMLElement, r: LinkedRow) {
     const row = button.closest("tr")
     const neighbour = (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>("[data-unlink]")
-    const result = edit({ linkedSessionIds: project.linkedSessionIds.filter((id) => id !== r.session.id) }, "Session linkage")
+    const result = edit(linkedFlow, { linkedSessionIds: project.linkedSessionIds.filter((id) => id !== r.session.id) }, "Session linkage")
     if (!result.ok) return
     ;(neighbour ?? document.getElementById(linkSessionsId))?.focus()
     setLinkageNote(`Unlinked ${r.label}.`)
@@ -148,7 +174,6 @@ function ProjectDetail({ projectId }: { projectId: string }) {
         }
         title={project.name}
         description={project.notes || undefined}
-        meta={<FlowStatus flow={flow} dirty={false} onReview={flow.reset} />}
         actions={
           <>
             <Button variant="outline" onClick={() => setEditOpen(true)}>
@@ -179,13 +204,18 @@ function ProjectDetail({ projectId }: { projectId: string }) {
                   progress={p}
                   catalog={catalog}
                   project={project}
-                  onRemove={() => edit({ checklist: project.checklist.filter((i) => i.id !== p.item.id) }, "Checklist")}
+                  onRemove={() => edit(checklistFlow, { checklist: project.checklist.filter((i) => i.id !== p.item.id) }, "Checklist").ok}
                 />
               ))}
             </ul>
           )}
-          <div className="rounded-lg border p-3">
-            <AddChecklistItem catalog={catalog} panels={project.panels} onAdd={(item) => edit({ checklist: [...project.checklist, item] }, "Checklist")} />
+          <div className="space-y-3 rounded-lg border p-3">
+            <AddChecklistItem
+              catalog={catalog}
+              panels={project.panels}
+              onAdd={(item, clear) => edit(checklistFlow, { checklist: [...project.checklist, item] }, "Checklist", clear).ok}
+            />
+            <FlowStatus flow={checklistFlow} dirty={false} onReview={() => review(checklistFlow)} />
           </div>
         </Section>
 
@@ -194,9 +224,12 @@ function ProjectDetail({ projectId }: { projectId: string }) {
           title={`Linked sessions (${linked.length})`}
           description="Linked explicitly. The Project has no capture site; each session keeps its own."
           actions={
-            <Button id={linkSessionsId} size="sm" variant="outline" onClick={() => setLinkOpen(true)}>
-              Link sessions…
-            </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <FlowStatus flow={linkedFlow} dirty={false} onReview={() => review(linkedFlow)} />
+              <Button id={linkSessionsId} size="sm" variant="outline" onClick={() => setLinkOpen(true)}>
+                Link sessions…
+              </Button>
+            </div>
           }
         >
           <p role="status" className="sr-only">
@@ -224,15 +257,24 @@ function ProjectDetail({ projectId }: { projectId: string }) {
           />
         </Section>
 
-        <Section id="framing" title="Targets, framing and panels">
+        <Section id="framing" title="Targets, framing and panels" actions={<FlowStatus flow={framingFlow} dirty={false} onReview={() => review(framingFlow)} />}>
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">Targets</h3>
-              <TargetsEditor targetIds={project.targetIds} onChange={(targetIds) => edit({ targetIds }, "Targets")} />
+              <TargetsEditor
+                targetIds={project.targetIds}
+                onChange={(targetIds, clear) => edit(framingFlow, { targetIds }, "Targets", clear).ok}
+                lockedReason={lockedReason}
+              />
             </div>
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">Mosaic panels</h3>
-              <PanelsEditor panels={project.panels} onChange={(panels) => edit({ panels }, "Panels")} checklist={project.checklist} />
+              <PanelsEditor
+                panels={project.panels}
+                onChange={(panels, clear) => edit(framingFlow, { panels }, "Panels", clear).ok}
+                checklist={project.checklist}
+                lockedReason={lockedReason}
+              />
             </div>
           </div>
           <p className="text-sm">
@@ -287,8 +329,8 @@ function ProjectDetail({ projectId }: { projectId: string }) {
           )}
         </Section>
       </PageBody>
-      <EditDetailsDialog open={editOpen} onOpenChange={setEditOpen} project={project} />
-      <LinkSessionsDialog open={linkOpen} onOpenChange={setLinkOpen} project={project} />
+      <EditDetailsDialog open={editOpen} onOpenChange={setEditOpen} project={project} onSaved={refreshBase} />
+      <LinkSessionsDialog open={linkOpen} onOpenChange={setLinkOpen} project={project} onSaved={refreshBase} />
     </div>
   )
 }
@@ -297,7 +339,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
 // Checklist progress (PRJ-FR-04, D10)
 // ---------------------------------------------------------------------------
 
-function ChecklistRow({ progress, catalog, project, onRemove }: { progress: ChecklistProgress; catalog: Catalog; project: Project; onRemove: () => void }) {
+function ChecklistRow({ progress, catalog, project, onRemove }: { progress: ChecklistProgress; catalog: Catalog; project: Project; onRemove: () => boolean }) {
   const { item, totals } = progress
   const criterion = checklistCriterion(catalog, project, item)
   const evidence = progress.evidenceSessionIds.map((id) => catalog.sessions[id]).filter((s) => s !== undefined)
@@ -313,7 +355,7 @@ function ChecklistRow({ progress, catalog, project, onRemove }: { progress: Chec
         <h3 className="text-sm font-medium">{criterion}</h3>
         <div className="flex items-center gap-2">
           <StatusBadge kind="checklist" value={progress.state} />
-          <Button size="sm" variant="ghost" onClick={onRemove}>
+          <Button size="sm" variant="ghost" data-remove="" onClick={(event) => removeKeepingFocus(event.currentTarget, onRemove)}>
             Remove item<span className="sr-only"> {criterion}</span>
           </Button>
         </div>
@@ -379,18 +421,24 @@ function ChecklistRow({ progress, catalog, project, onRemove }: { progress: Chec
 
 const NONE = "none"
 
-function EditDetailsDialog({ open, onOpenChange, project }: { open: boolean; onOpenChange: (open: boolean) => void; project: Project }) {
+/** A dialog's failed save: Retry for a failed write, Review current revision for a stale one (D08). */
+function CommitError({ error, onRetry, onReview }: { error: Extract<CommitResult, { ok: false }> | null; onRetry: () => void; onReview: () => void }) {
+  if (!error) return null
+  return error.reason === "stale" ? <SaveState state="stale" message={error.message} onReview={onReview} /> : <ActionError message={error.message} onRetry={onRetry} />
+}
+
+function EditDetailsDialog({ open, onOpenChange, project, onSaved }: { open: boolean; onOpenChange: (open: boolean) => void; project: Project; onSaved: () => void }) {
   const trains = useStore((s) => s.catalog.opticalTrains)
   const [name, setName] = useState(project.name)
   const [notes, setNotes] = useState(project.notes)
   const [equipmentId, setEquipmentId] = useState<string | null>(project.equipmentId)
   const [base, setBase] = useState(project.revision)
   const [nameError, setNameError] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Extract<CommitResult, { ok: false }> | null>(null)
   const ids = { name: useId(), notes: useId() }
 
-  useEffect(() => {
-    if (!open) return
+  /** The record as it is now: on opening, and on Review current revision after a stale refusal. */
+  function load() {
     const current = store.getState().catalog.projects[project.id] ?? project
     setName(current.name)
     setNotes(current.notes)
@@ -398,6 +446,10 @@ function EditDetailsDialog({ open, onOpenChange, project }: { open: boolean; onO
     setBase(current.revision)
     setNameError(false)
     setError(null)
+  }
+
+  useEffect(() => {
+    if (open) load()
   }, [open])
 
   function save() {
@@ -407,9 +459,10 @@ function EditDetailsDialog({ open, onOpenChange, project }: { open: boolean; onO
     }
     const result = updateProject(project.id, { name: name.trim(), notes: notes.trim(), equipmentId }, base, "Project details")
     if (!result.ok) {
-      setError(result.message)
+      setError(result)
       return
     }
+    onSaved()
     onOpenChange(false)
   }
 
@@ -454,7 +507,7 @@ function EditDetailsDialog({ open, onOpenChange, project }: { open: boolean; onO
             onChange={(value) => setEquipmentId(value === NONE ? null : value)}
             className="w-80"
           />
-          {error ? <ActionError message={error} onRetry={save} /> : null}
+          <CommitError error={error} onRetry={save} onReview={load} />
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
             <Button type="submit">Save details</Button>
@@ -465,25 +518,30 @@ function EditDetailsDialog({ open, onOpenChange, project }: { open: boolean; onO
   )
 }
 
-function LinkSessionsDialog({ open, onOpenChange, project }: { open: boolean; onOpenChange: (open: boolean) => void; project: Project }) {
+function LinkSessionsDialog({ open, onOpenChange, project, onSaved }: { open: boolean; onOpenChange: (open: boolean) => void; project: Project; onSaved: () => void }) {
   const [selected, setSelected] = useState<SessionId[]>(project.linkedSessionIds)
   const [base, setBase] = useState(project.revision)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Extract<CommitResult, { ok: false }> | null>(null)
 
-  useEffect(() => {
-    if (!open) return
+  /** The record as it is now: on opening, and on Review current revision after a stale refusal. */
+  function load() {
     const current = store.getState().catalog.projects[project.id] ?? project
     setSelected(current.linkedSessionIds)
     setBase(current.revision)
     setError(null)
+  }
+
+  useEffect(() => {
+    if (open) load()
   }, [open])
 
   function save() {
     const result = updateProject(project.id, { linkedSessionIds: selected }, base, "Session linkage")
     if (!result.ok) {
-      setError(result.message)
+      setError(result)
       return
     }
+    onSaved()
     onOpenChange(false)
   }
 
@@ -497,7 +555,7 @@ function LinkSessionsDialog({ open, onOpenChange, project }: { open: boolean; on
           <DialogDescription>Only the sessions you check are linked. Linking changes no file, quality decision or View.</DialogDescription>
         </DialogHeader>
         <SessionLinkPicker selected={selected} onChange={setSelected} targetIds={project.targetIds} />
-        {error ? <ActionError message={error} onRetry={save} /> : null}
+        <CommitError error={error} onRetry={save} onReview={load} />
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
           <Button onClick={save}>

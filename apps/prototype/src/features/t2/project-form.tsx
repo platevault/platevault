@@ -6,7 +6,7 @@
  */
 import { Link } from "@tanstack/react-router"
 import { Layers, X } from "lucide-react"
-import { type ReactNode, useId, useState } from "react"
+import { type KeyboardEvent, type ReactNode, useId, useState } from "react"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { EmptyState, UnknownValue } from "@/components/app/feedback"
 import { Button } from "@/components/ui/button"
@@ -64,8 +64,40 @@ export function LabeledSelect({
   )
 }
 
+/**
+ * An editor's report of a change it asked for: `false` when the change was not
+ * saved, so the editor keeps the user's input. New Project drafts always apply.
+ */
+type Applied = boolean | void
+
+/**
+ * Remove a row, then keep focus in the list (WCAG 2.4.3): the neighbouring
+ * Remove, or else the editor's first add control. Nothing moves when the
+ * removal was not saved.
+ */
+export function removeKeepingFocus(button: HTMLElement, remove: () => Applied) {
+  const row = button.closest("li")
+  const neighbour = (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>("[data-remove]")
+  const editor = button.closest("[data-editor]") ?? button.closest("section")
+  if (remove() === false) return
+  // After React commits the removal; the neighbour's node is kept by its key.
+  requestAnimationFrame(() => {
+    const target = neighbour?.isConnected ? neighbour : editor?.querySelector<HTMLElement>("[data-editor-add] :is(button, input, [role=combobox])")
+    target?.focus()
+  })
+}
+
+/** In a sub-form, Enter runs the sub-form's own Add instead of submitting the page form (WCAG 3.2.2). */
+function enterAdds(add: () => void) {
+  return (event: KeyboardEvent<HTMLFieldSetElement>) => {
+    if (event.key !== "Enter" || !(event.target instanceof HTMLInputElement)) return
+    event.preventDefault()
+    add()
+  }
+}
+
 /** A removable row in an editor list; the remove button names the row. */
-function RemovableRow({ children, label, onRemove, disabledReason }: { children: ReactNode; label: string; onRemove: () => void; disabledReason?: string }) {
+function RemovableRow({ children, label, onRemove, disabledReason }: { children: ReactNode; label: string; onRemove: () => Applied; disabledReason?: string }) {
   const reasonId = useId()
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
@@ -80,7 +112,8 @@ function RemovableRow({ children, label, onRemove, disabledReason }: { children:
           type="button"
           size="sm"
           variant="ghost"
-          onClick={onRemove}
+          data-remove=""
+          onClick={(event) => removeKeepingFocus(event.currentTarget, onRemove)}
           disabled={Boolean(disabledReason)}
           focusableWhenDisabled
           aria-describedby={disabledReason ? reasonId : undefined}
@@ -97,7 +130,21 @@ function RemovableRow({ children, label, onRemove, disabledReason }: { children:
 // Targets and framing
 // ---------------------------------------------------------------------------
 
-export function TargetsEditor({ targetIds, onChange, error, errorId }: { targetIds: TargetId[]; onChange: (ids: TargetId[]) => void; error?: string; errorId?: string }) {
+export function TargetsEditor({
+  targetIds,
+  onChange,
+  error,
+  errorId,
+  lockedReason,
+}: {
+  targetIds: TargetId[]
+  /** `clear` empties the add control; the caller runs it when a later Retry saves the change. */
+  onChange: (ids: TargetId[], clear?: () => void) => Applied
+  error?: string
+  errorId?: string
+  /** Why no Target can be removed, e.g. it is the Project's last Target or panel. */
+  lockedReason?: string
+}) {
   const targets = useStore((s) => s.catalog.targets)
   const [adding, setAdding] = useState<string | null>(null)
   const remaining = Object.values(targets)
@@ -107,11 +154,11 @@ export function TargetsEditor({ targetIds, onChange, error, errorId }: { targetI
   const framingTarget = targetIds.map((id) => targets[id]).find((t) => t && t.ra !== null && t.dec !== null)
   const SOURCE = { catalog: "catalog coordinates", user: "coordinates entered by you", resolver: "resolver coordinates", unknown: "" } as const
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-editor="">
       {targetIds.length > 0 ? (
         <ul className="divide-y rounded-lg border px-3">
           {targetIds.map((id) => (
-            <RemovableRow key={id} label={targets[id]?.name ?? id} onRemove={() => onChange(targetIds.filter((t) => t !== id))}>
+            <RemovableRow key={id} label={targets[id]?.name ?? id} onRemove={() => onChange(targetIds.filter((t) => t !== id))} disabledReason={lockedReason}>
               <Link to="/targets/$targetId" params={{ targetId: id }} className="font-medium underline-offset-2 hover:underline">
                 {targets[id]?.name ?? "Removed Target"}
               </Link>
@@ -122,7 +169,7 @@ export function TargetsEditor({ targetIds, onChange, error, errorId }: { targetI
         <p className="text-sm text-muted-foreground">No Target yet. Add one, or add a mosaic panel below.</p>
       )}
       {remaining.length > 0 ? (
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="flex flex-wrap items-end gap-2" data-editor-add="">
           <LabeledSelect label="Add a Target" value={adding} items={remaining} onChange={setAdding} placeholder="Choose a Target" />
           <Button
             type="button"
@@ -131,8 +178,8 @@ export function TargetsEditor({ targetIds, onChange, error, errorId }: { targetI
             focusableWhenDisabled
             onClick={() => {
               if (!adding) return
-              onChange([...targetIds, adding])
-              setAdding(null)
+              const clear = () => setAdding(null)
+              if (onChange([...targetIds, adding], clear) !== false) clear()
             }}
           >
             Add Target
@@ -178,7 +225,19 @@ interface PanelForm {
 
 const EMPTY_PANEL: PanelForm = { name: "", ra: "", dec: "", width: "", height: "", rotation: "0" }
 
-export function PanelsEditor({ panels, onChange, checklist }: { panels: MosaicPanel[]; onChange: (panels: MosaicPanel[]) => void; checklist: ChecklistItem[] }) {
+export function PanelsEditor({
+  panels,
+  onChange,
+  checklist,
+  lockedReason,
+}: {
+  panels: MosaicPanel[]
+  /** `clear` empties the add form; the caller runs it when a later Retry saves the change. */
+  onChange: (panels: MosaicPanel[], clear?: () => void) => Applied
+  checklist: ChecklistItem[]
+  /** Why no panel can be removed, e.g. it is the Project's last Target or panel. */
+  lockedReason?: string
+}) {
   const [form, setForm] = useState<PanelForm>(EMPTY_PANEL)
   const [errors, setErrors] = useState<Partial<Record<keyof PanelForm, string>>>({})
   const ids = { name: useId(), ra: useId(), dec: useId(), width: useId(), height: useId(), rotation: useId() }
@@ -191,15 +250,16 @@ export function PanelsEditor({ panels, onChange, checklist }: { panels: MosaicPa
     const height = Number(form.height)
     const rotation = Number(form.rotation || "0")
     if (!form.name.trim()) found.name = "Enter a panel name."
-    if (form.ra.trim() === "" || !Number.isFinite(ra) || ra < 0 || ra >= 360) found.ra = "Panel RA must be degrees from 0 up to 360."
-    if (form.dec.trim() === "" || !Number.isFinite(dec) || dec < -90 || dec > 90) found.dec = "Panel Dec must be degrees from −90 to +90."
+    if (form.ra.trim() === "" || !Number.isFinite(ra) || ra < 0 || ra >= 360) found.ra = "Panel RA must be between 0 and 360 degrees."
+    if (form.dec.trim() === "" || !Number.isFinite(dec) || dec < -90 || dec > 90) found.dec = "Panel Dec must be between −90 and +90 degrees."
     if (!Number.isFinite(width) || width <= 0) found.width = "Width must be more than 0 degrees."
     if (!Number.isFinite(height) || height <= 0) found.height = "Height must be more than 0 degrees."
     if (!Number.isFinite(rotation)) found.rotation = "Rotation must be a number of degrees."
     setErrors(found)
     if (Object.keys(found).length > 0) return
-    onChange([...panels, { id: `pnl_${stableHash(`${form.name}|${Date.now()}`)}`, name: form.name.trim(), ra, dec, widthDeg: width, heightDeg: height, rotationDeg: rotation }])
-    setForm(EMPTY_PANEL)
+    const panel = { id: `pnl_${stableHash(`${form.name}|${Date.now()}`)}`, name: form.name.trim(), ra, dec, widthDeg: width, heightDeg: height, rotationDeg: rotation }
+    const clear = () => setForm(EMPTY_PANEL)
+    if (onChange([...panels, panel], clear) !== false) clear()
   }
 
   const field = (key: keyof PanelForm, label: string, mono = true) => (
@@ -223,7 +283,7 @@ export function PanelsEditor({ panels, onChange, checklist }: { panels: MosaicPa
   )
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-editor="">
       {panels.length > 0 ? (
         <ul className="divide-y rounded-lg border px-3">
           {panels.map((p) => {
@@ -233,7 +293,7 @@ export function PanelsEditor({ panels, onChange, checklist }: { panels: MosaicPa
                 key={p.id}
                 label={p.name}
                 onRemove={() => onChange(panels.filter((x) => x.id !== p.id))}
-                disabledReason={used ? "Remove its Panel coverage item first" : undefined}
+                disabledReason={used ? "Remove its Panel coverage item first" : lockedReason}
               >
                 <span className="font-medium">{p.name}</span>{" "}
                 <span className="text-muted-foreground tabular-nums">
@@ -246,10 +306,10 @@ export function PanelsEditor({ panels, onChange, checklist }: { panels: MosaicPa
       ) : (
         <p className="text-sm text-muted-foreground">No panels. Add panels for a mosaic; each one is a user-defined footprint.</p>
       )}
-      <fieldset className="space-y-2">
+      <fieldset className="space-y-2" data-editor-add="" onKeyDown={enterAdds(add)}>
         <legend className="text-sm font-medium">Add a panel</legend>
         <div className="flex flex-wrap items-start gap-2">
-          {field("name", "Name", false)}
+          {field("name", "Panel name", false)}
           {field("ra", "RA (°)")}
           {field("dec", "Dec (°)")}
           {field("width", "Width (°)")}
@@ -294,12 +354,12 @@ export function ChecklistEditor({
   panels,
 }: {
   checklist: ChecklistItem[]
-  onChange: (items: ChecklistItem[]) => void
+  onChange: (items: ChecklistItem[]) => Applied
   panels: MosaicPanel[]
 }) {
   const catalog = useStore((s) => s.catalog)
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-editor="">
       {checklist.length > 0 ? (
         <ul className="divide-y rounded-lg border px-3">
           {checklist.map((item) => {
@@ -320,7 +380,16 @@ export function ChecklistEditor({
 }
 
 /** Form for one new checklist item; Add item stays disabled, with its reason, until the criterion is complete. */
-export function AddChecklistItem({ catalog, panels, onAdd }: { catalog: Catalog; panels: MosaicPanel[]; onAdd: (item: ChecklistItem) => void }) {
+export function AddChecklistItem({
+  catalog,
+  panels,
+  onAdd,
+}: {
+  catalog: Catalog
+  panels: MosaicPanel[]
+  /** `clear` empties the form; the caller runs it when a later Retry saves the item. */
+  onAdd: (item: ChecklistItem, clear: () => void) => Applied
+}) {
   const [kind, setKind] = useState<ChecklistKind>("integration")
   const [channel, setChannel] = useState<string | null>(null)
   const [amount, setAmount] = useState("")
@@ -371,13 +440,15 @@ export function AddChecklistItem({ catalog, panels, onAdd }: { catalog: Catalog;
               : kind === "equipment"
                 ? { id, kind, opticalTrainId: trainId! }
                 : { id, kind, calibrationKind, channel: calibrationKind === "flat" ? channelOrAny : null }
-    onAdd(item)
-    setAmount("")
-    setAmountError(null)
+    const clear = () => {
+      setAmount("")
+      setAmountError(null)
+    }
+    if (onAdd(item, clear) !== false) clear()
   }
 
   return (
-    <fieldset className="space-y-2">
+    <fieldset className="space-y-2" data-editor-add="" onKeyDown={enterAdds(add)}>
       <legend className="text-sm font-medium">Add a checklist item</legend>
       <div className="flex flex-wrap items-start gap-2">
         <LabeledSelect
@@ -385,7 +456,10 @@ export function AddChecklistItem({ catalog, panels, onAdd }: { catalog: Catalog;
           value={kind}
           items={kinds}
           onChange={(value) => {
+            // A new kind starts clean: a channel or amount picked for another kind never carries over silently.
             setKind(value as ChecklistKind)
+            setChannel(null)
+            setAmount("")
             setAmountError(null)
           }}
         />

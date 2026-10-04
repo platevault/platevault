@@ -31,9 +31,13 @@ export function ProjectNewPage() {
   const navigate = useNavigate()
   const stored = useStore((s) => s.slices.t2.projectDraft)
   const trains = useStore((s) => s.catalog.opticalTrains)
-  const hasTargets = useStore((s) => Object.keys(s.catalog.targets).length > 0)
+  const targets = useStore((s) => s.catalog.targets)
+  const hasTargets = Object.keys(targets).length > 0
   const [initial, setInitial] = useState(() => freshDraft(search.targetId))
   const [recovered, setRecovered] = useState(() => stored !== null)
+  // Opened from another Target while a draft exists: say so instead of silently reusing the draft (J20 S2).
+  const requestedTarget = search.targetId ? targets[search.targetId] : undefined
+  const requested = recovered && stored && requestedTarget && !stored.targetIds.includes(requestedTarget.id) ? requestedTarget : undefined
   const draft = stored ?? initial
   const [submitted, setSubmitted] = useState(false)
   const [commitError, setCommitError] = useState<string | null>(null)
@@ -95,11 +99,12 @@ export function ProjectNewPage() {
             title="Recovered unsaved draft"
             actions={
               <Button size="sm" variant="outline" onClick={discard}>
-                Discard draft
+                {requested ? `Discard draft and start for ${requested.name}` : "Discard draft"}
               </Button>
             }
           >
             This draft was last changed {formatDateTime(stored.updatedAt)}. It is kept in this browser until you create the Project or discard it.
+            {requested ? ` It is for ${stored.targetIds.map((id) => targets[id]?.name ?? "a removed Target").join(", ") || "no Target"}, not ${requested.name}.` : null}
           </Notice>
         ) : null}
         {!hasTargets ? (
@@ -121,6 +126,10 @@ export function ProjectNewPage() {
           onSubmit={(event) => {
             event.preventDefault()
             submit()
+          }}
+          onKeyDown={(event) => {
+            // Enter creates the Project only from the Name field; panel and checklist sub-forms run their own Add (WCAG 3.2.2).
+            if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target !== nameRef.current) event.preventDefault()
           }}
         >
           <Section title="Details" id="details">
