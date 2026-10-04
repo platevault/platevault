@@ -2062,9 +2062,9 @@ async fn observe_file(
         AssetMatch::Existing(stored) => {
             refresh_asset(conn, op, &stored, file, fingerprint, observed_at).await
         }
-        AssetMatch::Ambiguous(candidates) => {
-            let reason = "path matches several catalog records under this volume's \
-                          case/normalization rules";
+        AssetMatch::Unproven(candidates) => {
+            let reason = "path is a case/normalization variant of a catalog record \
+                          without qualified file identity";
             let paths = candidates.into_iter().map(|asset| asset.relative_path);
             for relative_path in std::iter::once(file.relative_path.clone()).chain(paths) {
                 let issue = ScanIssue {
@@ -2076,6 +2076,14 @@ async fn observe_file(
             }
             Ok(None)
         }
+        AssetMatch::Distinct(variants) => {
+            // Proven different files: the variant records stay unchanged and are
+            // excluded from this scan's absence reconciliation.
+            for variant in &variants {
+                mark_scope_incomplete(conn, op.id, variant).await?;
+            }
+            insert_asset(conn, op, location, file, &fingerprint, observed_at).await.map(Some)
+        }
         AssetMatch::New => {
             insert_asset(conn, op, location, file, &fingerprint, observed_at).await.map(Some)
         }
@@ -2085,12 +2093,15 @@ async fn observe_file(
 enum AssetMatch {
     New,
     Existing(Box<Asset>),
-    Ambiguous(Vec<Asset>),
+    /// Name variants whose qualified file identity differs from the observed file.
+    Distinct(Vec<NativePath>),
+    /// Name variants that cannot be told apart without qualified file identity.
+    Unproven(Vec<Asset>),
 }
 
-/// Exact path, or on a case/normalization-insensitive volume the single same name
-/// variant with identical size and nanosecond mtime not yet seen by this scan.
-/// Several variants are ambiguous. Renames are never adopted by inode.
+/// Exact path, or on a case/normalization-insensitive volume the name variant
+/// with identical size, nanosecond mtime and qualified stable file id, not yet
+/// seen by this scan. Path equivalence alone never adopts another record.
 async fn find_asset(
     conn: &mut SqliteConnection,
     location: &Location,
@@ -2129,10 +2140,21 @@ async fn find_asset(
             variants.push(asset);
         }
     }
-    Ok(match variants.len() {
-        0 => AssetMatch::New,
-        1 => AssetMatch::Existing(Box::new(variants.remove(0))),
-        _ => AssetMatch::Ambiguous(variants),
+    if variants.is_empty() {
+        return Ok(AssetMatch::New);
+    }
+    let observed_id = fingerprint.identity.file_id.as_deref().filter(|_| volume.file_ids_stable);
+    let qualified =
+        |asset: &Asset| observed_id.is_some() && asset.fingerprint.identity.file_id.is_some();
+    if let Some(index) = variants.iter().position(|asset| {
+        qualified(asset) && asset.fingerprint.identity.file_id.as_deref() == observed_id
+    }) {
+        return Ok(AssetMatch::Existing(Box::new(variants.swap_remove(index))));
+    }
+    Ok(if variants.iter().all(qualified) {
+        AssetMatch::Distinct(variants.into_iter().map(|asset| asset.relative_path).collect())
+    } else {
+        AssetMatch::Unproven(variants)
     })
 }
 

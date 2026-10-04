@@ -1054,38 +1054,45 @@ async fn reviewed_case_variant_same_stat_rewrite_is_rehashed_and_invalidated() {
     );
 }
 
-#[tokio::test]
-async fn ambiguous_case_variant_is_refused_without_adoption_or_absence() {
-    let fx = Fixture::new();
-    let catalog = Catalog::open(&fx.db).await.unwrap();
-    let location = register_insensitive(&catalog, &fx).await;
-    let fabricated = |relative: &str, file_id: &str| ScanFile {
+/// Same size and nanosecond mtime; the file id is the only identity evidence.
+fn variant_file(relative: &str, file_id: Option<&str>) -> ScanFile {
+    ScanFile {
         relative_path: NativePath::from_path(Path::new(relative)),
         fingerprint: ObservationFingerprint {
-            identity: FileIdentity { volume: insensitive_volume(), file_id: Some(file_id.into()) },
+            identity: FileIdentity {
+                volume: insensitive_volume(),
+                file_id: file_id.map(str::to_owned),
+            },
             size_bytes: 2880,
             modified_ns: 1_759_000_000_123_456_789,
             content_sha256: None,
         },
         format: ImageFormat::Fits,
         metadata: metadata_for(relative),
-    };
+    }
+}
+
+#[tokio::test]
+async fn case_variant_without_qualified_file_identity_is_refused_without_adoption_or_absence() {
+    let fx = Fixture::new();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = register_insensitive(&catalog, &fx).await;
     scan_files(
         &catalog,
         &location,
-        vec![fabricated("Frame.fits", "11"), fabricated("FRAME.fits", "12")],
+        vec![variant_file("Frame.fits", None), variant_file("FRAME.fits", None)],
     )
     .await;
     let before = catalog.location_assets(location.id).await.unwrap();
     assert_eq!(before.len(), 2);
 
-    let operation = scan_files(&catalog, &location, vec![fabricated("frame.fits", "13")]).await;
+    let operation = scan_files(&catalog, &location, vec![variant_file("frame.fits", None)]).await;
     assert_eq!(operation.state, ScanState::Partial);
     assert!(operation
         .issues
         .iter()
         .any(|issue| issue.availability == Availability::IdentityConflict
-            && issue.reason.contains("several catalog records")));
+            && issue.reason.contains("without qualified file identity")));
     let after = catalog.location_assets(location.id).await.unwrap();
     assert_eq!(after.len(), 2, "no third record and no adoption");
     for asset in &after {
@@ -1094,6 +1101,39 @@ async fn ambiguous_case_variant_is_refused_without_adoption_or_absence() {
         assert_eq!(asset.relative_path, prior.relative_path);
         assert_eq!(asset.fingerprint, prior.fingerprint);
     }
+}
+
+#[tokio::test]
+async fn case_equivalent_different_file_with_distinct_qualified_id_is_never_adopted() {
+    let fx = Fixture::new();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = register_insensitive(&catalog, &fx).await;
+    scan_files(&catalog, &location, vec![variant_file("Frame.fits", Some("11"))]).await;
+    let before = catalog.location_assets(location.id).await.unwrap();
+    assert_eq!(before.len(), 1);
+    let old = before[0].clone();
+
+    let operation =
+        scan_files(&catalog, &location, vec![variant_file("FRAME.fits", Some("12"))]).await;
+    assert_eq!(operation.state, ScanState::Partial, "uncertain old variant scope");
+    assert!(operation.incomplete_scopes.contains(&old.relative_path));
+    let after = catalog.location_assets(location.id).await.unwrap();
+    assert_eq!(after.len(), 2, "different file identity creates a separate record");
+    let kept = after.iter().find(|asset| asset.id == old.id).unwrap();
+    assert_eq!(kept.relative_path, old.relative_path);
+    assert_eq!(kept.fingerprint.identity.file_id.as_deref(), Some("11"));
+    assert_eq!(kept.observation_revision, old.observation_revision);
+    assert_eq!(kept.availability, Availability::Available, "not Missing");
+    let added = after.iter().find(|asset| asset.id != old.id).unwrap();
+    assert_eq!(added.relative_path, NativePath::from_path(Path::new("FRAME.fits")));
+    assert_eq!(added.fingerprint.identity.file_id.as_deref(), Some("12"));
+
+    let renamed =
+        scan_files(&catalog, &location, vec![variant_file("frame.fits", Some("11"))]).await;
+    assert!(renamed.issues.is_empty(), "{:?}", renamed.issues);
+    let adopted = catalog.asset(old.id).await.unwrap();
+    assert_eq!(adopted.relative_path, NativePath::from_path(Path::new("frame.fits")));
+    assert_eq!(catalog.location_assets(location.id).await.unwrap().len(), 2);
 }
 
 #[tokio::test]
