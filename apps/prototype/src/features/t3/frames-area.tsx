@@ -7,7 +7,7 @@
  */
 import { Link } from "@tanstack/react-router"
 import { ImageOff, Upload } from "lucide-react"
-import { useEffect, useId, useRef, useState } from "react"
+import { type FocusEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { getPreferences } from "@/app/preferences"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { type Column, DataTable, SelectionBar, TableToolbar } from "@/components/app/data-table"
@@ -108,21 +108,40 @@ const ARIA_DISABLED = "aria-disabled:pointer-events-none aria-disabled:opacity-5
 
 /**
  * Measurement status and the Review frames control (J22 S1). Frames opens idle;
- * only this control starts, resumes or completes a review.
+ * only this control starts, resumes or completes a review. Its buttons swap as
+ * the run starts, is canceled or finishes, so focus that was in the bar moves
+ * to the bar's current control instead of the page body (WCAG 2.4.3).
  */
 function MeasureBar({ op, notMeasured, scope, onReview, disabledReason }: { op: Operation | undefined; notMeasured: number; scope: string | null; onReview: () => void; disabledReason: string | null }) {
   const reasonId = useId()
+  const barRef = useRef<HTMLDivElement>(null)
+  const focusInBar = useRef(false)
+  const status = op?.status
+  useLayoutEffect(() => {
+    const bar = barRef.current
+    if (!focusInBar.current || !bar || bar.contains(document.activeElement)) return
+    ;(bar.querySelector<HTMLElement>("button") ?? bar).focus()
+  }, [status, notMeasured])
+  const focusHandlers = {
+    onFocus: () => {
+      focusInBar.current = true
+    },
+    // A focused button that unmounts blurs with no related target: keep the flag so the layout effect can restore focus.
+    onBlur: (event: FocusEvent<HTMLDivElement>) => {
+      if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) focusInBar.current = false
+    },
+  }
   const scopeLine = scope ? <p className="w-full text-xs text-muted-foreground">{scope}</p> : null
   if (op && !isSettled(op.status)) {
     const pct = op.progress.total > 0 ? (op.progress.done / op.progress.total) * 100 : 0
     return (
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-card px-3 py-2">
+      <div ref={barRef} tabIndex={-1} {...focusHandlers} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-card px-3 py-2 outline-none">
         <Progress value={pct} aria-label="Measurement progress" getAriaValueText={() => `${op.progress.done} of ${op.progress.total} frames`} className="min-w-48 flex-1 gap-1">
           <span className="text-sm tabular-nums" aria-hidden="true">
             {op.status === "running" ? ((op.payload as unknown as MeasurePayload).verify.length > 0 ? "Verifying cached values" : "Measuring frames") : op.status === "interrupted" ? "Measurement interrupted by a restart" : "Measurement paused"}: {op.progress.done} of {op.progress.total} frames · current frame first
           </span>
         </Progress>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 gap-2">
           {op.status !== "running" ? (
             <Button size="sm" onClick={onReview}>
               {op.status === "interrupted" ? "Review frames" : "Resume"}
@@ -139,22 +158,24 @@ function MeasureBar({ op, notMeasured, scope, onReview, disabledReason }: { op: 
   const unfinished = unfinishedCount(op)
   if (!op && notMeasured === 0) return null
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm">
-      <p className="text-pretty">
+    <div ref={barRef} tabIndex={-1} {...focusHandlers} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2 text-sm outline-none">
+      <p className="min-w-0 flex-1 text-pretty">
         {op ? (
           <>
             <StatusBadge kind="operation" value={op.status} className="mr-2" />
-            {op.status === "canceled" ? `Measurement canceled: ${op.progress.done} of ${op.progress.total} frames reached; ${unfinished} not measured. ` : `${op.summary ?? ""} `}
+            {op.status === "canceled" ? `Measurement canceled: ${op.progress.done} of ${op.progress.total} frames reached; ${unfinished} not measured.` : `${op.summary ?? ""} `}
           </>
         ) : null}
         {notMeasured === 0
           ? "Every readable frame has a valid value."
-          : op
-            ? `${plural(notMeasured, "frame")} read Not measured.`
-            : `${plural(notMeasured, "frame")} not measured yet. Measuring starts only when you choose Review frames; opening, browsing and filtering never measure.`}
+          : op?.status === "canceled"
+            ? null
+            : op
+              ? `${plural(notMeasured, "frame")} read Not measured.`
+              : `${plural(notMeasured, "frame")} not measured yet. Measuring starts only when you choose Review frames; opening, browsing and filtering never measure.`}
       </p>
       {notMeasured > 0 ? (
-        <div className="flex flex-col items-end gap-0.5">
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
           <Button size="sm" onClick={onReview} disabled={disabledReason !== null} focusableWhenDisabled aria-describedby={disabledReason ? reasonId : undefined} className={ARIA_DISABLED}>
             Review frames
           </Button>
@@ -396,7 +417,6 @@ export function FramesArea() {
         )
       },
     },
-    { id: "session", header: "Session", sortValue: (r) => r.session?.startedAt ?? null, cell: (r) => (r.session ? sessionLabel(r.session) : <UnknownValue label="No session" />) },
     {
       id: "member",
       header: "In View",
@@ -410,6 +430,14 @@ export function FramesArea() {
           <StatusBadge kind="availability" value={assetAvailability(disk, catalog, r.asset) === "available" ? "available" : assetAvailability(disk, catalog, r.asset)} label="Unresolved" />
         ),
     },
+    { id: "state", header: "Measurement", sortValue: (r) => r.state, cell: (r) => <StatusBadge kind="measurement" value={STATE_BADGE[r.state].value} label={STATE_BADGE[r.state].label} /> },
+    { id: "fwhm", header: "FWHM", align: "right", sortValue: (r) => r.builtIn.fwhm?.value ?? null, cell: metricCell("fwhm") },
+    ...(anyImported
+      ? [{ id: "fwhm-imported", header: "FWHM imported", align: "right" as const, sortValue: (r: FrameRow) => r.imported.fwhm?.value ?? null, cell: (r: FrameRow) => (r.imported.fwhm ? formatMetric(r.imported.fwhm) : <span className="text-muted-foreground">None</span>) }]
+      : []),
+    { id: "hfr", header: "HFR", align: "right", sortValue: (r) => r.builtIn.hfr?.value ?? null, cell: metricCell("hfr") },
+    { id: "ecc", header: "Ecc.", align: "right", sortValue: (r) => r.builtIn.eccentricity?.value ?? null, cell: metricCell("eccentricity") },
+    { id: "stars", header: "Stars", align: "right", sortValue: (r) => r.builtIn["star-count"]?.value ?? null, cell: metricCell("star-count") },
     {
       id: "quality",
       header: "Library quality",
@@ -424,14 +452,7 @@ export function FramesArea() {
         )
       },
     },
-    { id: "state", header: "Measurement", sortValue: (r) => r.state, cell: (r) => <StatusBadge kind="measurement" value={STATE_BADGE[r.state].value} label={STATE_BADGE[r.state].label} /> },
-    { id: "fwhm", header: "FWHM", align: "right", sortValue: (r) => r.builtIn.fwhm?.value ?? null, cell: metricCell("fwhm") },
-    ...(anyImported
-      ? [{ id: "fwhm-imported", header: "FWHM imported", align: "right" as const, sortValue: (r: FrameRow) => r.imported.fwhm?.value ?? null, cell: (r: FrameRow) => (r.imported.fwhm ? formatMetric(r.imported.fwhm) : <span className="text-muted-foreground">None</span>) }]
-      : []),
-    { id: "hfr", header: "HFR", align: "right", sortValue: (r) => r.builtIn.hfr?.value ?? null, cell: metricCell("hfr") },
-    { id: "ecc", header: "Ecc.", align: "right", sortValue: (r) => r.builtIn.eccentricity?.value ?? null, cell: metricCell("eccentricity") },
-    { id: "stars", header: "Stars", align: "right", sortValue: (r) => r.builtIn["star-count"]?.value ?? null, cell: metricCell("star-count") },
+    { id: "session", header: "Session", sortValue: (r) => r.session?.startedAt ?? null, cell: (r) => (r.session ? sessionLabel(r.session) : <UnknownValue label="No session" />) },
     {
       id: "warnings",
       header: "Warnings",
@@ -490,12 +511,6 @@ export function FramesArea() {
         </p>
         {readOnlyReason ? <p className="text-sm text-muted-foreground">{readOnlyReason}</p> : null}
         <MeasureBar op={op} notMeasured={notMeasured} scope={measureScope} disabledReason={view.completedAt ? "Complete Views are not measured; Reopen first." : null} onReview={() => startMeasurement(view.id, measurable)} />
-
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <SelectField className="w-44" label="Plot metric" value={ui.metric} options={metricOptions} onChange={(value) => setFrameUi(view.id, { metric: value as MetricKey })} />
-          <p className="text-xs text-muted-foreground">Click a point to make it the current frame; the table and preview follow.</p>
-        </div>
-        <MeasurementPlot points={plotPoints} metric={ui.metric} activeId={active?.asset.id ?? null} onSelect={select} />
 
         {imports.length > 0 ? (
           <Section title="Imported measurements" level={3} description="Imported values sit next to built-in values with their source, method and units. Rows that match no single frame attach to nothing.">
@@ -619,26 +634,34 @@ export function FramesArea() {
             }
           />
           </div>
-          {active ? (
-            <FramePreview
-              asset={active.asset}
-              file={activeFile}
-              record={catalog.measurements[active.asset.id]}
-              state={active.state}
-              applies={active.applies}
-              scaleArcsec={pixelScaleFor(catalog, active.session)}
-              position={{ index: Math.max(0, position), total: ordered.length }}
-              copies={active.asset.copies.map((c) => ({ location: catalog.locations[c.locationId]?.displayName ?? "Unknown location", path: c.path }))}
-              onPrevious={() => step(-1)}
-              onNext={() => step(1)}
-              exclude={{ label: excludeLabel, disabledReason: readOnlyReason, run: () => toggleExclusion(active) }}
-              unavailableReason={
-                activeAvailability === "available"
-                  ? null
-                  : `Preview unavailable: the frame is ${activeAvailability === "offline" ? "offline" : activeAvailability === "unreadable" ? "unreadable (access denied)" : "not found at its last complete scan"}.`
-              }
-            />
-          ) : null}
+          <div className="min-w-0 space-y-4 self-start">
+            {active ? (
+              <FramePreview
+                asset={active.asset}
+                file={activeFile}
+                record={catalog.measurements[active.asset.id]}
+                state={active.state}
+                applies={active.applies}
+                scaleArcsec={pixelScaleFor(catalog, active.session)}
+                position={{ index: Math.max(0, position), total: ordered.length }}
+                copies={active.asset.copies.map((c) => ({ location: catalog.locations[c.locationId]?.displayName ?? "Unknown location", path: c.path }))}
+                onPrevious={() => step(-1)}
+                onNext={() => step(1)}
+                exclude={{ label: excludeLabel, disabledReason: readOnlyReason, run: () => toggleExclusion(active) }}
+                unavailableReason={
+                  activeAvailability === "available"
+                    ? null
+                    : `Preview unavailable: the frame is ${activeAvailability === "offline" ? "offline" : activeAvailability === "unreadable" ? "unreadable (access denied)" : "not found at its last complete scan"}.`
+                }
+              />
+            ) : null}
+            {/* The plot sits with the preview it drives, so the frames table starts higher (density 7). */}
+            <div className="space-y-2">
+              <SelectField className="w-44" label="Plot metric" value={ui.metric} options={metricOptions} onChange={(value) => setFrameUi(view.id, { metric: value as MetricKey })} />
+              <p className="text-xs text-muted-foreground">Click a point to make it the current frame; the table and preview follow.</p>
+              <MeasurementPlot points={plotPoints} metric={ui.metric} activeId={active?.asset.id ?? null} onSelect={select} />
+            </div>
+          </div>
         </div>
         {notMeasured > 0 && op?.status === "canceled" ? (
           <Notice tone="info" title="Cancel kept your selection and exclusions">

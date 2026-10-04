@@ -142,7 +142,7 @@ export function SkyCoverage({
             .filter((s) => s.polygon || s.point)
             .map(({ item, point }) => (
               <li key={item.id}>
-                <Button size="sm" variant={item.id === activeId ? "secondary" : "outline"} aria-pressed={item.id === activeId} onClick={() => onActivate(item.id)}>
+                <Button size="sm" variant={item.id === activeId ? "default" : "outline"} aria-pressed={item.id === activeId} onClick={() => onActivate(item.id)}>
                   {item.label}
                   {point ? " · pointing only" : ""}
                 </Button>

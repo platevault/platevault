@@ -93,7 +93,7 @@ function buildRows(disk: Disk, catalog: Catalog, sessions: Session[], ctx: ViewC
 /** Reason recorded when the user checks a row: geometry evidence when it qualifies, otherwise a manual inclusion. */
 function reasonForCheck(row: CandidateRow, via: string): SelectionReason {
   if (row.suggestion.kind === "geometry") return { kind: "geometry", detail: `Checked ${via}. ${row.suggestion.detail}` }
-  return { kind: "manual", detail: `Manual inclusion ${via}: ${row.suggestion.label}. ${row.suggestion.detail}` }
+  return { kind: "manual", detail: `Checked ${via}: ${row.suggestion.label}. ${row.suggestion.detail}` }
 }
 
 function QualityCounts({ row }: { row: CandidateRow }) {
@@ -147,7 +147,7 @@ export function SessionsArea() {
   const chips = filterChips(filters, names)
   const active = rows.find((r) => r.session.id === activeId) ?? shown.find((r) => r.reason) ?? shown[0] ?? null
   const editable = readOnlyReason === null
-  const matchReason = !editable ? "Read-only, see above" : chips.length === 0 ? "Set a filter first" : shown.every((r) => r.reason) ? "Every match is selected" : null
+  const matchReason = !editable ? readOnlyReason : chips.length === 0 ? "Set a filter first" : shown.every((r) => r.reason) ? "Every match is selected" : null
   // Notices and the Selection bar unmount after these actions: keep focus in the session table (WCAG 2.4.3).
   const focusTable = () => requestAnimationFrame(() => document.querySelector<HTMLElement>("#t3-sessions-table thead [role=checkbox]")?.focus())
   const readableAgain = content.unresolved.filter((id) => {
@@ -183,6 +183,17 @@ export function SessionsArea() {
           {formatNight(r.session.night)}
         </button>
       ),
+    },
+    {
+      id: "reason",
+      header: "Reason",
+      sortValue: (r) => (r.reason ? REASON_LABEL[r.reason.kind] : `~${r.suggestion.label}`),
+      cell: (r) =>
+        r.reason ? (
+          <span className="font-medium">{REASON_LABEL[r.reason.kind]}</span>
+        ) : (
+          <span className="text-muted-foreground">Not selected · {r.suggestion.label}</span>
+        ),
     },
     { id: "start", header: "Start (UTC)", sortValue: (r) => r.session.startedAt, cell: (r) => formatTime(r.session.startedAt, "UTC") },
     { id: "channel", header: "Channel", sortValue: (r) => r.session.channel, cell: (r) => r.session.channel ?? <UnknownValue label="No filter" /> },
@@ -231,17 +242,6 @@ export function SessionsArea() {
       align: "right",
       sortValue: (r) => r.fwhm?.median ?? null,
       cell: (r) => (r.fwhm ? formatMetric({ value: Number(r.fwhm.median.toFixed(2)), unit: r.fwhm.unit }) : <UnknownValue label="Not measured" />),
-    },
-    {
-      id: "reason",
-      header: "Reason",
-      sortValue: (r) => (r.reason ? REASON_LABEL[r.reason.kind] : `~${r.suggestion.label}`),
-      cell: (r) =>
-        r.reason ? (
-          <span className="font-medium">{REASON_LABEL[r.reason.kind]}</span>
-        ) : (
-          <span className="text-muted-foreground">Not selected · {r.suggestion.label}</span>
-        ),
     },
   ]
 

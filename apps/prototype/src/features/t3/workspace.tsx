@@ -313,6 +313,8 @@ export function ViewWorkspacePage() {
         ? `Saved membership moved from ${draftBase === null ? "nothing saved" : `revision ${draftBase}`} to revision ${latest} elsewhere: ${describeDiff(catalog, diffContent(before, base)).join("; ") || "no member changed"}. Save View replaces it with your draft.`
         : `Saved membership is unchanged (${latest === null ? "never saved" : `revision ${latest}`}); only the View record changed elsewhere and is now record revision ${view!.revision}. Your unsaved changes are kept; Save View commits them as revision ${(latest ?? 0) + 1}.`
     setSaveFeedback({ state: "reviewed", note })
+    // The Review button unmounts with the stale state: focus goes to Save View, the next step (WCAG 2.4.3).
+    requestAnimationFrame(() => document.getElementById(`${viewId}-save`)?.focus())
   }
 
   const saveState = saveFeedback?.state === "failed" || saveFeedback?.state === "stale" ? saveFeedback.state : hasDraft || !base ? "unsaved" : "saved"
@@ -357,7 +359,7 @@ export function ViewWorkspacePage() {
             </span>
           }
           actions={
-            <>
+            <div className="flex flex-wrap items-start gap-2">
               <Button variant="outline" size="sm" onClick={() => setDetailsOpen(true)}>
                 Edit details
               </Button>
@@ -389,7 +391,7 @@ export function ViewWorkspacePage() {
                   </span>
                 ) : null}
               </div>
-            </>
+            </div>
           }
         />
         <SummaryStrip summary={summary} content={content} />

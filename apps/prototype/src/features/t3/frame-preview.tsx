@@ -292,7 +292,7 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <ToggleGroup value={[zoom]} onValueChange={(v) => v[0] && setZoom(v[0] as Zoom)} variant="outline" size="sm" aria-label="Zoom">
               <ToggleGroupItem value="fit">Fit</ToggleGroupItem>
               <ToggleGroupItem value="1">1:1</ToggleGroupItem>
@@ -384,7 +384,7 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" onClick={exclude.run} disabled={exclude.disabledReason !== null} aria-keyshortcuts="x" aria-describedby={`${helpId}-exclude`}>
+        <Button size="sm" variant="outline" onClick={exclude.run} disabled={exclude.disabledReason !== null} focusableWhenDisabled className="aria-disabled:pointer-events-none aria-disabled:opacity-50" aria-keyshortcuts="x" aria-describedby={`${helpId}-exclude`}>
           <CircleSlash aria-hidden="true" data-icon="inline-start" />
           {exclude.label} <Kbd>X</Kbd>
         </Button>

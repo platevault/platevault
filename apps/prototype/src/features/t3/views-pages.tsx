@@ -238,7 +238,7 @@ export function NewViewPage() {
   const originLabel: Record<ViewOrigin, string> = {
     project: project ? `From Project ${project.name}` : "From a Project",
     target: target ? `From Target ${target.name}` : "From a Target",
-    sessions: "From Sessions",
+    sessions: sessions.length > 0 ? "From Sessions" : "Standalone View",
     results: "From accepted Results",
   }
 
