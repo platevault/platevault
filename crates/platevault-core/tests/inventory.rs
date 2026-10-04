@@ -397,7 +397,7 @@ fn capture_tree(root: &Path) -> PathBuf {
 fn assert_malformed_file_is_uncertain(observation: &ScanObservation) {
     let broken = issue_at(observation, "broken.fits");
     assert!(broken.reason.starts_with("metadata unreadable"), "{}", broken.reason);
-    assert_eq!(broken.availability, Availability::Available);
+    assert_eq!(broken.availability, Availability::Unreadable);
     let progress = &observation.progress;
     assert_eq!((progress.unsupported, progress.unreadable), (1, 1), "{progress:?}");
     assert_eq!(progress.metadata_read, observation.files.len() as u64);

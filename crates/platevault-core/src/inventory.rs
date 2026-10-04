@@ -437,6 +437,9 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
         format: ImageFormat,
         extractor: &dyn MetadataExtractor,
     ) {
+        // Every header the adapters cannot turn into metadata is one per-file
+        // issue with Unreadable availability: the catalog records it, keeps the
+        // file out of absence reconciliation and commits its readable siblings.
         let raw = match extractor.extract(path) {
             Ok(Some(raw)) => raw,
             Ok(None) => {
@@ -444,7 +447,7 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
                 self.exclude(
                     relative,
                     "metadata unreadable: the adapter declined the file".into(),
-                    Availability::Available,
+                    Availability::Unreadable,
                 );
                 return;
             }
@@ -462,7 +465,7 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
                 self.exclude(
                     relative,
                     format!("metadata unreadable: {msg}"),
-                    Availability::Available,
+                    Availability::Unreadable,
                 );
                 return;
             }

@@ -240,3 +240,49 @@ async fn retry_runs_a_real_scoped_worker_and_offline_scan_retains_observations()
     assert_eq!(retained.availability, Availability::Offline);
     assert_eq!(retained.fingerprint, asset.fingerprint);
 }
+
+#[tokio::test]
+async fn malformed_headers_are_visible_file_issues_and_valid_siblings_commit() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("captures");
+    std::fs::create_dir(&root).unwrap();
+    let fields = [("IMAGETYP", "'LIGHT'"), ("FILTER", "'Ha'"), ("EXPTIME", "60")];
+    let valid = root.join("light.fits");
+    support::fits(&valid, &fields).unwrap();
+    let zeroed = root.join("zeroed.fits");
+    std::fs::write(&zeroed, [0_u8; 2880]).unwrap();
+    let empty = root.join("empty.fits");
+    std::fs::write(&empty, []).unwrap();
+    let truncated = root.join("truncated.xisf");
+    support::xisf(&truncated, &fields).unwrap();
+    let whole = std::fs::read(&truncated).unwrap();
+    std::fs::write(&truncated, &whole[..40]).unwrap();
+    let sources = [&valid, &zeroed, &empty, &truncated];
+    let originals: Vec<String> = sources.iter().map(|path| support::digest(path)).collect();
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let location = library
+        .register_location(NativePath::from_path(&root), "Captured".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    let started = library.start_scan(location.id, None).await.unwrap();
+    let finished = terminal(&library, started.id).await;
+    assert_eq!(finished.state, ScanState::Partial, "{finished:?}");
+    for name in ["zeroed.fits", "empty.fits", "truncated.xisf"] {
+        let issue = finished
+            .issues
+            .iter()
+            .find(|issue| issue.relative_path.display() == name)
+            .unwrap_or_else(|| panic!("{name} must be a visible per-file issue: {finished:?}"));
+        assert!(issue.reason.contains("unreadable"), "{name}: {}", issue.reason);
+        assert_eq!(issue.availability, Availability::Unreadable, "{name}");
+        assert!(finished.incomplete_scopes.contains(&issue.relative_path), "{name}");
+    }
+    let assets = library.catalog().location_assets(location.id).await.unwrap();
+    let names: Vec<String> = assets.iter().map(|asset| asset.relative_path.display()).collect();
+    assert_eq!(names, ["light.fits"], "only the readable file is indexed");
+    assert_eq!(assets[0].availability, Availability::Available);
+    let location = library.catalog().location(location.id).await.unwrap();
+    assert_eq!(location.availability, Availability::Available);
+    let after: Vec<String> = sources.iter().map(|path| support::digest(path)).collect();
+    assert_eq!(after, originals, "sources are read-only");
+}
