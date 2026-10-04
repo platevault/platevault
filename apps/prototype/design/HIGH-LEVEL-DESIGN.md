@@ -430,6 +430,10 @@ Base UI usage notes (verified in the running build):
   `aria-hidden="true"` for forms; snapshots list it, assistive technology does not.
 - `AlertDialog` puts initial focus on Cancel; the destructive action is never
   the default.
+- `DialogContent` and `AlertDialogContent` are at most the viewport height
+  minus 2rem and the safe-area insets, and scroll inside; their footers are
+  sticky, so a tall dialog's actions stay reachable. A footer with `m-0` in an
+  unpadded dialog passes `bottom-0` (FolderPicker does).
 
 Shell components (`src/app/*`): `AppShell`, `SetupShell`, sidebar, status area,
 `CommandPalette`, `ShortcutsDialog`, `SimulationSheet` / `SimulationControls`,
