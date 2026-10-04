@@ -3,6 +3,7 @@
  * selection summary, saved criteria and the Refresh comparison (VSEL-FR-12).
  * No store access here; actions.ts writes through `commit()`.
  */
+import { correctedExposureS } from "@/domain/corrections"
 import {
   assetAvailability,
   type AssetAvailability,
@@ -227,6 +228,11 @@ export function sessionLabel(session: Session): string {
 
 export function trainName(catalog: Catalog, session: Session): string | null {
   return session.equipment.value ? (catalog.opticalTrains[session.equipment.value]?.name ?? null) : null
+}
+
+/** The session's exposure as the catalog counts it: the latest correction, else the observed EXPTIME. */
+export function sessionExposureS(session: Session): number {
+  return correctedExposureS(session) ?? session.exposureS
 }
 
 export const REASON_LABEL: Record<SelectionReason["kind"], string> = {
@@ -471,7 +477,7 @@ export function deriveCriteria(catalog: Catalog, view: View, content: Membership
     projectId: view.projectId,
     opticalTrainIds: [...trains],
     channels: [...new Set(basis.map((s) => s.channel).filter((c): c is string => c !== null))].sort(),
-    exposureS: [...new Set(basis.map((s) => s.exposureS))].sort((a, b) => a - b),
+    exposureS: [...new Set(basis.map(sessionExposureS))].sort((a, b) => a - b),
   }
 }
 
@@ -490,7 +496,7 @@ export function describeCriteria(catalog: Catalog, criteria: SelectionCriteria) 
 export function matchesCriteria(catalog: Catalog, session: Session, criteria: SelectionCriteria, regions: Region[]): { match: boolean; detail: string } {
   if (session.supersededBy || session.imageType !== "light") return { match: false, detail: "Not a current light session" }
   if (criteria.channels.length > 0 && !criteria.channels.includes(session.channel ?? "")) return { match: false, detail: "Channel outside the criteria" }
-  if (criteria.exposureS.length > 0 && !criteria.exposureS.includes(session.exposureS)) return { match: false, detail: "Exposure outside the criteria" }
+  if (criteria.exposureS.length > 0 && !criteria.exposureS.includes(sessionExposureS(session))) return { match: false, detail: "Exposure outside the criteria" }
   if (session.equipment.status !== "confirmed" || (criteria.opticalTrainIds.length > 0 && !criteria.opticalTrainIds.includes(session.equipment.value ?? ""))) {
     return { match: false, detail: "Equipment is not the confirmed criteria equipment" }
   }
@@ -498,7 +504,7 @@ export function matchesCriteria(catalog: Catalog, session: Session, criteria: Se
   if (geometry.kind !== "footprint" || (geometry.coverage ?? 0) < MIN_FOOTPRINT_OVERLAP) return { match: false, detail: "No qualifying footprint" }
   return {
     match: true,
-    detail: `Matches saved criteria: footprint covers ${pct(geometry.coverage ?? 0)} of ${geometry.coveredRegion}, ${trainName(catalog, session)} confirmed, ${session.channel}, ${formatExposure(session.exposureS)}`,
+    detail: `Matches saved criteria: footprint covers ${pct(geometry.coverage ?? 0)} of ${geometry.coveredRegion}, ${trainName(catalog, session)} confirmed, ${session.channel}, ${formatExposure(sessionExposureS(session))}`,
   }
 }
 

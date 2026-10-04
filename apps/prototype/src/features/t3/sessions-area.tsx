@@ -33,6 +33,7 @@ import {
   sessionAvailability,
   type SessionGeometry,
   sessionGeometry,
+  sessionExposureS,
   sessionLabel,
   type Suggestion,
   suggestionFor,
@@ -182,7 +183,7 @@ export function SessionsArea() {
     },
     { id: "start", header: "Start (UTC)", sortValue: (r) => r.session.startedAt, cell: (r) => formatTime(r.session.startedAt, "UTC") },
     { id: "channel", header: "Channel", sortValue: (r) => r.session.channel, cell: (r) => r.session.channel ?? <UnknownValue label="No filter" /> },
-    { id: "exposure", header: "Exposure", align: "right", sortValue: (r) => r.session.exposureS, cell: (r) => formatExposure(r.session.exposureS) },
+    { id: "exposure", header: "Exposure", align: "right", sortValue: (r) => sessionExposureS(r.session), cell: (r) => formatExposure(sessionExposureS(r.session)) },
     {
       id: "equipment",
       header: "Camera / optical train",
@@ -288,7 +289,7 @@ export function SessionsArea() {
               }
             >
               {plural(members, "selected frame")} {state === "offline" ? `on ${location?.displayName ?? "an offline location"}` : ""} cannot be read now. They stay
-              named as unresolved members, never verified inputs: {session.assetIds.length} frames and {formatDuration(session.assetIds.length * session.exposureS)} are
+              named as unresolved members, never verified inputs: {session.assetIds.length} frames and {formatDuration(session.assetIds.length * sessionExposureS(session))} are
               last-observed counts. Reconnect, locate a copy, or remove the session explicitly.
             </Notice>
           )

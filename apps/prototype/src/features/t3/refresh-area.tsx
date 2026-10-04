@@ -21,7 +21,7 @@ import type { Catalog } from "@/domain/types"
 import { formatDuration, formatNight, plural } from "@/lib/format"
 import { nowIso, useStore } from "@/store/core"
 import { clearRefreshDecisions, setRefreshDecision } from "./actions"
-import { sessionLocationIds } from "@/domain/derive"
+import { effectiveExposureS, sessionLocationIds } from "@/domain/derive"
 import { applyRefreshChanges, describeCriteria, type RefreshChange, refreshComparison, REASON_LABEL, sessionLabel } from "./model"
 import { useDraftEditor, useWorkspace } from "./workspace"
 
@@ -34,7 +34,10 @@ const KIND_LABEL: Record<RefreshChange["kind"], string> = {
 function changeTotals(catalog: Catalog, change: RefreshChange) {
   const session = catalog.sessions[change.sessionId]
   const ids = change.kind === "add-frames" ? change.assetIds : (session?.assetIds ?? [])
-  const seconds = ids.reduce((sum, id) => sum + (catalog.assets[id]?.observed.exposureS ?? 0), 0)
+  const seconds = ids.reduce((sum, id) => {
+    const asset = catalog.assets[id]
+    return sum + (asset ? effectiveExposureS(catalog, asset) : 0)
+  }, 0)
   const copies = ids.filter((id) => (catalog.assets[id]?.copies.length ?? 0) > 1).length
   const locations = session ? sessionLocationIds(catalog, session).map((id) => catalog.locations[id]?.displayName ?? "Unknown location") : []
   return { frames: ids.length, seconds, copies, locations }

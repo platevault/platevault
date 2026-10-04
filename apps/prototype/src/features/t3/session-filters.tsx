@@ -17,6 +17,7 @@ import type { Session } from "@/domain/types"
 import { formatExposure, formatNight } from "@/lib/format"
 import type { AvailabilityFilter, QualityFilter, SessionFilters } from "@/store/slices/t3"
 import { NumberField, type Option, SelectField } from "./fields"
+import { sessionExposureS } from "./model"
 
 /** What a filter needs to know about one candidate row. */
 export interface FilterableRow {
@@ -50,8 +51,9 @@ export function matchesFilters(row: FilterableRow, f: SessionFilters): boolean {
   if (f.night && s.night !== f.night) return false
   if (f.startedFrom && s.startedAt.slice(0, 10) < f.startedFrom) return false
   if (f.startedTo && s.startedAt.slice(0, 10) > f.startedTo) return false
-  if (f.exposureMin !== null && s.exposureS < f.exposureMin) return false
-  if (f.exposureMax !== null && s.exposureS > f.exposureMax) return false
+  const exposureS = sessionExposureS(s)
+  if (f.exposureMin !== null && exposureS < f.exposureMin) return false
+  if (f.exposureMax !== null && exposureS > f.exposureMax) return false
   if (f.equipment && (f.equipment === "unknown" ? row.trainId !== null : row.trainId !== f.equipment)) return false
   if (f.quality) {
     const b = row.breakdown
