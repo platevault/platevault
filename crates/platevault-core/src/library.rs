@@ -53,7 +53,8 @@ pub struct LibrarySession {
 ///
 /// The correction is durable whether or not the refresh succeeds. A failed refresh
 /// leaves the catalog's fail-closed `NeedsReview` state in place, and the next
-/// scan or correction retries it.
+/// scan or correction retries it. A session another writer changed after it was
+/// read is skipped the same way rather than reported.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfirmedCorrection {
@@ -392,6 +393,21 @@ impl Library {
         saved: &[TargetCandidate],
     ) -> Result<(), LibraryError> {
         let detail = self.catalog.session(session_id).await?;
+        self.record_assessment(&detail, saved).await
+    }
+
+    /// Assess one read of a session and record the result against exactly that read.
+    ///
+    /// A `Conflict` means a concurrent writer (a quality decision, a correction or
+    /// another location's scan) changed the session after it was read. The stale
+    /// assessment is skipped rather than failing the caller; the next checkpoint
+    /// re-derives the session from its current evidence.
+    async fn record_assessment(
+        &self,
+        detail: &SessionDetail,
+        saved: &[TargetCandidate],
+    ) -> Result<(), LibraryError> {
+        let session_id = detail.summary.session.id;
         let frames = detail.assets.iter().map(|asset| asset.effective.clone()).collect::<Vec<_>>();
         let assessments = self.targets.candidates_for_frames(&frames, saved);
         let mut qualified =
@@ -421,7 +437,8 @@ impl Library {
                 crate::Provenance::Inferred { rule: crate::targets::ASSOCIATION_RULE.into() },
             )
         };
-        self.catalog
+        let recorded = self
+            .catalog
             .record_suggestions(&[SuggestedAssociation {
                 session_id,
                 grouping_revision: detail.summary.session.grouping_revision,
@@ -446,8 +463,11 @@ impl Library {
                 evidence,
                 provenance,
             }])
-            .await?;
-        Ok(())
+            .await;
+        match recorded {
+            Ok(_) | Err(LibraryError::Conflict { .. }) => Ok(()),
+            Err(error) => Err(error),
+        }
     }
 
     async fn run_scan(
@@ -546,5 +566,96 @@ fn root_failure(error: &LibraryError) -> Option<Availability> {
             Some(Availability::Offline)
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+#[path = "../tests/support/mod.rs"]
+mod fixtures;
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::time::Duration;
+
+    use super::*;
+    use crate::{ExpectedAsset, Quality};
+
+    fn target_basis(detail: &SessionDetail) -> BTreeMap<Uuid, ObservationFingerprint> {
+        detail
+            .associations
+            .iter()
+            .find(|association| association.kind == AssociationKind::Target)
+            .map(|association| association.observation_basis.clone())
+            .expect("the scan recorded a target assessment")
+    }
+
+    /// A writer committing between the session read and the record of its
+    /// assessment is the scan-time race; it is injected here deterministically.
+    #[tokio::test]
+    async fn a_decision_committed_after_the_session_read_skips_the_stale_assessment() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("captures");
+        std::fs::create_dir(&root).unwrap();
+        let light = root.join("light.fits");
+        let fields = [
+            ("IMAGETYP", "'LIGHT'"),
+            ("FILTER", "'Ha'"),
+            ("EXPTIME", "300"),
+            ("OBJECT", "'M31'"),
+            ("RA", "10.684708"),
+            ("DEC", "41.26875"),
+        ];
+        super::fixtures::fits(&light, &fields).unwrap();
+        let original = super::fixtures::digest(&light);
+        let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+        let location = library
+            .register_location(
+                NativePath::from_path(&root),
+                "Captured".into(),
+                LocationRole::Captures,
+            )
+            .await
+            .unwrap();
+        let mut progress = library.subscribe_scan_progress();
+        let started = library.start_scan(location.id, None).await.unwrap();
+        // The terminal event is published only after the scan's own final refresh.
+        tokio::time::timeout(Duration::from_secs(20), async {
+            loop {
+                let operation = progress.recv().await.unwrap();
+                if operation.id == started.id && operation.state != ScanState::Running {
+                    assert_eq!(operation.state, ScanState::Completed);
+                    return;
+                }
+            }
+        })
+        .await
+        .expect("scan must publish its terminal state");
+        let sessions = library.catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+        let session_id = sessions[0].session.id;
+        let stale = library.catalog.session(session_id).await.unwrap();
+        let asset = &stale.assets[0];
+        let expected = ExpectedAsset {
+            asset_id: asset.id,
+            decision_revision: asset.decision_revision,
+            fingerprint: asset.fingerprint.clone(),
+        };
+        library.catalog.set_quality(&[expected], Quality::Usable, InventoryProbe).await.unwrap();
+
+        let saved = library.saved_targets().await.unwrap();
+        library
+            .record_assessment(&stale, &saved)
+            .await
+            .expect("a concurrent writer skips the stale assessment instead of failing");
+        let skipped = library.catalog.session(session_id).await.unwrap();
+        assert_eq!(target_basis(&skipped), target_basis(&stale), "nothing recorded");
+        assert!(target_basis(&skipped)[&asset.id].content_sha256.is_none());
+
+        library.refresh_session_suggestion(session_id, &saved).await.unwrap();
+        let refreshed = library.catalog.session(session_id).await.unwrap();
+        let current = &refreshed.assets[0].fingerprint;
+        assert!(current.content_sha256.is_some(), "the decision bound the reviewed bytes");
+        assert_eq!(&target_basis(&refreshed)[&asset.id], current, "next checkpoint re-derives");
+        assert_eq!(super::fixtures::digest(&light), original);
     }
 }
