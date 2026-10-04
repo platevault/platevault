@@ -639,7 +639,7 @@ Baseline status records source traces. Full runtime verification remains incompl
 
 ## Recorded decisions and implementation readiness
 
-These proposed journeys remain unvalidated. D01 through D18 record settled conservative choices. The list below identifies their remaining implementation evidence and the per-item mode/refresh questions those decisions do not settle.
+These proposed journeys remain unvalidated. D01 through D19 record settled conservative choices. The list below identifies their remaining implementation evidence and the per-item mode/refresh questions those decisions do not settle.
 
 1. **Geometry, D01/D12:** qualify footprint/equipment evidence and the visible configured overlap criterion. Unknown geometry remains manual, never zero distance.
 2. **Membership, D02:** available Unreviewed/Usable frames enter the draft; library-Unusable starts visibly excluded; unavailable members stay unresolved. Verify exact preparation confirmation and explicit bulk quality scope.
@@ -651,5 +651,6 @@ These proposed journeys remain unvalidated. D01 through D18 record settled conse
 8. **Drafts, D08:** verify explicit Save, committed restart recovery and stale-edit refusal; failed writes remain unsaved.
 9. **View lifecycle, D09:** qualify immutable preparation revisions, safe retry and explicit reopening. Identity-preserving cleanup/reference repair does not reopen Complete or alter membership. D09 does not settle manual-inclusion pins across refresh or new-folder versus reviewed-replacement revision storage; flow decision 9 remains open for those questions.
 10. **Quality/progress, D10/D15:** verify fingerprint-and-digest-bound library decisions, independent Project rejection/progress and fixed View membership; source corrections stay catalog-only.
+11. **Content-bound consumption, D19:** verify that every count, assignment, Open, preparation, reuse, cleanup, archive, filing and retirement re-verifies its recorded identity and SHA-256 immediately before the effect. Drift blocks the item by name or leaves applicable totals, and never resolves automatically.
 
 Readiness check: user actions and expected outcomes are stated; negative assertions guard file changes and quality-scope changes. Existing product code and source verification do not establish that these redesigned flows run. Formal journey conversion and independent running-product validation follow implementation and intent approval.

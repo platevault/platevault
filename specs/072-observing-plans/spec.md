@@ -74,3 +74,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 ## Decisions before feature approval
 
 - Root decisions D07 and D18 define opt-in reminders, explicit site/criteria/lead time, repeat suppression, permission recovery, honest scheduler capability and shared scientific calculations. Scheduler delivery claims require real platform evidence.
+- Root decision D19 has no PLAN consumer: no planning path consumes a recorded file, and calendar export writes computed windows.

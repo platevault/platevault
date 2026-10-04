@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [view-review, indexing, sessions, locations]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 066-view-selection, 069-application-handoff, D02, D08, D09, D16, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-g-refresh-an-existing-view]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 066-view-selection, 069-application-handoff, D02, D08, D09, D16, D19, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-g-refresh-an-existing-view]
 ---
 
 ## Goal
@@ -28,6 +28,7 @@ locations count once.
 - P2: Two new RedCat NGC 7000 sessions with full geometry evidence and RedCat equipment evidence, not yet in `Astro-T7/Captures`: one Ha 300 s session and one OIII 300 s session, each of 10 frames, dated after 30 Sep.
 - P3: The J19/P5 manifest is available.
 - P4: A disposable writable volume `Spare` holding an empty `Captures/` folder.
+- P5: A same-size variant, with different bytes, of one named new Ha frame, kept outside PlateVault.
 
 ## Steps
 
@@ -72,17 +73,25 @@ locations count once.
 - **Expect (negative):** No duplicate 18 Sep session appears.
 - **Trace:** flow G · LIB-FR-06
 
+### S7 — Change one copy of a new Ha frame {#S7}
+
+- **Do:** Overwrite the P5 frame's `Spare` copy in place with its variant, restore that copy's mtime, and index `Spare/Captures` again.
+- **Expect:** After indexing completes, the frame reads as conflicting copies on `Astro-T7` and `Spare`, needing review. NGC 7000 captured Ha integration is unchanged.
+- **Expect (negative):** Captured Ha does not rise by 0h 05m, and the `Spare` copy is not offered in place of the `Astro-T7` copy. PlateVault changes neither file.
+- **Trace:** flow G · LIB-FR-08 · LIB-AC-15 · D16, D19 · J19/G4
+
 ## Success criteria
 
 - SC1: The prepared revision's entries equal the P1 listing at S1, S4, S5, and S6.
 - SC2: S3 lists exactly 2 added sessions, each with a reason, 2 manual inclusions, 6 retained exclusions, and 18 Sep as Unavailable with 0 removals.
 - SC3: After S5 the saved reviewed revision contains the new Ha session's 10 frames once each and not the new OIII session, persists across restart, and reads as needing review before preparation.
 - SC4: After S1 captured Ha has risen by exactly 0h 50m and each new Ha frame lists 2 physical copies.
+- SC5: After S7 captured Ha is unchanged and the changed frame reads as conflicting copies.
 
 ## Known gaps
 
-- G1: Not validated — the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D02, D08, and D09; no implementation has been validated against them.
-- G2: Unresolved — whether repeated refresh keeps manual inclusions pinned, and the folder used to prepare a new revision, are not settled by D01–D18 (flow decision 9). Preparing the S5 revision, and cleanup of replaced entries, are not exercised. Blocks readiness.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D02, D08, D09, D16, and D19; no implementation has been validated against them.
+- G2: Unresolved: whether repeated refresh keeps manual inclusions pinned, and the folder used to prepare a new revision, are not settled by D01 through D19 (flow decision 9). Preparing the S5 revision, and cleanup of replaced entries, are not exercised. Blocks readiness.
 - G3: Out of scope for this journey — path repair after an archive transfer is distinct from refresh and is exercised in J28/S8.
 
 ## Delta log

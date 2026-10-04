@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [preparation, view-review]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 069-application-handoff, D02, D04, D09, D13, D15, specs/063-clean-rebuild-contract/decisions.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-f-prepare-and-open-the-view]
+trace: [063-clean-rebuild-contract, 069-application-handoff, D02, D04, D09, D13, D15, D19, specs/063-clean-rebuild-contract/decisions.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-f-prepare-and-open-the-view]
 ---
 
 ## Goal
@@ -29,6 +29,7 @@ inputs and offers no verified Open. Retry completes only recorded items.
 - P5: No View has been prepared in this catalog, so no last-used parent exists.
 - P6: The J19/P5 manifest is available.
 - P7: For one named frame among the three 28 Sep frames made unreadable in S15, a backup of its original bytes and nanosecond mtime is kept outside PlateVault, with a replacement file of identical size and different pixel bytes. A fault control pauses Prepare after that item's source snapshot is recorded and before terminal success (G5).
+- P8: For one named 26 Sep frame, a backup of its original bytes and nanosecond mtime is kept outside PlateVault, with a same-size variant whose pixel bytes differ. Overwriting the frame in place keeps its inode, so its hardlink entry exposes the variant.
 
 ## Steps
 
@@ -99,12 +100,19 @@ inputs and offers no verified Open. Retry completes only recorded items.
 - **Expect (negative):** The View stays Prepared with its decisions and entries unchanged.
 - **Trace:** flow F6 failure branch · PREP-FR-10
 
+### S10a — Open after an input changed {#S10a}
+
+- **Do:** Restore Siril to its located path. Overwrite the P8 frame in place with its variant, restore its recorded mtime, and click **Open in Siril**.
+- **Expect:** Siril is not launched. The P8 frame's entry is named as changed since its preparation snapshot, and the View reads unverified.
+- **Expect (negative):** Open does not launch on the changed bytes, and PlateVault writes nothing to the frame or its entry.
+- **Trace:** flow F6 failure branch, cross-flow "External changes" · PREP-FR-10 · PREP-AC-15 · D19
+
 ### S11 — Open Siril {#S11}
 
-- **Do:** Restore Siril to its path, click **Open in Siril**, inspect the prepared inputs in Siril, then quit Siril.
-- **Expect:** Siril opens on the prepared View. PlateVault records the launch separately from processing completion.
+- **Do:** Restore the P8 frame's original bytes and recorded mtime. Click **Open in Siril**, inspect the prepared inputs in Siril, then quit Siril.
+- **Expect:** Open re-verifies every entry against its preparation snapshot, then Siril opens on the prepared View. PlateVault records the launch separately from processing completion.
 - **Expect (negative):** Quitting Siril does not mark the View Complete.
-- **Trace:** flow F6 · PREP-FR-10 · root edge "External application exit"
+- **Trace:** flow F6 · PREP-FR-10 · PREP-AC-15 · root edge "External application exit"
 
 ### S12 — Start a disposable check View {#S12}
 
@@ -157,12 +165,13 @@ inputs and offers no verified Open. Retry completes only recorded items.
 - SC6: Launching Siril and quitting it leave the View not Complete; a missing executable leaves it Prepared (S10, S11).
 - SC7: Only copies carry the patched value (S16).
 - SC8: The drifted P7 item reads Prepared 0 times while its source differs from its snapshot (S15a), and the manifest equals P6 after S16.
+- SC9: Siril launches 0 times while the P8 entry differs from its snapshot (S10a), and launches after S11 re-verification.
 
 ## Known gaps
 
-- G1: Not validated — the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D02, D04, D09, D13, and D15; no implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D02, D04, D09, D13, D15, and D19; no implementation has been validated against them.
 - G2: Unresolved implementation qualification — Siril's exact handoff, folder-versus-list input, and input-write behavior (P2) need a profile capability probe (D04); S2's branch and S3 depend on it. Blocks readiness.
-- G3: Unresolved — whether a View supports mixed per-item input modes is not settled by D01–D18; per-item mode changes are not exercised. Blocks readiness.
+- G3: Unresolved: whether a View supports mixed per-item input modes is not settled by D01 through D19, and per-item mode changes are not exercised. Blocks readiness.
 - G4: Unresolved implementation qualification — which preparation phases offer Cancel or Pause "where safe" is unspecified; Canceled and Paused outcomes are not exercised. Blocks readiness.
 - G5: Unresolved implementation qualification: no fault control yet pauses Prepare between a source snapshot and terminal success (P7), and S15a depends on it. Blocks readiness.
 

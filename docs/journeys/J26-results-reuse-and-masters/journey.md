@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [results, view-review, preparation, calibration, projects, targets]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 070-results-reuse, 068-calibration-inputs, 069-application-handoff, D04, D05, D09, D13, specs/063-clean-rebuild-contract/decisions.md, specs/070-results-reuse/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-h-results-and-generated-masters]
+trace: [063-clean-rebuild-contract, 070-results-reuse, 068-calibration-inputs, 069-application-handoff, D04, D05, D09, D13, D19, specs/063-clean-rebuild-contract/decisions.md, specs/070-results-reuse/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-h-results-and-generated-masters]
 ---
 
 ## Goal
@@ -49,10 +49,17 @@ automatically.
 
 ### S3 — Accept products {#S3}
 
-- **Do:** Inspect the Ha stack, the OIII stack, and the final image, each with its association. Select all three and click **Accept Result**.
-- **Expect:** The three products appear on the View, on Project `NGC 7000 HOO`, and on Target NGC 7000, and read Keep for cleanup. Each product's details show the SHA-256 recorded at acceptance.
-- **Expect (negative):** Acceptance does not change any lineage value, and nothing claims that all 208 planned frames were used.
-- **Trace:** flow H3 · RES-FR-04 · RES-AC-03
+- **Do:** Inspect the Ha stack, the OIII stack, and the final image, each with its association. With the P5 helper, save the final image, overwrite it with its same-size variant, and restore its mtime. Select all three and click **Accept Result**.
+- **Expect:** The Ha and OIII stacks appear on the View, on Project `NGC 7000 HOO`, and on Target NGC 7000, read Keep for cleanup, and show the SHA-256 recorded at acceptance. The final image is refused as changed since inspection and asks to be inspected again.
+- **Expect (negative):** The final image is not accepted. Acceptance does not change any lineage value, and nothing claims that all 208 planned frames were used.
+- **Trace:** flow H3, cross-flow "External changes" · RES-FR-04 · RES-AC-03, RES-AC-10 · D19
+
+### S3a — Accept the re-inspected image {#S3a}
+
+- **Do:** With the P5 helper, restore the final image's saved bytes and mtime. Inspect it again and click **Accept Result**.
+- **Expect:** The final image appears on the View, Project and Target, reads Keep for cleanup, and shows the SHA-256 recorded at acceptance.
+- **Expect (negative):** Its lineage stays User-linked.
+- **Trace:** flow H3 · RES-FR-04 · RES-AC-10 · D19
 
 ### S4 — Create a View from accepted results {#S4}
 
@@ -124,20 +131,36 @@ automatically.
 - **Expect (negative):** The generated source in `output/` remains in place, and the S8a file is unchanged. Neither S8b nor S8c copy is registered or suggested. The adopted master is not handed off before it is accepted.
 - **Trace:** flow H4 · CAL-FR-06, CAL-FR-07 · CAL-AC-05, CAL-AC-07, CAL-AC-08, CAL-AC-09 · D05, D13
 
+### S9a — Change the adopted master {#S9a}
+
+- **Do:** With the P5 helper, save the adopted master in `Astro-T7/Calibration`, overwrite it with its variant, and restore its mtime. Open Calibration, then reopen the Calibration area of `28 Sep Ha copy check`.
+- **Expect:** Calibration lists the adopted master as drifted against its adoption digest, needing review. `28 Sep Ha copy check` shows no suggestion for it, and it cannot be accepted there.
+- **Expect (negative):** The master is not removed, re-adopted or offered to any View, and its adoption provenance stays as history.
+- **Trace:** flow H4, cross-flow "External changes" · CAL-FR-08 · CAL-AC-10 · D05, D19
+
+### S9b — Restore the adopted master {#S9b}
+
+- **Do:** With the P5 helper, restore the adopted master's saved bytes and mtime, then reopen the Calibration area of `28 Sep Ha copy check`.
+- **Expect:** The rehash matches the adoption digest, and the master appears again as a compatible suggestion awaiting acceptance.
+- **Expect (negative):** No new adoption is recorded.
+- **Trace:** flow H4 · CAL-FR-08 · CAL-AC-10 · D19
+
 ## Success criteria
 
 - SC1: At S1 the growing file reads Pending and 0 candidates read accepted.
-- SC2: The attached file reads User-linked (S2); 0 lineage values change on acceptance (S3).
+- SC2: The attached file reads User-linked (S2); 0 lineage values change on acceptance (S3, S3a).
 - SC3: `NGC7000 HOO combine` has exactly 2 product inputs and 0 raw session integration (S4).
 - SC4: Product-input support is either listed or refused by name, never converted (S5).
 - SC5: Same-stat drift is flagged for review and the drifted product is offered for reuse 0 times (S7); after S7a it is offered again with 0 new acceptances.
 - SC6: The master is offered to 0 Views before adoption (S8); it is registered only after a verified copy, and its source remains (S9).
 - SC7: The occupied adoption path is refused and its file changes 0 bytes (S8a).
 - SC8: 0 masters are registered while the source differs from its reviewed digest (S8b, S8c); exactly 1 is registered after a fresh review (S9).
+- SC9: The product changed after inspection is accepted 0 times until inspected again (S3, S3a).
+- SC10: The drifted adopted master is suggested 0 times (S9a) and is suggested again with 0 new adoptions after S9b.
 
 ## Known gaps
 
-- G1: Not validated — the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D04, D05, D09, and D13; no implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D04, D05, D09, D13, and D19; no implementation has been validated against them.
 - G2: Unresolved implementation qualification — Siril's product-input capability (D04) decides which S5 branch applies; S6 runs only on the supported branch. Blocks readiness.
 - G3: Out of scope for this journey — mixed raw/product inputs in one View and **Add accepted results** in an existing View's workspace are not exercised. Blocks readiness until covered by a step or a journey.
 - G4: Unresolved implementation qualification: no fault control yet pauses adoption between destination verification and registration (P6). S8c depends on it. Blocks readiness.

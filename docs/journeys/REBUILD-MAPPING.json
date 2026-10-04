@@ -144,21 +144,23 @@
         "id": "J24",
         "blocking": [
           "G2 Siril handoff and input-write probe",
-          "G3 mixed per-item modes not settled by D01–D18",
-          "G4 Cancel/Pause phases"
+          "G3 mixed per-item modes not settled by D01–D19",
+          "G4 Cancel/Pause phases",
+          "G5 fault control pausing Prepare between snapshot and success"
         ]
       },
       {
         "id": "J25",
         "blocking": [
-          "G2 manual-inclusion pins and the folder for a new revision not settled by D01–D18"
+          "G2 manual-inclusion pins and the folder for a new revision not settled by D01–D19"
         ]
       },
       {
         "id": "J26",
         "blocking": [
           "G2 Siril product-input capability",
-          "G3 mixed raw/product and Add accepted results not exercised"
+          "G3 mixed raw/product and Add accepted results not exercised",
+          "G4 fault control pausing adoption before registration"
         ]
       },
       {
@@ -173,13 +175,15 @@
         "blocking": [
           "G2 hash-mismatch fault fixture",
           "G3 View layout for P4 and the source-retirement method",
-          "G4 Direct-source path updates not exercised"
+          "G4 Direct-source path updates not exercised",
+          "G5 fault control pausing an item before source retirement"
         ]
       },
       {
         "id": "J29",
         "blocking": [
-          "G2 reminder observability and the scheduler (D07)"
+          "G2 reminder observability and the scheduler (D07)",
+          "G3 development clock control for reminder delivery"
         ]
       },
       {

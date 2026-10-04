@@ -16,7 +16,7 @@ Feature: [Specification](../spec.md)
 - [x] Open choices have named consuming feature owners.
 - [x] Existing uncommitted work and the archived reference remain outside destructive actions.
 - [x] Independent cross-feature requirements review passed after M1 through M13, R1 through R9 and C1 corrections; implementation readiness is not certified.
-- [x] Conservative product defaults are encoded in D01 through D18 under the user-authorized autonomous run.
+- [x] Conservative product defaults are encoded in D01 through D19 under the user-authorized autonomous run.
 
 ## Feature readiness
 

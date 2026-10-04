@@ -118,10 +118,10 @@
     {
       "flowStep": "D1",
       "journeyStep": "J22/S1, J22/S3, J22/S4, J22/S15a, J22/S15b",
-      "spec": "067-frame-review PIX-FR-01, PIX-AC-01, PIX-AC-10; 064-library-inventory LIB-FR-09, LIB-AC-14",
+      "spec": "067-frame-review PIX-FR-01, PIX-FR-06, PIX-AC-01, PIX-AC-10; 064-library-inventory LIB-FR-09, LIB-AC-14; 065-project-goals PRJ-FR-04; D19",
       "action": "Open Review frames, cancel measurement, and reopen. Replace a reviewed frame's bytes in place, rescan and reopen, then restore the reviewed bytes.",
-      "expect": "Pending frames and progress show. After Cancel, unfinished frames read Not measured. Cached values reappear and missing ones resume. The replaced frame reads ChangedContent outside usable totals and is measured again; restored bytes make it Usable again.",
-      "negative": "Cancel discards no selection or exclusion. Cached values for other bytes never read valid, and no quality decision is recorded."
+      "expect": "Pending frames and progress show. After Cancel, unfinished frames read Not measured. Cached values reappear and missing ones resume. The replaced frame reads ChangedContent outside usable totals and Project progress and is measured again; restored bytes make it Usable again.",
+      "negative": "Cancel discards no selection or exclusion. Cached or imported values for other bytes never read valid, and no quality decision is recorded."
     },
     {
       "flowStep": "D2",
@@ -237,19 +237,19 @@
     },
     {
       "flowStep": "F6",
-      "journeyStep": "J24/S10, J24/S11",
-      "spec": "069-application-handoff PREP-FR-10",
-      "action": "Open with a missing executable, then open Siril and quit it.",
-      "expect": "Choose application and Reveal View are offered, and the launch is recorded separately from processing.",
-      "negative": "The View stays Prepared, and quitting Siril does not mark it Complete."
+      "journeyStep": "J24/S10, J24/S10a, J24/S11",
+      "spec": "069-application-handoff PREP-FR-10, PREP-AC-15; D19",
+      "action": "Open with a missing executable, open after a linked input changed in place, then restore it, open Siril and quit it.",
+      "expect": "Choose application and Reveal View are offered. A changed entry refuses the launch and is named. Open re-verifies every entry before launching, and the launch is recorded separately from processing.",
+      "negative": "The View stays Prepared, Siril never launches on changed bytes, and quitting Siril does not mark it Complete."
     },
     {
       "flowStep": "G",
-      "journeyStep": "J25/S1–S6",
-      "spec": "066-view-selection VSEL-FR-08, VSEL-FR-12, VSEL-AC-06, VSEL-AC-15; 064-library-inventory LIB-FR-08, LIB-AC-15; 069-application-handoff PREP-FR-11; D02, D08, D09, D16",
-      "action": "Index new arrivals, one session also copied to a second Captures location, make a member unreadable, Refresh selection, keep the View unchanged, then accept one addition, decline one, and save.",
-      "expect": "The copied session's frames count once and name both copies. Additions show with reasons, manual inclusions and exclusions stay recorded, and the unreadable member reads Unavailable. The accepted change becomes a proposed revision that needs review.",
-      "negative": "Membership never changes without approval, and no copied frame enters it twice. The prepared revision and the inputs Siril reads stay identical."
+      "journeyStep": "J25/S1–S7",
+      "spec": "066-view-selection VSEL-FR-08, VSEL-FR-12, VSEL-AC-06, VSEL-AC-15; 064-library-inventory LIB-FR-08, LIB-AC-15; 069-application-handoff PREP-FR-11; D02, D08, D09, D16, D19",
+      "action": "Index new arrivals, one session also copied to a second Captures location, make a member unreadable, Refresh selection, keep the View unchanged, then accept one addition, decline one, and save. Finally change one copy of a copied frame and rescan.",
+      "expect": "The copied session's frames count once and name both copies. Additions show with reasons, manual inclusions and exclusions stay recorded, and the unreadable member reads Unavailable. The accepted change becomes a proposed revision that needs review. A changed copy reads as conflicting copies.",
+      "negative": "Membership never changes without approval, and no copied frame enters it twice. The prepared revision and the inputs Siril reads stay identical. A conflicting copy is not counted twice or substituted."
     },
     {
       "flowStep": "H1",
@@ -269,11 +269,11 @@
     },
     {
       "flowStep": "H3",
-      "journeyStep": "J26/S3",
-      "spec": "070-results-reuse RES-FR-04, RES-AC-03",
-      "action": "Inspect and accept three products.",
-      "expect": "They appear on the View, Project, and Target and read Keep, each with the SHA-256 recorded at acceptance.",
-      "negative": "Acceptance upgrades no lineage and claims no use of all frames."
+      "journeyStep": "J26/S3, J26/S3a",
+      "spec": "070-results-reuse RES-FR-04, RES-AC-03, RES-AC-10; D19",
+      "action": "Inspect three products, change one before accepting, then inspect it again and accept it.",
+      "expect": "They appear on the View, Project, and Target and read Keep, each with the SHA-256 recorded at acceptance. A product changed since inspection is refused until inspected again.",
+      "negative": "Acceptance upgrades no lineage, claims no use of all frames, and never records bytes that were not inspected."
     },
     {
       "flowStep": "H3a",
@@ -285,11 +285,11 @@
     },
     {
       "flowStep": "H4",
-      "journeyStep": "J26/S8, J26/S8a, J26/S8b, J26/S8c, J26/S9",
-      "spec": "068-calibration-inputs CAL-FR-06, CAL-FR-07, CAL-AC-04, CAL-AC-05, CAL-AC-07, CAL-AC-08, CAL-AC-09; D05, D13",
-      "action": "See the detected master, meet an occupied destination path, change the master after review and again before registration, then adopt it into a durable calibration destination.",
-      "expect": "The occupied path is refused, and both source changes block adoption with drift named. The master is registered with provenance only after its copy and source match the reviewed digest, then appears as a suggestion awaiting acceptance.",
-      "negative": "It is never preselected before adoption, the occupying file is unchanged, no copy of changed or unreviewed bytes is registered, and its generated source is not removed."
+      "journeyStep": "J26/S8, J26/S8a, J26/S8b, J26/S8c, J26/S9, J26/S9a, J26/S9b",
+      "spec": "068-calibration-inputs CAL-FR-06, CAL-FR-07, CAL-FR-08, CAL-AC-04, CAL-AC-05, CAL-AC-07, CAL-AC-08, CAL-AC-09, CAL-AC-10; D05, D13, D19",
+      "action": "See the detected master, meet an occupied destination path, change the master after review and again before registration, adopt it into a durable calibration destination, then change and restore the adopted copy.",
+      "expect": "The occupied path is refused, and both source changes block adoption with drift named. The master is registered with provenance only after its copy and source match the reviewed digest, then appears as a suggestion awaiting acceptance. A changed adopted copy reads drifted until its bytes return.",
+      "negative": "It is never preselected before adoption, the occupying file is unchanged, no copy of changed or unreviewed bytes is registered, its generated source is not removed, and a drifted master is never suggested or accepted."
     },
     {
       "flowStep": "I1",
@@ -317,19 +317,19 @@
     },
     {
       "flowStep": "I4",
-      "journeyStep": "J27/S7, J27/S11",
-      "spec": "071-storage-custody STO-FR-04, STO-AC-04, STO-AC-08",
-      "action": "Review cleanup, then remove a symlink View's prepared links and a verified duplicate.",
-      "expect": "The exact entries show with Send to OS Trash, movable and blocked counts per location, and a last-copy hardlink blocked. Duplicate removal names the verified copy kept.",
-      "negative": "Nothing with stale identity, missing proof, an unavailable source, or ambiguous ownership is approved. No symlink target or target directory is followed."
+      "journeyStep": "J27/S7, J27/S11, J27/S11a",
+      "spec": "071-storage-custody STO-FR-04, STO-AC-04, STO-AC-08, STO-AC-15; D19",
+      "action": "Review cleanup, then remove a symlink View's prepared links and a verified duplicate whose kept copy changes after review, and remove the duplicate again after a fresh review.",
+      "expect": "The exact entries show with Send to OS Trash, movable and blocked counts per location, and a last-copy hardlink blocked. Duplicate removal names the verified copy kept and waits until that copy matches its review again.",
+      "negative": "Nothing with stale identity, drift, missing proof, an unavailable source, or ambiguous ownership is approved. No symlink target or target directory is followed."
     },
     {
       "flowStep": "I5",
       "journeyStep": "J27/S8, J27/S9, J27/S10",
-      "spec": "071-storage-custody STO-FR-05, STO-AC-03",
-      "action": "Send to Trash, put one file back, and try a location without Trash.",
-      "expect": "Per-item outcomes and a partial summary show. The removed entries are in the OS Trash. The unsupported location offers Keep files and Reveal location.",
-      "negative": "Link targets are not followed, protected files are unchanged, and no permanent-delete fallback exists."
+      "spec": "071-storage-custody STO-FR-04, STO-FR-05, STO-AC-03, STO-AC-15; D19",
+      "action": "Send to Trash after one selected intermediate changes, put one file back, and try a location without Trash.",
+      "expect": "Per-item outcomes and a partial summary show, naming the changed intermediate as blocked. The removed entries are in the OS Trash. The unsupported location offers Keep files and Reveal location.",
+      "negative": "Link targets are not followed, protected files and changed entries are unchanged, and no permanent-delete fallback exists."
     },
     {
       "flowStep": "J",
@@ -349,10 +349,10 @@
     },
     {
       "flowStep": "L",
-      "journeyStep": "J30/S1–S6",
-      "spec": "071-storage-custody STO-FR-09, STO-AC-06; D06, D14; D09",
-      "action": "Propose filing, meet a collision, revise the plan, approve, verify, and interrupt a cross-volume filing.",
-      "expect": "Every relative path is previewed with its original basename. Only the displayed operations run. Hashes verify, and references report outcomes.",
+      "journeyStep": "J30/S1–S6, J30/S4a",
+      "spec": "071-storage-custody STO-FR-09, STO-AC-06, STO-AC-15; D06, D14, D19; D09",
+      "action": "Propose filing, meet a collision, revise the plan, approve after one source changes, file it once restored, verify, and interrupt a cross-volume filing.",
+      "expect": "Every relative path is previewed with its original basename. Only the displayed operations run, and a source changed since review is blocked until it matches again. Hashes verify, and references report outcomes.",
       "negative": "Nothing is overwritten, merged, or patched. A source is kept after failed verification, and membership is unchanged."
     }
   ]

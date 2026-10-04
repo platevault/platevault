@@ -15,7 +15,7 @@ Implement the full LIB contract in a clean Rust backend and catalog. The first a
 - Storage: fresh SQLite catalog, WAL, foreign keys, FULL synchronous user-decision commits; no legacy data migration.
 - Platform: desktop Tauri 2 on macOS, Windows and Linux. Host proof is macOS; other-platform gates remain explicit.
 - Testing: focused Rust behavior tests and generated FITS/XISF integration, then `cargo test --workspace` after integration; real development Tauri MCP application scenarios.
-- Performance: bounded headers and progressive batches; no source copies. New Unreviewed indexing does not hash full images. Explicit quality review, readable rescans/reuse of previously decided assets and cross-location duplicate candidates hash bytes off the UI thread, even when stats match. A decided asset is verification pending, outside applicable totals, until its rehash finishes. Unavailable inputs keep last-observed quality with availability labels.
+- Performance: bounded headers and progressive batches; no source copies. New Unreviewed indexing does not hash full images. Explicit quality review, readable rescans/reuse of previously decided or aliased assets and cross-location duplicate candidates hash bytes off the UI thread, even when stats match. A decided asset is verification pending, outside applicable totals, until its rehash finishes. Unavailable inputs keep last-observed quality with availability labels.
 - Scale: user-selected roots and file inventory, not an assumed workspace. Preserve non-UTF8 path errors rather than silently skip them.
 
 ## Constitution Check

@@ -74,3 +74,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 ## Decisions before feature approval
 
 - Root decisions D01, D10 and D12 define framing, checklist kinds/progress basis and explicit Project-session linkage. Automatic geometry remains subject to qualified evidence.
+- Root decision D19 limits Project progress to library decisions whose content still verifies; a drifted frame counts toward no goal.

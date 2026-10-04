@@ -36,7 +36,7 @@ Register locations and index them in place. Form metadata-homogeneous sessions, 
 - **LIB-AC-12**: Given a saved local target and a successful external resolver response, when enrichment is reviewed, then aliases, coordinates and provider provenance remain distinguishable from capture metadata. A resolver failure leaves the local target and indexed sessions usable.
 - **LIB-AC-13**: Given the development app is running with its MCP bridge, when the test client connects and invokes indexing, queries sessions and controls navigation, then real persisted outcomes and the actual app surface are observed. The release configuration does not enable the unauthenticated development bridge.
 - **LIB-AC-14**: Given a Usable frame replaced in place with its size and mtime preserved, when its location is rescanned, then the rehash marks it ChangedContent and keeps the previous decision as history. It leaves applicable usable totals, appears under the ChangedContent filter, and fixed View membership is unchanged. Restoring the reviewed bytes and rescanning returns the frame to applicable Usable totals without a new decision.
-- **LIB-AC-15**: Given byte-identical copies of one session in two registered Captures locations, when indexing completes, then Sessions lists each frame once with both physical copies and captured integration counts it once. Both copies remain registered, protected and unchanged.
+- **LIB-AC-15**: Given byte-identical copies of one session in two registered Captures locations, when indexing completes, then Sessions lists each frame once with both physical copies and captured integration counts it once. Both copies remain registered, protected and unchanged. When one copy is later replaced in place with its size and mtime preserved, the next rescan of its location names the pair conflicting copies. The capture still counts once, and neither copy is offered in place of the other.
 
 ### Edge Cases
 
@@ -95,3 +95,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 ## Decisions before feature approval
 
 - Root decisions D01, D08, D10, D11, D15, D16, D17 and D18 define geometry evidence, failed-write recovery, quality, equipment/remap proof, grouping revisions, location availability, development MCP and target enrichment. Their implementation still requires fixture and platform evidence.
+- Root decision D19 binds usable totals, logical-capture proof and remap to a re-verified identity and SHA-256.

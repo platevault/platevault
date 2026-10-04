@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [filing, sessions, storage, view-review]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 071-storage-custody, D06, D09, D14, specs/063-clean-rebuild-contract/decisions.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-l-optional-reviewed-filing]
+trace: [063-clean-rebuild-contract, 071-storage-custody, D06, D09, D14, D19, specs/063-clean-rebuild-contract/decisions.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-l-optional-reviewed-filing]
 ---
 
 ## Goal
@@ -24,6 +24,7 @@ source; and session boundaries and View membership are unchanged.
 - P1: Fresh replay of J24 (J25–J28 not run). `NGC7000 HOO - Siril` is Prepared with 208 hardlink entries and has been marked Complete as in J27/S2.
 - P2: Folder `Astro-T7/Library` exists (same volume as the captures) and the disposable volume `Archive` holds `Library/`; both are writable.
 - P3: The J19/P5 manifest is available.
+- P4: A helper outside PlateVault that saves a named file's bytes and nanosecond mtime, then overwrites it in place with a same-size variant whose bytes differ and restores the saved mtime. The helper later restores the saved bytes and mtime.
 
 ## Steps
 
@@ -49,10 +50,17 @@ source; and session boundaries and View membership are unchanged.
 
 ### S4 — Approve the displayed operations {#S4}
 
-- **Do:** Approve the displayed file operations and reference changes.
-- **Expect:** Item progress and final outcomes are reported; each affected reference reports completed, blocked, or uncertain.
-- **Expect (negative):** No operation runs that the plan did not display.
-- **Trace:** flow L · STO-FR-09
+- **Do:** With the P4 helper, overwrite one named 30 Sep source frame after the S3 review. Then approve the displayed file operations and reference changes.
+- **Expect:** Item progress and final outcomes are reported; each affected reference reports completed, blocked, or uncertain. The named frame's item is blocked because its bytes differ from the reviewed plan, and the other 47 files move.
+- **Expect (negative):** No operation runs that the plan did not display, and the named frame stays at its source path.
+- **Trace:** flow L · STO-FR-09 · STO-AC-15 · D19
+
+### S4a — File the restored frame {#S4a}
+
+- **Do:** With the P4 helper, restore the frame's saved bytes and mtime. Review filing for the blocked item again and approve it.
+- **Expect:** The item re-verifies and moves to its previewed path, and its affected references report completed.
+- **Expect (negative):** No other item moves again.
+- **Trace:** flow L · STO-FR-09 · STO-AC-15 · D19
 
 ### S5 — Verify the result {#S5}
 
@@ -71,13 +79,14 @@ source; and session boundaries and View membership are unchanged.
 ## Success criteria
 
 - SC1: The collision file is byte-identical after S2 and 0 files are overwritten.
-- SC2: Exactly 48 files move in S4, each with its original basename and P3 hash (S5).
+- SC2: Exactly 48 files move across S4 and S4a, each with its original basename and P3 hash (S5).
 - SC3: Sessions stay at exactly 7 light sessions, and View membership stays 208 / 17h 20m (S5, S6).
 - SC4: After S6, every pending, failed or unverified item retains its original source and hash. Every retired source has recorded destination hash and reference verification.
+- SC5: The changed frame moves 0 times while it differs from the reviewed plan (S4).
 
 ## Known gaps
 
-- G1: Not validated — the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D06, D09, and D14; no implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D06, D09, D14, and D19; no implementation has been validated against them.
 - G2: Unresolved implementation qualification — the relative layout under the destination (folder structure beyond retained basenames, D14) is not fixed; S1 and S2 rely on the preview rather than a predicted path. Retrying the S6 filing is not exercised. Blocks readiness.
 
 ## Delta log

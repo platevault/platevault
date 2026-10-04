@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [frame-review, view-review, targets, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 066-view-selection, 067-frame-review, 065-project-goals, 064-library-inventory, D02, D03, D08, D10, specs/063-clean-rebuild-contract/decisions.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, specs/065-project-goals/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-d-inspect-frames-and-quality]
+trace: [063-clean-rebuild-contract, 066-view-selection, 067-frame-review, 065-project-goals, 064-library-inventory, D02, D03, D08, D10, D19, specs/063-clean-rebuild-contract/decisions.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, specs/065-project-goals/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-d-inspect-frames-and-quality]
 ---
 
 ## Goal
@@ -141,14 +141,14 @@ as Usable until its reviewed bytes return. PlateVault writes no source file.
 ### S15a — Replace a reviewed frame in place {#S15a}
 
 - **Do:** Outside PlateVault, overwrite the P5 frame with its replacement and restore its recorded mtime. Index `Astro-T7 captures` again, then click **Review frames**.
-- **Expect:** After the rescan completes, the frame reads ChangedContent with its previous Usable decision kept as history, it is listed under the ChangedContent filter, and NGC 7000 usable Ha integration reads 9h 10m. In Review frames its cached measurements never read valid; the frame is measured again from its current bytes, and the earlier values show as history for the earlier content.
+- **Expect:** After the rescan completes, the frame reads ChangedContent with its previous Usable decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, and Project `NGC 7000 HOO` reads Ha usable 9h 10m, still met. In Review frames neither its cached nor its imported S14 values read valid; the frame is measured again from its current bytes, and the earlier values show as history for the earlier content.
 - **Expect (negative):** The frame counts as neither Usable nor Unreviewed. No quality decision is recorded, and the View still reads 208 lights / 17h 20m.
-- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01 · LIB-AC-14, PIX-AC-10 · D10 · J19/G4
+- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01, PIX-FR-06, PRJ-FR-04 · LIB-AC-14, PIX-AC-10 · D10, D19 · J19/G4
 
 ### S15b — Restore the reviewed bytes {#S15b}
 
 - **Do:** Restore the P5 frame's original bytes and recorded mtime, index `Astro-T7 captures` again, and reopen **Review frames**.
-- **Expect:** The rehash matches the reviewed digest. The frame reads Usable, NGC 7000 usable Ha integration reads 9h 15m, and its earlier cached measurements read valid again.
+- **Expect:** The rehash matches the reviewed digest. The frame reads Usable, NGC 7000 usable Ha integration and the Project's Ha progress read 9h 15m, and its earlier cached and imported values read valid again.
 - **Expect (negative):** The restoration records no new quality decision. Source bytes equal P4 again.
 - **Trace:** flow D1 · LIB-FR-09, PIX-FR-01 · LIB-AC-14 · J19/G4
 
@@ -167,11 +167,11 @@ as Usable until its reviewed bytes return. PlateVault writes no source file.
 - SC4: Library quality decisions change only at S11 (208 frames) and S13 (1 frame); the Project rejection changes 0 library totals, and S15a and S15b change applicability only.
 - SC5: S14 replaces 0 native values and lists both the unmatched and the ambiguous row.
 - SC6: The Project stays open after the Ha item is met (S12).
-- SC7: With the replacement in place, the frame reads ChangedContent, usable Ha reads 9h 10m and its cached values read valid 0 times (S15a); after S15b usable Ha reads 9h 15m again.
+- SC7: With the replacement in place, the frame reads ChangedContent, usable Ha reads 9h 10m and its cached or imported values read valid 0 times (S15a); after S15b usable Ha reads 9h 15m again.
 
 ## Known gaps
 
-- G1: Not validated — the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D02, D03, D08, and D10; no implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D02, D03, D08, D10, and D19; no implementation has been validated against them.
 - G2: Unresolved implementation qualification — numerical measurement methods, metric set, masks, saturation, background, aperture, and tolerances need fixture qualification in PIX planning (D03). The P2 fixture is mono; CFA inspection as the recorded mosaic plane (D03) is not exercised. Blocks readiness.
 
 ## Delta log

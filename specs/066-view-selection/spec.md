@@ -100,3 +100,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 ## Decisions before feature approval
 
 - Root decisions D01, D02, D08, D09, D10, D12, D15 and D16 define geometry, draft inclusion, explicit saving and stale-edit recovery, immutable preparation revisions, quality scopes, panel/session linkage, grouping corrections and single membership for content-identical copies.
+- Root decision D19 binds View totals and logical-capture membership to re-verified content; preparation enforces it per item.

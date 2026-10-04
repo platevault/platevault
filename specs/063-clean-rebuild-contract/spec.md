@@ -118,6 +118,7 @@ The user chooses a planning site, reviews observing windows, and explicitly opts
 - **FR-014**: Planning-site selection, capture sites, and Project membership MUST remain independent. Reminders MUST require opt-in and name the default site.
 - **FR-015**: Core library use MUST remain local-first without an account. External applications own calibration, registration, integration, and final image production.
 - **FR-016**: The old application and existing uncommitted work MUST remain recoverable during rebuilding. Source-code reuse MUST NOT imply importing old catalog decisions.
+- **FR-017**: Counting, assigning, opening, preparing, reusing, cleaning, archiving, filing or retiring a recorded file MUST re-verify its recorded identity and SHA-256 immediately before the effect. On any mismatch it MUST name the drift and block that item, or exclude it from applicable totals when counting (D19).
 
 ### Feature ownership
 
@@ -182,6 +183,7 @@ The user authorized conservative product defaults and, on 2026-10-04, waived eve
 | Draft persistence and concurrent edits | PV-VSEL |
 | View revisions, retries, reopening, and completion blockers | PV-VSEL, PV-PREP, PV-RES, PV-STO |
 | Quality precedence and Project progress | PV-LIB, PV-PRJ, PV-VSEL |
+| Content-bound consumption of recorded files | All feature owners |
 
 The existing constitution prohibits debayering. A raw/CFA review specification must define supported read-only channel handling or seek an explicit constitutional amendment before adding debayered preview behavior.
 

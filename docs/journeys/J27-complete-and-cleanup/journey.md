@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [results, cleanup, storage, view-review]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 070-results-reuse, 071-storage-custody, D05, D09, D16, specs/063-clean-rebuild-contract/decisions.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-i-completion-and-selectable-cleanup]
+trace: [063-clean-rebuild-contract, 070-results-reuse, 071-storage-custody, D05, D09, D16, D19, specs/063-clean-rebuild-contract/decisions.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-i-completion-and-selectable-cleanup]
 ---
 
 ## Goal
@@ -28,6 +28,7 @@ location without safe Trash refuses removal with no permanent-delete fallback.
 - P4: Record a baseline inventory of the isolated account's Trash without deleting anything, plus a manifest of accepted products, adopted master/source and remaining generated captures. Trash checks compare only this journey's newly added entries against that baseline.
 - P5: A second final image saved by the user outside the View, at `Work/Finals/NGC7000-HOO-crop.tif`.
 - P6: A disposable standalone View `26 Sep symlink check`, created from the 26 Sep session and prepared under `Work/Processing` in Linked View with symlink entries, then marked Complete with no Result. Outside PlateVault, its View folder also receives `extra/`, holding a byte copy of one named 26 Sep capture. Record the J19/P5 entries of the 26 Sep session.
+- P7: A helper outside PlateVault that saves a named file's bytes and nanosecond mtime, then overwrites it in place with a same-size variant whose bytes differ and restores the saved mtime. The helper later restores the saved bytes and mtime.
 
 ## Steps
 
@@ -82,10 +83,10 @@ location without safe Trash refuses removal with no permanent-delete fallback.
 
 ### S8 — Send the selected files to Trash {#S8}
 
-- **Do:** Confirm **Send selected files to Trash**.
-- **Expect:** Progress shows per-item outcomes and a partial summary naming the blocked entry. The View records which prepared inputs and products were removed and which remain. The removed entries appear in the OS Trash. The View still reads Complete.
-- **Expect (negative):** Link targets are not followed: the remaining captures, accepted products, master and its source, and the unknown file match P4. The deselected registered intermediate and the P3 hardlink entry remain. Reviewed cleanup neither reopens the View nor changes its fixed membership.
-- **Trace:** flow I5 · STO-FR-05 · root SC-006 · D09
+- **Do:** With the P7 helper, overwrite one selected registered intermediate after its review. Then confirm **Send selected files to Trash**.
+- **Expect:** Progress shows per-item outcomes and a partial summary naming both blocked entries: the P3 hardlink entry and the intermediate, which reads changed since review. The View records which prepared inputs and products were removed and which remain. The removed entries appear in the OS Trash. The View still reads Complete.
+- **Expect (negative):** Link targets are not followed: the remaining captures, accepted products, master and its source, and the unknown file match P4. The deselected registered intermediate, the changed intermediate and the P3 hardlink entry remain. Reviewed cleanup neither reopens the View nor changes its fixed membership.
+- **Trace:** flow I5 · STO-FR-04, STO-FR-05 · STO-AC-15 · root SC-006 · D09, D19
 
 ### S9 — Restore from the OS Trash {#S9}
 
@@ -102,10 +103,17 @@ location without safe Trash refuses removal with no permanent-delete fallback.
 
 ### S11 — Remove symlink entries and a verified duplicate {#S11}
 
-- **Do:** Open `26 Sep symlink check`, click **Clean up View**, select **Prepared inputs** and the duplicate in `extra/`, click **Review cleanup**, and confirm **Send selected files to Trash**.
-- **Expect:** Cleanup lists the `extra/` file as a verified duplicate, and the review names the 26 Sep capture kept as its verified copy. The 35 symlink entries are listed as links removed without following their targets. After execution the 35 links and the duplicate are newly in the OS Trash.
-- **Expect (negative):** Every 26 Sep capture, including each link target and the kept copy, matches its P6 record. No file under `Astro-T7/Captures/26 Sep` reaches the Trash, and no link target or target directory is traversed or removed.
-- **Trace:** flow I4, I5 · STO-FR-04, STO-FR-05 · STO-AC-08
+- **Do:** Open `26 Sep symlink check`, click **Clean up View**, select **Prepared inputs** and the duplicate in `extra/`, and click **Review cleanup**. With the P7 helper, overwrite the kept 26 Sep capture. Then confirm **Send selected files to Trash**.
+- **Expect:** Cleanup listed the `extra/` file as a verified duplicate, and the review named the 26 Sep capture kept as its verified copy. The 35 symlink entries were listed as links removed without following their targets. After execution the 35 links are newly in the OS Trash, and the duplicate is blocked because its kept copy changed since review.
+- **Expect (negative):** The duplicate remains in `extra/`. No file under `Astro-T7/Captures/26 Sep` reaches the Trash, and no link target or target directory is traversed or removed.
+- **Trace:** flow I4, I5 · STO-FR-04, STO-FR-05 · STO-AC-08, STO-AC-15 · D19
+
+### S11a — Remove the duplicate after a fresh review {#S11a}
+
+- **Do:** With the P7 helper, restore the kept capture's saved bytes and mtime. Review cleanup for the duplicate again and confirm **Send selected files to Trash**.
+- **Expect:** The review names the kept capture as a verified copy again, and the duplicate is newly in the OS Trash.
+- **Expect (negative):** Every 26 Sep capture, including each link target and the kept copy, matches its P6 record.
+- **Trace:** flow I4, I5 · STO-FR-04 · STO-AC-08, STO-AC-15 · D19
 
 ## Success criteria
 
@@ -115,11 +123,12 @@ location without safe Trash refuses removal with no permanent-delete fallback.
 - SC4: The last-copy hardlink is refused and remains (S7, S8).
 - SC5: On `Scratch`, 0 files are removed and no permanent-delete action exists (S10).
 - SC6: A Complete View refuses membership edits until Reopen, accepts a notes edit and a Result acceptance, and still reads Complete after reviewed cleanup (S3, S8).
-- SC7: Trashing 35 symlinks and 1 verified duplicate names the kept copy and leaves 100% of 26 Sep captures matching P6 (S11).
+- SC7: Trashing 35 symlinks and 1 verified duplicate names the kept copy and leaves 100% of 26 Sep captures matching P6 (S11, S11a).
+- SC8: Entries whose own bytes or kept copy changed after review are removed 0 times (S8, S11).
 
 ## Known gaps
 
-- G1: Not validated — the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D05, D09, and D16; no implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D05, D09, D16, and D19; no implementation has been validated against them.
 - G2: Out of scope for this journey — Direct-source cleanup (only processing outputs attributed to the View are eligible; originals never are, STO-AC-02) needs a prepared Direct-source View that no journey prepares yet. Blocks readiness until covered.
 - G3: Out of scope for this journey — removing replaced prepared entries after a refresh (D09) is not exercised. Blocks readiness until covered by a step or a journey.
 
