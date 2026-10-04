@@ -728,6 +728,169 @@ async fn seed_facts_are_recorded_without_adoption_and_qualified_suggestions_coun
     assert_eq!(kept.decision_revision, 3);
 }
 
+/// Recorded capabilities of a case- and normalization-insensitive volume.
+fn insensitive_volume() -> VolumeIdentity {
+    VolumeIdentity {
+        case: PathSensitivity::Insensitive,
+        normalization: PathSensitivity::Insensitive,
+        ..volume()
+    }
+}
+
+/// Real no-follow probe reporting the insensitive volume's recorded capabilities.
+struct InsensitiveProbe;
+
+impl SourceProbe for InsensitiveProbe {
+    fn fingerprint(&self, path: &Path) -> Result<ObservationFingerprint, LibraryError> {
+        let mut fingerprint = file_fingerprint(path)?;
+        fingerprint.identity.volume = insensitive_volume();
+        Ok(fingerprint)
+    }
+    fn root_identity(&self, location: &Location) -> Result<FileIdentity, LibraryError> {
+        let mut identity = folder_identity(&location.path.to_path_buf()?)?;
+        identity.volume = insensitive_volume();
+        Ok(identity)
+    }
+}
+
+async fn register_insensitive(catalog: &Catalog, fx: &Fixture) -> Location {
+    let mut registration = fx.registration();
+    registration.identity.volume = insensitive_volume();
+    catalog.register_location(&registration).await.unwrap()
+}
+
+async fn scan_files(catalog: &Catalog, location: &Location, files: Vec<ScanFile>) -> ScanOperation {
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let root = InsensitiveProbe.root_identity(location).unwrap();
+    let batch = ScanBatch { files: files.clone(), ..ScanBatch::default() };
+    catalog.apply_scan_batch(operation.id, &root, &batch, group).await.unwrap();
+    let observation = ScanObservation {
+        location_id: location.id,
+        root_identity: root,
+        files,
+        issues: Vec::new(),
+        complete_scopes: vec![root_scope()],
+        incomplete_scopes: Vec::new(),
+        progress: ScanProgress::default(),
+        state: ScanState::Completed,
+    };
+    catalog
+        .finish_scan(
+            operation.id,
+            &observation,
+            |location| InsensitiveProbe.root_identity(location),
+            group,
+        )
+        .await
+        .unwrap()
+}
+
+fn insensitive_file(fx: &Fixture, relative: &str) -> ScanFile {
+    let mut file = fx.scan_file(relative);
+    file.fingerprint.identity.volume = insensitive_volume();
+    file
+}
+
+#[tokio::test]
+async fn reviewed_case_variant_same_stat_rewrite_is_rehashed_and_invalidated() {
+    let fx = Fixture::new();
+    fx.write("night1/Ha_001.fits", b"original bytes A");
+    fx.write("night1/Ha_002.fits", b"original bytes B");
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = register_insensitive(&catalog, &fx).await;
+    let files = ["night1/Ha_001.fits", "night1/Ha_002.fits"];
+    scan_files(&catalog, &location, files.iter().map(|name| insensitive_file(&fx, name)).collect())
+        .await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let expected: Vec<_> = assets.iter().map(expected).collect();
+    catalog.set_quality(&expected, Quality::Usable, InsensitiveProbe).await.unwrap();
+
+    for name in ["Ha_001.fits", "Ha_002.fits"] {
+        let upper = name.to_uppercase().replace(".FITS", ".fits");
+        std::fs::rename(fx.root.join("night1").join(name), fx.root.join("night1").join(upper))
+            .unwrap();
+    }
+    let rewritten = fx.root.join("night1/HA_001.fits");
+    let before = file_fingerprint(&rewritten).unwrap();
+    let modified = std::fs::metadata(&rewritten).unwrap().modified().unwrap();
+    let file = std::fs::OpenOptions::new().write(true).truncate(true).open(&rewritten).unwrap();
+    std::io::Write::write_all(&mut &file, b"rewritten bytesA").unwrap();
+    file.set_modified(modified).unwrap();
+    drop(file);
+    assert!(before.equivalent(&file_fingerprint(&rewritten).unwrap()), "stats cannot detect it");
+
+    // The progressive batch is the first and only delivery of the variant spelling;
+    // the decision must already be invalidated when it commits.
+    let variants: Vec<ScanFile> = ["night1/HA_001.fits", "night1/HA_002.fits"]
+        .iter()
+        .map(|name| insensitive_file(&fx, name))
+        .collect();
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let root = InsensitiveProbe.root_identity(&location).unwrap();
+    let batch = ScanBatch { files: variants, ..ScanBatch::default() };
+    let status = catalog.apply_scan_batch(operation.id, &root, &batch, group).await.unwrap();
+    assert!(status.issues.is_empty(), "{:?}", status.issues);
+    let rescanned = catalog.location_assets(location.id).await.unwrap();
+    assert_eq!(rescanned.len(), 2, "variant spelling reuses the asset identity");
+    let changed =
+        rescanned.iter().find(|asset| asset.id == by_name(&assets, "Ha_001.fits").id).unwrap();
+    assert_eq!(changed.relative_path, NativePath::from_path(Path::new("night1/HA_001.fits")));
+    assert_eq!(
+        changed.applicable_quality(),
+        ApplicableQuality::ChangedContent { previous: Quality::Usable }
+    );
+    assert_eq!(changed.fingerprint.content_sha256, Some(sha_of(&rewritten)));
+    let kept =
+        rescanned.iter().find(|asset| asset.id == by_name(&assets, "Ha_002.fits").id).unwrap();
+    assert_eq!(
+        kept.applicable_quality(),
+        ApplicableQuality::Usable,
+        "unchanged bytes keep the decision"
+    );
+}
+
+#[tokio::test]
+async fn ambiguous_case_variant_is_refused_without_adoption_or_absence() {
+    let fx = Fixture::new();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = register_insensitive(&catalog, &fx).await;
+    let fabricated = |relative: &str, file_id: &str| ScanFile {
+        relative_path: NativePath::from_path(Path::new(relative)),
+        fingerprint: ObservationFingerprint {
+            identity: FileIdentity { volume: insensitive_volume(), file_id: Some(file_id.into()) },
+            size_bytes: 2880,
+            modified_ns: 1_759_000_000_123_456_789,
+            content_sha256: None,
+        },
+        format: ImageFormat::Fits,
+        metadata: metadata_for(relative),
+    };
+    scan_files(
+        &catalog,
+        &location,
+        vec![fabricated("Frame.fits", "11"), fabricated("FRAME.fits", "12")],
+    )
+    .await;
+    let before = catalog.location_assets(location.id).await.unwrap();
+    assert_eq!(before.len(), 2);
+
+    let operation = scan_files(&catalog, &location, vec![fabricated("frame.fits", "13")]).await;
+    assert_eq!(operation.state, ScanState::Partial);
+    assert!(operation
+        .issues
+        .iter()
+        .any(|issue| issue.availability == Availability::IdentityConflict
+            && issue.reason.contains("several catalog records")));
+    let after = catalog.location_assets(location.id).await.unwrap();
+    assert_eq!(after.len(), 2, "no third record and no adoption");
+    for asset in &after {
+        assert_eq!(asset.availability, Availability::IdentityConflict, "never Missing");
+        let prior = before.iter().find(|prior| prior.id == asset.id).unwrap();
+        assert_eq!(asset.relative_path, prior.relative_path);
+        assert_eq!(asset.fingerprint, prior.fingerprint);
+    }
+}
+
 #[tokio::test]
 async fn overlapping_roots_on_the_same_volume_are_refused() {
     let fx = Fixture::new();

@@ -723,22 +723,22 @@ impl Catalog {
     }
 
     /// Hash reviewed frames of a batch off the writer lock, bound to their observation.
+    ///
+    /// The reviewed asset is found exactly as the transaction will find it, including
+    /// a single case/normalization variant on insensitive volumes; the live observed
+    /// path is hashed. Ambiguous variants are refused in the transaction instead.
     async fn decided_digests(&self, operation_id: Uuid, files: &[ScanFile]) -> Result<DigestMap> {
         let mut conn = self.reader().await?;
         let op = load_operation_row(&mut conn, operation_id).await?;
         let location = load_location(&mut conn, op.location_id).await?;
         let mut work = Vec::new();
         for file in files {
-            let key = path_key(&file.relative_path);
-            let decided: Option<String> = sqlx::query_scalar(
-                "SELECT quality FROM assets WHERE location_id = ?1 AND path_key = ?2 \
-                 AND quality <> 'unreviewed'",
-            )
-            .bind(location.id.to_string())
-            .bind(key.clone())
-            .fetch_optional(&mut *conn)
-            .await?;
-            if decided.is_some() {
+            let matched =
+                find_asset(&mut conn, &location, &file.relative_path, &file.fingerprint, op.id)
+                    .await?;
+            if matches!(&matched, AssetMatch::Existing(asset) if asset.quality != Quality::Unreviewed)
+            {
+                let key = path_key(&file.relative_path);
                 work.push((key, file.relative_path.clone(), file.fingerprint.clone()));
             }
         }
@@ -2019,33 +2019,69 @@ async fn observe_file(
     let mut fingerprint = file.fingerprint.clone();
     fingerprint.content_sha256 = observed.digest;
     match find_asset(conn, location, &file.relative_path, &fingerprint, op.id).await? {
-        Some(stored) => refresh_asset(conn, op, &stored, file, fingerprint, observed_at).await,
-        None => insert_asset(conn, op, location, file, &fingerprint, observed_at).await.map(Some),
+        AssetMatch::Existing(stored)
+            if stored.quality != Quality::Unreviewed && fingerprint.content_sha256.is_none() =>
+        {
+            let issue = ScanIssue {
+                relative_path: file.relative_path.clone(),
+                reason: "reviewed frame was not content-verified in this scan".into(),
+                availability: Availability::Unreadable,
+            };
+            record_issue(conn, op, &issue).await?;
+            Ok(None)
+        }
+        AssetMatch::Existing(stored) => {
+            refresh_asset(conn, op, &stored, file, fingerprint, observed_at).await
+        }
+        AssetMatch::Ambiguous(candidates) => {
+            let reason = "path matches several catalog records under this volume's \
+                          case/normalization rules";
+            let paths = candidates.into_iter().map(|asset| asset.relative_path);
+            for relative_path in std::iter::once(file.relative_path.clone()).chain(paths) {
+                let issue = ScanIssue {
+                    relative_path,
+                    reason: reason.into(),
+                    availability: Availability::IdentityConflict,
+                };
+                record_issue(conn, op, &issue).await?;
+            }
+            Ok(None)
+        }
+        AssetMatch::New => {
+            insert_asset(conn, op, location, file, &fingerprint, observed_at).await.map(Some)
+        }
     }
 }
 
-/// Exact path, or on a case/normalization-insensitive volume the same name variant
-/// with identical size and nanosecond mtime. Renames are never adopted by inode.
+enum AssetMatch {
+    New,
+    Existing(Box<Asset>),
+    Ambiguous(Vec<Asset>),
+}
+
+/// Exact path, or on a case/normalization-insensitive volume the single same name
+/// variant with identical size and nanosecond mtime not yet seen by this scan.
+/// Several variants are ambiguous. Renames are never adopted by inode.
 async fn find_asset(
     conn: &mut SqliteConnection,
     location: &Location,
     path: &NativePath,
     fingerprint: &ObservationFingerprint,
     operation_id: Uuid,
-) -> Result<Option<Asset>> {
+) -> Result<AssetMatch> {
     let exact = sqlx::query(asset_sql!("WHERE a.location_id = ?1 AND a.path_key = ?2"))
         .bind(location.id.to_string())
         .bind(path_key(path))
         .fetch_optional(&mut *conn)
         .await?;
     if let Some(row) = exact {
-        return asset_from_row(&row).map(Some);
+        return asset_from_row(&row).map(|asset| AssetMatch::Existing(Box::new(asset)));
     }
     let volume = &location.identity.volume;
     if volume.case != PathSensitivity::Insensitive
         && volume.normalization != PathSensitivity::Insensitive
     {
-        return Ok(None);
+        return Ok(AssetMatch::New);
     }
     let rows = sqlx::query(asset_sql!(
         "WHERE a.location_id = ?1 AND a.size_bytes = ?2 AND a.modified_ns = ?3 \
@@ -2057,13 +2093,18 @@ async fn find_asset(
     .bind(operation_id.to_string())
     .fetch_all(&mut *conn)
     .await?;
+    let mut variants = Vec::new();
     for row in &rows {
         let asset = asset_from_row(row)?;
         if asset.relative_path.same_on(path, volume) {
-            return Ok(Some(asset));
+            variants.push(asset);
         }
     }
-    Ok(None)
+    Ok(match variants.len() {
+        0 => AssetMatch::New,
+        1 => AssetMatch::Existing(Box::new(variants.remove(0))),
+        _ => AssetMatch::Ambiguous(variants),
+    })
 }
 
 async fn refresh_asset(
