@@ -600,7 +600,8 @@ impl Catalog {
         .bind(op.id.to_string())
         .execute(&mut *txn)
         .await?;
-        regroup(&mut txn, &changed, &mut grouping, Cause::Scan(op.id)).await?;
+        regroup(&mut txn, &changed.regroup, &mut grouping, Cause::Scan(op.id)).await?;
+        invalidate_inferences(&mut txn, &changed.evidence).await?;
         mark_location_observed(&mut txn, location.id).await?;
         let status = load_operation(&mut txn, op.id).await?;
         txn.commit().await?;
@@ -1894,7 +1895,8 @@ where
     let changed =
         observe_batch(conn, op, location, &observation.files, &observation.issues, input.digests)
             .await?;
-    regroup(conn, &changed, grouping, Cause::Scan(op.id)).await?;
+    regroup(conn, &changed.regroup, grouping, Cause::Scan(op.id)).await?;
+    invalidate_inferences(conn, &changed.evidence).await?;
     mark_location_observed(conn, location.id).await?;
     let op = load_operation_row(conn, op.id).await?;
     let mut incomplete = op.incomplete.clone();
@@ -1993,9 +1995,9 @@ async fn observe_batch(
     files: &[ScanFile],
     issues: &[ScanIssue],
     digests: &DigestMap,
-) -> Result<BTreeSet<Uuid>> {
+) -> Result<BatchChanges> {
     let observed_at = now()?;
-    let mut changed = BTreeSet::new();
+    let mut changed = BatchChanges::default();
     for file in files {
         match digests.get(&path_key(&file.relative_path)) {
             Some(Err(error)) => {
@@ -2009,8 +2011,18 @@ async fn observe_batch(
             digest => {
                 let digest = digest.and_then(|digest| digest.as_ref().ok()).cloned();
                 let observed = ObservedFile { file, digest };
-                if let Some(id) = observe_file(conn, op, location, observed, &observed_at).await? {
-                    changed.insert(id);
+                match observe_file(conn, op, location, observed, &observed_at).await? {
+                    Change::Unchanged => {}
+                    Change::Inserted(id) => {
+                        changed.regroup.insert(id);
+                        changed.evidence.insert(id);
+                    }
+                    Change::Refreshed { id, regroup } => {
+                        if regroup {
+                            changed.regroup.insert(id);
+                        }
+                        changed.evidence.insert(id);
+                    }
                 }
             }
         }
@@ -2027,13 +2039,32 @@ struct ObservedFile<'a> {
     digest: Option<String>,
 }
 
+enum Change {
+    Unchanged,
+    Inserted(Uuid),
+    /// Recorded evidence (fingerprint, format or observed metadata) changed.
+    Refreshed {
+        id: Uuid,
+        regroup: bool,
+    },
+}
+
+/// Assets a batch changed: `regroup` need capture regrouping; `evidence` are new
+/// members or had their recorded observation replaced, so any inference about
+/// the sessions now holding them was made without their current evidence.
+#[derive(Default)]
+struct BatchChanges {
+    regroup: BTreeSet<Uuid>,
+    evidence: BTreeSet<Uuid>,
+}
+
 async fn observe_file(
     conn: &mut SqliteConnection,
     op: &OperationRow,
     location: &Location,
     observed: ObservedFile<'_>,
     observed_at: &str,
-) -> Result<Option<Uuid>> {
+) -> Result<Change> {
     let file = observed.file;
     file.relative_path
         .relative_path()
@@ -2052,7 +2083,7 @@ async fn observe_file(
             availability: Availability::IdentityConflict,
         };
         record_issue(conn, op, &issue).await?;
-        return Ok(None);
+        return Ok(Change::Unchanged);
     }
     let mut fingerprint = file.fingerprint.clone();
     fingerprint.content_sha256 = observed.digest;
@@ -2066,7 +2097,7 @@ async fn observe_file(
                 availability: Availability::Unreadable,
             };
             record_issue(conn, op, &issue).await?;
-            Ok(None)
+            Ok(Change::Unchanged)
         }
         AssetMatch::Existing(stored) => {
             refresh_asset(conn, op, &stored, file, fingerprint, observed_at).await
@@ -2083,7 +2114,7 @@ async fn observe_file(
                 };
                 record_issue(conn, op, &issue).await?;
             }
-            Ok(None)
+            Ok(Change::Unchanged)
         }
         AssetMatch::Distinct(variants) => {
             // Proven different files: the variant records stay unchanged and are
@@ -2091,11 +2122,13 @@ async fn observe_file(
             for variant in &variants {
                 mark_scope_incomplete(conn, op.id, variant).await?;
             }
-            insert_asset(conn, op, location, file, &fingerprint, observed_at).await.map(Some)
+            insert_asset(conn, op, location, file, &fingerprint, observed_at)
+                .await
+                .map(Change::Inserted)
         }
-        AssetMatch::New => {
-            insert_asset(conn, op, location, file, &fingerprint, observed_at).await.map(Some)
-        }
+        AssetMatch::New => insert_asset(conn, op, location, file, &fingerprint, observed_at)
+            .await
+            .map(Change::Inserted),
     }
 }
 
@@ -2174,7 +2207,7 @@ async fn refresh_asset(
     file: &ScanFile,
     fingerprint: ObservationFingerprint,
     observed_at: &str,
-) -> Result<Option<Uuid>> {
+) -> Result<Change> {
     let unchanged = fingerprint_matches(&stored.fingerprint, &fingerprint)
         && stored.format == file.format
         && stored.observed == file.metadata;
@@ -2194,7 +2227,7 @@ async fn refresh_asset(
         .bind(stored.id.to_string())
         .execute(&mut *conn)
         .await?;
-        return Ok(None);
+        return Ok(Change::Unchanged);
     }
     let sequence = stored.observation_revision + 1;
     let effective = effective_metadata(conn, stored.id, &file.metadata).await?;
@@ -2217,7 +2250,7 @@ async fn refresh_asset(
     .execute(&mut *conn)
     .await?;
     insert_observation(conn, stored.id, op.id, sequence, &fingerprint, file, observed_at).await?;
-    Ok((effective != stored.effective).then_some(stored.id))
+    Ok(Change::Refreshed { id: stored.id, regroup: effective != stored.effective })
 }
 
 async fn insert_asset(
