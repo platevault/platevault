@@ -84,6 +84,8 @@ export function BulkConfirmDialog({
     if (run.failure) {
       setOutcome({ ...run, confirmed: done })
       setPending(run.remaining)
+      // A stale refusal needs Review first: Retry would send the same revisions and be refused again.
+      if (run.failure.result.reason === "stale") requestAnimationFrame(() => document.getElementById(staleId)?.querySelector("button")?.focus())
       return
     }
     const chosen = items.find((i) => i.value === value)?.label ?? ""
@@ -92,11 +94,17 @@ export function BulkConfirmDialog({
   }
 
   function review() {
+    // Focus Retry before Review unmounts, so the dialog never parks focus on its container.
+    document.getElementById(submitId)?.focus()
     const sessions = store.getState().catalog.sessions
     setRevisions((current) => ({ ...current, ...Object.fromEntries(pending.map((id) => [id, sessions[id]?.revision ?? 0])) }))
     setReviewed(failedLabel)
     setOutcome((current) => (current ? { ...current, failure: null } : current))
   }
+
+  const staleId = useId()
+  const submitId = useId()
+  const staleUnreviewed = outcome?.failure?.result.reason === "stale"
 
   const failedLabel = outcome?.failure ? sessionLabel(catalog, catalog.sessions[outcome.failure.sessionId]!) : ""
   const failedMessage = outcome?.failure ? `Confirmed ${outcome.confirmed.length} of ${sessionIds.length}. ${failedLabel} not saved: ${outcome.failure.result.message}` : ""
@@ -191,8 +199,10 @@ export function BulkConfirmDialog({
               <li>Quality decisions and View membership</li>
             </ul>
           </div>
-          {outcome?.failure?.result.reason === "stale" ? (
-            <SaveState state="stale" message={failedMessage} onReview={review} />
+          {staleUnreviewed ? (
+            <div id={staleId}>
+              <SaveState state="stale" message={failedMessage} onReview={review} />
+            </div>
           ) : outcome?.failure ? (
             <ActionError message={failedMessage} />
           ) : reviewed ? (
@@ -203,7 +213,13 @@ export function BulkConfirmDialog({
         </div>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-          <Button onClick={confirm} disabled={items.length === 0}>
+          <Button
+            id={submitId}
+            onClick={confirm}
+            disabled={items.length === 0 || staleUnreviewed}
+            focusableWhenDisabled
+            aria-describedby={staleUnreviewed ? staleId : undefined}
+          >
             {outcome ? `Retry ${plural(pending.length, "remaining session")}` : `${verb} for ${plural(sessionIds.length, "session")}`}
           </Button>
         </DialogFooter>

@@ -54,6 +54,8 @@ export function ProjectNewPage() {
     setRecovered(false)
     setSubmitted(false)
     setCommitError(null)
+    // The notice and its button go away; continue at the Name field.
+    requestAnimationFrame(() => nameRef.current?.focus())
   }
 
   const errors = {
@@ -95,8 +97,12 @@ export function ProjectNewPage() {
       <PageBody>
         {recovered && stored ? (
           <Notice
-            tone="info"
-            title="Recovered unsaved draft"
+            tone={requested ? "warning" : "info"}
+            title={
+              requested
+                ? `Recovered draft for ${stored.targetIds.map((id) => targets[id]?.name ?? "a removed Target").join(", ") || "no Target"}, not ${requested.name}`
+                : "Recovered unsaved draft"
+            }
             actions={
               <Button size="sm" variant="outline" onClick={discard}>
                 {requested ? `Discard draft and start for ${requested.name}` : "Discard draft"}
@@ -104,7 +110,6 @@ export function ProjectNewPage() {
             }
           >
             This draft was last changed {formatDateTime(stored.updatedAt)}. It is kept in this browser until you create the Project or discard it.
-            {requested ? ` It is for ${stored.targetIds.map((id) => targets[id]?.name ?? "a removed Target").join(", ") || "no Target"}, not ${requested.name}.` : null}
           </Notice>
         ) : null}
         {!hasTargets ? (

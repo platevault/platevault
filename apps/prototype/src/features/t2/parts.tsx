@@ -58,20 +58,35 @@ export function useCommitFlow(): CommitFlow {
  */
 export function FlowStatus({ flow, dirty, onReview, className }: { flow: CommitFlow; dirty: boolean; onReview: () => void; className?: string }) {
   const holder = useRef<HTMLDivElement>(null)
+  const [reviewed, setReviewed] = useState(false)
   const state = flow.state === "failed" || flow.state === "stale" ? flow.state : dirty ? "unsaved" : flow.state
+  // Review resets the flow; until the next save the status says what Review did.
+  const showReviewed = reviewed && !state
   const announcement = state === "failed" ? `Not saved. ${flow.message ?? ""}` : state === "stale" ? `Changed elsewhere. ${flow.message ?? ""}` : state === "saved" ? "Saved." : ""
-  // Retry and Review remove their own button; keep focus in this status instead of dropping it to the page (WCAG 2.4.3).
+  // Retry and Review remove their own button; move focus to this status first, so it never drops to the page (WCAG 2.4.3).
   const keepFocus = (action: () => void) => () => {
+    holder.current?.focus()
     action()
-    requestAnimationFrame(() => holder.current?.focus())
+    // Failed again: its Retry is still there, so go back to it.
+    requestAnimationFrame(() => holder.current?.querySelector<HTMLElement>("button")?.focus())
   }
   return (
     <div ref={holder} tabIndex={-1} className={cn("outline-none", className)}>
       {/* Mounted before the first save, so each outcome changes its text and is announced (WCAG 4.1.3). */}
-      <p role="status" className="sr-only">
-        {announcement}
+      <p role="status" className={showReviewed ? "text-xs text-pretty text-muted-foreground" : "sr-only"}>
+        {showReviewed ? "Showing the current revision. Make your change again to save it." : announcement}
       </p>
-      {state ? <SaveState state={state} message={flow.message} onRetry={keepFocus(flow.retry)} onReview={keepFocus(onReview)} /> : null}
+      {state ? (
+        <SaveState
+          state={state}
+          message={flow.message}
+          onRetry={keepFocus(flow.retry)}
+          onReview={keepFocus(() => {
+            onReview()
+            setReviewed(true)
+          })}
+        />
+      ) : null}
     </div>
   )
 }

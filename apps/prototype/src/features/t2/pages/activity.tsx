@@ -52,7 +52,7 @@ function ActivityRow({ event, operation }: { event: ActivityEvent; operation: Op
   return (
     <Fragment>
       <tr className="border-b align-top last:border-0">
-        <td className="px-3 py-2">
+        <td className="px-3 py-2 whitespace-nowrap">
           <time dateTime={event.at} className="text-xs text-muted-foreground tabular-nums">
             {formatDateTime(event.at)}
           </time>

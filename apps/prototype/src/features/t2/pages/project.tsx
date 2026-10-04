@@ -421,10 +421,37 @@ function ChecklistRow({ progress, catalog, project, onRemove }: { progress: Chec
 
 const NONE = "none"
 
-/** A dialog's failed save: Retry for a failed write, Review current revision for a stale one (D08). */
-function CommitError({ error, onRetry, onReview }: { error: Extract<CommitResult, { ok: false }> | null; onRetry: () => void; onReview: () => void }) {
-  if (!error) return null
-  return error.reason === "stale" ? <SaveState state="stale" message={error.message} onReview={onReview} /> : <ActionError message={error.message} onRetry={onRetry} />
+/**
+ * A dialog's failed save: Retry for a failed write, Review current revision for a stale one (D08).
+ * After a review it says so and returns focus to the save button, since Review removes itself.
+ */
+function CommitError({
+  error,
+  reviewed,
+  onRetry,
+  onReview,
+  saveId,
+}: {
+  error: Extract<CommitResult, { ok: false }> | null
+  reviewed: boolean
+  onRetry: () => void
+  onReview: () => void
+  saveId: string
+}) {
+  if (error?.reason === "stale") {
+    const review = () => {
+      // Focus Save before Review unmounts, so the dialog never parks focus on its container.
+      document.getElementById(saveId)?.focus()
+      onReview()
+    }
+    return <SaveState state="stale" message={error.message} onReview={review} />
+  }
+  if (error) return <ActionError message={error.message} onRetry={onRetry} />
+  return reviewed ? (
+    <p role="status" className="text-sm text-pretty">
+      Reloaded the current revision. Make your changes again, then save.
+    </p>
+  ) : null
 }
 
 function EditDetailsDialog({ open, onOpenChange, project, onSaved }: { open: boolean; onOpenChange: (open: boolean) => void; project: Project; onSaved: () => void }) {
@@ -435,7 +462,8 @@ function EditDetailsDialog({ open, onOpenChange, project, onSaved }: { open: boo
   const [base, setBase] = useState(project.revision)
   const [nameError, setNameError] = useState(false)
   const [error, setError] = useState<Extract<CommitResult, { ok: false }> | null>(null)
-  const ids = { name: useId(), notes: useId() }
+  const [reviewed, setReviewed] = useState(false)
+  const ids = { name: useId(), notes: useId(), save: useId() }
 
   /** The record as it is now: on opening, and on Review current revision after a stale refusal. */
   function load() {
@@ -446,6 +474,7 @@ function EditDetailsDialog({ open, onOpenChange, project, onSaved }: { open: boo
     setBase(current.revision)
     setNameError(false)
     setError(null)
+    setReviewed(false)
   }
 
   useEffect(() => {
@@ -507,10 +536,21 @@ function EditDetailsDialog({ open, onOpenChange, project, onSaved }: { open: boo
             onChange={(value) => setEquipmentId(value === NONE ? null : value)}
             className="w-80"
           />
-          <CommitError error={error} onRetry={save} onReview={load} />
+          <CommitError
+            error={error}
+            reviewed={reviewed}
+            onRetry={save}
+            onReview={() => {
+              load()
+              setReviewed(true)
+            }}
+            saveId={ids.save}
+          />
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-            <Button type="submit">Save details</Button>
+            <Button id={ids.save} type="submit">
+              Save details
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -522,6 +562,8 @@ function LinkSessionsDialog({ open, onOpenChange, project, onSaved }: { open: bo
   const [selected, setSelected] = useState<SessionId[]>(project.linkedSessionIds)
   const [base, setBase] = useState(project.revision)
   const [error, setError] = useState<Extract<CommitResult, { ok: false }> | null>(null)
+  const [reviewed, setReviewed] = useState(false)
+  const saveId = useId()
 
   /** The record as it is now: on opening, and on Review current revision after a stale refusal. */
   function load() {
@@ -529,6 +571,7 @@ function LinkSessionsDialog({ open, onOpenChange, project, onSaved }: { open: bo
     setSelected(current.linkedSessionIds)
     setBase(current.revision)
     setError(null)
+    setReviewed(false)
   }
 
   useEffect(() => {
@@ -555,10 +598,19 @@ function LinkSessionsDialog({ open, onOpenChange, project, onSaved }: { open: bo
           <DialogDescription>Only the sessions you check are linked. Linking changes no file, quality decision or View.</DialogDescription>
         </DialogHeader>
         <SessionLinkPicker selected={selected} onChange={setSelected} targetIds={project.targetIds} />
-        <CommitError error={error} onRetry={save} onReview={load} />
+        <CommitError
+          error={error}
+          reviewed={reviewed}
+          onRetry={save}
+          onReview={() => {
+            load()
+            setReviewed(true)
+          }}
+          saveId={saveId}
+        />
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-          <Button onClick={save}>
+          <Button id={saveId} onClick={save}>
             {added === 0 && removed === 0 ? "Save links" : `Save links (${[added ? `${added} added` : null, removed ? `${removed} removed` : null].filter(Boolean).join(", ")})`}
           </Button>
         </DialogFooter>

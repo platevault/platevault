@@ -473,7 +473,7 @@ export function updateProject(projectId: string, patch: ProjectPatch, expectRevi
   const href = `/projects/${projectId}`
   const name = store.getState().catalog.projects[projectId]?.name ?? "Project"
   const result = commit(
-    `${what} for ${name}`,
+    `Change to ${what} for ${name}`,
     (state) =>
       withCatalog(state, (c) => {
         const current = c.projects[projectId]!
