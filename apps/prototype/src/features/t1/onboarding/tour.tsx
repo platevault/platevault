@@ -22,18 +22,19 @@ interface Stop {
 }
 
 const STOPS: Stop[] = [
-  { title: "Targets", route: "/targets", anchor: '[href="#/targets"]', body: "Your library starts here. Each Target shows captured, usable and Unreviewed integration by channel, with its Projects, Views and plans." },
-  { title: "Sessions", route: "/sessions", anchor: '[href="#/sessions"]', body: "Every indexed session, one per filter, exposure and equipment. Inspect the evidence, confirm Targets and equipment, and select sessions to create a View." },
-  { title: "Calibration", route: "/calibration", anchor: '[href="#/calibration"]', body: "Masters and raw calibration sets, grouped by camera, settings and channel. PlateVault shows compatibility; it never builds masters." },
-  { title: "Projects", route: "/projects", anchor: '[href="#/projects"]', body: "Optional goals with a capture checklist. A Project never moves files and never blocks creating a View." },
-  { title: "Views", route: "/views", anchor: '[href="#/views"]', body: "A View is a named, reviewed set of frames. Review frames, accept calibration and prepare inputs for PixInsight, Siril or another app." },
+  // Hash-history links render as "/#/targets" (or "./#/targets"), so match the end of the href.
+  { title: "Targets", route: "/targets", anchor: 'nav[aria-label="Main"] [href$="#/targets"]', body: "Your library starts here. Each Target shows captured, usable and Unreviewed integration by channel, with its Projects, Views and plans." },
+  { title: "Sessions", route: "/sessions", anchor: 'nav[aria-label="Main"] [href$="#/sessions"]', body: "Every indexed session, one per filter, exposure and equipment. Inspect the evidence, confirm Targets and equipment, and select sessions to create a View." },
+  { title: "Calibration", route: "/calibration", anchor: 'nav[aria-label="Main"] [href$="#/calibration"]', body: "Masters and raw calibration sets, grouped by camera, settings and channel. PlateVault shows compatibility; it never builds masters." },
+  { title: "Projects", route: "/projects", anchor: 'nav[aria-label="Main"] [href$="#/projects"]', body: "Optional goals with a capture checklist. A Project never moves files and never blocks creating a View." },
+  { title: "Views", route: "/views", anchor: 'nav[aria-label="Main"] [href$="#/views"]', body: "A View is a named, reviewed set of frames. Review frames, accept calibration and prepare inputs for PixInsight, Siril or another app." },
   { title: "Getting started", route: "/targets", anchor: "[data-getting-started-trigger]", body: "This checklist ticks itself from what you do. Open it any time, or remove it from its menu." },
 ]
 
 const REMOVED_LAST_STOP: Stop = {
   title: "Settings",
   route: "/targets",
-  anchor: 'aside [href="#/settings"]',
+  anchor: 'aside [href$="#/settings"]',
   body: "Settings holds locations, equipment, sites and appearance. You removed Getting started; restore it in Settings › About this prototype.",
 }
 
@@ -95,6 +96,8 @@ export function OrientationTour() {
         <DialogPrimitive.Popup
           ref={popup}
           initialFocus={next}
+          // No trigger opened the tour, so return focus to the page content when it ends.
+          finalFocus={() => document.getElementById("main")}
           className="fixed z-50 w-80 space-y-3 rounded-lg bg-popover p-4 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none duration-100 data-open:animate-in data-open:fade-in-0"
           style={position}
         >

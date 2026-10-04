@@ -68,12 +68,13 @@ export function LocationRow({ location, current, actions, onChooseAgain, onRetry
         </div>
         <div className="flex flex-wrap items-center gap-1.5" aria-label={`${location.displayName} state`} role="group">
           <StatusBadge kind="role" value={location.role} />
-          <StatusBadge kind="access" value={location.access} />
+          {/* While offline the last-observed access and scope are history, not current state; the Offline notice says so. */}
+          {offline ? null : <StatusBadge kind="access" value={location.access} />}
           <StatusBadge kind="availability" value={availability} />
           {indexing ? (
             <StatusBadge kind="operation" value="running" label="Indexing" />
           ) : (
-            <StatusBadge kind="scanScope" value={location.scanScope} />
+            offline ? null : <StatusBadge kind="scanScope" value={location.scanScope} />
           )}
         </div>
         {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}

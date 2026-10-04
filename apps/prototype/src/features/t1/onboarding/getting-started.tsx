@@ -197,7 +197,7 @@ export function GettingStarted({ collapsed }: { collapsed: boolean }) {
                                   {item.jump.label}
                                 </Button>
                               ) : (
-                                <Button size="xs" variant="link" className="h-auto px-0" render={<a href={`#${item.jump.to}`} onClick={() => setChecklistOpen(false)} />}>
+                                <Button size="sm" variant="link" className="px-0" render={<a href={`#${item.jump.to}`} onClick={() => setChecklistOpen(false)} />}>
                                   {item.jump.label}
                                 </Button>
                               )

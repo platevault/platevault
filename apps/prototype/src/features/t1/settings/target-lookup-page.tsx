@@ -137,7 +137,7 @@ export function TargetLookupPage() {
           <Switch id={ids.enabled} aria-describedby={`${ids.enabled}-hint`} checked={lookup.enabled} onCheckedChange={(checked) => change({ ...lookup, enabled: checked })} />
         </div>
 
-        <Section title="Provider" id={ids.provider}>
+        <Section title="Provider" level={3} id={ids.provider}>
           <RadioGroup
             aria-labelledby={`${ids.provider}-title`}
             aria-describedby={lookup.enabled ? undefined : `${ids.provider}-off`}
@@ -165,7 +165,7 @@ export function TargetLookupPage() {
           )}
         </Section>
 
-        <Section title="Test a lookup" id="lookup-test" description="Prototype: the response is fixture data, and no request leaves this browser.">
+        <Section title="Test a lookup" level={3} id="lookup-test" description="Prototype: the response is fixture data, and no request leaves this browser.">
           <form
             noValidate
             className="flex flex-wrap items-start gap-2"

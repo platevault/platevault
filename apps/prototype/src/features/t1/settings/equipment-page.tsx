@@ -361,7 +361,7 @@ export function EquipmentPage() {
       <PageBody>
         <ReturnNotice task="Equipment" />
 
-        <Section title="Optical trains" id="eq-trains" description="A camera behind a telescope at one effective focal length. Confirm equipment on a session links it to a train." actions={trains.length ? addButton("train") : null}>
+        <Section title="Optical trains" level={3} id="eq-trains" description="A camera behind a telescope at one effective focal length. Confirm equipment on a session links it to a train." actions={trains.length ? addButton("train") : null}>
           {refusalNotice("train")}
           <DataTable<OpticalTrain>
             label="Optical trains"
@@ -390,7 +390,7 @@ export function EquipmentPage() {
           />
         </Section>
 
-        <Section title="Cameras" id="eq-cameras" actions={cameras.length ? addButton("camera") : null}>
+        <Section title="Cameras" level={3} id="eq-cameras" actions={cameras.length ? addButton("camera") : null}>
           {refusalNotice("camera")}
           <DataTable<Camera>
             label="Cameras"
@@ -401,7 +401,7 @@ export function EquipmentPage() {
             empty={empty("camera", CameraIcon, "Indexing adds detected cameras from INSTRUME headers, or add one yourself.")}
             columns={[
               { id: "name", header: "Name", cell: (r) => r.name, sortValue: (r) => r.name, rowHeader: true },
-              { id: "aliases", header: "Aliases", cell: (r) => aliasesCell(r.aliases) },
+              { id: "aliases", header: "Aliases", cell: (r) => aliasesCell(r.aliases), truncate: true },
               {
                 id: "sensor",
                 header: "Sensor",
@@ -414,7 +414,7 @@ export function EquipmentPage() {
           />
         </Section>
 
-        <Section title="Telescopes" id="eq-telescopes" actions={telescopes.length ? addButton("telescope") : null}>
+        <Section title="Telescopes" level={3} id="eq-telescopes" actions={telescopes.length ? addButton("telescope") : null}>
           {refusalNotice("telescope")}
           <DataTable<Telescope>
             label="Telescopes"
@@ -425,7 +425,7 @@ export function EquipmentPage() {
             empty={empty("telescope", TelescopeIcon, "Indexing adds detected telescopes from TELESCOP and FOCALLEN headers, or add one yourself.")}
             columns={[
               { id: "name", header: "Name", cell: (r) => r.name, sortValue: (r) => r.name, rowHeader: true },
-              { id: "aliases", header: "Aliases", cell: (r) => aliasesCell(r.aliases) },
+              { id: "aliases", header: "Aliases", cell: (r) => aliasesCell(r.aliases), truncate: true },
               { id: "focal", header: "Focal length", cell: (r) => `${formatCount(r.focalLengthMm)} mm`, sortValue: (r) => r.focalLengthMm, align: "right" },
               { id: "aperture", header: "Aperture", cell: (r) => (r.apertureMm ? `${formatCount(r.apertureMm)} mm` : <UnknownValue label="Not set" />), align: "right" },
               sourceColumn<Telescope>(),
@@ -434,7 +434,7 @@ export function EquipmentPage() {
           />
         </Section>
 
-        <Section title="Filters" id="eq-filters" description="Filter names group sessions by channel. Aliases match the FILTER header." actions={filters.length ? addButton("filter") : null}>
+        <Section title="Filters" level={3} id="eq-filters" description="Filter names group sessions by channel. Aliases match the FILTER header." actions={filters.length ? addButton("filter") : null}>
           {refusalNotice("filter")}
           <DataTable<FilterDef>
             label="Filters"
@@ -446,7 +446,7 @@ export function EquipmentPage() {
             columns={[
               { id: "name", header: "Name", cell: (r) => r.name, sortValue: (r) => r.name, rowHeader: true },
               { id: "category", header: "Category", cell: (r) => FILTER_CATEGORIES.find((c) => c.value === r.category)?.label ?? r.category, sortValue: (r) => r.category },
-              { id: "aliases", header: "Aliases", cell: (r) => aliasesCell(r.aliases) },
+              { id: "aliases", header: "Aliases", cell: (r) => aliasesCell(r.aliases), truncate: true },
               sourceColumn<FilterDef>(),
               actionColumn<FilterDef>("filter"),
             ]}

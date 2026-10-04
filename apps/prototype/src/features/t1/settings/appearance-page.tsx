@@ -54,21 +54,9 @@ export function AppearancePage() {
         level={2}
         title="Appearance"
         description="Applies immediately and is stored in this browser. Resetting prototype data keeps these choices."
-        actions={
-          <div className="flex items-center gap-2">
-            {atDefaults ? (
-              <span id={ids.resetReason} className="text-xs text-muted-foreground">
-                Appearance already uses the defaults.
-              </span>
-            ) : null}
-            <Button variant="outline" disabled={atDefaults} aria-describedby={atDefaults ? ids.resetReason : undefined} onClick={() => setConfirmReset(true)}>
-              Restore appearance defaults
-            </Button>
-          </div>
-        }
       />
       <PageBody className="max-w-3xl">
-        <Section title="Theme" id={ids.theme}>
+        <Section title="Theme" level={3} id={ids.theme}>
           <RadioGroup aria-labelledby={`${ids.theme}-title`} value={preferences.theme} onValueChange={(value) => setTheme(value as ThemePreference)} className="grid-cols-3">
             {THEMES.map((theme) => (
               <ChoiceCard key={theme.value} id={`${ids.theme}-${theme.value}`} value={theme.value} title={theme.title} description={theme.description} />
@@ -79,7 +67,7 @@ export function AppearancePage() {
           </p>
         </Section>
 
-        <Section title="Density" id={ids.density} description="Row height in tables and lists. Text size stays the same.">
+        <Section title="Density" level={3} id={ids.density} description="Row height in tables and lists. Text size stays the same.">
           <RadioGroup aria-labelledby={`${ids.density}-title`} value={preferences.density} onValueChange={(value) => setDensity(value as Density)} className="grid-cols-3">
             {DENSITIES.map((density) => (
               <ChoiceCard key={density.value} id={`${ids.density}-${density.value}`} value={density.value} title={density.title} description={density.description}>
@@ -95,7 +83,7 @@ export function AppearancePage() {
           </RadioGroup>
         </Section>
 
-        <Section title="Keyboard" id={ids.shortcuts}>
+        <Section title="Keyboard" level={3} id={ids.shortcuts}>
           <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
             <div className="space-y-0.5">
               <label htmlFor={`${ids.shortcuts}-switch`} className="text-sm font-medium">
@@ -111,6 +99,19 @@ export function AppearancePage() {
               checked={preferences.singleKeyShortcuts}
               onCheckedChange={(checked) => setSingleKeyShortcuts(checked)}
             />
+          </div>
+        </Section>
+
+        <Section title="Defaults" level={3} id="appearance-defaults">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" disabled={atDefaults} aria-describedby={atDefaults ? ids.resetReason : undefined} onClick={() => setConfirmReset(true)}>
+              Restore appearance defaults
+            </Button>
+            {atDefaults ? (
+              <span id={ids.resetReason} className="text-xs text-muted-foreground">
+                Appearance already uses the defaults.
+              </span>
+            ) : null}
           </div>
         </Section>
       </PageBody>

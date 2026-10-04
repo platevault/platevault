@@ -312,7 +312,8 @@ export function SetupIndexingPage() {
   const anyRunning = runs.some((op) => !isSettled(op.status))
   // The first run is the full setup scan; later runs retry single locations.
   const counts = first ? indexCounts(first.payload) : null
-  const settledLocations = first ? first.items.filter((i) => i.status === "done" || i.status === "blocked" || i.status === "uncertain").length : 0
+  // Complete scope only: a blocked or uncertain location is settled but not complete (LIB-FR-03).
+  const completeLocations = first ? first.items.filter((i) => i.status === "done").length : 0
 
   function openLibrary() {
     completeOnboarding()
@@ -339,7 +340,7 @@ export function SetupIndexingPage() {
                   { label: "Metadata read", value: formatCount(counts.read) },
                   { label: "Unsupported", value: formatCount(counts.unsupported), hint: counts.unsupported ? "Skipped, left as they are" : undefined },
                   { label: "Unreadable folders", value: formatCount(counts.unreadableFolders), hint: counts.unreadableFolders ? "Read Unknown, never missing" : undefined },
-                  { label: "Completed scope", value: `${settledLocations} of ${first.items.length}`, hint: "locations" },
+                  { label: "Complete scope", value: `${completeLocations} of ${first.items.length}`, hint: "locations" },
                 ].map((stat) => (
                   <div key={stat.label}>
                     <dt className="sr-only">{stat.label}</dt>

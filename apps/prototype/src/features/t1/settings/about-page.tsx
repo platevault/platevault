@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { SimulationControls } from "@/app/simulation-panel"
 import { STORAGE_KEY } from "@/store"
-import { formatCount, formatDateTime } from "@/lib/format"
+import { formatDateTime, plural } from "@/lib/format"
 import { nowIso, useStore } from "@/store/core"
 import { replayTour, restartSetup, setChecklistHidden } from "../lib/writes"
 
@@ -53,7 +53,7 @@ export function AboutPage() {
           browser.
         </Notice>
 
-        <Section title="This build">
+        <Section title="This build" level={3}>
           <KeyValueList
             items={[
               { label: "Version", value: VERSION },
@@ -61,14 +61,14 @@ export function AboutPage() {
               { label: "Stored in", value: `This browser, localStorage key ${STORAGE_KEY}`, mono: false },
               {
                 label: "Catalog",
-                value: `${formatCount(counts.locations)} locations · ${formatCount(counts.sessions)} light sessions · ${formatCount(counts.frames)} frames · ${formatCount(counts.views)} Views`,
+                value: `${plural(counts.locations, "location")} · ${plural(counts.sessions, "light session")} · ${plural(counts.frames, "frame")} · ${plural(counts.views, "View")}`,
               },
               { label: "PlateVault clock", value: clockOffset ? `${formatDateTime(nowIso())} (simulated)` : "Matches this computer" },
             ]}
           />
         </Section>
 
-        <Section title="Onboarding" description="The orientation tour and the Getting started checklist are independent.">
+        <Section title="Onboarding" level={3} description="The orientation tour and the Getting started checklist are independent.">
           <ul className="divide-y rounded-lg border">
             <li className="flex flex-wrap items-center justify-between gap-3 p-3">
               <div className="min-w-0 space-y-0.5">
@@ -110,7 +110,7 @@ export function AboutPage() {
           </ul>
         </Section>
 
-        <Section title="Simulation controls" description="The same controls as the header Prototype button: volumes, folder access, external file changes, faults, clock and seeds.">
+        <Section title="Simulation controls" level={3} description="The same controls as the header Prototype button: volumes, folder access, external file changes, faults, clock and seeds.">
           <SimulationControls />
         </Section>
       </PageBody>
