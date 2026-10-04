@@ -162,6 +162,8 @@ export const STATUS = {
   measurement: {
     valid: s("Measured", "success", Check),
     pending: s("Pending", "muted", Clock),
+    // PIX-FR-01: a cached measurement reads Verifying until its bytes rehash to the recorded digest.
+    verifying: s("Verifying", "info", Hourglass),
     failed: s("Failed fit", "danger", CircleX),
     unavailable: s("Not measured", "muted", CircleDashed),
   },

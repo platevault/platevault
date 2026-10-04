@@ -3,10 +3,13 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
+import { useCloseUnmountFallback } from "@/components/ui/use-close-unmount-fallback"
 import { XIcon } from "lucide-react"
 
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+/** Unmounts on close even when a background tab pauses the exit animation (see useCloseUnmountFallback). */
+function Dialog({ open, defaultOpen, onOpenChange, onOpenChangeComplete, actionsRef, ...props }: DialogPrimitive.Root.Props) {
+  const closeProps = useCloseUnmountFallback({ open, defaultOpen, onOpenChange, onOpenChangeComplete, actionsRef })
+  return <DialogPrimitive.Root data-slot="dialog" {...props} {...closeProps} />
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
