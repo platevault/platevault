@@ -933,6 +933,115 @@ async fn stale_assessment_after_correction_or_metadata_only_observation_is_refus
     assert_eq!(recorded[0].observation_basis, observed.observations);
 }
 
+#[tokio::test]
+async fn catalog_correction_invalidates_inferred_suggestions_but_keeps_confirmations() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"OBJECT = 'NGC 7000' one");
+    fx.write("Ha_002.fits", b"OBJECT = 'NGC 7000' two");
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &["Ha_001.fits", "Ha_002.fits"]).await;
+    let mut seed = target("NGC 7000", "ngc 7000");
+    seed.provenance = Provenance::Seed { dataset: "bundled-seed".into() };
+    catalog.record_seed_target(&seed).await.unwrap();
+    let equipment = saved_equipment(&catalog).await;
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let confirmed =
+        catalog.confirm_equipment(&[expected_session(&session)], equipment.id).await.unwrap();
+    let session = catalog.session(session.id).await.unwrap().summary.session;
+    let assessed = assessment(&catalog, session.id).await;
+    let suggestion = SuggestedAssociation {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        kind: AssociationKind::Target,
+        subject_id: Some(seed.id),
+        state: AssociationState::Suggested,
+        evidence: vec![
+            EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true },
+            EvidenceItem::Coordinates { ra_deg: 314.75, dec_deg: 44.33, qualified: true },
+        ],
+        provenance: Provenance::Inferred { rule: "alias-and-coordinates".into() },
+        expected_observations: assessed.observations.clone(),
+        expected_decisions: assessed.decisions.clone(),
+        expected_observation_revisions: assessed.sequences.clone(),
+    };
+    catalog.record_suggestions(std::slice::from_ref(&suggestion)).await.unwrap();
+    let counted = |coverage: platevault_model::TargetCoverage| -> f64 {
+        coverage.contributions.iter().map(|c| c.captured_seconds).sum()
+    };
+    assert!((counted(catalog.target_coverage(seed.id).await.unwrap()) - 600.0).abs() < 1e-9);
+
+    // OBJECT is outside capture identity: same session, same grouping revision.
+    let asset = catalog.session(session.id).await.unwrap().assets[0].clone();
+    let correction = CorrectionInput {
+        asset_id: asset.id,
+        field: "object".into(),
+        value: serde_json::json!("M 31"),
+    };
+    let outcome = catalog
+        .apply_correction_and_regroup(&[expected(&asset)], &[correction], group)
+        .await
+        .unwrap();
+    assert!(outcome.lineage.is_none(), "no regroup");
+    let detail = catalog.session(session.id).await.unwrap();
+    assert_eq!(detail.summary.session.grouping_revision, session.grouping_revision);
+
+    let by_kind = |kind| detail.associations.iter().find(|a| a.kind == kind).unwrap().clone();
+    let inferred = by_kind(AssociationKind::Target);
+    assert_eq!(inferred.state, AssociationState::NeedsReview, "stale inference not trusted");
+    assert_eq!(inferred.subject_id, Some(seed.id), "evidence history retained");
+    let stale_total = counted(catalog.target_coverage(seed.id).await.unwrap());
+    assert!(stale_total.abs() < 1e-9, "coverage no longer counts it: {stale_total}");
+    let manual = by_kind(AssociationKind::Equipment);
+    assert_eq!(manual.state, AssociationState::Confirmed);
+    assert_eq!(manual.decision_revision, confirmed[0].decision_revision, "confirmation untouched");
+    let error = catalog.record_suggestions(&[suggestion]).await.unwrap_err();
+    assert_eq!(kind(&error), "conflict", "pre-correction assessment refused");
+    assert_eq!(tree(&fx.root), before, "catalog-only correction");
+}
+
+#[tokio::test]
+async fn failed_subtree_retry_reports_unreadable_scope_and_keeps_location_available() {
+    let fx = Fixture::new();
+    fx.write("night1/Ha_001.fits", b"frame one");
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &["night1/Ha_001.fits"]).await;
+    let missing = NativePath::from_path(Path::new("night9"));
+
+    let operation = catalog.retry_scope(location.id, missing.clone()).await.unwrap();
+    let failed = catalog
+        .abort_scan(operation.id, ScanState::Failed, "night9: No such file or directory")
+        .await
+        .unwrap();
+    assert_eq!(failed.state, ScanState::Failed);
+    let issue = failed.issues.iter().find(|issue| issue.relative_path == missing).unwrap();
+    assert_eq!(issue.availability, Availability::Unreadable, "failed scope is not available");
+    assert!(failed.incomplete_scopes.contains(&missing));
+    assert!(failed.complete_scopes.is_empty());
+    let after = catalog.location(location.id).await.unwrap();
+    assert_eq!(after.availability, Availability::Available, "root location state unchanged");
+    assert!(catalog.location_failure(location.id).await.unwrap().is_none());
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    assert_eq!(assets[0].availability, Availability::Available, "no Missing claim");
+
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let canceled =
+        catalog.abort_scan(operation.id, ScanState::Canceled, "canceled by user").await.unwrap();
+    let issue = canceled.issues.iter().find(|issue| issue.reason == "canceled by user").unwrap();
+    assert_eq!(issue.availability, Availability::Available, "cancellation is not a file failure");
+
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    catalog
+        .mark_location_unavailable(location.id, Availability::Offline, "unplugged")
+        .await
+        .unwrap();
+    let offline = catalog.abort_scan(operation.id, ScanState::Failed, "volume gone").await.unwrap();
+    let issue = offline.issues.iter().find(|issue| issue.reason == "volume gone").unwrap();
+    assert_eq!(issue.availability, Availability::Offline, "known location failure preserved");
+}
+
 /// Recorded capabilities of a case- and normalization-insensitive volume.
 fn insensitive_volume() -> VolumeIdentity {
     VolumeIdentity {
