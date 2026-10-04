@@ -17,13 +17,14 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
 use platevault_model::{
-    ApplicableQuality, Asset, Association, AssociationKind, AssociationState, Availability,
-    CaptureKey, CaptureMetadata, CorrectionInput, CoverageContribution, DigestEvidence, Equipment,
-    EvidenceItem, ExpectedAsset, ExpectedSession, FileIdentity, GroupingResult, LibraryError,
-    Location, LocationRole, NativePath, ObservationFingerprint, PathSensitivity, Provenance,
-    Quality, RemapBlock, RemapBlockReason, RemapItem, RemapReview, Revision, ScanBatch, ScanFile,
-    ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState, Session, SessionCandidate,
-    SessionLineage, TargetCandidate, TargetCone, TargetCoverage, TargetRecord, VolumeIdentity,
+    logical_quality, ApplicableQuality, Asset, Association, AssociationKind, AssociationState,
+    Availability, CaptureKey, CaptureMetadata, CorrectionInput, CoverageContribution,
+    DigestEvidence, Equipment, EvidenceItem, ExpectedAsset, ExpectedSession, FileIdentity,
+    GroupingResult, LibraryError, Location, LocationRole, NativePath, ObservationFingerprint,
+    PathSensitivity, Provenance, Quality, RemapBlock, RemapBlockReason, RemapItem, RemapReview,
+    Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress,
+    ScanState, Session, SessionCandidate, SessionLineage, TargetCandidate, TargetCone,
+    TargetCoverage, TargetRecord, VolumeIdentity,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -132,6 +133,8 @@ pub struct SessionSummary {
     pub session: Session,
     pub location_ids: Vec<Uuid>,
     pub asset_count: u64,
+    /// Logical captures: content-identical copies in different locations count once.
+    pub capture_count: u64,
     pub availability: Availability,
     /// Last recorded observation; never a claim about current live bytes.
     pub last_observed_at: Option<String>,
@@ -145,8 +148,24 @@ pub struct SessionSummary {
 pub struct SessionDetail {
     pub summary: SessionSummary,
     pub assets: Vec<Asset>,
+    /// Each logical capture once, naming every physical copy (D16).
+    pub members: Vec<SessionMember>,
     pub associations: Vec<Association>,
     pub lineage: Vec<SessionLineage>,
+}
+
+/// One logical capture of a session (D16): every current physical copy with equal
+/// SHA-256 across registered locations, listed once. An asset without such a copy
+/// is its own member. Every copy stays registered and protected.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMember {
+    pub copies: Vec<Uuid>,
+    pub content_sha256: Option<String>,
+    pub applicable_quality: ApplicableQuality,
+    /// Unhashed and matching a copy in another location by size, capture key and
+    /// start time; totals stay provisional until it is hashed.
+    pub duplicate_candidate: bool,
 }
 
 /// Result of applying (or proposing) catalog corrections plus their regroup.
@@ -905,10 +924,21 @@ impl Catalog {
         let row = load_session_row(&mut conn, id).await?;
         let ids: BTreeSet<Uuid> = row.session.asset_ids.iter().copied().collect();
         let assets = load_assets(&mut conn, &ids).await?;
+        let candidates = duplicate_candidates(&mut conn, None).await?;
+        let mut members = Vec::new();
+        for capture in logical_captures(&mut conn, &assets).await? {
+            let copies: Vec<&Asset> = capture.copies.iter().collect();
+            members.push(SessionMember {
+                copies: capture.copies.iter().map(|asset| asset.id).collect(),
+                content_sha256: capture.content_sha256.clone(),
+                applicable_quality: logical_quality(&copies),
+                duplicate_candidate: capture.present.iter().any(|a| candidates.contains(&a.id)),
+            });
+        }
         let associations = load_associations(&mut conn, id).await?;
         let lineage = session_lineage(&mut conn, id).await?;
         let summary = summarize(&mut conn, row).await?;
-        Ok(SessionDetail { summary, assets, associations, lineage })
+        Ok(SessionDetail { summary, assets, members, associations, lineage })
     }
 
     /// # Errors
@@ -1448,8 +1478,7 @@ impl Catalog {
         .bind(target_id.to_string())
         .fetch_all(&mut *conn)
         .await?;
-        let mut contributions = Vec::new();
-        let mut locations = BTreeSet::new();
+        let mut counted = Vec::new();
         for row in &rows {
             let state: AssociationState = from_text(&row.try_get::<String, _>("state")?)?;
             let evidence: Vec<EvidenceItem> = from_json(&row.try_get::<String, _>("evidence")?)?;
@@ -1458,11 +1487,40 @@ impl Catalog {
             }
             let session_id = parse_uuid(&row.try_get::<String, _>("id")?)?;
             let date_basis: Option<String> = row.try_get("date_basis")?;
-            let assets = current_member_assets(&mut conn, session_id).await?;
-            for contribution in contributions_for(session_id, date_basis.as_ref(), &assets) {
-                locations.insert(contribution.location_id);
-                contributions.push(contribution);
+            for asset in current_member_assets(&mut conn, session_id).await? {
+                counted.push((date_basis.clone(), session_id, asset));
             }
+        }
+        let placement: HashMap<Uuid, (Option<String>, Uuid)> = counted
+            .iter()
+            .map(|(date, session, asset)| (asset.id, (date.clone(), *session)))
+            .collect();
+        let assets: Vec<Asset> = counted.into_iter().map(|(_, _, asset)| asset).collect();
+        let candidates = duplicate_candidates(&mut conn, None).await?;
+        let mut locations = BTreeSet::new();
+        let mut by_session: BTreeMap<(Option<String>, Uuid), Vec<(Asset, ApplicableQuality)>> =
+            BTreeMap::new();
+        for capture in logical_captures(&mut conn, &assets).await? {
+            locations.extend(capture.present.iter().map(|asset| asset.location_id));
+            let copies: Vec<&Asset> = capture.copies.iter().collect();
+            let quality = logical_quality(&copies);
+            // Each logical capture counts once, on an available copy when there is one.
+            let Some(primary) = capture.present.iter().min_by_key(|asset| {
+                (asset.availability != Availability::Available, asset.location_id, asset.id)
+            }) else {
+                continue;
+            };
+            let place = placement[&primary.id].clone();
+            by_session.entry(place).or_default().push((primary.clone(), quality));
+        }
+        let mut contributions = Vec::new();
+        for ((date_basis, session_id), entries) in &by_session {
+            contributions.extend(contributions_for(
+                *session_id,
+                date_basis.as_ref(),
+                entries,
+                &candidates,
+            ));
         }
         let mut provisional = false;
         for id in &locations {
@@ -1474,6 +1532,73 @@ impl Catalog {
             provisional,
             contributions,
         })
+    }
+}
+
+impl Catalog {
+    /// Hash the unhashed cross-location duplicate candidates that involve this
+    /// location, read-only and off the writer lock, and bind each digest to the
+    /// exact observation it was taken from. A copy that cannot be read stays a
+    /// candidate and keeps its totals provisional. Returns the number bound.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read or written.
+    pub async fn verify_duplicate_candidates<P: SourceProbe>(
+        &self,
+        location_id: Uuid,
+        probe: P,
+    ) -> Result<usize> {
+        let mut conn = self.reader().await?;
+        let mut work = Vec::new();
+        for id in duplicate_candidates(&mut conn, Some(location_id)).await? {
+            let asset = load_asset(&mut conn, id).await?;
+            if asset.fingerprint.content_sha256.is_none()
+                && asset.availability == Availability::Available
+            {
+                let root = SourceRoot::new(load_location(&mut conn, asset.location_id).await?)?;
+                work.push((
+                    asset.id,
+                    root,
+                    asset.relative_path.relative_path()?,
+                    asset.fingerprint,
+                ));
+            }
+        }
+        drop(conn);
+        if work.is_empty() {
+            return Ok(0);
+        }
+        let hashed = blocking(move || {
+            Ok(work
+                .into_iter()
+                .filter_map(|(id, root, relative, fingerprint)| {
+                    root.verify(&probe).ok()?;
+                    let sha256 = current_digest(&root, &relative, &fingerprint, &probe).ok()?;
+                    Some((id, sha256, fingerprint))
+                })
+                .collect::<Vec<_>>())
+        })
+        .await?;
+        let bound = write_txn!(self, |conn| {
+            let mut bound = 0;
+            for (id, sha256, hashed) in &hashed {
+                let asset = load_asset(conn, *id).await?;
+                if asset.fingerprint.content_sha256.is_none()
+                    && fingerprint_matches(&asset.fingerprint, hashed)
+                {
+                    let mut fingerprint = asset.fingerprint.clone();
+                    fingerprint.content_sha256 = Some(sha256.clone());
+                    sqlx::query("UPDATE assets SET fingerprint = ?1 WHERE id = ?2")
+                        .bind(to_json(&fingerprint)?)
+                        .bind(id.to_string())
+                        .execute(&mut *conn)
+                        .await?;
+                    bound += 1;
+                }
+            }
+            bound
+        });
+        Ok(bound)
     }
 }
 
@@ -1925,7 +2050,9 @@ async fn location_provisional(conn: &mut SqliteConnection, id: Uuid) -> Result<b
     .bind(id.to_string())
     .fetch_one(&mut *conn)
     .await?;
-    Ok(state.as_deref() != Some("completed") || pending)
+    Ok(state.as_deref() != Some("completed")
+        || pending
+        || !duplicate_candidates(conn, Some(id)).await?.is_empty())
 }
 
 /// The first readable pass of an operation (its first verified batch, or its
@@ -3253,6 +3380,7 @@ async fn summarize(conn: &mut SqliteConnection, row: SessionRow) -> Result<Sessi
     };
     Ok(SessionSummary {
         asset_count: u64::try_from(assets.len()).unwrap_or(u64::MAX),
+        capture_count: in_session_captures(&assets),
         availability: session_availability(&assets),
         last_observed_at: assets.iter().map(|asset| asset.last_observed_at.clone()).max(),
         provisional,
@@ -4150,14 +4278,113 @@ fn is_light(metadata: &CaptureMetadata) -> Option<bool> {
     Some(image_type.to_ascii_lowercase().contains("light"))
 }
 
+/// Logical captures among one session's assets: equal SHA-256 across locations
+/// counts once.
+fn in_session_captures(assets: &[Asset]) -> u64 {
+    let mut locations: HashMap<&str, BTreeSet<Uuid>> = HashMap::new();
+    for asset in assets {
+        if let Some(digest) = asset.fingerprint.content_sha256.as_deref() {
+            locations.entry(digest).or_default().insert(asset.location_id);
+        }
+    }
+    let keys: BTreeSet<String> = assets
+        .iter()
+        .map(|asset| {
+            asset
+                .fingerprint
+                .content_sha256
+                .as_deref()
+                .filter(|digest| locations[digest].len() > 1)
+                .map_or_else(|| asset.id.to_string(), str::to_owned)
+        })
+        .collect();
+    u64::try_from(keys.len()).unwrap_or(u64::MAX)
+}
+
+/// Physical assets grouped into one logical capture (D16).
+struct Capture {
+    content_sha256: Option<String>,
+    /// The grouped input assets.
+    present: Vec<Asset>,
+    /// Every current physical copy in the library.
+    copies: Vec<Asset>,
+}
+
+/// Group assets into logical captures: copies with equal SHA-256 that span at
+/// least two registered locations are one capture listing every current copy.
+/// Any other asset is its own capture.
+async fn logical_captures(conn: &mut SqliteConnection, assets: &[Asset]) -> Result<Vec<Capture>> {
+    let mut copies_of: HashMap<String, Vec<Asset>> = HashMap::new();
+    let mut captures: BTreeMap<String, Capture> = BTreeMap::new();
+    for asset in assets {
+        let mut shared = None;
+        if let Some(digest) = &asset.fingerprint.content_sha256 {
+            if !copies_of.contains_key(digest) {
+                let rows = sqlx::query(asset_sql!(
+                    "WHERE json_extract(a.fingerprint, '$.contentSha256') = ?1 \
+                     AND a.availability <> 'missing' AND a.session_id IS NOT NULL \
+                     ORDER BY a.location_id, a.id"
+                ))
+                .bind(digest.as_str())
+                .fetch_all(&mut *conn)
+                .await?;
+                let copies = rows.iter().map(asset_from_row).collect::<Result<Vec<_>>>()?;
+                copies_of.insert(digest.clone(), copies);
+            }
+            let copies = &copies_of[digest];
+            let locations: BTreeSet<Uuid> = copies.iter().map(|copy| copy.location_id).collect();
+            if locations.len() > 1 {
+                shared = Some(digest.clone());
+            }
+        }
+        let key = shared.clone().unwrap_or_else(|| asset.id.to_string());
+        let capture = captures.entry(key).or_insert_with(|| Capture {
+            content_sha256: asset.fingerprint.content_sha256.clone(),
+            present: Vec::new(),
+            copies: shared
+                .as_ref()
+                .map_or_else(|| vec![asset.clone()], |digest| copies_of[digest].clone()),
+        });
+        capture.present.push(asset.clone());
+    }
+    Ok(captures.into_values().collect())
+}
+
+/// Current assets with an unhashed duplicate candidate: a copy in the same
+/// session (equal capture key) in another location with equal size and equal
+/// known capture start time, where either side has no content digest. With a
+/// location, only pairs involving it.
+async fn duplicate_candidates(
+    conn: &mut SqliteConnection,
+    location: Option<Uuid>,
+) -> Result<BTreeSet<Uuid>> {
+    let ids: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT a.id FROM assets a JOIN assets b \
+         ON b.session_id = a.session_id AND b.location_id <> a.location_id \
+         AND b.size_bytes = a.size_bytes \
+         AND json_extract(b.effective, '$.dateObs') = json_extract(a.effective, '$.dateObs') \
+         WHERE a.session_id IS NOT NULL \
+         AND a.availability <> 'missing' AND b.availability <> 'missing' \
+         AND (json_extract(a.fingerprint, '$.contentSha256') IS NULL \
+              OR json_extract(b.fingerprint, '$.contentSha256') IS NULL) \
+         AND (?1 IS NULL OR a.location_id = ?1 OR b.location_id = ?1)",
+    )
+    .bind(location.map(|id| id.to_string()))
+    .fetch_all(&mut *conn)
+    .await?;
+    ids.iter().map(|id| parse_uuid(id)).collect()
+}
+
 fn contributions_for(
     session_id: Uuid,
     date_basis: Option<&String>,
-    assets: &[Asset],
+    entries: &[(Asset, ApplicableQuality)],
+    candidates: &BTreeSet<Uuid>,
 ) -> Vec<CoverageContribution> {
     let mut groups: BTreeMap<(Uuid, String, Option<String>), CoverageContribution> =
         BTreeMap::new();
-    for asset in assets {
+    for (asset, quality) in entries {
+        let quality = *quality;
         let light = is_light(&asset.effective);
         if light == Some(false) {
             continue;
@@ -4177,17 +4404,22 @@ fn contributions_for(
                 unknown_exposure_count: 0,
                 drifted_decisions: 0,
                 verification_pending: 0,
+                duplicate_candidates: 0,
+                conflicting_decisions: 0,
                 availability: asset.availability,
                 last_observed_at: asset.last_observed_at.clone(),
             });
         if asset.last_observed_at > entry.last_observed_at {
             entry.last_observed_at.clone_from(&asset.last_observed_at);
         }
-        let quality = asset.applicable_quality();
         match quality {
             ApplicableQuality::ChangedContent { .. } => entry.drifted_decisions += 1,
             ApplicableQuality::VerificationPending { .. } => entry.verification_pending += 1,
+            ApplicableQuality::Conflicting => entry.conflicting_decisions += 1,
             _ => {}
+        }
+        if candidates.contains(&asset.id) {
+            entry.duplicate_candidates += 1;
         }
         match (light, asset.effective.exposure_seconds) {
             (Some(true), Some(exposure)) => {
@@ -4197,7 +4429,8 @@ fn contributions_for(
                     ApplicableQuality::Unreviewed => entry.unreviewed_seconds += exposure,
                     ApplicableQuality::Unusable
                     | ApplicableQuality::ChangedContent { .. }
-                    | ApplicableQuality::VerificationPending { .. } => {}
+                    | ApplicableQuality::VerificationPending { .. }
+                    | ApplicableQuality::Conflicting => {}
                 }
             }
             _ => entry.unknown_exposure_count += 1,

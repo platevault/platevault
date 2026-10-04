@@ -391,3 +391,119 @@ async fn same_stat_replacement_leaves_usable_totals_until_the_reviewed_bytes_ret
     assert!(!coverage.provisional);
     assert_eq!(support::digest(&light), original);
 }
+
+fn expected_of(asset: &Asset) -> ExpectedAsset {
+    ExpectedAsset {
+        asset_id: asset.id,
+        decision_revision: asset.decision_revision,
+        fingerprint: asset.fingerprint.clone(),
+    }
+}
+
+fn summed(coverage: &TargetCoverage, pick: fn(&CoverageContribution) -> f64) -> f64 {
+    coverage.contributions.iter().map(pick).sum()
+}
+
+#[tokio::test]
+async fn byte_identical_copies_in_two_locations_are_one_logical_capture() {
+    let temp = tempfile::tempdir().unwrap();
+    let (first, second) = (temp.path().join("T7"), temp.path().join("NAS"));
+    std::fs::create_dir(&first).unwrap();
+    std::fs::create_dir(&second).unwrap();
+    let mut originals = Vec::new();
+    for (name, start) in
+        [("light_1.fits", "'2026-09-18T22:00:00'"), ("light_2.fits", "'2026-09-18T22:05:00'")]
+    {
+        let fields =
+            [("IMAGETYP", "'LIGHT'"), ("FILTER", "'Ha'"), ("EXPTIME", "300"), ("DATE-OBS", start)];
+        support::fits(&first.join(name), &fields).unwrap();
+        std::fs::copy(first.join(name), second.join(name)).unwrap();
+        originals.push((first.join(name), support::digest(&first.join(name))));
+        originals.push((second.join(name), support::digest(&second.join(name))));
+    }
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let mut locations = Vec::new();
+    for root in [&first, &second] {
+        let location = library
+            .register_location(
+                NativePath::from_path(root),
+                "Captured".into(),
+                LocationRole::Captures,
+            )
+            .await
+            .unwrap();
+        assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+        locations.push(location.id);
+    }
+    let catalog = library.catalog();
+    let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    assert_eq!(sessions.len(), 1, "copies share one capture key");
+    let session = sessions[0].session.clone();
+    let target = TargetCandidate {
+        id: Uuid::new_v4(),
+        designation: "NGC 7000".into(),
+        aliases: Vec::new(),
+        common_name: None,
+        object_type: "nebula".into(),
+        coordinates: None,
+        provenance: Provenance::User,
+        provider_id: None,
+    };
+    let target = catalog.save_target(&target, None).await.unwrap().candidate.id;
+    let expected_session = ExpectedSession {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        decision_revision: session.decision_revision,
+    };
+    catalog.associate_target(&[expected_session], target).await.unwrap();
+    let coverage = catalog.target_coverage(target).await.unwrap();
+    assert!(
+        (summed(&coverage, |c| c.captured_seconds) - 600.0).abs() < 1e-9,
+        "counted once: {coverage:?}"
+    );
+    assert!(!coverage.provisional, "{coverage:?}");
+    let mut covered = coverage.covered_location_ids.clone();
+    covered.sort_unstable();
+    locations.sort_unstable();
+    assert_eq!(covered, locations);
+    let detail = catalog.session(session.id).await.unwrap();
+    assert_eq!((detail.summary.asset_count, detail.summary.capture_count), (4, 2));
+    assert_eq!(detail.members.len(), 2, "each frame listed once");
+    for member in &detail.members {
+        assert!(member.content_sha256.is_some() && !member.duplicate_candidate, "{member:?}");
+        let homes: Vec<Uuid> = member
+            .copies
+            .iter()
+            .map(|id| detail.assets.iter().find(|asset| asset.id == *id).unwrap().location_id)
+            .collect();
+        assert_eq!(homes.len(), 2, "both physical copies named");
+        assert_ne!(homes[0], homes[1]);
+    }
+
+    // A decision on either copy applies to the logical capture.
+    let member = &detail.members[0];
+    let first_copy = catalog.asset(member.copies[0]).await.unwrap();
+    catalog
+        .set_quality(&[expected_of(&first_copy)], Quality::Usable, InventoryProbe)
+        .await
+        .unwrap();
+    let coverage = catalog.target_coverage(target).await.unwrap();
+    assert!((summed(&coverage, |c| c.usable_seconds) - 300.0).abs() < 1e-9, "{coverage:?}");
+    assert!((summed(&coverage, |c| c.unreviewed_seconds) - 300.0).abs() < 1e-9);
+    // Conflicting explicit decisions count as neither Usable nor Unreviewed.
+    let second = catalog.asset(member.copies[1]).await.unwrap();
+    catalog.set_quality(&[expected_of(&second)], Quality::Unusable, InventoryProbe).await.unwrap();
+    let coverage = catalog.target_coverage(target).await.unwrap();
+    assert!(summed(&coverage, |c| c.usable_seconds).abs() < 1e-9, "{coverage:?}");
+    assert!((summed(&coverage, |c| c.unreviewed_seconds) - 300.0).abs() < 1e-9);
+    assert!((summed(&coverage, |c| c.captured_seconds) - 600.0).abs() < 1e-9);
+    assert_eq!(coverage.contributions.iter().map(|c| c.conflicting_decisions).sum::<u64>(), 1);
+    let detail = catalog.session(session.id).await.unwrap();
+    assert!(detail.members.iter().any(|m| m.applicable_quality == ApplicableQuality::Conflicting));
+    for location in &locations {
+        assert_eq!(catalog.location_assets(*location).await.unwrap().len(), 2, "every copy stays");
+    }
+    for (path, digest) in &originals {
+        assert_eq!(&support::digest(path), digest, "copies are read-only");
+    }
+}

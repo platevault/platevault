@@ -364,6 +364,9 @@ pub enum ApplicableQuality {
     VerificationPending {
         previous: Quality,
     },
+    /// Copies of one logical capture carry conflicting explicit decisions; the
+    /// capture counts as neither Usable nor Unreviewed (D16).
+    Conflicting,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -543,6 +546,36 @@ impl Asset {
             Quality::Unusable => ApplicableQuality::Unusable,
         }
     }
+}
+
+/// Applicable quality of one logical capture from all of its physical copies
+/// (D16). An applicable decision on any copy applies to the capture. Explicit
+/// decisions that are applicable, or still pending their rehash, and disagree make
+/// it `Conflicting`. A decision whose bytes changed never speaks for these bytes.
+#[must_use]
+pub fn logical_quality(copies: &[&Asset]) -> ApplicableQuality {
+    let qualities: Vec<ApplicableQuality> =
+        copies.iter().map(|copy| copy.applicable_quality()).collect();
+    let explicit = |wanted: Quality| {
+        qualities.iter().any(|quality| match quality {
+            ApplicableQuality::Usable => wanted == Quality::Usable,
+            ApplicableQuality::Unusable => wanted == Quality::Unusable,
+            ApplicableQuality::VerificationPending { previous } => *previous == wanted,
+            _ => false,
+        })
+    };
+    if explicit(Quality::Usable) && explicit(Quality::Unusable) {
+        return ApplicableQuality::Conflicting;
+    }
+    for decided in [ApplicableQuality::Usable, ApplicableQuality::Unusable] {
+        if qualities.contains(&decided) {
+            return decided;
+        }
+    }
+    let pending =
+        qualities.iter().find(|q| matches!(q, ApplicableQuality::VerificationPending { .. }));
+    let changed = qualities.iter().find(|q| matches!(q, ApplicableQuality::ChangedContent { .. }));
+    pending.or(changed).copied().unwrap_or(ApplicableQuality::Unreviewed)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -816,6 +849,11 @@ pub struct CoverageContribution {
     pub drifted_decisions: u64,
     /// Decided frames outside applicable totals until their rehash finishes.
     pub verification_pending: u64,
+    /// Unhashed frames matching a copy in another location by size, capture key
+    /// and start time; totals stay provisional until they are hashed.
+    pub duplicate_candidates: u64,
+    /// Logical captures whose copies carry conflicting explicit decisions.
+    pub conflicting_decisions: u64,
     pub availability: Availability,
     pub last_observed_at: String,
 }

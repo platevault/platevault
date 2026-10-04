@@ -408,7 +408,15 @@ impl Library {
         saved: &[TargetCandidate],
     ) -> Result<(), LibraryError> {
         let session_id = detail.summary.session.id;
-        let frames = detail.assets.iter().map(|asset| asset.effective.clone()).collect::<Vec<_>>();
+        // One frame per logical capture: identical copies are one observation.
+        let frames = detail
+            .members
+            .iter()
+            .filter_map(|member| {
+                detail.assets.iter().find(|asset| member.copies.contains(&asset.id))
+            })
+            .map(|asset| asset.effective.clone())
+            .collect::<Vec<_>>();
         let assessments = self.targets.candidates_for_frames(&frames, saved);
         let mut qualified =
             assessments.iter().filter(|assessment| assessment.state == AssociationState::Suggested);
@@ -513,6 +521,9 @@ impl Library {
         .await;
         match observation {
             Ok(observation) => {
+                // Cross-location duplicate candidates are hashed before the terminal
+                // state, so totals leave provisional scope with the scan (D16).
+                self.catalog.verify_duplicate_candidates(location.id, InventoryProbe).await?;
                 let catalog = Arc::clone(&self.catalog);
                 let handle = tokio::runtime::Handle::current();
                 let completed = blocking(move || {
