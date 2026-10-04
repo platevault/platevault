@@ -18,7 +18,8 @@ two accepted channel products to a new View, and adopts a generated master into
 the calibration library. Done means three accepted products appear on the View,
 Project and Target with actual lineage. The new View lists two product inputs
 and no raw integration. The master is reusable only after explicit adoption and
-a verified durable copy. Nothing is accepted, adopted or upgraded in lineage
+a verified durable copy. An accepted product whose bytes change is not offered
+for reuse. Nothing is accepted, adopted or upgraded in lineage
 automatically.
 
 ## Preconditions
@@ -27,6 +28,7 @@ automatically.
 - P2: A helper process keeps appending to one further file in `output/` during S1.
 - P3: A final TIFF saved by the user outside the View, at `Work/Finals/NGC7000-HOO.tif`.
 - P4: The J19/P5 manifest is available.
+- P5: A helper outside PlateVault that saves a file's bytes and nanosecond mtime, then overwrites it in place with a same-size variant whose pixel bytes differ and restores the saved mtime. The helper later restores the saved bytes and mtime.
 
 ## Steps
 
@@ -47,7 +49,7 @@ automatically.
 ### S3 — Accept products {#S3}
 
 - **Do:** Inspect the Ha stack, the OIII stack, and the final image, each with its association. Select all three and click **Accept Result**.
-- **Expect:** The three products appear on the View, on Project `NGC 7000 HOO`, and on Target NGC 7000, and read Keep for cleanup.
+- **Expect:** The three products appear on the View, on Project `NGC 7000 HOO`, and on Target NGC 7000, and read Keep for cleanup. Each product's details show the SHA-256 recorded at acceptance.
 - **Expect (negative):** Acceptance does not change any lineage value, and nothing claims that all 208 planned frames were used.
 - **Trace:** flow H3 · RES-FR-04 · RES-AC-03
 
@@ -72,12 +74,19 @@ automatically.
 - **Expect (negative):** Quitting Siril does not mark the View Complete.
 - **Trace:** flow H3a, F5, F6 · PREP-FR-06, PREP-FR-09, PREP-FR-10
 
-### S7 — Detect reference drift {#S7}
+### S7 — Detect same-stat reference drift {#S7}
 
-- **Do:** Overwrite the bytes of the accepted OIII stack outside PlateVault, then reopen `NGC7000 HOO combine`.
-- **Expect:** The OIII product input reads as drifted and requires review.
-- **Expect (negative):** The accepted product is not silently replaced or re-accepted.
-- **Trace:** flow H3a, cross-flow "External changes" · RES-FR-05
+- **Do:** With the P5 helper, save the accepted OIII stack, overwrite it with its same-size variant, and restore its mtime. Reopen `NGC7000 HOO combine`, then click **Create View from results** and read the picker without creating a View.
+- **Expect:** The OIII product input reads drifted: its rehash differs from its acceptance digest, and it requires review. Its acceptance and lineage show as history for the earlier bytes. The picker lists the OIII stack as drifted and does not offer it, while the Ha stack is still offered.
+- **Expect (negative):** Equal size and mtime are not read as unchanged content. The accepted product is not silently replaced, re-accepted or offered for reuse.
+- **Trace:** flow H3a, cross-flow "External changes" · RES-FR-04, RES-FR-05 · RES-AC-09
+
+### S7a — Restore the accepted bytes {#S7a}
+
+- **Do:** With the P5 helper, restore the OIII stack's saved bytes and mtime. Reopen `NGC7000 HOO combine` and the **Create View from results** picker, then close the picker without creating a View.
+- **Expect:** The rehash matches the acceptance digest. The OIII product input reads accepted with its original lineage, and the picker offers it again.
+- **Expect (negative):** No new acceptance is recorded and no lineage value changes.
+- **Trace:** flow H3a · RES-FR-05 · RES-AC-09
 
 ### S8 — See a generated master candidate {#S8}
 
@@ -106,7 +115,7 @@ automatically.
 - SC2: The attached file reads User-linked (S2); 0 lineage values change on acceptance (S3).
 - SC3: `NGC7000 HOO combine` has exactly 2 product inputs and 0 raw session integration (S4).
 - SC4: Product-input support is either listed or refused by name, never converted (S5).
-- SC5: Drift is flagged for review, with 0 silent replacements (S7).
+- SC5: Same-stat drift is flagged for review and the drifted product is offered for reuse 0 times (S7); after S7a it is offered again with 0 new acceptances.
 - SC6: The master is offered to 0 Views before adoption (S8); it is registered only after a verified copy, and its source remains (S9).
 - SC7: The occupied adoption path is refused and its file changes 0 bytes (S8a).
 

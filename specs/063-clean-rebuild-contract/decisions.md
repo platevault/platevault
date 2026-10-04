@@ -73,7 +73,7 @@ Owners: PLAN.
 - Notifications start disabled.
 - A default site and explicit criteria/lead time are required before enabling them; the UI names those values.
 - No app-closed delivery is claimed without an installed, tested scheduler.
-- Resume recomputes upcoming windows and suppresses repeats by target/site/window identity.
+- Resume or restart recomputes upcoming windows and suppresses repeats of durably recorded delivered target/site/window identities.
 - Permission denial remains visible and offers Settings/Retry.
 
 ### D08

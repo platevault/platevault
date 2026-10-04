@@ -28,7 +28,7 @@ Astronomical windows for a Target from a chosen planning site, opt-in reminders 
 - **PLAN-AC-04**: Given no default site, when Enable notifications is chosen, then the user is directed to set one and no reminder is scheduled without a named site.
 - **PLAN-AC-05**: Given reminders were never enabled, then no background reminder activity occurs; enabling reminders starts no indexing.
 - **PLAN-AC-06**: Given notifications are disabled, when enabling is requested without explicit criteria or lead time, then no reminder starts. The confirmed site, criteria and lead time are shown before activation.
-- **PLAN-AC-07**: Given notifications were enabled and the app resumes, when upcoming windows are recomputed, then already-delivered target/site/window identities do not repeat. No app-closed delivery capability is claimed without an installed, tested scheduler.
+- **PLAN-AC-07**: Given a reminder was delivered for a target/site/window identity, when the app restarts or resumes inside that window's lead time and recomputes upcoming windows, then that identity is not delivered again. No app-closed delivery capability is claimed without an installed, tested scheduler.
 - **PLAN-AC-08**: Given OS notification permission is denied, when activation is requested, then denial remains visible with Settings and Retry, and no delivery success is claimed.
 
 ### Edge Cases
@@ -44,7 +44,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PLAN-FR-03**: Mark Planned and Enable notifications are explicit opt-ins. Reminders use the displayed default site, and every reminder names it. Planning elsewhere never enables reminders there. Enabling reminders starts no indexing or image processing.
 - **PLAN-FR-04**: Export calendar confirms site, date range, time zone, and selected windows, then saves an .ics file through the native save dialog as a one-time snapshot.
 - **PLAN-FR-05**: Suitability is astronomical only: no weather, equipment, or processing-readiness claims, and no provider account or authorization.
-- **PLAN-FR-06**: Notifications require explicit criteria and lead time plus the default site, all named before activation. Resume recomputes upcoming windows and suppresses repeats by target/site/window identity. App-closed delivery needs an installed, tested scheduler; otherwise that capability is explicitly unavailable.
+- **PLAN-FR-06**: Notifications require explicit criteria and lead time plus the default site, all named before activation. Each delivered reminder's target/site/window identity is recorded durably. Resume and restart recompute upcoming windows and suppress repeats of recorded identities. App-closed delivery needs an installed, tested scheduler; otherwise that capability is explicitly unavailable.
 - **PLAN-FR-07**: Permission denial remains visible and offers Settings and Retry. No scheduler acknowledgment is represented as actual notification delivery.
 - **PLAN-FR-08**: Rust computes astronomical planning windows through qualified shared skymath contracts; the frontend presents windows and controls without reimplementing scientific calculations.
 

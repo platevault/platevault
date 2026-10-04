@@ -272,16 +272,16 @@
       "journeyStep": "J26/S3",
       "spec": "070-results-reuse RES-FR-04, RES-AC-03",
       "action": "Inspect and accept three products.",
-      "expect": "They appear on the View, Project, and Target and read Keep.",
+      "expect": "They appear on the View, Project, and Target and read Keep, each with the SHA-256 recorded at acceptance.",
       "negative": "Acceptance upgrades no lineage and claims no use of all frames."
     },
     {
       "flowStep": "H3a",
-      "journeyStep": "J26/S4, J26/S5, J26/S6, J26/S7",
-      "spec": "070-results-reuse RES-FR-05, RES-AC-04, RES-AC-05; D04",
-      "action": "Create View from results, choose a product-capable profile, prepare and open the View, then change a product's bytes.",
-      "expect": "Two product inputs with their originating View. Unsupported product kinds are refused by name. Drift is flagged for review.",
-      "negative": "No raw integration is added and nothing is converted, combined, or replaced silently."
+      "journeyStep": "J26/S4, J26/S5, J26/S6, J26/S7, J26/S7a",
+      "spec": "070-results-reuse RES-FR-04, RES-FR-05, RES-AC-04, RES-AC-05, RES-AC-09; D04",
+      "action": "Create View from results, choose a product-capable profile, prepare and open the View, then replace a product's bytes with its size and mtime preserved and restore them.",
+      "expect": "Two product inputs with their originating View. Unsupported product kinds are refused by name. The rehash flags the replaced product as drifted for review; restored bytes make it available again.",
+      "negative": "No raw integration is added and nothing is converted, combined, or replaced silently. Equal stats never stand in for content, and a drifted product is not offered for reuse or re-accepted."
     },
     {
       "flowStep": "H4",
@@ -341,11 +341,11 @@
     },
     {
       "flowStep": "K",
-      "journeyStep": "J29/S1–S10",
-      "spec": "072-observing-plans PLAN-FR-01–PLAN-FR-05, PLAN-AC-01–PLAN-AC-05; D07, D18",
-      "action": "Plan windows, switch site, try reminders without a default site, set the default and lead time, deny then grant permission, restart, and export and re-check the .ics.",
-      "expect": "Windows name their site and time zone. Reminders only after opt-in, naming Backyard. Visible denial with Settings and Retry. No duplicate reminders. The .ics holds exactly the selected windows.",
-      "negative": "No weather or readiness claims, no reminder for the second site, no indexing, no provider account, and the saved .ics never changes."
+      "journeyStep": "J29/S1–S10, J29/S7a",
+      "spec": "072-observing-plans PLAN-FR-01–PLAN-FR-07, PLAN-AC-01–PLAN-AC-05, PLAN-AC-07; D07, D18",
+      "action": "Plan windows, switch site, try reminders without a default site, set the default and lead time, deny then grant permission, receive one reminder, restart inside its lead time, and export and re-check the .ics.",
+      "expect": "Windows name their site and time zone. Reminders only after opt-in, naming Backyard. Visible denial with Settings and Retry. The delivered reminder stays recorded as delivered after restart. The .ics holds exactly the selected windows.",
+      "negative": "No weather or readiness claims, no reminder for the second site, no repeat delivery of a delivered identity, no indexing, no provider account, and the saved .ics never changes."
     },
     {
       "flowStep": "L",

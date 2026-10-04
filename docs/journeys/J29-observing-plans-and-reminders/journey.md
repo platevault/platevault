@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [planning, targets, projects, settings]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 072-observing-plans, D07, D18, specs/063-clean-rebuild-contract/decisions.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-k-observing-plans-and-reminders]
+trace: [063-clean-rebuild-contract, 072-observing-plans, D07, D17, D18, specs/063-clean-rebuild-contract/decisions.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-k-observing-plans-and-reminders]
 ---
 
 ## Goal
@@ -16,15 +16,16 @@ The user checks when NGC 7000 has a suitable observing window, compares planning
 sites, deliberately enables reminders for the default site, and saves a one-time
 calendar snapshot. Done means windows name their site and time-zone basis.
 Reminders require opt-in, a default site, criteria and lead time; each names
-Backyard. The saved `.ics` contains exactly the confirmed windows and remains
-unchanged afterwards. Planning changes no library, Project or session data
-and starts no indexing.
+Backyard. A delivered reminder is not delivered again after a restart. The saved
+`.ics` contains exactly the confirmed windows and remains unchanged afterwards.
+Planning changes no library, Project or session data and starts no indexing.
 
 ## Preconditions
 
 - P1: J20 completed (the J21–J28 journeys are not required). Settings holds Backyard and the second site; no site is designated default.
 - P2: The OS has not yet been asked for notification permission for PlateVault, so the first request can be denied.
 - P3: No calendar provider account is configured.
+- P4: A development-build clock control (D17) sets PlateVault's clock so that the first upcoming Backyard window reaches its reminder lead time while the app runs. The control keeps the clock inside that lead time across a relaunch (G3).
 
 ## Steps
 
@@ -74,11 +75,19 @@ and starts no indexing.
 - **Expect (negative):** No reminder is created for the second site. Enabling reminders starts no indexing or processing.
 - **Trace:** flow K · PLAN-FR-03 · PLAN-AC-02, PLAN-AC-05 · D07
 
+### S7a — Receive one reminder {#S7a}
+
+- **Do:** With the P4 clock control, bring the first upcoming Backyard window to its reminder lead time while PlateVault runs.
+- **Expect:** Exactly one OS notification arrives, naming NGC 7000, Backyard and that window. PlateVault records that reminder as delivered for its target/site/window identity.
+- **Expect (negative):** The S7 scheduling did not read as delivery before this notification arrived. No notification names the second site.
+- **Trace:** flow K · PLAN-FR-06, PLAN-FR-07 · PLAN-AC-07 · D07
+
 ### S8 — Restart without duplicate reminders {#S8}
 
-- **Do:** Quit and relaunch PlateVault, then open the Plan area.
-- **Expect:** Upcoming windows are recomputed and each Backyard window has at most one reminder.
-- **Trace:** D07
+- **Do:** Quit and relaunch PlateVault with the P4 clock still inside the S7a window's lead time, then open the Plan area.
+- **Expect:** Upcoming windows are recomputed and each Backyard window has at most one reminder. The S7a reminder still reads delivered.
+- **Expect (negative):** No second notification arrives for the S7a target/site/window identity; the OS notification list holds exactly one for it.
+- **Trace:** flow K · PLAN-FR-06 · PLAN-AC-07 · D07
 
 ### S9 — Export a calendar snapshot {#S9}
 
@@ -100,11 +109,13 @@ and starts no indexing.
 - SC3: The `.ics` contains exactly the S9 selected windows and is unchanged after S10.
 - SC4: 0 indexing operations start from planning or reminder steps (S7).
 - SC5: A permission denial stays visible with Settings and Retry (S6).
+- SC6: Exactly 1 notification is delivered for the S7a target/site/window identity across S7a and S8.
 
 ## Known gaps
 
 - G1: Not validated — the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D07 and D18; no implementation has been validated against them.
 - G2: Unresolved implementation qualification — how a scheduled reminder is observed before delivery, and delivery while the app is closed (not claimed without an installed, tested scheduler, D07), are unspecified. S7 and S8 depend on it. Blocks readiness.
+- G3: Unresolved implementation qualification: no development clock control yet brings a window to its lead time or holds it there across a relaunch (P4). S7a and S8 depend on it. Blocks readiness.
 
 ## Delta log
 

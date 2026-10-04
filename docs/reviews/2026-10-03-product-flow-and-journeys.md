@@ -457,7 +457,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Do:** choose a profile capable of handing those products to the external application. Review paths and membership. Prepare the View. Open the external application as in Journey F.
 
-**Trust:** PlateVault does not combine channels or stitch panels itself. Raw-frame calibration controls do not imply recalibration of processed products. Mixed raw/product inputs need profile support; otherwise prepare separate Views. Reference drift requires review rather than silently replacing an accepted product.
+**Trust:** PlateVault does not combine channels or stitch panels itself. Raw-frame calibration controls do not imply recalibration of processed products. Mixed raw/product inputs need profile support; otherwise prepare separate Views. Each accepted product is rehashed against its acceptance digest before reuse; reference drift requires review rather than silently replacing an accepted product.
 
 ### H4. Adopt generated calibration masters
 
