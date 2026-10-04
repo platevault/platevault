@@ -81,7 +81,7 @@ export function restoreFileExternally(path: string): boolean {
   return true
 }
 
-export type CopyOutcome = { ok: true; copied: number; destination: string } | { ok: false; message: string }
+export type CopyOutcome = { ok: true; copied: number; destination: string } | { ok: false; field: "source" | "destination"; message: string }
 
 /**
  * Copy a file or folder byte for byte into `destinationFolder` outside
@@ -93,11 +93,11 @@ export function copyFolderExternally(source: string, destinationFolder: string):
   const disk = store.getState().disk
   const single = fileAt(disk, source)
   const sources = single ? [single] : filesUnder(disk, source).filter((f) => !f.linkTarget)
-  if (sources.length === 0) return { ok: false, message: `Nothing to copy: no file or folder with files at ${source}.` }
+  if (sources.length === 0) return { ok: false, field: "source", message: `Nothing to copy: no file or folder with files at ${source}.` }
   const volumeId = volumeForPath(disk, destinationFolder)
   const volume = volumeId ? disk.volumes[volumeId] : undefined
-  if (!volumeId || !volume?.mounted) return { ok: false, message: `Cannot copy to ${destinationFolder}: no mounted volume holds that path.` }
-  if (disk.readOnlyPaths.some((p) => isUnder(destinationFolder, p))) return { ok: false, message: `Cannot copy to ${destinationFolder}: write permission is removed.` }
+  if (!volumeId || !volume?.mounted) return { ok: false, field: "destination", message: `Cannot copy to ${destinationFolder}: no mounted volume holds that path.` }
+  if (disk.readOnlyPaths.some((p) => isUnder(destinationFolder, p))) return { ok: false, field: "destination", message: `Cannot copy to ${destinationFolder}: write permission is removed.` }
   const base = source.slice(0, source.lastIndexOf("/"))
   const copies = sources.map((file) =>
     makeFile({
@@ -112,7 +112,7 @@ export function copyFolderExternally(source: string, destinationFolder: string):
     }),
   )
   const collision = copies.find((c) => disk.files[fileKey(volumeId, c.path)])
-  if (collision) return { ok: false, message: `Not copied: ${collision.path} already exists. Nothing was overwritten.` }
+  if (collision) return { ok: false, field: "destination", message: `Not copied: ${collision.path} already exists. Nothing was overwritten.` }
   store.setState((s) => ({ ...s, disk: writeFiles(s.disk, copies) }))
   return { ok: true, copied: copies.length, destination: `${destinationFolder}${source.slice(base.length)}` }
 }

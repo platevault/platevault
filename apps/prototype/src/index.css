@@ -145,7 +145,8 @@ html[data-density="spacious"] {
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    /* Full-strength ring as the resting outline colour, so `transition-all` never animates the focus indicator through a low-contrast colour. */
+    @apply border-border outline-ring;
   }
 
   html {

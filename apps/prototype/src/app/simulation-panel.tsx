@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch"
 import { fileAt } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
 import { formatDateTime } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { store, useStore } from "@/store/core"
 import { resetPrototype } from "@/store"
 import {
@@ -37,7 +38,20 @@ import {
 } from "@/store/simulation"
 import { closePanel, useShellUi } from "./ui-state"
 
-function ToggleRow({ label, detail, checked, onChange }: { label: string; detail?: string; checked: boolean; onChange: (checked: boolean) => void }) {
+/** `path` details render in monospace and truncate; prose details wrap in the body font. */
+function ToggleRow({
+  label,
+  detail,
+  path,
+  checked,
+  onChange,
+}: {
+  label: string
+  detail?: string
+  path?: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
   const id = useId()
   return (
     <div className="flex items-center justify-between gap-3 py-1.5">
@@ -45,7 +59,8 @@ function ToggleRow({ label, detail, checked, onChange }: { label: string; detail
         <Label htmlFor={id} className="font-normal">
           {label}
         </Label>
-        {detail ? <p className="truncate font-mono text-xs text-muted-foreground">{detail}</p> : null}
+        {path ? <p className="truncate font-mono text-xs text-muted-foreground">{path}</p> : null}
+        {detail ? <p className="text-xs text-pretty text-muted-foreground">{detail}</p> : null}
       </div>
       <Switch id={id} checked={checked} onCheckedChange={(value) => onChange(value)} />
     </div>
@@ -66,13 +81,15 @@ export function SimulationControls() {
   const [path, setPath] = useState("")
   const [destination, setDestination] = useState("")
   const [clock, setClock] = useState("")
-  const [pathMessage, setPathMessage] = useState<string | null>(null)
+  /** Outcome of the last disk control; `invalid` names the field an error is about. */
+  const [pathMessage, setPathMessage] = useState<{ text: string; invalid: "path" | "destination" | null } | null>(null)
   const [clockMessage, setClockMessage] = useState<string | null>(null)
   const [confirmSeed, setConfirmSeed] = useState<"empty" | "demo" | null>(null)
   const folderInput = useId()
   const pathInput = useId()
   const destinationInput = useId()
   const clockInput = useId()
+  const pathMessageId = useId()
 
   // Folders that hold files or exist explicitly, under any volume root, plus denied ones.
   const folders = useMemo(() => {
@@ -95,7 +112,7 @@ export function SimulationControls() {
             <ToggleRow
               key={volume.id}
               label={`${volume.name}${volume.id.includes("impostor") ? " (different volume, same name)" : ""}`}
-              detail={`${volume.mountPath} · ${volume.volumeUuid} · ${volume.trash === "supported" ? "Trash" : "no Trash"}`}
+              path={`${volume.mountPath} · ${volume.volumeUuid} · ${volume.trash === "supported" ? "Trash" : "no Trash"}`}
               checked={volume.mounted}
               onChange={(mounted) => setVolumeMounted(volume.id, mounted)}
             />
@@ -114,7 +131,7 @@ export function SimulationControls() {
                 <ToggleRow
                   key={folder}
                   label={folder.split("/").slice(-2).join("/")}
-                  detail={`${folder}${registered ? "" : " · not registered"}`}
+                  path={`${folder}${registered ? "" : " · not registered"}`}
                   checked={denied.includes(folder)}
                   onChange={(value) => setFolderAccess(folder, value)}
                 />
@@ -135,15 +152,23 @@ export function SimulationControls() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={pathInput}>File or folder path</Label>
-            <Input id={pathInput} className="font-mono text-xs" placeholder="/Volumes/Astro-T7/…" value={path} onChange={(e) => setPath(e.target.value)} />
+            <Input
+              id={pathInput}
+              className="font-mono text-xs"
+              placeholder="/Volumes/Astro-T7/…"
+              value={path}
+              aria-invalid={pathMessage?.invalid === "path" || undefined}
+              aria-describedby={pathMessage?.invalid === "path" ? pathMessageId : undefined}
+              onChange={(e) => setPath(e.target.value)}
+            />
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!fileAt(store.getState().disk, path)) return setPathMessage(`No file at ${path || "(empty path)"}. Enter the full path of an existing file.`)
+                  if (!fileAt(store.getState().disk, path)) return setPathMessage({ text: path ? `No file at ${path}. Enter the full path of an existing file.` : "Enter a file path first.", invalid: "path" })
                   modifyFileExternally(path)
-                  setPathMessage(`Overwrote ${path} with new bytes. Restore original bytes puts them back.`)
+                  setPathMessage({ text: `Overwrote ${path} with new bytes. Restore original bytes puts them back.`, invalid: null })
                 }}
               >
                 Overwrite existing file
@@ -152,9 +177,11 @@ export function SimulationControls() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!fileAt(store.getState().disk, path)) return setPathMessage(`No file at ${path || "(empty path)"}. Enter the full path of an existing file.`)
+                  if (!fileAt(store.getState().disk, path)) return setPathMessage({ text: path ? `No file at ${path}. Enter the full path of an existing file.` : "Enter a file path first.", invalid: "path" })
                   setPathMessage(
-                    restoreFileExternally(path) ? `Restored the original bytes of ${path}.` : `${path} has not been overwritten, so there is nothing to restore.`,
+                    restoreFileExternally(path)
+                      ? { text: `Restored the original bytes of ${path}.`, invalid: null }
+                      : { text: `${path} has not been overwritten, so there is nothing to restore.`, invalid: "path" },
                   )
                 }}
               >
@@ -164,9 +191,14 @@ export function SimulationControls() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (fileAt(store.getState().disk, path)) return setPathMessage(`A file already exists at ${path}.`)
+                  if (!path) return setPathMessage({ text: "Enter a file path first.", invalid: "path" })
+                  if (fileAt(store.getState().disk, path)) return setPathMessage({ text: `A file already exists at ${path}.`, invalid: "path" })
                   createExternalFile(path)
-                  setPathMessage(fileAt(store.getState().disk, path) ? `Created ${path}.` : `Could not create ${path}: no mounted volume holds that path.`)
+                  setPathMessage(
+                    fileAt(store.getState().disk, path)
+                      ? { text: `Created ${path}.`, invalid: null }
+                      : { text: `Could not create ${path}: no mounted volume holds that path.`, invalid: "path" },
+                  )
                 }}
               >
                 Create unrelated file
@@ -175,35 +207,12 @@ export function SimulationControls() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!fileAt(store.getState().disk, path)) return setPathMessage(`No file at ${path || "(empty path)"}. Enter the full path of an existing file.`)
+                  if (!fileAt(store.getState().disk, path)) return setPathMessage({ text: path ? `No file at ${path}. Enter the full path of an existing file.` : "Enter a file path first.", invalid: "path" })
                   deleteFileExternally(path)
-                  setPathMessage(`Deleted ${path} outside PlateVault. It is not in the OS Trash.`)
+                  setPathMessage({ text: `Deleted ${path} outside PlateVault. It is not in the OS Trash.`, invalid: null })
                 }}
               >
                 Delete outside PlateVault
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="min-w-64 flex-1 space-y-1.5">
-                <Label htmlFor={destinationInput}>Copy into folder</Label>
-                <Input
-                  id={destinationInput}
-                  className="font-mono text-xs"
-                  placeholder="/Volumes/Spare/Captures"
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value)}
-                />
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  if (!path || !destination) return setPathMessage("Enter the file or folder to copy and the folder to copy it into.")
-                  const outcome = copyFolderExternally(path, destination)
-                  setPathMessage(outcome.ok ? `Copied ${outcome.copied} file${outcome.copied === 1 ? "" : "s"} byte for byte to ${outcome.destination}.` : outcome.message)
-                }}
-              >
-                Copy byte for byte
               </Button>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -211,10 +220,10 @@ export function SimulationControls() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!path) return setPathMessage("Enter a folder or file path first.")
+                  if (!path) return setPathMessage({ text: "Enter a folder or file path first.", invalid: "path" })
                   const deny = !denied.includes(path)
                   setFolderAccess(path, deny)
-                  setPathMessage(deny ? `Access denied: ${path}.` : `Access restored: ${path}.`)
+                  setPathMessage({ text: deny ? `Access denied: ${path}.` : `Access restored: ${path}.`, invalid: null })
                 }}
               >
                 {denied.includes(path) ? "Restore read access" : "Deny read access"}
@@ -223,17 +232,48 @@ export function SimulationControls() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  if (!path) return setPathMessage("Enter a folder or file path first.")
+                  if (!path) return setPathMessage({ text: "Enter a folder or file path first.", invalid: "path" })
                   const readOnly = !readOnlyPaths.includes(path)
                   setPathReadOnly(path, readOnly)
-                  setPathMessage(readOnly ? `Write permission removed: ${path}.` : `Write permission restored: ${path}.`)
+                  setPathMessage({ text: readOnly ? `Write permission removed: ${path}.` : `Write permission restored: ${path}.`, invalid: null })
                 }}
               >
                 {readOnlyPaths.includes(path) ? "Restore write permission" : "Remove write permission"}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground" aria-live="polite">
-              {pathMessage}
+            {/* Copying acts on two fields; its own group keeps it apart from the single-path controls. */}
+            <div className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
+              <div className="min-w-64 flex-1 space-y-1.5">
+                <Label htmlFor={destinationInput}>Copy into folder</Label>
+                <Input
+                  id={destinationInput}
+                  className="font-mono text-xs"
+                  placeholder="/Volumes/Spare/Captures"
+                  value={destination}
+                  aria-invalid={pathMessage?.invalid === "destination" || undefined}
+                  aria-describedby={pathMessage?.invalid === "destination" ? pathMessageId : undefined}
+                  onChange={(e) => setDestination(e.target.value)}
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (!path) return setPathMessage({ text: "Enter the file or folder to copy in File or folder path.", invalid: "path" })
+                  if (!destination) return setPathMessage({ text: "Enter the folder to copy into in Copy into folder.", invalid: "destination" })
+                  const outcome = copyFolderExternally(path, destination)
+                  setPathMessage(
+                    outcome.ok
+                      ? { text: `Copied ${outcome.copied} file${outcome.copied === 1 ? "" : "s"} byte for byte to ${outcome.destination}.`, invalid: null }
+                      : { text: outcome.message, invalid: outcome.field === "source" ? "path" : "destination" },
+                  )
+                }}
+              >
+                Copy byte for byte
+              </Button>
+            </div>
+            <p id={pathMessageId} className={cn("text-xs", pathMessage?.invalid ? "text-destructive" : "text-muted-foreground")} aria-live="polite">
+              {pathMessage?.text}
             </p>
           </div>
         </div>
