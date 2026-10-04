@@ -5,7 +5,7 @@ Version: 1. Requests/responses are JSON with UUID identities. Angles are degrees
 ## Commands
 
 | Command | Request | Response and behavior |
-|---|---|---|
+| --- | --- | --- |
 | library_register_location | path, displayName, role | Location revision; registration does not scan or modify files. |
 | library_list_locations | none | Registered locations with last-observed/access/availability states. |
 | library_start_scan | locationId | Committed operationId and Running state, not terminal success. |
