@@ -50,10 +50,6 @@ function libraryItems(catalog: Catalog): LibraryItem[] {
   return items
 }
 
-function settingsKey(source: CalSource): string {
-  return [source.cameraName ?? "Camera unknown", source.widthPx && source.heightPx ? `${source.widthPx} × ${source.heightPx}` : "dimensions unknown", `bin ${source.binning}`, `gain ${source.gain ?? "?"} / offset ${source.offset ?? "?"}`].join(" · ")
-}
-
 const KIND_ORDER = ["dark", "bias", "flat", "dark-flat"]
 
 function itemLine(item: LibraryItem): string {
@@ -71,7 +67,8 @@ function LibraryList({ items, activeId }: { items: LibraryItem[]; activeId: stri
   const reusable = items.filter((i) => !i.candidate && i.source)
   const groups = new Map<string, LibraryItem[]>()
   for (const item of reusable.sort((a, b) => KIND_ORDER.indexOf(a.source!.kind) - KIND_ORDER.indexOf(b.source!.kind) || (a.source!.night ?? "").localeCompare(b.source!.night ?? ""))) {
-    const key = settingsKey(item.source!)
+    const s = item.source!
+    const key = [s.cameraName ?? "Camera unknown", s.widthPx && s.heightPx ? `${s.widthPx} × ${s.heightPx}` : "dimensions unknown", `bin ${s.binning}`, `gain ${s.gain ?? "?"} / offset ${s.offset ?? "?"}`].join(" · ")
     groups.set(key, [...(groups.get(key) ?? []), item])
   }
   const renderItem = (item: LibraryItem) => (
@@ -409,7 +406,7 @@ export function CalibrationLibraryPage() {
 
   const header = (
     <PageHeader
-      title={active && activeId ? "Calibration" : "Calibration"}
+      title="Calibration"
       description="Masters and raw calibration sets from indexed locations, grouped by camera and settings, with their compatibility evidence."
       actions={
         <Button variant="outline" onClick={check}>

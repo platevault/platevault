@@ -172,7 +172,8 @@ function finalizePrepare(state: PrototypeState, op: Operation, payload: PrepareP
   const preparedResults = new Set(prep.preparedResultIds)
   const calibrationPrepared = new Set(payload.calibrationPrepared)
   const blockedNow = new Map<string, { input: PreparationInput; path: string; reason: string }>()
-  for (const b of prep.blocked) blockedNow.set(b.input.kind === "asset" ? `a:${b.input.assetId}` : `r:${b.input.resultId}`, b)
+  // Calibration files without an asset record use their `f:` item id as the asset id.
+  for (const b of prep.blocked) blockedNow.set(b.input.kind === "result" ? `r:${b.input.resultId}` : b.input.assetId.startsWith("f:") ? b.input.assetId : `a:${b.input.assetId}`, b)
   for (const item of items) {
     const entry = payload.entries[item.id]
     if (!entry) continue
