@@ -207,7 +207,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
                 />
                 <Stat label="Sessions" value={contributing.length} hint={plural(coverage.channels.length, "channel")} />
               </div>
-              <ul className="grid gap-4 lg:grid-cols-2">
+              <ul className="grid gap-4 2xl:grid-cols-2">
                 {coverage.channels.map((c) => (
                   <li key={c.channel} className="rounded-lg border p-3">
                     <ChannelCoverage channel={c.channel} breakdown={c.breakdown} />

@@ -45,7 +45,8 @@ export function LabeledSelect({
 }) {
   const id = useId()
   return (
-    <div className="space-y-1.5">
+    // Flex gap, not space-y: space-y adds a bottom margin to the trigger before Select's hidden input.
+    <div className="flex flex-col gap-1.5">
       <Label id={id}>{label}</Label>
       <Select items={items} value={value} onValueChange={(next) => onChange(next as string)}>
         <SelectTrigger aria-labelledby={id} aria-invalid={invalid || undefined} aria-describedby={describedBy} className={className}>
@@ -388,9 +389,9 @@ export function AddChecklistItem({ catalog, panels, onAdd }: { catalog: Catalog;
             setAmountError(null)
           }}
         />
-        {needsChannel ? <LabeledSelect label="Channel" value={channel === ANY ? null : channel} items={channels} onChange={setChannel} placeholder="Choose a channel" className="w-36" /> : null}
+        {needsChannel ? <LabeledSelect label="Channel" value={channel === ANY ? null : channel} items={channels} onChange={setChannel} placeholder="Choose a channel" className="w-44" /> : null}
         {kind === "exposure" || (kind === "calibration" && calibrationKind === "flat") ? (
-          <LabeledSelect label="Channel" value={channel ?? ANY} items={[{ value: ANY, label: "Any channel" }, ...channels]} onChange={setChannel} className="w-36" />
+          <LabeledSelect label="Channel" value={channel ?? ANY} items={[{ value: ANY, label: "Any channel" }, ...channels]} onChange={setChannel} className="w-44" />
         ) : null}
         {kind === "calibration" ? (
           <LabeledSelect label="Calibration" value={calibrationKind} items={CALIBRATION_ITEMS} onChange={(v) => setCalibrationKind(v as CalibrationKind)} className="w-36" />
@@ -400,8 +401,10 @@ export function AddChecklistItem({ catalog, panels, onAdd }: { catalog: Catalog;
         ) : null}
         {kind === "equipment" ? <LabeledSelect label="Optical train" value={trainId} items={trains} onChange={setTrainId} placeholder="Choose an optical train" className="w-72" /> : null}
         {needsAmount ? (
-          <Field data-invalid={Boolean(amountError) || undefined} className="w-auto">
-            <FieldLabel htmlFor={amountId}>{amountLabel}</FieldLabel>
+          <Field data-invalid={Boolean(amountError) || undefined} className="w-auto gap-1.5">
+            <FieldLabel htmlFor={amountId} className="leading-none">
+              {amountLabel}
+            </FieldLabel>
             <Input
               id={amountId}
               inputMode="decimal"
@@ -461,13 +464,13 @@ export function SessionLinkPicker({ selected, onChange, targetIds }: { selected:
       id: "target",
       header: "Target",
       cell: (r) => (
-        <span className="inline-flex items-center gap-2">
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 py-0.5 whitespace-normal">
           {r.targetName ?? null}
           <AssociationBadge association={r.session.target} />
         </span>
       ),
     },
-    { id: "equipment", header: "Equipment", cell: (r) => r.trainName ?? <UnknownValue /> },
+    { id: "equipment", header: "Equipment", className: "whitespace-normal", cell: (r) => r.trainName ?? <UnknownValue /> },
     { id: "integration", header: "Integration", align: "right", sortValue: (r) => r.breakdown.captured.seconds, cell: (r) => formatDuration(r.breakdown.captured.seconds) },
     { id: "site", header: "Capture site", cell: (r) => r.site ?? <UnknownValue reason="No saved site matches the header coordinates." /> },
   ]

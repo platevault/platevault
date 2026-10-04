@@ -340,7 +340,7 @@ function TargetSection({ session, catalog, editable }: { session: Session; catal
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={confirm} disabled={confirmedSame} focusableWhenDisabled aria-describedby={confirmedSame ? reasonId : undefined}>
+            <Button variant="outline" onClick={confirm} disabled={confirmedSame} focusableWhenDisabled aria-describedby={confirmedSame ? reasonId : undefined}>
               Confirm Target
             </Button>
             {confirmedSame ? (
@@ -445,7 +445,7 @@ function EquipmentSection({ session, catalog, editable }: { session: Session; ca
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={confirm} disabled={confirmedSame} focusableWhenDisabled aria-describedby={confirmedSame ? reasonId : undefined}>
+                <Button variant="outline" onClick={confirm} disabled={confirmedSame} focusableWhenDisabled aria-describedby={confirmedSame ? reasonId : undefined}>
                   Confirm equipment
                 </Button>
                 {confirmedSame ? (
@@ -804,10 +804,12 @@ function FramesSection({ session, editable }: { session: Session; editable: bool
       className: "whitespace-normal",
       sortValue: (r) => r.availability,
       cell: (r) => {
+        if (r.availability === "available") return <span className="text-muted-foreground">Available</span>
+        // Last observed matters only when the bytes cannot be read now.
         const observed = r.asset.copies.map((c) => c.lastObservedAt).sort().at(-1) ?? r.asset.observed.dateObs
         return (
           <span className="flex flex-col items-start gap-0.5 py-0.5">
-            {r.availability === "available" ? <span className="text-muted-foreground">Available</span> : <StatusBadge kind="availability" value={r.availability} />}
+            <StatusBadge kind="availability" value={r.availability} />
             <span className="text-xs text-muted-foreground">Last observed {formatDateTime(observed)}</span>
           </span>
         )

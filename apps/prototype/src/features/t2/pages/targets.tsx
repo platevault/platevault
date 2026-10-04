@@ -5,7 +5,7 @@
  * LIB-FR-10, LIB-FR-13, LIB-AC-09).
  */
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
-import { CalendarClock, Crosshair, TriangleAlert } from "lucide-react"
+import { CalendarClock, Crosshair, TriangleAlert, Unplug } from "lucide-react"
 import { useId, useState } from "react"
 import { type Column, DataTable, TableToolbar } from "@/components/app/data-table"
 import { EmptyState, Notice, TableSkeleton } from "@/components/app/feedback"
@@ -72,7 +72,7 @@ export function TargetsPage() {
             {r.target.name}
           </Link>
           {r.target.aliases.length > 0 ? (
-            <span className={`${coords ? "max-w-28" : "max-w-36"} truncate text-xs text-muted-foreground`} title={r.target.aliases.slice(0, 2).join(" · ")}>
+            <span className={`${coords ? "max-w-28 xl:max-w-56" : "max-w-36 xl:max-w-64"} truncate text-xs text-muted-foreground`} title={r.target.aliases.slice(0, 2).join(" · ")}>
               {r.target.aliases.slice(0, 2).join(" · ")}
             </span>
           ) : null}
@@ -107,7 +107,12 @@ export function TargetsPage() {
       cell: (r) => (
         <span className="flex flex-col items-end gap-0.5 py-0.5">
           <span className="whitespace-nowrap">{formatDuration(r.breakdown.captured.seconds)}</span>
-          {r.breakdown.unavailable.frames > 0 ? <span className="text-xs text-warning">{formatDuration(r.breakdown.unavailable.seconds)} unavailable</span> : null}
+          {r.breakdown.unavailable.frames > 0 ? (
+            <span className="inline-flex items-start gap-1 text-xs text-warning">
+              <Unplug aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
+              {formatDuration(r.breakdown.unavailable.seconds)} unavailable
+            </span>
+          ) : null}
         </span>
       ),
     },
@@ -181,7 +186,7 @@ export function TargetsPage() {
             <TableToolbar
               search={{
                 label: "Search Targets",
-                placeholder: "Name, alias, or RA Dec in degrees",
+                placeholder: "Name, alias, or RA Dec (°)",
                 value: query,
                 onChange: (value) => setParams({ q: value }),
               }}
@@ -224,7 +229,7 @@ export function TargetsPage() {
                   description={
                     coords
                       ? `No local Target lies within ${COORDINATE_SEARCH_RADIUS_DEG}° of these coordinates. Search uses local records only.`
-                      : "Search uses local Target names and aliases only."
+                      : "Search matches local Target names and aliases, or RA and Dec in degrees."
                   }
                   action={
                     <Button size="sm" variant="outline" onClick={() => setParams({ q: undefined, show: undefined })}>

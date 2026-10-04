@@ -76,8 +76,21 @@ function ProjectDetail({ projectId }: { projectId: string }) {
   const train = project.equipmentId ? catalog.opticalTrains[project.equipmentId] : undefined
   const rejected = Object.keys(project.rejections).length
 
+  const linkSessionsId = useId()
+  const [linkageNote, setLinkageNote] = useState("")
+
   function edit(patch: ProjectPatch, what: string) {
-    flow.run(() => updateProject(projectId, patch, store.getState().catalog.projects[projectId]?.revision ?? project.revision, what))
+    return flow.run(() => updateProject(projectId, patch, store.getState().catalog.projects[projectId]?.revision ?? project.revision, what))
+  }
+
+  /** Unlink, then keep focus in the table: the neighbouring Unlink, or Link sessions… after the last row (WCAG 2.4.3). */
+  function unlink(button: HTMLElement, r: LinkedRow) {
+    const row = button.closest("tr")
+    const neighbour = (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>("[data-unlink]")
+    const result = edit({ linkedSessionIds: project.linkedSessionIds.filter((id) => id !== r.session.id) }, "Session linkage")
+    if (!result.ok) return
+    ;(neighbour ?? document.getElementById(linkSessionsId))?.focus()
+    setLinkageNote(`Unlinked ${r.label}.`)
   }
 
   const columns: Column<LinkedRow>[] = [
@@ -118,7 +131,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
       id: "unlink",
       header: "Linkage",
       cell: (r) => (
-        <Button size="sm" variant="ghost" onClick={() => edit({ linkedSessionIds: project.linkedSessionIds.filter((id) => id !== r.session.id) }, "Session linkage")}>
+        <Button size="sm" variant="ghost" data-unlink="" onClick={(event) => unlink(event.currentTarget, r)}>
           Unlink<span className="sr-only"> {r.label}</span>
         </Button>
       ),
@@ -181,11 +194,14 @@ function ProjectDetail({ projectId }: { projectId: string }) {
           title={`Linked sessions (${linked.length})`}
           description="Linked explicitly. The Project has no capture site; each session keeps its own."
           actions={
-            <Button size="sm" variant="outline" onClick={() => setLinkOpen(true)}>
+            <Button id={linkSessionsId} size="sm" variant="outline" onClick={() => setLinkOpen(true)}>
               Link sessions…
             </Button>
           }
         >
+          <p role="status" className="sr-only">
+            {linkageNote}
+          </p>
           <DataTable
             label={`Sessions linked to ${project.name}`}
             rows={linked}

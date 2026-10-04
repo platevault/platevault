@@ -286,7 +286,7 @@ export function SessionsPage() {
                   columns={columns}
                   getRowId={(r) => r.session.id}
                   selection={selectionProps}
-                  initialSort={{ columnId: "session", direction: "asc" }}
+                  initialSort={{ columnId: "session", direction: "desc" }}
                   scroll="none"
                 />
               </section>
@@ -342,7 +342,7 @@ export function SessionsPage() {
         {rows.length > 0 ? (
           <>
             <TableToolbar
-              search={{ label: "Search sessions", placeholder: "Search OBJECT, Target, night or camera", value: query, onChange: (value) => setParams({ q: value }) }}
+              search={{ label: "Search sessions", placeholder: "OBJECT, Target, night, camera", value: query, onChange: (value) => setParams({ q: value }) }}
               filters={
                 <>
                   <ToggleGroup

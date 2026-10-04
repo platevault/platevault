@@ -19,6 +19,9 @@ import { isSettled } from "@/store/operations"
 
 type Filter = "all" | ActivityKind
 
+/** Absolute paths inside a detail sentence, without trailing punctuation. */
+const PATH = /(\/Volumes\/\S*[^\s.,;:])/
+
 const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: "all", label: "All" },
   { value: "operation", label: "Operations" },
@@ -57,7 +60,20 @@ function ActivityRow({ event, operation }: { event: ActivityEvent; operation: Op
         </span>
         <div className="min-w-0">
           <div className="font-medium text-pretty">{event.title}</div>
-          {event.detail ? <p className="text-xs text-pretty text-muted-foreground">{event.detail}</p> : null}
+          {event.detail ? (
+            <p className="text-xs text-pretty text-muted-foreground">
+              {/* Paths in the mono face (HLD §7); split() puts each captured path at an odd index. */}
+              {event.detail.split(PATH).map((part, i) =>
+                i % 2 === 1 ? (
+                  <span key={i} className="font-mono">
+                    {part}
+                  </span>
+                ) : (
+                  part
+                ),
+              )}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap justify-end gap-1">
           {operation && operation.items.length > 0 ? (
