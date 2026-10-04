@@ -6,10 +6,10 @@
  */
 import { fileKey, removeFile } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
-import type { AssetId, Operation, OperationItem, ViewId, VolumeId } from "@/domain/types"
+import type { AssetId, Operation, OperationItem, Preparation, ResultId, ViewId, VolumeId } from "@/domain/types"
 import { nowIso, type PrototypeState, store } from "@/store/core"
 import { type OperationHandler, ensureTicker, patchOperation, settleOperation, startOperation } from "@/store/operations"
-import type { CleanupEntry } from "./cleanup"
+import { type ReviewedEntry, reviewDrift } from "./cleanup"
 import { baseName, type PreparedEntry, preparedEntries, retainedOriginal, viewPreparations } from "./files"
 import { buildPayload, retryRecords, stepTransfer, type TransferDraft, type TransferKind, type TransferPlan, transferTitle } from "./transfer"
 
@@ -17,17 +17,26 @@ import { buildPayload, retryRecords, stepTransfer, type TransferDraft, type Tran
 // Cleanup
 // ---------------------------------------------------------------------------
 
+/** One selected entry exactly as Review cleanup recorded it; execution re-verifies every field (STO-FR-04, D19). */
 export interface CleanupItemRecord {
   key: string
   path: string
   volumeId: VolumeId
   sha256: string
   inode: number
+  linkTarget: string | null
   group: string
+  role: string
   /** Prepared entries and duplicates are re-proved immediately before removal. */
   needsProof: boolean
   isLink: boolean
   assetId: AssetId | null
+  resultId: ResultId | null
+  preparationId: string | null
+  sizeBytes: number
+  /** The retained original or kept copy the removal relies on, and its SHA-256 at review. */
+  keptPath: string | null
+  keptSha256: string | null
 }
 
 export interface CleanupPayload {
@@ -44,6 +53,36 @@ export interface CleanupPayload {
 }
 
 const CLEANUP_BATCH = 24
+
+/**
+ * The View records what cleanup removed (STO-FR-05): each preparation drops the
+ * entries that went to the OS Trash, so its entry count, footprint and prepared
+ * inputs stay true while the View folder is offline and for later handoffs.
+ */
+function recordRemovedEntries(state: PrototypeState, records: CleanupItemRecord[], removed: Set<string>): PrototypeState {
+  const byPreparation = new Map<string, CleanupItemRecord[]>()
+  for (const record of records) {
+    if (!record.preparationId || !removed.has(record.path)) continue
+    byPreparation.set(record.preparationId, [...(byPreparation.get(record.preparationId) ?? []), record])
+  }
+  if (byPreparation.size === 0) return state
+  const preparations = { ...state.catalog.preparations }
+  for (const [id, gone] of byPreparation) {
+    const preparation = preparations[id]
+    if (!preparation) continue
+    const assets = new Set(gone.map((r) => r.assetId).filter((a): a is AssetId => a !== null))
+    const results = new Set(gone.map((r) => r.resultId).filter((r): r is ResultId => r !== null))
+    const next: Preparation = {
+      ...preparation,
+      entryCount: Math.max(0, preparation.entryCount - gone.length),
+      footprintBytes: Math.max(0, preparation.footprintBytes - gone.reduce((sum, r) => sum + (r.isLink ? 0 : r.sizeBytes), 0)),
+      preparedAssetIds: preparation.preparedAssetIds.filter((a) => !assets.has(a)),
+      preparedResultIds: preparation.preparedResultIds.filter((r) => !results.has(r)),
+    }
+    preparations[id] = next
+  }
+  return { ...state, catalog: { ...state.catalog, preparations } }
+}
 
 function cleanupStep(state: PrototypeState, op: Operation): PrototypeState {
   const payload = op.payload as unknown as CleanupPayload
@@ -76,9 +115,10 @@ function cleanupStep(state: PrototypeState, op: Operation): PrototypeState {
     }
     const volume = next.disk.volumes[record.volumeId]
     const file = next.disk.files[fileKey(record.volumeId, record.path)]
+    // Immediately before the move: the entry, its link target and its kept copy still match the review (D19).
+    const drift = volume?.mounted ? reviewDrift(next.disk, record) : null
     if (!volume?.mounted) refuse(`${volume?.name ?? "The volume"} is offline. Nothing was moved.`)
-    else if (!file) refuse("Not found: the file changed since review. Nothing was moved.")
-    else if (file.sha256 !== record.sha256 || file.inode !== record.inode) refuse("Changed since review: its identity no longer matches. Nothing was moved.")
+    else if (drift || !file) refuse(`${drift ?? "Changed since review."} Nothing was moved.`)
     else if (volume.trash === "unsupported") refuse(`Refused: OS Trash is unsupported on ${volume.name}. PlateVault never deletes permanently.`)
     else if (next.disk.readOnlyPaths.some((p) => isUnder(record.path, p))) refuse("Refused: write permission removed. Nothing was moved.")
     else {
@@ -89,15 +129,7 @@ function cleanupStep(state: PrototypeState, op: Operation): PrototypeState {
         if (!proof) proofFailure = "Insufficient retained-original proof: this entry no longer matches a prepared input."
         else if (proof.state !== "verified" && proof.state !== "not-needed") proofFailure = proof.text
       }
-      if (record.group === "duplicates" && record.assetId) {
-        const asset = next.catalog.assets[record.assetId]
-        const kept = asset?.copies.find((c) => {
-          if (isUnder(c.path, payload.viewPath)) return false
-          const copy = next.disk.files[fileKey(c.volumeId, c.path)]
-          return next.disk.volumes[c.volumeId]?.mounted && copy?.sha256 === asset.sha256
-        })
-        if (!kept) proofFailure = "No verified copy outside this View exists now; this may be the last copy."
-      }
+      if (record.group === "duplicates" && !record.keptPath) proofFailure = "No verified copy outside this View was named at review; this may be the last copy."
       if (proofFailure) refuse(proofFailure)
       else {
         next = {
@@ -117,6 +149,7 @@ function cleanupStep(state: PrototypeState, op: Operation): PrototypeState {
     payload: { ...payload, removed, refused, trashedAt: payload.trashedAt ?? now } as unknown as Record<string, unknown>,
   })
   if (finished < items.length) return next
+  next = recordRemovedEntries(next, payload.records, new Set(removed))
   const href = `/views/${payload.viewId}/cleanup`
   if (refused.length === 0) return settleOperation(next, op.id, "succeeded", `Sent ${removed.length} ${removed.length === 1 ? "file" : "files"} to the OS Trash.`, href)
   if (removed.length === 0) {
@@ -125,17 +158,25 @@ function cleanupStep(state: PrototypeState, op: Operation): PrototypeState {
   return settleOperation(next, op.id, "partial", `Partial: ${removed.length} sent to the OS Trash, ${refused.length} refused and kept in place.`, href)
 }
 
-export function startCleanup(viewId: ViewId, viewName: string, viewPath: string, entries: CleanupEntry[]): string {
+/** Start cleanup of exactly the reviewed entries, carrying what Review cleanup recorded for each. */
+export function startCleanup(viewId: ViewId, viewName: string, viewPath: string, entries: ReviewedEntry[]): string {
   const records: CleanupItemRecord[] = entries.map((e) => ({
     key: e.key,
     path: e.path,
     volumeId: e.volumeId,
     sha256: e.sha256,
     inode: e.inode,
+    linkTarget: e.linkTarget,
     group: e.group,
+    role: e.role,
     needsProof: e.group === "prepared" || e.group === "replaced",
     isLink: e.linkKind === "symlink",
     assetId: e.assetId,
+    resultId: e.resultId,
+    preparationId: e.preparationId,
+    sizeBytes: e.sizeBytes,
+    keptPath: e.proof?.keptPath ?? null,
+    keptSha256: e.keptSha256,
   }))
   const items: OperationItem[] = entries.map((e) => ({ id: e.key, label: baseName(e.path), path: e.path, status: "pending", phase: null, detail: null }))
   const payload: CleanupPayload = { viewId, viewPath, records, removed: [], refused: [], kept: [], trashedAt: null }

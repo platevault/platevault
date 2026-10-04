@@ -81,6 +81,21 @@ export function PrototypeControls({ title = "Prototype controls", description, c
   )
 }
 
+/**
+ * After an in-page stage change, move focus to the new stage's section heading so it never falls
+ * to the body (WCAG 2.4.3). `afterMs` waits out a closing dialog that would restore focus itself.
+ */
+export function focusHeading(id: string, afterMs = 0) {
+  const run = () => {
+    const heading = document.getElementById(id)
+    if (!heading) return
+    heading.tabIndex = -1
+    heading.focus()
+  }
+  if (afterMs > 0) window.setTimeout(run, afterMs)
+  else requestAnimationFrame(run)
+}
+
 interface FileChooserProps {
   open: boolean
   onOpenChange: (open: boolean) => void
