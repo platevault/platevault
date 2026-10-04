@@ -25,10 +25,10 @@ Local-first custody: indexing has no filesystem writes. Mutation requires review
 ## Project Structure
 
 - `crates/platevault-core/Cargo.toml`: clean backend crate.
-- `crates/platevault-core/src/model.rs`: shared types and immutable IDs; one integration owner.
+- `crates/platevault-model/src/lib.rs`: canonical shared types and immutable IDs; one integration owner. Core consumes this crate; persistence never depends on the application core.
 - `crates/platevault-core/src/inventory.rs`: read-only scan observations, explicit complete/incomplete scope and progress.
 - `crates/platevault-core/src/grouping.rs`: pure homogeneous capture grouping and revision rules.
-- `crates/platevault-core/src/catalog.rs`: sole clean-schema and SQLite writer owner, user corrections and revision checks.
+- `crates/persistence/library/src/lib.rs` and `schema.sql`: sole clean-schema and SQLite writer owner, user corrections and revision checks. The existing SQL boundary remains unchanged.
 - `crates/platevault-core/src/targets.rs`: local seed/search, provenance, provider adapter and geometry evidence.
 - `crates/platevault-core/src/library.rs`: integrates observations, reconciliation, corrections and coverage.
 - `crates/platevault-core/tests/library.rs`: consumer-visible fixture/restart/negative behavior.
@@ -46,4 +46,4 @@ Workers skip repository-wide builds/tests/lint/formatters. The lead runs focused
 
 ## Complexity Tracking
 
-No constitutional exception. One clean backend crate avoids repeating the old many-layer orchestration and database facade conventions. The archived baseline remains available for selective adoption and comparison.
+The application core composes inventory, grouping and target logic. A shared model crate breaks the persistence/application dependency cycle; all SQL remains under `crates/persistence`. The archived baseline remains available for selective adoption and comparison.

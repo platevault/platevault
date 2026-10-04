@@ -637,19 +637,19 @@ Baseline status records source traces. Full runtime verification remains incompl
 - Direct Google Calendar/Outlook event sync and unresolved live-subscription hosting.
 - Multiple active notification sites; initial reminders use the default site only.
 
-## Open decisions and readiness
+## Recorded decisions and implementation readiness
 
-These proposed journeys specify user actions and refusal behavior. They have not been validated against a running implementation.
+These proposed journeys remain unvalidated. The authorized autonomous run records conservative product choices in D01 through D18; those choices are settled, while the following implementation evidence is still required.
 
-1. **Geometry and standalone defaults (product decision):** set overlap/coverage/radius defaults and unknown-orientation handling. Define equipment/framing preselection for Views without a Project or Target context.
-2. **Unreviewed membership (settled by D02):** available Unreviewed/Usable frames enter the draft, library-Unusable frames start visibly excluded, and unavailable members remain unresolved. Bulk Usable is explicit; worked totals have confirmed membership. Implementation and runtime evidence remain required.
-3. **Raw/CFA measurement support (engineering contract):** define channel/sample/model semantics and imported-metric identity matching before treating results as comparable.
-4. **Profile and input-mode support (engineering contract):** verify each application's exact membership handoff and result-input capabilities. Define whether a View supports mixed per-item modes; every affected item and mode change must be reviewed.
-5. **Generated master storage (product decision):** choose copy, transfer, or in-place registration when adopting a master. Adoption must not leave reusable data disposable with a processing folder.
-6. **Archive failure sequencing (engineering contract):** define rollback versus pause/source-retention when reference updates fail. Preserve verified data and fixed membership; cross-volume mode conversion needs approval.
-7. **Reminders (product defaults and engineering contract):** set window horizon, Moon conditions, lead time, and repeat suppression. Specify sleep/app-closed behavior and permission-denial recovery.
-8. **Draft ownership (engineering contract):** define autosave or explicit Save draft, restart recovery, and concurrent edits for the review workspace.
-9. **View lifecycle (product decision and engineering contract):** define manual-inclusion pins, revision folders, partial-preparation retry/resume, completion blockers, reopening, and editing after Complete. Existing entries are removed only under the cleanup rules.
-10. **Quality scope (product decision):** define Project rejection's effect on progress, frame-state precedence, and aggregate filter thresholds. A changed quality decision must not silently alter fixed View membership.
+1. **Geometry, D01/D12:** qualify footprint/equipment evidence and the visible configured overlap criterion. Unknown geometry remains manual, never zero distance.
+2. **Membership, D02:** available Unreviewed/Usable frames enter the draft; library-Unusable starts visibly excluded; unavailable members stay unresolved. Verify exact preparation confirmation and explicit bulk quality scope.
+3. **Raw/CFA, D03:** qualify read-only mosaic/channel and numerical metric/import semantics; no debayering.
+4. **Profiles, D04:** verify exact input/layout/product capabilities and safe mode eligibility for each required application. Unknown/write-prone inputs refuse Linked/Direct-source use; every alternative needs review.
+5. **Master adoption, D05:** verify a durable chosen library copy and its hashes before reuse; preserve generated source until reviewed cleanup.
+6. **Archive, D06:** verify per-item retained phases, affected-item retirement blocking and resumable retries. Destination and reference verification precede each source retirement; no reopened rollback-versus-retention choice.
+7. **Reminders, D07:** qualify explicit site/criteria/lead-time controls, repeat suppression, permission recovery and actual scheduler capability. No app-closed claim without tested delivery.
+8. **Drafts, D08:** verify explicit Save, committed restart recovery and stale-edit refusal; failed writes remain unsaved.
+9. **View lifecycle, D09:** qualify immutable preparation revisions, safe retry and explicit reopening. Identity-preserving cleanup/reference repair does not reopen Complete or alter membership.
+10. **Quality/progress, D10/D15:** verify fingerprint-and-digest-bound library decisions, independent Project rejection/progress and fixed View membership; source corrections stay catalog-only.
 
 Readiness check: user actions and expected outcomes are stated; negative assertions guard file changes and quality-scope changes. Existing product code and source verification do not establish that these redesigned flows run. Formal journey conversion and independent running-product validation follow implementation and intent approval.
