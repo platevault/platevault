@@ -1597,3 +1597,71 @@ async fn overlap_follows_canonical_ancestry_through_aliases_and_fails_closed() {
     assert_eq!(catalog.list_locations().await.unwrap().len(), 1, "refusals write nothing");
     catalog.register_location(&registration_at(&elsewhere)).await.unwrap();
 }
+
+#[tokio::test]
+async fn root_loss_during_a_subtree_retry_changes_availability_only_inside_its_scope() {
+    let fx = Fixture::new();
+    fx.write("night1/Ha_001.fits", b"frame one");
+    fx.write("night2/Ha_002.fits", b"frame two");
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &["night1/Ha_001.fits", "night2/Ha_002.fits"]).await;
+    let night1 = NativePath::from_path(Path::new("night1"));
+
+    let operation = catalog.retry_scope(location.id, night1.clone()).await.unwrap();
+    let root = DiskProbe.root_identity(&location).unwrap();
+    // The walker reports root continuity loss at the location root path.
+    let lost = ScanIssue {
+        relative_path: root_scope(),
+        reason: "location root became unavailable during the scan".into(),
+        availability: Availability::Offline,
+    };
+    let observation = ScanObservation {
+        location_id: location.id,
+        root_identity: root,
+        files: Vec::new(),
+        issues: vec![lost],
+        complete_scopes: Vec::new(),
+        incomplete_scopes: vec![night1.clone()],
+        progress: ScanProgress::default(),
+        state: ScanState::Failed,
+    };
+    let failed = catalog
+        .finish_scan(
+            operation.id,
+            &observation,
+            |location| DiskProbe.root_identity(location),
+            group,
+        )
+        .await
+        .unwrap();
+    assert_eq!(failed.state, ScanState::Failed);
+    assert!(failed.issues.iter().any(|issue| issue.relative_path == root_scope()), "reported");
+    assert_eq!(failed.incomplete_scopes, vec![night1], "{failed:?}");
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    assert_eq!(by_name(&assets, "Ha_001.fits").availability, Availability::Offline);
+    assert_eq!(
+        by_name(&assets, "Ha_002.fits").availability,
+        Availability::Available,
+        "siblings outside the retried scope keep their state"
+    );
+
+    // An issue for a path the operation never covered is refused, not applied.
+    let operation =
+        catalog.retry_scope(location.id, NativePath::from_path(Path::new("night1"))).await.unwrap();
+    let outside = ScanBatch {
+        issues: vec![ScanIssue {
+            relative_path: NativePath::from_path(Path::new("night2")),
+            reason: "listing interrupted".into(),
+            availability: Availability::Unreadable,
+        }],
+        ..ScanBatch::default()
+    };
+    let root = DiskProbe.root_identity(&location).unwrap();
+    let error = catalog.apply_scan_batch(operation.id, &root, &outside, group).await.unwrap_err();
+    assert_eq!(kind(&error), "invalid_input");
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    assert_eq!(by_name(&assets, "Ha_002.fits").availability, Availability::Available);
+    assert_eq!(tree(&fx.root), before);
+}

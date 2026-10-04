@@ -2376,14 +2376,29 @@ fn validate_issue(issue: &ScanIssue) -> Result<()> {
     Ok(())
 }
 
+/// Record a scan issue under its reported path, and apply it to the part of the
+/// location this operation covers. A failure at or above the operation's scope
+/// (root continuity loss during a subtree retry) marks only that scope incomplete
+/// and changes availability only for assets inside it.
 async fn record_issue(
     conn: &mut SqliteConnection,
     op: &OperationRow,
     issue: &ScanIssue,
 ) -> Result<()> {
+    let scope = if within(&issue.relative_path, &op.scope) {
+        issue.relative_path.clone()
+    } else if within(&op.scope, &issue.relative_path) {
+        op.scope.clone()
+    } else {
+        return Err(scoped(
+            LibraryError::InvalidInput("scan issue is outside the scan scope".into()),
+            issue.relative_path.clone(),
+            Some(op.location_id),
+        ));
+    };
     add_issue(conn, op.id, &issue.relative_path, &issue.reason, issue.availability).await?;
-    mark_scope_incomplete(conn, op.id, &issue.relative_path).await?;
-    let key = path_key(&issue.relative_path);
+    mark_scope_incomplete(conn, op.id, &scope).await?;
+    let key = path_key(&scope);
     let rows = sqlx::query(
         "SELECT id, path_key FROM assets WHERE location_id = ?1 AND substr(path_key, 1, ?2) = ?3",
     )
@@ -2395,7 +2410,7 @@ async fn record_issue(
     let availability = to_text(&issue.availability)?;
     for row in &rows {
         let path = path_from_key(&row.try_get::<Vec<u8>, _>("path_key")?)?;
-        if within(&path, &issue.relative_path) {
+        if within(&path, &scope) {
             sqlx::query("UPDATE assets SET availability = ?1 WHERE id = ?2")
                 .bind(availability.as_str())
                 .bind(row.try_get::<String, _>("id")?)
