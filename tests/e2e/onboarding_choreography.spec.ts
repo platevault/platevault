@@ -30,6 +30,7 @@ import {
   expect,
   landOnMockRoute,
   openChecklist,
+  seedEmptyInventory,
   ONB_SECTION as SECTION,
 } from './support/harness';
 import type { Page } from '@playwright/test';
@@ -85,6 +86,13 @@ async function readChoreographyAnimations(
 
 /** Open the checklist flyout and wait for its body (no-op when already open). */
 test.describe('onboarding completion choreography (spec 056 US3)', () => {
+  // US3 watches items complete, so every item must start incomplete. Seed the
+  // inventory empty rather than inheriting the sample library's milestones,
+  // which would present these rows as already checked.
+  test.beforeEach(({ page }) => {
+    seedEmptyInventory(page);
+  });
+
   test('renders a polite aria-live region for per-tick announcements (T024)', async ({
     page,
   }) => {

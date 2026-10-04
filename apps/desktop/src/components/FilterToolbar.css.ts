@@ -27,7 +27,15 @@ export const search = style({
   border: `1px solid ${vars.border}`,
   borderRadius: uvars.radiusSm,
   selectors: {
-    '&:focus': { outline: 'none', borderColor: vars.accent },
+    // `:focus-visible`, not `:focus`: the accent border alone was the entire
+    // keyboard indicator here (1px recolour, no ring), while every other
+    // control in the product paints the shared `--pv-focus-ring`. Keep the
+    // border recolour AND add the ring so the two are not the same signal.
+    '&:focus-visible': {
+      outline: '2px solid transparent',
+      borderColor: vars.accent,
+      boxShadow: vars.focusRing,
+    },
   },
 });
 

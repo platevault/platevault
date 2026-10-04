@@ -1136,8 +1136,16 @@
 }
 
 /* ── Calibration: masters table (spec-043, tasks #39/#73) ────────────────── */
+/* `fixed` (not `auto`): with `auto`, nine `white-space: nowrap` columns set a
+   min-content floor wider than the list viewport, so opening the side detail
+   pushed the table into its own horizontal scroll and clipped the LAST column
+   off-screen at rest — the column carrying the active sort marker. `fixed` +
+   `width: 100%` pins the table to its container at every width, so all nine
+   headers stay on screen and the per-column ellipsis in `.pv-table td`
+   (primitives.css) is finally the mechanism that absorbs long values. */
 .pv-calib-table {
-  table-layout: auto;
+  table-layout: fixed;
+  width: 100%;
 }
 .pv-calib-table th {
   user-select: none;
@@ -1145,6 +1153,47 @@
 .pv-calib-table td,
 .pv-calib-table th {
   padding: var(--pv-sp-1) var(--pv-sp-3);
+}
+/* One row height for the whole list regardless of detail state (the density
+   token, as Targets does). Row rhythm is what makes the list scannable. */
+.pv-calib-table tbody td {
+  height: var(--pv-row-height);
+}
+/* Column widths — required by `table-layout: fixed`, which otherwise splits the
+   table into nine equal columns and starves the identity column. Percentages
+   (not px) so the columns track the container as the side detail opens, resizes
+   and closes, and so the table never demands more room than it has.
+
+   Allocated against the narrowest supported list viewport (800px: a 1440 window
+   with the side detail at its default width). At that width every mono value
+   and the whole date still fit; the master name, camera and usage are the three
+   prose columns that ellipsize, and each restates itself as a tooltip. */
+.pv-calib-col--master {
+  width: 28%;
+}
+.pv-calib-col--camera {
+  width: 11.5%;
+}
+.pv-calib-col--filter {
+  width: 7%;
+}
+.pv-calib-col--gain {
+  width: 6.5%;
+}
+.pv-calib-col--exposure {
+  width: 8%;
+}
+.pv-calib-col--temp {
+  width: 6.5%;
+}
+.pv-calib-col--binning {
+  width: 6.5%;
+}
+.pv-calib-col--usage {
+  width: 11.5%;
+}
+.pv-calib-col--created {
+  width: 14.5%;
 }
 .pv-calib-table__row {
   cursor: pointer;
@@ -1155,7 +1204,28 @@
 .pv-calib-table__row--selected td {
   background: var(--pv-accent-bg);
 }
+/* Identity cell: kind pill + name + optional aging pill on ONE line. The shared
+   `.pv-table__cell-inline` wraps (two pills plus a label is its stated case),
+   which turned this column into 2- and 3-line cells the moment the side detail
+   narrowed it — three different row heights in one list. Pills hold their size;
+   the name is the one part that shrinks, per `.pv-inbox-cell__path-wrap`. */
+.pv-calib-cell__master {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--pv-sp-2);
+  min-width: 0;
+}
+/* `> *`, not a Pill class: Pill's class is a hashed vanilla-extract name and is
+   unaddressable from here. The label rule below re-enables its own shrink. */
+.pv-calib-cell__master > * {
+  flex-shrink: 0;
+}
 .pv-calib-cell__master-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: var(--pv-weight-medium);
   color: var(--pv-text);
 }

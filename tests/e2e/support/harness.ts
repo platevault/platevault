@@ -166,6 +166,20 @@ export function seedEmptyInventory(page: Page): void {
 }
 
 /**
+ * Undo `seedEmptyInventory` for one test inside a describe that seeds it.
+ *
+ * Init scripts run in registration order, so calling this after the
+ * describe-level seed clears the flag before the app boots. A spec needs this
+ * when it must deep-link to a real session while its siblings require a library
+ * that has achieved nothing.
+ */
+export function seedPopulatedInventory(page: Page): void {
+  page.addInitScript(() => {
+    window.localStorage.removeItem('alm-e2e-empty-inventory');
+  });
+}
+
+/**
  * Suppress all spec-056 onboarding surfaces (orientation walk, checklist
  * accordion auto-expand, find-it spotlights) so their overlays never intercept
  * clicks or steal focus from the surface under test.

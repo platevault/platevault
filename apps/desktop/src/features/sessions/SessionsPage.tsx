@@ -308,7 +308,9 @@ export function SessionsPage() {
   const handleCloseDetail =
     selectedSession != null ? clearSelection : undefined;
 
-  const detailAriaLabel = m.cmp_listpage_close_session_details_aria();
+  // Names the region for what it holds, not for the button that closes it: a
+  // reviewer moving between landmarks hears a place, not a command.
+  const detailAriaLabel = m.list_page_layout_bottom_detail_label();
 
   return (
     <ListPageLayout

@@ -12,6 +12,7 @@
 // check-off, dismiss, remove, and restore without a backend.
 
 import type { OnboardingFlagsDto, OnboardingItemDto } from '@/bindings/index';
+import { SAMPLE_NOW } from '@/api/mocks/library';
 
 export type MockOnboardingItemSeed = [
   itemId: string,
@@ -99,25 +100,63 @@ export function unmetPrerequisiteIds(): Set<string> {
   }
 }
 
+/**
+ * What the sample library has genuinely already achieved.
+ *
+ * The checklist is a record of real milestones, never decoration, so a library
+ * that holds confirmed sessions, resolved targets, a created project and an
+ * observed tool run must show those as done. The three still open are open for
+ * a reason: no session note has been written, the masters have not been
+ * reviewed since the oldest one aged out, and no target has been favourited.
+ */
+const SAMPLE_LIBRARY_PROGRESS: Record<string, OnboardingItemDto['state']> = {
+  'inbox.confirm_first': 'auto_checked',
+  'inbox.apply_first_plan': 'auto_checked',
+  'sessions.review_first': 'manually_checked',
+  'calibration.match_master': 'manually_checked',
+  'targets.resolve_first': 'auto_checked',
+  'projects.create_first': 'auto_checked',
+  'projects.launch_tool': 'auto_checked',
+  'projects.review_artifacts': 'manually_checked',
+};
+
 export function freshMockOnboardingItems(): OnboardingItemDto[] {
   const unmet = unmetPrerequisiteIds();
+  // An empty library has achieved nothing, so it must not report milestones as
+  // done. `seedEmptyInventory` is the same switch `inventory.list` reads, which
+  // keeps the checklist and the library telling one story.
+  const progress: Record<string, OnboardingItemDto['state']> = isE2EFlagSet(
+    E2E_EMPTY_INVENTORY_STORE_ID,
+  )
+    ? {}
+    : SAMPLE_LIBRARY_PROGRESS;
   return MOCK_ONBOARDING_ITEMS.map(
-    ([itemId, page, hasAutoTick, upstreamItemId, jumpPage]) => ({
-      itemId,
-      page,
-      state: 'unchecked',
-      at: new Date().toISOString(),
-      source: 'seed',
-      prerequisite: upstreamItemId
-        ? {
-            upstreamItemId,
-            met: !unmet.has(itemId),
-            reasonKey: `onboarding.prerequisite.${upstreamItemId}`,
-            jumpPage: jumpPage ?? page,
-          }
-        : null,
-      hasAutoTick,
-    }),
+    ([itemId, page, hasAutoTick, upstreamItemId, jumpPage]) => {
+      const state = progress[itemId] ?? 'unchecked';
+      return {
+        itemId,
+        page,
+        state,
+        // Fixed, so a milestone never reads as freshly completed just because
+        // the checklist was opened again.
+        at: SAMPLE_NOW,
+        source:
+          state === 'unchecked'
+            ? ('seed' as const)
+            : state === 'auto_checked'
+              ? ('event' as const)
+              : ('user' as const),
+        prerequisite: upstreamItemId
+          ? {
+              upstreamItemId,
+              met: !unmet.has(itemId),
+              reasonKey: `onboarding.prerequisite.${upstreamItemId}`,
+              jumpPage: jumpPage ?? page,
+            }
+          : null,
+        hasAutoTick,
+      };
+    },
   );
 }
 

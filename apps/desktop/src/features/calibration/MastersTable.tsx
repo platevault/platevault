@@ -165,11 +165,16 @@ function binningCell(m: CalibrationMaster): ReactNode {
   );
 }
 
-/** Camera applies to every master kind. */
+/**
+ * Camera applies to every master kind. The camera name is one of the three
+ * prose columns that ellipsize once the side detail narrows the list, so a real
+ * name carries itself as a tooltip; an absent one renders the unresolved chip
+ * from `renderValue` and has no text to restate.
+ */
 function cameraCell(m: CalibrationMaster): ReactNode {
-  return renderValue(m.fingerprint?.camera ?? null, {
-    applicability: 'applicable',
-  });
+  const camera = m.fingerprint?.camera ?? null;
+  const rendered = renderValue(camera, { applicability: 'applicable' });
+  return camera == null ? rendered : <span title={camera}>{rendered}</span>;
 }
 
 /**
@@ -393,7 +398,7 @@ export function MastersTable({
 
   if (loading) {
     return (
-      <div className="pv-calib-table__status">
+      <div className="pv-calib-table__status" data-testid="masters-table">
         <Skeleton
           variant="block"
           count={6}
@@ -445,10 +450,15 @@ export function MastersTable({
     );
   }
 
-  // Sortable header buttons (column header passthrough).
+  // Sortable header buttons (column header passthrough). The width class is
+  // derived from the column key rather than restated per entry, so
+  // `.pv-calib-col--<key>` (feature-lists.css) cannot drift from COLUMNS —
+  // `table-layout: fixed` needs a width on every column.
   const columns: TableColumn[] = COLUMNS.map((c) => ({
     key: c.key,
-    className: c.className,
+    className: [`pv-calib-col--${c.key}`, c.className]
+      .filter(Boolean)
+      .join(' '),
     ariaSort: ariaSortFor(sort.col === c.sort, sort.dir),
     label: (
       <SortHeader
@@ -490,9 +500,14 @@ export function MastersTable({
       _selected: selected === master.id,
       _indent: indentPx || undefined,
       master: (
-        <span className="pv-table__cell-inline">
+        <span className="pv-calib-cell__master">
           <Pill variant={kindVariant(kindStr)}>{kindStr.toUpperCase()}</Pill>
-          <span className="pv-calib-cell__master-label">
+          {/* The one part of the cell that ellipsizes, so it carries the full
+              text as a tooltip (the `.pv-inbox-cell__path` convention). */}
+          <span
+            className="pv-calib-cell__master-label"
+            title={masterLabel(master)}
+          >
             {masterLabel(master)}
           </span>
           {isAging && (
@@ -509,7 +524,10 @@ export function MastersTable({
       temp: tempCell(master),
       binning: binningCell(master),
       usage: (
-        <span data-testid={`master-usage-${master.id}`}>
+        <span
+          data-testid={`master-usage-${master.id}`}
+          title={usageSummary(master)}
+        >
           {usageSummary(master)}
         </span>
       ),

@@ -221,6 +221,7 @@ export function Cleanup({ save }: CleanupProps) {
           info={m.settings_cleanup_route_info()}
         >
           <Toggle
+            aria-label={m.settings_cleanup_block_delete_label()}
             checked={blockPermanentDelete}
             onChange={(v) => {
               editedRef.current = true;
@@ -235,6 +236,7 @@ export function Cleanup({ save }: CleanupProps) {
           info={m.settings_cleanup_protection_info()}
         >
           <select
+            aria-label={m.settings_cleanup_default_protection_label()}
             className={`${selectBase} pv-cleanup__protection-select`}
             value={defaultProtection}
             onChange={(e) => {

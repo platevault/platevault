@@ -26,6 +26,7 @@ import {
   landOnMockRoute,
   openChecklist,
   seedEmptyInventory,
+  seedPopulatedInventory,
   seedOnboardingUnmet,
 } from './support/harness';
 import type { Page } from '@playwright/test';
@@ -50,6 +51,14 @@ function findBtn(page: Page, itemId: string) {
 }
 
 test.describe('onboarding find-it spotlight (spec 056 US4)', () => {
+  // A "Show me where" affordance only exists on an item that is still open, so
+  // these specs need a library that has achieved nothing. Seed the inventory
+  // empty rather than inheriting the sample library's milestones, which would
+  // auto-check these rows and remove the affordance entirely.
+  test.beforeEach(({ page }) => {
+    seedEmptyInventory(page);
+  });
+
   test('activating find spotlights the real control non-modally and presses the affordance', async ({
     page,
   }) => {
@@ -185,6 +194,9 @@ test.describe('onboarding find-it spotlight (spec 056 US4)', () => {
   test('sessions.add_note deep-links to a session and spotlights its note field', async ({
     page,
   }) => {
+    // This one needs a session to deep-link to, so it opts out of the
+    // describe's empty library.
+    seedPopulatedInventory(page);
     await landOnMockRoute(page, '/#/sessions');
     await openChecklist(page);
 
@@ -259,6 +271,12 @@ test.describe('onboarding find-it spotlight — reduced motion (VC-002)', () => 
   // still applied at runtime) — set it via the `contextOptions` escape hatch
   // instead of the removed direct property.
   test.use({ contextOptions: { reducedMotion: 'reduce' } });
+
+  // Same precondition as the sibling describe: the affordance exists only while
+  // the item is open.
+  test.beforeEach(({ page }) => {
+    seedEmptyInventory(page);
+  });
 
   test('reduced motion suppresses the spotlight pulse (static outline only)', async ({
     page,

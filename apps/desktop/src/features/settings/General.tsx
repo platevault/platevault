@@ -110,6 +110,7 @@ export function General() {
           </div>
           <div className="pv-settings__row-content">
             <select
+              aria-label={m.settings_general_fontsize_title()}
               className={selectBase}
               value={fontSize}
               onChange={(e) => setFontSize(e.target.value as FontSizeChoice)}
@@ -141,6 +142,7 @@ export function General() {
           </div>
           <div className="pv-settings__row-content">
             <select
+              aria-label={m.settings_general_zoom_label()}
               className={selectBase}
               value={zoom}
               onChange={(e) => setZoom(Number(e.target.value) as ZoomPercent)}
@@ -172,6 +174,7 @@ export function General() {
           </div>
           <div className="pv-settings__row-content">
             <select
+              aria-label={m.settings_general_density_label()}
               className={selectBase}
               value={density}
               onChange={(e) => setDensity(e.target.value as Density)}
