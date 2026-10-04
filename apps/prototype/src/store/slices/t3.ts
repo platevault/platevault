@@ -1,16 +1,123 @@
 /**
  * T3 slice: View workspace and frame review (J21, J22, J25; specs 066, 067).
- * Owned by track T3. Holds T3-local state and registers the operation
- * handlers T3 owns ("measure", "import-measurements"). Registered by the
- * foundation in ./index.ts; the shape below is T3's to change (bump
- * `version` when it does).
+ * Holds T3-local UI state (filters, the current session and frame, review
+ * choices, measurement-import review) and registers the "measure" operation.
+ * Durable data (View membership, quality, measurements) lives in the catalog.
  */
+import type { AssetId, MetricKey, SessionId, ViewId } from "@/domain/types"
+import { measureHandler } from "@/features/t3/measure"
 import type { SliceDefinition } from "./index"
 
-export type T3State = Record<string, never>
+export type QualityFilter = "unreviewed" | "usable" | "unusable" | "changed-content"
+export type AvailabilityFilter = "available" | "offline" | "unreadable" | "absent"
+
+/** Browsing filters for the session table; they never change the selected ids (VSEL-FR-06). */
+export interface SessionFilters {
+  object: string
+  missingObject: boolean
+  channels: string[]
+  night: string | null
+  startedFrom: string | null
+  startedTo: string | null
+  exposureMin: number | null
+  exposureMax: number | null
+  equipment: string | null
+  quality: QualityFilter | null
+  locationId: string | null
+  availability: AvailabilityFilter | null
+  targetId: string | null
+  camera: string | null
+  gain: number | null
+  offset: number | null
+  binning: number | null
+  tempMin: number | null
+  tempMax: number | null
+  /** "near": framing radius, Target association or Position unknown. */
+  scope: "near" | "all"
+  selectedOnly: boolean
+}
+
+export function defaultSessionFilters(): SessionFilters {
+  return {
+    object: "",
+    missingObject: false,
+    channels: [],
+    night: null,
+    startedFrom: null,
+    startedTo: null,
+    exposureMin: null,
+    exposureMax: null,
+    equipment: null,
+    quality: null,
+    locationId: null,
+    availability: null,
+    targetId: null,
+    camera: null,
+    gain: null,
+    offset: null,
+    binning: null,
+    tempMin: null,
+    tempMax: null,
+    scope: "near",
+    selectedOnly: false,
+  }
+}
+
+export interface FrameUi {
+  /** Current frame: highlighted in the row, plot and preview at once (PIX-FR-02). */
+  activeAssetId: AssetId | null
+  /** Frames checked for bulk actions; separate from the current frame. */
+  checked: AssetId[]
+  showExcluded: boolean
+  sessionId: SessionId | null
+  search: string
+  metric: MetricKey
+}
+
+export function defaultFrameUi(): FrameUi {
+  return { activeAssetId: null, checked: [], showExcluded: false, sessionId: null, search: "", metric: "fwhm" }
+}
+
+/** An import's rows that attach to no frame until the user resolves them (PIX-FR-07). */
+export interface ImportReviewRow {
+  index: number
+  file: string
+  status: "ambiguous" | "unmatched" | "resolved"
+  candidates: AssetId[]
+  assetId: AssetId | null
+  values: Partial<Record<MetricKey, number>>
+}
+
+export interface MeasurementImport {
+  id: string
+  viewId: ViewId
+  path: string
+  importedAt: string
+  matched: number
+  /** Matched rows whose frame is outside this View; values still attach to the frame. */
+  outsideView: number
+  rows: ImportReviewRow[]
+}
+
+export interface RefreshUi {
+  decisions: Record<string, "accept" | "decline">
+  /** Changes declined earlier, shown as such the next time. */
+  declined: string[]
+}
+
+export interface T3State {
+  sessionFilters: Record<ViewId, SessionFilters>
+  /** Session whose evidence is open; its footprint is highlighted. */
+  activeSession: Record<ViewId, SessionId | null>
+  sky: Record<ViewId, boolean>
+  frames: Record<ViewId, FrameUi>
+  refresh: Record<ViewId, RefreshUi>
+  imports: Record<string, MeasurementImport>
+}
 
 export const t3Slice: SliceDefinition<T3State> = {
   id: "t3",
-  version: 1,
-  initial: () => ({}),
+  version: 2,
+  initial: () => ({ sessionFilters: {}, activeSession: {}, sky: {}, frames: {}, refresh: {}, imports: {} }),
+  operations: [measureHandler],
 }
