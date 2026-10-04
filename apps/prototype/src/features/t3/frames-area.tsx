@@ -46,10 +46,10 @@ interface FrameRow {
   rejected: boolean
 }
 
-const STATE_BADGE: Record<FrameMeasureState, { value: "valid" | "pending" | "unavailable"; label: string }> = {
+const STATE_BADGE: Record<FrameMeasureState, { value: "valid" | "pending" | "verifying" | "unavailable"; label: string }> = {
   measured: { value: "valid", label: "Measured" },
   pending: { value: "pending", label: "Pending" },
-  verifying: { value: "pending", label: "Verifying" },
+  verifying: { value: "verifying", label: "Verifying" },
   "history-only": { value: "unavailable", label: "Not measured" },
   "not-measured": { value: "unavailable", label: "Not measured" },
 }
