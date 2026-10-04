@@ -19,19 +19,28 @@ export interface KeyValueItem {
   source?: string
 }
 
+/**
+ * Label/value pairs with optional source notes. Layout follows the space the
+ * list actually has (a container query, so it also follows text zoom): two
+ * columns of pairs from 46rem when `columns={2}`, label beside value from
+ * 22rem, and label above value below that. Nothing scrolls sideways at 200%
+ * text (WCAG 1.4.4, 1.4.10). Source notes use the data face and wrap.
+ */
 export function KeyValueList({ items, className, columns = 1 }: { items: KeyValueItem[]; className?: string; columns?: 1 | 2 }) {
   return (
-    <dl className={cn("grid gap-x-6 gap-y-2 text-sm", columns === 2 ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1", className)}>
-      {items.map((item) => (
-        <div key={item.label} className="grid min-w-0 grid-cols-[10rem_minmax(0,1fr)] items-baseline gap-3">
-          <dt className="text-muted-foreground">{item.label}</dt>
-          <dd className={cn("min-w-0 tabular-nums", item.mono && "font-mono text-xs break-all")}>
-            {item.value}
-            {item.source ? <span className="ml-2 text-xs text-muted-foreground">{item.source}</span> : null}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <div className={cn("@container/kv min-w-0", className)}>
+      <dl className={cn("grid grid-cols-1 gap-x-6 gap-y-2 text-sm", columns === 2 && "@min-[46rem]/kv:grid-cols-2")}>
+        {items.map((item) => (
+          <div key={item.label} className="grid min-w-0 grid-cols-1 gap-0.5 @min-[22rem]/kv:grid-cols-[10rem_minmax(0,1fr)] @min-[22rem]/kv:items-baseline @min-[22rem]/kv:gap-3">
+            <dt className="text-muted-foreground">{item.label}</dt>
+            <dd className={cn("min-w-0 tabular-nums [overflow-wrap:anywhere]", item.mono && "font-mono text-xs break-all")}>
+              {item.value}
+              {item.source ? <span className="ml-2 font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">{item.source}</span> : null}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   )
 }
 
