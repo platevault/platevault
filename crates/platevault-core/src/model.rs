@@ -20,6 +20,8 @@ pub enum LibraryError {
     Conflict { id: Uuid, current: Revision, successors: Vec<Uuid> },
     #[error("filesystem identity conflict: {0}")]
     IdentityConflict(String),
+    #[error("access denied: {0}")]
+    AccessDenied(String),
     #[error("source unavailable: {0}")]
     SourceUnavailable(String),
     #[error("unsupported format: {0}")]
@@ -36,19 +38,85 @@ pub enum LibraryError {
     Canceled,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RetryAction {
+    Retry,
+    Review,
+    None,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorResponse {
+    pub kind: String,
+    pub identity: Option<Uuid>,
+    pub scope: Option<NativePath>,
+    pub retry: RetryAction,
+    pub message: String,
+    pub current_revision: Option<Revision>,
+    pub successors: Vec<Uuid>,
+}
+
+impl LibraryError {
+    /// Convert filesystem failure while retaining its affected path.
+    #[must_use]
+    pub fn from_io(path: &Path, error: &std::io::Error) -> Self {
+        let message = format!("{}: {error}", path.display());
+        match error.kind() {
+            std::io::ErrorKind::PermissionDenied => Self::AccessDenied(message),
+            std::io::ErrorKind::NotFound => Self::NotFound(message),
+            _ => Self::SourceUnavailable(message),
+        }
+    }
+
+    /// Attach affected identity/scope to the stable IPC failure shape.
+    #[must_use]
+    pub fn response(&self, identity: Option<Uuid>, scope: Option<NativePath>) -> ErrorResponse {
+        let (kind, retry) = match self {
+            Self::InvalidInput(_) => ("invalid_input", RetryAction::Review),
+            Self::NotFound(_) => ("not_found", RetryAction::Retry),
+            Self::Conflict { .. } => ("conflict", RetryAction::Review),
+            Self::IdentityConflict(_) => ("identity_conflict", RetryAction::Review),
+            Self::AccessDenied(_) => ("access_denied", RetryAction::Retry),
+            Self::SourceUnavailable(_) => ("source_unavailable", RetryAction::Retry),
+            Self::UnsupportedFormat(_) => ("unsupported_format", RetryAction::None),
+            Self::MetadataUnreadable(_) => ("metadata_unreadable", RetryAction::Review),
+            Self::ProviderUnavailable(_) => ("provider_unavailable", RetryAction::Retry),
+            Self::PersistenceFailure(_) => ("persistence_failure", RetryAction::Retry),
+            Self::NoByteProof(_) => ("no_byte_proof", RetryAction::Review),
+            Self::Canceled => ("canceled", RetryAction::None),
+        };
+        let (identity, current_revision, successors) = match self {
+            Self::Conflict { id, current, successors } => {
+                (Some(*id), Some(*current), successors.clone())
+            }
+            _ => (identity, None, Vec::new()),
+        };
+        ErrorResponse {
+            kind: kind.into(),
+            identity,
+            scope,
+            retry,
+            message: self.to_string(),
+            current_revision,
+            successors,
+        }
+    }
+}
+
 impl From<sqlx::Error> for LibraryError {
     fn from(error: sqlx::Error) -> Self {
-        Self::PersistenceFailure(error.to_string())
+        if matches!(error, sqlx::Error::RowNotFound) {
+            Self::NotFound("catalog record".into())
+        } else {
+            Self::PersistenceFailure(error.to_string())
+        }
     }
 }
 impl From<serde_json::Error> for LibraryError {
     fn from(error: serde_json::Error) -> Self {
         Self::InvalidInput(error.to_string())
-    }
-}
-impl From<std::io::Error> for LibraryError {
-    fn from(error: std::io::Error) -> Self {
-        Self::SourceUnavailable(error.to_string())
     }
 }
 
@@ -144,8 +212,60 @@ impl NativePath {
 #[serde(rename_all = "camelCase")]
 pub struct VolumeIdentity {
     pub filesystem: String,
-    pub stable_id: String,
+    pub stable_id: Option<String>,
     pub file_ids_stable: bool,
+    pub case: PathSensitivity,
+    pub normalization: PathSensitivity,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PathSensitivity {
+    Sensitive,
+    Insensitive,
+    Unknown,
+}
+
+impl VolumeIdentity {
+    /// Validate remount-stable identity before making absence claims.
+    ///
+    /// # Errors
+    /// Refuses absent/empty stable identity and filesystem type.
+    pub fn validate(&self) -> Result<(), LibraryError> {
+        if self.filesystem.is_empty() || self.stable_id.as_deref().is_none_or(str::is_empty) {
+            return Err(LibraryError::IdentityConflict("volume identity is unqualified".into()));
+        }
+        Ok(())
+    }
+}
+
+impl NativePath {
+    /// Compare paths only using recorded filesystem capabilities.
+    #[must_use]
+    pub fn same_on(&self, other: &Self, volume: &VolumeIdentity) -> bool {
+        if volume.case == PathSensitivity::Unknown
+            || volume.normalization == PathSensitivity::Unknown
+        {
+            return self == other;
+        }
+        let text = |path: &Self| match path {
+            Self::UnixBytes(bytes) => std::str::from_utf8(bytes).ok().map(str::to_owned),
+            Self::WindowsUtf16(units) => String::from_utf16(units).ok(),
+        };
+        let (Some(mut left), Some(mut right)) = (text(self), text(other)) else {
+            return self == other;
+        };
+        if volume.normalization == PathSensitivity::Insensitive {
+            use unicode_normalization::UnicodeNormalization;
+            left = left.nfc().collect();
+            right = right.nfc().collect();
+        }
+        if volume.case == PathSensitivity::Insensitive {
+            left = left.to_lowercase();
+            right = right.to_lowercase();
+        }
+        left == right
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -155,7 +275,7 @@ pub struct FileIdentity {
     pub file_id: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ObservationFingerprint {
     pub identity: FileIdentity,
@@ -174,6 +294,13 @@ impl ObservationFingerprint {
                 || self.identity.file_id == other.identity.file_id)
     }
 }
+
+impl PartialEq for ObservationFingerprint {
+    fn eq(&self, other: &Self) -> bool {
+        self.equivalent(other)
+    }
+}
+impl Eq for ObservationFingerprint {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -198,6 +325,15 @@ pub enum Quality {
     Unreviewed,
     Usable,
     Unusable,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApplicableQuality {
+    Unreviewed,
+    Usable,
+    Unusable,
+    ChangedContent { previous: Quality },
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -344,13 +480,16 @@ pub struct Asset {
 
 impl Asset {
     #[must_use]
-    pub fn applicable_quality(&self) -> Quality {
-        if self.quality == Quality::Unreviewed
-            || self.quality_basis.as_ref().is_some_and(|basis| basis.equivalent(&self.fingerprint))
+    pub fn applicable_quality(&self) -> ApplicableQuality {
+        if self.quality != Quality::Unreviewed
+            && !self.quality_basis.as_ref().is_some_and(|basis| basis.equivalent(&self.fingerprint))
         {
-            self.quality
-        } else {
-            Quality::Unreviewed
+            return ApplicableQuality::ChangedContent { previous: self.quality };
+        }
+        match self.quality {
+            Quality::Unreviewed => ApplicableQuality::Unreviewed,
+            Quality::Usable => ApplicableQuality::Usable,
+            Quality::Unusable => ApplicableQuality::Unusable,
         }
     }
 }
@@ -413,15 +552,42 @@ pub enum AssociationState {
     NeedsReview,
     Confirmed,
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AssociationKind {
+    Target,
+    Equipment,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "source", rename_all = "snake_case")]
+pub enum Provenance {
+    Seed { dataset: String },
+    User,
+    Provider { name: String, id: Option<String> },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum EvidenceItem {
+    Alias { normalized: String, agrees: bool },
+    Coordinates { ra_deg: f64, dec_deg: f64, qualified: bool },
+    Footprint { overlap: f64, qualified: bool },
+    Header { field: String, value: String },
+    Unknown { field: String },
+    Conflict { field: String, values: Vec<String> },
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Association {
     pub session_id: Uuid,
-    pub target_id: Option<Uuid>,
-    pub equipment_id: Option<Uuid>,
+    pub kind: AssociationKind,
+    pub subject_id: Option<Uuid>,
     pub state: AssociationState,
-    pub evidence: Vec<String>,
-    pub provenance: String,
+    pub evidence: Vec<EvidenceItem>,
+    pub provenance: Provenance,
+    pub observation_basis: BTreeMap<Uuid, ObservationFingerprint>,
     pub decision_revision: Revision,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -492,6 +658,8 @@ pub struct ScanOperation {
     pub state: ScanState,
     pub progress: ScanProgress,
     pub issues: Vec<ScanIssue>,
+    pub complete_scopes: Vec<NativePath>,
+    pub incomplete_scopes: Vec<NativePath>,
     pub started_at: String,
     pub finished_at: Option<String>,
 }
@@ -512,6 +680,7 @@ pub struct TargetAlias {
     pub text: String,
     pub normalized: String,
     pub kind: String,
+    pub provenance: Provenance,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -521,10 +690,17 @@ pub struct TargetCandidate {
     pub aliases: Vec<TargetAlias>,
     pub common_name: Option<String>,
     pub object_type: String,
+    pub coordinates: Option<SkyCoordinates>,
+    pub provenance: Provenance,
+    pub provider_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkyCoordinates {
     pub ra_deg: f64,
     pub dec_deg: f64,
-    pub provenance: String,
-    pub provider_id: Option<String>,
+    pub frame: String,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -567,7 +743,10 @@ pub struct Equipment {
     pub focal_length_mm: Option<f64>,
     pub pixel_size_um: Option<f64>,
     pub decision_revision: Revision,
+    pub state: AssociationState,
+    pub provenance: Provenance,
 }
+/// Coverage is split by session, location and availability, not just session.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoverageContribution {
@@ -615,5 +794,22 @@ pub struct RemapReview {
     pub proposed_root: NativePath,
     pub proposed_identity: FileIdentity,
     pub items: Vec<RemapItem>,
-    pub blocked: Vec<String>,
+    pub blocked: Vec<RemapBlock>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemapBlock {
+    pub asset_id: Option<Uuid>,
+    pub reason: RemapBlockReason,
+    pub message: String,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemapBlockReason {
+    NoByteProof,
+    Mismatch,
+    Collision,
+    Drift,
+    IdentityConflict,
 }

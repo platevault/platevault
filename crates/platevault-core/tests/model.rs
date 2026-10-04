@@ -73,8 +73,10 @@ fn unix_non_utf8_path_roundtrips_without_display_identity_loss() {
 fn mount_unstable_file_numbers_do_not_invalidate_identical_decision_fingerprint() {
     let volume = VolumeIdentity {
         filesystem: "test-unstable".into(),
-        stable_id: "same-volume".into(),
+        stable_id: Some("same-volume".into()),
         file_ids_stable: false,
+        case: platevault_core::PathSensitivity::Unknown,
+        normalization: platevault_core::PathSensitivity::Unknown,
     };
     let a = ObservationFingerprint {
         identity: FileIdentity { volume, file_id: Some("mount-a".into()) },
@@ -87,7 +89,7 @@ fn mount_unstable_file_numbers_do_not_invalidate_identical_decision_fingerprint(
     b.size_bytes += 1;
     assert!(!a.equivalent(&b));
     b.size_bytes = a.size_bytes;
-    b.identity.volume.stable_id = "replacement".into();
+    b.identity.volume.stable_id = Some("replacement".into());
     assert!(!a.equivalent(&b));
 }
 
