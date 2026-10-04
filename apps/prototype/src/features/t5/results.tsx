@@ -661,7 +661,7 @@ function AttachDialog({ open, onOpenChange, view }: { open: boolean; onOpenChang
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Attach Result</DialogTitle>
             <DialogDescription>Attach a file saved outside the output location. Its View association reads User-linked and its input-frame lineage stays Unknown.</DialogDescription>
@@ -786,7 +786,7 @@ function ResultPicker({
   const viewItems = Object.values(catalog.views).map((v) => ({ value: v.id, label: v.name }))
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Choose accepted Results</DialogTitle>
           <DialogDescription>
