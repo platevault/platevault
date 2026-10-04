@@ -14,6 +14,7 @@
 import { fileKey } from "@/domain/disk"
 import { listLocation, markScanStopped, markVerificationPending, readFiles, settleLocationScan } from "@/domain/indexing"
 import type { LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus } from "@/domain/types"
+import { plural } from "@/lib/format"
 import { nowIso, type PrototypeState, store } from "./core"
 
 export interface OperationHandler {
@@ -139,9 +140,19 @@ export function cancelOperation(id: OperationId) {
     if (!op || isSettled(op.status) || !op.canCancel) return s
     const done = op.items.filter((i) => i.status === "done").length
     let next = s
-    // A canceled index leaves the location it was reading incomplete, never provisional (LIB-FR-03).
-    const current = op.kind === "index" ? (op.payload as unknown as IndexPayload).current : null
-    if (current) next = { ...next, catalog: markScanStopped(next.catalog, current.locationId, nowIso()) }
+    if (op.kind === "index") {
+      const { current } = op.payload as unknown as IndexPayload
+      // A canceled index leaves the location it was reading incomplete, never provisional (LIB-FR-03).
+      if (current) next = { ...next, catalog: markScanStopped(next.catalog, current.locationId, nowIso()) }
+      const items = op.items.map((item): OperationItem => {
+        if (item.id === current?.locationId) {
+          return { ...item, status: "uncertain", detail: `Canceled after ${plural(current.observed.length, "file")}. Incomplete until indexed again.` }
+        }
+        if (item.status === "pending") return { ...item, status: "skipped", detail: "Not started: indexing was canceled." }
+        return item
+      })
+      next = patchOperation(next, id, { items })
+    }
     return settleOperation(
       next,
       id,
