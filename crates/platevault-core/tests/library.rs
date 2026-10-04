@@ -114,6 +114,93 @@ async fn real_composed_library_preserves_sources_quality_and_restart() {
 }
 
 #[tokio::test]
+async fn confirmed_object_correction_refreshes_the_stored_target_association() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("captures");
+    std::fs::create_dir(&root).unwrap();
+    let fits = root.join("light.fits");
+    let xisf = root.join("light.xisf");
+    let fields = [
+        ("IMAGETYP", "'LIGHT'"),
+        ("FILTER", "'Ha'"),
+        ("EXPTIME", "300"),
+        ("DATE-OBS", "'2026-09-18T22:00:00Z'"),
+        ("RA", "10.684708"),
+        ("DEC", "41.26875"),
+        ("FOCALLEN", "1"),
+        ("XPIXSZ", "3.76"),
+    ];
+    support::fits(&fits, &fields).unwrap();
+    support::xisf(&xisf, &fields).unwrap();
+    let originals = [support::digest(&fits), support::digest(&xisf)];
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let location = library
+        .register_location(NativePath::from_path(&root), "Captured".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    let mut progress = library.subscribe_scan_progress();
+    let started = library.start_scan(location.id, None).await.unwrap();
+    // The Completed event is published only after scan-time suggestions are recorded.
+    let completed = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let operation = progress.recv().await.unwrap();
+            if operation.id == started.id && operation.state != ScanState::Running {
+                return operation;
+            }
+        }
+    })
+    .await
+    .expect("scan must publish its terminal state");
+    assert_eq!(completed.state, ScanState::Completed);
+    let stored_target = |detail: &persistence_library::SessionDetail| {
+        detail
+            .associations
+            .iter()
+            .find(|association| association.kind == AssociationKind::Target)
+            .map(|association| (association.state.clone(), association.subject_id))
+            .unwrap()
+    };
+    let sessions = library.catalog().list_sessions(&SessionQuery::default()).await.unwrap();
+    assert_eq!(sessions.len(), 1);
+    let before = library.catalog().session(sessions[0].session.id).await.unwrap();
+    assert_eq!(stored_target(&before).0, AssociationState::NeedsReview, "no OBJECT alias yet");
+
+    let expected = before
+        .assets
+        .iter()
+        .map(|asset| ExpectedAsset {
+            asset_id: asset.id,
+            decision_revision: asset.decision_revision,
+            fingerprint: asset.fingerprint.clone(),
+        })
+        .collect::<Vec<_>>();
+    let corrections = expected
+        .iter()
+        .map(|asset| CorrectionInput {
+            asset_id: asset.asset_id,
+            field: "object".into(),
+            value: serde_json::json!("M 31"),
+        })
+        .collect::<Vec<_>>();
+    let preview = library
+        .catalog()
+        .preview_correction(&expected, &corrections, platevault_core::grouping::group_assets)
+        .await
+        .unwrap();
+    let confirmed = library.confirm_correction(preview.id, &expected).await.unwrap();
+    assert!(confirmed.association_refresh.is_none());
+    assert_eq!(confirmed.outcome.sessions.len(), 1);
+
+    let after = library.catalog().session(confirmed.outcome.sessions[0].id).await.unwrap();
+    let (state, subject) = stored_target(&after);
+    assert_eq!(state, AssociationState::Suggested, "stored association refreshed on confirm");
+    let m31 = library.catalog().target(subject.unwrap()).await.unwrap();
+    assert_eq!(m31.candidate.designation, "M 31");
+    assert!(after.assets.iter().all(|asset| asset.observed.object.is_none()), "observed kept");
+    assert_eq!([support::digest(&fits), support::digest(&xisf)], originals);
+}
+
+#[tokio::test]
 async fn retry_runs_a_real_scoped_worker_and_offline_scan_retains_observations() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().join("captures");

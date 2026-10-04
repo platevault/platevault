@@ -23,7 +23,8 @@ use crate::{
     ScanOptions, ScanState, TargetCandidate,
 };
 use persistence_library::{
-    Catalog, LocationRegistration, SessionDetail, SessionQuery, SuggestedAssociation,
+    Catalog, CorrectionOutcome, LocationRegistration, SessionDetail, SessionQuery,
+    SuggestedAssociation,
 };
 
 pub struct Library {
@@ -45,6 +46,20 @@ struct ScanControl {
 pub struct LibrarySession {
     pub detail: SessionDetail,
     pub target_assessments: Vec<TargetAssessment>,
+}
+
+/// A committed metadata correction plus the outcome of re-deriving the target
+/// suggestions of the sessions now holding the corrected assets.
+///
+/// The correction is durable whether or not the refresh succeeds. A failed refresh
+/// leaves the catalog's fail-closed `NeedsReview` state in place, and the next
+/// scan or correction retries it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfirmedCorrection {
+    #[serde(flatten)]
+    pub outcome: CorrectionOutcome,
+    pub association_refresh: Option<crate::ErrorResponse>,
 }
 
 pub struct InventoryProbe;
@@ -317,6 +332,33 @@ impl Library {
         ))
     }
 
+    /// Confirm a reviewed correction preview, then re-derive the target suggestion
+    /// of every session that now holds a corrected asset.
+    ///
+    /// # Errors
+    /// Returns the catalog's confirmation errors; a refresh failure after commit is
+    /// reported in [`ConfirmedCorrection::association_refresh`] instead.
+    pub async fn confirm_correction(
+        &self,
+        preview_id: Uuid,
+        expected: &[crate::ExpectedAsset],
+    ) -> Result<ConfirmedCorrection, LibraryError> {
+        let outcome = self.catalog.confirm_correction(preview_id, expected, group_assets).await?;
+        let association_refresh = match self.refresh_sessions(&outcome).await {
+            Ok(()) => None,
+            Err(error) => Some(error.response(Some(preview_id), None)),
+        };
+        Ok(ConfirmedCorrection { outcome, association_refresh })
+    }
+
+    async fn refresh_sessions(&self, outcome: &CorrectionOutcome) -> Result<(), LibraryError> {
+        let saved = self.saved_targets().await?;
+        for session in &outcome.sessions {
+            self.refresh_session_suggestion(session.id, &saved).await?;
+        }
+        Ok(())
+    }
+
     async fn refresh_target_suggestions(&self, location_id: Uuid) -> Result<(), LibraryError> {
         let saved = self.saved_targets().await?;
         let mut offset = 0_u32;
@@ -333,68 +375,7 @@ impl Library {
             let count = u32::try_from(rows.len())
                 .map_err(|_| LibraryError::PersistenceFailure("session page exceeds u32".into()))?;
             for row in rows {
-                let detail = self.catalog.session(row.session.id).await?;
-                let frames =
-                    detail.assets.iter().map(|asset| asset.effective.clone()).collect::<Vec<_>>();
-                let assessments = self.targets.candidates_for_frames(&frames, &saved);
-                let mut qualified = assessments
-                    .iter()
-                    .filter(|assessment| assessment.state == AssociationState::Suggested);
-                let first = qualified.next();
-                let unique = first.filter(|_| qualified.next().is_none());
-                let (subject_id, state, evidence, provenance) = if let Some(assessment) = unique {
-                    if matches!(assessment.candidate.provenance, crate::Provenance::Seed { .. }) {
-                        self.catalog.record_seed_target(&assessment.candidate).await?;
-                    }
-                    (
-                        Some(assessment.candidate.id),
-                        AssociationState::Suggested,
-                        assessment.evidence.clone(),
-                        assessment.provenance.clone(),
-                    )
-                } else {
-                    let state = if assessments.is_empty() {
-                        AssociationState::Unresolved
-                    } else {
-                        AssociationState::NeedsReview
-                    };
-                    (
-                        None,
-                        state,
-                        vec![crate::EvidenceItem::Unknown {
-                            field: "qualified unique target".into(),
-                        }],
-                        crate::Provenance::Inferred {
-                            rule: crate::targets::ASSOCIATION_RULE.into(),
-                        },
-                    )
-                };
-                self.catalog
-                    .record_suggestions(&[SuggestedAssociation {
-                        session_id: row.session.id,
-                        grouping_revision: row.session.grouping_revision,
-                        expected_observations: detail
-                            .assets
-                            .iter()
-                            .map(|asset| (asset.id, asset.fingerprint.clone()))
-                            .collect(),
-                        expected_decisions: detail
-                            .assets
-                            .iter()
-                            .map(|asset| (asset.id, asset.decision_revision))
-                            .collect(),
-                        expected_observation_revisions: detail
-                            .assets
-                            .iter()
-                            .map(|asset| (asset.id, asset.observation_revision))
-                            .collect(),
-                        kind: AssociationKind::Target,
-                        subject_id,
-                        state,
-                        evidence,
-                        provenance,
-                    }])
-                    .await?;
+                self.refresh_session_suggestion(row.session.id, &saved).await?;
             }
             if count < 1000 {
                 return Ok(());
@@ -403,6 +384,70 @@ impl Library {
                 LibraryError::PersistenceFailure("session index exceeds u32".into())
             })?;
         }
+    }
+
+    async fn refresh_session_suggestion(
+        &self,
+        session_id: Uuid,
+        saved: &[TargetCandidate],
+    ) -> Result<(), LibraryError> {
+        let detail = self.catalog.session(session_id).await?;
+        let frames = detail.assets.iter().map(|asset| asset.effective.clone()).collect::<Vec<_>>();
+        let assessments = self.targets.candidates_for_frames(&frames, saved);
+        let mut qualified =
+            assessments.iter().filter(|assessment| assessment.state == AssociationState::Suggested);
+        let first = qualified.next();
+        let unique = first.filter(|_| qualified.next().is_none());
+        let (subject_id, state, evidence, provenance) = if let Some(assessment) = unique {
+            if matches!(assessment.candidate.provenance, crate::Provenance::Seed { .. }) {
+                self.catalog.record_seed_target(&assessment.candidate).await?;
+            }
+            (
+                Some(assessment.candidate.id),
+                AssociationState::Suggested,
+                assessment.evidence.clone(),
+                assessment.provenance.clone(),
+            )
+        } else {
+            let state = if assessments.is_empty() {
+                AssociationState::Unresolved
+            } else {
+                AssociationState::NeedsReview
+            };
+            (
+                None,
+                state,
+                vec![crate::EvidenceItem::Unknown { field: "qualified unique target".into() }],
+                crate::Provenance::Inferred { rule: crate::targets::ASSOCIATION_RULE.into() },
+            )
+        };
+        self.catalog
+            .record_suggestions(&[SuggestedAssociation {
+                session_id,
+                grouping_revision: detail.summary.session.grouping_revision,
+                expected_observations: detail
+                    .assets
+                    .iter()
+                    .map(|asset| (asset.id, asset.fingerprint.clone()))
+                    .collect(),
+                expected_decisions: detail
+                    .assets
+                    .iter()
+                    .map(|asset| (asset.id, asset.decision_revision))
+                    .collect(),
+                expected_observation_revisions: detail
+                    .assets
+                    .iter()
+                    .map(|asset| (asset.id, asset.observation_revision))
+                    .collect(),
+                kind: AssociationKind::Target,
+                subject_id,
+                state,
+                evidence,
+                provenance,
+            }])
+            .await?;
+        Ok(())
     }
 
     async fn run_scan(

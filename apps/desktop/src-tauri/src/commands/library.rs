@@ -11,11 +11,9 @@
 
 use std::sync::Arc;
 
-use persistence_library::{
-    CorrectionOutcome, CorrectionPreview, LocationFailure, SessionQuery, SessionSummary,
-};
+use persistence_library::{CorrectionPreview, LocationFailure, SessionQuery, SessionSummary};
 use platevault_core::grouping::group_assets;
-use platevault_core::library::{InventoryProbe, Library, LibrarySession};
+use platevault_core::library::{ConfirmedCorrection, InventoryProbe, Library, LibrarySession};
 use platevault_core::targets::{user_target, TargetQuery, TargetSearchHit, UserTargetInput};
 use platevault_core::{
     Asset, Association, AssociationState, CorrectionInput, Equipment, ErrorResponse, ExpectedAsset,
@@ -213,21 +211,19 @@ pub async fn library_preview_metadata(
         .map_err(fail(None))
 }
 
-/// Apply a reviewed plan atomically with regroup and lineage; headers are untouched.
+/// Apply a reviewed plan atomically with regroup and lineage, then re-derive the
+/// target suggestions of the resulting sessions; headers are untouched.
 ///
 /// # Errors
 /// `Conflict` with no changes when any expectation is stale or differs from the plan.
+/// A suggestion refresh failure after commit is reported in `associationRefresh`.
 #[tauri::command]
 pub async fn library_confirm_metadata(
     library: State<'_, Arc<Library>>,
     preview_id: Uuid,
     expected: Vec<ExpectedAsset>,
-) -> Reply<CorrectionOutcome> {
-    library
-        .catalog()
-        .confirm_correction(preview_id, &expected, group_assets)
-        .await
-        .map_err(fail(Some(preview_id)))
+) -> Reply<ConfirmedCorrection> {
+    library.confirm_correction(preview_id, &expected).await.map_err(fail(Some(preview_id)))
 }
 
 /// Record a fingerprint- and digest-bound quality decision; membership is unchanged.
