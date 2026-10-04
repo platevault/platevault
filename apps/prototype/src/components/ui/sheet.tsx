@@ -5,8 +5,65 @@ import { cn } from "cn"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
-function Sheet({ ...props }: SheetPrimitive.Root.Props) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />
+/** Longer than the 200 ms exit transition, so a visible sheet still animates out. */
+const CLOSE_UNMOUNT_FALLBACK_MS = 400
+
+/**
+ * Base UI unmounts a closed sheet only after requestAnimationFrame and its
+ * exit animation finish. Background tabs pause both, so a sheet closed there
+ * stayed mounted and its overlay kept the page inert. Unmount at once while
+ * the document is hidden (or when it becomes hidden), else after a bound
+ * longer than the exit transition. Both go through Base UI's own unmount, so
+ * focus still returns to the element that opened the sheet.
+ */
+function Sheet({ open, defaultOpen, onOpenChange, onOpenChangeComplete, actionsRef, ...props }: SheetPrimitive.Root.Props) {
+  const actions = React.useRef<SheetPrimitive.Root.Actions | null>(null)
+  React.useImperativeHandle(actionsRef, () => ({ unmount: () => actions.current?.unmount(), close: () => actions.current?.close() }), [])
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen ?? false)
+  const isOpen = open ?? uncontrolledOpen
+  // True once Base UI reports the close complete (its own unmount or ours); false while mounted.
+  const closeComplete = React.useRef(!isOpen)
+
+  React.useEffect(() => {
+    if (isOpen) {
+      closeComplete.current = false
+      return undefined
+    }
+    const finish = () => {
+      if (!closeComplete.current) actions.current?.unmount()
+    }
+    if (document.hidden) {
+      finish()
+      return undefined
+    }
+    const timer = window.setTimeout(finish, CLOSE_UNMOUNT_FALLBACK_MS)
+    const onVisibilityChange = () => {
+      if (document.hidden) finish()
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  }, [isOpen])
+
+  return (
+    <SheetPrimitive.Root
+      data-slot="sheet"
+      open={open}
+      defaultOpen={defaultOpen}
+      actionsRef={actions}
+      onOpenChange={(next, details) => {
+        if (open === undefined) setUncontrolledOpen(next)
+        onOpenChange?.(next, details)
+      }}
+      onOpenChangeComplete={(next) => {
+        if (!next) closeComplete.current = true
+        onOpenChangeComplete?.(next)
+      }}
+      {...props}
+    />
+  )
 }
 
 function SheetTrigger({ ...props }: SheetPrimitive.Trigger.Props) {
