@@ -182,34 +182,43 @@ export function SessionsPage() {
       rowHeader: true,
       sortValue: (r) => `${r.session.night}|${r.label}`,
       cell: (r) => (
-        <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium underline-offset-2 hover:underline">
-          {r.label}
-        </Link>
+        <span className="flex flex-col items-start gap-0.5 py-1">
+          <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium underline-offset-2 hover:underline">
+            {r.label}
+          </Link>
+          <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            {isLight ? (
+              <span>
+                OBJECT {r.session.objectLabel ? <span className="font-mono text-foreground">{r.session.objectLabel}</span> : "missing"}
+              </span>
+            ) : (
+              <span>{IMAGE_TYPE_LABEL[r.session.imageType]}</span>
+            )}
+            <ScopeCell scope={r.session.scope} />
+          </span>
+        </span>
       ),
     },
-    ...(isLight
-      ? [
-          { id: "target", header: "Target", sortValue: (r: SessionRow) => r.targetName, cell: (r: SessionRow) => <TargetCell row={r} /> },
-          {
-            id: "object",
-            header: "OBJECT",
-            sortValue: (r: SessionRow) => r.session.objectLabel,
-            cell: (r: SessionRow) => (r.session.objectLabel ? <span className="font-mono text-xs">{r.session.objectLabel}</span> : <span className="text-muted-foreground">Missing</span>),
-          },
-        ]
-      : [{ id: "type", header: "Type", sortValue: (r: SessionRow) => r.session.imageType, cell: (r: SessionRow) => IMAGE_TYPE_LABEL[r.session.imageType] }]),
-    { id: "frames", header: "Frames", align: "right", sortValue: (r) => r.session.assetIds.length, cell: (r) => formatCount(r.session.assetIds.length) },
+    ...(isLight ? [{ id: "target", header: "Target", sortValue: (r: SessionRow) => r.targetName, cell: (r: SessionRow) => <TargetCell row={r} /> }] : []),
     {
-      id: "integration",
-      header: isLight ? "Integration" : "Exposure",
-      align: "right",
-      sortValue: (r) => (isLight ? r.breakdown.captured.seconds : r.session.exposureS),
-      cell: (r) => (isLight ? formatDuration(r.breakdown.captured.seconds) : formatExposure(r.session.exposureS)),
+      id: "frames",
+      header: isLight ? "Frames · integration" : "Frames · exposure",
+      sortValue: (r) => (isLight ? r.breakdown.captured.seconds : r.session.assetIds.length),
+      cell: (r) => (
+        <span className="flex flex-col items-start gap-0.5 py-1">
+          <span>
+            {formatCount(r.session.assetIds.length)} · {isLight ? formatDuration(r.breakdown.captured.seconds) : formatExposure(r.session.exposureS)}
+          </span>
+          {isLight ? (
+            <span className="text-xs text-muted-foreground">
+              <QualityCounts breakdown={r.breakdown} />
+            </span>
+          ) : null}
+        </span>
+      ),
     },
     { id: "equipment", header: "Equipment", sortValue: (r) => r.trainName, cell: (r) => <EquipmentCell row={r} /> },
     { id: "locations", header: "Locations", cell: (r) => <LocationsCell row={r} /> },
-    ...(isLight ? [{ id: "quality", header: "Quality", cell: (r: SessionRow) => <QualityCounts breakdown={r.breakdown} /> }] : []),
-    { id: "scope", header: "Scope", cell: (r) => <ScopeCell scope={r.session.scope} /> },
   ]
 
   const selectionProps = { selected, onChange: setSelected, rowLabel: (r: SessionRow) => r.label }

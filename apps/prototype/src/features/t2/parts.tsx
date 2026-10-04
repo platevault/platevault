@@ -74,7 +74,7 @@ export function AssociationBadge({ association }: { association: Association<str
 export function TargetCell({ row }: { row: SessionRow }) {
   const { target } = row.session
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex max-w-40 flex-wrap items-center gap-x-2 gap-y-0.5 py-0.5 whitespace-normal">
       {target.value && row.targetName ? (
         <Link to="/targets/$targetId" params={{ targetId: target.value }} className="underline-offset-2 hover:underline">
           {row.targetName}
@@ -87,8 +87,8 @@ export function TargetCell({ row }: { row: SessionRow }) {
 
 export function EquipmentCell({ row }: { row: SessionRow }) {
   return (
-    <span className="inline-flex items-center gap-2">
-      {row.trainName ? <span className="truncate">{row.trainName}</span> : <UnknownValue label="Unknown" />}
+    <span className="inline-flex max-w-48 flex-wrap items-center gap-x-2 gap-y-0.5 py-0.5 whitespace-normal">
+      {row.trainName ? <span>{row.trainName}</span> : <UnknownValue label="Unknown" />}
       <AssociationBadge association={row.session.equipment} />
     </span>
   )
@@ -97,7 +97,7 @@ export function EquipmentCell({ row }: { row: SessionRow }) {
 /** Locations holding copies; an offline location says so. Copies of one frame count once. */
 export function LocationsCell({ row }: { row: SessionRow }) {
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+    <span className="inline-flex max-w-40 flex-wrap items-center gap-x-2 gap-y-0.5 py-0.5 whitespace-normal">
       {row.locations.map(({ location, availability }) => (
         <span key={location.id} className="inline-flex items-center gap-1.5">
           {location.displayName}
@@ -120,7 +120,7 @@ export function QualityCounts({ breakdown }: { breakdown: QualityBreakdown }) {
   if (breakdown.unusable.frames) parts.push({ key: "unusable", text: `${formatCount(breakdown.unusable.frames)} Unusable` })
   if (breakdown.unreviewed.frames) parts.push({ key: "unreviewed", text: `${formatCount(breakdown.unreviewed.frames)} Unreviewed` })
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+    <span className="inline-flex max-w-44 flex-wrap items-center gap-x-2 gap-y-0.5 py-0.5 whitespace-normal">
       {parts.length > 0 ? <span>{parts.map((p) => p.text).join(" · ")}</span> : null}
       {breakdown.changedContent.frames ? (
         <StatusBadge kind="quality" value="changed-content" label={`Changed content · ${formatCount(breakdown.changedContent.frames)}`} />
