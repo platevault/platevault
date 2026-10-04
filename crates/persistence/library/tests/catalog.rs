@@ -15,9 +15,9 @@ use persistence_library::{
     Catalog, LocationRegistration, SessionQuery, SourceProbe, SuggestedAssociation,
 };
 use platevault_model::{
-    ApplicableQuality, Asset, AssociationKind, AssociationState, Availability, CaptureKey,
-    CaptureMetadata, CorrectionInput, EvidenceItem, ExpectedAsset, ExpectedSession, FileIdentity,
-    GroupingResult, ImageFormat, LibraryError, Location, LocationRole, NativePath,
+    ApplicableQuality, Asset, Association, AssociationKind, AssociationState, Availability,
+    CaptureKey, CaptureMetadata, CorrectionInput, EvidenceItem, ExpectedAsset, ExpectedSession,
+    FileIdentity, GroupingResult, ImageFormat, LibraryError, Location, LocationRole, NativePath,
     ObservationFingerprint, PathSensitivity, Provenance, Quality, RemapBlockReason, Revision,
     ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState,
     Session, SessionCandidate, TargetAlias, TargetCandidate, VolumeIdentity,
@@ -999,6 +999,72 @@ async fn catalog_correction_invalidates_inferred_suggestions_but_keeps_confirmat
     let error = catalog.record_suggestions(&[suggestion]).await.unwrap_err();
     assert_eq!(kind(&error), "conflict", "pre-correction assessment refused");
     assert_eq!(tree(&fx.root), before, "catalog-only correction");
+}
+
+#[tokio::test]
+async fn changed_observation_in_scan_batch_invalidates_inferred_suggestions_atomically() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"OBJECT = 'NGC 7000' one");
+    fx.write("Ha_002.fits", b"OBJECT = 'NGC 7000' two");
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &["Ha_001.fits", "Ha_002.fits"]).await;
+    let mut seed = target("NGC 7000", "ngc 7000");
+    seed.provenance = Provenance::Seed { dataset: "bundled-seed".into() };
+    catalog.record_seed_target(&seed).await.unwrap();
+    let equipment = saved_equipment(&catalog).await;
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let confirmed =
+        catalog.confirm_equipment(&[expected_session(&session)], equipment.id).await.unwrap();
+    let session = catalog.session(session.id).await.unwrap().summary.session;
+    let assessed = assessment(&catalog, session.id).await;
+    let suggestion = SuggestedAssociation {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        kind: AssociationKind::Target,
+        subject_id: Some(seed.id),
+        state: AssociationState::Suggested,
+        evidence: vec![
+            EvidenceItem::Alias { normalized: "ngc 7000".into(), agrees: true },
+            EvidenceItem::Coordinates { ra_deg: 314.75, dec_deg: 44.33, qualified: true },
+        ],
+        provenance: Provenance::Inferred { rule: "alias-and-coordinates".into() },
+        expected_observations: assessed.observations,
+        expected_decisions: assessed.decisions,
+        expected_observation_revisions: assessed.sequences,
+    };
+    catalog.record_suggestions(&[suggestion]).await.unwrap();
+    let total = |coverage: platevault_model::TargetCoverage| -> f64 {
+        coverage.contributions.iter().map(|c| c.captured_seconds).sum()
+    };
+    assert!((total(catalog.target_coverage(seed.id).await.unwrap()) - 600.0).abs() < 1e-9);
+
+    // An unchanged rescan batch keeps the assessment.
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let root = DiskProbe.root_identity(&location).unwrap();
+    let unchanged = ScanBatch { files: vec![fx.scan_file("Ha_002.fits")], ..ScanBatch::default() };
+    catalog.apply_scan_batch(operation.id, &root, &unchanged, group).await.unwrap();
+    let kept = catalog.associations(session.id).await.unwrap();
+    let target_of = |list: &[Association]| {
+        list.iter().find(|a| a.kind == AssociationKind::Target).unwrap().clone()
+    };
+    assert_eq!(target_of(&kept).state, AssociationState::Suggested, "positive control");
+
+    // The next batch observes a changed header; no new assessment is supplied.
+    let mut changed = fx.scan_file("Ha_001.fits");
+    changed.metadata.object = Some("M 31".into());
+    let batch = ScanBatch { files: vec![changed], ..ScanBatch::default() };
+    catalog.apply_scan_batch(operation.id, &root, &batch, group).await.unwrap();
+    let detail = catalog.session(session.id).await.unwrap();
+    assert_eq!(detail.summary.session.grouping_revision, session.grouping_revision);
+    let inferred = target_of(&detail.associations);
+    assert_eq!(inferred.state, AssociationState::NeedsReview);
+    assert_eq!(inferred.subject_id, Some(seed.id), "evidence history retained");
+    let stale = total(catalog.target_coverage(seed.id).await.unwrap());
+    assert!(stale.abs() < 1e-9, "stale inference no longer counts: {stale}");
+    let manual = detail.associations.iter().find(|a| a.kind == AssociationKind::Equipment).unwrap();
+    assert_eq!(manual.state, AssociationState::Confirmed);
+    assert_eq!(manual.decision_revision, confirmed[0].decision_revision);
 }
 
 #[tokio::test]
