@@ -5,8 +5,10 @@
  * - Selection: controlled checkbox column with a select-all for the rows
  *   shown. Filtering is the caller's job: selection ids are never dropped
  *   here, so callers can report "Selected outside current filters: N".
- * - Keyboard: ↑/↓ move focus to the same column in the adjacent row; Tab
- *   order stays natural. Row height follows the density token `--row-h`.
+ * - Keyboard: ↑/↓ move focus to the same column in the adjacent row, across
+ *   groups; Tab order stays natural. Row height follows the density token `--row-h`.
+ * - Grouping (opt-in `groups`): group header rows inside this one table, so
+ *   every group shares the column widths and the pinned header row.
  */
 import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react"
 import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react"
@@ -37,6 +39,15 @@ export interface DataTableSelection<T> {
   isSelectable?: (row: T) => boolean
 }
 
+export interface DataTableGrouping<T> {
+  /** Group of a row, e.g. its observing night. */
+  key: (row: T) => string
+  /** Group header content, e.g. "Thu 30 Sep · 3 sessions"; `rows` are the group's rows. */
+  label: (key: string, rows: T[]) => ReactNode
+  /** Order of groups by key; default ascending (`localeCompare`). */
+  compare?: (a: string, b: string) => number
+}
+
 export interface DataTableProps<T> {
   /** Table caption (visually hidden); names the data set. */
   label: string
@@ -54,6 +65,12 @@ export interface DataTableProps<T> {
   className?: string
   /** "frame" (default) scrolls long tables inside their frame with a pinned header; "none" grows with content. */
   scroll?: "frame" | "none"
+  /**
+   * Show rows in groups inside this one table. Columns line up across groups
+   * because they are one table; the sort applies within each group, and
+   * select-all covers every group shown.
+   */
+  groups?: DataTableGrouping<T>
 }
 
 export function DataTable<T>({
@@ -69,6 +86,7 @@ export function DataTable<T>({
   rowClassName,
   className,
   scroll = "frame",
+  groups,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState(initialSort ?? null)
 
@@ -86,6 +104,19 @@ export function DataTable<T>({
       return (typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb))) * factor
     })
   }, [rows, columns, sort])
+
+  // One body per group (keeping the sort inside each), or one body for all rows.
+  const bodies = useMemo(() => {
+    if (!groups) return [{ key: null, rows: sorted }]
+    const byKey = new Map<string, T[]>()
+    for (const row of sorted) {
+      const key = groups.key(row)
+      byKey.set(key, [...(byKey.get(key) ?? []), row])
+    }
+    return [...byKey.keys()]
+      .sort(groups.compare ?? ((a, b) => a.localeCompare(b)))
+      .map((key) => ({ key, rows: byKey.get(key)! }))
+  }, [sorted, groups])
 
   const selectable = selection ? sorted.filter((row) => selection.isSelectable?.(row) ?? true) : []
   const selectedSet = new Set(selection?.selected ?? [])
@@ -111,9 +142,11 @@ export function DataTable<T>({
     const target = event.target as HTMLElement
     if (target.closest("input, textarea, select, [role=listbox], [role=menu]") && target.tagName !== "BUTTON") return
     const cell = target.closest("td, th")
-    const row = cell?.parentElement
+    const row = cell?.closest<HTMLElement>("tr[data-row]")
     if (!cell || !row) return
-    const sibling = (event.key === "ArrowDown" ? row.nextElementSibling : row.previousElementSibling) as HTMLElement | null
+    // Data rows of the whole table, so ↑/↓ also cross group boundaries.
+    const allRows = Array.from(row.closest("table")?.querySelectorAll<HTMLElement>("tbody tr[data-row]") ?? [])
+    const sibling = allRows[allRows.indexOf(row) + (event.key === "ArrowDown" ? 1 : -1)]
     if (!sibling) return
     const index = Array.from(row.children).indexOf(cell)
     const focusable = "a[href], button:not([disabled]), [role=checkbox], input:not([disabled])"
@@ -209,54 +242,64 @@ export function DataTable<T>({
             </tr>
           </tbody>
         ) : (
-          <tbody onKeyDown={onKeyDown}>
-            {sorted.map((row) => {
-              const id = getRowId(row)
-              const isSelected = selectedSet.has(id)
-              const canSelect = selection?.isSelectable?.(row) ?? true
-              return (
-                <tr
-                  key={id}
-                  aria-current={activeRowId === id ? "true" : undefined}
-                  data-selected={isSelected || undefined}
-                  className={cn(
-                    "h-(--row-h) border-b last:border-0 hover:bg-muted/60",
-                    "data-selected:bg-primary/10 data-selected:hover:bg-primary/16",
-                    "aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
-                    rowClassName?.(row),
-                  )}
-                >
-                  {selection ? (
-                    <td className="w-10 px-3">
-                      <Checkbox
-                        aria-label={`Select ${selection.rowLabel(row)}`}
-                        checked={isSelected}
-                        disabled={!canSelect}
-                        onCheckedChange={(checked) => toggleRow(id, checked)}
-                      />
-                    </td>
-                  ) : null}
-                  {columns.map((column) => {
-                    const Cell = column.rowHeader ? "th" : "td"
-                    return (
-                      <Cell
-                        key={column.id}
-                        scope={column.rowHeader ? "row" : undefined}
-                        className={cn(
-                          "px-3 py-1 font-normal tabular-nums",
-                          column.truncate ? "max-w-72 truncate" : "whitespace-nowrap",
-                          column.align === "right" ? "text-right" : "text-left",
-                          column.className,
-                        )}
-                      >
-                        {column.cell(row)}
-                      </Cell>
-                    )
-                  })}
+          bodies.map((body, bodyIndex) => (
+            <tbody key={body.key ?? "rows"} onKeyDown={onKeyDown}>
+              {body.key !== null && groups ? (
+                <tr className={cn("border-b bg-muted/40", bodyIndex > 0 && "border-t")}>
+                  <th scope="rowgroup" colSpan={columnCount} className="h-(--row-h) px-3 text-left text-xs font-semibold">
+                    {groups.label(body.key, body.rows)}
+                  </th>
                 </tr>
-              )
-            })}
-          </tbody>
+              ) : null}
+              {body.rows.map((row) => {
+                const id = getRowId(row)
+                const isSelected = selectedSet.has(id)
+                const canSelect = selection?.isSelectable?.(row) ?? true
+                return (
+                  <tr
+                    key={id}
+                    data-row
+                    aria-current={activeRowId === id ? "true" : undefined}
+                    data-selected={isSelected || undefined}
+                    className={cn(
+                      "h-(--row-h) border-b last:border-0 hover:bg-muted/60",
+                      "data-selected:bg-primary/10 data-selected:hover:bg-primary/16",
+                      "aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
+                      rowClassName?.(row),
+                    )}
+                  >
+                    {selection ? (
+                      <td className="w-10 px-3">
+                        <Checkbox
+                          aria-label={`Select ${selection.rowLabel(row)}`}
+                          checked={isSelected}
+                          disabled={!canSelect}
+                          onCheckedChange={(checked) => toggleRow(id, checked)}
+                        />
+                      </td>
+                    ) : null}
+                    {columns.map((column) => {
+                      const Cell = column.rowHeader ? "th" : "td"
+                      return (
+                        <Cell
+                          key={column.id}
+                          scope={column.rowHeader ? "row" : undefined}
+                          className={cn(
+                            "px-3 py-1 font-normal tabular-nums",
+                            column.truncate ? "max-w-72 truncate" : "whitespace-nowrap",
+                            column.align === "right" ? "text-right" : "text-left",
+                            column.className,
+                          )}
+                        >
+                          {column.cell(row)}
+                        </Cell>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          ))
         )}
       </table>
     </div>
