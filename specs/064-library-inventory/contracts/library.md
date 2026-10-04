@@ -2,6 +2,8 @@
 
 Version: 1. Requests/responses are JSON with UUID identities. Angles are degrees, exposures seconds, temperatures Celsius and sizes bytes. Native paths use `{encoding: unix-bytes|windows-utf16, payload: number[], display: string}`; display is never identity. Batch edits carry per-record expected decision revisions and observation fingerprints.
 
+Fingerprint `modifiedNs` is a signed decimal string, preserving nanoseconds across JavaScript clients. The string is required in both responses and expected-fingerprint requests; display text and rounded JSON numbers are not identity evidence.
+
 ## Commands
 
 | Command | Request | Response and behavior |

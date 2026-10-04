@@ -8,6 +8,8 @@ Shared model, exported ports, Cargo dependencies and fixture writers have one fo
 
 `ObservationFingerprint` includes qualified stable volume/file identity, size/nanosecond mtime and optional content SHA-256. Quality/content-sensitive decisions bind reviewed bytes to SHA-256; readable rescans/reuse recheck decided assets even when stats match. A mismatched digest or absent historical review basis makes quality ChangedContent, never Unreviewed. Unreadable/offline inputs retain last-observed digest/quality with unavailable/unverified scope. ExpectedAsset carries assetId/decisionRevision/fingerprint; ExpectedSession carries sessionId/groupingRevision/decisionRevision, with Conflict plus successor IDs on supersession. Batch edits commit all or nothing.
 
+Fingerprint `modifiedNs` is a signed decimal string on the JSON boundary and an `i128` internally. This preserves nanosecond CAS precision above JavaScript's safe-integer range. No rounded numeric compatibility path is accepted.
+
 `CaptureKey` has canonical typed fields defined in data-model.md; equivalent numeric strings normalize identically. `GroupingResult` contains candidate keys and exact asset memberships. `SessionLineage` records predecessor/successor IDs, correction and moved assets. Settings and Target labels never enter capture identity.
 
 ## Inventory/grouping owner

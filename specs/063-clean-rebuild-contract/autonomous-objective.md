@@ -20,7 +20,7 @@ Implement the full PlateVault rebuild backend against specs 064 through 072. Sel
 ## Boundaries
 
 - Work one implementation spec at a time. Fan out independent major tasks within it using task agents and linked worktrees.
-- Conservative product defaults and human specification-gate waivers are authorized for this run.
+- Conservative product defaults are authorized. On 2026-10-04 the user authorized resolving all repository human-approval gates and proceeding fully autonomously without human signoff. Automated correctness/safety checks and required evidence remain mandatory.
 - Reviewed PlateVault PRs may merge. Reviewed changes in skymath, simbad-resolver, target-match, fits-header and xisf-header may merge and release.
 - All existing application databases may be reset because there is no real catalog. Generate FITS/XISF fixtures or use public samples.
 - Preserve real image libraries, credentials and unrelated work.
