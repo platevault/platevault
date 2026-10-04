@@ -62,7 +62,7 @@ Owners: STO.
 
 - Archive journals per-item durable copy, destination verification, reference verification and source retirement.
 - Failure stops retirement of the affected item; already verified items retain their recorded phases.
-- Source retirement requires verified destination and all affected references.
+- Immediately before source retirement, revalidate source identity and digest against the copied snapshot; destination and all affected references must still verify. Drift blocks that item's retirement and retains both versions for review.
 - Retry revalidates identities and destination volume.
 
 ### D07

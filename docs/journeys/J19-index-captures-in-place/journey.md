@@ -25,7 +25,7 @@ pre-run manifest.
 ## Preconditions
 
 - P1: A clean development build of the rebuilt PlateVault (D17) with no catalog and no network connection; first launch shows onboarding.
-- P2: Volume `Astro-T7` holds `Captures/` with one subfolder per session, all mono 300 s lights from the RedCat 51 / ASI2600MM train at one gain, offset, temperature, and 1x1 binning, captured at the Backyard coordinates, plus one plain-text note file (an unsupported item). The 30 Sep session also carries the frame-review properties of J22/P2.
+- P2: Volume `Astro-T7` holds `Captures/` with one subfolder per session. The five dated sessions use mono 300 s lights from the RedCat 51 / ASI2600MM train at one gain, offset, temperature and 1x1 binning, captured at the Backyard coordinates. The separate `other camera` session uses the second camera and optical train named below. A plain-text note is an unsupported item. The 30 Sep session also carries the frame-review properties of J22/P2.
 
   | Session | Channel | Lights | OBJECT | Pointing | Orientation | Optics keywords |
   | --- | --- | --- | --- | --- | --- | --- |
