@@ -31,8 +31,13 @@ pub struct Library {
     targets: Arc<TargetIndex>,
     provider: Option<SimbadTargetResolver>,
     saved_targets: Mutex<Option<(u64, Arc<Vec<TargetCandidate>>)>>,
-    scans: Mutex<HashMap<Uuid, Arc<AtomicBool>>>,
+    scans: Mutex<HashMap<Uuid, ScanControl>>,
     progress: broadcast::Sender<ScanOperation>,
+}
+
+struct ScanControl {
+    canceled: Arc<AtomicBool>,
+    pending_failure: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -172,30 +177,37 @@ impl Library {
         relative_scope: Option<NativePath>,
     ) {
         let canceled = Arc::new(AtomicBool::new(false));
-        self.scans.lock().await.insert(operation.id, Arc::clone(&canceled));
+        self.scans.lock().await.insert(
+            operation.id,
+            ScanControl { canceled: Arc::clone(&canceled), pending_failure: None },
+        );
         let library = Arc::clone(self);
         let id = operation.id;
         tokio::spawn(async move {
             let outcome = library.run_scan(id, relative_scope, &canceled).await;
-            if let Err(error) = outcome {
-                // A commit failure must not become a terminal-success event.
-                // If even this write fails, durable status remains Running and
-                // catalog reopen recovers the interrupted operation.
-                if let Ok(recorded) = library.catalog.scan_status(id).await {
-                    if recorded.state == ScanState::Running {
-                        if let Ok(failed) = library
-                            .catalog
-                            .abort_scan(id, ScanState::Failed, &error.to_string())
-                            .await
-                        {
-                            let _ = library.progress.send(failed);
-                        }
-                    } else {
+            let finished = match outcome {
+                Ok(()) => true,
+                Err(error) => match library.catalog.scan_status(id).await {
+                    Ok(recorded) if recorded.state != ScanState::Running => {
                         let _ = library.progress.send(recorded);
+                        true
                     }
-                }
+                    _ => {
+                        if let Ok(failed) = library.catalog.abort_scan(id, ScanState::Failed, &error.to_string()).await {
+                            let _ = library.progress.send(failed);
+                            true
+                        } else {
+                            if let Some(control) = library.scans.lock().await.get_mut(&id) {
+                                control.pending_failure = Some(error.to_string());
+                            }
+                            false
+                        }
+                    }
+                },
+            };
+            if finished {
+                library.scans.lock().await.remove(&id);
             }
-            library.scans.lock().await.remove(&id);
         });
     }
 
@@ -207,13 +219,20 @@ impl Library {
         let operation = self.catalog.scan_status(id).await?;
         if operation.state == ScanState::Running {
             let scans = self.scans.lock().await;
-            let flag = scans.get(&id).ok_or_else(|| {
+            let control = scans.get(&id).ok_or_else(|| {
                 LibraryError::SourceUnavailable(
                     "scan supervisor is not active; reload durable status".into(),
                 )
             })?;
-            flag.store(true, Ordering::Release);
+            control.canceled.store(true, Ordering::Release);
+            let pending = control.pending_failure.clone();
             drop(scans);
+            if let Some(reason) = pending {
+                let failed = self.catalog.abort_scan(id, ScanState::Failed, &reason).await?;
+                self.scans.lock().await.remove(&id);
+                let _ = self.progress.send(failed.clone());
+                return Ok(failed);
+            }
         }
         // Acknowledges the request; the durable operation may still be Running.
         Ok(operation)
@@ -438,9 +457,17 @@ impl Library {
             }
             Err(error) => {
                 let checked_location = location.clone();
-                if let Err(root_error) = blocking(move || inventory::validate_location_root(&checked_location)).await {
+                if let Err(root_error) =
+                    blocking(move || inventory::validate_location_root(&checked_location)).await
+                {
                     if let Some(availability) = root_failure(&root_error) {
-                        self.catalog.mark_location_unavailable(location.id, availability, &root_error.to_string()).await?;
+                        self.catalog
+                            .mark_location_unavailable(
+                                location.id,
+                                availability,
+                                &root_error.to_string(),
+                            )
+                            .await?;
                     }
                 }
                 Err(error)
