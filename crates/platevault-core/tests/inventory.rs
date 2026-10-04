@@ -13,12 +13,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use metadata_core::MetadataExtractor;
 use platevault_core::*;
+use platevault_core::{grouping, inventory};
 use uuid::Uuid;
-
-#[path = "../src/grouping.rs"]
-mod grouping;
-#[path = "../src/inventory.rs"]
-mod inventory;
 
 const LIGHT: [(&str, &str); 12] = [
     ("IMAGETYP", "'LIGHT'"),
@@ -570,6 +566,9 @@ fn replaced_or_offline_roots_refuse_before_any_batch() {
     assert_eq!(kind(&offline.unwrap_err()), "source_unavailable");
     assert!(batches.is_empty());
 
+    let relative = inventory::observe_root_identity(Path::new("Captures")).unwrap_err();
+    assert_eq!(kind(&relative), "invalid_input", "{relative}");
+
     // Unqualified recorded identity fails closed instead of guessing.
     std::fs::rename(parent.path().join("Captures-moved"), &root).unwrap();
     let mut unqualified = location.clone();
@@ -670,42 +669,57 @@ fn volume_identity_qualifies_the_host_volume_and_fails_closed_elsewhere() {
     assert_eq!(kind(&file), "invalid_input");
 }
 
+/// A real disk image attached at `mountpoint` with `hdiutil`, detached on drop.
+#[cfg(target_os = "macos")]
+struct DiskImage {
+    mountpoint: PathBuf,
+    _images: tempfile::TempDir,
+}
+
+#[cfg(target_os = "macos")]
+impl DiskImage {
+    fn attach(filesystem: &str, mountpoint: &Path) -> Self {
+        use std::process::Command;
+        let images = tempfile::tempdir().unwrap();
+        let image = images.path().join("volume.dmg");
+        let created = Command::new("/usr/bin/hdiutil")
+            .args(["create", "-quiet", "-size", "8m", "-fs", filesystem, "-volname", "PVTEST"])
+            .arg(&image)
+            .status()
+            .unwrap();
+        assert!(created.success(), "hdiutil create {filesystem}");
+        let attached = Command::new("/usr/bin/hdiutil")
+            .args(["attach", "-quiet", "-nobrowse", "-mountpoint"])
+            .arg(mountpoint)
+            .arg(&image)
+            .status()
+            .unwrap();
+        assert!(attached.success(), "hdiutil attach {filesystem}");
+        Self { mountpoint: mountpoint.to_path_buf(), _images: images }
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for DiskImage {
+    fn drop(&mut self) {
+        let _ = std::process::Command::new("/usr/bin/hdiutil")
+            .args(["detach", "-force"])
+            .arg(&self.mountpoint)
+            .status();
+    }
+}
+
 /// Mounts a real disk image inside the scan root; needs `hdiutil`.
 #[cfg(target_os = "macos")]
 #[test]
 #[ignore = "attaches a disk image with hdiutil"]
 fn nested_foreign_volume_is_a_boundary_scope() {
-    use std::process::Command;
-
-    struct Detach(PathBuf);
-    impl Drop for Detach {
-        fn drop(&mut self) {
-            let _ =
-                Command::new("/usr/bin/hdiutil").args(["detach", "-force"]).arg(&self.0).status();
-        }
-    }
-
     let dir = tempfile::tempdir().unwrap();
-    let images = tempfile::tempdir().unwrap();
     let root = dir.path();
     let nested = root.join("nested");
     std::fs::create_dir(&nested).unwrap();
     support::fits(&root.join("light.fits"), &LIGHT).unwrap();
-    let image = images.path().join("nested.dmg");
-    let created = Command::new("/usr/bin/hdiutil")
-        .args(["create", "-quiet", "-size", "4m", "-fs", "HFS+", "-volname", "PVNested"])
-        .arg(&image)
-        .status()
-        .unwrap();
-    assert!(created.success());
-    let attached = Command::new("/usr/bin/hdiutil")
-        .args(["attach", "-quiet", "-nobrowse", "-mountpoint"])
-        .arg(&nested)
-        .arg(&image)
-        .status()
-        .unwrap();
-    assert!(attached.success());
-    let _detach = Detach(nested.clone());
+    let _volume = DiskImage::attach("HFS+", &nested);
     support::fits(&nested.join("foreign.fits"), &LIGHT).unwrap();
     let location = location(root);
 
@@ -717,4 +731,44 @@ fn nested_foreign_volume_is_a_boundary_scope() {
     assert!(observation.files.iter().all(|file| file.relative_path != rel("nested/foreign.fits")));
     assert!(!inventory::absence_provable(&observation, &rel("nested/foreign.fits")));
     assert!(inventory::absence_provable(&observation, &rel("gone.fits")));
+}
+
+/// FAT and exFAT folder IDs follow directory-entry positions, so a replaced
+/// folder is indistinguishable: such roots are refused before any batch.
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "attaches disk images with hdiutil"]
+fn roots_without_stable_folder_ids_are_refused_before_any_batch() {
+    for filesystem in ["MS-DOS", "ExFAT"] {
+        let mount = tempfile::tempdir().unwrap();
+        let volume = DiskImage::attach(filesystem, mount.path());
+        let root = volume.mountpoint.join("Captures");
+        std::fs::create_dir(&root).unwrap();
+        support::fits(&root.join("light.fits"), &LIGHT).unwrap();
+
+        let refused = inventory::observe_root_identity(&root).unwrap_err();
+        assert_eq!(kind(&refused), "identity_conflict", "{filesystem}: {refused}");
+
+        // A file fingerprint is still observable, but carries no file ID.
+        let file = inventory::probe_fingerprint(&root.join("light.fits")).unwrap();
+        assert!(!file.identity.volume.file_ids_stable, "{filesystem}: {file:?}");
+        assert_eq!(file.identity.file_id, None);
+        assert!(file.identity.volume.validate().is_ok(), "{filesystem}: volume UUID qualifies");
+
+        // A location recorded with only that volume identity never scans.
+        let location = Location {
+            id: Uuid::new_v4(),
+            name: "Card".into(),
+            path: NativePath::from_path(&root),
+            role: LocationRole::Captures,
+            identity: FileIdentity { volume: file.identity.volume.clone(), file_id: None },
+            decision_revision: 1,
+            availability: Availability::Available,
+            last_observed_at: None,
+        };
+        let (scanned, batches) = run(&location, &ScanOptions::default());
+        assert_eq!(kind(&scanned.unwrap_err()), "identity_conflict", "{filesystem}");
+        assert!(batches.is_empty(), "{filesystem}: no batch before refusal");
+        assert!(inventory::validate_location_root(&location).is_err());
+    }
 }
