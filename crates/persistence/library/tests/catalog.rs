@@ -1665,3 +1665,86 @@ async fn root_loss_during_a_subtree_retry_changes_availability_only_inside_its_s
     assert_eq!(by_name(&assets, "Ha_002.fits").availability, Availability::Available);
     assert_eq!(tree(&fx.root), before);
 }
+
+/// Replace a fixture's bytes in place with equal length and its original mtime.
+fn rewrite_same_stat(fx: &Fixture, name: &str, bytes: &[u8]) {
+    let source = fx.root.join(name);
+    let before = file_fingerprint(&source).unwrap();
+    assert_eq!(before.size_bytes, bytes.len() as u64);
+    let modified = std::fs::metadata(&source).unwrap().modified().unwrap();
+    let file = std::fs::OpenOptions::new().write(true).truncate(true).open(&source).unwrap();
+    std::io::Write::write_all(&mut &file, bytes).unwrap();
+    file.set_modified(modified).unwrap();
+    drop(file);
+    assert!(before.equivalent(&file_fingerprint(&source).unwrap()), "stats cannot detect it");
+}
+
+#[tokio::test]
+async fn terminal_pass_reuses_batch_proof_and_reads_each_decided_frame_once_per_scan() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"reviewed bytes A");
+    fx.write("Ha_002.fits", b"second frame");
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    let names = ["Ha_001.fits", "Ha_002.fits"];
+    scan(&catalog, &fx, &location, &names).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let reviewed = by_name(&assets, "Ha_001.fits").clone();
+    catalog.set_quality(&[expected(&reviewed)], Quality::Usable, DiskProbe).await.unwrap();
+
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let root = DiskProbe.root_identity(&location).unwrap();
+    let files: Vec<ScanFile> = names.iter().map(|name| fx.scan_file(name)).collect();
+    let denied = ScanIssue {
+        relative_path: NativePath::from_path(Path::new("night9")),
+        reason: "listing interrupted".into(),
+        availability: Availability::Unreadable,
+    };
+    let batch = ScanBatch {
+        files: files.clone(),
+        issues: vec![denied.clone()],
+        progress: ScanProgress::default(),
+    };
+    catalog.apply_scan_batch(operation.id, &root, &batch, group).await.unwrap();
+    let proven = catalog.asset(reviewed.id).await.unwrap();
+    assert_eq!(proven.applicable_quality(), ApplicableQuality::Usable, "batch rehash matched");
+
+    // The bytes change after the batch proved them. A terminal pass that read
+    // the reviewed frame a second time would see the replacement now.
+    rewrite_same_stat(&fx, "Ha_001.fits", b"replaced bytes B");
+    let observation = ScanObservation {
+        location_id: location.id,
+        root_identity: root,
+        files,
+        issues: vec![denied.clone()],
+        complete_scopes: vec![root_scope()],
+        incomplete_scopes: vec![denied.relative_path.clone()],
+        progress: ScanProgress::default(),
+        state: ScanState::Partial,
+    };
+    let finished = catalog
+        .finish_scan(
+            operation.id,
+            &observation,
+            |location| DiskProbe.root_identity(location),
+            group,
+        )
+        .await
+        .unwrap();
+    assert_eq!(finished.state, ScanState::Partial);
+    let recorded =
+        finished.issues.iter().filter(|issue| issue.relative_path == denied.relative_path);
+    assert_eq!(recorded.count(), 1, "a batch issue is recorded once: {finished:?}");
+    let kept = catalog.asset(reviewed.id).await.unwrap();
+    assert_eq!(kept.fingerprint, proven.fingerprint, "the terminal pass did not re-read it");
+    assert_eq!(kept.observation_revision, proven.observation_revision);
+    assert_eq!(kept.applicable_quality(), ApplicableQuality::Usable);
+
+    // The next scan reads the frame once again and sees the replacement.
+    scan(&catalog, &fx, &location, &names).await;
+    let rescanned = catalog.asset(reviewed.id).await.unwrap();
+    assert_eq!(
+        rescanned.applicable_quality(),
+        ApplicableQuality::ChangedContent { previous: Quality::Usable }
+    );
+}

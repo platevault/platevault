@@ -11,7 +11,7 @@
 //! digest lives in the fingerprint it was computed for, so a changed observation
 //! invalidates it.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
@@ -579,7 +579,9 @@ impl Catalog {
     where
         G: FnMut(&[Asset]) -> GroupingResult,
     {
-        let digests = self.decided_digests(operation_id, &batch.files).await?;
+        let files: Vec<&ScanFile> = batch.files.iter().collect();
+        let issues: Vec<&ScanIssue> = batch.issues.iter().collect();
+        let digests = self.decided_digests(operation_id, &files).await?;
         let mut writer = self.writer.lock().await;
         let mut txn = writer.begin_with("BEGIN IMMEDIATE").await?;
         let op = load_operation_row(&mut txn, operation_id).await?;
@@ -591,8 +593,7 @@ impl Catalog {
             drop(writer);
             return Err(scoped(error, location.path, Some(location.id)));
         }
-        let changed =
-            observe_batch(&mut txn, &op, &location, &batch.files, &batch.issues, &digests).await?;
+        let changed = observe_batch(&mut txn, &op, &location, &files, &issues, &digests).await?;
         sqlx::query(
             "UPDATE scan_operations SET progress = ?1, revision = revision + 1 WHERE id = ?2",
         )
@@ -614,6 +615,8 @@ impl Catalog {
     /// `root_check` revalidates the root inside this transaction. Missing is recorded
     /// only for Completed/Partial observations whose identity was verified for every
     /// batch, under a complete scope and outside every incomplete or issue scope.
+    /// Files and issues this operation's batches already applied are not read,
+    /// hashed or recorded again; the batch proof stands for this scan.
     ///
     /// # Errors
     /// Root mismatch errors after committing the downgrade; `InvalidInput` for a
@@ -632,7 +635,8 @@ impl Catalog {
         if observation.state == ScanState::Running {
             return Err(LibraryError::InvalidInput("final observation must be terminal".into()));
         }
-        let digests = self.decided_digests(operation_id, &observation.files).await?;
+        let pending = self.unapplied(operation_id, observation).await?;
+        let digests = self.decided_digests(operation_id, &pending.files).await?;
         let mut writer = self.writer.lock().await;
         let mut txn = writer.begin_with("BEGIN IMMEDIATE").await?;
         let op = load_operation_row(&mut txn, operation_id).await?;
@@ -651,7 +655,8 @@ impl Catalog {
         });
         let outcome = match verified {
             Ok(proven) => {
-                let finish = FinishInput { observation, digests: &digests, proven };
+                let finish =
+                    FinishInput { observation, pending: &pending, digests: &digests, proven };
                 finish_verified(&mut txn, &op, &location, finish, &mut grouping).await?;
                 Ok(())
             }
@@ -744,12 +749,12 @@ impl Catalog {
     /// The reviewed asset is found exactly as the transaction will find it, including
     /// a single case/normalization variant on insensitive volumes; the live observed
     /// path is hashed. Ambiguous variants are refused in the transaction instead.
-    async fn decided_digests(&self, operation_id: Uuid, files: &[ScanFile]) -> Result<DigestMap> {
+    async fn decided_digests(&self, operation_id: Uuid, files: &[&ScanFile]) -> Result<DigestMap> {
         let mut conn = self.reader().await?;
         let op = load_operation_row(&mut conn, operation_id).await?;
         let location = load_location(&mut conn, op.location_id).await?;
         let mut work = Vec::new();
-        for file in files {
+        for file in files.iter().copied() {
             let matched =
                 find_asset(&mut conn, &location, &file.relative_path, &file.fingerprint, op.id)
                     .await?;
@@ -781,6 +786,69 @@ impl Catalog {
                 .collect())
         })
         .await
+    }
+
+    /// The part of a terminal observation this operation's batches have not
+    /// applied. A file is applied when its asset holds this operation's observation
+    /// with the same fingerprint, format and metadata, or when the operation already
+    /// recorded an issue at its exact path; an issue is applied when the operation
+    /// already recorded it.
+    async fn unapplied<'a>(
+        &self,
+        operation_id: Uuid,
+        observation: &'a ScanObservation,
+    ) -> Result<Pending<'a>> {
+        let mut conn = self.reader().await?;
+        let rows = sqlx::query(asset_sql!("WHERE a.last_operation_id = ?1"))
+            .bind(operation_id.to_string())
+            .fetch_all(&mut *conn)
+            .await?;
+        let mut applied = HashMap::with_capacity(rows.len());
+        for row in &rows {
+            let asset = asset_from_row(row)?;
+            applied.insert(path_key(&asset.relative_path), asset);
+        }
+        let recorded = sqlx::query(
+            "SELECT path_key, reason, availability FROM scan_issues WHERE operation_id = ?1",
+        )
+        .bind(operation_id.to_string())
+        .fetch_all(&mut *conn)
+        .await?;
+        drop(conn);
+        let mut issued = HashSet::with_capacity(recorded.len());
+        let mut recorded_issues = HashSet::with_capacity(recorded.len());
+        for row in &recorded {
+            let key: Vec<u8> = row.try_get("path_key")?;
+            let reason: String = row.try_get("reason")?;
+            let availability: String = row.try_get("availability")?;
+            recorded_issues.insert((key.clone(), reason, availability));
+            issued.insert(key);
+        }
+        let files = observation
+            .files
+            .iter()
+            .filter(|file| {
+                let key = path_key(&file.relative_path);
+                let proven = applied.get(&key).is_some_and(|asset| {
+                    asset.format == file.format
+                        && asset.observed == file.metadata
+                        && fingerprint_matches(&asset.fingerprint, &file.fingerprint)
+                });
+                !proven && !issued.contains(&key)
+            })
+            .collect();
+        let mut issues = Vec::new();
+        for issue in &observation.issues {
+            let recorded = (
+                path_key(&issue.relative_path),
+                issue.reason.clone(),
+                to_text(&issue.availability)?,
+            );
+            if !recorded_issues.contains(&recorded) {
+                issues.push(issue);
+            }
+        }
+        Ok(Pending { files, issues })
     }
 }
 
@@ -1877,9 +1945,16 @@ impl Catalog {
 
 struct FinishInput<'a> {
     observation: &'a ScanObservation,
+    /// The observation's files and issues no batch of this operation applied.
+    pending: &'a Pending<'a>,
     digests: &'a DigestMap,
     /// Root folder identity proven by a remount-stable file id.
     proven: bool,
+}
+
+struct Pending<'a> {
+    files: Vec<&'a ScanFile>,
+    issues: Vec<&'a ScanIssue>,
 }
 
 fn require_running(op: &OperationRow) -> Result<()> {
@@ -1943,9 +2018,15 @@ where
     G: FnMut(&[Asset]) -> GroupingResult,
 {
     let observation = input.observation;
-    let changed =
-        observe_batch(conn, op, location, &observation.files, &observation.issues, input.digests)
-            .await?;
+    let changed = observe_batch(
+        conn,
+        op,
+        location,
+        &input.pending.files,
+        &input.pending.issues,
+        input.digests,
+    )
+    .await?;
     regroup(conn, &changed.regroup, grouping, Cause::Scan(op.id)).await?;
     invalidate_inferences(conn, &changed.evidence).await?;
     mark_location_observed(conn, location.id).await?;
@@ -2043,13 +2124,13 @@ async fn observe_batch(
     conn: &mut SqliteConnection,
     op: &OperationRow,
     location: &Location,
-    files: &[ScanFile],
-    issues: &[ScanIssue],
+    files: &[&ScanFile],
+    issues: &[&ScanIssue],
     digests: &DigestMap,
 ) -> Result<BatchChanges> {
     let observed_at = now()?;
     let mut changed = BatchChanges::default();
-    for file in files {
+    for file in files.iter().copied() {
         match digests.get(&path_key(&file.relative_path)) {
             Some(Err(error)) => {
                 let issue = ScanIssue {
@@ -2078,7 +2159,7 @@ async fn observe_batch(
             }
         }
     }
-    for issue in issues {
+    for issue in issues.iter().copied() {
         validate_issue(issue)?;
         record_issue(conn, op, issue).await?;
     }
