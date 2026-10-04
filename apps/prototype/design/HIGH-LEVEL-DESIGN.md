@@ -398,7 +398,7 @@ Overlays have no backdrop blur.
 | Component | File | Variants / props | Applicable states (N/A reason) |
 |---|---|---|---|
 | `StatusBadge` | status.tsx | `kind` × `value` from `STATUS` (availability, access, scanScope, role, quality, association, operation, item, view, preparation, assignment, match, lineage, acceptance, processing, content, custody, master, measurement, save, reminders, trash) | default; selected via row; others N/A: not interactive |
-| `PageHeader`, `Section`, `PageBody` | page.tsx | eyebrow, meta, actions; section level 2/3; `PageHeader` names the browser tab (`useDocumentTitle`: "Sessions · View workspace · PlateVault prototype") | default only: structural |
+| `PageHeader`, `Section`, `PageBody` | page.tsx | eyebrow, meta, actions; section level 2/3; the title block takes the free width and wraps, so actions stay top-right beside long descriptions; `PageHeader` names the browser tab (`useDocumentTitle`: "Sessions · View workspace · PlateVault prototype") | default only: structural |
 | `ListDetail` | page.tsx | list label | default; selected item is the list's concern |
 | `StepIndicator` | page.tsx | current, completed | default, selected (current step); not interactive |
 | `PlaceholderPage` | page.tsx | track owner | scaffold only; tracks replace it |
@@ -406,7 +406,7 @@ Overlays have no backdrop blur.
 | `Notice` | feedback.tsx | info, offline, warning, refusal (role=alert) | default; actions inherit button states |
 | `ActionError` | feedback.tsx | message, Retry | error |
 | `SaveState` | feedback.tsx | saved, unsaved, saving, failed (Retry), stale (Review current revision) | loading (saving), error (failed, stale) |
-| `UnknownValue` | feedback.tsx | Unknown, Not measured, Position unknown, FOV unknown, Not set; a `reason` is a focusable tooltip (dotted underline) | default, focus-visible when it has a reason |
+| `UnknownValue` | feedback.tsx | Unknown, Not measured, Position unknown, FOV unknown, Not set; a `reason` makes it a button (tooltip trigger, dotted underline) named "label: reason" | default, focus-visible when it has a reason |
 | `TableSkeleton`, `DetailSkeleton` | feedback.tsx | rows, columns; `role=status` with sr-only label text | loading |
 | `KeyValueList` | data.tsx | mono, source (mono, wraps); `columns={2}`. Layout is a container query on the list's own width, so it follows text zoom: two columns from 46rem, label beside value from 22rem, label above value below | default |
 | `EvidenceList` | data.tsx | agrees / conflicts / unknown | default |
@@ -417,8 +417,10 @@ Overlays have no backdrop blur.
 | `TableToolbar` | data-table.tsx | search (`data-page-search`, focused by `/`), filters, actions | default, focus-visible; empty N/A |
 | `SelectionBar` | data-table.tsx | count, "Selected outside current filters: N", Show selected, Clear selection, bulk actions | selected; renders nothing when empty |
 | `ConfirmDialog` | confirm-dialog.tsx | changes, unchanged, tone, CommitResult error | default, focus-visible, error (stays open with Retry); loading N/A: commits are synchronous |
-| `OperationPanel` | operation-panel.tsx | Pause, Resume, Retry, Cancel by kind; progressbar keeps a stable name, the count is its `aria-valuetext` | loading (running), error (failed/blocked items), empty (no items), success, partial, interrupted |
+| `OperationPanel` | operation-panel.tsx | Pause, Resume, Retry, Cancel by kind; `headingLevel` (2/3/4, default 3: pass 2 directly under the page h1); a pressed control that is replaced hands focus to its replacement, else to the panel title; progressbar keeps a stable name, the count is its `aria-valuetext` | loading (running), error (failed/blocked items), empty (no items), success, partial, interrupted |
 | `FolderPicker` | folder-picker.tsx | simulated OS folder chooser: volumes (offline shown with reason), breadcrumb, Up, child folders including empty ones, denied folders marked; returns a path, writes nothing | default, hover, focus-visible, active, disabled (offline volume, Up at a volume root), empty (no subfolders), error (access denied: listed with a Notice, still choosable), selected (current volume `aria-current`); loading N/A: the simulated disk is synchronous |
+
+Route changes (`MainArea`, shell.tsx): when the activated control leaves with the old page, focus moves to the URL anchor, else the page h1, else `#main`; a surviving control (sidebar link, View tab) keeps focus; the new document title is announced in a polite live region. Search-param changes never move focus.
 
 Base UI usage notes (verified in the running build):
 

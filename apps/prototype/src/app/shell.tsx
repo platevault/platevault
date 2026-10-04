@@ -2,9 +2,9 @@
  * App shell (foundation-owned): root providers, the main layout with sidebar,
  * header and status area, and the minimal onboarding layout.
  */
-import { Link, Outlet } from "@tanstack/react-router"
+import { Link, Outlet, useRouterState } from "@tanstack/react-router"
 import { Aperture, FlaskConical, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
-import type { ReactNode } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import { EmptyState } from "@/components/app/feedback"
 import { useDocumentTitle } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
@@ -214,10 +214,63 @@ function PaletteTrigger() {
   )
 }
 
+/**
+ * Route last shown by any MainArea, and a navigation whose focus move has
+ * not run yet. Module-level, so a shell switch (not found → page, setup →
+ * app) that unmounts one MainArea and mounts another still completes it.
+ */
+let shownRoute: string | null = null
+let pendingRoute: string | null = null
+
+/**
+ * After a route change (WCAG 2.4.3, 4.1.3): when the activated control went
+ * away with the old page, focus moves to the URL's anchor, else the page h1,
+ * else #main. A control that survives the change (sidebar link, View tab)
+ * keeps focus. The new document title is announced either way. Search-param
+ * changes (filters) never move focus.
+ */
+function useRouteFocus(): string {
+  const route = useRouterState({ select: (s) => `${s.location.pathname}#${s.location.hash}` })
+  const [announcement, setAnnouncement] = useState("")
+  useEffect(() => {
+    if (shownRoute !== null && shownRoute !== route) pendingRoute = route
+    shownRoute = route
+    if (pendingRoute !== route) return
+    const anchorId = route.slice(route.indexOf("#") + 1)
+    const moveFocus = (force: boolean) => {
+      const active = document.activeElement
+      const lost = !active || active === document.body || !active.isConnected
+      const anchor = anchorId ? document.getElementById(anchorId) : null
+      if (!lost && !(force && anchor)) return
+      const main = document.getElementById("main")
+      const target = anchor ?? main?.querySelector<HTMLElement>("h1") ?? main
+      if (!target) return
+      if (!target.hasAttribute("tabindex") && target.tabIndex < 0) target.setAttribute("tabindex", "-1")
+      target.focus()
+    }
+    const frame = requestAnimationFrame(() => {
+      pendingRoute = null
+      moveFocus(true)
+      setAnnouncement(document.title)
+    })
+    // A closing dialog (palette) restores focus to its trigger after its exit transition; if that trigger is gone, take focus back.
+    const late = window.setTimeout(() => moveFocus(false), 450)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.clearTimeout(late)
+    }
+  }, [route])
+  return announcement
+}
+
 /** The single scroll container; the skip link targets it. */
 function MainArea({ children }: { children: ReactNode }) {
+  const announcement = useRouteFocus()
   return (
     <main id="main" tabIndex={-1} className="relative flex min-h-0 flex-1 flex-col overflow-y-auto outline-none">
+      <p className="sr-only" aria-live="polite" data-route-announcer="">
+        {announcement}
+      </p>
       {children}
     </main>
   )
