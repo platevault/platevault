@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use persistence_library::SessionQuery;
+use persistence_library::{SessionMember, SessionQuery};
 use platevault_core::library::{InventoryProbe, Library};
 use platevault_core::targets::TargetQuery;
 use platevault_core::*;
@@ -677,39 +677,130 @@ async fn a_missing_copy_stays_inside_its_logical_capture() {
     assert_eq!(after, originals);
 }
 
+/// Flip the last pixel byte of a copy in place, keeping its size and mtime.
+fn replace_pixels_in_place(path: &Path) -> String {
+    let mut bytes = std::fs::read(path).unwrap();
+    *bytes.last_mut().unwrap() ^= 0xff;
+    rewrite_same_stat(path, &bytes);
+    support::digest(path)
+}
+
+fn conflicting_copies(coverage: &TargetCoverage) -> u64 {
+    coverage.contributions.iter().map(|contribution| contribution.conflicting_copies).sum()
+}
+
+/// The capture of `name` in the location's session, with its copies' locations.
+async fn capture_of(library: &Library, location: &Location, name: &str) -> (SessionMember, u64) {
+    let copy = copy_named(library, location, name).await;
+    let session =
+        library.catalog().list_sessions(&SessionQuery::default()).await.unwrap()[0].clone();
+    let detail = library.catalog().session(session.session.id).await.unwrap();
+    let member =
+        detail.members.into_iter().find(|member| member.copies.contains(&copy.id)).unwrap();
+    (member, session.capture_count)
+}
+
 #[tokio::test]
-async fn a_replaced_copy_is_rehashed_before_it_carries_another_copys_decision() {
+async fn a_same_stat_replaced_copy_is_rehashed_and_names_the_pair_conflicting_copies() {
+    let temp = tempfile::tempdir().unwrap();
+    let (library, locations, target) = copied_library(&temp).await;
+    let catalog = library.catalog();
+    let (aliased, _) = capture_of(&library, &locations[0], "light_1.fits").await;
+    assert_eq!(aliased.copies.len(), 2);
+    assert!(aliased.content_sha256.is_some());
+    let kept = [temp.path().join("T7/light_1.fits"), temp.path().join("T7/light_2.fits")];
+    let originals: Vec<String> = kept.iter().map(|path| support::digest(path)).collect();
+    // Nobody reviewed either copy; the NAS copy is replaced in place.
+    let replaced = temp.path().join("NAS/light_1.fits");
+    let replaced_digest = replace_pixels_in_place(&replaced);
+
+    assert_eq!(scan_to_end(&library, locations[1].id).await.state, ScanState::Completed);
+    let copy = copy_named(&library, &locations[1], "light_1.fits").await;
+    assert_eq!(copy.fingerprint.content_sha256.as_deref(), Some(replaced_digest.as_str()));
+    let (member, capture_count) = capture_of(&library, &locations[1], "light_1.fits").await;
+    assert_eq!(member.applicable_quality, ApplicableQuality::ConflictingCopies);
+    assert_eq!((member.copies.len(), member.content_sha256.as_deref()), (2, None));
+    assert_eq!(capture_count, 2, "the pair still counts once");
+    let coverage = catalog.target_coverage(target).await.unwrap();
+    assert!((summed(&coverage, |c| c.captured_seconds) - 600.0).abs() < 1e-9, "{coverage:?}");
+    assert!((summed(&coverage, |c| c.unreviewed_seconds) - 300.0).abs() < 1e-9, "{coverage:?}");
+    assert_eq!(conflicting_copies(&coverage), 1);
+    for location in &locations {
+        assert_eq!(catalog.location_assets(location.id).await.unwrap().len(), 2, "both registered");
+    }
+    let after: Vec<String> = kept.iter().map(|path| support::digest(path)).collect();
+    assert_eq!(after, originals);
+    assert_eq!(support::digest(&replaced), replaced_digest, "the scan wrote nothing");
+}
+
+#[tokio::test]
+async fn a_replaced_copy_never_carries_another_copys_decision() {
     let temp = tempfile::tempdir().unwrap();
     let (library, locations, target) = copied_library(&temp).await;
     let catalog = library.catalog();
     let reviewed = copy_named(&library, &locations[0], "light_1.fits").await;
     catalog.set_quality(&[expected_of(&reviewed)], Quality::Usable, InventoryProbe).await.unwrap();
-    let replaced = temp.path().join("NAS/light_1.fits");
-    let mut bytes = std::fs::read(&replaced).unwrap();
-    *bytes.last_mut().unwrap() ^= 0xff;
-    rewrite_same_stat(&replaced, &bytes);
     let kept = [
         temp.path().join("T7/light_1.fits"),
         temp.path().join("T7/light_2.fits"),
         temp.path().join("NAS/light_2.fits"),
     ];
     let originals: Vec<String> = kept.iter().map(|path| support::digest(path)).collect();
-    let replaced_digest = support::digest(&replaced);
+    let replaced = temp.path().join("NAS/light_1.fits");
+    let replaced_digest = replace_pixels_in_place(&replaced);
 
     // The NAS rescan rehashes the copy that carried the T7 decision.
     assert_eq!(scan_to_end(&library, locations[1].id).await.state, ScanState::Completed);
     let copy = copy_named(&library, &locations[1], "light_1.fits").await;
     assert_eq!(copy.fingerprint.content_sha256.as_deref(), Some(replaced_digest.as_str()));
     assert!(!copy.verification_pending);
-    // With T7 offline the replaced copy is its own, unreviewed capture.
+    // With T7 offline the available NAS copy is not offered in its place.
     std::fs::rename(temp.path().join("T7"), temp.path().join("T7-unplugged")).unwrap();
     assert_eq!(scan_to_end(&library, locations[0].id).await.state, ScanState::Failed);
     std::fs::rename(temp.path().join("T7-unplugged"), temp.path().join("T7")).unwrap();
     let coverage = catalog.target_coverage(target).await.unwrap();
-    assert!((summed(&coverage, |c| c.captured_seconds) - 900.0).abs() < 1e-9, "{coverage:?}");
-    assert!((summed(&coverage, |c| c.usable_seconds) - 300.0).abs() < 1e-9, "{coverage:?}");
-    assert!((summed(&coverage, |c| c.unreviewed_seconds) - 600.0).abs() < 1e-9);
+    assert!((summed(&coverage, |c| c.captured_seconds) - 600.0).abs() < 1e-9, "{coverage:?}");
+    assert!(summed(&coverage, |c| c.usable_seconds).abs() < 1e-9, "{coverage:?}");
+    assert!((summed(&coverage, |c| c.unreviewed_seconds) - 300.0).abs() < 1e-9);
+    assert_eq!(conflicting_copies(&coverage), 1);
     let after: Vec<String> = kept.iter().map(|path| support::digest(path)).collect();
     assert_eq!(after, originals);
     assert_eq!(support::digest(&replaced), replaced_digest, "the scan wrote nothing");
+}
+
+#[tokio::test]
+async fn candidates_whose_digests_differ_are_conflicting_copies_counted_once() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let mut locations = Vec::new();
+    let mut originals = Vec::new();
+    for name in ["T7", "NAS"] {
+        let root = temp.path().join(name);
+        std::fs::create_dir(&root).unwrap();
+        let light = root.join("light_1.fits");
+        write_frame(&light, "2026-09-18T22:00:00");
+        if name == "NAS" {
+            // Same header, size and start time; different pixels.
+            let mut bytes = std::fs::read(&light).unwrap();
+            *bytes.last_mut().unwrap() ^= 0xff;
+            std::fs::write(&light, &bytes).unwrap();
+        }
+        originals.push((light.clone(), support::digest(&light)));
+        let location = library
+            .register_location(NativePath::from_path(&root), name.into(), LocationRole::Captures)
+            .await
+            .unwrap();
+        assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+        locations.push(location);
+    }
+    let (member, capture_count) = capture_of(&library, &locations[0], "light_1.fits").await;
+    assert_eq!(member.applicable_quality, ApplicableQuality::ConflictingCopies);
+    assert!(!member.duplicate_candidate, "both copies were hashed");
+    assert_eq!((member.copies.len(), capture_count), (2, 1));
+    let session =
+        library.catalog().list_sessions(&SessionQuery::default()).await.unwrap()[0].clone();
+    assert!(!session.provisional, "hashed conflicting copies are not provisional");
+    for (path, digest) in &originals {
+        assert_eq!(&support::digest(path), digest);
+    }
 }

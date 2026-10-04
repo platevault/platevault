@@ -787,7 +787,7 @@ impl Catalog {
             let AssetMatch::Existing(asset) = &matched else {
                 continue;
             };
-            if asset.quality != Quality::Unreviewed || carries_decision(&mut conn, asset).await? {
+            if asset.quality != Quality::Unreviewed || aliased_copy(&mut conn, asset).await? {
                 let key = path_key(&file.relative_path);
                 work.push((key, file.relative_path.clone(), file.fingerprint.clone()));
             }
@@ -2171,9 +2171,12 @@ async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Res
     let rows = sqlx::query(
         "SELECT a.id, a.path_key FROM assets a WHERE a.location_id = ?1 \
          AND a.availability <> 'missing' AND substr(a.path_key, 1, ?2) = ?3 \
-         AND (a.quality <> 'unreviewed' OR (a.content_sha256 IS NOT NULL AND EXISTS ( \
+         AND (a.quality <> 'unreviewed' OR (a.content_sha256 IS NOT NULL AND (EXISTS ( \
              SELECT 1 FROM assets d WHERE d.content_sha256 = a.content_sha256 \
-             AND d.location_id <> a.location_id AND d.quality <> 'unreviewed')))",
+             AND d.location_id <> a.location_id) OR EXISTS ( \
+             SELECT 1 FROM assets b WHERE b.session_id = a.session_id \
+             AND b.location_id <> a.location_id AND b.size_bytes = a.size_bytes \
+             AND b.capture_start IS a.capture_start))))",
     )
     .bind(op.location_id.to_string())
     .bind(i64::try_from(key.len()).map_err(|_| LibraryError::InvalidInput("path too long".into()))?)
@@ -4399,7 +4402,7 @@ fn is_light(metadata: &CaptureMetadata) -> Option<bool> {
 /// duplicate candidates and the provisional state of their locations, each read
 /// with one indexed query (location state once per location).
 struct CaptureView {
-    /// Asset id → capture key: the shared digest, or the asset's own id.
+    /// Asset id → capture key: the capture's smallest asset id.
     key_of: HashMap<Uuid, String>,
     /// Capture key → every recorded copy, including Missing ones.
     copies: HashMap<String, Vec<Asset>>,
@@ -4413,8 +4416,8 @@ impl CaptureView {
         sessions: &[Uuid],
         assets: &[Asset],
     ) -> Result<Self> {
-        let candidates = candidates_in_sessions(conn, sessions).await?;
-        let (key_of, copies) = logical_captures(conn, assets).await?;
+        let (matches, candidates) = matches_in_sessions(conn, sessions).await?;
+        let (key_of, copies) = logical_captures(conn, assets, &matches).await?;
         let locations: BTreeSet<Uuid> = assets.iter().map(|asset| asset.location_id).collect();
         let mut provisional = HashMap::with_capacity(locations.len());
         for id in locations {
@@ -4440,25 +4443,30 @@ impl CaptureView {
         groups
     }
 
+    fn copies_of(&self, key: &str) -> Vec<&Asset> {
+        self.copies.get(key).map(|copies| copies.iter().collect()).unwrap_or_default()
+    }
+
     fn quality(&self, key: &str) -> ApplicableQuality {
-        let copies: Vec<&Asset> =
-            self.copies.get(key).map(|c| c.iter().collect()).unwrap_or_default();
-        logical_quality(&copies)
+        capture_quality(&self.copies_of(key))
     }
 
     fn members(&self, assets: &[Asset]) -> Vec<SessionMember> {
         self.group(assets)
             .into_iter()
-            .map(|(key, present)| SessionMember {
-                copies: self.copies.get(&key).map_or_else(
-                    || present.iter().map(|asset| asset.id).collect(),
-                    |copies| copies.iter().map(|copy| copy.id).collect(),
-                ),
-                content_sha256: present[0].fingerprint.content_sha256.clone(),
-                applicable_quality: self.quality(&key),
-                duplicate_candidate: present
-                    .iter()
-                    .any(|asset| self.candidates.contains(&asset.id)),
+            .map(|(key, present)| {
+                let copies = self.copies_of(&key);
+                let digests = digests_of(&copies);
+                SessionMember {
+                    copies: copies.iter().map(|copy| copy.id).collect(),
+                    content_sha256: (digests.len() == 1)
+                        .then(|| digests.first().map(|digest| (*digest).to_owned()))
+                        .flatten(),
+                    applicable_quality: capture_quality(&copies),
+                    duplicate_candidate: present
+                        .iter()
+                        .any(|asset| self.candidates.contains(&asset.id)),
+                }
             })
             .collect()
     }
@@ -4481,25 +4489,54 @@ impl CaptureView {
     }
 }
 
+fn digests_of<'a>(copies: &[&'a Asset]) -> Vec<&'a str> {
+    let digests: BTreeSet<&str> =
+        copies.iter().filter_map(|copy| copy.fingerprint.content_sha256.as_deref()).collect();
+    digests.into_iter().collect()
+}
+
+/// Applicable quality of one logical capture (D16). Copies whose SHA-256 differ
+/// are conflicting copies: neither substitutes for the other. A decision speaks for
+/// the capture only once every readable copy carries the proven digest.
+fn capture_quality(copies: &[&Asset]) -> ApplicableQuality {
+    if digests_of(copies).len() > 1 {
+        return ApplicableQuality::ConflictingCopies;
+    }
+    let unproven = copies.len() > 1
+        && copies.iter().any(|copy| {
+            copy.fingerprint.content_sha256.is_none() && copy.availability != Availability::Missing
+        });
+    match logical_quality(copies) {
+        ApplicableQuality::Usable if unproven => {
+            ApplicableQuality::VerificationPending { previous: Quality::Usable }
+        }
+        ApplicableQuality::Unusable if unproven => {
+            ApplicableQuality::VerificationPending { previous: Quality::Unusable }
+        }
+        quality => quality,
+    }
+}
+
 /// Every recorded copy, Missing included, of the given digests.
 const COPIES_BY_DIGEST: &str = asset_sql!(
     "WHERE a.content_sha256 IN (SELECT value FROM json_each(?1)) \
      AND a.session_id IS NOT NULL ORDER BY a.location_id, a.id"
 );
 
-/// Duplicate candidates of a session: a copy in the same session (equal capture
-/// key) in another location with equal size and equal (or equally unknown) capture
-/// start time, where either side has no content digest.
-const CANDIDATES_IN_SESSIONS: &str = "SELECT a.id AS id, b.id AS partner \
+/// Copies of one capture within the request's sessions: an asset in the same
+/// session (equal capture key) in another location with equal size and equal (or
+/// equally unknown) capture start time. A pair is a duplicate candidate while
+/// either side has no content digest and both can still be read.
+const MATCHES_IN_SESSIONS: &str = "SELECT a.id AS id, b.id AS partner, \
+     ((a.content_sha256 IS NULL OR b.content_sha256 IS NULL) \
+      AND a.availability <> 'missing' AND b.availability <> 'missing') AS candidate \
      FROM assets a CROSS JOIN assets b ON b.session_id = a.session_id \
      AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id) \
      AND b.size_bytes = a.size_bytes \
      WHERE a.session_id IN (SELECT value FROM json_each(?1)) \
-     AND a.availability <> 'missing' AND b.availability <> 'missing' \
-     AND (a.content_sha256 IS NULL OR b.content_sha256 IS NULL) \
      AND b.capture_start IS a.capture_start";
 
-/// The same pairs, driven from one location's assets.
+/// Duplicate-candidate pairs driven from one location's assets.
 const CANDIDATES_OF_LOCATION: &str = "SELECT a.id AS id, b.id AS partner \
      FROM assets a CROSS JOIN assets b ON b.session_id = a.session_id \
      AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id) \
@@ -4512,43 +4549,86 @@ const CANDIDATES_OF_LOCATION: &str = "SELECT a.id AS id, b.id AS partner \
 const PENDING_IN_LOCATION: &str =
     "SELECT EXISTS (SELECT 1 FROM assets WHERE location_id = ?1 AND verification_pending = 1)";
 
-/// A decided copy in another location carries this asset's recorded digest.
-const CARRIES_DECISION: &str = "SELECT EXISTS (SELECT 1 FROM assets d \
-     WHERE d.content_sha256 = ?1 AND d.location_id <> ?2 AND d.quality <> 'unreviewed')";
+/// A hashed asset that is a copy of a logical capture: its digest is recorded in
+/// another location, or another location holds its matching copy.
+const IS_ALIASED_COPY: &str = "SELECT EXISTS (SELECT 1 FROM assets a CROSS JOIN assets d \
+     ON d.content_sha256 = a.content_sha256 AND d.location_id <> a.location_id \
+     WHERE a.id = ?1) \
+     OR EXISTS (SELECT 1 FROM assets a CROSS JOIN assets b ON b.session_id = a.session_id \
+     AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id) \
+     AND b.size_bytes = a.size_bytes \
+     WHERE a.id = ?1 AND a.content_sha256 IS NOT NULL AND b.capture_start IS a.capture_start)";
 
-/// Group assets into logical captures (D16): a digest whose recorded copies,
-/// Missing ones included, span at least two registered locations is one capture
-/// listing every copy. Any other asset is its own capture.
+fn find_root(parent: &HashMap<Uuid, Uuid>, id: Uuid) -> Uuid {
+    let mut root = id;
+    while let Some(&next) = parent.get(&root) {
+        root = next;
+    }
+    root
+}
+
+fn join_copies(parent: &mut HashMap<Uuid, Uuid>, left: Uuid, right: Uuid) {
+    let (left, right) = (find_root(parent, left), find_root(parent, right));
+    if left != right {
+        parent.insert(left.max(right), left.min(right));
+    }
+}
+
+/// Group assets into logical captures (D16). Copies are joined when their digest
+/// is recorded in at least two registered locations, Missing copies included, or
+/// when they match across locations (duplicate candidates, and aliased copies
+/// whose digests have since diverged). Any other asset is its own capture.
 async fn logical_captures(
     conn: &mut SqliteConnection,
     assets: &[Asset],
+    matches: &[(Uuid, Uuid)],
 ) -> Result<(HashMap<Uuid, String>, HashMap<String, Vec<Asset>>)> {
     let digests: BTreeSet<&str> =
         assets.iter().filter_map(|asset| asset.fingerprint.content_sha256.as_deref()).collect();
-    let mut by_digest: HashMap<String, Vec<Asset>> = HashMap::new();
+    let mut nodes: HashMap<Uuid, Asset> =
+        assets.iter().map(|asset| (asset.id, asset.clone())).collect();
+    let mut parent = HashMap::new();
     if !digests.is_empty() {
         count_read("logical_captures");
         let rows =
             sqlx::query(COPIES_BY_DIGEST).bind(to_json(&digests)?).fetch_all(&mut *conn).await?;
+        let mut by_digest: HashMap<String, Vec<Asset>> = HashMap::new();
         for row in &rows {
             let copy = asset_from_row(row)?;
             if let Some(digest) = copy.fingerprint.content_sha256.clone() {
                 by_digest.entry(digest).or_default().push(copy);
             }
         }
+        for group in by_digest.into_values() {
+            let spans =
+                group.iter().map(|copy| copy.location_id).collect::<BTreeSet<_>>().len() > 1;
+            if spans {
+                for pair in group.windows(2) {
+                    join_copies(&mut parent, pair[0].id, pair[1].id);
+                }
+            }
+            for copy in group {
+                nodes.entry(copy.id).or_insert(copy);
+            }
+        }
+    }
+    for (left, right) in matches {
+        if nodes.contains_key(left) && nodes.contains_key(right) {
+            join_copies(&mut parent, *left, *right);
+        }
+    }
+    let mut components: HashMap<Uuid, Vec<Asset>> = HashMap::new();
+    for (id, asset) in nodes {
+        components.entry(find_root(&parent, id)).or_default().push(asset);
     }
     let mut key_of = HashMap::with_capacity(assets.len());
     let mut copies = HashMap::new();
     for asset in assets {
-        let shared = asset.fingerprint.content_sha256.as_ref().filter(|digest| {
-            by_digest.get(*digest).is_some_and(|group| {
-                group.iter().map(|copy| copy.location_id).collect::<BTreeSet<_>>().len() > 1
-            })
-        });
-        let key = shared.cloned().unwrap_or_else(|| asset.id.to_string());
+        let root = find_root(&parent, asset.id);
+        let key = root.to_string();
         if !copies.contains_key(&key) {
-            let group =
-                shared.map_or_else(|| vec![asset.clone()], |digest| by_digest[digest].clone());
+            let mut group = components.get(&root).cloned().unwrap_or_default();
+            group.sort_by_key(|copy| (copy.location_id, copy.id));
             copies.insert(key.clone(), group);
         }
         key_of.insert(asset.id, key);
@@ -4556,19 +4636,31 @@ async fn logical_captures(
     Ok((key_of, copies))
 }
 
-async fn candidates_in_sessions(
+/// Cross-location matches of the sessions' assets and the duplicate candidates
+/// among them, in one query.
+async fn matches_in_sessions(
     conn: &mut SqliteConnection,
     sessions: &[Uuid],
-) -> Result<BTreeSet<Uuid>> {
+) -> Result<(Vec<(Uuid, Uuid)>, BTreeSet<Uuid>)> {
+    let mut matches = Vec::new();
+    let mut candidates = BTreeSet::new();
     if sessions.is_empty() {
-        return Ok(BTreeSet::new());
+        return Ok((matches, candidates));
     }
     count_read("candidates");
-    let ids: Vec<String> = sqlx::query_scalar(CANDIDATES_IN_SESSIONS)
+    let rows = sqlx::query(MATCHES_IN_SESSIONS)
         .bind(json_ids(&sessions.iter().copied().collect())?)
         .fetch_all(&mut *conn)
         .await?;
-    ids.iter().map(|id| parse_uuid(id)).collect()
+    for row in &rows {
+        let id = parse_uuid(&row.try_get::<String, _>("id")?)?;
+        let partner = parse_uuid(&row.try_get::<String, _>("partner")?)?;
+        if row.try_get::<bool, _>("candidate")? {
+            candidates.insert(id);
+        }
+        matches.push((id, partner));
+    }
+    Ok((matches, candidates))
 }
 
 /// Both sides of every candidate pair involving the location.
@@ -4588,17 +4680,13 @@ async fn candidates_of_location(
     Ok(ids)
 }
 
-/// An Unreviewed asset whose recorded digest a decided copy elsewhere carries: its
-/// bytes decide the logical capture's applicability, so readable rescans rehash it.
-async fn carries_decision(conn: &mut SqliteConnection, asset: &Asset) -> Result<bool> {
-    let Some(digest) = asset.fingerprint.content_sha256.as_deref() else {
+/// A copy of a logical capture (D19): readable rescans rehash it even when its
+/// stats match, because its bytes decide what the capture counts as.
+async fn aliased_copy(conn: &mut SqliteConnection, asset: &Asset) -> Result<bool> {
+    if asset.fingerprint.content_sha256.is_none() {
         return Ok(false);
-    };
-    Ok(sqlx::query_scalar(CARRIES_DECISION)
-        .bind(digest)
-        .bind(asset.location_id.to_string())
-        .fetch_one(&mut *conn)
-        .await?)
+    }
+    Ok(sqlx::query_scalar(IS_ALIASED_COPY).bind(asset.id.to_string()).fetch_one(&mut *conn).await?)
 }
 
 async fn record_progress(
@@ -4660,6 +4748,7 @@ fn contributions_for(
                 verification_pending: 0,
                 duplicate_candidates: 0,
                 conflicting_decisions: 0,
+                conflicting_copies: 0,
                 availability: asset.availability,
                 last_observed_at: asset.last_observed_at.clone(),
             });
@@ -4670,6 +4759,7 @@ fn contributions_for(
             ApplicableQuality::ChangedContent { .. } => entry.drifted_decisions += 1,
             ApplicableQuality::VerificationPending { .. } => entry.verification_pending += 1,
             ApplicableQuality::Conflicting => entry.conflicting_decisions += 1,
+            ApplicableQuality::ConflictingCopies => entry.conflicting_copies += 1,
             _ => {}
         }
         if candidates.contains(&asset.id) {
@@ -4684,7 +4774,8 @@ fn contributions_for(
                     ApplicableQuality::Unusable
                     | ApplicableQuality::ChangedContent { .. }
                     | ApplicableQuality::VerificationPending { .. }
-                    | ApplicableQuality::Conflicting => {}
+                    | ApplicableQuality::Conflicting
+                    | ApplicableQuality::ConflictingCopies => {}
                 }
             }
             _ => entry.unknown_exposure_count += 1,
@@ -5647,11 +5738,11 @@ mod tests {
         let mut conn = catalog.reader().await.unwrap();
         let ids = r#"["00000000-0000-0000-0000-000000000000"]"#;
         for (sql, binds) in [
-            (CANDIDATES_IN_SESSIONS, vec![ids]),
+            (MATCHES_IN_SESSIONS, vec![ids]),
             (CANDIDATES_OF_LOCATION, vec!["location"]),
             (COPIES_BY_DIGEST, vec![r#"["digest"]"#]),
             (PENDING_IN_LOCATION, vec!["location"]),
-            (CARRIES_DECISION, vec!["digest", "location"]),
+            (IS_ALIASED_COPY, vec!["asset"]),
         ] {
             let explain = format!("EXPLAIN QUERY PLAN {sql}");
             let mut query = sqlx::query(sqlx::AssertSqlSafe(explain));

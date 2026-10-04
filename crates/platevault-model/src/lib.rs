@@ -367,6 +367,10 @@ pub enum ApplicableQuality {
     /// Copies of one logical capture carry conflicting explicit decisions; the
     /// capture counts as neither Usable nor Unreviewed (D16).
     Conflicting,
+    /// Copies of one logical capture (duplicate candidates or aliased copies)
+    /// whose SHA-256 differ. The capture counts once in captured integration,
+    /// neither Usable nor Unreviewed, and neither copy substitutes for the other.
+    ConflictingCopies,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -870,6 +874,8 @@ pub struct CoverageContribution {
     pub duplicate_candidates: u64,
     /// Logical captures whose copies carry conflicting explicit decisions.
     pub conflicting_decisions: u64,
+    /// Logical captures whose copies' SHA-256 differ (conflicting copies).
+    pub conflicting_copies: u64,
     pub availability: Availability,
     pub last_observed_at: String,
 }
