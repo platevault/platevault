@@ -427,7 +427,11 @@ function TargetRecordSection({ target }: { target: Target }) {
         </p>
       ) : null}
       <p className="sr-only" role="status">
-        {state.phase === "loading" ? `Looking up ${target.name} at ${provider}` : ""}
+        {state.phase === "loading"
+          ? `Looking up ${target.name} at ${provider}`
+          : state.phase === "done" && (state.outcome.kind === "failed" || state.outcome.kind === "no-match")
+            ? `${state.outcome.kind === "failed" ? "Lookup failed" : "No match"}. ${state.outcome.message}`
+            : ""}
       </p>
       {state.phase === "done" && state.outcome.kind === "failed" ? (
         <Notice

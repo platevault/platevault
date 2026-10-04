@@ -147,6 +147,7 @@ export function TargetsEditor({
 }) {
   const targets = useStore((s) => s.catalog.targets)
   const [adding, setAdding] = useState<string | null>(null)
+  const addReasonId = useId()
   const remaining = Object.values(targets)
     .filter((t) => !targetIds.includes(t.id))
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -176,6 +177,7 @@ export function TargetsEditor({
             variant="outline"
             disabled={!adding}
             focusableWhenDisabled
+            aria-describedby={adding ? undefined : addReasonId}
             onClick={() => {
               if (!adding) return
               const clear = () => setAdding(null)
@@ -184,6 +186,11 @@ export function TargetsEditor({
           >
             Add Target
           </Button>
+          {adding ? null : (
+            <span id={addReasonId} className="pb-2.5 text-xs text-muted-foreground">
+              Choose a Target to add it
+            </span>
+          )}
         </div>
       ) : null}
       {error ? (

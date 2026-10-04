@@ -56,10 +56,24 @@ export function useCommitFlow(): CommitFlow {
  * "Unsaved changes" while the edit differs from the catalog, then "Saved"
  * after a successful commit. Nothing before the first edit.
  */
-export function FlowStatus({ flow, dirty, onReview }: { flow: CommitFlow; dirty: boolean; onReview: () => void }) {
+export function FlowStatus({ flow, dirty, onReview, className }: { flow: CommitFlow; dirty: boolean; onReview: () => void; className?: string }) {
+  const holder = useRef<HTMLDivElement>(null)
   const state = flow.state === "failed" || flow.state === "stale" ? flow.state : dirty ? "unsaved" : flow.state
-  if (!state) return null
-  return <SaveState state={state} message={flow.message} onRetry={flow.retry} onReview={onReview} />
+  const announcement = state === "failed" ? `Not saved. ${flow.message ?? ""}` : state === "stale" ? `Changed elsewhere. ${flow.message ?? ""}` : state === "saved" ? "Saved." : ""
+  // Retry and Review remove their own button; keep focus in this status instead of dropping it to the page (WCAG 2.4.3).
+  const keepFocus = (action: () => void) => () => {
+    action()
+    requestAnimationFrame(() => holder.current?.focus())
+  }
+  return (
+    <div ref={holder} tabIndex={-1} className={cn("outline-none", className)}>
+      {/* Mounted before the first save, so each outcome changes its text and is announced (WCAG 4.1.3). */}
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
+      {state ? <SaveState state={state} message={flow.message} onRetry={keepFocus(flow.retry)} onReview={keepFocus(onReview)} /> : null}
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------

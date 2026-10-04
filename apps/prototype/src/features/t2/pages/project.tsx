@@ -209,13 +209,13 @@ function ProjectDetail({ projectId }: { projectId: string }) {
               ))}
             </ul>
           )}
-          <div className="space-y-3 rounded-lg border p-3">
+          <div className="rounded-lg border p-3">
             <AddChecklistItem
               catalog={catalog}
               panels={project.panels}
               onAdd={(item, clear) => edit(checklistFlow, { checklist: [...project.checklist, item] }, "Checklist", clear).ok}
             />
-            <FlowStatus flow={checklistFlow} dirty={false} onReview={() => review(checklistFlow)} />
+            <FlowStatus flow={checklistFlow} dirty={false} onReview={() => review(checklistFlow)} className={checklistFlow.state ? "mt-3" : undefined} />
           </div>
         </Section>
 

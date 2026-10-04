@@ -60,7 +60,7 @@ function ActivityRow({ event, operation }: { event: ActivityEvent; operation: Op
         <td className="px-3 py-2">
           <Outcome event={event} operation={operation} />
         </td>
-        <th scope="row" className="min-w-0 px-3 py-2 text-left font-normal">
+        <th scope="row" className="min-w-40 px-3 py-2 text-left font-normal">
           <div className="font-medium text-pretty">{event.title}</div>
           {event.detail ? (
             <p className="text-xs text-pretty text-muted-foreground">
@@ -78,7 +78,7 @@ function ActivityRow({ event, operation }: { event: ActivityEvent; operation: Op
           ) : null}
         </th>
         <td className="px-3 py-2">
-          <div className="flex flex-wrap justify-end gap-1">
+          <div className="flex justify-end gap-1">
             {operation && operation.items.length > 0 ? (
               <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((v) => !v)}>
                 {open ? "Hide items" : "Show items"}
@@ -173,15 +173,11 @@ export function ActivityPage() {
               }
             />
           ) : (
-            <div className="rounded-lg border">
-              <table className="w-full table-fixed text-sm">
+            // Auto layout: the What column keeps its share as text grows (WCAG 1.4.4). A too-narrow frame scrolls
+            // the table, not the page; `relative` keeps the sr-only labels inside that frame.
+            <div className="relative overflow-x-auto rounded-lg border">
+              <table className="w-full text-sm">
                 <caption className="sr-only">Activity history, newest first</caption>
-                <colgroup>
-                  <col className="w-36" />
-                  <col className="w-36" />
-                  <col />
-                  <col className="w-48" />
-                </colgroup>
                 <thead className="text-xs text-muted-foreground">
                   <tr className="border-b">
                     <th scope="col" className="h-(--row-h) px-3 text-left font-medium">
