@@ -1545,3 +1545,55 @@ async fn inherited_confirmation_conflicts_survive_automatic_rescans_and_regroups
     }
     assert_eq!(tree(&fx.root), before, "headers unchanged");
 }
+
+fn registration_at(path: &Path) -> LocationRegistration {
+    LocationRegistration {
+        name: path.file_name().unwrap().to_string_lossy().into_owned(),
+        path: NativePath::from_path(path),
+        role: LocationRole::Captures,
+        identity: folder_identity(path).unwrap(),
+    }
+}
+
+#[tokio::test]
+async fn overlap_follows_canonical_ancestry_through_aliases_and_fails_closed() {
+    let fx = Fixture::new();
+    let volume_root = fx.root.parent().unwrap().to_path_buf();
+    std::fs::create_dir_all(fx.root.join("night1")).unwrap();
+    // A linked home folder pointing into the capture volume.
+    let link = fx.temp.path().join("linked-T7");
+    std::os::unix::fs::symlink(&volume_root, &link).unwrap();
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let linked = catalog.register_location(&registration_at(&link.join("Captures"))).await.unwrap();
+    assert_eq!(linked.path, NativePath::from_path(&link.join("Captures")), "stored as given");
+    for path in [volume_root.clone(), fx.root.clone(), fx.root.join("night1")] {
+        let error = catalog.register_location(&registration_at(&path)).await.unwrap_err();
+        assert_eq!(kind(&error), "identity_conflict", "{}", path.display());
+    }
+    // macOS temporary folders live below /var, a link to /private/var.
+    #[cfg(target_os = "macos")]
+    {
+        let canonical = std::fs::canonicalize(&fx.root).unwrap();
+        assert!(fx.root.starts_with("/var") && canonical.starts_with("/private/var"));
+        let error = catalog
+            .register_location(&registration_at(&canonical.join("night1")))
+            .await
+            .unwrap_err();
+        assert_eq!(kind(&error), "identity_conflict");
+    }
+    assert_eq!(catalog.list_locations().await.unwrap().len(), 1);
+
+    // A registered root that no longer resolves cannot be ruled out as an
+    // ancestor or descendant, and neither can a path that does not resolve.
+    let elsewhere = fx.temp.path().join("Elsewhere");
+    std::fs::create_dir_all(elsewhere.join("Flats")).unwrap();
+    std::fs::rename(&link, fx.temp.path().join("renamed-link")).unwrap();
+    let error = catalog.register_location(&registration_at(&elsewhere)).await.unwrap_err();
+    assert_eq!(kind(&error), "identity_conflict");
+    std::fs::rename(fx.temp.path().join("renamed-link"), &link).unwrap();
+    let mut unresolved = registration_at(&elsewhere.join("Flats"));
+    unresolved.path = NativePath::from_path(&elsewhere.join("Darks"));
+    catalog.register_location(&unresolved).await.unwrap_err();
+    assert_eq!(catalog.list_locations().await.unwrap().len(), 1, "refusals write nothing");
+    catalog.register_location(&registration_at(&elsewhere)).await.unwrap();
+}

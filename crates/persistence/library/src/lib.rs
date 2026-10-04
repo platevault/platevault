@@ -1680,6 +1680,11 @@ fn scoped(error: LibraryError, scope: NativePath, identity: Option<Uuid>) -> Lib
     LibraryError::Context { error: Box::new(error), scope, identity }
 }
 
+/// Refuse a root that is, contains or lies inside another registered root on the
+/// same volume. Overlap is decided on canonical ancestry and folder identity, never
+/// on the path text the user chose: links anywhere above either root (macOS
+/// `/var` → `/private/var`, a linked home folder) resolve first. A root that cannot
+/// be resolved cannot be ruled out, so it refuses the registration.
 async fn ensure_no_overlap(
     conn: &mut SqliteConnection,
     exclude: Option<Uuid>,
@@ -1693,14 +1698,28 @@ async fn ensure_no_overlap(
     .bind(identity.volume.stable_id.as_deref())
     .fetch_all(&mut *conn)
     .await?;
+    let candidate =
+        CanonicalRoot::resolve(path).map_err(|error| scoped(error, path.clone(), None))?;
     for row in &rows {
         let other = location_from_row(row)?;
         if Some(other.id) == exclude {
             continue;
         }
-        if roots_overlap(&other.path, path, &identity.volume)
-            || same_root(&other.identity, identity)
-        {
+        let overlaps = same_root(&other.identity, identity)
+            || CanonicalRoot::resolve(&other.path)
+                .map_err(|error| {
+                    scoped(
+                        LibraryError::IdentityConflict(format!(
+                            "overlap with registered location {:?} cannot be ruled out because \
+                             its root does not resolve ({error}); reselect or remap it first",
+                            other.name
+                        )),
+                        path.clone(),
+                        Some(other.id),
+                    )
+                })?
+                .overlaps(&candidate, &identity.volume);
+        if overlaps {
             return Err(scoped(
                 LibraryError::IdentityConflict(format!(
                     "folder overlaps registered location {:?}",
@@ -1712,6 +1731,36 @@ async fn ensure_no_overlap(
         }
     }
     Ok(())
+}
+
+/// A root resolved through every link to its canonical folder, with the identity
+/// stamp of that folder and of each folder above it.
+struct CanonicalRoot {
+    path: NativePath,
+    ancestry: Vec<Stamp>,
+}
+
+impl CanonicalRoot {
+    fn resolve(root: &NativePath) -> Result<Self> {
+        let given = root.to_path_buf()?;
+        let canonical =
+            std::fs::canonicalize(&given).map_err(|error| LibraryError::from_io(&given, &error))?;
+        let mut ancestry = Vec::new();
+        for folder in canonical.ancestors() {
+            ancestry.push(stamp_of(&real_directory(folder)?));
+        }
+        Ok(Self { path: NativePath::from_path(&canonical), ancestry })
+    }
+
+    /// Same folder, ancestor or descendant, by folder identity or canonical path.
+    fn overlaps(&self, other: &Self, volume: &VolumeIdentity) -> bool {
+        let (Some(own), Some(theirs)) = (self.ancestry.first(), other.ancestry.first()) else {
+            return true;
+        };
+        other.ancestry.contains(own)
+            || self.ancestry.contains(theirs)
+            || roots_overlap(&self.path, &other.path, volume)
+    }
 }
 
 async fn insert_location(
