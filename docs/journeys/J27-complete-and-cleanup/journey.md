@@ -27,6 +27,7 @@ location without safe Trash refuses removal with no permanent-delete fallback.
 - P3: In an isolated test OS account or disposable VM containing only these generated fixtures, unlink one named 30 Sep capture directly from its generated source folder, without using or emptying OS Trash. Its prepared hardlink is the fixture's last copy. Record the exact fixture path and its pre-unlink hash; real libraries and unrelated Trash contents are outside this setup.
 - P4: Record a baseline inventory of the isolated account's Trash without deleting anything, plus a manifest of accepted products, adopted master/source and remaining generated captures. Trash checks compare only this journey's newly added entries against that baseline.
 - P5: A second final image saved by the user outside the View, at `Work/Finals/NGC7000-HOO-crop.tif`.
+- P6: A disposable standalone View `26 Sep symlink check`, created from the 26 Sep session and prepared under `Work/Processing` in Linked View with symlink entries, then marked Complete with no Result. Outside PlateVault, its View folder also receives `extra/`, holding a byte copy of one named 26 Sep capture. Record the J19/P5 entries of the 26 Sep session.
 
 ## Steps
 
@@ -99,6 +100,13 @@ location without safe Trash refuses removal with no permanent-delete fallback.
 - **Expect (negative):** No permanent-delete fallback is offered and no copy is removed.
 - **Trace:** flow I4, I5, cross-flow "Cleanup/Trash failure" · STO-FR-04, STO-FR-05 · STO-AC-03 · root FR-010
 
+### S11 — Remove symlink entries and a verified duplicate {#S11}
+
+- **Do:** Open `26 Sep symlink check`, click **Clean up View**, select **Prepared inputs** and the duplicate in `extra/`, click **Review cleanup**, and confirm **Send selected files to Trash**.
+- **Expect:** Cleanup lists the `extra/` file as a verified duplicate, and the review names the 26 Sep capture kept as its verified copy. The 35 symlink entries are listed as links removed without following their targets. After execution the 35 links and the duplicate are newly in the OS Trash.
+- **Expect (negative):** Every 26 Sep capture, including each link target and the kept copy, matches its P6 record. No file under `Astro-T7/Captures/26 Sep` reaches the Trash, and no link target or target directory is traversed or removed.
+- **Trace:** flow I4, I5 · STO-FR-04, STO-FR-05 · STO-AC-08
+
 ## Success criteria
 
 - SC1: Completing either View removes 0 files and starts 0 cleanups (S1, S2).
@@ -107,6 +115,7 @@ location without safe Trash refuses removal with no permanent-delete fallback.
 - SC4: The last-copy hardlink is refused and remains (S7, S8).
 - SC5: On `Scratch`, 0 files are removed and no permanent-delete action exists (S10).
 - SC6: A Complete View refuses membership edits until Reopen, accepts a notes edit and a Result acceptance, and still reads Complete after reviewed cleanup (S3, S8).
+- SC7: Trashing 35 symlinks and 1 verified duplicate names the kept copy and leaves 100% of 26 Sep captures matching P6 (S11).
 
 ## Known gaps
 

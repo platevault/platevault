@@ -36,6 +36,7 @@ One persistent workspace that builds a named View's reviewed membership from ses
 - **VSEL-AC-12**: Given a running external application using a prepared revision, when a Refresh diff is accepted, then a new View membership revision is saved but the prepared entries and external inputs remain unchanged until separately reviewed preparation.
 - **VSEL-AC-13**: Given a selected session contains available Unreviewed, Usable and library-Unusable frames plus an unavailable frame, when it enters a draft, then available Unreviewed/Usable frames are included, library-Unusable frames start visibly excluded, and the unavailable frame remains named unresolved. Explicit inclusion changes only the draft and preparation requires membership confirmation.
 - **VSEL-AC-14**: Given a Target-originated or standalone View with no reviewed session selection, when it opens, then it has no automatically selected sessions; suggestions can be inspected and checked explicitly.
+- **VSEL-AC-15**: Given a session whose frames also have byte-identical copies in a second registered Captures location, when Refresh selection adds it and the change is accepted, then each frame enters membership once. Each member names its other physical copy, and the summary counts each frame once.
 
 ### Edge Cases
 
@@ -52,7 +53,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **VSEL-FR-05**: Filters: date/time, night, channel, exposure range, equipment, quality state, location, availability, and OBJECT text (including Missing OBJECT). Expanded filters: Target, camera, gain, offset, binning, temperature. Active filters show as chips with a match count. Columns sort by value; sky-distance and overlap sorting appear when evidence exists. Rows show counts per quality state; measurement columns show 'Not measured' where no value exists.
 - **VSEL-FR-06**: Select with checkboxes or Select matching. Filters change the candidate list, not the selected IDs. Show 'Selected outside current filters: N', Show selected, and an explicit Clear selection. Sorting, paging, and the sky toggle keep the selection. Each selection shows its reason.
 - **VSEL-FR-07**: Linked sky-coverage toggle: the table stays primary, and highlighting links footprints and rows both ways. Mosaic footprints are shown; there is no stitching.
-- **VSEL-FR-08**: The summary shows intended included frames and integration by channel, names unresolved membership, and keeps Unreviewed and library-Unusable counts visible.
+- **VSEL-FR-08**: The summary shows intended included frames and integration by channel, names unresolved membership, and keeps Unreviewed and library-Unusable counts visible. Each LIB logical capture enters membership and totals once and names its other physical copies.
 - **VSEL-FR-09**: Offline, missing, and unreadable inputs are flagged. Last-observed counts are never treated as verified counts. Options: reconnect, locate a copy, or remove explicitly. Handoff never silently omits a selected source.
 - **VSEL-FR-10**: Exclude from View is the default exclusion scope, and excluded rows can be shown or restored. Files stay on disk; other Views and library state are unchanged.
 - **VSEL-FR-11**: Library decisions: Mark included frames usable, Mark unusable in library, and Reject for Project (Project-owned Views). Each confirmation names its scope. Saving or preparing a View never changes quality state.
@@ -98,4 +99,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 
 ## Decisions before feature approval
 
-- Root decisions D01, D02, D08, D09, D10, D12 and D15 define geometry, draft inclusion, explicit saving and stale-edit recovery, immutable preparation revisions, quality scopes, panel/session linkage and grouping corrections.
+- Root decisions D01, D02, D08, D09, D10, D12, D15 and D16 define geometry, draft inclusion, explicit saving and stale-edit recovery, immutable preparation revisions, quality scopes, panel/session linkage, grouping corrections and single membership for content-identical copies.

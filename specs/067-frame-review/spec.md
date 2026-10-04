@@ -31,6 +31,7 @@ Native measurement and full-resolution linear preview during View review, star/P
 - **PIX-AC-07**: Given a frame selected from a row, plot or preview, when the selection changes, then all three identify the same frame and disclosure names header evidence, metric source, units, method and input identity.
 - **PIX-AC-08**: Given samples containing NaN, infinity, saturated values and a mask, when preview and measurement run, then invalid/masked evidence remains inspectable, no invalid sample is silently replaced with a plausible measurement, and values retain the qualified input/channel basis.
 - **PIX-AC-09**: Given a raw CFA fixture with recorded pattern and channel evidence, when preview and linear measurement run, then the recorded mosaic plane is inspectable, the channel basis is named, no debayering or RGB-derived metric occurs, and source hashes remain unchanged.
+- **PIX-AC-10**: Given a frame with cached measurements whose bytes are replaced in place with its size and mtime preserved, when Review frames opens, then its cached values never read valid. The frame is measured again from its current bytes and the earlier values remain only as history for the earlier content.
 
 ### Edge Cases
 
@@ -40,7 +41,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 
 ### Functional Requirements
 
-- **PIX-FR-01**: Review frames shows valid cached measurements at once and pending, failed, or unavailable states elsewhere. Missing built-in measurements are computed with selected work first. Progress is visible and frames can be inspected meanwhile. Cancel stops further measurement and keeps the draft. Filtering or browsing never starts built-in measurement.
+- **PIX-FR-01**: Review frames shows cached measurements at once and pending, failed, or unavailable states elsewhere. Each cached measurement records the SHA-256 of the bytes it measured. It reads verifying until the frame's current bytes rehash to that digest, then valid; a mismatch keeps it as history and re-measures the current bytes. Missing built-in measurements are computed with selected work first. Progress is visible and frames can be inspected meanwhile. Cancel stops further measurement and keeps the draft. Filtering or browsing never starts built-in measurement.
 - **PIX-FR-02**: Selecting a frame in the row, plot, or preview highlights it in all three. Header metadata and measurement source and units are shown on disclosure.
 - **PIX-FR-03**: Full-resolution zoom and pan, fixed centre/corner comparison, and next/previous frame. Display stretch affects the preview only; source pixels are never altered.
 - **PIX-FR-04**: Measurements use linear image data, never a stretched thumbnail.

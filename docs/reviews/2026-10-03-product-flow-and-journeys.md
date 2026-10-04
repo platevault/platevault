@@ -550,7 +550,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Recovery branch:** after interruption, the user sees destination-verified, source-retained, reference-updated, and pending work. Retry resumes recorded work without guessing from filename presence alone.
 
-**Sequencing, D06:** a reference-update failure blocks retirement of that item's source. Retain its verified destination and recorded phase for resumable retry. Completed items may retire only after destination hashes and affected references pass; the implementation must qualify each phase.
+**Sequencing, D06:** a reference-update failure blocks retirement of that item's source. Retain its verified destination and recorded phase for resumable retry. Completed items may retire only when, immediately before retirement, the source still matches its copied snapshot, the destination re-verifies and affected references pass; source drift retains both versions for review. The implementation must qualify each phase.
 
 ## Journey K: observing plans and reminders
 
@@ -646,7 +646,7 @@ These proposed journeys remain unvalidated. D01 through D18 record settled conse
 3. **Raw/CFA, D03:** qualify read-only mosaic/channel and numerical metric/import semantics; no debayering.
 4. **Profiles, D04:** verify exact input/layout/product capabilities and safe mode eligibility for each required application. Unknown/write-prone inputs refuse Linked/Direct-source use; every alternative needs review. D04 does not settle mixed per-item modes within one preparation; that capability needs an explicit contract.
 5. **Master adoption, D05:** verify a durable chosen library copy and its hashes before reuse; preserve generated source until reviewed cleanup.
-6. **Archive, D06:** verify per-item retained phases, affected-item retirement blocking and resumable retries. Destination and reference verification precede each source retirement; no reopened rollback-versus-retention choice.
+6. **Archive, D06:** verify per-item retained phases, affected-item retirement blocking and resumable retries. A final source snapshot match, destination verification and reference verification precede each source retirement; no reopened rollback-versus-retention choice.
 7. **Reminders, D07:** qualify explicit site/criteria/lead-time controls, repeat suppression, permission recovery and actual scheduler capability. No app-closed claim without tested delivery.
 8. **Drafts, D08:** verify explicit Save, committed restart recovery and stale-edit refusal; failed writes remain unsaved.
 9. **View lifecycle, D09:** qualify immutable preparation revisions, safe retry and explicit reopening. Identity-preserving cleanup/reference repair does not reopen Complete or alter membership. D09 does not settle manual-inclusion pins across refresh or new-folder versus reviewed-replacement revision storage; flow decision 9 remains open for those questions.

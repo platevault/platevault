@@ -86,12 +86,19 @@ automatically.
 - **Expect (negative):** The candidate is not preselected in `28 Sep Ha copy check` or any other View.
 - **Trace:** flow H4 · CAL-FR-06 · CAL-AC-04 · D05
 
+### S8a — Meet an occupied adoption path {#S8a}
+
+- **Do:** Click **Add to calibration library**, choose `Astro-T7/Calibration` as the durable destination, and read the destination path in the review. Outside PlateVault, create an unrelated text file at that path and record its SHA-256. Then confirm.
+- **Expect:** Adoption is refused for that path, names the existing file, and asks for another name or destination.
+- **Expect (negative):** The unrelated file still matches its recorded SHA-256. No copy is written, no master is registered, and the generated source remains in `output/`.
+- **Trace:** flow H4, cross-flow "Destination collision" · CAL-FR-07 · CAL-AC-08 · D05
+
 ### S9 — Adopt the master {#S9}
 
-- **Do:** Click **Add to calibration library**, choose `Astro-T7/Calibration` as the durable destination, and confirm. Then reopen the Calibration area of `28 Sep Ha copy check`.
+- **Do:** Choose another file name under `Astro-T7/Calibration` and confirm. Then reopen the Calibration area of `28 Sep Ha copy check`.
 - **Expect:** PlateVault copies the master, re-reads and hash-verifies the copy, and only then registers it in Calibration with origin `NGC7000 HOO - Siril` and its provenance. In `28 Sep Ha copy check` it appears as a compatible suggestion awaiting acceptance.
-- **Expect (negative):** The generated source in `output/` remains in place. The adopted master is not handed off before it is accepted.
-- **Trace:** flow H4 · CAL-FR-06, CAL-FR-07 · CAL-AC-05 · D05, D13
+- **Expect (negative):** The generated source in `output/` remains in place, and the S8a file is unchanged. The adopted master is not handed off before it is accepted.
+- **Trace:** flow H4 · CAL-FR-06, CAL-FR-07 · CAL-AC-05, CAL-AC-07, CAL-AC-08 · D05, D13
 
 ## Success criteria
 
@@ -101,6 +108,7 @@ automatically.
 - SC4: Product-input support is either listed or refused by name, never converted (S5).
 - SC5: Drift is flagged for review, with 0 silent replacements (S7).
 - SC6: The master is offered to 0 Views before adoption (S8); it is registered only after a verified copy, and its source remains (S9).
+- SC7: The occupied adoption path is refused and its file changes 0 bytes (S8a).
 
 ## Known gaps
 

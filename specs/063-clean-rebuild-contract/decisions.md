@@ -54,6 +54,7 @@ Owners: CAL, STO.
 
 - Adoption requires an explicit durable calibration-library destination.
 - Copy and re-read/hash verification precede registering an adopted master; the generated source remains until separately reviewed cleanup.
+- An existing entry at the destination path blocks adoption and is never overwritten; the path is checked again immediately before writing.
 - No master becomes reusable merely by discovery.
 
 ### D06
@@ -151,10 +152,11 @@ Owners: LIB, VSEL, PREP.
 
 ### D16
 
-Owners: LIB, STO.
+Owners: LIB, VSEL, STO.
 
 - Storage shows registered locations and availability, View footprints, archive transfers, and library-wide duplicate candidates based on content identity.
 - Candidate display does not authorize disposal.
+- Content-identical copies count once in totals and View membership while every physical copy stays registered and protected.
 - Whole-library duplicate removal and application-managed restore remain outside View cleanup.
 
 ### D17

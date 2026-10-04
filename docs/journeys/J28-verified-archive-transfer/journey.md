@@ -17,9 +17,10 @@ transfer that also rebuilds the View's references, and can trust that no source
 is retired before its destination copy and every affected reference are
 verified. Done means: the five sessions live on `Archive` with verified hashes;
 every source retired was retired only after destination and reference
-verification; an interrupted or failing item keeps its source and its recorded
-phase; and the View's membership and exclusions are unchanged, with archived
-inputs reading Offline when `Archive` is unplugged.
+verification, while it still matched its copied snapshot; an interrupted,
+failing or drifted item keeps its source and its recorded phase; and the View's
+membership and exclusions are unchanged, with archived inputs reading Offline
+when `Archive` is unplugged.
 
 ## Preconditions
 
@@ -27,6 +28,7 @@ inputs reading Offline when `Archive` is unplugged.
 - P2: A disposable writable volume `Archive` with free space for the five sessions, and a second disposable volume that can be mounted under the same name `Archive`.
 - P3: The J19/P5 manifest and a SHA-256 list of the five sessions' files are recorded. `Cold-1` stays offline.
 - P4: Write permission is removed from the View folder that holds the prepared entries of one named 24 Sep frame, so that its reference cannot be rebuilt (fault fixture for S8; G3).
+- P5: For one named 26 Sep frame, a backup of its original bytes and nanosecond mtime and a replacement file of identical size with different bytes, kept outside PlateVault. A fault control pauses that item after destination verification and before source retirement (G5).
 
 ## Steps
 
@@ -76,10 +78,17 @@ inputs reading Offline when `Archive` is unplugged.
 - **Expect (negative):** A partially written destination file is not treated as verified because its name exists.
 - **Trace:** flow J recovery branch · STO-FR-08 · D06, D09
 
+### S7a — Change a source before retirement {#S7a}
+
+- **Do:** When the P5 pause reports the named 26 Sep frame destination-verified and awaiting retirement, overwrite its source with the P5 replacement, restore its recorded mtime, and release the pause.
+- **Expect:** That item reads blocked with source drift named. Its source path keeps the replacement bytes, `Archive/NGC7000` keeps the verified snapshot, and both are listed for review. Other items keep their recorded phases.
+- **Expect (negative):** Neither version is retired, overwritten or chosen automatically.
+- **Trace:** flow J recovery branch · STO-FR-07 · STO-AC-14 · D06
+
 ### S8 — Inspect a failed reference rebuild {#S8}
 
 - **Do:** When the transfer settles, open the per-item outcomes and the 24 Sep frame of P4.
-- **Expect:** Each affected reference reports completed, blocked, or uncertain. The P4 frame's reference reads blocked and its source is retained; every other item reads source retired only after its destination and references verified. The View reads 208 lights / 17h 20m with the same six exclusions and still reads Complete.
+- **Expect:** Each affected reference reports completed, blocked, or uncertain. The P4 frame's reference reads blocked and its source is retained; the S7a item still reads blocked by drift; every other item reads source retired only after its destination and references verified. The View reads 208 lights / 17h 20m with the same six exclusions and still reads Complete.
 - **Expect (negative):** The blocked item's source is not retired. The identity-preserving reference repair does not reopen the View or create a membership or preparation revision, and no hardlink is converted without the S4 choice.
 - **Trace:** flow J open sequencing detail · STO-FR-07 · root SC-007 · D06, D09
 
@@ -88,6 +97,13 @@ inputs reading Offline when `Archive` is unplugged.
 - **Do:** Restore write permission on the P4 folder and click **Retry** for the blocked item.
 - **Expect:** Its reference rebuilds and verifies; only then its source is retired.
 - **Trace:** flow J · STO-FR-07 · D06
+
+### S9a — Resolve the drifted item {#S9a}
+
+- **Do:** Restore the P5 frame's original bytes and recorded mtime, review the item's current evidence, and click **Retry** for it.
+- **Expect:** The current source matches its snapshot again, the destination and its references re-verify, and only then is the source retired.
+- **Expect (negative):** The archived copy still matches P3, and no other item changes phase.
+- **Trace:** flow J · STO-FR-07 · STO-AC-14 · D06
 
 ### S10 — Unplug the archive later {#S10}
 
@@ -104,6 +120,7 @@ inputs reading Offline when `Archive` is unplugged.
 - SC4: 0 implicit reference-mode conversions occur (S4, S8).
 - SC5: The impostor volume blocks approval (S2).
 - SC6: With `Archive` unplugged, Open is refused and 0 inputs are omitted (S10).
+- SC7: The drifted source is retired 0 times while it differs from its snapshot (S7a, S8); it retires only after re-verification (S9a).
 
 ## Known gaps
 
@@ -111,7 +128,7 @@ inputs reading Offline when `Archive` is unplugged.
 - G2: Unresolved implementation qualification — no fault fixture yet produces a destination hash mismatch; the hash-failure branch is not exercised. Blocks readiness.
 - G3: Unresolved implementation qualification — the prepared View layout that P4 depends on is unspecified, and the method of source retirement after verification is not named by the flow. Blocks readiness.
 - G4: Out of scope for this journey — Direct-source configuration paths affected by a move are not exercised because no journey prepares a Direct-source View. Blocks readiness until covered by a step or a journey.
-- G5: Unqualified source-drift fixture (STO-AC-14) blocks readiness. The implementation must expose an observable pause after destination verification but before retirement, so a disposable source can be rewritten externally. Validation must observe the item blocked with drift named, both versions retained and other items' phases unchanged. Existing S6/S8 fault cases do not cover this boundary; no source-retirement acceptance is complete until this case is exercised.
+- G5: Unresolved implementation qualification: no fault control yet pauses an item after destination verification and before retirement (P5). S7a depends on it, and no source-retirement acceptance is complete until S7a passes. Blocks readiness.
 
 ## Delta log
 

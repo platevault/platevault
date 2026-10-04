@@ -24,7 +24,7 @@ Fingerprint `modifiedNs` is a signed decimal string, preserving nanoseconds acro
 | library_associate_target | expected sessions, targetId | Explicit confirmed association/evidence revision; no capture-key change. |
 | library_save_equipment | camera/optical-train fields, expectedRevision | Durable evidence and confirmed state. |
 | library_confirm_equipment | expected sessions, equipmentId | Explicit confirmation revision; source evidence remains inspectable. |
-| library_target_coverage | targetId | Effective captured/applicable-usable/unreviewed exposure, unknownExposureCount, drift counts, coveredLocationIds/provisional scope and per-contribution date/availability/last observation. |
+| library_target_coverage | targetId | Effective captured/applicable-usable/unreviewed exposure counting each logical capture once, unknownExposureCount, drift, verification-pending and duplicate-candidate counts, coveredLocationIds/provisional scope and per-contribution date/availability/last observation. |
 | library_review_remap | locationId, native proposedPath | Durable catalog review of per-asset identity/digests/collisions; no image writes. NoByteProof is explicit. |
 | library_apply_remap | reviewed operationId, expectedRevision | Atomic per-location apply after every asset passes revalidated byte/identity checks; any refusal leaves all old paths unchanged. |
 | library_update_location | locationId, displayName, expectedDecisionRevision | Durable display name; no scan/source changes. |

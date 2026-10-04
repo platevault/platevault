@@ -18,7 +18,8 @@ through explicit, scoped confirmations. Imported measurements keep their
 provenance. Done means the saved View reads Ha 111 / 9h 15m, OIII 97 / 8h 05m
 and 208 lights / 17h 20m, with six 30 Sep exclusions. Its last committed
 revision survives restart. Library quality changes only through the scoped
-confirmations in S11 and S13. Source files remain unchanged.
+confirmations in S11 and S13; a frame whose bytes change in place stops counting
+as Usable until its reviewed bytes return. PlateVault writes no source file.
 
 ## Preconditions
 
@@ -26,6 +27,7 @@ confirmations in S11 and S13. Source files remain unchanged.
 - P2: Frame-review properties of the J19 fixture: six named 30 Sep OIII frames have visibly trailed stars; one of the other 42 frames contains a saturated star whose PSF fit fails, at a recorded pixel position; at least one frame has a well-exposed unsaturated star at a recorded position.
 - P3: A PixInsight SubframeSelector CSV export covering the five sessions with FWHM values, plus one row naming a file in no session, one filename present in two session subfolders, and one column with no units and no native equivalent.
 - P4: The J19/P5 manifest is available.
+- P5: For one named 18 Sep Ha frame, a backup of its original bytes and nanosecond mtime, and a replacement file of identical size with different pixel bytes, both kept outside PlateVault.
 
 ## Steps
 
@@ -136,6 +138,20 @@ confirmations in S11 and S13. Source files remain unchanged.
 - **Expect (negative):** The column is not shown as built-in FWHM or HFR.
 - **Trace:** flow D6 failure branch · PIX-FR-07 · PIX-AC-05
 
+### S15a — Replace a reviewed frame in place {#S15a}
+
+- **Do:** Outside PlateVault, overwrite the P5 frame with its replacement and restore its recorded mtime. Index `Astro-T7 captures` again, then click **Review frames**.
+- **Expect:** After the rescan completes, the frame reads ChangedContent with its previous Usable decision kept as history, it is listed under the ChangedContent filter, and NGC 7000 usable Ha integration reads 9h 10m. In Review frames its cached measurements never read valid; the frame is measured again from its current bytes, and the earlier values show as history for the earlier content.
+- **Expect (negative):** The frame counts as neither Usable nor Unreviewed. No quality decision is recorded, and the View still reads 208 lights / 17h 20m.
+- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01 · LIB-AC-14, PIX-AC-10 · D10 · J19/G4
+
+### S15b — Restore the reviewed bytes {#S15b}
+
+- **Do:** Restore the P5 frame's original bytes and recorded mtime, index `Astro-T7 captures` again, and reopen **Review frames**.
+- **Expect:** The rehash matches the reviewed digest. The frame reads Usable, NGC 7000 usable Ha integration reads 9h 15m, and its earlier cached measurements read valid again.
+- **Expect (negative):** The restoration records no new quality decision. Source bytes equal P4 again.
+- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01 · LIB-AC-14 · J19/G4
+
 ### S16 — Save, then restart with an unsaved change {#S16}
 
 - **Do:** Click **Save View**. Restore one excluded frame without saving, quit PlateVault, relaunch, and reopen `NGC7000 HOO - Siril`.
@@ -148,9 +164,10 @@ confirmations in S11 and S13. Source files remain unchanged.
 - SC1: The View reads exactly Ha 111 / 9h 15m, OIII 97 / 8h 05m, and 208 / 17h 20m after S10 and after S16.
 - SC2: Source bytes equal P4 for 100% of files at S5 and at the end.
 - SC3: Measured values are identical with stretch on and off (S5); the failed fit shows 0 width numbers (S7).
-- SC4: Library quality changes occur only at S11 (208 frames) and S13 (1 frame); the Project rejection changes 0 library totals.
+- SC4: Library quality decisions change only at S11 (208 frames) and S13 (1 frame); the Project rejection changes 0 library totals, and S15a and S15b change applicability only.
 - SC5: S14 replaces 0 native values and lists both the unmatched and the ambiguous row.
 - SC6: The Project stays open after the Ha item is met (S12).
+- SC7: With the replacement in place, the frame reads ChangedContent, usable Ha reads 9h 10m and its cached values read valid 0 times (S15a); after S15b usable Ha reads 9h 15m again.
 
 ## Known gaps
 

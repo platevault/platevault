@@ -28,6 +28,7 @@ inputs and offers no verified Open. Retry completes only recorded items.
 - P4: A network share `Scratch` is mounted with `Processing/` writable; the share supports neither links nor OS Trash (macOS deletes immediately there). `Scratch/Processing/NGC7000-HOO-Siril/keep.txt` exists with unrelated content and a recorded SHA-256.
 - P5: No View has been prepared in this catalog, so no last-used parent exists.
 - P6: The J19/P5 manifest is available.
+- P7: For one named frame among the three 28 Sep frames made unreadable in S15, a backup of its original bytes and nanosecond mtime is kept outside PlateVault, with a replacement file of identical size and different pixel bytes. A fault control pauses Prepare after that item's source snapshot is recorded and before terminal success (G5).
 
 ## Steps
 
@@ -132,12 +133,19 @@ inputs and offers no verified Open. Retry completes only recorded items.
 - **Expect (negative):** No verified Open is offered. The three sources are untouched. `28 Sep Ha copy check` does not read Complete.
 - **Trace:** flow F5 failure branch, cross-flow "Partial preparation" · PREP-FR-09 · PREP-AC-05 · root FR-004 · D09
 
+### S15a — Retry into source drift {#S15a}
+
+- **Do:** Restore read permission on the three frames. Arm the P7 pause and choose **Retry**. When the pause reports the P7 frame's source snapshot recorded, overwrite that source with its replacement, restore its recorded mtime, and release the pause.
+- **Expect:** The P7 item reads blocked with source drift named. The other two retried entries read prepared after their copies re-read to match their source snapshots. The outcome reads Partial with 55 prepared and 1 blocked.
+- **Expect (negative):** No verified Open is offered and the P7 item never reads Prepared. PlateVault writes nothing to the changed source.
+- **Trace:** flow F5 failure branch · PREP-FR-09 · PREP-AC-14 · D09
+
 ### S16 — Retry and verify custody {#S16}
 
-- **Do:** Restore read permission on the three frames and choose **Retry**. Then compare a prepared copy's header with its original and recompute the manifest.
-- **Expect:** Retry prepares the three journaled entries and the View reads Prepared with 56 entries matching its membership. The prepared copy carries the patched focal length.
+- **Do:** Restore the P7 frame's original bytes and recorded mtime and choose **Retry**. Then compare a prepared copy's header with its original and recompute the manifest.
+- **Expect:** Retry prepares the journaled entry only after its source matches a fresh snapshot and its copy re-reads to match, and the View reads Prepared with 56 entries matching its membership. The prepared copy carries the patched focal length.
 - **Expect (negative):** The original is byte-identical and the manifest equals P6. Retry does not infer completion from filenames already present.
-- **Trace:** flow F5 · PREP-FR-03, PREP-FR-09 · PREP-AC-06 · D09, D15
+- **Trace:** flow F5 · PREP-FR-03, PREP-FR-09 · PREP-AC-06, PREP-AC-14 · D09, D15
 
 ## Success criteria
 
@@ -148,6 +156,7 @@ inputs and offers no verified Open. Retry completes only recorded items.
 - SC5: When linking is unsupported, the review offers alternatives and 0 files reach `Scratch` before a choice (S13).
 - SC6: Launching Siril and quitting it leave the View not Complete; a missing executable leaves it Prepared (S10, S11).
 - SC7: Only copies carry the patched value (S16).
+- SC8: The drifted P7 item reads Prepared 0 times while its source differs from its snapshot (S15a), and the manifest equals P6 after S16.
 
 ## Known gaps
 
@@ -155,6 +164,7 @@ inputs and offers no verified Open. Retry completes only recorded items.
 - G2: Unresolved implementation qualification — Siril's exact handoff, folder-versus-list input, and input-write behavior (P2) need a profile capability probe (D04); S2's branch and S3 depend on it. Blocks readiness.
 - G3: Unresolved — whether a View supports mixed per-item input modes is not settled by D01–D18; per-item mode changes are not exercised. Blocks readiness.
 - G4: Unresolved implementation qualification — which preparation phases offer Cancel or Pause "where safe" is unspecified; Canceled and Paused outcomes are not exercised. Blocks readiness.
+- G5: Unresolved implementation qualification: no fault control yet pauses Prepare between a source snapshot and terminal success (P7), and S15a depends on it. Blocks readiness.
 
 ## Delta log
 

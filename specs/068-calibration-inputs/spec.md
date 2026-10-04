@@ -29,6 +29,7 @@ An explainable compatible preselection of masters or raw sets for the chosen lig
 - **CAL-AC-05**: Given explicit adoption, then the master appears in Calibration with its origin and provenance and can be preselected where compatible.
 - **CAL-AC-06**: Given suggested calibrations, when Review preparation opens before assignment is accepted, then suggestions remain unaccepted and verified handoff is blocked until explicit acceptance, a scoped exception, another input or explicit exclusion resolves them.
 - **CAL-AC-07**: Given a generated master in a processing folder, when adoption is confirmed, then its copy is durably written and re-read/hash verified at the chosen calibration-library destination before reuse is registered. Failed verification retains the candidate and no reusable record is claimed.
+- **CAL-AC-08**: Given adoption is reviewed and an unrelated file then appears at the master's destination path, when adoption is confirmed, then it is refused for that path and names the existing file. That file stays byte-identical, no copy is written, nothing is registered and the generated source remains. A free path then adopts under CAL-AC-07.
 
 ### Edge Cases
 
@@ -44,7 +45,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **CAL-FR-04**: Raw calibration sets (for example, flats) can be assigned for an external application that builds its own masters.
 - **CAL-FR-05**: For a mismatch or unknown criterion, the user can choose another input, exclude the session, defer, or record a scoped exception with a reason. The criterion and reason are kept. An exception never rewrites master evidence or makes a master universally compatible.
 - **CAL-FR-06**: Detected candidate masters show Add to calibration library, with type, camera/settings, channel, source evidence, and origin. Adoption needs explicit confirmation and records actual provenance. Detection alone never makes a master available for reuse. Candidate and adopted masters are protected by default (STO consumes this).
-- **CAL-FR-07**: Adopted master storage follows D05 in the root decision register. Adoption never leaves a reusable master disposable along with its processing folder. The generated source retained after verified adoption remains protected Keep until separately reviewed as a verified duplicate.
+- **CAL-FR-07**: Adopted master storage follows D05 in the root decision register. Adoption never leaves a reusable master disposable along with its processing folder. Adoption checks the destination path during review and again immediately before writing; an existing entry there is never overwritten and blocks adoption until another path or destination is chosen. The generated source retained after verified adoption remains protected Keep until separately reviewed as a verified duplicate.
 - **CAL-FR-08**: Accept assignments explicitly records the selected calibration identities and evidence for the View revision. Unaccepted suggestions never enter a verified handoff. Unresolved requirements stay named and require acceptance, exception, alternate input or explicit exclusion.
 
 ### Owned interaction steps

@@ -117,11 +117,11 @@
     },
     {
       "flowStep": "D1",
-      "journeyStep": "J22/S1, J22/S3, J22/S4",
-      "spec": "067-frame-review PIX-FR-01, PIX-AC-01",
-      "action": "Open Review frames, cancel measurement, and reopen.",
-      "expect": "Pending frames and progress show. After Cancel, unfinished frames read Not measured. Cached values reappear and missing ones resume.",
-      "negative": "Cancel discards no selection or exclusion."
+      "journeyStep": "J22/S1, J22/S3, J22/S4, J22/S15a, J22/S15b",
+      "spec": "067-frame-review PIX-FR-01, PIX-AC-01, PIX-AC-10; 064-library-inventory LIB-FR-09, LIB-AC-14",
+      "action": "Open Review frames, cancel measurement, and reopen. Replace a reviewed frame's bytes in place, rescan and reopen, then restore the reviewed bytes.",
+      "expect": "Pending frames and progress show. After Cancel, unfinished frames read Not measured. Cached values reappear and missing ones resume. The replaced frame reads ChangedContent outside usable totals and is measured again; restored bytes make it Usable again.",
+      "negative": "Cancel discards no selection or exclusion. Cached values for other bytes never read valid, and no quality decision is recorded."
     },
     {
       "flowStep": "D2",
@@ -229,11 +229,11 @@
     },
     {
       "flowStep": "F5",
-      "journeyStep": "J24/S9, J24/S15, J24/S16",
-      "spec": "069-application-handoff PREP-FR-09, PREP-AC-05; D09",
-      "action": "Prepare, prepare with three blocked inputs while trying Mark complete, and Retry.",
-      "expect": "Prepared appears only when the entries match the membership. Partial reads 53/3. Retry completes the journaled entries to 56.",
-      "negative": "An acknowledgment is not success and no verified Open is offered on Partial. Complete is refused while preparation runs. Sources are untouched."
+      "journeyStep": "J24/S9, J24/S15, J24/S15a, J24/S16",
+      "spec": "069-application-handoff PREP-FR-09, PREP-AC-05, PREP-AC-14; D09",
+      "action": "Prepare, prepare with three blocked inputs while trying Mark complete, Retry while one source changes after its snapshot, then restore it and Retry.",
+      "expect": "Prepared appears only when the entries match the membership and their source snapshots. Partial reads 53/3, then 55/1 with drift named. Retry completes the journaled entries to 56.",
+      "negative": "An acknowledgment is not success and no verified Open is offered on Partial. Complete is refused while preparation runs. A drifted item never reads Prepared. Sources are untouched."
     },
     {
       "flowStep": "F6",
@@ -246,10 +246,10 @@
     {
       "flowStep": "G",
       "journeyStep": "J25/S1–S6",
-      "spec": "066-view-selection VSEL-FR-12, VSEL-AC-06; 069-application-handoff PREP-FR-11; D02, D08, D09",
-      "action": "Index new arrivals, make a member unreadable, Refresh selection, keep the View unchanged, then accept one addition, decline one, and save.",
-      "expect": "Additions show with reasons, manual inclusions and exclusions stay recorded, and the unreadable member reads Unavailable. The accepted change becomes a proposed revision that needs review.",
-      "negative": "Membership never changes without approval. The prepared revision and the inputs Siril reads stay identical."
+      "spec": "066-view-selection VSEL-FR-08, VSEL-FR-12, VSEL-AC-06, VSEL-AC-15; 064-library-inventory LIB-FR-08, LIB-AC-15; 069-application-handoff PREP-FR-11; D02, D08, D09, D16",
+      "action": "Index new arrivals, one session also copied to a second Captures location, make a member unreadable, Refresh selection, keep the View unchanged, then accept one addition, decline one, and save.",
+      "expect": "The copied session's frames count once and name both copies. Additions show with reasons, manual inclusions and exclusions stay recorded, and the unreadable member reads Unavailable. The accepted change becomes a proposed revision that needs review.",
+      "negative": "Membership never changes without approval, and no copied frame enters it twice. The prepared revision and the inputs Siril reads stay identical."
     },
     {
       "flowStep": "H1",
@@ -285,11 +285,11 @@
     },
     {
       "flowStep": "H4",
-      "journeyStep": "J26/S8, J26/S9",
-      "spec": "068-calibration-inputs CAL-FR-06, CAL-FR-07, CAL-AC-04, CAL-AC-05; D05, D13",
-      "action": "See the detected master and adopt it into a durable calibration destination.",
-      "expect": "The master is registered with provenance only after a verified copy, then appears as a suggestion awaiting acceptance.",
-      "negative": "It is never preselected before adoption, and its generated source is not removed."
+      "journeyStep": "J26/S8, J26/S8a, J26/S9",
+      "spec": "068-calibration-inputs CAL-FR-06, CAL-FR-07, CAL-AC-04, CAL-AC-05, CAL-AC-07, CAL-AC-08; D05, D13",
+      "action": "See the detected master, meet an occupied destination path, and adopt it into a durable calibration destination.",
+      "expect": "The occupied path is refused. The master is registered with provenance only after a verified copy, then appears as a suggestion awaiting acceptance.",
+      "negative": "It is never preselected before adoption, the occupying file is unchanged, and its generated source is not removed."
     },
     {
       "flowStep": "I1",
@@ -317,11 +317,11 @@
     },
     {
       "flowStep": "I4",
-      "journeyStep": "J27/S7",
-      "spec": "071-storage-custody STO-FR-04, STO-AC-04",
-      "action": "Review cleanup.",
-      "expect": "The exact entries show with Send to OS Trash, movable and blocked counts per location, and a last-copy hardlink blocked.",
-      "negative": "Nothing with stale identity, missing proof, an unavailable source, or ambiguous ownership is approved."
+      "journeyStep": "J27/S7, J27/S11",
+      "spec": "071-storage-custody STO-FR-04, STO-AC-04, STO-AC-08",
+      "action": "Review cleanup, then remove a symlink View's prepared links and a verified duplicate.",
+      "expect": "The exact entries show with Send to OS Trash, movable and blocked counts per location, and a last-copy hardlink blocked. Duplicate removal names the verified copy kept.",
+      "negative": "Nothing with stale identity, missing proof, an unavailable source, or ambiguous ownership is approved. No symlink target or target directory is followed."
     },
     {
       "flowStep": "I5",
@@ -333,11 +333,11 @@
     },
     {
       "flowStep": "J",
-      "journeyStep": "J28/S1–S10",
-      "spec": "071-storage-custody STO-FR-06, STO-FR-07, STO-FR-08, STO-AC-05; D06, D09, D11; D09",
-      "action": "Plan an archive, meet an impostor volume, choose the reference mode, approve, interrupt, retry, repair a blocked reference, and unplug the archive later.",
-      "expect": "Per-item journaled phases. Sources are retired only after destination and reference verification. Fixed membership; archived inputs read Offline.",
-      "negative": "No source is retired on failure or uncertainty. Hardlinks are not converted implicitly. Retry does not infer from filenames, and Open never omits unavailable inputs."
+      "journeyStep": "J28/S1–S10, J28/S7a, J28/S9a",
+      "spec": "071-storage-custody STO-FR-06, STO-FR-07, STO-FR-08, STO-AC-05, STO-AC-14; D06, D09, D11; D09",
+      "action": "Plan an archive, meet an impostor volume, choose the reference mode, approve, interrupt, retry, change one source before retirement, repair a blocked reference, resolve the drift, and unplug the archive later.",
+      "expect": "Per-item journaled phases. Sources are retired only after destination and reference verification while they still match their snapshots. Fixed membership; archived inputs read Offline.",
+      "negative": "No source is retired on failure, uncertainty or drift, and drift retains both versions. Hardlinks are not converted implicitly. Retry does not infer from filenames, and Open never omits unavailable inputs."
     },
     {
       "flowStep": "K",
