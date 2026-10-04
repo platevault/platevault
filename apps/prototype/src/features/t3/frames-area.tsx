@@ -224,6 +224,8 @@ export function FramesArea() {
   const [importOpen, setImportOpen] = useState(false)
   const [confirm, setConfirm] = useState<"usable" | "unusable" | "reject" | null>(null)
   const [announcement, setAnnouncement] = useState("")
+  // Bulk-action selection is component state, never persisted: a selection that survives a restart turns a bulk action into a surprise.
+  const [checkedIds, setCheckedIds] = useState<AssetId[]>([])
   const project = view.projectId ? catalog.projects[view.projectId] : undefined
   const editable = readOnlyReason === null
 
@@ -245,7 +247,7 @@ export function FramesArea() {
   const shown = rows.filter((r) => (ui.showExcluded || r.member !== "excluded") && (!ui.sessionId || r.asset.sessionId === ui.sessionId) && (!query || r.asset.fileName.toLowerCase().includes(query)))
   const active = shown.find((r) => r.asset.id === ui.activeAssetId) ?? rows.find((r) => r.asset.id === ui.activeAssetId) ?? shown[0] ?? null
   const position = active ? shown.indexOf(active) : -1
-  const checked = ui.checked.filter((id) => memberIds.includes(id))
+  const checked = checkedIds.filter((id) => memberIds.includes(id))
   const checkedIncluded = checked.filter((id) => content.included.includes(id))
   const checkedExcluded = checked.filter((id) => content.excluded.includes(id))
   const hiddenChecked = checked.filter((id) => !shown.some((r) => r.asset.id === id)).length
@@ -441,7 +443,7 @@ export function FramesArea() {
           hiddenByFilters={hiddenChecked}
           noun="frame"
           onShowSelected={() => setFrameUi(view.id, { showExcluded: true, sessionId: null, search: "" })}
-          onClear={() => setFrameUi(view.id, { checked: [] })}
+          onClear={() => setCheckedIds([])}
           actions={
             <>
               <Button
@@ -512,7 +514,7 @@ export function FramesArea() {
             initialSort={{ columnId: "frame", direction: "asc" }}
             activeRowId={active?.asset.id ?? null}
             className="max-h-[40rem] self-start"
-            selection={{ selected: checked, onChange: (ids) => setFrameUi(view.id, { checked: ids }), rowLabel: (r) => r.asset.fileName }}
+            selection={{ selected: checked, onChange: setCheckedIds, rowLabel: (r) => r.asset.fileName }}
             empty={
               <EmptyState
                 icon={ImageOff}

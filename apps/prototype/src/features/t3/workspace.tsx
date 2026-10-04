@@ -267,6 +267,7 @@ export function ViewWorkspacePage() {
   const hasDraft = view.draft !== null
   const diff = view.draft ? describeDiff(catalog, diffContent(base, view.draft)) : []
   const sincePrepared = framesSincePrepared(catalog, view, content)
+  const saveBlocked = view.completedAt ? "Complete Views cannot be saved." : recovered ? "Resume the recovered changes first." : hasDraft ? null : "No unsaved changes."
 
   function save() {
     const result = saveView(viewId)
@@ -323,13 +324,22 @@ export function ViewWorkspacePage() {
                 <RefreshCw aria-hidden="true" data-icon="inline-start" />
                 Refresh selection
               </Button>
-              <Button size="sm" onClick={save} disabled={!hasDraft || recovered || Boolean(view.completedAt)} aria-describedby={`${viewId}-save-reason`}>
+              {saveBlocked ? (
+                <span id={`${viewId}-save-reason`} className="text-xs text-muted-foreground">
+                  {saveBlocked}
+                </span>
+              ) : null}
+              <Button
+                size="sm"
+                onClick={save}
+                disabled={saveBlocked !== null}
+                focusableWhenDisabled
+                aria-describedby={saveBlocked ? `${viewId}-save-reason` : undefined}
+                className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+              >
                 <Save aria-hidden="true" data-icon="inline-start" />
                 Save View
               </Button>
-              <span id={`${viewId}-save-reason`} className="sr-only">
-                {view.completedAt ? "Complete Views cannot be saved." : recovered ? "Resume the recovered changes first." : hasDraft ? "" : "No unsaved changes."}
-              </span>
             </>
           }
         />

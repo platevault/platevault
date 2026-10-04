@@ -7,7 +7,7 @@
  * and no quality changes.
  */
 import { FileSpreadsheet } from "lucide-react"
-import { useState } from "react"
+import { useId, useState } from "react"
 import { PathText } from "@/components/app/data"
 import { ActionError, Notice } from "@/components/app/feedback"
 import { StatusBadge } from "@/components/app/status"
@@ -43,6 +43,19 @@ export function ImportDialog({ viewId, viewAssetIds, open, onOpenChange }: { vie
   const matched = mapped.filter((m) => m.status === "matched" || m.status === "matched-by-name")
   const unresolved = mapped.filter((m) => m.status === "ambiguous" || m.status === "unmatched")
   const outside = matched.filter((m) => !viewAssetIds.has(m.assetId!)).length
+  const blockedId = useId()
+  const blocked =
+    step === "choose"
+      ? path
+        ? null
+        : csvFiles.length === 0
+          ? "No export on a mounted volume to review."
+          : "Choose an export file to review its mapping."
+      : !rows
+        ? "This file cannot be imported."
+        : matched.length === 0
+          ? "No row matches an indexed frame."
+          : null
 
   function reset(next: boolean) {
     if (next) {
@@ -173,15 +186,20 @@ export function ImportDialog({ viewId, viewAssetIds, open, onOpenChange }: { vie
         )}
 
         <DialogFooter>
+          {blocked ? (
+            <p id={blockedId} className="text-xs text-muted-foreground sm:mr-auto sm:self-center">
+              {blocked}
+            </p>
+          ) : null}
           <Button variant="outline" onClick={() => (step === "review" ? setStep("choose") : reset(false))}>
             {step === "review" ? "Back" : "Cancel"}
           </Button>
           {step === "choose" ? (
-            <Button disabled={!path} onClick={() => setStep("review")}>
+            <Button disabled={blocked !== null} aria-describedby={blocked ? blockedId : undefined} onClick={() => setStep("review")}>
               Review mapping
             </Button>
           ) : (
-            <Button disabled={!rows || matched.length === 0} onClick={confirm}>
+            <Button disabled={blocked !== null} aria-describedby={blocked ? blockedId : undefined} onClick={confirm}>
               Import {plural(matched.length, "matched row")}
             </Button>
           )}

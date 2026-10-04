@@ -66,8 +66,6 @@ export function defaultSessionFilters(): SessionFilters {
 export interface FrameUi {
   /** Current frame: highlighted in the row, plot and preview at once (PIX-FR-02). */
   activeAssetId: AssetId | null
-  /** Frames checked for bulk actions; separate from the current frame. */
-  checked: AssetId[]
   showExcluded: boolean
   sessionId: SessionId | null
   search: string
@@ -75,7 +73,7 @@ export interface FrameUi {
 }
 
 export function defaultFrameUi(): FrameUi {
-  return { activeAssetId: null, checked: [], showExcluded: false, sessionId: null, search: "", metric: "fwhm" }
+  return { activeAssetId: null, showExcluded: false, sessionId: null, search: "", metric: "fwhm" }
 }
 
 /** An import's rows that attach to no frame until the user resolves them (PIX-FR-07). */
@@ -117,7 +115,7 @@ export interface T3State {
 
 export const t3Slice: SliceDefinition<T3State> = {
   id: "t3",
-  version: 2,
+  version: 3,
   initial: () => ({ sessionFilters: {}, activeSession: {}, sky: {}, frames: {}, refresh: {}, imports: {} }),
   operations: [measureHandler],
 }
