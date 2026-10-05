@@ -251,26 +251,7 @@ impl Catalog {
         rejected: bool,
     ) -> Result<Project> {
         let project = write_txn!(self, |conn| {
-            let next = next_revision(conn, id, expected).await?;
-            let decided = check_expected_assets(conn, assets).await?;
-            let at = now()?;
-            for asset in &decided {
-                sqlx::query(
-                    "INSERT INTO project_rejections \
-                     (project_id, asset_id, rejected, fingerprint, project_revision, decided_at) \
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                )
-                .bind(id.to_string())
-                .bind(asset.id.to_string())
-                .bind(i64::from(rejected))
-                .bind(to_json(&asset.fingerprint)?)
-                .bind(db_revision(next)?)
-                .bind(&at)
-                .execute(&mut *conn)
-                .await?;
-            }
-            commit_revision(conn, id, next).await?;
-            load_project(conn, id).await?
+            record_rejection(conn, id, expected, assets, rejected).await?
         });
         Ok(project)
     }
@@ -410,6 +391,38 @@ async fn commit_revision(conn: &mut SqliteConnection, id: Uuid, next: Revision) 
         .execute(&mut *conn)
         .await?;
     Ok(())
+}
+
+/// The body of [`Catalog::set_project_rejection`], run inside the caller's
+/// writer transaction so a View's Reject for Project checks its own scope in
+/// the same transaction (S1).
+pub async fn record_rejection(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    expected: Revision,
+    assets: &[ExpectedAsset],
+    rejected: bool,
+) -> Result<Project> {
+    let next = next_revision(conn, id, expected).await?;
+    let decided = check_expected_assets(conn, assets).await?;
+    let at = now()?;
+    for asset in &decided {
+        sqlx::query(
+            "INSERT INTO project_rejections \
+             (project_id, asset_id, rejected, fingerprint, project_revision, decided_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )
+        .bind(id.to_string())
+        .bind(asset.id.to_string())
+        .bind(i64::from(rejected))
+        .bind(to_json(&asset.fingerprint)?)
+        .bind(db_revision(next)?)
+        .bind(&at)
+        .execute(&mut *conn)
+        .await?;
+    }
+    commit_revision(conn, id, next).await?;
+    load_project(conn, id).await
 }
 
 /// Framing, panels and equipment of a create or update.

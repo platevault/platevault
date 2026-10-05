@@ -11,14 +11,15 @@ mod support;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use persistence_library::{Catalog, LocationRegistration, SessionQuery};
+use persistence_library::{Catalog, LocationReferences, LocationRegistration, SessionQuery};
 use platevault_model::{
     ApplicableQuality, AssessedMembers, Asset, AssetReference, AssociationState, Availability,
     CorrectionInput, CriteriaInput, DraftEdit, Equipment, GeometryClass, GeometryEvidence,
     LibraryError, LocationRole, MemberReason, MemberState, Membership, NativePath, NewView,
-    Project, ProjectInput, Provenance, Quality, ReferenceKind, Revision, SelectionReason, Session,
-    SessionChoice, SessionChoiceState, SuggestedChoice, TargetFraming, TargetRecord, ViewMember,
-    ViewOriginInput, ViewRecord,
+    Project, ProjectInput, Provenance, Quality, ReferenceKind, RefreshItem, RefreshItemKind,
+    RefreshReview, RefreshState, Revision, SelectionReason, Session, SessionChoice,
+    SessionChoiceState, SuggestedChoice, TargetFraming, TargetRecord, ViewMember, ViewOriginInput,
+    ViewRecord,
 };
 use sqlx::Connection;
 use support::*;
@@ -1157,4 +1158,474 @@ async fn view_references_name_every_view_whose_revisions_or_draft_hold_an_asked_
     assert!(catalog.view_references(&BTreeSet::new()).await.unwrap().is_empty());
     let elsewhere = BTreeSet::from([Uuid::new_v4()]);
     assert!(catalog.view_references(&elsewhere).await.unwrap().is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Scoped quality actions and refresh reviews (T006)
+// ---------------------------------------------------------------------------
+
+/// Retire `location` after an Offline review naming the Views holding its copies.
+async fn retire(catalog: &Catalog, location: Uuid) {
+    let assets: BTreeSet<Uuid> =
+        catalog.location_assets(location).await.unwrap().iter().map(|a| a.id).collect();
+    let references = LocationReferences {
+        references: catalog.view_references(&assets).await.unwrap(),
+        assets,
+        consulted: vec![ReferenceKind::View],
+    };
+    catalog.mark_location_unavailable(location, Availability::Offline, "unplugged").await.unwrap();
+    let review = catalog.review_retire_location(location, &references).await.unwrap();
+    catalog
+        .retire_location(review.id, location, review.expected_revision, &references)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // one scope walked through every refusal and both actions
+async fn view_quality_actions_decide_only_their_scope_and_never_move_members() {
+    let lib = indexed_with(&["night1/Unknown_001.fits"]).await;
+    let catalog = &lib.catalog;
+    let cold = cold_copy(&lib).await;
+    let assets = catalog.location_assets(lib.location.id).await.unwrap();
+    let asset = |name: &str| by_name(&assets, name).clone();
+    let ha = session_holding(catalog, asset("Ha_001.fits").id).await;
+    let oiii = session_holding(catalog, asset("OIII_001.fits").id).await;
+    let id = catalog.create_view(&origin_sessions(&[&ha, &oiii])).await.unwrap().view.id;
+    let excluded = asset("OIII_002.fits");
+    let exclude =
+        DraftEdit::SetFrames { member_keys: vec![excluded.id], state: MemberState::Excluded };
+    catalog.edit_view_draft(id, 1, &exclude).await.unwrap();
+    let views = dump_tables(&lib.fx.db, &VIEW_TABLES).await;
+    let decisions = dump_where(&lib.fx.db, "quality_decisions", "").await;
+    let (ha2, ha3) = (asset("Ha_002.fits"), asset("Ha_003.fits"));
+
+    // Refusals decide nothing: an excluded or a non-member, or a stale draft.
+    let error = catalog
+        .set_view_quality(
+            id,
+            Membership::Draft,
+            Some(2),
+            &[expected(&ha2), expected(&excluded)],
+            Quality::Usable,
+            DiskProbe,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&error), "invalid_input");
+    assert!(error.to_string().contains(&excluded.id.to_string()), "{error}");
+    let stranger = asset("Unknown_001.fits");
+    let error = catalog
+        .set_view_quality(
+            id,
+            Membership::Draft,
+            Some(2),
+            &[expected(&stranger)],
+            Quality::Unusable,
+            DiskProbe,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&error), "invalid_input", "not a member: {error}");
+    let error = catalog
+        .set_view_quality(
+            id,
+            Membership::Draft,
+            Some(1),
+            &[expected(&ha2)],
+            Quality::Usable,
+            DiskProbe,
+        )
+        .await
+        .unwrap_err();
+    conflict_at(&error, id, 2);
+    assert_eq!(dump_where(&lib.fx.db, "quality_decisions", "").await, decisions);
+
+    // Mark included frames usable hashes and decides; no member moves.
+    let decided = catalog
+        .set_view_quality(
+            id,
+            Membership::Draft,
+            Some(2),
+            &[expected(&ha2), expected(&ha3)],
+            Quality::Usable,
+            DiskProbe,
+        )
+        .await
+        .unwrap();
+    assert_eq!(decided.iter().map(|a| a.id).collect::<Vec<_>>(), sorted(vec![ha2.id, ha3.id]));
+    for asset in &decided {
+        assert_eq!(asset.quality, Quality::Usable);
+        assert!(asset.quality_basis.as_ref().is_some_and(|basis| basis.content_sha256.is_some()));
+    }
+    assert_eq!(dump_where(&lib.fx.db, "quality_decisions", "").await.len(), decisions.len() + 2);
+    assert_eq!(dump_tables(&lib.fx.db, &VIEW_TABLES).await, views, "no member moved");
+    let error = catalog
+        .set_view_quality(
+            id,
+            Membership::Draft,
+            Some(2),
+            &[expected(&ha2)],
+            Quality::Usable,
+            DiskProbe,
+        )
+        .await
+        .unwrap_err();
+    conflict_at(&error, ha2.id, ha2.decision_revision + 1);
+
+    // Mark unusable in library takes an excluded member and leaves it excluded.
+    catalog
+        .set_view_quality(
+            id,
+            Membership::Draft,
+            Some(2),
+            &[expected(&excluded)],
+            Quality::Unusable,
+            DiskProbe,
+        )
+        .await
+        .unwrap();
+    assert_eq!(catalog.asset(excluded.id).await.unwrap().quality, Quality::Unusable);
+    assert_eq!(dump_tables(&lib.fx.db, &VIEW_TABLES).await, views);
+    let (_, members) = stored(&lib.fx.db, id, None).await;
+    let member = members.iter().find(|m| m.member_key == excluded.id).unwrap();
+    assert_eq!(
+        (member.state, &member.reason),
+        (MemberState::Excluded, &MemberReason::ViewExclusion)
+    );
+
+    // On a committed revision a later decision changes no revision row.
+    catalog.save_view(id, 0, 2).await.unwrap();
+    let rows = committed_rows(&lib.fx.db).await;
+    let ha3 = catalog.asset(ha3.id).await.unwrap();
+    let unusable = catalog
+        .set_view_quality(
+            id,
+            Membership::Committed,
+            None,
+            &[expected(&ha3)],
+            Quality::Unusable,
+            DiskProbe,
+        )
+        .await
+        .unwrap();
+    assert_eq!(unusable[0].quality, Quality::Unusable);
+    assert_eq!(committed_rows(&lib.fx.db).await, rows, "the revision is unchanged");
+    let revision = catalog.view_revision(id, 1).await.unwrap();
+    let member = revision.members.iter().find(|m| m.member_key == ha3.id).unwrap();
+    assert_eq!((member.state, &member.reason), (MemberState::Included, &MemberReason::Initial));
+
+    // A Retired copy is refused before anything is hashed.
+    retire(catalog, cold.id).await;
+    let cold_assets = catalog.location_assets(cold.id).await.unwrap();
+    let retired = by_name(&cold_assets, "Ha_001.fits").clone();
+    assert_eq!(retired.availability, Availability::Retired);
+    let error = catalog
+        .set_view_quality(
+            id,
+            Membership::Committed,
+            None,
+            &[expected(&retired)],
+            Quality::Unusable,
+            DiskProbe,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&error), "invalid_input", "{error}");
+    assert_eq!(committed_rows(&lib.fx.db).await, rows);
+    assert_eq!(tree(&lib.fx.root), lib.before);
+}
+
+#[tokio::test]
+async fn reject_for_project_records_only_the_project_rejection() {
+    let lib = indexed().await;
+    let catalog = &lib.catalog;
+    let by_filter = sessions(catalog).await;
+    let (ha, oiii) = (&by_filter["Ha"], &by_filter["OIII"]);
+    let project = hoo(&lib).await;
+    let id = project_view(catalog, &project, vec![suggestion(catalog, ha).await]).await.view.id;
+    let assets = catalog.location_assets(lib.location.id).await.unwrap();
+    let (ha1, oiii1) = (by_name(&assets, "Ha_001.fits"), by_name(&assets, "OIII_001.fits"));
+    let library = dump_tables(&lib.fx.db, &LIBRARY_TABLES[..7]).await;
+    let views = dump_tables(&lib.fx.db, &VIEW_TABLES).await;
+
+    let error = catalog
+        .reject_view_members(id, Membership::Draft, Some(1), project.revision, &[expected(oiii1)])
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&error), "invalid_input", "not a member: {error}");
+    let error = catalog
+        .reject_view_members(id, Membership::Draft, Some(1), project.revision + 1, &[expected(ha1)])
+        .await
+        .unwrap_err();
+    conflict_at(&error, project.id, project.revision);
+    let error = catalog
+        .reject_view_members(id, Membership::Draft, Some(2), project.revision, &[expected(ha1)])
+        .await
+        .unwrap_err();
+    conflict_at(&error, id, 1);
+    assert_eq!(catalog.project(project.id).await.unwrap().revision, project.revision);
+
+    let rejected = catalog
+        .reject_view_members(id, Membership::Draft, Some(1), project.revision, &[expected(ha1)])
+        .await
+        .unwrap();
+    assert_eq!(rejected.revision, project.revision + 1);
+    let decisions: Vec<(Uuid, bool)> =
+        rejected.rejections.iter().map(|r| (r.asset_id, r.rejected)).collect();
+    assert_eq!(decisions, vec![(ha1.id, true)]);
+    assert_eq!(dump_tables(&lib.fx.db, &LIBRARY_TABLES[..7]).await, library, "library unchanged");
+    assert_eq!(dump_tables(&lib.fx.db, &VIEW_TABLES).await, views, "no member moved");
+
+    // A View without a Project has no Project scope.
+    let standalone = catalog.create_view(&origin_sessions(&[oiii])).await.unwrap().view.id;
+    let error = catalog
+        .reject_view_members(
+            standalone,
+            Membership::Draft,
+            Some(1),
+            rejected.revision,
+            &[expected(oiii1)],
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(kind(&error), "invalid_input", "{error}");
+    assert_eq!(catalog.project(project.id).await.unwrap().revision, rejected.revision);
+    assert_eq!(tree(&lib.fx.root), lib.before);
+}
+
+fn refresh_item(kind: RefreshItemKind, session: &Session) -> RefreshItem {
+    RefreshItem {
+        id: Uuid::new_v4(),
+        kind,
+        session_id: session.id,
+        session: Some(expected_session(session)),
+        assessed: None,
+        evidence: None,
+        reason: None,
+        member_keys: Vec::new(),
+        successors: Vec::new(),
+    }
+}
+
+/// An added-session item bound to the session's current members.
+async fn added_session(catalog: &Catalog, session: &Session) -> RefreshItem {
+    let detail = catalog.session(session.id).await.unwrap();
+    RefreshItem {
+        assessed: Some(assessed(&detail.assets)),
+        evidence: Some(geometry()),
+        ..refresh_item(RefreshItemKind::AddedSession, &detail.summary.session)
+    }
+}
+
+async fn record_review(catalog: &Catalog, view: Uuid, items: Vec<RefreshItem>) -> RefreshReview {
+    let record = catalog.view(view).await.unwrap();
+    let revision = record.revision.unwrap();
+    let review = RefreshReview {
+        id: Uuid::new_v4(),
+        view_id: view,
+        base_revision: revision.revision,
+        criteria: revision.criteria,
+        items,
+        state: RefreshState::Reviewed,
+        created_at: String::new(),
+        applied_at: None,
+    };
+    catalog.record_refresh_review(&review).await.unwrap()
+}
+
+#[tokio::test]
+async fn refresh_reviews_persist_and_apply_once_onto_a_draft() {
+    let lib = indexed_with(&["night1/Unknown_001.fits"]).await;
+    let catalog = &lib.catalog;
+    let assets = catalog.location_assets(lib.location.id).await.unwrap();
+    let ha = session_holding(catalog, by_name(&assets, "Ha_001.fits").id).await;
+    let oiii = session_holding(catalog, by_name(&assets, "OIII_001.fits").id).await;
+    let unknown = session_holding(catalog, by_name(&assets, "Unknown_001.fits").id).await;
+    let id = catalog.create_view(&origin_sessions(&[&ha])).await.unwrap().view.id;
+    catalog.save_view(id, 0, 1).await.unwrap();
+    let rows = committed_rows(&lib.fx.db).await;
+
+    let added = added_session(catalog, &oiii).await;
+    let declined = added_session(catalog, &unknown).await;
+    let manual = RefreshItem {
+        reason: Some(SelectionReason::OriginSessions),
+        member_keys: ha.asset_ids.clone(),
+        ..refresh_item(RefreshItemKind::ManualInclusion, &ha)
+    };
+    let review =
+        record_review(catalog, id, vec![added.clone(), declined.clone(), manual.clone()]).await;
+    assert_eq!((review.state, review.applied_at.is_none()), (RefreshState::Reviewed, true));
+    assert_eq!((review.base_revision, review.items.len()), (1, 3));
+    assert!(!review.created_at.is_empty());
+    assert_eq!(dump_where(&lib.fx.db, "view_refresh_reviews", "").await.len(), 1, "persisted");
+    let stale_base = RefreshReview { id: Uuid::new_v4(), base_revision: 2, ..review.clone() };
+    conflict_at(&catalog.record_refresh_review(&stale_base).await.unwrap_err(), id, 1);
+    // A review whose added session changed since it was computed.
+    let mut changed = added_session(catalog, &oiii).await;
+    changed.session.as_mut().unwrap().decision_revision += 1;
+    let stale_review = record_review(catalog, id, vec![changed.clone()]).await;
+
+    // Refusals write nothing: a kept item, an unknown item, a stale View or item.
+    let before = dump_tables(&lib.fx.db, &VIEW_TABLES).await;
+    let error = catalog.apply_refresh(review.id, id, 1, 0, &[manual.id], &[]).await.unwrap_err();
+    assert_eq!(kind(&error), "invalid_input", "a manual inclusion is only listed: {error}");
+    let error = catalog.apply_refresh(review.id, id, 1, 0, &[Uuid::new_v4()], &[]).await;
+    assert_eq!(kind(&error.unwrap_err()), "invalid_input");
+    let error = catalog.apply_refresh(review.id, id, 2, 0, &[added.id], &[]).await.unwrap_err();
+    conflict_at(&error, id, 1);
+    let error = catalog.apply_refresh(stale_review.id, id, 1, 0, &[changed.id], &[]).await;
+    conflict_at(&error.unwrap_err(), oiii.id, oiii.decision_revision);
+    assert_eq!(dump_tables(&lib.fx.db, &VIEW_TABLES).await, before);
+
+    // Accepting OIII and declining the unknown session starts the draft.
+    let applied = catalog.apply_refresh(review.id, id, 1, 0, &[added.id], &[declined.id]).await;
+    let draft = applied.unwrap().draft.unwrap();
+    assert_eq!(
+        (draft.draft_revision, draft.base_revision, draft.refresh_review_id),
+        (1, 1, Some(review.id))
+    );
+    let (choices, members) = stored(&lib.fx.db, id, None).await;
+    let choice = |session: Uuid| choices.iter().find(|c| c.session_id == session).unwrap();
+    let refresh = SelectionReason::RefreshMatch { review_id: review.id };
+    assert_eq!(
+        (choice(oiii.id).state, &choice(oiii.id).reason),
+        (SessionChoiceState::Selected, &refresh)
+    );
+    assert_eq!(choice(oiii.id).evidence, Some(geometry()));
+    assert_eq!(
+        (choice(unknown.id).state, &choice(unknown.id).reason),
+        (SessionChoiceState::Excluded, &refresh)
+    );
+    assert_eq!(choice(ha.id).reason, SelectionReason::OriginSessions);
+    for member in &members {
+        if member.session_id == oiii.id {
+            assert_eq!(member.reason, MemberReason::RefreshAdded { review_id: review.id });
+            assert_eq!((member.state, member.added_in_revision), (MemberState::Included, None));
+        } else {
+            assert_eq!((member.session_id, member.added_in_revision), (ha.id, Some(1)));
+        }
+    }
+    assert_eq!(members.len(), ha.asset_ids.len() + oiii.asset_ids.len(), "no unknown member");
+    assert_eq!(committed_rows(&lib.fx.db).await, rows, "revision 1 is byte-identical");
+    let filter = format!("WHERE id = '{}'", review.id);
+    let state = dump_where(&lib.fx.db, "view_refresh_reviews", &filter).await;
+    assert!(state[0].contains("'applied'"), "{state:?}");
+    let twice = catalog.apply_refresh(review.id, id, 1, 1, &[added.id], &[]).await.unwrap_err();
+    assert_eq!(kind(&twice), "conflict", "{twice}");
+
+    // Save: the additions carry the new revision; revision 1 stays as it was.
+    let saved = catalog.save_view(id, 1, 1).await.unwrap();
+    assert_eq!(saved.revision.as_ref().unwrap().refresh_review_id, Some(review.id));
+    let revision = catalog.view_revision(id, 2).await.unwrap();
+    for member in &revision.members {
+        let added_in = if member.session_id == oiii.id { 2 } else { 1 };
+        assert_eq!(member.added_in_revision, Some(added_in));
+    }
+    let after = committed_rows(&lib.fx.db).await;
+    for (before, after) in rows.iter().zip(&after) {
+        assert!(after.starts_with(before), "revision 1 rows unchanged: {before:?} vs {after:?}");
+    }
+    assert_eq!(tree(&lib.fx.root), lib.before);
+}
+
+#[tokio::test]
+async fn accepted_captures_removals_and_regroups_follow_their_items() {
+    let lib = indexed().await;
+    let catalog = &lib.catalog;
+    let by_filter = sessions(catalog).await;
+    let (ha, oiii) = (by_filter["Ha"].clone(), by_filter["OIII"].clone());
+    let project = hoo(&lib).await;
+    let id = project_view(catalog, &project, vec![suggestion(catalog, &ha).await]).await.view.id;
+    let details = DraftEdit::Details {
+        name: "NGC 7000 HOO".into(),
+        project_id: Some(project.id),
+        criteria: CriteriaInput::default(),
+    };
+    catalog.edit_view_draft(id, 1, &details).await.unwrap();
+    catalog.save_view(id, 0, 2).await.unwrap();
+
+    // A new Ha frame joins the kept Ha session: accepting adds just that capture.
+    lib.fx.write("night1/Ha_005.fits", b"night1/Ha_005.fits");
+    let mut names = FRAMES.to_vec();
+    names.push("night1/Ha_005.fits");
+    scan(catalog, &lib.fx, &lib.location, &names).await;
+    let assets = catalog.location_assets(lib.location.id).await.unwrap();
+    let new = by_name(&assets, "Ha_005.fits").id;
+    let grown = session_holding(catalog, new).await;
+    assert_eq!(grown.id, ha.id, "identical evidence keeps the session");
+    let captures = RefreshItem { member_keys: vec![new], ..added_session(catalog, &grown).await };
+    let captures = RefreshItem { kind: RefreshItemKind::AddedCaptures, ..captures };
+    let review = record_review(catalog, id, vec![captures.clone()]).await;
+    catalog.apply_refresh(review.id, id, 1, 0, &[captures.id], &[]).await.unwrap();
+    let (choices, members) = stored(&lib.fx.db, id, None).await;
+    assert_eq!(choices[0].grouping_revision, grown.grouping_revision, "the choice follows");
+    assert_eq!(members.len(), 4);
+    let added = members.iter().find(|m| m.member_key == new).unwrap();
+    assert_eq!(added.reason, MemberReason::RefreshAdded { review_id: review.id });
+    catalog.save_view(id, 1, 1).await.unwrap();
+
+    // Removing a criteria-based member session turns it into an exclusion.
+    let removed = RefreshItem {
+        member_keys: grown.asset_ids.clone(),
+        ..refresh_item(RefreshItemKind::Removed, &grown)
+    };
+    let review = record_review(catalog, id, vec![removed.clone()]).await;
+    catalog.apply_refresh(review.id, id, 2, 0, &[removed.id], &[]).await.unwrap();
+    let (choices, members) = stored(&lib.fx.db, id, None).await;
+    assert_eq!(
+        (choices.len(), choices[0].state, &choices[0].reason),
+        (1, SessionChoiceState::Excluded, &SelectionReason::GeometrySuggestion)
+    );
+    assert!(members.is_empty());
+
+    // A superseded member session is regrouped: the choice points at the
+    // successors and every member keeps its state, now held by a successor.
+    let other = catalog.create_view(&origin_sessions(&[&oiii])).await.unwrap().view.id;
+    let exclude = DraftEdit::SetFrames {
+        member_keys: vec![by_name(&assets, "OIII_002.fits").id],
+        state: MemberState::Excluded,
+    };
+    catalog.edit_view_draft(other, 1, &exclude).await.unwrap();
+    catalog.save_view(other, 0, 2).await.unwrap();
+    let (_, before) = stored(&lib.fx.db, other, Some(1)).await;
+    let corrected = by_name(&assets, "OIII_002.fits").clone();
+    let correction = CorrectionInput {
+        asset_id: corrected.id,
+        field: "filter".into(),
+        value: serde_json::json!("SII"),
+    };
+    let outcome = catalog
+        .apply_correction_and_regroup(&[expected(&corrected)], &[correction], group)
+        .await
+        .unwrap();
+    let successors = outcome.lineage.unwrap().successors;
+    let mut current = Vec::new();
+    for successor in &successors {
+        current.push(expected_session(&catalog.session(*successor).await.unwrap().summary.session));
+    }
+    let regrouped = RefreshItem {
+        session: None,
+        successors: current,
+        ..refresh_item(RefreshItemKind::Regrouped, &oiii)
+    };
+    let review = record_review(catalog, other, vec![regrouped.clone()]).await;
+    catalog.apply_refresh(review.id, other, 1, 0, &[regrouped.id], &[]).await.unwrap();
+    let (choices, members) = stored(&lib.fx.db, other, None).await;
+    assert_eq!(selected(&choices), sorted(successors.clone()));
+    assert!(choices.iter().all(|c| c.reason == SelectionReason::OriginSessions));
+    let keep = |members: &[ViewMember]| {
+        members.iter().map(|m| (m.member_key, m.state, m.reason.clone())).collect::<Vec<_>>()
+    };
+    assert_eq!(keep(&members), keep(&before), "members unchanged");
+    for member in &members {
+        let holder = session_holding(catalog, member.member_key).await;
+        assert_eq!(member.session_id, holder.id, "held by the successor holding its copy");
+    }
+    assert!(successors.contains(&session_holding(catalog, corrected.id).await.id));
+    let now = tree(&lib.fx.root);
+    assert!(
+        lib.before.iter().all(|(path, file)| now.get(path) == Some(file)),
+        "originals unchanged"
+    );
 }

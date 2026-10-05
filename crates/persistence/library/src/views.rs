@@ -20,7 +20,8 @@ use platevault_model::{
     ChoiceBasis, CopyState, CriteriaInput, DraftEdit, ExpectedAsset, ExpectedSession,
     FrameEvidence, FramingPanel, FramingSnapshot, FramingSource, FramingTarget, GeometryEvidence,
     LibraryError, MemberBasis, MemberCopy, MemberReason, MemberState, Membership, MembershipBasis,
-    NewView, ReferenceKind, Revision, SelectionReason, Session, SessionChoice, SessionChoiceState,
+    NewView, Project, Quality, ReferenceKind, RefreshItem, RefreshItemKind, RefreshReview,
+    RefreshState, Revision, SelectionReason, Session, SessionChoice, SessionChoiceState,
     SuggestedChoice, View, ViewCriteria, ViewDraftHeader, ViewListing, ViewMember, ViewOrigin,
     ViewOriginInput, ViewQuery, ViewRecord, ViewRevision, ViewRevisionHeader,
 };
@@ -29,10 +30,12 @@ use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::{
-    check_expected_sessions, conflict, current_member_assets, db_revision, fingerprint_matches,
-    from_json, from_text, is_light, json_ids, load_assets, load_associations, load_equipment,
-    load_session_row, load_target, members_unchanged, now, parse_uuid, projects, require_revision,
-    revision, summarize_rows, to_json, to_text, CaptureView, Catalog, Result, MAX_PAGE,
+    check_expected_assets, check_expected_sessions, conflict, current_member_assets, db_revision,
+    decide_quality, fingerprint_matches, from_json, from_text, is_light, json_ids, load_asset,
+    load_assets, load_associations, load_equipment, load_session_row, load_target,
+    members_unchanged, now, parse_uuid, projects, require_decidable, require_revision,
+    require_unique_assets, revision, successors_of, summarize_rows, to_json, to_text, CaptureView,
+    Catalog, Result, SourceProbe, MAX_PAGE,
 };
 
 fn invalid(message: String) -> LibraryError {
@@ -622,6 +625,511 @@ fn member_basis(
 }
 
 // ---------------------------------------------------------------------------
+// Scoped quality actions and refresh reviews
+// ---------------------------------------------------------------------------
+
+impl Catalog {
+    /// Mark members Usable (included members only) or Unusable (any member) in
+    /// the library. The scope is the draft at `expected_draft` or the latest
+    /// committed revision. The sources are hashed off the writer lock as
+    /// `set_quality` does; one transaction then checks the draft, the scope and
+    /// every expected asset and decides. No member state changes (R18).
+    ///
+    /// # Errors
+    /// `InvalidInput` for Unreviewed, a missing `expected_draft` for the draft,
+    /// an asset that is no member, an excluded member marked Usable or a Retired
+    /// copy, each refused before anything is hashed; `Conflict` for a stale
+    /// draft or asset; `NotFound` for an unknown View or membership; source
+    /// access errors and `IdentityConflict` as for `set_quality`.
+    pub async fn set_view_quality<P: SourceProbe>(
+        &self,
+        id: Uuid,
+        membership: Membership,
+        expected_draft: Option<Revision>,
+        expected: &[ExpectedAsset],
+        quality: Quality,
+        probe: P,
+    ) -> Result<Vec<Asset>> {
+        if quality == Quality::Unreviewed {
+            return Err(invalid("a View quality action marks frames Usable or Unusable".into()));
+        }
+        require_unique_assets(expected)?;
+        let included_only = quality == Quality::Usable;
+        {
+            let mut conn = self.reader().await?;
+            let (row, _) = membership_row(&mut conn, id, membership, expected_draft).await?;
+            require_scope(&mut conn, row, expected, included_only).await?;
+            for item in expected {
+                require_decidable(&load_asset(&mut conn, item.asset_id).await?)?;
+            }
+        }
+        let digests = self.current_digests(expected, probe).await?;
+        let ids: BTreeSet<Uuid> = expected.iter().map(|item| item.asset_id).collect();
+        let assets = write_txn!(self, |conn| {
+            let (row, _) = membership_row(conn, id, membership, expected_draft).await?;
+            require_scope(conn, row, expected, included_only).await?;
+            let assets = check_expected_assets(conn, expected).await?;
+            let decided_at = now()?;
+            for asset in &assets {
+                decide_quality(conn, asset, quality, digests.get(&asset.id), &decided_at).await?;
+            }
+            load_assets(conn, &ids).await?
+        });
+        Ok(assets)
+    }
+
+    /// Reject members for the View's Project: the 065 rejection, written in
+    /// the same transaction that checks the draft and the membership scope.
+    /// Library quality and every member stay unchanged.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a View without a Project, an asset that is no member
+    /// or a Retired copy; `Conflict` for a stale draft, Project revision or
+    /// asset; `NotFound` for an unknown View, membership or Project.
+    pub async fn reject_view_members(
+        &self,
+        id: Uuid,
+        membership: Membership,
+        expected_draft: Option<Revision>,
+        expected_project: Revision,
+        expected: &[ExpectedAsset],
+    ) -> Result<Project> {
+        let project = write_txn!(self, |conn| {
+            let (row, project) = membership_row(conn, id, membership, expected_draft).await?;
+            let project = project
+                .ok_or_else(|| invalid(format!("view {id} has no Project to reject for")))?;
+            require_scope(conn, row, expected, false).await?;
+            projects::record_rejection(conn, project, expected_project, expected, true).await?
+        });
+        Ok(project)
+    }
+
+    /// Durably record a refresh review against the View's latest committed
+    /// revision. Changes no membership.
+    ///
+    /// # Errors
+    /// `Conflict` carrying the committed revision when `base_revision` is not
+    /// the latest; `InvalidInput` for a review that is not `reviewed`, repeated
+    /// item ids or a review id already recorded; `NotFound` for an unknown View.
+    pub async fn record_refresh_review(&self, review: &RefreshReview) -> Result<RefreshReview> {
+        if review.state != RefreshState::Reviewed || review.applied_at.is_some() {
+            return Err(invalid(format!(
+                "refresh review {} must be recorded as reviewed",
+                review.id
+            )));
+        }
+        let items: Vec<Uuid> = review.items.iter().map(|item| item.id).collect();
+        if !items.is_empty() {
+            require_unique("items", &items)?;
+        }
+        let recorded = write_txn!(self, |conn| {
+            let view = load_view(conn, review.view_id).await?;
+            if view.revision == 0 || review.base_revision != view.revision {
+                return Err(conflict(view.id, view.revision));
+            }
+            let known: Option<i64> =
+                sqlx::query_scalar("SELECT 1 FROM view_refresh_reviews WHERE id = ?1")
+                    .bind(review.id.to_string())
+                    .fetch_optional(&mut *conn)
+                    .await?;
+            if known.is_some() {
+                return Err(invalid(format!("refresh review {} is already recorded", review.id)));
+            }
+            sqlx::query(
+                "INSERT INTO view_refresh_reviews (id, view_id, base_revision, criteria, items, \
+                 state, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 'reviewed', ?6)",
+            )
+            .bind(review.id.to_string())
+            .bind(view.id.to_string())
+            .bind(db_revision(view.revision)?)
+            .bind(to_json(&review.criteria)?)
+            .bind(to_json(&review.items)?)
+            .bind(now()?)
+            .execute(&mut *conn)
+            .await?;
+            load_refresh_review(conn, review.id).await?
+        });
+        Ok(recorded)
+    }
+
+    /// Apply a refresh review to the View's draft, starting one from the latest
+    /// committed revision when none exists (`expected_draft` 0). Each accepted
+    /// item is re-validated against the library and applied (R25); a declined
+    /// added session becomes a session exclusion; other declined items change
+    /// nothing. The review is applied at most once; committed rows never change.
+    ///
+    /// # Errors
+    /// `Conflict` for a stale View revision, draft or review, an applied
+    /// review, or an item whose session or members changed; `InvalidInput` for
+    /// no or repeated items, an item of another review or one that is only
+    /// listed; `NotFound` for an unknown View or review.
+    pub async fn apply_refresh(
+        &self,
+        review: Uuid,
+        id: Uuid,
+        expected: Revision,
+        expected_draft: Revision,
+        accept: &[Uuid],
+        decline: &[Uuid],
+    ) -> Result<ViewRecord> {
+        let chosen: Vec<Uuid> = accept.iter().chain(decline).copied().collect();
+        require_unique("accept and decline", &chosen)?;
+        let record = write_txn!(self, |conn| {
+            let reviewed = load_refresh_review(conn, review).await?;
+            if reviewed.view_id != id {
+                return Err(invalid(format!(
+                    "refresh review {review} belongs to view {}",
+                    reviewed.view_id
+                )));
+            }
+            let view = load_view(conn, id).await?;
+            if reviewed.state == RefreshState::Applied {
+                return Err(conflict(review, view.revision));
+            }
+            require_revision(id, view.revision, expected)?;
+            if reviewed.base_revision != view.revision {
+                return Err(conflict(id, view.revision));
+            }
+            let item = |item_id: &Uuid| -> Result<&RefreshItem> {
+                let item =
+                    reviewed.items.iter().find(|item| item.id == *item_id).ok_or_else(|| {
+                        invalid(format!("item {item_id} is not in refresh review {review}"))
+                    })?;
+                if !item.kind.actionable() {
+                    return Err(invalid(format!(
+                        "item {item_id} ({:?}) is only listed and takes no decision",
+                        item.kind
+                    )));
+                }
+                Ok(item)
+            };
+            let accepted = accept.iter().map(item).collect::<Result<Vec<_>>>()?;
+            let declined = decline.iter().map(item).collect::<Result<Vec<_>>>()?;
+            if let Some(draft) = draft_row(conn, id).await? {
+                if draft.base_revision != view.revision {
+                    return Err(conflict(id, view.revision));
+                }
+            }
+            let row = begin_edit(conn, &view, expected_draft).await?;
+            for item in accepted {
+                accept_item(conn, row, review, item).await?;
+            }
+            for item in declined {
+                decline_item(conn, row, review, item).await?;
+            }
+            let at = now()?;
+            sqlx::query("UPDATE view_revisions SET refresh_review_id = ?2 WHERE id = ?1")
+                .bind(row)
+                .bind(review.to_string())
+                .execute(&mut *conn)
+                .await?;
+            sqlx::query(
+                "UPDATE view_refresh_reviews SET state = 'applied', applied_at = ?2 \
+                 WHERE id = ?1 AND state = 'reviewed'",
+            )
+            .bind(review.to_string())
+            .bind(&at)
+            .execute(&mut *conn)
+            .await?;
+            load_record(conn, id).await?
+        });
+        Ok(record)
+    }
+}
+
+/// The revision row of `membership` and its Project, after checking
+/// `expected_draft` for the draft.
+async fn membership_row(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    membership: Membership,
+    expected_draft: Option<Revision>,
+) -> Result<(i64, Option<Uuid>)> {
+    let view = load_view(conn, id).await?;
+    match membership {
+        Membership::Draft => {
+            let expected = expected_draft.ok_or_else(|| {
+                invalid(format!("expectedDraftRevision is required for the draft of view {id}"))
+            })?;
+            let Some((row, header)) = draft_header(conn, &view).await? else {
+                return Err(conflict(id, 0));
+            };
+            if header.draft_revision != expected {
+                return Err(conflict(id, header.draft_revision));
+            }
+            Ok((row, header.project_id))
+        }
+        Membership::Committed => {
+            if view.revision == 0 {
+                return Err(LibraryError::NotFound(format!("committed revision of view {id}")));
+            }
+            let (row, header) = committed_header(conn, id, view.revision).await?;
+            Ok((row, header.project_id))
+        }
+    }
+}
+
+/// Every expected asset is a copy of a member of revision row `row`, and of an
+/// included one when `included_only`.
+async fn require_scope(
+    conn: &mut SqliteConnection,
+    row: i64,
+    expected: &[ExpectedAsset],
+    included_only: bool,
+) -> Result<()> {
+    let rows = sqlx::query(
+        "SELECT c.asset_id, m.state FROM view_member_copies c JOIN view_members m \
+         ON m.revision_row = c.revision_row AND m.member_key = c.member_key \
+         WHERE c.revision_row = ?1",
+    )
+    .bind(row)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut states = HashMap::with_capacity(rows.len());
+    for copy in &rows {
+        let state: MemberState = from_text(&copy.try_get::<String, _>("state")?)?;
+        states.insert(parse_uuid(&copy.try_get::<String, _>("asset_id")?)?, state);
+    }
+    for item in expected {
+        match states.get(&item.asset_id) {
+            None => {
+                return Err(invalid(format!(
+                    "asset {} is not a member of this View",
+                    item.asset_id
+                )))
+            }
+            Some(MemberState::Excluded) if included_only => {
+                return Err(invalid(format!(
+                    "asset {} is an excluded member; Mark included frames usable takes \
+                     included members only",
+                    item.asset_id
+                )))
+            }
+            Some(_) => {}
+        }
+    }
+    Ok(())
+}
+
+async fn load_refresh_review(conn: &mut SqliteConnection, id: Uuid) -> Result<RefreshReview> {
+    let row = sqlx::query("SELECT * FROM view_refresh_reviews WHERE id = ?1")
+        .bind(id.to_string())
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or_else(|| LibraryError::NotFound(format!("refresh review {id}")))?;
+    Ok(RefreshReview {
+        id,
+        view_id: parse_uuid(&row.try_get::<String, _>("view_id")?)?,
+        base_revision: revision(row.try_get("base_revision")?)?,
+        criteria: from_json(&row.try_get::<String, _>("criteria")?)?,
+        items: from_json(&row.try_get::<String, _>("items")?)?,
+        state: from_text(&row.try_get::<String, _>("state")?)?,
+        created_at: row.try_get("created_at")?,
+        applied_at: row.try_get("applied_at")?,
+    })
+}
+
+/// The choice of `session` in draft `row`: its state and raw reason and evidence.
+async fn choice_of(
+    conn: &mut SqliteConnection,
+    row: i64,
+    session: Uuid,
+) -> Result<Option<(SessionChoiceState, String, Option<String>)>> {
+    let choice = sqlx::query(
+        "SELECT state, reason, evidence FROM view_session_choices \
+         WHERE revision_row = ?1 AND session_id = ?2",
+    )
+    .bind(row)
+    .bind(session.to_string())
+    .fetch_optional(&mut *conn)
+    .await?;
+    choice
+        .map(|choice| {
+            Ok((
+                from_text(&choice.try_get::<String, _>("state")?)?,
+                choice.try_get("reason")?,
+                choice.try_get("evidence")?,
+            ))
+        })
+        .transpose()
+}
+
+/// The item's session as reviewed, still current (Conflict with successors
+/// when superseded).
+async fn reviewed_session(conn: &mut SqliteConnection, item: &RefreshItem) -> Result<Session> {
+    let expected = item
+        .session
+        .as_ref()
+        .ok_or_else(|| invalid(format!("refresh item {} names no session", item.id)))?;
+    Ok(check_expected_sessions(conn, std::slice::from_ref(expected)).await?.remove(0))
+}
+
+/// [`reviewed_session`] whose members are still exactly those the item assessed.
+async fn assessed_session(conn: &mut SqliteConnection, item: &RefreshItem) -> Result<Session> {
+    let session = reviewed_session(conn, item).await?;
+    let assessed = item
+        .assessed
+        .as_ref()
+        .ok_or_else(|| invalid(format!("refresh item {} names no member basis", item.id)))?;
+    let members = current_member_assets(conn, session.id).await?;
+    if !members_unchanged(
+        &assessed.observations,
+        &assessed.decisions,
+        &assessed.observation_revisions,
+        &members,
+    ) {
+        return Err(conflict(session.id, session.grouping_revision));
+    }
+    Ok(session)
+}
+
+async fn accept_item(
+    conn: &mut SqliteConnection,
+    row: i64,
+    review: Uuid,
+    item: &RefreshItem,
+) -> Result<()> {
+    match item.kind {
+        RefreshItemKind::AddedSession => {
+            let session = assessed_session(conn, item).await?;
+            if choice_of(conn, row, session.id).await?.is_some() {
+                return Err(conflict(session.id, session.grouping_revision));
+            }
+            let reason = SelectionReason::RefreshMatch { review_id: review };
+            choose(conn, row, &session, &reason, item.evidence.as_ref()).await?;
+            add_captures(conn, row, session.id, None, Some(review)).await?;
+        }
+        RefreshItemKind::AddedCaptures => {
+            let session = assessed_session(conn, item).await?;
+            let selected = choice_of(conn, row, session.id).await?;
+            let keys: BTreeSet<Uuid> = item.member_keys.iter().copied().collect();
+            if !matches!(selected, Some((SessionChoiceState::Selected, ..))) || keys.is_empty() {
+                return Err(conflict(session.id, session.grouping_revision));
+            }
+            if add_captures(conn, row, session.id, Some(&keys), Some(review)).await? != keys {
+                return Err(conflict(session.id, session.grouping_revision));
+            }
+            sqlx::query(
+                "UPDATE view_session_choices SET grouping_revision = ?3 \
+                 WHERE revision_row = ?1 AND session_id = ?2",
+            )
+            .bind(row)
+            .bind(session.id.to_string())
+            .bind(db_revision(session.grouping_revision)?)
+            .execute(&mut *conn)
+            .await?;
+        }
+        RefreshItemKind::Removed => {
+            let session = reviewed_session(conn, item).await?;
+            let criteria_based = match choice_of(conn, row, session.id).await? {
+                Some((SessionChoiceState::Selected, reason, _)) => {
+                    !from_json::<SelectionReason>(&reason)?.is_pinned()
+                }
+                _ => false,
+            };
+            if !criteria_based {
+                return Err(conflict(session.id, session.grouping_revision));
+            }
+            deselect_session(conn, row, session.id).await?;
+        }
+        RefreshItemKind::Regrouped => regroup(conn, row, item).await?,
+        RefreshItemKind::Unavailable
+        | RefreshItemKind::ManualInclusion
+        | RefreshItemKind::KeptExclusion => {
+            return Err(invalid(format!("refresh item {} is only listed", item.id)));
+        }
+    }
+    Ok(())
+}
+
+/// A declined added session becomes a session exclusion (R13); declining any
+/// other item keeps the membership as it is.
+async fn decline_item(
+    conn: &mut SqliteConnection,
+    row: i64,
+    review: Uuid,
+    item: &RefreshItem,
+) -> Result<()> {
+    if item.kind != RefreshItemKind::AddedSession {
+        return Ok(());
+    }
+    let session = reviewed_session(conn, item).await?;
+    if choice_of(conn, row, session.id).await?.is_some() {
+        return Err(conflict(session.id, session.grouping_revision));
+    }
+    sqlx::query(
+        "INSERT INTO view_session_choices (revision_row, session_id, grouping_revision, state, \
+         reason, evidence) VALUES (?1, ?2, ?3, 'excluded', ?4, ?5)",
+    )
+    .bind(row)
+    .bind(session.id.to_string())
+    .bind(db_revision(session.grouping_revision)?)
+    .bind(to_json(&SelectionReason::RefreshMatch { review_id: review })?)
+    .bind(item.evidence.as_ref().map(to_json).transpose()?)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+/// Point the choice of a superseded member session at its current successors
+/// with the same reason; each member keeps its state and copies and is now held
+/// by the successor holding its copy.
+async fn regroup(conn: &mut SqliteConnection, row: i64, item: &RefreshItem) -> Result<()> {
+    let old = load_session_row(conn, item.session_id).await?;
+    let Some((SessionChoiceState::Selected, reason, evidence)) =
+        choice_of(conn, row, old.session.id).await?
+    else {
+        return Err(conflict(old.session.id, old.session.grouping_revision));
+    };
+    let current: BTreeSet<Uuid> = successors_of(conn, &old).await?.into_iter().collect();
+    let named: BTreeSet<Uuid> = item.successors.iter().map(|s| s.session_id).collect();
+    if current.is_empty() || current != named {
+        return Err(LibraryError::Conflict {
+            id: old.session.id,
+            current: old.session.grouping_revision,
+            successors: current.into_iter().collect(),
+        });
+    }
+    let successors = check_expected_sessions(conn, &item.successors).await?;
+    sqlx::query("DELETE FROM view_session_choices WHERE revision_row = ?1 AND session_id = ?2")
+        .bind(row)
+        .bind(old.session.id.to_string())
+        .execute(&mut *conn)
+        .await?;
+    for successor in &successors {
+        sqlx::query(
+            "INSERT INTO view_session_choices (revision_row, session_id, grouping_revision, \
+             state, reason, evidence) VALUES (?1, ?2, ?3, 'selected', ?4, ?5) \
+             ON CONFLICT (revision_row, session_id) DO NOTHING",
+        )
+        .bind(row)
+        .bind(successor.id.to_string())
+        .bind(db_revision(successor.grouping_revision)?)
+        .bind(&reason)
+        .bind(evidence.as_deref())
+        .execute(&mut *conn)
+        .await?;
+    }
+    sqlx::query(
+        "UPDATE view_members SET session_id = (SELECT a.session_id FROM view_member_copies c \
+         JOIN assets a ON a.id = c.asset_id WHERE c.revision_row = view_members.revision_row \
+         AND c.member_key = view_members.member_key \
+         AND a.session_id IN (SELECT value FROM json_each(?3)) ORDER BY a.id LIMIT 1) \
+         WHERE revision_row = ?1 AND session_id = ?2 AND EXISTS (SELECT 1 \
+         FROM view_member_copies c JOIN assets a ON a.id = c.asset_id \
+         WHERE c.revision_row = view_members.revision_row \
+         AND c.member_key = view_members.member_key \
+         AND a.session_id IN (SELECT value FROM json_each(?3)))",
+    )
+    .bind(row)
+    .bind(old.session.id.to_string())
+    .bind(json_ids(&current)?)
+    .execute(&mut *conn)
+    .await?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Origins and choices
 // ---------------------------------------------------------------------------
 
@@ -721,6 +1229,19 @@ async fn select_session(
     reason: &SelectionReason,
     evidence: Option<&GeometryEvidence>,
 ) -> Result<()> {
+    choose(conn, row, session, reason, evidence).await?;
+    add_captures(conn, row, session.id, None, None).await?;
+    Ok(())
+}
+
+/// Record `session` as selected in draft `row`, replacing an earlier choice.
+async fn choose(
+    conn: &mut SqliteConnection,
+    row: i64,
+    session: &Session,
+    reason: &SelectionReason,
+    evidence: Option<&GeometryEvidence>,
+) -> Result<()> {
     sqlx::query(
         "INSERT INTO view_session_choices (revision_row, session_id, grouping_revision, state, \
          reason, evidence) VALUES (?1, ?2, ?3, 'selected', ?4, ?5) \
@@ -735,19 +1256,42 @@ async fn select_session(
     .bind(evidence.map(to_json).transpose()?)
     .execute(&mut *conn)
     .await?;
-    let assets = current_member_assets(conn, session.id).await?;
-    let view = CaptureView::read(conn, &[session.id], &assets).await?;
+    Ok(())
+}
+
+/// Add each logical capture of `session` not yet in draft `row` once, with its
+/// D02 starting state; only the captures keyed in `only` when given. A capture
+/// a refresh review adds and includes records `refresh_added` with the review.
+/// Returns the added member keys.
+async fn add_captures(
+    conn: &mut SqliteConnection,
+    row: i64,
+    session: Uuid,
+    only: Option<&BTreeSet<Uuid>>,
+    review: Option<Uuid>,
+) -> Result<BTreeSet<Uuid>> {
+    let assets = current_member_assets(conn, session).await?;
+    let view = CaptureView::read(conn, &[session], &assets).await?;
     let recorded: BTreeSet<Uuid> = recorded_copies(conn, row).await?;
+    let mut added = BTreeSet::new();
     for key in view.group(&assets).into_keys() {
         let mut copies = view.copies_of(&key);
         copies.sort_by_key(|copy| copy.id);
         if copies.is_empty() || copies.iter().any(|copy| recorded.contains(&copy.id)) {
             continue;
         }
-        let quality = view.quality(&key);
-        let (state, reason) = initial_member_state(&quality);
         let member_key = copies[0].id;
-        insert_member(conn, row, member_key, session.id, state, &reason, &quality).await?;
+        if only.is_some_and(|only| !only.contains(&member_key)) {
+            continue;
+        }
+        let quality = view.quality(&key);
+        let (state, reason) = match (initial_member_state(&quality), review) {
+            ((MemberState::Included, _), Some(review_id)) => {
+                (MemberState::Included, MemberReason::RefreshAdded { review_id })
+            }
+            (initial, _) => initial,
+        };
+        insert_member(conn, row, member_key, session, state, &reason, &quality).await?;
         for copy in copies {
             sqlx::query(
                 "INSERT INTO view_member_copies (revision_row, member_key, asset_id, \
@@ -761,8 +1305,9 @@ async fn select_session(
             .execute(&mut *conn)
             .await?;
         }
+        added.insert(member_key);
     }
-    Ok(())
+    Ok(added)
 }
 
 async fn insert_member(
