@@ -9,4 +9,5 @@ pub mod library;
 pub mod model;
 pub mod projects;
 pub mod targets;
+pub mod view_geometry;
 pub use model::*;
