@@ -17,11 +17,11 @@ use persistence_library::{
 };
 use platevault_model::{
     ApplicableQuality, Asset, AssetReference, Association, AssociationKind, AssociationState,
-    Availability, CorrectionInput, EvidenceItem, FileIdentity, GroupingResult, ImageFormat,
-    LibraryError, Location, LocationLifecycle, LocationRole, NativePath, ObservationFingerprint,
-    PathSensitivity, Provenance, Quality, ReferenceKind, RemapBlockReason, RetryAction, Revision,
-    ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState,
-    Session, VolumeIdentity,
+    Availability, CorrectionInput, EvidenceItem, ExpectedSession, FileIdentity, GroupingResult,
+    ImageFormat, LibraryError, Location, LocationLifecycle, LocationRole, NativePath,
+    ObservationFingerprint, PathSensitivity, Provenance, Quality, ReferenceKind, RemapBlockReason,
+    RetryAction, Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation,
+    ScanProgress, ScanState, Session, VolumeIdentity,
 };
 use support::*;
 use uuid::Uuid;
