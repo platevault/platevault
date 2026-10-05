@@ -2194,12 +2194,21 @@ async fn a_retired_folder_registers_again_and_counts_each_capture_once() {
         "no retired decision transfers"
     );
 
-    // Each capture counts once: retired copies are neither totals nor candidates.
+    // The copies form their own session, which counts toward the Target only once
+    // associated, each capture once: retired copies are neither totals nor candidates.
+    let summaries = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    let renewed_session = session_holding(&summaries, &fresh);
+    assert_ne!(renewed_session.id, session.id, "the retired session absorbs nothing");
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!(coverage.contributions.is_empty(), "no association transfers: {coverage:?}");
+    catalog
+        .associate_target(&[expected_session(&renewed_session)], saved.candidate.id)
+        .await
+        .unwrap();
     let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
     assert_eq!(totals(&coverage), (600.0, 0.0, 600.0), "{coverage:?}");
     assert_eq!(coverage.covered_location_ids, vec![again.id]);
     assert!(!coverage.provisional, "{coverage:?}");
-    let summaries = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
     let counted: u64 = summaries.iter().map(|summary| summary.capture_count).sum();
     assert_eq!(counted, 2, "{summaries:?}");
     assert!(summaries.iter().all(|summary| !summary.provisional), "{summaries:?}");
@@ -2210,17 +2219,109 @@ async fn a_retired_folder_registers_again_and_counts_each_capture_once() {
     let digest = decided.unwrap()[0].fingerprint.content_sha256.clone();
     let twin = catalog.asset(reviewed.id).await.unwrap();
     assert_eq!(digest, twin.fingerprint.content_sha256, "byte-identical");
-    let holder = summaries
-        .iter()
-        .find(|summary| summary.session.asset_ids.contains(&renewed.id))
-        .unwrap()
-        .session
-        .id;
+    let holder = renewed_session.id;
     let members = catalog.session(holder).await.unwrap().members;
     let member = members.iter().find(|member| member.copies.contains(&renewed.id)).unwrap();
     assert_eq!(member.copies, vec![renewed.id], "{members:?}");
     let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
     assert_eq!(totals(&coverage), (600.0, 300.0, 300.0), "{coverage:?}");
+    assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
+/// The current session holding every one of these assets.
+fn session_holding(summaries: &[persistence_library::SessionSummary], assets: &[Asset]) -> Session {
+    let ids = ids_of(assets);
+    let holders: Vec<&Session> = summaries
+        .iter()
+        .map(|summary| &summary.session)
+        .filter(|session| session.asset_ids.iter().any(|id| ids.contains(id)))
+        .collect();
+    assert_eq!(holders.len(), 1, "{summaries:?}");
+    assert_eq!(holders[0].asset_ids.iter().copied().collect::<BTreeSet<_>>(), ids);
+    holders[0].clone()
+}
+
+/// LIB-FR-15, D11: a session whose assets all belong to Retired locations never
+/// absorbs new assets. Copies of its re-registered folder form a new session from
+/// their own evidence; no quality decision, Target or equipment association or
+/// catalog correction of the retired copies transfers to them.
+#[tokio::test]
+async fn a_re_registered_folder_forms_new_sessions_that_inherit_nothing_retired() {
+    let fx = Fixture::new();
+    let names = ["Ha_001.fits", "Ha_002.fits"];
+    fx.write(names[0], b"frame one bytes");
+    fx.write(names[1], b"frame two bytes");
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &names).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    catalog
+        .set_quality(&[expected(by_name(&assets, names[0]))], Quality::Usable, DiskProbe)
+        .await
+        .unwrap();
+    // A catalog correction outside capture identity keeps the session.
+    let corrected = by_name(&assets, names[1]).clone();
+    let correction =
+        CorrectionInput { asset_id: corrected.id, field: "object".into(), value: "M 31".into() };
+    catalog
+        .apply_correction_and_regroup(&[expected(&corrected)], &[correction], group)
+        .await
+        .unwrap();
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    assert_eq!(session.asset_ids.iter().copied().collect::<BTreeSet<_>>(), ids_of(&assets));
+    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
+    let session = catalog.session(session.id).await.unwrap().summary.session;
+    let equipment = saved_equipment(&catalog).await;
+    catalog.confirm_equipment(&[expected_session(&session)], equipment.id).await.unwrap();
+    let decisions = |associations: Vec<Association>| {
+        associations
+            .into_iter()
+            .map(|a| (a.kind, a.state, a.subject_id, a.decision_revision))
+            .collect::<Vec<_>>()
+    };
+    let confirmed = decisions(catalog.associations(session.id).await.unwrap());
+    assert_eq!(confirmed.len(), 2);
+    assert!(confirmed.iter().all(|(_, state, _, _)| *state == AssociationState::Confirmed));
+
+    let unplugged = fx.root.with_extension("unplugged");
+    std::fs::rename(&fx.root, &unplugged).unwrap();
+    let location = catalog
+        .mark_location_unavailable(location.id, Availability::Offline, "unplugged")
+        .await
+        .unwrap();
+    let references = read_references(&assets, Vec::new());
+    let review = catalog.review_retire_location(location.id, &references).await.unwrap();
+    catalog
+        .retire_location(review.id, location.id, review.expected_revision, &references)
+        .await
+        .unwrap();
+
+    std::fs::rename(&unplugged, &fx.root).unwrap();
+    let again = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &again, &names).await;
+    let fresh = catalog.location_assets(again.id).await.unwrap();
+    assert!(
+        fresh.iter().all(|asset| asset.quality == Quality::Unreviewed
+            && asset.quality_basis.is_none()
+            && asset.effective == asset.observed),
+        "no retired quality decision or correction transfers: {fresh:?}"
+    );
+
+    // The retired session keeps exactly its retired copies and confirmations as
+    // history; the new copies form a new session that inherits none of them.
+    let summaries = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    let renewed = session_holding(&summaries, &fresh);
+    assert_ne!(renewed.id, session.id, "the retired session absorbs no new asset");
+    let history = catalog.session(session.id).await.unwrap();
+    assert_eq!(history.summary.session.asset_ids, session.asset_ids);
+    assert!(history.summary.successors.is_empty(), "{history:?}");
+    assert_eq!(decisions(catalog.associations(session.id).await.unwrap()), confirmed);
+    let inherited = catalog.associations(renewed.id).await.unwrap();
+    assert!(inherited.is_empty(), "it starts from its own evidence: {inherited:?}");
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!(coverage.contributions.is_empty(), "{coverage:?}");
     assert_eq!(tree(&fx.root), before, "originals unchanged");
 }
 

@@ -4079,12 +4079,18 @@ async fn current_session_of(
         .collect()
 }
 
+/// Current sessions with this capture key that can still absorb new assets. A
+/// session whose assets all belong to Retired locations never does: re-registered
+/// copies of a retired folder form new sessions from their own evidence and
+/// inherit none of its associations (LIB-FR-15, D11).
 async fn current_sessions_with_key(
     conn: &mut SqliteConnection,
     key: &CaptureKey,
 ) -> Result<Vec<Uuid>> {
     let ids: Vec<String> = sqlx::query_scalar(
-        "SELECT id FROM sessions WHERE capture_key = ?1 AND superseded_by IS NULL",
+        "SELECT s.id FROM sessions s WHERE s.capture_key = ?1 AND s.superseded_by IS NULL \
+         AND EXISTS (SELECT 1 FROM assets a JOIN locations l ON l.id = a.location_id \
+         WHERE a.session_id = s.id AND l.lifecycle = 'active')",
     )
     .bind(key.0.as_str())
     .fetch_all(&mut *conn)

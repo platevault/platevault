@@ -1205,3 +1205,150 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
         assert_eq!(&support::digest(path), digest, "originals unchanged");
     }
 }
+
+fn expected_session_of(session: &Session) -> ExpectedSession {
+    ExpectedSession {
+        session_id: session.id,
+        grouping_revision: session.grouping_revision,
+        decision_revision: session.decision_revision,
+    }
+}
+
+/// Decide the first frame Usable, correct the second's OBJECT (outside capture
+/// identity, so no regroup) and confirm `target` and new equipment for the
+/// session. Returns the equipment id.
+async fn decide_and_confirm(
+    library: &Library,
+    detail: &persistence_library::SessionDetail,
+    target: Uuid,
+) -> Uuid {
+    let catalog = library.catalog();
+    catalog
+        .set_quality(&[expected_of(&detail.assets[0])], Quality::Usable, InventoryProbe)
+        .await
+        .unwrap();
+    let corrected = expected_of(&catalog.asset(detail.assets[1].id).await.unwrap());
+    let corrections = [CorrectionInput {
+        asset_id: corrected.asset_id,
+        field: "object".into(),
+        value: serde_json::json!("M 31"),
+    }];
+    let preview = catalog
+        .preview_correction(
+            std::slice::from_ref(&corrected),
+            &corrections,
+            platevault_core::grouping::group_assets,
+        )
+        .await
+        .unwrap();
+    let confirmed = library.confirm_correction(preview.id, &[corrected]).await.unwrap();
+    assert!(confirmed.outcome.lineage.is_none(), "no regroup");
+    let id = detail.summary.session.id;
+    let session = catalog.session(id).await.unwrap().summary.session;
+    catalog.associate_target(&[expected_session_of(&session)], target).await.unwrap();
+    let equipment = Equipment {
+        id: Uuid::new_v4(),
+        name: "ASI2600MM on RedCat".into(),
+        camera: Some("ASI2600MM".into()),
+        telescope: None,
+        focal_length_mm: Some(250.0),
+        pixel_size_um: Some(3.76),
+        decision_revision: 0,
+        state: AssociationState::Unresolved,
+        provenance: Provenance::User,
+    };
+    let equipment = catalog.save_equipment(&equipment, None).await.unwrap();
+    let session = catalog.session(id).await.unwrap().summary.session;
+    catalog.confirm_equipment(&[expected_session_of(&session)], equipment.id).await.unwrap();
+    equipment.id
+}
+
+/// LIB-FR-15, D11: the copies of a re-registered retired folder form new sessions
+/// from their own evidence. No quality decision, confirmed Target or equipment
+/// association or catalog correction of the retired copies transfers to them.
+#[tokio::test]
+async fn a_re_registered_retired_folder_starts_its_sessions_from_their_own_evidence() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("Cold-1");
+    std::fs::create_dir(&root).unwrap();
+    let frames = [root.join("light_1.fits"), root.join("light_2.fits")];
+    write_frame(&frames[0], "2026-09-12T22:00:00");
+    write_frame(&frames[1], "2026-09-12T22:05:00");
+    let originals = frames.clone().map(|path| support::digest(&path));
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let catalog = library.catalog();
+    let location = library
+        .register_location(NativePath::from_path(&root), "Cold-1".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+    let (_, detail) = only_session(&library).await;
+    let m31 = target_of(&detail).unwrap().1.unwrap();
+    let equipment = decide_and_confirm(&library, &detail, m31).await;
+    let retired_session = detail.summary.session.id;
+    let decisions = |associations: &[Association]| {
+        associations.iter().map(|a| (a.kind, a.state.clone(), a.subject_id)).collect::<Vec<_>>()
+    };
+    let held = decisions(&catalog.session(retired_session).await.unwrap().associations);
+    assert_eq!(
+        held,
+        [
+            (AssociationKind::Equipment, AssociationState::Confirmed, Some(equipment)),
+            (AssociationKind::Target, AssociationState::Confirmed, Some(m31)),
+        ]
+    );
+
+    // Cold-1 goes offline and is retired.
+    let unplugged = temp.path().join("Cold-1 unplugged");
+    std::fs::rename(&root, &unplugged).unwrap();
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Failed);
+    let review = library.review_retire_location(location.id).await.unwrap();
+    library.retire_location(review.id, location.id, review.expected_revision).await.unwrap();
+
+    // Its folder registers again: the copies form a new session from their own
+    // evidence, and the retired session keeps its copies and confirmations.
+    std::fs::rename(&unplugged, &root).unwrap();
+    let again = library
+        .register_location(NativePath::from_path(&root), "Cold-1".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    assert_eq!(scan_to_end(&library, again.id).await.state, ScanState::Completed);
+    let fresh = catalog.location_assets(again.id).await.unwrap();
+    assert!(
+        fresh.iter().all(|asset| asset.quality == Quality::Unreviewed
+            && asset.quality_basis.is_none()
+            && asset.effective == asset.observed),
+        "no retired decision or correction transfers: {fresh:?}"
+    );
+    let fresh_ids: BTreeSet<Uuid> = fresh.iter().map(|asset| asset.id).collect();
+    let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    let holders: Vec<&Session> = sessions
+        .iter()
+        .map(|summary| &summary.session)
+        .filter(|session| session.asset_ids.iter().any(|id| fresh_ids.contains(id)))
+        .collect();
+    assert_eq!(holders.len(), 1, "{sessions:?}");
+    let renewed = holders[0];
+    assert_ne!(renewed.id, retired_session, "the retired session absorbs no new asset");
+    assert_eq!(renewed.asset_ids.iter().copied().collect::<BTreeSet<_>>(), fresh_ids);
+    let history = catalog.session(retired_session).await.unwrap();
+    assert_eq!(history.summary.session.asset_ids, detail.summary.session.asset_ids);
+    assert_eq!(decisions(&history.associations), held);
+    let own = catalog.session(renewed.id).await.unwrap();
+    assert_eq!(
+        decisions(&own.associations),
+        [(AssociationKind::Target, AssociationState::Suggested, Some(m31))],
+        "only its own header evidence suggests a Target"
+    );
+    let coverage = catalog.target_coverage(m31).await.unwrap();
+    let totals = (
+        summed(&coverage, |c| c.captured_seconds),
+        summed(&coverage, |c| c.usable_seconds),
+        summed(&coverage, |c| c.unreviewed_seconds),
+    );
+    assert_eq!(totals, (600.0, 0.0, 600.0), "{coverage:?}");
+    assert_eq!(coverage.covered_location_ids, vec![again.id]);
+    for (path, digest) in frames.iter().zip(&originals) {
+        assert_eq!(&support::digest(path), digest, "originals unchanged");
+    }
+}
