@@ -13,7 +13,7 @@ import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { type Column, DataTable, SelectionBar, TableToolbar } from "@/components/app/data-table"
 import { EmptyState, Notice, UnknownValue } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
-import { StatusBadge } from "@/components/app/status"
+import { STATUS, StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
@@ -464,14 +464,13 @@ export function FramesArea() {
       id: "member",
       header: "In View",
       sortValue: (r) => r.member,
-      cell: (r) =>
-        r.member === "included" ? (
-          <span>Included</span>
-        ) : r.member === "excluded" ? (
-          <StatusBadge kind="quality" value="excluded" />
-        ) : (
-          <StatusBadge kind="availability" value={assetAvailability(disk, catalog, r.asset) === "available" ? "available" : assetAvailability(disk, catalog, r.asset)} label="Unresolved" />
-        ),
+      cell: (r) => {
+        if (r.member === "excluded") return <StatusBadge kind="quality" value="excluded" />
+        const availability = assetAvailability(disk, catalog, r.asset)
+        if (availability === "available") return r.member === "included" ? <span>Included</span> : <StatusBadge kind="availability" value="available" label="Unresolved" />
+        // A member that cannot be read stays named unresolved, with why: "Unresolved · Offline", "Unresolved · Retired" (D11, VSEL-AC-09).
+        return <StatusBadge kind="availability" value={availability} label={`Unresolved · ${STATUS.availability[availability].label}`} />
+      },
     },
     { id: "state", header: "Measurement", sortValue: (r) => r.state, cell: (r) => <StatusBadge kind="measurement" value={STATE_BADGE[r.state].value} label={STATE_BADGE[r.state].label} /> },
     { id: "fwhm", header: "FWHM", align: "right", sortValue: (r) => r.builtIn.fwhm?.value ?? null, cell: metricCell("fwhm") },

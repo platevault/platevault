@@ -12,7 +12,7 @@ import { FilterChips, KeyValueList, PathText } from "@/components/app/data"
 import { type Column, DataTable, SelectionBar, TableToolbar } from "@/components/app/data-table"
 import { EmptyState, Notice, UnknownValue } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
-import { StatusBadge } from "@/components/app/status"
+import { STATUS, StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
@@ -268,25 +268,27 @@ export function SessionsArea() {
       />
       <PageBody className="space-y-4">
         {readOnlyReason ? <p className="text-sm text-muted-foreground">{readOnlyReason}</p> : null}
-        {summary.unavailableSessions.map(({ session, members, state }) => {
-          const locationId = sessionLocationIds(catalog, session)[0]
+        {summary.unavailableSessions.map(({ session, members, state, locationId }) => {
+          // The location holding the copies in this state, so "on Archive" names where they are, not the first-seen copy.
           const location = locationId ? catalog.locations[locationId] : undefined
-          const word = state === "offline" ? "offline" : state === "unreadable" ? "unreadable" : "not found"
+          const retired = state === "retired"
           return (
             <Notice
               key={session.id}
-              tone={state === "offline" ? "offline" : "warning"}
-              title={`${sessionLabel(session)} is ${word}`}
+              tone={state === "offline" ? "offline" : retired ? "info" : "warning"}
+              title={`${sessionLabel(session)} is ${STATUS.availability[state].label.toLowerCase()}`}
               actions={
                 <>
                   {location ? (
                     <Button size="sm" variant="outline" render={<Link to="/settings/locations" search={{ locationId: location.id }} />}>
-                      Locate a copy
+                      {retired ? "Open Locations" : "Locate a copy"}
                     </Button>
                   ) : null}
-                  <Button size="sm" variant="outline" render={<Link to="/storage" />}>
-                    Open Storage
-                  </Button>
+                  {retired ? null : (
+                    <Button size="sm" variant="outline" render={<Link to="/storage" />}>
+                      Open Storage
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
@@ -300,9 +302,19 @@ export function SessionsArea() {
                 </>
               }
             >
-              {plural(members, "selected frame")} {state === "offline" ? `on ${location?.displayName ?? "an offline location"}` : ""} cannot be read now. They stay
-              named as unresolved members, never verified inputs: {session.assetIds.length} frames and {formatDuration(session.assetIds.length * sessionExposureS(session))} are
-              last-observed counts. Reconnect, locate a copy, or remove the session explicitly.
+              {retired ? (
+                <>
+                  {plural(members, "selected frame")} are in the retired location {location?.displayName ?? "that was retired"}. They stay named as unresolved members and
+                  Retired, never inputs, and no longer count in captured totals. A retired location is never reselected: add its folder again to index it as a new location, or
+                  remove the session explicitly.
+                </>
+              ) : (
+                <>
+                  {plural(members, "selected frame")} {state === "offline" ? `on ${location?.displayName ?? "an offline location"}` : ""} cannot be read now. They stay named as
+                  unresolved members, never verified inputs: {session.assetIds.length} frames and {formatDuration(session.assetIds.length * sessionExposureS(session))} are
+                  last-observed counts. Reconnect, locate a copy, or remove the session explicitly.
+                </>
+              )}
             </Notice>
           )
         })}

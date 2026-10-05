@@ -10,7 +10,7 @@ import { createContext, type ReactNode, useContext, useId, useState } from "reac
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { ActionError, EmptyState, Notice, SaveState } from "@/components/app/feedback"
 import { PageHeader } from "@/components/app/page"
-import { StatusBadge } from "@/components/app/status"
+import { STATUS, StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -84,7 +84,11 @@ function SummaryStrip({ summary, content }: { summary: ViewSummary; content: Mem
     { label: "Unreviewed (included)", value: summary.unreviewed },
     { label: "Unusable", value: summary.excludedUnusable > 0 ? `${summary.unusable} included · ${summary.excludedUnusable} excluded` : `${summary.unusable} included` },
   ]
-  if (summary.includedUnavailable > 0) items.push({ label: "Unavailable now", value: summary.includedUnavailable, tone: "warning" })
+  if (summary.includedUnavailable > 0) {
+    // Name why the members cannot be read: "208 Offline", "208 Retired" (D11, VSEL-AC-09).
+    const value = summary.includedUnavailableBy.map((u) => `${u.frames} ${STATUS.availability[u.state].label}`).join(" · ")
+    items.push({ label: "Unavailable now", value, tone: "warning" })
+  }
   if (content.productInputs.length > 0) items.push({ label: "Result inputs", value: content.productInputs.length })
   return (
     <div className="border-b px-6 py-2">

@@ -7,6 +7,7 @@ import { correctedExposureS } from "@/domain/corrections"
 import {
   assetAvailability,
   type AssetAvailability,
+  copyAvailability,
   coverageFraction,
   type Footprint,
   membershipSummary,
@@ -24,6 +25,7 @@ import type {
   Catalog,
   Disk,
   DiskFile,
+  LocationId,
   MembershipContent,
   MembershipRevision,
   OpticalTrainId,
@@ -265,35 +267,46 @@ export function sessionAvailability(disk: Disk, catalog: Catalog, session: Sessi
   return { state: unavailable === 0 ? "available" : worst, unavailable, total: session.assetIds.length }
 }
 
+/** Why a member cannot be read now. */
+export type UnavailableState = Exclude<AssetAvailability, "available">
+
 export interface ViewSummary extends MembershipSummary {
   /** Included frames with no available copy right now: last-observed, not verified. */
   includedUnavailable: number
+  /** The same frames by why they cannot be read, for naming them ("208 Offline", "208 Retired"). */
+  includedUnavailableBy: Array<{ state: UnavailableState; frames: number }>
   /** Excluded members whose library quality is Unusable (they start excluded, D02); `unusable` counts included ones. */
   excludedUnusable: number
-  /** Sessions with unresolved or unavailable members, for naming them. */
-  unavailableSessions: Array<{ session: Session; members: number; state: AssetAvailability }>
+  /** Sessions with unresolved or unavailable members, for naming them; `locationId` holds the copies in that state. */
+  unavailableSessions: Array<{ session: Session; members: number; state: UnavailableState; locationId: LocationId | null }>
 }
 
 export function viewSummary(disk: Disk, catalog: Catalog, content: MembershipContent): ViewSummary {
   const base = membershipSummary(catalog, content)
   let includedUnavailable = 0
-  const bySession = new Map<SessionId, { members: number; state: AssetAvailability }>()
+  const byState = new Map<UnavailableState, number>()
+  const bySession = new Map<SessionId, { members: number; state: UnavailableState; locationId: LocationId | null }>()
   for (const id of [...content.included, ...content.unresolved]) {
     const asset = catalog.assets[id]
     if (!asset) continue
     const state = assetAvailability(disk, catalog, asset)
     if (state === "available") continue
-    if (content.included.includes(id)) includedUnavailable += 1
+    if (content.included.includes(id)) {
+      includedUnavailable += 1
+      byState.set(state, (byState.get(state) ?? 0) + 1)
+    }
     if (!asset.sessionId) continue
-    const entry = bySession.get(asset.sessionId) ?? { members: 0, state }
+    const locationId = asset.copies.find((copy) => copyAvailability(disk, catalog, copy) === state)?.locationId ?? null
+    const entry = bySession.get(asset.sessionId) ?? { members: 0, state, locationId }
     entry.members += 1
     bySession.set(asset.sessionId, entry)
   }
   const unavailableSessions = [...bySession.entries()]
     .map(([id, entry]) => ({ session: catalog.sessions[id], ...entry }))
-    .filter((e): e is { session: Session; members: number; state: AssetAvailability } => e.session !== undefined)
+    .filter((e): e is { session: Session; members: number; state: UnavailableState; locationId: LocationId | null } => e.session !== undefined)
   const excludedUnusable = content.excluded.filter((id) => catalog.assets[id]?.quality.value === "unusable").length
-  return { ...base, includedUnavailable, excludedUnusable, unavailableSessions }
+  const includedUnavailableBy = [...byState.entries()].map(([state, frames]) => ({ state, frames }))
+  return { ...base, includedUnavailable, includedUnavailableBy, excludedUnusable, unavailableSessions }
 }
 
 export function totalsLine(frames: number, seconds: number) {

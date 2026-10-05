@@ -13,7 +13,7 @@ import { useId, useState } from "react"
 import { KeyValueList } from "@/components/app/data"
 import { EmptyState, Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
-import { StatusBadge } from "@/components/app/status"
+import { STATUS, StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -248,7 +248,7 @@ export function RefreshArea() {
               {comparison.unavailable.map(({ session, members, state }) => (
                 <li key={session.id} className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{sessionLabel(session)}</span>
-                  <StatusBadge kind="availability" value={state} label={`Unavailable: ${state === "offline" ? "Offline" : state === "unreadable" ? "Unreadable" : "Not found"}`} />
+                  <StatusBadge kind="availability" value={state} label={`Unavailable: ${STATUS.availability[state].label}`} />
                   <span className="text-muted-foreground">{plural(members, "member")} kept as recorded. Path repair after a move is separate from refresh.</span>
                 </li>
               ))}
