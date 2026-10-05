@@ -865,9 +865,7 @@ async fn two_location_library(
     (library, locations, originals)
 }
 
-async fn only_session(
-    library: &Library,
-) -> (persistence_library::SessionSummary, persistence_library::SessionDetail) {
+async fn only_session(library: &Library) -> (SessionSummary, persistence_library::SessionDetail) {
     let sessions = library.catalog().list_sessions(&SessionQuery::default()).await.unwrap();
     assert_eq!(sessions.len(), 1, "one capture key across both locations");
     let detail = library.catalog().session(sessions[0].session.id).await.unwrap();

@@ -6,7 +6,7 @@
 
 **Created**: 2026-10-03
 
-**Status**: Draft; product defaults recorded in D01 through D18 under the user-authorized specification-gate waiver. Requirements analysis, implementation and verification remain pending.
+**Status**: Draft; product defaults recorded in D01 through D19 under the user-authorized specification-gate waiver. Requirements analysis, implementation and verification remain pending.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 
@@ -73,4 +73,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 
 ## Decisions before feature approval
 
-- Root decisions D01, D10 and D12 define framing, checklist kinds/progress basis and explicit Project-session linkage. Automatic geometry remains subject to qualified evidence.
+- Root decisions D01, D10 and D12 define framing, checklist kinds/progress basis and explicit Project-session linkage. D19 governs PRJ counts: library-usable and Project-accepted progress count each decision as of its last completed verification and label that time. Automatic geometry remains subject to qualified evidence.
