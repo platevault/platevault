@@ -8,6 +8,8 @@ use metadata_core::RawFileMetadata;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod frame_review;
+pub use frame_review::*;
 mod project;
 pub use project::*;
 

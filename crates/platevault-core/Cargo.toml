@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 platevault_model = { path = "../platevault-model" }
+platevault_pixels = { path = "../platevault-pixels" }
 persistence_library = { path = "../persistence/library" }
 metadata_core = { path = "../metadata/core" }
 metadata_fits = { path = "../metadata/fits" }
@@ -21,6 +22,8 @@ time.workspace = true
 sha2.workspace = true
 hex.workspace = true
 unicode-normalization.workspace = true
+csv.workspace = true
+base64 = "0.22.1"
 simbad-resolver = "0.5.0"
 skymath = "0.7.2"
 target-match = "0.5.1"
@@ -30,6 +33,7 @@ winapi-util = "0.1.11"
 
 [dev-dependencies]
 tempfile.workspace = true
+platevault_pixels = { path = "../platevault-pixels", features = ["fixtures"] }
 
 [lints]
 workspace = true
