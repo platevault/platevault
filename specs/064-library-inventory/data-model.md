@@ -36,7 +36,7 @@ Night derives only from header DATE-LOC with a noon boundary, or capture time pl
 
 One serialized writer owns the SQLite connection; readers use separate connections. Every writer connection uses WAL, foreign keys and FULL synchronous mode, with fullfsync/checkpoint_fullfsync on macOS. Scan batches are short. Corrections, their regroup and lineage commit in one transaction using current observed evidence. Decision revisions are independent of scan observation sequences.
 
-Multi-record commands use `{id, expectedDecisionRevision, expectedObservationFingerprint}` lists and apply all or nothing. Unchanged rescans do not invalidate decision CAS. Restart restores committed records and marks interrupted scans incomplete. A disposable SQLite `max_page_count` fixture forces SQLITE_FULL to prove PersistenceFailure and no saved acknowledgment; no failure switch is compiled into release and no custom userspace WAL is introduced.
+Multi-record commands use `{id, expectedDecisionRevision, expectedObservationFingerprint}` lists and apply all or nothing. Unchanged rescans do not invalidate decision CAS. Restart restores committed records and marks interrupted scans incomplete. A disposable SQLite `max_page_count` fixture forces SQLITE_FULL to prove PersistenceFailure and no saved acknowledgment, for a failed or cancelled write, and that the same open catalog commits the next write on a durable writer once space frees; no failure switch is compiled into release and no custom userspace WAL is introduced.
 
 ## Progress
 
