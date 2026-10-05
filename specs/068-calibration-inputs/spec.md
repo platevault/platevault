@@ -23,7 +23,7 @@ An explainable compatible preselection of masters or raw sets for the chosen lig
 **Acceptance Scenarios**:
 
 - **CAL-AC-01**: Given selected Ha and OIII sessions with compatible darks and flats, when the calibration area opens, then those inputs are preselected per group and marked as suggestions until accepted.
-- **CAL-AC-02**: Given the 24 Sep OIII session and a 26 Sep flat set with unknown optical-train state, then Why this match shows that criterion as unknown and the item is listed as unresolved in preparation review.
+- **CAL-AC-02**: Given the 24 Sep OIII session with a compatible 30 Sep flat suggestion, when the user chooses the 26 Sep flat set instead, then Why this match shows its optical-train state as unknown. The item is listed as unresolved in preparation review.
 - **CAL-AC-03**: Given a scoped exception with a reason for the 26 Sep flats, then the flats' evidence is unchanged and another View still shows the criterion as unknown.
 - **CAL-AC-04**: Given a detected generated master that has not been adopted, then no View ever preselects it.
 - **CAL-AC-05**: Given explicit adoption, then the master appears in Calibration with its origin and provenance and can be preselected where compatible.

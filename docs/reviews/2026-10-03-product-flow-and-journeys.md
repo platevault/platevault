@@ -299,7 +299,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 ### E2. Resolve exceptions
 
-**See:** the 24 Sep OIII session lacks confirmed flat compatibility. Its candidate 26 Sep flat set has unknown optical-train state.
+**See:** the 24 Sep OIII session has a compatible 30 Sep OIII flat suggestion. The alternative 26 Sep flat set has unknown optical-train state, so choosing it leaves the flat unresolved.
 
 **Do:** choose another candidate, exclude the affected session, defer preparation, or record an explicit scoped exception with a reason.
 

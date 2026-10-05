@@ -13,9 +13,10 @@ trace: [063-clean-rebuild-contract, 068-calibration-inputs, 069-application-hand
 ## Goal
 
 For the reviewed selection, the user explicitly accepts explainable calibration
-suggestions, handles a session whose flat compatibility is unknown with a scoped
-exception and reason, picks a maintained application profile, and decides how a
-catalog correction reaches the application. Done means: every calibration input
+suggestions, prefers an alternative flat whose compatibility is unknown for one
+session and records a scoped exception with a reason, picks a maintained
+application profile, and decides how a catalog correction reaches the
+application. Done means: every calibration input
 is accepted or carries a recorded exception with its reason; the Siril profile is
 chosen with its capability evidence shown; the review names the effective value
 the application will read for the corrected session; and no calibration or
@@ -27,8 +28,8 @@ source file is created or changed.
 - P2: Calibration fixture in `Astro-T7/Calibration`, indexed in J19:
   - Darks match camera, dimensions, binning, gain, offset, image type, 300 s exposure and recorded temperature exactly.
   - Raw Ha flats have Ha channel and RedCat optical-train evidence.
-  - Raw OIII flats have OIII channel and RedCat optical-train evidence.
-  - The 26 Sep OIII flats lack optical-train evidence and are the only flat candidate for 24 Sep.
+  - Raw OIII flats taken 30 Sep have OIII channel and RedCat optical-train evidence.
+  - For 24 Sep, the 30 Sep OIII flats match every D13 flat criterion and are the compatible suggestion. The 26 Sep OIII flats lack optical-train evidence and are an alternative candidate.
 - P3: Siril is installed at a known path and not yet configured in PlateVault.
 - P4: The J19/P5 manifest is available.
 
@@ -50,8 +51,8 @@ source file is created or changed.
 
 ### S3 — Accept the compatible suggestions {#S3}
 
-- **Do:** Accept every suggestion except the 24 Sep flat candidate.
-- **Expect:** Those assignments read accepted and are visually distinct from suggestions; **Why this match** remains available on each.
+- **Do:** Accept every suggestion except 24 Sep's flat suggestion.
+- **Expect:** Those assignments read accepted and are visually distinct from suggestions; **Why this match** remains available on each. 24 Sep's 30 Sep OIII flat suggestion still reads a suggestion.
 - **Trace:** flow E1 · CAL-FR-02, CAL-FR-03 · D13
 
 ### S4 — Hand raw flats to the application {#S4}
@@ -61,24 +62,24 @@ source file is created or changed.
 - **Expect (negative):** PlateVault writes no master file.
 - **Trace:** flow E1 · CAL-FR-04 · root FR-015
 
-### S5 — Find the unresolved session {#S5}
+### S5 — Choose the alternative flat for 24 Sep {#S5}
 
-- **Do:** Click **Review preparation**.
-- **Expect:** 24 Sep's flat is listed as unresolved: its only candidate, the 26 Sep set, shows optical-train state unknown in **Why this match**. The offered choices are another candidate, exclude the session, defer preparation, or record a scoped exception with a reason.
-- **Expect (negative):** The unaccepted 24 Sep flat suggestion is not counted as a handoff input.
-- **Trace:** flow E2, C1 · CAL-FR-05 · CAL-AC-02 · D13
+- **Do:** For 24 Sep, open **Why this match** for the suggested 30 Sep OIII flats and for the 26 Sep OIII flats. Choose the 26 Sep set instead of the suggestion, then click **Review preparation**.
+- **Expect:** The 30 Sep set lists every criterion compatible; the 26 Sep set lists optical-train state unknown. The review lists 24 Sep's flat as unresolved because the chosen 26 Sep set has an unknown criterion. The offered choices are another input (the compatible 30 Sep suggestion), exclude the session, defer preparation, or record a scoped exception with a reason.
+- **Expect (negative):** The 26 Sep set is not shown as compatible, and the unresolved flat is not counted as a handoff input. The 30 Sep suggestion is neither accepted nor substituted without the user's choice.
+- **Trace:** flow E2, C1 · CAL-FR-03, CAL-FR-05, CAL-FR-08 · CAL-AC-02, CAL-AC-06 · D13
 
 ### S6 — Record a scoped exception {#S6}
 
 - **Do:** Record an exception for 24 Sep using the 26 Sep flats with reason `Same rotation as 26 Sep; train not changed`.
-- **Expect:** The review shows the exception with the unknown criterion and the reason; 24 Sep no longer reads unresolved.
+- **Expect:** The review shows the exception with the unknown criterion and the reason; 24 Sep no longer reads unresolved. The 30 Sep set stays listed as an unassigned compatible alternative.
 - **Expect (negative):** The 26 Sep flat set's own evidence still reads optical-train unknown; the exception does not make it compatible elsewhere.
 - **Trace:** flow E2 · CAL-FR-05 · CAL-AC-03 · D13
 
 ### S7 — Confirm the exception is View-scoped {#S7}
 
 - **Do:** From Sessions, create a standalone View from 24 Sep only and open its Calibration area.
-- **Expect:** The 26 Sep flats read optical-train unknown with no exception attached.
+- **Expect:** The 30 Sep OIII flats are suggested as compatible, and the 26 Sep flats read optical-train unknown with no exception attached.
 - **Trace:** flow E2 · CAL-FR-05 · CAL-AC-03
 
 ### S8 — Choose the Siril profile {#S8}
@@ -109,8 +110,8 @@ source file is created or changed.
 
 ## Success criteria
 
-- SC1: Compatible suggestions remain distinct from assignments until S3 explicitly accepts them. The 24 Sep unknown assignment remains unresolved until the scoped exception in S6; unrelated suggestions are not silently accepted.
-- SC2: 24 Sep reads unresolved until S6, and its exception record shows both the unknown criterion and the reason.
+- SC1: Compatible suggestions remain distinct from assignments until S3 explicitly accepts them; 24 Sep's compatible 30 Sep suggestion is never accepted or substituted silently (S3, S5, S6).
+- SC2: 24 Sep reads unresolved from choosing the 26 Sep set in S5 until S6, and its exception record shows both the unknown criterion and the reason.
 - SC3: The 26 Sep flat evidence is unchanged, and another View shows it unknown with no exception (S7).
 - SC4: PlateVault creates 0 calibration files, and the manifest equals P4 at S11.
 - SC5: The Siril profile shows its capability evidence (S8); **Open in...** reads unverified with Linked and Direct source blocked (S9).

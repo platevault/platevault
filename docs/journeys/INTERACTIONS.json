@@ -174,10 +174,10 @@
     {
       "flowStep": "E2",
       "journeyStep": "J23/S5, J23/S6, J23/S7",
-      "spec": "068-calibration-inputs CAL-FR-05, CAL-AC-02, CAL-AC-03; D13",
-      "action": "Find the unresolved 24 Sep flat, record a scoped exception with a reason, and check another View.",
-      "expect": "The exception keeps the unknown criterion and the reason, and another View shows no exception.",
-      "negative": "The flat set's evidence is unchanged and the exception does not make it universally compatible."
+      "spec": "068-calibration-inputs CAL-FR-03, CAL-FR-05, CAL-FR-08, CAL-AC-02, CAL-AC-03, CAL-AC-06; D13",
+      "action": "For 24 Sep, compare the compatible 30 Sep flat suggestion with the 26 Sep set, choose the 26 Sep set, see it unresolved, record a scoped exception with a reason, and check another View.",
+      "expect": "The 26 Sep set shows its unknown optical-train criterion and reads unresolved until the exception, which keeps the unknown criterion and the reason. Another View shows no exception and still suggests the 30 Sep set.",
+      "negative": "The flat set's evidence is unchanged, the exception does not make it universally compatible, and the 30 Sep suggestion is never accepted or substituted silently."
     },
     {
       "flowStep": "E3",
