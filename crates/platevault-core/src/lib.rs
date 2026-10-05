@@ -8,5 +8,6 @@ pub mod inventory;
 pub mod library;
 pub mod model;
 pub mod projects;
+pub mod subframe_csv;
 pub mod targets;
 pub use model::*;
