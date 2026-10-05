@@ -20,6 +20,7 @@
 )]
 
 pub mod decode;
+pub mod display;
 #[cfg(feature = "fixtures")]
 pub mod fixtures;
 mod hfr;

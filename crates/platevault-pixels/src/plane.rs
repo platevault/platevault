@@ -424,6 +424,8 @@ pub enum PixelError {
     /// Truncated or inconsistent data, naming the structure.
     Malformed(String),
     Io(std::io::Error),
+    /// A display or readout region outside the plane or over its size limit.
+    InvalidRegion(String),
     Canceled,
 }
 
@@ -433,6 +435,7 @@ impl fmt::Display for PixelError {
             Self::Unsupported(feature) => write!(formatter, "unsupported: {feature}"),
             Self::Malformed(structure) => write!(formatter, "malformed: {structure}"),
             Self::Io(error) => write!(formatter, "read failed: {error}"),
+            Self::InvalidRegion(region) => write!(formatter, "invalid region: {region}"),
             Self::Canceled => formatter.write_str("canceled"),
         }
     }
