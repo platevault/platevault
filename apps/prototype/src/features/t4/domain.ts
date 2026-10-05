@@ -30,6 +30,7 @@ import type {
   Volume,
 } from "@/domain/types"
 import { formatBytes, formatExposure, formatNight, plural } from "@/lib/format"
+import type { AssignmentBasis } from "@/store/slices/t4"
 
 // ---------------------------------------------------------------------------
 // Membership
@@ -192,11 +193,74 @@ export function sourceFor(catalog: Catalog, input: CalibrationInput): CalSource 
   return session ? rawSetSource(catalog, session) : null
 }
 
-/** Reusable sources only: adopted masters and raw sets. Candidates never match (CAL-AC-04). */
-export function reusableSources(catalog: Catalog): CalSource[] {
+/**
+ * The bytes at a path when they can be read now, else null: missing, on a
+ * volume that is not mounted, or denied. Unreadable is unverified, never matched (D19).
+ */
+function readableSha(disk: Disk, path: string): string | null {
+  const file = fileAt(disk, path)
+  if (!file || disk.volumes[file.volumeId]?.mounted === false) return null
+  if (disk.deniedPaths.some((denied) => isUnder(path, denied))) return null
+  return file.sha256
+}
+
+/**
+ * Why an input's current bytes do not match their basis, or null when they do
+ * (CAL-FR-08, CAL-AC-10, D19). An adopted master is checked against its
+ * adoption digest, a library master and a raw set against the SHA-256
+ * recorded when they were indexed. A master that cannot be read is
+ * unverified; a raw-set frame that cannot be read is left to Prepare, which
+ * names offline and unreadable sources itself.
+ */
+export function inputDrift(catalog: Catalog, disk: Disk, input: CalibrationInput): string | null {
+  if (input.type === "master") {
+    const master = catalog.masters[input.masterId]
+    if (!master) return "This master is no longer in the calibration library."
+    const source = masterSource(catalog, master.id)
+    const assetId = source?.files[0]?.assetId
+    const basis = master.adoption?.verifiedSha256 ?? (assetId ? (catalog.assets[assetId]?.sha256 ?? null) : null)
+    const current = readableSha(disk, master.path)
+    if (current === null) return `Unverified: ${master.path} cannot be read, so its bytes cannot be checked against ${master.adoption ? "its adoption digest" : "its recorded SHA-256"}.`
+    if (basis !== null && current !== basis) return master.adoption ? "Drifted: its SHA-256 differs from its adoption digest." : "Drifted: its SHA-256 differs from the digest recorded when it was indexed."
+    return null
+  }
+  const session = catalog.sessions[input.sessionId]
+  if (!session) return "This calibration set is no longer in the catalog."
+  for (const id of session.assetIds) {
+    const asset = catalog.assets[id]
+    if (!asset) continue
+    const path = preferredCopy(disk, catalog, asset).path
+    const current = readableSha(disk, path)
+    if (current !== null && current !== asset.sha256) return `Drifted: ${fileName(path)} differs from the digest recorded when it was indexed.`
+  }
+  return null
+}
+
+/** The files an input hands off and the SHA-256 each has now: the basis recorded on acceptance (CAL-FR-08). */
+export function basisFiles(catalog: Catalog, disk: Disk, input: CalibrationInput): AssignmentBasis["files"] {
+  return (sourceFor(catalog, input)?.files ?? []).flatMap((file) => {
+    const sha256 = readableSha(disk, file.path)
+    return sha256 === null ? [] : [{ path: file.path, sha256 }]
+  })
+}
+
+/** A recorded acceptance basis whose file now reads different bytes (D19). */
+function basisDrift(disk: Disk, basis: AssignmentBasis | undefined, input: CalibrationInput): string | null {
+  if (!basis || basis.input !== inputKey(input)) return null
+  const changed = basis.files.find((file) => {
+    const current = readableSha(disk, file.path)
+    return current !== null && current !== file.sha256
+  })
+  return changed ? `Drifted: ${fileName(changed.path)} changed since this input was accepted for View revision ${basis.viewRevision} (SHA-256 differs).` : null
+}
+
+/** Reusable sources only: adopted masters whose bytes match their basis, and raw sets. Candidates never match (CAL-AC-04). */
+export function reusableSources(catalog: Catalog, disk: Disk): CalSource[] {
   const out: CalSource[] = []
   for (const master of Object.values(catalog.masters)) {
     if (master.state !== "adopted") continue
+    // A drifted master is neither suggested nor offered until its adopted bytes return (CAL-AC-10).
+    if (inputDrift(catalog, disk, { type: "master", masterId: master.id })) continue
     const source = masterSource(catalog, master.id)
     if (source) out.push(source)
   }
@@ -363,6 +427,11 @@ export interface RequirementRow {
   assignment: CalibrationAssignment | null
   /** The preselected compatible candidate (never stored until accepted). */
   suggestion: Candidate | null
+  /**
+   * On a decided row: a compatible master adopted after the decision, offered
+   * as a separate suggestion. The decision stands until it is accepted (J26 S9).
+   */
+  pending: Candidate | null
   /** Best candidate when nothing is fully compatible; named, not preselected. */
   closest: Candidate | null
   candidates: Candidate[]
@@ -371,6 +440,10 @@ export interface RequirementRow {
   input: CalibrationInput | null
   source: CalSource | null
   criteria: MatchCriterion[]
+  /** The handed-off input's bytes no longer match its basis; the row blocks (CAL-FR-08). */
+  drift: string | null
+  /** When this View's decision was recorded, if it was. */
+  decidedAt: string | null
   groupKey: string
   groupLabel: string
 }
@@ -397,13 +470,15 @@ export interface CalibrationPlan {
   rows: RequirementRow[]
   groups: Array<{ key: string; label: string; rows: RequirementRow[] }>
   counts: Record<RowState, number>
+  /** Decided rows whose handed-off input drifted. */
+  drifted: number
   /** Rows that block a verified handoff (CAL-AC-06). */
   blocking: RequirementRow[]
 }
 
-export function calibrationPlan(catalog: Catalog, view: View, content: MembershipContent | null): CalibrationPlan {
+export function calibrationPlan(catalog: Catalog, disk: Disk, view: View, content: MembershipContent | null, decisions: Record<string, AssignmentBasis>): CalibrationPlan {
   const members = content ? memberSessions(catalog, content) : []
-  const sources = reusableSources(catalog)
+  const sources = reusableSources(catalog, disk)
   const rows: RequirementRow[] = []
   for (const member of members) {
     const group = groupOf(catalog, member.session)
@@ -412,14 +487,25 @@ export function calibrationPlan(catalog: Catalog, view: View, content: Membershi
       const suggestion = candidates[0]?.summary.allCompatible ? candidates[0] : null
       const closest = suggestion ? null : (candidates[0] ?? null)
       const assignment = view.calibration.find((a) => a.lightSessionId === member.session.id && a.kind === kind) ?? null
+      const basis = assignment ? decisions[assignment.id] : undefined
+      const decidedAt = basis?.at ?? assignment?.exception?.at ?? null
       let state: RowState
       let input: CalibrationInput | null
       let criteria: MatchCriterion[]
+      let pending: Candidate | null = null
+      let drift: string | null = null
       if (assignment) {
         state = assignment.state
         input = assignment.input
         const live = assignment.input ? candidates.find((c) => sameInput(c.source.input, assignment.input)) : undefined
         criteria = assignment.criteria.length > 0 ? assignment.criteria : (live?.criteria ?? [])
+        if (assignment.input && (state === "accepted" || state === "exception")) drift = inputDrift(catalog, disk, assignment.input) ?? basisDrift(disk, basis, assignment.input)
+        pending =
+          candidates.find((c) => {
+            if (!c.summary.allCompatible || !c.source.isMaster || sameInput(c.source.input, assignment.input)) return false
+            const adoptedAt = catalog.masters[c.source.id]?.adoption?.adoptedAt
+            return Boolean(adoptedAt) && (decidedAt === null || adoptedAt! > decidedAt)
+          }) ?? null
       } else if (suggestion) {
         state = "suggested"
         input = suggestion.source.input
@@ -435,12 +521,15 @@ export function calibrationPlan(catalog: Catalog, view: View, content: Membershi
         kind,
         assignment,
         suggestion,
+        pending,
         closest,
         candidates,
         state,
         input,
         source: input ? sourceFor(catalog, input) : null,
         criteria,
+        drift,
+        decidedAt,
         groupKey: group.key,
         groupLabel: group.label,
       })
@@ -454,15 +543,15 @@ export function calibrationPlan(catalog: Catalog, view: View, content: Membershi
   }
   const counts: Record<RowState, number> = { suggested: 0, accepted: 0, exception: 0, excluded: 0, deferred: 0, unresolved: 0 }
   for (const row of rows) counts[row.state] += 1
-  const blocking = rows.filter((r) => r.state === "suggested" || r.state === "deferred" || r.state === "unresolved")
-  return { rows, groups, counts, blocking }
+  const blocking = rows.filter((r) => r.state === "suggested" || r.state === "deferred" || r.state === "unresolved" || r.drift !== null)
+  return { rows, groups, counts, drifted: rows.filter((r) => r.drift !== null).length, blocking }
 }
 
 /** Handed-off calibration inputs, deduplicated (one master can serve many sessions). */
 export function handoffCalibration(catalog: Catalog, plan: CalibrationPlan): CalSource[] {
   const out: CalSource[] = []
   for (const row of plan.rows) {
-    if ((row.state !== "accepted" && row.state !== "exception") || !row.input) continue
+    if ((row.state !== "accepted" && row.state !== "exception") || !row.input || row.drift) continue
     if (out.some((s) => sameInput(s.input, row.input))) continue
     const source = sourceFor(catalog, row.input)
     if (source) out.push(source)
@@ -741,14 +830,16 @@ export interface PlanInput {
   view: View
   lastViewParent: string | null
   choices: PlanChoices
+  /** Calibration decision bases from the T4 slice (CAL-FR-08). */
+  decisions: Record<string, AssignmentBasis>
 }
 
-export function preparationPlan({ disk, catalog, view, lastViewParent, choices }: PlanInput): PreparationPlan {
+export function preparationPlan({ disk, catalog, view, lastViewParent, choices, decisions }: PlanInput): PreparationPlan {
   const revision = savedMembership(view)
   const content = revision ?? workingMembership(view)
   const members = content ? memberSessions(catalog, content) : []
   const profile = view.profileId ? (catalog.profiles[view.profileId] ?? null) : null
-  const calibration = calibrationPlan(catalog, view, content)
+  const calibration = calibrationPlan(catalog, disk, view, content, decisions)
   const calibrationSources = handoffCalibration(catalog, calibration)
   const diffs = metadataDiffs(catalog, members)
 
@@ -872,7 +963,7 @@ export function preparationPlan({ disk, catalog, view, lastViewParent, choices }
           ? handoffCountText(calibration, calibrationSources.length)
           : `${plural(calibration.blocking.length, "requirement")} not resolved: ${calibration.blocking
               .slice(0, 3)
-              .map((r) => `${formatNight(r.member.session.night)} ${KIND_LABEL[r.kind].toLowerCase()} ${r.state}`)
+              .map((r) => `${formatNight(r.member.session.night)} ${KIND_LABEL[r.kind].toLowerCase()} ${r.drift ? "drifted" : r.state}`)
               .join(", ")}${calibration.blocking.length > 3 ? "…" : ""}`,
   })
   checks.push({ id: "profile", label: "Application", ok: profile !== null, blocking: true, detail: profile ? profile.name : "Choose an application." })

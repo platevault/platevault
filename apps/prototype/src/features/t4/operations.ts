@@ -5,7 +5,7 @@
  * ticks (drift, denied access, collisions) are observed honestly.
  */
 import { copyAvailability, preferredCopy } from "@/domain/derive"
-import { createFolder, fakeSha256, fileAt, makeFile, removeFile, volumeForPath, writeFiles } from "@/domain/disk"
+import { createFolder, fakeSha256, fileAt, filesUnder, makeFile, removeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { assetIdForPath, isUnder } from "@/domain/indexing"
 import type { Asset, CorrectionField, Disk, InputMode, Operation, OperationItem, Preparation, PreparationInput } from "@/domain/types"
 import { formatCount, plural } from "@/lib/format"
@@ -68,12 +68,45 @@ function sourceProblem(state: PrototypeState, entry: PrepareEntry): string | nul
 /**
  * Prepared entries that no longer match their preparation snapshot: the
  * source bytes or availability changed, or the written entry did (PREP-FR-10,
- * PREP-AC-15). Open runs this before every launch. Reads only.
+ * PREP-AC-15). Open runs this before every launch. Reads only. A preparation
+ * without a run journal (recorded before this session) is checked against
+ * each frame's recorded catalog digest and the View entry for it; one with
+ * nothing recorded cannot be re-verified, so it fails closed.
  */
 export function changedPreparedEntries(state: PrototypeState, prep: Preparation): Array<{ path: string; reason: string }> {
   const op = prep.operationId ? state.operations[prep.operationId] : undefined
   const payload = op?.payload as unknown as PreparePayload | undefined
-  if (!payload?.entries) return []
+  if (!payload?.entries) {
+    if (prep.preparedAssetIds.length === 0) {
+      return [{ path: prep.viewPath, reason: "No preparation snapshot is recorded for its entries, so they cannot be re-verified. Prepare the View again." }]
+    }
+    const written = filesUnder(state.disk, prep.viewPath)
+    const changed: Array<{ path: string; reason: string }> = []
+    for (const assetId of prep.preparedAssetIds) {
+      const asset = state.catalog.assets[assetId]
+      if (!asset) {
+        changed.push({ path: prep.viewPath, reason: `A prepared frame (${assetId}) is no longer in the catalog.` })
+        continue
+      }
+      const sourcePath = preferredCopy(state.disk, state.catalog, asset).path
+      const problem = sourceProblem(state, { kind: "light", assetId, resultId: null, sourcePath, destPath: sourcePath, fileName: asset.fileName, patch: null })
+      if (problem) {
+        changed.push({ path: sourcePath, reason: problem })
+        continue
+      }
+      if (fileAt(state.disk, sourcePath)?.sha256 !== asset.sha256) {
+        changed.push({ path: sourcePath, reason: "Changed since it was prepared: its SHA-256 differs from the recorded digest." })
+        continue
+      }
+      const intact =
+        prep.mode === "direct-source" ||
+        (prep.mode === "linked" && prep.linkType === "symlink"
+          ? written.some((f) => f.linkTarget === sourcePath)
+          : written.some((f) => f.sha256 === asset.sha256 && f.path.endsWith(`/${asset.fileName}`)))
+      if (!intact) changed.push({ path: sourcePath, reason: "Its View entry is missing or no longer matches what was prepared." })
+    }
+    return changed
+  }
   const assets = new Set(prep.preparedAssetIds)
   const results = new Set(prep.preparedResultIds)
   const calibration = new Set(payload.calibrationPrepared)

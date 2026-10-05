@@ -10,7 +10,7 @@ import { plural } from "@/lib/format"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
 import { isSettled, startOperation } from "@/store/operations"
 import { emptyPrepDraft, type PrepDraft, type SimulatedApp } from "@/store/slices/t4"
-import { assignmentId, entryPath, type PreparationPlan, type RequirementRow } from "./domain"
+import { assignmentId, basisFiles, entryPath, inputDrift, inputKey, type PreparationPlan, type RequirementRow, savedMembership, sourceFor } from "./domain"
 import { ADOPT_PHASES, type AdoptPayload, changedPreparedEntries, type PrepareEntry, type PreparePayload } from "./operations"
 
 // ---------------------------------------------------------------------------
@@ -52,35 +52,80 @@ export interface AssignmentDecision {
   reason?: string
 }
 
-function withAssignments(view: View, decisions: Array<{ row: RequirementRow; decision: AssignmentDecision | null }>): View {
-  let calibration = [...view.calibration]
-  const at = nowIso()
-  for (const { row, decision } of decisions) {
-    calibration = calibration.filter((a) => !(a.lightSessionId === row.member.session.id && a.kind === row.kind))
-    if (!decision) continue
-    calibration.push({
-      id: assignmentId(view.id, row.member.session.id, row.kind),
-      lightSessionId: row.member.session.id,
-      kind: row.kind,
-      input: decision.input,
-      state: decision.state,
-      criteria: decision.criteria,
-      exception: decision.reason ? { reason: decision.reason, at } : null,
-    })
+/**
+ * Store the decisions and, beside each, its D19 basis in the T4 slice: when
+ * it was made, the View revision it is saved as, and for an accepted input or
+ * an exception the SHA-256 of every file it hands off (CAL-FR-08). An input
+ * whose bytes no longer match their basis cannot be accepted.
+ */
+function commitAssignments(view: View, label: string, decisions: Array<{ row: RequirementRow; decision: AssignmentDecision | null }>): CommitResult {
+  const { catalog, disk } = store.getState()
+  if (catalog.views[view.id]?.completedAt) {
+    return { ok: false, reason: "write-failed", message: `${label} was refused: ${view.name} is Complete, so its calibration decisions are read-only. Reopen the View to change them.` }
   }
-  return { ...view, calibration }
+  for (const { decision } of decisions) {
+    if (!decision?.input || (decision.state !== "accepted" && decision.state !== "exception")) continue
+    const drift = inputDrift(catalog, disk, decision.input)
+    if (drift) {
+      const name = sourceFor(catalog, decision.input)?.name ?? "This input"
+      const message = `${label} was refused: ${name}. ${drift} Restore its bytes, or choose another input.`
+      recordActivity({ kind: "write-refused", title: `${label} refused`, detail: message, operationId: null, href: `/views/${view.id}/calibration` })
+      return { ok: false, reason: "write-failed", message }
+    }
+  }
+  const at = nowIso()
+  const membershipRevision = savedMembership(view)?.revision ?? null
+  return commit(
+    label,
+    (s) => {
+      const current = s.catalog.views[view.id]
+      if (!current) return s
+      let calibration = [...current.calibration]
+      const bases = { ...s.slices.t4.decisions }
+      for (const { row, decision } of decisions) {
+        const id = assignmentId(view.id, row.member.session.id, row.kind)
+        calibration = calibration.filter((a) => !(a.lightSessionId === row.member.session.id && a.kind === row.kind))
+        delete bases[id]
+        if (!decision) continue
+        calibration.push({
+          id,
+          lightSessionId: row.member.session.id,
+          kind: row.kind,
+          input: decision.input,
+          state: decision.state,
+          criteria: decision.criteria,
+          exception: decision.reason ? { reason: decision.reason, at } : null,
+        })
+        const handedOff = decision.input && (decision.state === "accepted" || decision.state === "exception") ? decision.input : null
+        bases[id] = {
+          input: handedOff ? inputKey(handedOff) : null,
+          viewRevision: current.revision + 1,
+          membershipRevision,
+          at,
+          files: handedOff ? basisFiles(s.catalog, s.disk, handedOff) : [],
+        }
+      }
+      const next = withCatalog(s, (c) => ({ ...c, views: { ...c.views, [view.id]: { ...current, calibration } } }))
+      return { ...next, slices: { ...next.slices, t4: { ...next.slices.t4, decisions: bases } } }
+    },
+    { expect: { collection: "views", id: view.id, revision: view.revision }, href: `/views/${view.id}/calibration` },
+  )
 }
 
-/** Accept exactly the given suggested rows; the evidence shown is the evidence stored. */
+/**
+ * Accept exactly the given rows' suggestions: a suggested row's preselection,
+ * or a decided row's newly adopted master (J26 S9). The evidence shown is the evidence stored.
+ */
 export function acceptSuggestions(view: View, rows: RequirementRow[]): CommitResult {
-  const decisions = rows
-    .filter((row) => row.suggestion)
-    .map((row) => ({ row, decision: { state: "accepted" as const, input: row.suggestion!.source.input, criteria: row.suggestion!.criteria } }))
-  return viewCommit(view, `Accept ${plural(decisions.length, "calibration suggestion")}`, (v) => withAssignments(v, decisions), `/views/${view.id}/calibration`)
+  const decisions = rows.flatMap((row) => {
+    const offer = row.state === "suggested" ? row.suggestion : row.pending
+    return offer ? [{ row, decision: { state: "accepted" as const, input: offer.source.input, criteria: offer.criteria } }] : []
+  })
+  return commitAssignments(view, `Accept ${plural(decisions.length, "calibration suggestion")}`, decisions)
 }
 
 export function decideRow(view: View, row: RequirementRow, decision: AssignmentDecision | null, label: string): CommitResult {
-  return viewCommit(view, label, (v) => withAssignments(v, [{ row, decision }]), `/views/${view.id}/calibration`)
+  return commitAssignments(view, label, [{ row, decision }])
 }
 
 // ---------------------------------------------------------------------------

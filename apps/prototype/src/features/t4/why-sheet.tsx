@@ -175,7 +175,7 @@ export function WhyThisMatchSheet({ row, viewId, applicationName, onOpenChange, 
                   Accept this {kind}
                 </Button>
               ) : null}
-              <Button variant="outline" onClick={() => onChoose(row)}>
+              <Button variant="outline" disabled={!canAccept} onClick={() => onChoose(row)}>
                 {row.state === "unresolved" ? "Resolve…" : "Choose another input…"}
               </Button>
             </SheetFooter>

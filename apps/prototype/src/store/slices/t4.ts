@@ -46,6 +46,22 @@ export interface SimulatedApp {
   launchFails: boolean
 }
 
+/**
+ * The D19 basis of one calibration decision for a View (CAL-FR-08): when it
+ * was made and, for an accepted input or an exception, the SHA-256 each file
+ * had at that moment. Keyed by assignment id beside the catalog assignment.
+ */
+export interface AssignmentBasis {
+  /** `inputKey` of the input; null for a decision without one. */
+  input: string | null
+  /** View record revision this decision was saved as. */
+  viewRevision: number
+  /** Saved membership revision the decision applies to. */
+  membershipRevision: number | null
+  at: string
+  files: Array<{ path: string; sha256: string }>
+}
+
 export interface T4State {
   prep: Record<ViewId, PrepDraft>
   adoption: Record<string, AdoptionDraft>
@@ -63,6 +79,8 @@ export interface T4State {
    * last Open (PREP-FR-10, PREP-AC-15). Cleared when a later Open re-verifies.
    */
   unverified: Record<PreparationId, { at: string; changed: Array<{ path: string; reason: string }> } | null>
+  /** Calibration decision bases, keyed by assignment id (CAL-FR-08, D19). */
+  decisions: Record<string, AssignmentBasis>
 }
 
 export function emptyPrepDraft(): PrepDraft {
@@ -71,7 +89,7 @@ export function emptyPrepDraft(): PrepDraft {
 
 export const t4Slice: SliceDefinition<T4State> = {
   id: "t4",
-  version: 3,
+  version: 4,
   initial: () => ({
     prep: {},
     adoption: {},
@@ -87,6 +105,7 @@ export const t4Slice: SliceDefinition<T4State> = {
     },
     running: {},
     unverified: {},
+    decisions: {},
   }),
   operations: t4OperationHandlers,
 }
