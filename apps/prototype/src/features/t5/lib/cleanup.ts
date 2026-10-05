@@ -186,10 +186,12 @@ export function groupEligible(plan: CleanupPlan, group: CleanupGroupId): boolean
   return plan.complete || group === "replaced"
 }
 
+/**
+ * Why the file cannot go to the OS Trash at review, or null. Unsupported Trash
+ * is not refused here: it is shown per location and refused when Send runs,
+ * which then offers Keep files and Reveal location (STO-FR-05, STO-AC-03).
+ */
 function trashBlock(disk: Disk, file: DiskFile): string | null {
-  if (disk.volumes[file.volumeId]?.trash === "unsupported") {
-    return `OS Trash is unsupported on ${disk.volumes[file.volumeId]?.name ?? "this volume"}: removal there would delete immediately, so PlateVault refuses it.`
-  }
   if (disk.readOnlyPaths.some((p) => isUnder(file.path, p))) return "Write permission removed: the file cannot be moved to the OS Trash."
   return null
 }
@@ -389,7 +391,7 @@ export function trashSupport(disk: Disk, entries: CleanupEntry[]): TrashSupportR
       movable: 0,
       blocked: 0,
     }
-    if (entry.blocked) row.blocked += 1
+    if (entry.blocked || !row.supported) row.blocked += 1
     else row.movable += 1
     rows.set(entry.volumeId, row)
   }

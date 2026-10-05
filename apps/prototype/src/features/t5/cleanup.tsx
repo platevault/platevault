@@ -15,6 +15,7 @@ import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { isUnder } from "@/domain/indexing"
 import type { Disk, View } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime, plural } from "@/lib/format"
 import { nowIso, updateSlice, useStore } from "@/store/core"
@@ -116,8 +117,12 @@ function CleanupArea({ view }: { view: View }) {
   const setSelected = (next: string[]) => setDraft(view.id, { selected: next })
   const review = draft.stage === "review" ? draft.review : null
   const checked = review ? checkReview(disk, review) : []
-  const movable = checked.filter((e) => !e.blocked)
-  const refusedCount = checked.length - movable.length
+  const sendable = checked.filter((e) => !e.blocked)
+  // Sent but refused at execution: the OS Trash is unsupported where they sit (STO-AC-03).
+  const noTrash = sendable.filter((e) => disk.volumes[e.volumeId]?.trash === "unsupported")
+  const movable = sendable.filter((e) => !noTrash.includes(e))
+  const noTrashVolumes = [...new Set(noTrash.map((e) => disk.volumes[e.volumeId]?.name ?? e.volumeId))].join(", ")
+  const refusedCount = checked.length - sendable.length
   const links = movable.filter((e) => e.linkKind === "symlink")
   const protectedOnes = movable.filter((e) => e.group === "keep")
 
@@ -170,21 +175,22 @@ function CleanupArea({ view }: { view: View }) {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         tone="destructive"
-        title={`Send ${plural(movable.length, "file")} to the OS Trash?`}
+        title={`Send ${plural(sendable.length, "file")} to the OS Trash?`}
         description="Each file is checked against its review again just before it moves. Anything that changed, lost its retained original or kept copy, or sits where the OS Trash is unsupported is refused and stays."
         changes={[
-          `Move ${plural(movable.length, "file")} from ${view.name}'s folder to the OS Trash`,
+          movable.length > 0 ? `Move ${plural(movable.length, "file")} from ${view.name}'s folder to the OS Trash` : `No file moves: the OS Trash is unsupported on ${noTrashVolumes}`,
           ...(links.length > 0 ? [`Trash ${plural(links.length, "link entry", "link entries")} without following their targets`] : []),
           ...(protectedOnes.length > 0 ? [`Remove protected ${plural(protectedOnes.length, "product")}: ${protectedOnes.map((e) => baseName(e.path)).join(", ")}`] : []),
         ]}
         unchanged={[
+          ...(noTrash.length > 0 ? [`${plural(noTrash.length, "file")} on ${noTrashVolumes} ${noTrash.length === 1 ? "is" : "are"} refused and ${noTrash.length === 1 ? "stays" : "stay"} in place: the OS Trash is unsupported there`] : []),
           ...(refusedCount > 0 ? [`${plural(refusedCount, "selected file")} ${refusedCount === 1 ? "is" : "are"} refused and ${refusedCount === 1 ? "stays" : "stay"} in place`] : []),
           "Original captures outside this View stay where they are",
           "Unselected files, including Keep, stay in place",
           `${view.name} ${view.completedAt ? "stays Complete" : "keeps its status"}; membership does not change`,
           "No file is deleted permanently",
         ]}
-        confirmLabel={`Send ${plural(movable.length, "file")} to Trash`}
+        confirmLabel={`Send ${plural(sendable.length, "file")} to Trash`}
         onConfirm={() => {
           if (!review) return
           const opId = startCleanup(view.id, view.name, review.viewPath, review.selected)
@@ -267,7 +273,8 @@ function GroupRow({
   const all = chosen.length === entries.length
   const some = chosen.length > 0 && !all
   const { bytes, reclaim } = groupStats(entries)
-  const blocked = entries.filter((e) => e.blocked).length
+  const volumes = useStore((s) => s.disk.volumes)
+  const blocked = entries.filter((e) => e.blocked || volumes[e.volumeId]?.trash === "unsupported").length
   const checkboxId = `t5-group-${group}`
   const hintId = `${checkboxId}-hint`
   const setGroup = (on: boolean) => {
@@ -365,11 +372,18 @@ function CleanupReview({ review, entries, onBack, onConfirm }: { review: ReviewS
   const disk = useStore((s) => s.disk)
   const support = trashSupport(disk, entries)
   const reviewedBlocked = new Set(review.selected.filter((e) => e.blocked).map((e) => e.key))
-  const movable = entries.filter((e) => !e.blocked)
+  const sendable = entries.filter((e) => !e.blocked)
+  const noTrash = sendable.filter((e) => disk.volumes[e.volumeId]?.trash === "unsupported")
+  const movable = sendable.filter((e) => !noTrash.includes(e))
   const refused = entries.filter((e) => reviewedBlocked.has(e.key))
   const changed = entries.filter((e) => e.blocked && !reviewedBlocked.has(e.key))
   const protectedOnes = movable.filter((e) => e.group === "keep")
-  const sendHint = movable.length === 0 ? "No selected file can move: each one is refused, so nothing would go to the OS Trash." : null
+  const sendHint =
+    sendable.length === 0
+      ? "No selected file can move: each one is refused, so nothing would go to the OS Trash."
+      : movable.length === 0
+        ? "No selected file can reach the OS Trash: sending refuses each one and keeps it in place."
+        : null
   return (
     <Section
       id="t5-cleanup-review"
@@ -380,7 +394,7 @@ function CleanupReview({ review, entries, onBack, onConfirm }: { review: ReviewS
           <Button variant="outline" onClick={onBack}>
             Back to selection
           </Button>
-          <Button variant="destructive" disabled={movable.length === 0} aria-describedby={sendHint ? "t5-cleanup-send-hint" : undefined} onClick={onConfirm}>
+          <Button variant="destructive" disabled={sendable.length === 0} aria-describedby={sendHint ? "t5-cleanup-send-hint" : undefined} onClick={onConfirm}>
             Send selected files to Trash
           </Button>
         </>
@@ -402,6 +416,12 @@ function CleanupReview({ review, entries, onBack, onConfirm }: { review: ReviewS
           </li>
         ))}
       </ul>
+      {noTrash.length > 0 ? (
+        <Notice tone="refusal" title={`OS Trash unsupported for ${plural(noTrash.length, "selected file")}`}>
+          Removal on {[...new Set(noTrash.map((e) => disk.volumes[e.volumeId]?.name ?? e.volumeId))].join(", ")} would delete immediately, so Send to OS Trash refuses these files and keeps them in place. There is no
+          permanent delete; afterwards you can keep the files or reveal their location. They are listed under Keep.
+        </Notice>
+      ) : null}
       {changed.length > 0 ? (
         <Notice tone="refusal" title={`${plural(changed.length, "selected file")} changed since review`}>
           <p>These stay in place. To include their current bytes, go back to selection and review again.</p>
@@ -438,7 +458,11 @@ function CleanupReview({ review, entries, onBack, onConfirm }: { review: ReviewS
       ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <ReviewList title={`Send to OS Trash (${formatCount(movable.length)})`} entries={movable} empty="No selected file can move." />
-        <ReviewList title={`Keep (${formatCount(review.retained.length + refused.length + changed.length)})`} entries={[...changed, ...refused, ...review.retained]} empty="Every file is selected." />
+        <ReviewList
+          title={`Keep (${formatCount(review.retained.length + noTrash.length + refused.length + changed.length)})`}
+          entries={[...noTrash, ...changed, ...refused, ...review.retained]}
+          empty="Every file is selected."
+        />
       </div>
     </Section>
   )
@@ -483,7 +507,13 @@ function CleanupRecord({ opId, viewPath }: { opId: string; viewPath: string }) {
   const payload = op.payload as unknown as CleanupPayload
   const settled = isSettled(op.status)
   const inTrash = trash.filter((t) => t.trashedAt === payload.trashedAt && payload.removed.includes(t.originalPath))
-  const refusedFolders = [...new Set(payload.refused.map((r) => parentFolder(r.path)))]
+  // The deepest folder holding every refused file: one Reveal location for the whole refusal.
+  const refusedFolders = payload.refused.map((r) => parentFolder(r.path))
+  const revealFolder = refusedFolders.reduce((common, folder) => {
+    let shared = common
+    while (shared && !isUnder(folder, shared)) shared = parentFolder(shared)
+    return shared
+  }, refusedFolders[0] ?? "")
   return (
     <Section id="t5-cleanup-record" title="Cleanup record" description={`Last cleanup, started ${formatDateTime(op.createdAt)}. The View records what was removed and what remains.`}>
       <OperationPanel operationId={opId} />
@@ -506,9 +536,7 @@ function CleanupRecord({ opId, viewPath }: { opId: string; viewPath: string }) {
                       Keep files
                     </Button>
                   )}
-                  {refusedFolders.slice(0, 3).map((folder) => (
-                    <RevealLocation key={folder} path={folder} label={refusedFolders.length > 1 ? `Reveal ${baseName(folder)}` : "Reveal location"} />
-                  ))}
+                  {revealFolder ? <RevealLocation path={revealFolder} /> : null}
                 </div>
               </>
             ) : (
