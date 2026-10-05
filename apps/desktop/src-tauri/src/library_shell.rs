@@ -4,8 +4,9 @@
 //! Isolated rebuilt library shell (spec 064): its own Tauri runtime over the
 //! clean catalog.
 //!
-//! It boots only [`Library`] with the [`crate::commands::library`] and
-//! [`crate::commands::project_goals`] IPC surfaces, the catalog in its own data
+//! It boots only [`Library`] with the [`crate::commands::library`],
+//! [`crate::commands::project_goals`] and [`crate::commands::frame_review`] IPC
+//! surfaces, the catalog in its own data
 //! directory. Nothing from the legacy
 //! composition root runs here: no `AppState`, legacy database, bootstrap job,
 //! watcher or legacy command registration. The legacy code stays archivable and
@@ -36,12 +37,15 @@ use std::sync::Arc;
 
 use platevault_core::library::Library;
 use platevault_core::targets::SimbadConfig;
-use platevault_core::{LibraryError, NativePath, Revision, ScanOperation, ScanProgress, ScanState};
+use platevault_core::{
+    LibraryError, MeasurementProgress, NativePath, Revision, ScanOperation, ScanProgress, ScanState,
+};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::broadcast::error::RecvError;
 use uuid::Uuid;
 
+use crate::commands::frame_review as pix;
 use crate::commands::library as ipc;
 use crate::commands::project_goals as projects;
 
@@ -56,6 +60,9 @@ pub const CATALOG_FILE: &str = "catalog.sqlite";
 pub const SIMBAD_ENDPOINT_ENV: &str = "PV_LIBRARY_SIMBAD_ENDPOINT";
 /// Committed scan snapshots; polling `library_scan_status` stays the durable truth.
 pub const SCAN_PROGRESS_EVENT: &str = "library_scan_progress";
+/// Settled frames and run state changes; polling `pix_measurement_status` and
+/// `pix_review_frames` stays the durable truth.
+pub const MEASUREMENT_PROGRESS_EVENT: &str = "pix_measurement_progress";
 /// Optional IPv4 loopback address for the development bridge.
 #[cfg(feature = "dev-tools")]
 pub const BRIDGE_BIND_ENV: &str = "PV_MCP_BRIDGE_BIND";
@@ -105,6 +112,22 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         projects::project_set_rejection,
         projects::project_list,
         projects::project_detail,
+        pix::pix_review_frames,
+        pix::pix_start_measurement,
+        pix::pix_prioritize_measurement,
+        pix::pix_measurement_status,
+        pix::pix_cancel_measurement,
+        pix::pix_list_measurement_runs,
+        pix::pix_open_frame,
+        pix::pix_preview_tile,
+        pix::pix_compare_regions,
+        pix::pix_sample_region,
+        pix::pix_frame_stars,
+        pix::pix_star_cutouts,
+        pix::pix_frame_detail,
+        pix::pix_review_import,
+        pix::pix_import_review,
+        pix::pix_confirm_import,
     ]);
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);
@@ -121,6 +144,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         "library catalog opened"
     );
     ProgressBridge::spawn(app.handle().clone(), Arc::clone(&library));
+    spawn_measurement_bridge(app.handle().clone(), Arc::clone(&library));
     app.manage(library);
     app.run(|_, _| {});
     Ok(())
@@ -288,6 +312,51 @@ impl ProgressBridge {
             self.forward(&catalog.scan_status(id).await?, false);
         }
         Ok(())
+    }
+}
+
+/// Forwards measurement snapshots to the webview. Each channel event is one
+/// settled frame or state change, so all are forwarded; after broadcast lag
+/// the Running run's durable status is re-emitted without a frame.
+fn spawn_measurement_bridge(app: AppHandle, library: Arc<Library>) {
+    let mut events = library.frame_review().subscribe_measurement_progress();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            match events.recv().await {
+                Ok(progress) => emit_measurement(&app, &progress),
+                Err(RecvError::Lagged(skipped)) => {
+                    tracing::warn!(
+                        skipped,
+                        "measurement progress lagged; re-reading durable status"
+                    );
+                    match library.frame_review().running_run().await {
+                        Ok(Some(run)) => emit_measurement(
+                            &app,
+                            &MeasurementProgress {
+                                operation_id: run.operation_id,
+                                revision: run.revision,
+                                state: run.state,
+                                counters: run.counters,
+                                asset_id: None,
+                                frame_state: None,
+                            },
+                        ),
+                        Ok(None) => {}
+                        Err(error) => tracing::error!(
+                            %error,
+                            "measurement progress resync failed; clients must poll pix_measurement_status"
+                        ),
+                    }
+                }
+                Err(RecvError::Closed) => return,
+            }
+        }
+    });
+}
+
+fn emit_measurement(app: &AppHandle, progress: &MeasurementProgress) {
+    if let Err(error) = app.emit(MEASUREMENT_PROGRESS_EVENT, progress) {
+        tracing::error!(run = %progress.operation_id, %error, "measurement progress event not delivered");
     }
 }
 
