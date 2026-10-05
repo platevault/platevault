@@ -1,10 +1,13 @@
 /**
- * Import measurements (D6, PIX-FR-07, PIX-AC-04, PIX-AC-05): choose a
- * supported export, review its column and row mapping, then confirm. Matched
- * rows attach imported values next to built-in ones; unmatched and ambiguous
- * rows attach to nothing until reviewed; unsupported columns stay
- * unavailable; rejection decisions are never imported. Nothing is excluded
- * and no quality changes.
+ * Import measurements (D6, PIX-FR-06, PIX-FR-07, PIX-AC-04, PIX-AC-05,
+ * PIX-AC-11): choose a supported export, review its column and row mapping,
+ * then confirm. Matched rows attach imported values next to built-in ones,
+ * stamped with the frame's bytes read at review and labelled content
+ * unverified (D19). A matched frame whose bytes differ from what PlateVault
+ * recorded, or cannot be read, is listed for review and attaches nothing;
+ * unmatched and ambiguous rows attach to nothing until reviewed; unsupported
+ * columns stay unavailable; rejection decisions are never imported. Nothing is
+ * excluded and no quality changes.
  */
 import { FileSpreadsheet } from "lucide-react"
 import { useId, useState } from "react"
@@ -19,7 +22,7 @@ import type { AssetId, Catalog } from "@/domain/types"
 import { formatBytes, formatDateTime, plural } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { importMeasurements } from "./actions"
-import { CSV_COLUMNS, mapRows, readSubframeSelectorCsv } from "./csv"
+import { attaches, CSV_COLUMNS, IMPORT_METHOD, mapRows, readSubframeSelectorCsv } from "./csv"
 import { sessionLabel } from "./model"
 
 export function frameName(catalog: Catalog, id: AssetId): string {
@@ -39,8 +42,9 @@ export function ImportDialog({ viewId, viewAssetIds, open, onOpenChange }: { vie
     .filter((f) => f.kind === "csv" && disk.volumes[f.volumeId]?.mounted)
     .sort((a, b) => a.path.localeCompare(b.path))
   const rows = path ? readSubframeSelectorCsv(disk, path) : null
-  const mapped = rows ? mapRows(catalog, rows) : []
-  const matched = mapped.filter((m) => m.status === "matched" || m.status === "matched-by-name")
+  const mapped = rows ? mapRows(disk, catalog, rows) : []
+  const matched = mapped.filter(attaches)
+  const changed = mapped.filter((m) => m.status === "content-changed" || m.status === "unreadable")
   const unresolved = mapped.filter((m) => m.status === "ambiguous" || m.status === "unmatched")
   const outside = matched.filter((m) => !viewAssetIds.has(m.assetId!)).length
   const byName = matched.filter((m) => m.status === "matched-by-name").length
@@ -119,6 +123,9 @@ export function ImportDialog({ viewId, viewAssetIds, open, onOpenChange }: { vie
             <p>
               <span className="font-medium">PixInsight SubframeSelector CSV</span> · {plural(rows.length, "row")} · subframe scale 3.10″/px as recorded in the export
             </p>
+            <p className="text-xs text-muted-foreground">
+              Source: imported · method {IMPORT_METHOD.method} {IMPORT_METHOD.version}. The export records no content identity, so attached values read content unverified. PlateVault records each frame's current SHA-256 only to notice later changes.
+            </p>
             <section className="space-y-1.5">
               <h3 className="text-xs font-medium text-muted-foreground">Columns</h3>
               <table className="w-full text-sm">
@@ -160,8 +167,29 @@ export function ImportDialog({ viewId, viewAssetIds, open, onOpenChange }: { vie
               <h3 className="text-xs font-medium text-muted-foreground">Rows</h3>
               <p className="tabular-nums">
                 {plural(matched.length, "row")} matched to indexed frames ({matched.length - byName} by path, {byName} by unique file name)
-                {outside > 0 ? ` (${outside} outside this View; their values still attach to the frame)` : ""} · {unresolved.length} attach to no frame until reviewed
+                {outside > 0 ? ` (${outside} outside this View; their values still attach to the frame)` : ""} · {changed.length + unresolved.length} attach to no frame until reviewed
               </p>
+              {changed.length > 0 ? (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-medium">Needs review: content changed since PlateVault recorded it</h4>
+                  <ul className="space-y-2">
+                    {changed.map((m) => (
+                      <li key={m.row.index} className="rounded-md border px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StatusBadge kind="association" value="needs-review" label={m.status === "unreadable" ? "Needs review: cannot be read" : "Needs review: content changed"} />
+                          <span className="text-xs text-muted-foreground">Row {m.row.index}</span>
+                        </div>
+                        <PathText path={m.row.file} className="mt-1" />
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {m.status === "unreadable"
+                            ? `${frameName(catalog, m.assetId!)} cannot be read now (offline or access denied), so PlateVault cannot record which content these values describe. It attaches to nothing.`
+                            : `The current bytes of ${frameName(catalog, m.assetId!)} (sha256 ${m.observedSha256!.slice(0, 12)}…) differ from the digest PlateVault recorded ${m.basis!.recordedBy === "measurement" ? "when it measured the frame" : "when it indexed the frame"} (${m.basis!.sha256.slice(0, 12)}…). These values may describe other content, so they attach to nothing.`}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <ul className="space-y-2">
                 {unresolved.map((m) => (
                   <li key={m.row.index} className="rounded-md border px-3 py-2">

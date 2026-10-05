@@ -24,7 +24,7 @@ import type {
 import { plural } from "@/lib/format"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
 import { defaultFrameUi, defaultSessionFilters, type FrameUi, type SessionFilters } from "@/store/slices/t3"
-import { type CsvRow, importedMetrics, type MappedRow } from "./csv"
+import { attaches, type CsvRow, importedMetrics, type MappedRow, observeFrame } from "./csv"
 import { historyEntry } from "./measure"
 import { contentEquals, contentOf, deriveCriteria, emptyContent, latestRevision, viewContext } from "./model"
 
@@ -264,12 +264,13 @@ export function rejectForProject(projectId: ProjectId, assetIds: AssetId[], href
 
 /**
  * Add imported metrics next to built-in ones; an earlier import of the same metric is replaced, a built-in value never.
- * The import is stamped with the frame's current digest when the mapping is confirmed (PIX-FR-06): a record of other
- * bytes moves to history with its values, and the import starts a record of the current bytes.
+ * `sha256` is the import observation: the frame's bytes read when the mapping was confirmed (PIX-FR-06). Values are
+ * attached only while those bytes equal the frame's recorded basis, so they join its current record; a frame with no
+ * record starts one of the observed bytes. The digest only detects later drift: imported values stay content unverified
+ * (D19) and become history once the frame differs from it.
  */
-function withImported(catalog: Catalog, assetId: AssetId, row: Pick<CsvRow, "index" | "file" | "values">, path: string): FrameMeasurement {
+function withImported(catalog: Catalog, assetId: AssetId, row: Pick<CsvRow, "index" | "file" | "values">, path: string, sha256: string): FrameMeasurement {
   const record = catalog.measurements[assetId]
-  const sha256 = catalog.assets[assetId]?.sha256 ?? null
   const metrics = importedMetrics({ ...row, approved: true, psfSignalWeight: 0 }, path)
   const keys = new Set(metrics.map((m) => m.key))
   if (record && record.inputSha256 === sha256) return { ...record, metrics: [...record.metrics.filter((m) => m.source === "built-in" || !keys.has(m.key)), ...metrics] }
@@ -278,10 +279,11 @@ function withImported(catalog: Catalog, assetId: AssetId, row: Pick<CsvRow, "ind
 }
 
 export function importMeasurements(viewId: ViewId, path: string, mapped: MappedRow[], viewAssetIds: Set<AssetId>): CommitResult {
-  const attach = mapped.filter((m) => m.assetId !== null)
+  const attach = mapped.filter(attaches)
   const rows: MeasurementImportRow[] = mapped
-    .filter((m) => m.status === "ambiguous" || m.status === "unmatched")
-    .map((m) => ({ index: m.row.index, file: m.row.file, status: m.status as "ambiguous" | "unmatched", candidates: m.candidates, assetId: null, values: m.row.values }))
+    .filter((m) => !attaches(m))
+    .map((m) => ({ index: m.row.index, file: m.row.file, status: m.status as MeasurementImportRow["status"], candidates: m.candidates, assetId: null, values: m.row.values }))
+  const changed = rows.filter((r) => r.status === "content-changed" || r.status === "unreadable").length
   const record: MeasurementImport = {
     id: `imp_${stableHash(`${path}|${nowIso()}`)}`,
     viewId,
@@ -297,7 +299,7 @@ export function importMeasurements(viewId: ViewId, path: string, mapped: MappedR
     (s) =>
       withCatalog(s, (c) => {
         const measurements = { ...c.measurements }
-        for (const m of attach) measurements[m.assetId!] = withImported({ ...c, measurements }, m.assetId!, m.row, path)
+        for (const m of attach) measurements[m.assetId!] = withImported({ ...c, measurements }, m.assetId!, m.row, path, m.observedSha256!)
         return { ...c, measurements, measurementImports: { ...c.measurementImports, [record.id]: record } }
       }),
     { href: `/views/${viewId}/frames` },
@@ -306,25 +308,30 @@ export function importMeasurements(viewId: ViewId, path: string, mapped: MappedR
   recordActivity({
     kind: "saved",
     title: "Measurements imported",
-    detail: `${plural(attach.length, "row")} attached as imported values from ${path}. ${rows.length} rows attach to no frame until reviewed. No frame was excluded and no quality changed.`,
+    detail: `${plural(attach.length, "row")} attached as imported values, content unverified, from ${path}. ${rows.length} rows attach to no frame${changed > 0 ? ` (${changed} because the frame's bytes differ from what PlateVault recorded, or cannot be read)` : ""}. No frame was excluded and no quality changed.`,
     operationId: null,
     href: `/views/${viewId}/frames`,
   })
   return result
 }
 
-/** Attach an ambiguous row to the frame the user chose. */
+/** Attach an ambiguous row to the frame the user chose, only while that frame's bytes still equal its recorded basis. */
 export function resolveImportRow(importId: string, rowIndex: number, assetId: AssetId): CommitResult {
-  const record = store.getState().catalog.measurementImports[importId]
+  const { catalog, disk } = store.getState()
+  const record = catalog.measurementImports[importId]
   const row = record?.rows.find((r) => r.index === rowIndex)
   if (!record || !row) return { ok: false, reason: "write-failed", message: "The import row was not found; open Import measurements again." }
+  const seen = observeFrame(disk, catalog, assetId, null)
+  if (seen.state === "unreadable") return { ok: false, reason: "write-failed", message: "Row not attached: the frame's bytes cannot be read now, so PlateVault cannot record which content the values describe." }
+  if (seen.state === "content-changed")
+    return { ok: false, reason: "write-failed", message: `Row not attached: the frame's bytes differ from the digest PlateVault recorded ${seen.basis?.recordedBy === "measurement" ? "when it measured it" : "when it was indexed"}. Index its folder and review frames again before attaching it.` }
   const rows = record.rows.map((r) => (r.index === rowIndex ? { ...r, status: "resolved" as const, assetId } : r))
   return commit(
     "Attach imported row",
     (s) =>
       withCatalog(s, (c) => ({
         ...c,
-        measurements: { ...c.measurements, [assetId]: withImported(c, assetId, row, record.path) },
+        measurements: { ...c.measurements, [assetId]: withImported(c, assetId, row, record.path, seen.observedSha256!) },
         measurementImports: { ...c.measurementImports, [importId]: { ...record, rows } },
       })),
     { href: `/views/${record.viewId}/frames` },

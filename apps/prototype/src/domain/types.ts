@@ -580,7 +580,8 @@ export interface FrameMeasurement {
 export interface MeasurementImportRow {
   index: number
   file: string
-  status: "ambiguous" | "unmatched" | "resolved"
+  /** "content-changed" / "unreadable": the named frame's bytes differed from its recorded basis, or could not be read, at mapping review; it never attaches (PIX-FR-06). */
+  status: "ambiguous" | "unmatched" | "content-changed" | "unreadable" | "resolved"
   candidates: AssetId[]
   assetId: AssetId | null
   values: Partial<Record<MetricKey, number>>

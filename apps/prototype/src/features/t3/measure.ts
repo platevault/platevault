@@ -76,6 +76,16 @@ export function currentImportedMetrics(record: FrameMeasurement | undefined, sha
   return record && record.inputSha256 === sha256 ? importedMetricsOf(record) : []
 }
 
+/**
+ * Imported metrics recorded for other bytes than the frame's current ones, newest first and one per metric: they
+ * read only as history (D19, J22 S15a). Restored bytes make them apply again once Review frames rehashes the frame.
+ */
+export function historyImportedMetrics(record: FrameMeasurement | undefined, sha256: string): Metric[] {
+  if (!record) return []
+  const earlier = [...(record.inputSha256 !== sha256 ? record.metrics : []), ...record.history.flatMap((h) => h.metrics)]
+  return earlier.filter((m, i) => m.source === "imported" && earlier.findIndex((o) => o.source === "imported" && o.key === m.key) === i)
+}
+
 /** History entry for a record: built-in and imported values stay with the bytes they describe. */
 export function historyEntry(record: FrameMeasurement): MeasurementRecord | null {
   if (!record.inputSha256 || !record.computedAt || record.state === "pending" || record.state === "verifying") return null

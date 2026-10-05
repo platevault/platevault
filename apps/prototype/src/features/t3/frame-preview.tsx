@@ -21,7 +21,7 @@ import type { Asset, DiskFile, FrameHeader, FrameMeasurement, Metric, MetricKey 
 import { HEADER_KEYWORDS } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, formatMetric, METRIC_LABEL } from "./measure"
+import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, formatMetric, historyImportedMetrics, METRIC_LABEL } from "./measure"
 import { type CutoutKind, detectedStars, renderCutout, renderWindow, type StarField, type StarRecord, starField, type Stretch, type ViewWindow } from "./raster"
 
 type Zoom = "fit" | "1" | "2"
@@ -116,6 +116,7 @@ function StarDetail({ field, star, scaleArcsec }: { field: StarField; star: Star
 function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurement | undefined; state: FrameMeasureState; applies: boolean; sha256: string }) {
   const builtIn = applies ? builtInMetrics(record) : []
   const imported = currentImportedMetrics(record, sha256)
+  const earlier = historyImportedMetrics(record, sha256)
   const byKey = (list: Metric[], key: MetricKey) => list.find((m) => m.key === key)
   const warning = builtIn.find((m) => m.warning)?.warning
   return (
@@ -139,6 +140,7 @@ function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurem
           {METRIC_ORDER.map((key) => {
             const own = byKey(builtIn, key)
             const other = byKey(imported, key)
+            const past = other ? undefined : byKey(earlier, key)
             return (
               <tr key={key} className="border-b last:border-0">
                 <th scope="row" className="py-1 text-left font-normal text-muted-foreground">
@@ -147,12 +149,36 @@ function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurem
                 <td className="py-1 text-right">
                   {own ? formatMetric(own) : <UnknownValue label={state === "pending" ? "Pending" : state === "verifying" ? "Verifying" : "Not measured"} />}
                 </td>
-                <td className="py-1 text-right">{other ? formatMetric(other) : <span className="text-muted-foreground">None</span>}</td>
+                <td className="py-1 text-right">
+                  {other ? (
+                    <>
+                      {formatMetric(other)}
+                      <span className="sr-only"> {other.unit}, imported, content unverified</span>
+                    </>
+                  ) : past ? (
+                    <span className="text-muted-foreground">
+                      History: {formatMetric(past)}
+                      <span className="sr-only"> {past.unit}, imported for earlier content</span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">None</span>
+                  )}
+                </td>
               </tr>
             )
           })}
         </tbody>
       </table>
+      {imported.length > 0 ? (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <StatusBadge kind="match" value="unknown" label="Imported · content unverified" />
+          <span>
+            {imported[0]!.method} {imported[0]!.version} · units {[...new Set(imported.map((m) => m.unit || "none"))].join(", ")} · matched by file only; the SHA-256 noted at import detects later changes and never verifies the values.
+          </span>
+        </p>
+      ) : earlier.length > 0 ? (
+        <p className="text-xs text-muted-foreground">Imported values are history: they were imported for other content than this frame's current bytes.</p>
+      ) : null}
       {warning ? <p className="text-xs text-warning">{warning}</p> : null}
       <p className="text-xs text-muted-foreground">Display stretch changes this preview only. Values are measured on linear data and never decide quality.</p>
     </div>
@@ -455,6 +481,7 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
                     </span>
                     <span className="[overflow-wrap:anywhere]">
                       {formatMetric(m)} · {m.unit || "no unit"} · {m.method} {m.version} · basis {m.basis}
+                      {m.source === "imported" ? " · content unverified" : ""}
                     </span>
                   </li>
                 ))}
@@ -462,9 +489,9 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
             )}
             {record?.inputSha256 ? (
               <p className="text-xs text-muted-foreground">
-                Built-in input identity: sha256 <span className="font-mono">{record.inputSha256.slice(0, 16)}…</span>
-                {applies ? " (matches the current bytes)" : " (earlier content; kept as history)"}
-                {record.computedAt ? `, measured ${formatDateTime(record.computedAt)}` : ""}
+                {builtInMetrics(record).length > 0 ? "Built-in input identity" : "Import observation"}: sha256 <span className="font-mono">{record.inputSha256.slice(0, 16)}…</span>
+                {record.inputSha256 === asset.sha256 ? " (matches the current bytes)" : " (earlier content; kept as history)"}
+                {record.computedAt ? `, ${builtInMetrics(record).length > 0 ? "measured" : "imported"} ${formatDateTime(record.computedAt)}` : ""}
               </p>
             ) : null}
             {record && record.history.length > 0 ? (

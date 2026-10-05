@@ -29,7 +29,19 @@ import { SelectField } from "./fields"
 import { FramePreview } from "./frame-preview"
 import { frameName, ImportDialog } from "./import-dialog"
 import { CSV_COLUMNS } from "./csv"
-import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, frameMeasureState, formatMetric, latestMeasureOp, type MeasurePayload, METRIC_LABEL, startMeasurement, unfinishedCount } from "./measure"
+import {
+  builtInMetrics,
+  currentImportedMetrics,
+  type FrameMeasureState,
+  frameMeasureState,
+  formatMetric,
+  historyImportedMetrics,
+  latestMeasureOp,
+  type MeasurePayload,
+  METRIC_LABEL,
+  startMeasurement,
+  unfinishedCount,
+} from "./measure"
 import { MeasurementPlot } from "./measurement-plot"
 import { currentFile, excludeFrames, type MemberState, memberState, pixelScaleFor, restoreFrames, sessionLabel } from "./model"
 import { registerFrameCommands } from "./shell"
@@ -43,7 +55,10 @@ interface FrameRow {
   state: FrameMeasureState
   applies: boolean
   builtIn: Partial<Record<MetricKey, Metric>>
+  /** Imported values for the current bytes: content unverified (D19). */
   imported: Partial<Record<MetricKey, Metric>>
+  /** Imported values for earlier content, shown only as history. */
+  importedHistory: Partial<Record<MetricKey, Metric>>
   rejected: boolean
 }
 
@@ -79,6 +94,7 @@ function buildRows(catalog: Catalog, ids: AssetId[], content: { included: AssetI
       applies,
       builtIn: applies ? byKey(builtInMetrics(record)) : {},
       imported: byKey(currentImportedMetrics(record, asset.sha256)),
+      importedHistory: byKey(historyImportedMetrics(record, asset.sha256)),
       rejected: asset.id in projectRejections,
     }
   })
@@ -201,7 +217,7 @@ function ImportReview({ record, catalog }: { record: MeasurementImport; catalog:
         <span className="font-medium">{record.path.slice(record.path.lastIndexOf("/") + 1)}</span>
         <span className="text-muted-foreground">
           {" "}
-          · {plural(record.matched, "row")} attached as imported values{record.outsideView > 0 ? ` (${record.outsideView} to frames outside this View)` : ""}
+          · {plural(record.matched, "row")} attached as imported values, content unverified{record.outsideView > 0 ? ` (${record.outsideView} to frames outside this View)` : ""}
           {CSV_COLUMNS.filter((c) => c.status === "unavailable" || c.status === "not-imported")
             .map((c) => ` · ${c.name} ${c.status === "unavailable" ? "unavailable" : "not imported"}`)
             .join("")}
@@ -214,14 +230,32 @@ function ImportReview({ record, catalog }: { record: MeasurementImport; catalog:
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge
                 kind="match"
-                value={row.status === "resolved" ? "compatible" : row.status === "ambiguous" ? "unknown" : "incompatible"}
-                label={row.status === "resolved" ? "Attached by you" : row.status === "ambiguous" ? "Ambiguous: attached to no frame" : "Unmatched: attached to no frame"}
+                value={row.status === "resolved" ? "compatible" : row.status === "unmatched" ? "incompatible" : "unknown"}
+                label={
+                  row.status === "resolved"
+                    ? "Attached by you"
+                    : row.status === "ambiguous"
+                      ? "Ambiguous: attached to no frame"
+                      : row.status === "content-changed"
+                        ? "Content changed: attached to no frame"
+                        : row.status === "unreadable"
+                          ? "Unreadable: attached to no frame"
+                          : "Unmatched: attached to no frame"
+                }
               />
               <span className="font-mono text-xs [overflow-wrap:anywhere]">{row.file}</span>
               <span className="text-xs text-muted-foreground">row {row.index}</span>
             </div>
             {row.status === "resolved" && row.assetId ? <p className="mt-1 text-xs text-muted-foreground">Attached to {frameName(catalog, row.assetId)}.</p> : null}
             {row.status === "unmatched" ? <p className="mt-1 text-xs text-muted-foreground">No indexed frame has this path or file name. Its values stay unattached.</p> : null}
+            {row.status === "content-changed" ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                At import, {frameName(catalog, row.candidates[0]!)} had bytes that differ from the digest PlateVault recorded for it. Its values stay unattached.
+              </p>
+            ) : null}
+            {row.status === "unreadable" ? (
+              <p className="mt-1 text-xs text-muted-foreground">At import, {frameName(catalog, row.candidates[0]!)} could not be read, so nothing ties these values to its content. Its values stay unattached.</p>
+            ) : null}
             {row.status === "ambiguous" ? (
               <div className="mt-2 flex flex-wrap items-end gap-2">
                 <SelectField
@@ -442,7 +476,27 @@ export function FramesArea() {
     { id: "state", header: "Measurement", sortValue: (r) => r.state, cell: (r) => <StatusBadge kind="measurement" value={STATE_BADGE[r.state].value} label={STATE_BADGE[r.state].label} /> },
     { id: "fwhm", header: "FWHM", align: "right", sortValue: (r) => r.builtIn.fwhm?.value ?? null, cell: metricCell("fwhm") },
     ...(anyImported
-      ? [{ id: "fwhm-imported", header: "FWHM imported", align: "right" as const, sortValue: (r: FrameRow) => r.imported.fwhm?.value ?? null, cell: (r: FrameRow) => (r.imported.fwhm ? formatMetric(r.imported.fwhm) : <span className="text-muted-foreground">None</span>) }]
+      ? [
+          {
+            id: "fwhm-imported",
+            header: "FWHM imported",
+            align: "right" as const,
+            sortValue: (r: FrameRow) => r.imported.fwhm?.value ?? null,
+            cell: (r: FrameRow) =>
+              r.imported.fwhm ? (
+                <span title="Imported · content unverified">
+                  {formatMetric(r.imported.fwhm)}
+                  <span className="sr-only">, content unverified</span>
+                </span>
+              ) : r.importedHistory.fwhm ? (
+                <span className="text-muted-foreground" title="Imported for earlier content">
+                  History
+                </span>
+              ) : (
+                <span className="text-muted-foreground">None</span>
+              ),
+          },
+        ]
       : []),
     { id: "hfr", header: "HFR", align: "right", sortValue: (r) => r.builtIn.hfr?.value ?? null, cell: metricCell("hfr") },
     { id: "ecc", header: "Ecc.", align: "right", sortValue: (r) => r.builtIn.eccentricity?.value ?? null, cell: metricCell("eccentricity") },
