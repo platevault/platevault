@@ -361,7 +361,9 @@ pub async fn library_confirm_equipment(
         .map_err(fail(Some(equipment_id)))
 }
 
-/// Effective captured/usable/unreviewed exposure per session, location and availability.
+/// Effective captured/usable/unreviewed exposure per session, location and
+/// availability, labelled with the oldest last verification behind usable
+/// exposure. Reading coverage starts no rehash.
 ///
 /// # Errors
 /// `NotFound` for an unknown target.

@@ -544,6 +544,10 @@ pub struct Asset {
     #[serde(default)]
     pub verification_pending: bool,
     pub last_observed_at: String,
+    /// When this asset's current bytes were last hashed against its record: at
+    /// review, inspection, a readable rescan or a verified remap (D19).
+    #[serde(default)]
+    pub last_verified_at: Option<String>,
 }
 
 impl Asset {
@@ -893,6 +897,10 @@ pub struct CoverageContribution {
     pub conflicting_copies: u64,
     pub availability: Availability,
     pub last_observed_at: String,
+    /// Oldest last completed verification behind this contribution's usable
+    /// exposure (D19); `None` when no applicable decision counts.
+    #[serde(default)]
+    pub last_verified_at: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -900,6 +908,11 @@ pub struct TargetCoverage {
     pub target_id: Uuid,
     pub covered_location_ids: Vec<Uuid>,
     pub provisional: bool,
+    /// Oldest last completed verification behind the applicable-usable exposure
+    /// (D19): totals count each decision as of that verification and reading them
+    /// starts no rehash. `None` when no applicable decision counts.
+    #[serde(default)]
+    pub last_verified_at: Option<String>,
     pub contributions: Vec<CoverageContribution>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]

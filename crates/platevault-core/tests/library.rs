@@ -362,11 +362,21 @@ async fn same_stat_replacement_leaves_usable_totals_until_the_reviewed_bytes_ret
     catalog.associate_target(&[expected_session], target).await.unwrap();
     let coverage = catalog.target_coverage(target).await.unwrap();
     assert!((usable_seconds(&coverage) - 300.0).abs() < 1e-9, "{coverage:?}");
+    // The total counts the decision as of its review and labels that time (D19).
+    let reviewed_at = decided[0].last_verified_at.clone();
+    assert!(reviewed_at.is_some(), "review verified the bytes");
+    assert_eq!(coverage.last_verified_at, reviewed_at, "{coverage:?}");
 
     // A pixel changes in place; size and nanosecond mtime stay the same.
     let mut replaced = reviewed_bytes.clone();
     *replaced.last_mut().unwrap() ^= 0xff;
     rewrite_same_stat(&light, &replaced);
+    // Showing the total starts no rehash: it still counts the decision as of its
+    // review, and nothing is recorded.
+    let shown = catalog.target_coverage(target).await.unwrap();
+    assert!((usable_seconds(&shown) - 300.0).abs() < 1e-9, "{shown:?}");
+    assert_eq!(shown.last_verified_at, reviewed_at);
+    assert_eq!(catalog.asset(asset.id).await.unwrap(), decided[0], "no rehash on display");
     assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
     let changed = catalog.asset(asset.id).await.unwrap();
     assert_eq!(changed.quality, Quality::Usable, "the decision is kept as history");
@@ -377,6 +387,7 @@ async fn same_stat_replacement_leaves_usable_totals_until_the_reviewed_bytes_ret
     let coverage = catalog.target_coverage(target).await.unwrap();
     assert!(usable_seconds(&coverage).abs() < 1e-9, "left usable totals: {coverage:?}");
     assert_eq!(coverage.contributions.iter().map(|c| c.drifted_decisions).sum::<u64>(), 1);
+    assert_eq!(coverage.last_verified_at, None, "a drifted decision labels no total");
     let membership = catalog.session(session.id).await.unwrap().summary;
     assert!(membership.successors.is_empty() && membership.session.asset_ids == session.asset_ids);
 
@@ -390,6 +401,8 @@ async fn same_stat_replacement_leaves_usable_totals_until_the_reviewed_bytes_ret
     let coverage = catalog.target_coverage(target).await.unwrap();
     assert!((usable_seconds(&coverage) - 300.0).abs() < 1e-9, "{coverage:?}");
     assert!(!coverage.provisional);
+    assert!(restored.last_verified_at.is_some() && restored.last_verified_at != reviewed_at);
+    assert_eq!(coverage.last_verified_at, restored.last_verified_at, "the rescan's verification");
     assert_eq!(support::digest(&light), original);
 }
 

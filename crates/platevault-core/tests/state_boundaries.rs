@@ -51,6 +51,7 @@ fn changed_content_preserves_prior_rejection_instead_of_reincluding_it() {
         quality_basis: Some(basis),
         verification_pending: false,
         last_observed_at: "2026-10-04T00:00:00Z".into(),
+        last_verified_at: None,
     };
     assert_eq!(asset.applicable_quality(), ApplicableQuality::Unusable);
     asset.fingerprint.content_sha256 = Some("rewritten-same-size-and-mtime".into());

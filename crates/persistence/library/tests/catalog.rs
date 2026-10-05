@@ -2520,6 +2520,113 @@ async fn decided_frames_stay_verification_pending_until_their_rehash_finishes() 
     assert_eq!(tree(&fx.root), before, "sources unchanged");
 }
 
+/// D19, FR-017: a total counts each decision as of its last completed
+/// verification, at review or a readable rescan, and labels the oldest such time
+/// it relies on. Reading the total starts no rehash; drifted and pending items
+/// stay outside it and outside its label.
+#[tokio::test]
+async fn coverage_counts_decisions_as_of_their_last_verification_and_reading_rehashes_nothing() {
+    let fx = Fixture::new();
+    let names = ["Ha_001.fits", "Ha_002.fits"];
+    fx.write(names[0], b"reviewed frame A");
+    fx.write(names[1], b"reviewed frame B");
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &names).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    assert!(assets.iter().all(|asset| asset.last_verified_at.is_none()), "indexing hashes nothing");
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
+    let mut decided: Vec<Asset> = Vec::new();
+    for name in names {
+        let asset = expected(by_name(&assets, name));
+        decided.extend(catalog.set_quality(&[asset], Quality::Usable, DiskProbe).await.unwrap());
+    }
+    let reviewed_at: Vec<String> = decided
+        .iter()
+        .map(|asset| asset.last_verified_at.clone().expect("review verifies the bytes"))
+        .collect();
+    assert_ne!(reviewed_at[0], reviewed_at[1]);
+    let usable =
+        |coverage: &platevault_model::TargetCoverage| coverage_sum(coverage, |c| c.usable_seconds);
+    let labels = |coverage: &platevault_model::TargetCoverage| {
+        let each: Vec<Option<String>> =
+            coverage.contributions.iter().map(|c| c.last_verified_at.clone()).collect();
+        (coverage.last_verified_at.clone(), each)
+    };
+    let settled = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!((usable(&settled) - 600.0).abs() < 1e-9, "{settled:?}");
+    let oldest = Some(reviewed_at[0].clone());
+    assert_eq!(labels(&settled), (oldest.clone(), vec![oldest]), "oldest verification relied on");
+
+    // The reviewed bytes change in place with size and mtime kept. Reading the
+    // total rehashes nothing: it still counts the frame as of its review and
+    // records no state or operation.
+    let reviewed_bytes = std::fs::read(fx.root.join(names[0])).unwrap();
+    rewrite_same_stat(&fx, names[0], b"replaced frame A");
+    let operations = catalog.list_operations(Some(location.id), 0, 10).await.unwrap().len();
+    let read = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!((usable(&read) - 600.0).abs() < 1e-9, "{read:?}");
+    assert_eq!(labels(&read), labels(&settled));
+    assert_eq!(catalog.asset(decided[0].id).await.unwrap(), decided[0], "nothing recorded");
+    assert_eq!(catalog.list_operations(Some(location.id), 0, 10).await.unwrap().len(), operations);
+
+    // A readable rescan verifies both: the drifted frame leaves the total and its
+    // label, which moves to the rescan's verification of the frame still counted.
+    scan(&catalog, &fx, &location, &names).await;
+    let drifted = catalog.asset(decided[0].id).await.unwrap();
+    assert_eq!(
+        drifted.applicable_quality(),
+        ApplicableQuality::ChangedContent { previous: Quality::Usable }
+    );
+    let rescanned = catalog.asset(decided[1].id).await.unwrap().last_verified_at;
+    assert!(rescanned.is_some() && rescanned != Some(reviewed_at[1].clone()), "{rescanned:?}");
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!((usable(&coverage) - 300.0).abs() < 1e-9, "{coverage:?}");
+    assert_eq!(coverage.contributions.iter().map(|c| c.drifted_decisions).sum::<u64>(), 1);
+    assert_eq!(labels(&coverage), (rescanned.clone(), vec![rescanned]));
+
+    // The reviewed bytes return: the next readable rescan counts them again.
+    rewrite_same_stat(&fx, names[0], &reviewed_bytes);
+    scan(&catalog, &fx, &location, &names).await;
+    let restored = catalog.asset(decided[0].id).await.unwrap();
+    assert_eq!(restored.applicable_quality(), ApplicableQuality::Usable);
+    let verified = restored.last_verified_at.clone();
+    assert_eq!(catalog.asset(decided[1].id).await.unwrap().last_verified_at, verified);
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!((usable(&coverage) - 600.0).abs() < 1e-9, "{coverage:?}");
+    assert_eq!(labels(&coverage), (verified.clone(), vec![verified.clone()]));
+
+    // While a started rehash runs, both read verification pending: outside the
+    // total and its label.
+    let operation = catalog.begin_scan(location.id, None).await.unwrap();
+    let root = DiskProbe.root_identity(&location).unwrap();
+    catalog.apply_scan_batch(operation.id, &root, &ScanBatch::default(), group).await.unwrap();
+    let pending = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!(usable(&pending).abs() < 1e-9, "{pending:?}");
+    assert_eq!(pending.contributions.iter().map(|c| c.verification_pending).sum::<u64>(), 2);
+    assert_eq!(labels(&pending), (None, vec![None]));
+    catalog.abort_scan(operation.id, ScanState::Canceled, "canceled by user").await.unwrap();
+    scan(&catalog, &fx, &location, &names).await;
+    let verified = catalog.asset(decided[0].id).await.unwrap().last_verified_at;
+
+    // Offline, the total keeps its last-observed count and verification time.
+    let unplugged = fx.root.with_extension("unplugged");
+    std::fs::rename(&fx.root, &unplugged).unwrap();
+    catalog
+        .mark_location_unavailable(location.id, Availability::Offline, "unplugged")
+        .await
+        .unwrap();
+    let offline = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!((usable(&offline) - 600.0).abs() < 1e-9, "{offline:?}");
+    assert!(offline.contributions.iter().all(|c| c.availability == Availability::Offline));
+    assert_eq!(labels(&offline), (verified.clone(), vec![verified]));
+    std::fs::rename(&unplugged, &fx.root).unwrap();
+    assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
 /// Real probe that requests cancellation as soon as the first file is probed.
 struct CancelingProbe(std::sync::Arc<std::sync::atomic::AtomicBool>);
 

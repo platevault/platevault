@@ -43,7 +43,7 @@ use uuid::Uuid;
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
 
 const SCHEMA: &str = include_str!("schema.sql");
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -68,7 +68,7 @@ macro_rules! asset_sql {
         concat!(
             "SELECT a.id, a.location_id, a.path_key, a.fingerprint, a.format, a.availability, ",
             "a.observed, a.effective, a.observation_revision, a.decision_revision, a.quality, ",
-            "a.quality_basis, a.verification_pending, a.last_observed_at, ",
+            "a.quality_basis, a.verification_pending, a.last_observed_at, a.last_verified_at, ",
             "l.availability AS location_availability, l.lifecycle AS location_lifecycle ",
             "FROM assets a JOIN locations l ON l.id = a.location_id ",
             $tail
@@ -1207,8 +1207,9 @@ impl Catalog {
             }
             let mut fingerprint = asset.fingerprint.clone();
             fingerprint.content_sha256 = Some(sha256.clone());
-            sqlx::query("UPDATE assets SET fingerprint = ?1 WHERE id = ?2")
+            sqlx::query("UPDATE assets SET fingerprint = ?1, last_verified_at = ?2 WHERE id = ?3")
                 .bind(to_json(&fingerprint)?)
+                .bind(now()?)
                 .bind(asset_id.to_string())
                 .execute(&mut *conn)
                 .await?;
@@ -1550,6 +1551,9 @@ impl Catalog {
     ///
     /// Counts Confirmed and evidence-qualified Suggested associations. Values are the
     /// last recorded evidence; offline contributions keep their last observation.
+    /// Usable exposure counts each decision as of its last completed verification
+    /// and is labelled with the oldest one it relies on (D19). Reading coverage
+    /// reads no source and starts no rehash.
     ///
     /// # Errors
     /// `NotFound` for an unknown target.
@@ -1589,8 +1593,7 @@ impl Catalog {
         let assets: Vec<Asset> = counted.into_iter().map(|(_, _, asset)| asset).collect();
         let view = CaptureView::read(&mut conn, &sessions, &assets).await?;
         let mut locations = BTreeSet::new();
-        let mut by_session: BTreeMap<(Option<String>, Uuid), Vec<(Asset, ApplicableQuality)>> =
-            BTreeMap::new();
+        let mut by_session: BTreeMap<(Option<String>, Uuid), Vec<CountedCapture>> = BTreeMap::new();
         for (key, present) in view.group(&assets) {
             locations.extend(present.iter().map(|asset| asset.location_id));
             // Each logical capture counts once, on an available copy when there is one.
@@ -1600,7 +1603,14 @@ impl Catalog {
                 continue;
             };
             let place = placement[&primary.id].clone();
-            by_session.entry(place).or_default().push(((*primary).clone(), view.quality(&key)));
+            let quality = view.quality(&key);
+            let verified_at =
+                if quality == ApplicableQuality::Usable { view.verified_at(&key) } else { None };
+            by_session.entry(place).or_default().push(CountedCapture {
+                asset: (*primary).clone(),
+                quality,
+                verified_at,
+            });
         }
         let mut contributions = Vec::new();
         for ((date_basis, session_id), entries) in &by_session {
@@ -1613,10 +1623,13 @@ impl Catalog {
         }
         let provisional = locations.iter().any(|id| view.location_provisional(*id))
             || assets.iter().any(|asset| view.candidates.contains(&asset.id));
+        let last_verified_at =
+            oldest(contributions.iter().filter_map(|c| c.last_verified_at.as_ref()));
         Ok(TargetCoverage {
             target_id,
             covered_location_ids: locations.into_iter().collect(),
             provisional,
+            last_verified_at,
             contributions,
         })
     }
@@ -1714,6 +1727,7 @@ impl Catalog {
             let op = load_operation_row(conn, operation_id).await?;
             require_running(&op)?;
             let mut bound = 0_u64;
+            let verified_at = now()?;
             for (id, sha256, hashed) in &hashed {
                 let asset = load_asset(conn, *id).await?;
                 if asset.fingerprint.content_sha256.is_none()
@@ -1721,11 +1735,14 @@ impl Catalog {
                 {
                     let mut fingerprint = asset.fingerprint.clone();
                     fingerprint.content_sha256 = Some(sha256.clone());
-                    sqlx::query("UPDATE assets SET fingerprint = ?1 WHERE id = ?2")
-                        .bind(to_json(&fingerprint)?)
-                        .bind(id.to_string())
-                        .execute(&mut *conn)
-                        .await?;
+                    sqlx::query(
+                        "UPDATE assets SET fingerprint = ?1, last_verified_at = ?2 WHERE id = ?3",
+                    )
+                    .bind(to_json(&fingerprint)?)
+                    .bind(&verified_at)
+                    .bind(id.to_string())
+                    .execute(&mut *conn)
+                    .await?;
                     bound += 1;
                 }
             }
@@ -3301,7 +3318,7 @@ async fn refresh_asset(
         && stored.format == file.format
         && stored.observed == file.metadata;
     if unchanged {
-        clear_verified(conn, stored.id, &fingerprint).await?;
+        clear_verified(conn, stored.id, &fingerprint, observed_at).await?;
         let mut retained = stored.fingerprint.clone();
         if retained.content_sha256.is_none() {
             retained.content_sha256 = fingerprint.content_sha256;
@@ -3352,21 +3369,26 @@ async fn refresh_asset(
     .execute(&mut *conn)
     .await?;
     insert_observation(conn, stored.id, op.id, sequence, &fingerprint, file, observed_at).await?;
-    clear_verified(conn, stored.id, &fingerprint).await?;
+    clear_verified(conn, stored.id, &fingerprint, observed_at).await?;
     Ok(Change::Refreshed { id: stored.id, regroup: effective != stored.effective })
 }
 
-/// A content digest taken in this scan finishes the asset's pending rehash.
+/// A content digest taken in this scan finishes the asset's pending rehash and
+/// is its last completed verification.
 async fn clear_verified(
     conn: &mut SqliteConnection,
     id: Uuid,
     fingerprint: &ObservationFingerprint,
+    verified_at: &str,
 ) -> Result<()> {
     if fingerprint.content_sha256.is_some() {
-        sqlx::query("UPDATE assets SET verification_pending = 0 WHERE id = ?1")
-            .bind(id.to_string())
-            .execute(&mut *conn)
-            .await?;
+        sqlx::query(
+            "UPDATE assets SET verification_pending = 0, last_verified_at = ?1 WHERE id = ?2",
+        )
+        .bind(verified_at)
+        .bind(id.to_string())
+        .execute(&mut *conn)
+        .await?;
     }
     Ok(())
 }
@@ -4268,6 +4290,7 @@ fn asset_from_row(row: &SqliteRow) -> Result<Asset> {
         quality_basis: quality_basis.as_deref().map(from_json).transpose()?,
         verification_pending: row.try_get::<i64, _>("verification_pending")? == 1,
         last_observed_at: row.try_get("last_observed_at")?,
+        last_verified_at: row.try_get("last_verified_at")?,
     })
 }
 
@@ -4574,14 +4597,18 @@ async fn decide_quality(
         (bound.clone(), Some(bound))
     };
     let basis = basis.as_ref().map(to_json).transpose()?;
+    // Review hashed the bytes: its time is their last completed verification.
+    let verified_at = (quality != Quality::Unreviewed).then_some(decided_at);
     sqlx::query(
         "UPDATE assets SET fingerprint = ?1, quality = ?2, quality_basis = ?3, \
-         decision_revision = ?4, verification_pending = 0 WHERE id = ?5",
+         decision_revision = ?4, verification_pending = 0, \
+         last_verified_at = coalesce(?5, last_verified_at) WHERE id = ?6",
     )
     .bind(to_json(&fingerprint)?)
     .bind(to_text(&quality)?)
     .bind(basis.as_deref())
     .bind(db_revision(decision_revision)?)
+    .bind(verified_at)
     .bind(asset.id.to_string())
     .execute(&mut *conn)
     .await?;
@@ -5161,6 +5188,17 @@ impl CaptureView {
         capture_quality(&self.copies_of(key))
     }
 
+    /// Oldest last completed verification of the copies whose decision speaks
+    /// for this capture as Usable.
+    fn verified_at(&self, key: &str) -> Option<String> {
+        oldest(
+            self.copies_of(key)
+                .into_iter()
+                .filter(|copy| copy.applicable_quality() == ApplicableQuality::Usable)
+                .filter_map(|copy| copy.last_verified_at.as_ref()),
+        )
+    }
+
     fn members(&self, assets: &[Asset]) -> Vec<SessionMember> {
         self.group(assets)
             .into_iter()
@@ -5550,15 +5588,32 @@ fn count_read(name: &'static str) {
 #[cfg(not(test))]
 const fn count_read(_name: &'static str) {}
 
+/// One logical capture counted toward coverage, on its primary copy.
+struct CountedCapture {
+    asset: Asset,
+    quality: ApplicableQuality,
+    /// Oldest last completed verification behind a Usable capture.
+    verified_at: Option<String>,
+}
+
+/// Recorded times are RFC 3339 with trailing fractional zeros trimmed, so their
+/// text order is not their time order: compare the instants.
+fn oldest<'a>(times: impl IntoIterator<Item = &'a String>) -> Option<String> {
+    let instant = |text: &String| {
+        time::OffsetDateTime::parse(text, &time::format_description::well_known::Rfc3339).ok()
+    };
+    times.into_iter().min_by_key(|text| instant(text)).cloned()
+}
+
 fn contributions_for(
     session_id: Uuid,
     date_basis: Option<&String>,
-    entries: &[(Asset, ApplicableQuality)],
+    entries: &[CountedCapture],
     candidates: &BTreeSet<Uuid>,
 ) -> Vec<CoverageContribution> {
     let mut groups: BTreeMap<(Uuid, String, Option<String>), CoverageContribution> =
         BTreeMap::new();
-    for (asset, quality) in entries {
+    for CountedCapture { asset, quality, verified_at } in entries {
         let quality = *quality;
         let light = is_light(&asset.effective);
         if light == Some(false) {
@@ -5584,6 +5639,7 @@ fn contributions_for(
                 conflicting_copies: 0,
                 availability: asset.availability,
                 last_observed_at: asset.last_observed_at.clone(),
+                last_verified_at: None,
             });
         if asset.last_observed_at > entry.last_observed_at {
             entry.last_observed_at.clone_from(&asset.last_observed_at);
@@ -5602,7 +5658,11 @@ fn contributions_for(
             (Some(true), Some(exposure)) => {
                 entry.captured_seconds += exposure;
                 match quality {
-                    ApplicableQuality::Usable => entry.usable_seconds += exposure,
+                    ApplicableQuality::Usable => {
+                        entry.usable_seconds += exposure;
+                        let behind = entry.last_verified_at.iter().chain(verified_at);
+                        entry.last_verified_at = oldest(behind);
+                    }
                     ApplicableQuality::Unreviewed => entry.unreviewed_seconds += exposure,
                     ApplicableQuality::Unusable
                     | ApplicableQuality::ChangedContent { .. }
@@ -5893,6 +5953,8 @@ async fn apply_remap_rows(
     .execute(&mut *conn)
     .await?;
     let mut rebound = HashMap::new();
+    // Every asset was rehashed against its reviewed digest just before this commit.
+    let verified_at = now()?;
     for item in &review.items {
         let asset = by_id
             .get(&item.asset_id)
@@ -5909,12 +5971,13 @@ async fn apply_remap_rows(
         });
         sqlx::query(
             "UPDATE assets SET fingerprint = ?1, size_bytes = ?2, modified_ns = ?3, \
-             availability = 'available', quality_basis = ?4 WHERE id = ?5",
+             availability = 'available', quality_basis = ?4, last_verified_at = ?5 WHERE id = ?6",
         )
         .bind(to_json(&fingerprint)?)
         .bind(db_size(fingerprint.size_bytes)?)
         .bind(fingerprint.modified_ns.to_string())
         .bind(basis.as_ref().map(to_json).transpose()?)
+        .bind(&verified_at)
         .bind(asset.id.to_string())
         .execute(&mut *conn)
         .await?;

@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
     value INTEGER NOT NULL
 ) STRICT;
 
-INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 5);
+INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 6);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('grouping_revision', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('scan_sequence', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('target_generation', 0);
@@ -122,6 +122,9 @@ CREATE TABLE IF NOT EXISTS assets (
     -- the latest readable scan has not finished.
     verification_pending INTEGER NOT NULL DEFAULT 0 CHECK (verification_pending IN (0, 1)),
     last_observed_at TEXT NOT NULL,
+    -- When the current bytes were last hashed against this record (D19): totals
+    -- count decisions as of this verification and never rehash to display.
+    last_verified_at TEXT,
     last_operation_id TEXT REFERENCES scan_operations (id),
     session_id TEXT REFERENCES sessions (id),
     -- Derived from the recorded observation; never written directly.
