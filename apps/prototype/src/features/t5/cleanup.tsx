@@ -507,6 +507,7 @@ function CleanupRecord({ opId, viewPath }: { opId: string; viewPath: string }) {
   const op = useStore((s) => s.operations[opId])
   const trash = useStore((s) => s.disk.trash)
   const [outcome, setOutcome] = useState<ControlOutcome | null>(null)
+  const [allTrash, setAllTrash] = useState(false)
   if (!op) return null
   const payload = op.payload as unknown as CleanupPayload
   const settled = isSettled(op.status)
@@ -552,7 +553,7 @@ function CleanupRecord({ opId, viewPath }: { opId: string; viewPath: string }) {
       {settled && inTrash.length > 0 ? (
         <PrototypeControls outcome={outcome} title="Prototype: OS Trash" description="Stand-in for Finder's Put Back on files this cleanup moved.">
           <ul className="max-h-48 w-full space-y-1 overflow-y-auto text-xs">
-            {inTrash.slice(0, 20).map((t) => (
+            {(allTrash ? inTrash : inTrash.slice(0, 20)).map((t) => (
               <li key={t.originalPath} className="flex flex-wrap items-center justify-between gap-2">
                 <PathText path={t.originalPath} className="min-w-0 flex-1" />
                 <Button size="xs" variant="outline" onClick={() => setOutcome(putBackFromTrash(t.trashedAt, t.originalPath))}>
@@ -561,7 +562,16 @@ function CleanupRecord({ opId, viewPath }: { opId: string; viewPath: string }) {
               </li>
             ))}
           </ul>
-          {inTrash.length > 20 ? <span className="text-xs text-muted-foreground">Showing 20 of {formatCount(inTrash.length)} items in the Trash from {viewPath}.</span> : null}
+          {inTrash.length > 20 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                Showing {allTrash ? "all" : "20 of"} {formatCount(inTrash.length)} items in the Trash from {viewPath}.
+              </span>
+              <Button size="xs" variant="ghost" onClick={() => setAllTrash((v) => !v)}>
+                {allTrash ? "Show fewer" : `Show all ${formatCount(inTrash.length)} in the Trash`}
+              </Button>
+            </div>
+          ) : null}
         </PrototypeControls>
       ) : null}
     </Section>

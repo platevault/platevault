@@ -102,6 +102,8 @@ function cleanupStep(state: PrototypeState, op: Operation): PrototypeState {
   const removed = [...payload.removed]
   const refused = [...payload.refused]
   const now = nowIso()
+  // One cleanup is one Trash batch: every batch step stamps the time of the first, so the record finds all it moved.
+  const trashedAt = payload.trashedAt ?? now
   let budget = CLEANUP_BATCH
   for (const item of items) {
     if (budget === 0) break
@@ -134,7 +136,7 @@ function cleanupStep(state: PrototypeState, op: Operation): PrototypeState {
       else {
         next = {
           ...next,
-          disk: { ...removeFile(next.disk, record.volumeId, record.path), trash: [...next.disk.trash, { file, originalPath: record.path, trashedAt: now }] },
+          disk: { ...removeFile(next.disk, record.volumeId, record.path), trash: [...next.disk.trash, { file, originalPath: record.path, trashedAt }] },
         }
         item.status = "done"
         item.detail = record.isLink ? "Link sent to the OS Trash; its target was not followed." : "Sent to the OS Trash."
@@ -146,7 +148,7 @@ function cleanupStep(state: PrototypeState, op: Operation): PrototypeState {
   next = patchOperation(next, op.id, {
     items,
     progress: { done: finished, total: items.length, unit: "files" },
-    payload: { ...payload, removed, refused, trashedAt: payload.trashedAt ?? now } as unknown as Record<string, unknown>,
+    payload: { ...payload, removed, refused, trashedAt } as unknown as Record<string, unknown>,
   })
   if (finished < items.length) return next
   next = recordRemovedEntries(next, payload.records, new Set(removed))
