@@ -59,39 +59,46 @@ const SOURCE_LABEL: Record<Evidence["source"], string> = {
   catalog: "Catalog",
 }
 
-/** Evidence used for an association (LIB-FR-05), observed values first. */
+/**
+ * Evidence used for an association (LIB-FR-05), observed values first. The
+ * value cell may break inside a word so the table reflows at narrow widths
+ * (WCAG 1.4.10); header keywords stay whole, and a container narrower than
+ * the shortest columns scrolls the table, not the page.
+ */
 export function EvidenceList({ evidence, caption }: { evidence: Evidence[]; caption: string }) {
   return (
-    <table className="w-full text-sm">
-      <caption className="sr-only">{caption}</caption>
-      <thead className="text-xs text-muted-foreground">
-        <tr className="border-b">
-          <th scope="col" className="py-1.5 pr-3 text-left font-medium">Source</th>
-          <th scope="col" className="py-1.5 pr-3 text-left font-medium">Evidence</th>
-          <th scope="col" className="py-1.5 pr-3 text-left font-medium">Value</th>
-          <th scope="col" className="py-1.5 text-left font-medium">Result</th>
-        </tr>
-      </thead>
-      <tbody>
-        {evidence.map((item) => {
-          const agreement = AGREEMENT[item.agrees === true ? "agrees" : item.agrees === false ? "conflicts" : "unknown"]
-          const Icon = agreement.icon
-          return (
-            <tr key={`${item.source}-${item.label}`} className="border-b last:border-0">
-              <td className="py-1.5 pr-3 text-muted-foreground">{SOURCE_LABEL[item.source]}</td>
-              <td className="py-1.5 pr-3 font-mono text-xs">{item.label}</td>
-              <td className="py-1.5 pr-3">{item.value}</td>
-              <td className={cn("py-1.5", agreement.className)}>
-                <span className="inline-flex items-center gap-1">
-                  <Icon aria-hidden="true" className="size-3.5" />
-                  {agreement.label}
-                </span>
-              </td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <caption className="sr-only">{caption}</caption>
+        <thead className="text-xs text-muted-foreground">
+          <tr className="border-b">
+            <th scope="col" className="py-1.5 pr-2 text-left font-medium">Source</th>
+            <th scope="col" className="py-1.5 pr-2 text-left font-medium">Evidence</th>
+            <th scope="col" className="py-1.5 pr-2 text-left font-medium">Value</th>
+            <th scope="col" className="py-1.5 text-left font-medium">Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {evidence.map((item) => {
+            const agreement = AGREEMENT[item.agrees === true ? "agrees" : item.agrees === false ? "conflicts" : "unknown"]
+            const Icon = agreement.icon
+            return (
+              <tr key={`${item.source}-${item.label}`} className="border-b last:border-0">
+                <td className="py-1.5 pr-2 text-muted-foreground">{SOURCE_LABEL[item.source]}</td>
+                <td className="py-1.5 pr-2 font-mono text-xs">{item.label}</td>
+                <td className="py-1.5 pr-2 [overflow-wrap:anywhere]">{item.value}</td>
+                <td className={cn("py-1.5", agreement.className)}>
+                  <span className="inline-flex items-center gap-1">
+                    <Icon aria-hidden="true" className="size-3.5" />
+                    {agreement.label}
+                  </span>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

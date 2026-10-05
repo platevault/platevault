@@ -170,7 +170,7 @@ function SessionInspector({ sessionId }: { sessionId: string }) {
                 <Button size="sm" variant="outline" onClick={() => startIndexing([location.id])}>
                   Rescan {location.displayName}
                 </Button>
-                <Button size="sm" variant="ghost" render={<Link to="/settings/locations" search={{ locationId: location.id }} />}>
+                <Button size="sm" variant="outline" render={<Link to="/settings/locations" search={{ locationId: location.id }} />}>
                   Choose folder again
                 </Button>
               </span>
@@ -362,7 +362,7 @@ function TargetSection({ session, catalog, editable, revision }: { session: Sess
         <ConfirmedLine session={session} field="target" />
         {editable ? (
           <div className="flex flex-wrap items-end gap-3 border-t pt-3">
-            <div className="space-y-1.5">
+            <div className="min-w-0 space-y-1.5">
               <Label id={labelId}>Target to confirm</Label>
               <Select
                 items={items}
@@ -470,7 +470,7 @@ function EquipmentSection({ session, catalog, editable, revision }: { session: S
           <div className="flex flex-wrap items-end gap-3 border-t pt-3">
             {items.length > 0 ? (
               <>
-                <div className="space-y-1.5">
+                <div className="min-w-0 space-y-1.5">
                   <Label id={labelId}>Optical train to confirm</Label>
                   <Select
                     items={items}
@@ -523,7 +523,7 @@ function EquipmentSection({ session, catalog, editable, revision }: { session: S
             ) : (
               <p className="text-sm text-muted-foreground">No optical train record exists yet.</p>
             )}
-            <Button variant="ghost" size="sm" render={<Link to="/settings/equipment" search={{ return: returnTo }} />} className="w-fit">
+            <Button variant="link" size="sm" render={<Link to="/settings/equipment" search={{ return: returnTo }} />}>
               {items.length > 0 ? "No matching record? Add an optical train" : "Add an optical train"}
             </Button>
           </div>
@@ -966,7 +966,7 @@ function FramesSection({ session, editable }: { session: Session; editable: bool
     <Section id="frames" title="Frames" description="Library quality applies to every View and Project. Measurements never set it.">
       <ToggleGroup aria-label="Show frames" size="sm" variant="outline" spacing={0} value={[filter]} onValueChange={(value) => value[0] && setFilter(value[0] as FrameFilter)} className="flex-wrap">
         {FRAME_FILTERS.map((f) => (
-          <ToggleGroupItem key={f.value} value={f.value} disabled={f.value !== "all" && counts[f.value] === 0 && filter !== f.value}>
+          <ToggleGroupItem key={f.value} value={f.value}>
             {f.label} <span className="text-muted-foreground tabular-nums">{formatCount(counts[f.value])}</span>
           </ToggleGroupItem>
         ))}
