@@ -4,6 +4,17 @@ use std::io::Write;
 use std::path::Path;
 
 pub fn fits(path: &Path, keywords: &[(&str, &str)]) -> std::io::Result<()> {
+    fits_sized(path, (4, 4), keywords)
+}
+
+/// A FITS frame declaring `width`×`height` pixels with a small data block: the
+/// header readers never read pixel data, so footprint-sized fields need no
+/// footprint-sized files (R30).
+pub fn fits_sized(
+    path: &Path,
+    (width, height): (u32, u32),
+    keywords: &[(&str, &str)],
+) -> std::io::Result<()> {
     let mut header = Vec::new();
     let mut card = |text: &str| {
         let mut bytes = [b' '; 80];
@@ -13,15 +24,15 @@ pub fn fits(path: &Path, keywords: &[(&str, &str)]) -> std::io::Result<()> {
         header.extend_from_slice(&bytes);
     };
     for text in [
-        "SIMPLE  =                    T",
-        "BITPIX  =                   16",
-        "NAXIS   =                    2",
-        "NAXIS1  =                    4",
-        "NAXIS2  =                    4",
-        "BZERO   =                32768",
-        "BSCALE  =                    1",
+        "SIMPLE  =                    T".to_owned(),
+        "BITPIX  =                   16".to_owned(),
+        "NAXIS   =                    2".to_owned(),
+        format!("NAXIS1  = {width:>20}"),
+        format!("NAXIS2  = {height:>20}"),
+        "BZERO   =                32768".to_owned(),
+        "BSCALE  =                    1".to_owned(),
     ] {
-        card(text);
+        card(&text);
     }
     for (key, value) in keywords {
         card(&format!("{key:<8}= {value}"));
@@ -49,6 +60,16 @@ fn xml_escape(value: &str) -> String {
 }
 
 pub fn xisf(path: &Path, keywords: &[(&str, &str)]) -> std::io::Result<()> {
+    xisf_sized(path, (4, 4), keywords)
+}
+
+/// An XISF frame whose `<Image geometry>` declares `width`×`height` over a
+/// small attachment (R30).
+pub fn xisf_sized(
+    path: &Path,
+    (width, height): (u32, u32),
+    keywords: &[(&str, &str)],
+) -> std::io::Result<()> {
     use std::fmt::Write as _;
     let mut fields = String::new();
     for (key, value) in keywords {
@@ -60,7 +81,7 @@ pub fn xisf(path: &Path, keywords: &[(&str, &str)]) -> std::io::Result<()> {
         )
         .expect("writing to a String cannot fail");
     }
-    let xml = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?><xisf version=\"1.0\" xmlns=\"http://www.pixinsight.com/xisf\"><Image geometry=\"4:4:1\" sampleFormat=\"UInt16\" colorSpace=\"Gray\" location=\"attachment:4096:32\">{fields}</Image></xisf>");
+    let xml = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?><xisf version=\"1.0\" xmlns=\"http://www.pixinsight.com/xisf\"><Image geometry=\"{width}:{height}:1\" sampleFormat=\"UInt16\" colorSpace=\"Gray\" location=\"attachment:4096:32\">{fields}</Image></xisf>");
     let mut bytes = b"XISF0100".to_vec();
     let length = u32::try_from(xml.len()).expect("small XML fixture");
     bytes.extend_from_slice(&length.to_le_bytes());

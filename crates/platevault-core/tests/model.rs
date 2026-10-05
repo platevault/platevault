@@ -2,9 +2,11 @@ mod support;
 
 use metadata_core::MetadataExtractor;
 use platevault_core::{
-    CalibrationKind, CaptureMetadata, ChecklistItemInput, ChecklistKind, FileIdentity,
-    LibraryError, NativePath, ObservationFingerprint, PanelInput, ProjectInput, ProjectPanel,
-    TargetCone, TargetFraming, VolumeIdentity,
+    initial_member_state, ApplicableQuality, CalibrationKind, CandidateFilters, CandidateQuery,
+    CaptureMetadata, ChecklistItemInput, ChecklistKind, CriteriaInput, FileIdentity, LibraryError,
+    MemberReason, MemberState, NativePath, ObservationFingerprint, PanelInput, ProjectInput,
+    ProjectPanel, Quality, SelectionReason, TargetCone, TargetFraming, VolumeIdentity,
+    DEFAULT_MIN_FOOTPRINT_COVERAGE, DEFAULT_SUGGESTION_RADIUS_DEG,
 };
 use uuid::Uuid;
 
@@ -301,4 +303,165 @@ fn checklist_item_input_refuses_empty_goals_blank_channels_and_panelless_coverag
         flats.criterion,
         ChecklistKind::MissingCalibration { calibration: CalibrationKind::DarkFlat, channel: None }
     );
+}
+
+#[test]
+fn initial_member_state_follows_the_d02_table() {
+    let included = (MemberState::Included, MemberReason::Initial);
+    assert_eq!(initial_member_state(&ApplicableQuality::Unreviewed), included);
+    assert_eq!(initial_member_state(&ApplicableQuality::Usable), included);
+    assert_eq!(
+        initial_member_state(&ApplicableQuality::Unusable),
+        (MemberState::Excluded, MemberReason::LibraryUnusable)
+    );
+    for quality in [
+        ApplicableQuality::ChangedContent { previous: Quality::Usable },
+        ApplicableQuality::VerificationPending { previous: Quality::Unusable },
+        ApplicableQuality::Conflicting,
+        ApplicableQuality::ConflictingCopies,
+    ] {
+        assert_eq!(
+            initial_member_state(&quality),
+            (MemberState::Excluded, MemberReason::QualityNeedsReview { quality }),
+            "{quality:?} starts excluded naming the state"
+        );
+    }
+}
+
+#[test]
+fn criteria_input_accepts_its_closed_bounds_and_refuses_everything_outside() {
+    let defaults: CriteriaInput = serde_json::from_value(serde_json::json!({})).unwrap();
+    assert_eq!(defaults, CriteriaInput::default());
+    assert_eq!((defaults.min_footprint_coverage, defaults.suggestion_radius_deg), (0.5, 2.0));
+    assert_eq!((DEFAULT_MIN_FOOTPRINT_COVERAGE, DEFAULT_SUGGESTION_RADIUS_DEG), (0.5, 2.0));
+    let input = |coverage, radius| CriteriaInput {
+        min_footprint_coverage: coverage,
+        suggestion_radius_deg: radius,
+    };
+    input(1.0, 180.0).validate().unwrap();
+    input(1e-9, 1e-9).validate().unwrap();
+    for coverage in [0.0, -0.1, 1.000_001, f64::NAN, f64::INFINITY] {
+        refused_naming(input(coverage, 2.0).validate(), "minFootprintCoverage");
+    }
+    for radius in [0.0, -1.0, 180.000_1, f64::NAN, f64::NEG_INFINITY] {
+        refused_naming(input(0.5, radius).validate(), "suggestionRadiusDeg");
+    }
+}
+
+#[test]
+fn candidate_filters_and_query_refuse_inverted_ranges_blank_text_and_bad_pages() {
+    CandidateFilters::default().validate().unwrap();
+    let cases = [
+        (
+            CandidateFilters {
+                exposure_min: Some(300.0),
+                exposure_max: Some(60.0),
+                ..Default::default()
+            },
+            "exposure",
+        ),
+        (
+            CandidateFilters { gain_min: Some(200.0), gain_max: Some(100.0), ..Default::default() },
+            "gain",
+        ),
+        (
+            CandidateFilters { offset_min: Some(50), offset_max: Some(10), ..Default::default() },
+            "offset",
+        ),
+        (
+            CandidateFilters {
+                date_from: Some("2026-09-30".into()),
+                date_to: Some("2026-09-12".into()),
+                ..Default::default()
+            },
+            "date",
+        ),
+        (
+            CandidateFilters {
+                set_temperature_min: Some(-5.0),
+                set_temperature_max: Some(-10.0),
+                ..Default::default()
+            },
+            "setTemperature",
+        ),
+        (CandidateFilters { object_text: Some("  ".into()), ..Default::default() }, "objectText"),
+        (CandidateFilters { exposure_min: Some(f64::NAN), ..Default::default() }, "exposureMin"),
+    ];
+    for (filters, field) in cases {
+        refused_naming(filters.validate(), field);
+    }
+    // Equal bounds are a range of one value, not an inversion.
+    CandidateFilters { exposure_min: Some(300.0), exposure_max: Some(300.0), ..Default::default() }
+        .validate()
+        .unwrap();
+
+    let query =
+        |value: serde_json::Value| -> CandidateQuery { serde_json::from_value(value).unwrap() };
+    query(serde_json::json!({"membership": "draft", "limit": 50, "sort": {"key": "skyDistance"}}))
+        .validate()
+        .unwrap();
+    refused_naming(
+        query(serde_json::json!({"membership": "draft", "limit": 0})).validate(),
+        "limit",
+    );
+    refused_naming(
+        query(serde_json::json!({"membership": "draft", "limit": 50, "sort": {"key": "object", "direction": "desc"}}))
+            .validate(),
+        "sort key",
+    );
+}
+
+#[test]
+fn manual_select_matching_and_origin_choices_are_pinned_and_criteria_choices_are_not() {
+    assert!(SelectionReason::Manual.is_pinned());
+    assert!(SelectionReason::SelectMatching { filters: Box::default() }.is_pinned());
+    assert!(SelectionReason::OriginSessions.is_pinned());
+    assert!(!SelectionReason::GeometrySuggestion.is_pinned());
+    assert!(!SelectionReason::RefreshMatch { review_id: Uuid::nil() }.is_pinned());
+}
+
+/// R30: footprint-sized geometry comes from declared dimensions over small
+/// data, read back unchanged by both header readers.
+#[test]
+fn declared_footprint_geometry_reads_back_through_both_header_readers() {
+    let dir = tempfile::tempdir().unwrap();
+    let fits = dir.path().join("geometry.fits");
+    let xisf = dir.path().join("geometry.xisf");
+    let fields = [
+        ("IMAGETYP", "'LIGHT'"),
+        ("FOCALLEN", "250"),
+        ("XPIXSZ", "3.76"),
+        ("XBINNING", "1"),
+        ("RA", "314.75"),
+        ("DEC", "44.5"),
+        ("OBJCTROT", "12.5"),
+        ("CTYPE1", "'RA---TAN'"),
+        ("CTYPE2", "'DEC--TAN'"),
+        ("CRVAL1", "314.7"),
+        ("CRVAL2", "44.6"),
+        ("CD1_1", "0.000743"),
+        ("CD2_1", "0.0"),
+    ];
+    support::fits_sized(&fits, (6248, 4176), &fields).unwrap();
+    support::xisf_sized(&xisf, (6248, 4176), &fields).unwrap();
+    let before = [support::digest(&fits), support::digest(&xisf)];
+    let extractors: [(&std::path::Path, &dyn MetadataExtractor); 2] =
+        [(&fits, &metadata_fits::FitsExtractor), (&xisf, &metadata_xisf::XisfExtractor)];
+    for (path, extractor) in extractors {
+        let metadata = CaptureMetadata::from(&extractor.extract(path).unwrap().unwrap());
+        let label = path.display();
+        assert_eq!((metadata.width, metadata.height), (Some(6248), Some(4176)), "{label}");
+        assert_eq!(metadata.focal_length_mm, Some(250.0), "{label}");
+        assert_eq!(metadata.pixel_size_um, Some(3.76), "{label}");
+        assert_eq!(metadata.binning_x, Some(1), "{label}");
+        assert_eq!((metadata.ra_deg, metadata.dec_deg), (Some(314.75), Some(44.5)), "{label}");
+        assert_eq!(
+            (metadata.wcs_ra_deg, metadata.wcs_dec_deg),
+            (Some(314.7), Some(44.6)),
+            "{label}"
+        );
+        // The WCS rotation wins over OBJCTROT as the sky position angle.
+        assert_eq!(metadata.sky_rotation_deg, Some(0.0), "{label}");
+    }
+    assert_eq!(before, [support::digest(&fits), support::digest(&xisf)]);
 }

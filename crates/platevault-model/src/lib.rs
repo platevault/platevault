@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 mod project;
+mod view;
 pub use project::*;
+pub use view::*;
 
 pub type Revision = u64;
 
