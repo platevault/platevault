@@ -28,6 +28,7 @@ import type {
   LocationId,
   MembershipContent,
   MembershipRevision,
+  Metric,
   OpticalTrainId,
   Project,
   SelectionCriteria,
@@ -269,6 +270,17 @@ export function sessionAvailability(disk: Disk, catalog: Catalog, session: Sessi
 
 /** Why a member cannot be read now. */
 export type UnavailableState = Exclude<AssetAvailability, "available">
+
+/**
+ * Why the current frame's preview cannot be drawn. A retired copy reads
+ * Retired, never "not found": it is never read again or offered as an input (D11, LIB-FR-15).
+ */
+export function previewUnavailableReason(state: UnavailableState): string {
+  if (state === "retired") return "Preview unavailable: the frame is Retired. Its location was retired, so PlateVault never reads this copy again or offers it as an input."
+  if (state === "offline") return "Preview unavailable: the frame is offline."
+  if (state === "unreadable") return "Preview unavailable: the frame is unreadable (access denied)."
+  return "Preview unavailable: the frame is not found at its last complete scan."
+}
 
 export interface ViewSummary extends MembershipSummary {
   /** Included frames with no available copy right now: last-observed, not verified. */
@@ -639,4 +651,17 @@ export function pixelScaleFor(catalog: Catalog, session: Session | undefined): n
   const camera = train?.cameraId ? catalog.cameras[train.cameraId] : undefined
   if (!train || !camera) return null
   return pixelScaleArcsec(camera.pixelSizeUm, train.effectiveFocalLengthMm, session.binning)
+}
+
+/**
+ * A metric at one precision per unit, so values in a column line up and
+ * compare (tabular figures): widths and ratios at two decimals ("8.70″",
+ * "0.43"), star counts and background as whole numbers.
+ */
+export function formatMetricFixed(metric: Pick<Metric, "value" | "unit">): string {
+  if (metric.value === null) return "Not reported"
+  if (metric.unit === "stars" || metric.unit === "ADU") return `${Math.round(metric.value).toLocaleString("en-GB")} ${metric.unit}`
+  const value = metric.value.toFixed(2)
+  if (metric.unit === "arcsec") return `${value}″`
+  return metric.unit === "ratio" || metric.unit === "" ? value : `${value} ${metric.unit}`
 }

@@ -22,6 +22,7 @@ import { HEADER_KEYWORDS } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, formatMetric, historyImportedMetrics, METRIC_LABEL } from "./measure"
+import { formatMetricFixed } from "./model"
 import { type CutoutKind, detectedStars, renderCutout, renderWindow, type StarField, type StarRecord, starField, type Stretch, type ViewWindow } from "./raster"
 
 type Zoom = "fit" | "1" | "2"
@@ -147,17 +148,17 @@ function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurem
                   {METRIC_LABEL[key]}
                 </th>
                 <td className="py-1 text-right">
-                  {own ? formatMetric(own) : <UnknownValue label={state === "pending" ? "Pending" : state === "verifying" ? "Verifying" : "Not measured"} />}
+                  {own ? formatMetricFixed(own) : <UnknownValue label={state === "pending" ? "Pending" : state === "verifying" ? "Verifying" : "Not measured"} />}
                 </td>
                 <td className="py-1 text-right">
                   {other ? (
                     <>
-                      {formatMetric(other)}
+                      {formatMetricFixed(other)}
                       <span className="sr-only"> {other.unit}, imported, content unverified</span>
                     </>
                   ) : past ? (
                     <span className="text-muted-foreground">
-                      History: {formatMetric(past)}
+                      History: {formatMetricFixed(past)}
                       <span className="sr-only"> {past.unit}, imported for earlier content</span>
                     </span>
                   ) : (

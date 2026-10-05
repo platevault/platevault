@@ -6,7 +6,7 @@
  * never exclude, reject or mark frames Usable (PIX-FR-08).
  */
 import { Link, useSearch } from "@tanstack/react-router"
-import { ImageOff, Upload } from "lucide-react"
+import { ImageOff, PanelRightClose, PanelRightOpen, Upload } from "lucide-react"
 import { type FocusEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { getPreferences } from "@/app/preferences"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
@@ -34,7 +34,6 @@ import {
   currentImportedMetrics,
   type FrameMeasureState,
   frameMeasureState,
-  formatMetric,
   historyImportedMetrics,
   latestMeasureOp,
   type MeasurePayload,
@@ -43,7 +42,17 @@ import {
   unfinishedCount,
 } from "./measure"
 import { MeasurementPlot } from "./measurement-plot"
-import { currentFile, excludeFrames, type MemberState, memberState, pixelScaleFor, restoreFrames, sessionLabel } from "./model"
+import {
+  currentFile,
+  excludeFrames,
+  formatMetricFixed,
+  type MemberState,
+  memberState,
+  pixelScaleFor,
+  previewUnavailableReason,
+  restoreFrames,
+  sessionLabel,
+} from "./model"
 import { registerFrameCommands } from "./shell"
 import { useDraftEditor, useWorkspace } from "./workspace"
 
@@ -315,6 +324,9 @@ export function FramesArea() {
   const measurableExcluded = measurable.filter((id) => content.excluded.includes(id)).length
   const measureScope = measurableExcluded > 0 ? `Review covers ${measurable.length} readable frames: ${measurable.length - measurableExcluded} included, ${measurableExcluded} excluded.` : null
   const hintId = useId()
+  // The preview pane can be hidden so the frames table takes the full width (F2).
+  const [paneOpen, setPaneOpen] = useState(true)
+  const paneId = useId()
 
   // DataTable owns its sort, so the rendered row order is the order the user sees; J/K and Previous/Next follow it (J22 S5).
   const tableRef = useRef<HTMLDivElement>(null)
@@ -432,7 +444,7 @@ export function FramesArea() {
   const metricCell = (key: MetricKey) => (r: FrameRow) => {
     const m = r.builtIn[key]
     return m ? (
-      formatMetric(m)
+      formatMetricFixed(m)
     ) : (
       <span className="text-muted-foreground">
         –<span className="sr-only">{STATE_BADGE[r.state].label}</span>
@@ -440,6 +452,11 @@ export function FramesArea() {
     )
   }
 
+  // Columns run in review order: the frame, then the widths that decide it,
+  // then membership. While the preview pane is open, a narrow table hides the
+  // columns the pane repeats for the current frame (measurement state, the other
+  // metrics, imported values, warnings); hiding the pane shows every column (F2).
+  const paneRepeats = paneOpen ? "hidden @min-[70rem]/frames:table-cell" : undefined
   const columns: Column<FrameRow>[] = [
     {
       id: "frame",
@@ -448,10 +465,11 @@ export function FramesArea() {
       sortValue: (r) => r.index,
       cell: (r) => {
         // Middle truncation: the frame number at the end stays visible, so rows stay distinguishable.
+        // A narrow table gives the name less room so the widths and In View stay in view (F2).
         const name = r.asset.fileName.replace(/\.(fits|xisf)$/i, "")
         const cut = name.lastIndexOf("_") + 1
         return (
-          <button type="button" id={`frame-${r.asset.id}`} data-frame-id={r.asset.id} className="flex max-w-48 min-w-0 rounded-sm text-left font-medium hover:underline" title={r.asset.fileName} onClick={() => select(r.asset.id)}>
+          <button type="button" id={`frame-${r.asset.id}`} data-frame-id={r.asset.id} className="flex max-w-32 min-w-0 rounded-sm text-left font-medium hover:underline @min-[40rem]/frames:max-w-48" title={r.asset.fileName} onClick={() => select(r.asset.id)}>
             <span className="truncate">{name.slice(0, cut)}</span>
             <span data-frame-tail className="shrink-0">
               {name.slice(cut)}
@@ -460,31 +478,20 @@ export function FramesArea() {
         )
       },
     },
-    {
-      id: "member",
-      header: "In View",
-      sortValue: (r) => r.member,
-      cell: (r) => {
-        if (r.member === "excluded") return <StatusBadge kind="quality" value="excluded" />
-        const availability = assetAvailability(disk, catalog, r.asset)
-        if (availability === "available") return r.member === "included" ? <span>Included</span> : <StatusBadge kind="availability" value="available" label="Unresolved" />
-        // A member that cannot be read stays named unresolved, with why: "Unresolved · Offline", "Unresolved · Retired" (D11, VSEL-AC-09).
-        return <StatusBadge kind="availability" value={availability} label={`Unresolved · ${STATUS.availability[availability].label}`} />
-      },
-    },
-    { id: "state", header: "Measurement", sortValue: (r) => r.state, cell: (r) => <StatusBadge kind="measurement" value={STATE_BADGE[r.state].value} label={STATE_BADGE[r.state].label} /> },
     { id: "fwhm", header: "FWHM", align: "right", sortValue: (r) => r.builtIn.fwhm?.value ?? null, cell: metricCell("fwhm") },
+    { id: "hfr", header: "HFR", align: "right", sortValue: (r) => r.builtIn.hfr?.value ?? null, cell: metricCell("hfr") },
     ...(anyImported
       ? [
           {
             id: "fwhm-imported",
             header: "FWHM imported",
             align: "right" as const,
+            className: paneRepeats,
             sortValue: (r: FrameRow) => r.imported.fwhm?.value ?? null,
             cell: (r: FrameRow) =>
               r.imported.fwhm ? (
                 <span title="Imported · content unverified">
-                  {formatMetric(r.imported.fwhm)}
+                  {formatMetricFixed(r.imported.fwhm)}
                   <span className="sr-only">, content unverified</span>
                 </span>
               ) : r.importedHistory.fwhm ? (
@@ -497,9 +504,27 @@ export function FramesArea() {
           },
         ]
       : []),
-    { id: "hfr", header: "HFR", align: "right", sortValue: (r) => r.builtIn.hfr?.value ?? null, cell: metricCell("hfr") },
-    { id: "ecc", header: "Ecc.", align: "right", sortValue: (r) => r.builtIn.eccentricity?.value ?? null, cell: metricCell("eccentricity") },
-    { id: "stars", header: "Stars", align: "right", sortValue: (r) => r.builtIn["star-count"]?.value ?? null, cell: metricCell("star-count") },
+    {
+      id: "member",
+      header: "In View",
+      sortValue: (r) => r.member,
+      cell: (r) => {
+        if (r.member === "excluded") return <StatusBadge kind="quality" value="excluded" />
+        const availability = assetAvailability(disk, catalog, r.asset)
+        if (availability === "available") return r.member === "included" ? <span>Included</span> : <StatusBadge kind="availability" value="available" label="Unresolved" />
+        // A member that cannot be read stays named unresolved, with why: "Unresolved · Offline", "Unresolved · Retired" (D11, VSEL-AC-09).
+        return <StatusBadge kind="availability" value={availability} label={`Unresolved · ${STATUS.availability[availability].label}`} />
+      },
+    },
+    {
+      id: "state",
+      header: "Measurement",
+      className: paneRepeats,
+      sortValue: (r) => r.state,
+      cell: (r) => <StatusBadge kind="measurement" value={STATE_BADGE[r.state].value} label={STATE_BADGE[r.state].label} />,
+    },
+    { id: "ecc", header: "Ecc.", align: "right", className: paneRepeats, sortValue: (r) => r.builtIn.eccentricity?.value ?? null, cell: metricCell("eccentricity") },
+    { id: "stars", header: "Stars", align: "right", className: paneRepeats, sortValue: (r) => r.builtIn["star-count"]?.value ?? null, cell: metricCell("star-count") },
     {
       id: "quality",
       header: "Library quality",
@@ -518,6 +543,7 @@ export function FramesArea() {
     {
       id: "warnings",
       header: "Warnings",
+      className: paneRepeats,
       cell: (r) => {
         const warning = r.builtIn.fwhm?.warning ?? ""
         const parts = [warning.includes("saturated") ? "Saturated stars" : null, warning.includes("invalid") ? "Invalid samples" : null].filter(Boolean)
@@ -666,12 +692,18 @@ export function FramesArea() {
             </>
           }
         />
-        <p className="text-xs text-muted-foreground tabular-nums">
-          {plural(shown.length, "frame")} shown of {memberIds.length} · {sessions.map((s) => `${formatNight(s.night)} ${s.channel}: ${rows.filter((r) => r.asset.sessionId === s.id && r.member === "included").length} of ${s.assetIds.length} in the View`).join(" · ")}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {plural(shown.length, "frame")} shown of {memberIds.length} · {sessions.map((s) => `${formatNight(s.night)} ${s.channel}: ${rows.filter((r) => r.asset.sessionId === s.id && r.member === "included").length} of ${s.assetIds.length} in the View`).join(" · ")}
+          </p>
+          <Button size="sm" variant="outline" className="ml-auto" aria-expanded={paneOpen} aria-controls={paneOpen ? paneId : undefined} onClick={() => setPaneOpen((open) => !open)}>
+            {paneOpen ? <PanelRightClose aria-hidden="true" data-icon="inline-start" /> : <PanelRightOpen aria-hidden="true" data-icon="inline-start" />}
+            {paneOpen ? "Hide preview and plot" : "Show preview and plot"}
+          </Button>
+        </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_min(22rem,40%)] xl:grid-cols-[minmax(0,1fr)_min(26rem,40%)]">
-          <div ref={tableRef} className="min-w-0 self-start">
+        <div className={paneOpen ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_min(22rem,40%)] xl:grid-cols-[minmax(0,1fr)_min(26rem,40%)]" : "grid gap-5"}>
+          <div ref={tableRef} className="@container/frames min-w-0 self-start">
           <DataTable
             label="Frames in this View"
             rows={shown}
@@ -680,6 +712,7 @@ export function FramesArea() {
             initialSort={{ columnId: "frame", direction: "asc" }}
             activeRowId={active?.asset.id ?? null}
             className="max-h-[40rem]"
+            stickyFirstColumn
             selection={{ selected: checked, onChange: setCheckedIds, rowLabel: (r) => `${r.asset.fileName}, ${r.session ? sessionLabel(r.session) : "no session"}` }}
             empty={
               <EmptyState
@@ -696,7 +729,8 @@ export function FramesArea() {
             }
           />
           </div>
-          <div className="min-w-0 space-y-4 self-start">
+          {paneOpen ? (
+          <div id={paneId} className="min-w-0 space-y-4 self-start">
             {active ? (
               <FramePreview
                 asset={active.asset}
@@ -710,11 +744,7 @@ export function FramesArea() {
                 onPrevious={() => step(-1)}
                 onNext={() => step(1)}
                 exclude={{ label: excludeLabel, disabledReason: readOnlyReason, run: () => toggleExclusion(active) }}
-                unavailableReason={
-                  activeAvailability === "available"
-                    ? null
-                    : `Preview unavailable: the frame is ${activeAvailability === "offline" ? "offline" : activeAvailability === "unreadable" ? "unreadable (access denied)" : "not found at its last complete scan"}.`
-                }
+                unavailableReason={activeAvailability === "available" ? null : previewUnavailableReason(activeAvailability)}
               />
             ) : null}
             {/* The plot sits with the preview it drives, so the frames table starts higher (density 7). */}
@@ -724,6 +754,7 @@ export function FramesArea() {
               <MeasurementPlot points={plotPoints} metric={ui.metric} activeId={active?.asset.id ?? null} onSelect={select} />
             </div>
           </div>
+          ) : null}
         </div>
         {notMeasured > 0 && op?.status === "canceled" ? (
           <Notice tone="info" title="Cancel kept your selection and exclusions">
