@@ -4,7 +4,7 @@
  */
 import { Link, useParams } from "@tanstack/react-router"
 import { Inbox, Trash2 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PathText } from "@/components/app/data"
 import { type Column, DataTable } from "@/components/app/data-table"
@@ -15,6 +15,8 @@ import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { isUnder } from "@/domain/indexing"
 import type { Disk, View } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime, plural } from "@/lib/format"
@@ -38,7 +40,7 @@ import {
 } from "./lib/cleanup"
 import { baseName, parentFolder } from "./lib/files"
 import { type CleanupPayload, keepRefusedFiles, startCleanup } from "./lib/operations"
-import { type ControlOutcome, putBackFromTrash } from "./lib/prototype"
+import { type ControlOutcome, overwriteKeepingStat, putBackFromTrash, restoreKeepingStat } from "./lib/prototype"
 import { focusHeading, PrototypeControls, RevealLocation } from "./shared"
 
 const EMPTY_DRAFT: CleanupDraft = { selected: null, stage: "choose", review: null, operationId: null }
@@ -169,6 +171,7 @@ function CleanupArea({ view }: { view: View }) {
             }}
           />
         )}
+        <FileChangeControls />
       </PageBody>
 
       <ConfirmDialog
@@ -500,6 +503,36 @@ function ReviewList({ title, entries, empty }: { title: string; entries: Cleanup
         </Button>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * The journey's P7 helper (J27 S8, S11, S11a): overwrite a named file in place with
+ * same-size bytes and its modification time kept, then restore the saved bytes. A
+ * review must notice the change by content alone.
+ */
+function FileChangeControls() {
+  const [outcome, setOutcome] = useState<ControlOutcome | null>(null)
+  const [path, setPath] = useState("")
+  const pathId = useId()
+  const target = path.trim()
+  return (
+    <PrototypeControls title="Prototype: change a file" outcome={outcome} description="Overwrites a named file in place with same-size bytes and keeps its modification time, then restores the saved bytes.">
+      <div className="flex w-full flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label htmlFor={pathId} className="text-xs">
+            File path
+          </Label>
+          <Input id={pathId} value={path} placeholder="/Volumes/Astro-T7/…" onChange={(e) => setPath(e.target.value)} className="w-96 max-w-full font-mono text-xs" />
+        </div>
+        <Button size="sm" variant="outline" disabled={!target} onClick={() => setOutcome(overwriteKeepingStat(target))}>
+          Overwrite in place (same size and mtime)
+        </Button>
+        <Button size="sm" variant="outline" disabled={!target} onClick={() => setOutcome(restoreKeepingStat(target))}>
+          Restore saved bytes
+        </Button>
+      </div>
+    </PrototypeControls>
   )
 }
 
