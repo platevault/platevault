@@ -4,14 +4,54 @@
  * and structural skeletons. Conventions are in HIGH-LEVEL-DESIGN.md §9.
  */
 import { CircleAlert, CircleHelp, Info, type LucideIcon, OctagonX, RotateCw, TriangleAlert, Unplug } from "lucide-react"
-import type { ReactNode } from "react"
+import { type ReactNode, useEffect, useRef } from "react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { StatusBadge, type StatusValue } from "./status"
+import { StatusBadge, type StatusValue, statusMeta } from "./status"
+
+let liveRegion: HTMLElement | null = null
+let pendingAnnouncement = 0
+
+/**
+ * Announce a status politely through the app's one persistent live region
+ * (WCAG 4.1.3). Use it for status shown by an element that mounts with its
+ * text: a live region born with content is not announced. Repeating the same
+ * message announces it again.
+ */
+export function announce(message: string) {
+  const region = liveRegion
+  if (!region) return
+  region.textContent = ""
+  window.clearTimeout(pendingAnnouncement)
+  pendingAnnouncement = window.setTimeout(() => {
+    region.textContent = message
+  }, 100)
+}
+
+/**
+ * The persistent polite live region behind `announce`. RootLayout mounts it
+ * once, before any dialog opens; Base UI keeps `[aria-live]` elements out of
+ * a modal's inert outside, so announcements still reach users in a dialog.
+ */
+export function LiveAnnouncer() {
+  return (
+    <div
+      ref={(node) => {
+        liveRegion = node
+        return () => {
+          liveRegion = null
+        }
+      }}
+      aria-live="polite"
+      className="sr-only"
+      data-live-announcer=""
+    />
+  )
+}
 
 export interface EmptyStateProps {
   icon: LucideIcon
@@ -114,14 +154,23 @@ export interface SaveStateProps {
 /**
  * Durable-write status (D08). "Saved" only after a committed write; a failed
  * write stays "Not saved" with Retry; a stale edit offers the current revision.
+ * Announced through `announce`: every change while mounted, and "Not saved" or
+ * "Changed elsewhere" when it appears with them. "Unsaved changes" is never
+ * announced (it follows the user's own typing), nor "Saved" on appearing.
  */
 export function SaveState({ state, onRetry, onReview, message }: SaveStateProps) {
+  const shown = useRef<StatusValue<"save"> | null>(null)
+  useEffect(() => {
+    const previous = shown.current
+    shown.current = state
+    if (state === "unsaved" || state === previous) return
+    if (previous === null && state !== "failed" && state !== "stale") return
+    const label = statusMeta("save", state).label
+    announce(message && (state === "failed" || state === "stale") ? `${label}. ${message}` : label)
+  }, [state, message])
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {/* Only the badge is live, so the buttons stay hidden behind modal dialogs. */}
-      <span aria-live="polite">
-        <StatusBadge kind="save" value={state} />
-      </span>
+      <StatusBadge kind="save" value={state} />
       {state === "failed" && onRetry ? (
         <Button size="sm" variant="outline" onClick={onRetry}>
           <RotateCw aria-hidden="true" data-icon="inline-start" />

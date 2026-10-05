@@ -18,7 +18,8 @@ import type { SeedData } from "@/domain/seed"
 import type { ActivityEvent, Catalog } from "@/domain/types"
 import type { SliceId, SliceStates } from "./slices"
 
-export const SCHEMA_VERSION = 4
+/** Bump when a domain shape changes; saved data of an older version restarts its seed. 5: `catalog.measurementImports`. */
+export const SCHEMA_VERSION = 5
 
 export interface PrototypeState extends SeedData {
   schemaVersion: number
