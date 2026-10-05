@@ -153,11 +153,25 @@ export function cancelOperation(id: OperationId) {
       })
       next = patchOperation(next, id, { items })
     }
+    // A canceled operation still links to its owning surface in Activity (seam 16).
+    const viewId = op.scope.viewIds?.[0]
+    const area = { measure: "frames", "import-measurements": "frames", prepare: "prepare", cleanup: "cleanup" } as Partial<Record<OperationKind, string>>
+    const href =
+      op.kind === "index"
+        ? "/settings/locations"
+        : op.kind === "archive" || op.kind === "filing"
+          ? `/storage/transfers/${op.id}`
+          : op.kind === "adopt-master"
+            ? "/calibration"
+            : viewId && area[op.kind]
+              ? `/views/${viewId}/${area[op.kind]}`
+              : null
     return settleOperation(
       next,
       id,
       "canceled",
       `Canceled. ${done} of ${op.items.length || op.progress.total} items finished before cancel; nothing else was changed.`,
+      href,
     )
   })
 }

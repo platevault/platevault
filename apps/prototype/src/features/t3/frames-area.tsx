@@ -5,7 +5,7 @@
  * decisions, and imported measurements with their provenance. Measurements
  * never exclude, reject or mark frames Usable (PIX-FR-08).
  */
-import { Link } from "@tanstack/react-router"
+import { Link, useSearch } from "@tanstack/react-router"
 import { ImageOff, Upload } from "lucide-react"
 import { type FocusEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { getPreferences } from "@/app/preferences"
@@ -298,6 +298,15 @@ export function FramesArea() {
     observer.observe(node, { childList: true, subtree: true })
     return () => observer.disconnect()
   }, [hasMembers])
+
+  // `?assetId=` (HLD §4) selects that frame when it is a member of this View; it shows excluded frames if needed.
+  const search: object = useSearch({ strict: false })
+  const linkedAssetId = "assetId" in search && typeof search.assetId === "string" ? search.assetId : null
+  const linkedMember = linkedAssetId && memberIds.includes(linkedAssetId) ? linkedAssetId : null
+  const linkedExcluded = linkedMember !== null && content.excluded.includes(linkedMember)
+  useEffect(() => {
+    if (linkedMember) setFrameUi(view.id, { activeAssetId: linkedMember, sessionId: null, search: "", ...(linkedExcluded ? { showExcluded: true } : {}) })
+  }, [view.id, linkedMember, linkedExcluded])
 
   const query = ui.search.toLowerCase()
   const shown = rows.filter((r) => (ui.showExcluded || r.member !== "excluded") && (!ui.sessionId || r.asset.sessionId === ui.sessionId) && (!query || r.asset.fileName.toLowerCase().includes(query)))

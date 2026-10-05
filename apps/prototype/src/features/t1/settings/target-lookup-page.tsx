@@ -20,6 +20,7 @@ import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import type { TargetLookupTest } from "@/store/slices/t1"
 import { TextField } from "../components/form-field"
 import { save } from "../lib/writes"
+import { ReturnNotice } from "./settings-layout"
 
 const HREF = "/settings/targets"
 
@@ -121,6 +122,7 @@ export function TargetLookupPage() {
         description="Optional online enrichment for Targets: coordinates, aliases and object type, each labelled with its provider. Capture metadata is never replaced."
       />
       <PageBody>
+        <ReturnNotice task="Target lookup" />
         <Notice tone="info" title="Local search always works">
           Searching by name, alias or coordinates uses your {targets === 1 ? "1 Target" : `${targets} Targets`} and the bundled offline catalog of {SKY_OBJECTS.length} objects. It needs no
           account or network.
