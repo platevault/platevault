@@ -42,8 +42,8 @@ use uuid::Uuid;
 
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
 
-const SCHEMA: &str = include_str!("schema.sql");
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA: &str = concat!(include_str!("schema.sql"), include_str!("projects.sql"));
+const SCHEMA_VERSION: i64 = 7;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -75,6 +75,8 @@ macro_rules! asset_sql {
         )
     };
 }
+
+mod projects;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
