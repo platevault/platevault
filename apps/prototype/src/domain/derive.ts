@@ -52,13 +52,25 @@ export function copyAvailability(disk: Disk, catalog: Catalog, copy: AssetCopy):
   return "available"
 }
 
-/** Every copy of the asset is in a retired location: it leaves integration totals (LIB-FR-15). */
+/**
+ * The asset's only present copies are in retired locations: it leaves
+ * integration totals and reads Retired (LIB-FR-15, D11). A copy a complete
+ * scan found absent (for example the source retired by a verified transfer)
+ * counts as gone; a copy last observed on an offline volume, or of unknown
+ * presence, still holds the asset.
+ */
 export function isRetiredAsset(catalog: Catalog, asset: Asset): boolean {
-  return asset.copies.every((copy) => catalog.locations[copy.locationId]?.retiredAt)
+  let retired = false
+  for (const copy of asset.copies) {
+    if (catalog.locations[copy.locationId]?.retiredAt) retired = true
+    else if (copy.presence !== "absent") return false
+  }
+  return retired
 }
 
-/** An asset is as available as its best copy. */
+/** An asset is as available as its best copy; a retired asset reads Retired. */
 export function assetAvailability(disk: Disk, catalog: Catalog, asset: Asset): AssetAvailability {
+  if (isRetiredAsset(catalog, asset)) return "retired"
   let best = AVAILABILITY_ORDER.length - 1
   for (const copy of asset.copies) best = Math.min(best, AVAILABILITY_ORDER.indexOf(copyAvailability(disk, catalog, copy)))
   return AVAILABILITY_ORDER[best]!

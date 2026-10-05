@@ -7,6 +7,7 @@
  * (progressively, a batch per tick), so both produce identical catalogs.
  */
 import { correctedExposureS } from "./corrections"
+import { isRetiredAsset } from "./derive"
 import { angularSeparationDeg, normalizeName, SKY_OBJECTS } from "./sky"
 import type {
   Asset,
@@ -371,16 +372,17 @@ function rebuildSession(catalog: Catalog, session: Session, now: IsoDateTime): S
 /**
  * The asset a file belongs to: the asset with a copy at this path in this
  * location, else a byte-identical asset of the same image type (a copy or a
- * move elsewhere, LIB-AC-15), else none. A retired asset (every copy in a
- * retired location) is never matched: registering its folder again makes new
- * assets that inherit no decision, association or correction (D11).
+ * move elsewhere, LIB-AC-15), else none. A retired asset (its only present
+ * copies are in retired locations) is never matched, by path or by bytes:
+ * registering its folder again makes new assets that inherit no decision,
+ * association or correction (D11).
  */
 function assetForFile(catalog: Catalog, location: Location, file: DiskFile): Asset | undefined {
   let sameBytes: Asset | undefined
   for (const asset of Object.values(catalog.assets)) {
+    if (isRetiredAsset(catalog, asset)) continue
     if (asset.copies.some((c) => c.locationId === location.id && c.path === file.path)) return asset
-    if (sameBytes || asset.sha256 !== file.sha256 || asset.imageType !== file.header!.imageType) continue
-    if (!asset.copies.every((c) => catalog.locations[c.locationId]?.retiredAt)) sameBytes = asset
+    if (!sameBytes && asset.sha256 === file.sha256 && asset.imageType === file.header!.imageType) sameBytes = asset
   }
   return sameBytes
 }
@@ -411,7 +413,12 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
   const takenSessionIds = new Set<SessionId>()
   for (const session of Object.values(catalog.sessions)) {
     // A session whose frames are all retired never absorbs new files (D11).
-    const retired = session.assetIds.length > 0 && session.assetIds.every((id) => catalog.assets[id]?.copies.every((c) => catalog.locations[c.locationId]?.retiredAt))
+    const retired =
+      session.assetIds.length > 0 &&
+      session.assetIds.every((id) => {
+        const asset = catalog.assets[id]
+        return asset !== undefined && isRetiredAsset(catalog, asset)
+      })
     if (!session.supersededBy && !retired) keyToSession.set(sessionKeyOf(session), session.id)
     takenSessionIds.add(session.id)
     for (const previous of session.previousSessionIds) takenSessionIds.add(previous)
