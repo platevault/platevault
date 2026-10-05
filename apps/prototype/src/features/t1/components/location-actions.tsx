@@ -32,7 +32,9 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
 
   function index(location: Location) {
     setFeedback(null)
-    onIndexStarted?.(startIndexing([location.id]))
+    // Start first: `onIndexStarted?.(startIndexing(…))` skips the argument when no callback is passed (Settings › Locations).
+    const operationId = startIndexing([location.id])
+    onIndexStarted?.(operationId)
   }
 
   function review(location: Location, path: string) {
