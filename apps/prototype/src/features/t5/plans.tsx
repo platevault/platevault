@@ -150,17 +150,18 @@ function TargetPlan({ target }: { target: Target }) {
         description="Astronomical windows from a planning site you choose. Planning changes no library, Project or session data and starts no indexing."
         meta={plan?.planned ? <StatusBadge kind="association" value="confirmed" label="Planned" /> : null}
         actions={
-          <>
-            {windows.length === 0 ? (
-              <span id="t5-export-reason" className="text-xs text-muted-foreground">
-                No windows to export: choose a planning site or relax the criteria.
-              </span>
-            ) : null}
+          // The reason sits under the button at a fixed measure, so it never squeezes the description (as Save View does).
+          <div className="flex flex-col items-end gap-1">
             <Button variant="outline" disabled={windows.length === 0} aria-describedby={windows.length === 0 ? "t5-export-reason" : undefined} onClick={() => setExportOpen(true)}>
               <CalendarDays aria-hidden="true" data-icon="inline-start" />
               Export calendar
             </Button>
-          </>
+            {windows.length === 0 ? (
+              <span id="t5-export-reason" className="max-w-56 text-right text-xs text-pretty text-muted-foreground">
+                No windows to export: choose a planning site or relax the criteria.
+              </span>
+            ) : null}
+          </div>
         }
       />
       <PageBody>
@@ -216,7 +217,7 @@ function TargetPlan({ target }: { target: Target }) {
                   {planningSite.latitude.toFixed(2)}°, {planningSite.longitude.toFixed(2)}° · {planningSite.timeZone}
                 </span>
               ) : null}
-              <Button variant="ghost" size="sm" render={<Link to="/settings/sites" search={{ return: returnPath }} />}>
+              <Button variant="link" size="sm" render={<Link to="/settings/sites" search={{ return: returnPath }} />}>
                 Manage sites
               </Button>
               {siteError ? <ActionError message={siteError} className="w-full" /> : null}
@@ -769,8 +770,14 @@ export function PlansPage() {
             items={[
               {
                 label: "Default site",
-                value: defaultSite ? defaultSite.name : <UnknownValue label="Not set" reason="Set a default site in Settings › Observing sites." />,
-                source: "Settings › Observing sites",
+                value: (
+                  <span className="inline-flex flex-wrap items-center gap-x-2">
+                    {defaultSite ? defaultSite.name : <UnknownValue label="Not set" reason="Set a default site in Settings › Observing sites." />}
+                    <Link to="/settings/sites" search={{ return: "/plans" }} className="text-xs text-primary underline underline-offset-2">
+                      Settings › Observing sites
+                    </Link>
+                  </span>
+                ),
               },
               { label: "Reminder site", value: reminders.enabled && reminderSite ? reminderSite.name : "None while notifications are off" },
               { label: "Lead time", value: reminders.enabled && reminders.leadTimeMin ? `${reminders.leadTimeMin} min before each window` : "Not set" },

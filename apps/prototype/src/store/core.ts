@@ -129,7 +129,8 @@ export function commit(label: string, mutate: (state: PrototypeState) => Prototy
     const { collection, id, revision } = options.expect
     const entity = (current.catalog[collection] as Catalog[RevisionedCollection])[id]
     if (entity && entity.revision !== revision) {
-      const message = `${label} was refused: this record changed since you opened it (revision ${revision} → ${entity.revision}). Review the current revision before saving again.`
+      // The record version is internal (D08); it is not the View membership "Revision N" a page shows, so the message names no number.
+      const message = `${label} was refused: this record was changed elsewhere since you opened it. Review the current version before saving again.`
       recordActivity({ kind: "write-refused", title: `${label} refused`, detail: message, operationId: null, href: options.href ?? null })
       return { ok: false, reason: "stale", message }
     }

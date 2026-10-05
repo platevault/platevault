@@ -21,10 +21,11 @@ import { projectProgress, targetCoverage, viewStatus } from "@/domain/derive"
 import type { Target } from "@/domain/types"
 import { usableVerifiedAt } from "@/domain/verification"
 import { formatDateTime, formatDec, formatDegrees, formatDuration, formatRa, plural } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { type CommitResult, store, useStore } from "@/store/core"
 import { acceptEnrichment, type EnrichmentProposal, LOOKUP_DELAY_MS, type LookupOutcome, PROVIDER_LABEL, resolveTargetLookup } from "../actions"
 import { acceptedResultsForViews, sessionRow, type SessionRow, sumBreakdowns, viewsForTarget } from "../model"
-import { AssociationBadge, IndexingNotices, LibraryScopeStrip, QualityCounts, ScopeCell } from "../parts"
+import { AssociationBadge, DENSITY_CELL, LibraryStatus, QualityCounts, ScopeCell } from "../parts"
 import { TargetRecordDialog } from "../target-record-dialog"
 
 export function TargetPage() {
@@ -87,9 +88,10 @@ function TargetDetail({ targetId }: { targetId: string }) {
       id: "session",
       header: "Session",
       rowHeader: true,
+      className: DENSITY_CELL,
       sortValue: (r) => `${r.session.night}|${r.label}`,
       cell: (r) => (
-        <span className="flex flex-col items-start gap-0.5 py-1">
+        <span className="flex flex-col items-start gap-0.5 compact:flex-row compact:items-center compact:gap-2">
           <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium underline-offset-2 hover:underline">
             {r.label}
           </Link>
@@ -97,21 +99,30 @@ function TargetDetail({ targetId }: { targetId: string }) {
         </span>
       ),
     },
-    { id: "association", header: "Association", cell: (r) => <AssociationBadge association={r.session.target} /> },
-    { id: "frames", header: "Frames", align: "right", sortValue: (r) => r.session.assetIds.length, cell: (r) => r.session.assetIds.length },
-    { id: "integration", header: "Integration", align: "right", sortValue: (r) => r.breakdown.captured.seconds, cell: (r) => formatDuration(r.breakdown.captured.seconds) },
-    { id: "quality", header: "Quality", cell: (r) => <QualityCounts breakdown={r.breakdown} /> },
+    { id: "association", header: "Association", className: DENSITY_CELL, cell: (r) => <AssociationBadge association={r.session.target} /> },
+    { id: "frames", header: "Frames", align: "right", className: DENSITY_CELL, sortValue: (r) => r.session.assetIds.length, cell: (r) => r.session.assetIds.length },
+    {
+      id: "integration",
+      header: "Integration",
+      align: "right",
+      className: DENSITY_CELL,
+      sortValue: (r) => r.breakdown.captured.seconds,
+      cell: (r) => formatDuration(r.breakdown.captured.seconds),
+    },
+    { id: "quality", header: "Quality", className: DENSITY_CELL, cell: (r) => <QualityCounts breakdown={r.breakdown} /> },
     {
       id: "availability",
       header: "Availability",
-      className: "whitespace-normal",
+      className: cn("whitespace-normal xl:compact:whitespace-nowrap", DENSITY_CELL),
       sortValue: (r) => r.breakdown.unavailable.frames,
       cell: (r) =>
         r.availability.offline > 0 ? (
-          <span className="inline-flex flex-wrap items-center gap-2">
+          <span className="inline-flex flex-wrap items-center gap-2 xl:compact:flex-nowrap">
             <StatusBadge kind="availability" value="offline" />
             <span className="text-xs text-muted-foreground">
-              Last observed {r.lastObservedAt ? formatDateTime(r.lastObservedAt) : "at the last scan"} · not available as input
+              Last observed {r.lastObservedAt ? formatDateTime(r.lastObservedAt) : "at the last scan"}
+              {/* Compact keeps one line; the offline notice above says the same. */}
+              <span className="compact:hidden"> · not available as input</span>
             </span>
           </span>
         ) : r.availability.unreadable > 0 ? (
@@ -153,7 +164,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
         }
       />
       <PageBody>
-        <IndexingNotices />
+        <LibraryStatus kind="light" />
         {offline.length > 0 ? (
           <Notice
             tone="offline"
@@ -176,7 +187,6 @@ function TargetDetail({ targetId }: { targetId: string }) {
             </ul>
           </Notice>
         ) : null}
-        <LibraryScopeStrip kind="light" />
 
         <Section
           id="coverage"
@@ -260,18 +270,20 @@ function TargetDetail({ targetId }: { targetId: string }) {
                 {
                   id: "object",
                   header: "OBJECT",
+                  className: DENSITY_CELL,
                   cell: (r) => (r.session.objectLabel ? <span className="font-mono text-xs">{r.session.objectLabel}</span> : <span className="text-muted-foreground">No OBJECT</span>),
                 },
                 {
                   id: "evidence",
                   header: "Why",
+                  className: DENSITY_CELL,
                   cell: (r) =>
                     r.session.target.evidence
                       .filter((e) => e.agrees === false)
                       .map((e) => `${e.label} ${e.value} conflicts`)
                       .join("; ") || "Evidence is unknown",
                 },
-                { id: "status", header: "Association", cell: (r) => <AssociationBadge association={r.session.target} /> },
+                { id: "status", header: "Association", className: DENSITY_CELL, cell: (r) => <AssociationBadge association={r.session.target} /> },
                 sessionColumns[2]!,
               ]}
               getRowId={(r) => r.session.id}
@@ -454,7 +466,7 @@ function TargetRecordSection({ target }: { target: Target }) {
       </p>
       {state.phase === "done" && state.outcome.kind === "failed" ? (
         <Notice
-          tone="warning"
+          tone="refusal"
           title="Lookup failed"
           actions={
             <Button size="sm" variant="outline" onClick={run}>

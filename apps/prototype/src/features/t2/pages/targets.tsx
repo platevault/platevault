@@ -8,7 +8,7 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { CalendarClock, Crosshair, TriangleAlert, Unplug } from "lucide-react"
 import { useId, useState } from "react"
 import { type Column, DataTable, TableToolbar } from "@/components/app/data-table"
-import { EmptyState, Notice, TableSkeleton } from "@/components/app/feedback"
+import { EmptyState, TableSkeleton } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -17,7 +17,7 @@ import { formatDegrees, formatDuration, plural } from "@/lib/format"
 import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
 import { activeIndexOperations, currentSessions, parseCoordinates, searchTargets, type TargetSummary, targetSummary, COORDINATE_SEARCH_RADIUS_DEG } from "../model"
-import { IndexingNotices, LibraryScopeStrip, ScopeProblemNotices } from "../parts"
+import { type LibraryNote, LibraryStatus } from "../parts"
 import { TargetRecordDialog } from "../target-record-dialog"
 
 const SHOW = [
@@ -58,6 +58,21 @@ export function TargetsPage() {
     if (show === "needs-review") return s.needsReview > 0
     return true
   })
+  const unresolvedNotes: LibraryNote[] =
+    unresolved > 0
+      ? [
+          {
+            id: "unresolved",
+            summary: `${plural(unresolved, "session")} ${unresolved === 1 ? "has" : "have"} no Target yet`,
+            detail: "Their headers have no OBJECT and not enough other evidence, so PlateVault does not guess. They are not counted for any Target.",
+            action: (
+              <Button size="sm" variant="outline" render={<Link to="/sessions" search={{ target: "unresolved" }} />}>
+                Review in Sessions
+              </Button>
+            ),
+          },
+        ]
+      : []
 
   const columns: Column<TargetSummary>[] = [
     {
@@ -145,22 +160,7 @@ export function TargetsPage() {
         }
       />
       <PageBody className="space-y-4">
-        <IndexingNotices />
-        <ScopeProblemNotices kind="light" />
-        {unresolved > 0 ? (
-          <Notice
-            tone="warning"
-            title={`${plural(unresolved, "session")} ${unresolved === 1 ? "has" : "have"} no Target yet`}
-            actions={
-              <Button size="sm" variant="outline" render={<Link to="/sessions" search={{ target: "unresolved" }} />}>
-                Review in Sessions
-              </Button>
-            }
-          >
-            Their headers have no OBJECT and not enough other evidence, so PlateVault does not guess. They are not counted for any Target.
-          </Notice>
-        ) : null}
-        <LibraryScopeStrip kind="light" />
+        <LibraryStatus kind="light" notes={unresolvedNotes} />
         {summaries.length === 0 ? (
           indexing ? (
             <TableSkeleton label="Reading session metadata; Targets appear as sessions are read" columns={6} />
@@ -171,13 +171,20 @@ export function TargetsPage() {
               title="No Targets yet"
               description={
                 hasLocations
-                  ? "Targets appear when indexed sessions carry pointing or OBJECT evidence, or when you add one yourself."
-                  : "Targets appear after a capture location is indexed, or when you add one yourself."
+                  ? "Targets appear when indexed sessions carry pointing or OBJECT evidence. You can also add one with Add Target."
+                  : "Targets appear after a capture location is indexed. You can also add one with Add Target."
               }
               action={
-                <Button size="sm" onClick={() => setAddOpen(true)}>
-                  Add Target
-                </Button>
+                // One first-run next step across the library pages; Add Target stays in the header.
+                hasLocations ? (
+                  <Button size="sm" render={<Link to="/sessions" />}>
+                    Go to Sessions
+                  </Button>
+                ) : (
+                  <Button size="sm" render={<Link to="/settings/locations" />}>
+                    Add a capture location
+                  </Button>
+                )
               }
             />
           )

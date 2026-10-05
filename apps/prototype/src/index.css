@@ -10,6 +10,7 @@
  */
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant compact (&:where([data-density="compact"] *));
 
 @theme inline {
   --color-background: var(--background);
@@ -64,7 +65,8 @@
   --card-foreground: oklch(0.18 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0 0);
-  --primary: oklch(0.5 0.13 242);
+  /* Link text meets 4.5:1 on every row surface, including the active row (accent). */
+  --primary: oklch(0.49 0.13 242);
   --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.955 0 0);
   --secondary-foreground: oklch(0.2 0 0);
@@ -72,7 +74,8 @@
   --muted-foreground: oklch(0.47 0 0);
   --accent: oklch(0.91 0 0);
   --accent-foreground: oklch(0.18 0 0);
-  --destructive: oklch(0.48 0.2 27);
+  /* Danger badge text over its 12% tint meets 4.5:1 on every row surface, including the active row (accent). */
+  --destructive: oklch(0.45 0.2 27);
   /* Badge text (success over its 12% tint, warning over its 14% tint) meets 4.5:1 on every row surface, including the active row (accent). */
   --success: oklch(0.43 0.12 155);
   --warning: oklch(0.45 0.12 65);
@@ -113,7 +116,8 @@
   /* Hover and highlighted-option surface; visible against the popover. */
   --accent: oklch(0.3 0 0);
   --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.71 0.17 22);
+  /* Danger badge text over its 12% tint meets 4.5:1 on every row surface, including the active and selected rows. */
+  --destructive: oklch(0.76 0.15 22);
   --success: oklch(0.75 0.13 155);
   --warning: oklch(0.8 0.13 80);
   --info: oklch(0.74 0.11 238);

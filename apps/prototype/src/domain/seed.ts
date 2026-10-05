@@ -727,6 +727,7 @@ function demoSeed(): SeedData {
       detail: "Access denied: /Volumes/Astro-T7/Imaging/M33/2026-08-30. Other folders were indexed.",
       operationId: null,
       href: "/settings/locations",
+      outcome: "incomplete-scope",
     },
   ]
 

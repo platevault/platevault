@@ -893,6 +893,8 @@ export interface ActivityEvent {
   operationId: OperationId | null
   /** Hash route of the surface that owns the outcome. */
   href: string | null
+  /** An indexing outcome whose scope was incomplete, kept even when no Operation record is retained. */
+  outcome?: "incomplete-scope"
 }
 
 // ---------------------------------------------------------------------------

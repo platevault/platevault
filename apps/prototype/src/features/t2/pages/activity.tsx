@@ -16,6 +16,11 @@ import type { ActivityEvent, ActivityKind, Operation } from "@/domain/types"
 import { formatCount, formatDateTime } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
+import { cn } from "@/lib/utils"
+import { DENSITY_CELL } from "../parts"
+
+/** The action cell holds 1.75rem buttons, so its padding makes the row exactly `--row-h`. */
+const ACTION_CELL = "py-[max(0px,calc((var(--row-h)-1.75rem)/2))]"
 
 type Filter = "all" | "operation" | "write-failed" | "refused" | "saved"
 
@@ -31,14 +36,66 @@ const FILTERS: Array<{ value: Filter; label: string; kinds: ActivityKind[] }> = 
   { value: "saved", label: "Saved", kinds: ["saved"] },
 ]
 
+/** Workspace areas by their route segment, as the View workspace names them. */
+const VIEW_AREA: Record<string, string> = {
+  sessions: "View sessions",
+  frames: "Frames",
+  refresh: "Refresh",
+  calibration: "Calibration",
+  prepare: "Prepare",
+  results: "Results",
+  cleanup: "Cleanup",
+}
+
+const SECTION: Record<string, string> = {
+  targets: "Targets",
+  sessions: "Sessions",
+  projects: "Projects",
+  views: "Views",
+  calibration: "Calibration",
+  storage: "Storage",
+  plans: "Plans",
+  activity: "Activity",
+  setup: "Setup",
+}
+
+const SINGLE: Record<string, string> = { targets: "Target", sessions: "Session", projects: "Project", calibration: "Calibration item" }
+
+const STORAGE_AREA: Record<string, string> = { archive: "Archive", filing: "Filing", transfers: "Transfer" }
+
+const SETTINGS_AREA: Record<string, string> = {
+  appearance: "Appearance",
+  locations: "Locations",
+  equipment: "Equipment",
+  sites: "Observing sites",
+  targets: "Target lookup",
+  applications: "Applications",
+  about: "About",
+}
+
+/** The surface an entry opens, named on its button ("Open Locations"). */
+function destinationLabel(href: string): string {
+  const [first = "", second, third] = href.split(/[?#]/)[0]!.split("/").filter(Boolean)
+  if (first === "settings") return (second && SETTINGS_AREA[second]) ?? "Settings"
+  if (first === "views" && second && second !== "new") return (third && VIEW_AREA[third]) ?? "View"
+  if (first === "storage" && second) return STORAGE_AREA[second] ?? "Storage"
+  if (first === "targets" && second && third === "plan") return "Target plan"
+  if (second && SINGLE[first] && second !== "new") return SINGLE[first]!
+  return SECTION[first] ?? "page"
+}
+
 function Outcome({ event, operation }: { event: ActivityEvent; operation: Operation | undefined }) {
   switch (event.kind) {
-    case "operation":
-      return operation ? <StatusBadge kind="operation" value={operation.status} /> : <StatusBadge kind="operation" value="succeeded" label="Recorded" />
+    case "operation": {
+      // Indexing that left part of a location unread reads Incomplete scope, not a plain success (LIB-FR-06).
+      const incomplete = event.outcome === "incomplete-scope" || (operation?.kind === "index" && operation.items.some((item) => item.status === "uncertain"))
+      if (incomplete) return <StatusBadge kind="scanScope" value="incomplete" />
+      return operation ? <StatusBadge kind="operation" value={operation.status} /> : <StatusBadge kind="processing" value="written" label="Recorded" />
+    }
     case "write-failed":
       return <StatusBadge kind="save" value="failed" />
+    // A refused write is a failed write: the destructive tone, like Not saved.
     case "write-refused":
-      return <StatusBadge kind="save" value="stale" />
     case "refusal":
       return <StatusBadge kind="item" value="blocked" label="Refused" />
     case "saved":
@@ -51,33 +108,36 @@ function ActivityRow({ event, operation }: { event: ActivityEvent; operation: Op
   const panelId = `activity-${event.id}-items`
   return (
     <Fragment>
-      <tr className="border-b align-top last:border-0">
-        <td className="px-3 py-2 whitespace-nowrap">
+      <tr className="h-(--row-h) border-b align-top last:border-0">
+        <td className={cn("px-3 whitespace-nowrap", DENSITY_CELL)}>
           <time dateTime={event.at} className="text-xs text-muted-foreground tabular-nums">
             {formatDateTime(event.at)}
           </time>
         </td>
-        <td className="px-3 py-2">
+        <td className={cn("px-3 whitespace-nowrap", DENSITY_CELL)}>
           <Outcome event={event} operation={operation} />
         </td>
-        <th scope="row" className="min-w-40 px-3 py-2 text-left font-normal">
-          <div className="font-medium text-pretty">{event.title}</div>
-          {event.detail ? (
-            <p className="text-xs text-pretty text-muted-foreground">
-              {/* Paths in the mono face (HLD §7); split() puts each captured path at an odd index. */}
-              {event.detail.split(PATH).map((part, i) =>
-                i % 2 === 1 ? (
-                  <span key={i} className="font-mono break-all">
-                    {part}
-                  </span>
-                ) : (
-                  part
-                ),
-              )}
-            </p>
-          ) : null}
+        {/* Compact density: title and detail share one line; the detail truncates and keeps its full text as a tooltip. */}
+        <th scope="row" className={cn("min-w-40 px-3 text-left font-normal compact:w-full compact:max-w-0", DENSITY_CELL)}>
+          <div className="compact:flex compact:min-w-0 compact:items-baseline compact:gap-2">
+            <div className="font-medium text-pretty compact:shrink-0 compact:whitespace-nowrap">{event.title}</div>
+            {event.detail ? (
+              <p className="text-xs text-pretty text-muted-foreground compact:min-w-0 compact:truncate" title={event.detail}>
+                {/* Paths in the mono face (HLD §7); split() puts each captured path at an odd index. */}
+                {event.detail.split(PATH).map((part, i) =>
+                  i % 2 === 1 ? (
+                    <span key={i} className="font-mono break-all compact:break-normal">
+                      {part}
+                    </span>
+                  ) : (
+                    part
+                  ),
+                )}
+              </p>
+            ) : null}
+          </div>
         </th>
-        <td className="px-3 py-2">
+        <td className={cn("px-3", ACTION_CELL)}>
           <div className="flex justify-end gap-1">
             {operation && operation.items.length > 0 ? (
               <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((v) => !v)}>
@@ -85,8 +145,9 @@ function ActivityRow({ event, operation }: { event: ActivityEvent; operation: Op
               </Button>
             ) : null}
             {event.href ? (
-              <Button size="sm" variant="outline" render={<a href={`#${event.href}`} />}>
-                Open<span className="sr-only"> {event.title}</span>
+              <Button size="sm" variant="outline" className="whitespace-nowrap" render={<a href={`#${event.href}`} />}>
+                Open {destinationLabel(event.href)}
+                <span className="sr-only">: {event.title}</span>
               </Button>
             ) : null}
           </div>
@@ -106,6 +167,7 @@ function ActivityRow({ event, operation }: { event: ActivityEvent; operation: Op
 export function ActivityPage() {
   const activity = useStore((s) => s.activity)
   const operations = useStore((s) => s.operations)
+  const hasLocations = useStore((s) => Object.keys(s.catalog.locations).length > 0)
   const unsettled = Object.values(operations)
     .filter((op) => !isSettled(op.status))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -156,9 +218,16 @@ export function ActivityPage() {
               title="No activity yet"
               description="Indexing, saves, failed writes and refusals appear here as they happen."
               action={
-                <Button size="sm" variant="outline" render={<a href="#/targets" />}>
-                  Go to Targets
-                </Button>
+                // First run: the one next step every library page names (no location yet: add one).
+                hasLocations ? (
+                  <Button size="sm" render={<a href="#/targets" />}>
+                    Go to Targets
+                  </Button>
+                ) : (
+                  <Button size="sm" render={<a href="#/settings/locations" />}>
+                    Add a capture location
+                  </Button>
+                )
               }
             />
           ) : shown.length === 0 ? (

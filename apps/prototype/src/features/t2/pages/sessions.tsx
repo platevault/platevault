@@ -34,7 +34,7 @@ import {
   sumBreakdowns,
   targetNeedsReview,
 } from "../model"
-import { EquipmentCell, IndexingNotices, LibraryScopeStrip, LocationsCell, QualityCounts, ScopeCell, ScopeProblemNotices, TargetCell } from "../parts"
+import { DENSITY_CELL, EquipmentCell, LibraryStatus, LocationsCell, QualityCounts, ScopeCell, TargetCell } from "../parts"
 
 const ALL = "all"
 
@@ -181,15 +181,17 @@ export function SessionsPage() {
       id: "session",
       header: "Session",
       rowHeader: true,
+      className: DENSITY_CELL,
       sortValue: (r) => `${r.session.night}|${r.label}`,
       cell: (r) => (
-        <span className="flex flex-col items-start gap-0.5 py-1">
+        // Compact density: one line; the OBJECT label stays for assistive technology only and badges sit inline.
+        <span className="flex flex-col items-start gap-0.5 compact:flex-row compact:items-center compact:gap-x-2">
           <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium underline-offset-2 hover:underline">
             {r.label}
           </Link>
           <span className="flex flex-wrap items-center gap-1.5 text-xs whitespace-normal text-muted-foreground">
             {isLight ? (
-              <span>
+              <span className="compact:sr-only">
                 {r.session.objectLabel ? (
                   <>
                     OBJECT <span className="font-mono text-foreground">{r.session.objectLabel}</span>
@@ -206,19 +208,22 @@ export function SessionsPage() {
         </span>
       ),
     },
-    ...(isLight ? [{ id: "target", header: "Target", sortValue: (r: SessionRow) => r.targetName, cell: (r: SessionRow) => <TargetCell row={r} /> }] : []),
+    ...(isLight
+      ? [{ id: "target", header: "Target", className: DENSITY_CELL, sortValue: (r: SessionRow) => r.targetName, cell: (r: SessionRow) => <TargetCell row={r} /> }]
+      : []),
     {
       id: "frames",
       header: isLight ? "Frames · integration" : "Frames · exposure",
+      className: DENSITY_CELL,
       sortValue: (r) => (isLight ? r.breakdown.captured.seconds : r.session.assetIds.length),
       cell: (r) => (
-        <span className="flex flex-col items-start gap-0.5 py-1">
+        <span className="flex flex-col items-start gap-0.5 compact:flex-row compact:flex-wrap compact:items-center compact:gap-x-2">
           <span>
             {formatCount(r.session.assetIds.length)} · {isLight ? formatDuration(r.breakdown.captured.seconds) : formatExposure(r.session.exposureS)}
           </span>
           {isLight ? (
             <span className="text-xs text-muted-foreground">
-              <QualityCounts breakdown={r.breakdown} />
+              <QualityCounts breakdown={r.breakdown} secondary />
             </span>
           ) : null}
           {/* Retired copies leave every total (D11), so the row names them instead. */}
@@ -226,8 +231,8 @@ export function SessionsPage() {
         </span>
       ),
     },
-    { id: "equipment", header: "Equipment", sortValue: (r) => r.trainName, cell: (r) => <EquipmentCell row={r} /> },
-    { id: "locations", header: "Locations", cell: (r) => <LocationsCell row={r} /> },
+    { id: "equipment", header: "Equipment", className: DENSITY_CELL, sortValue: (r) => r.trainName, cell: (r) => <EquipmentCell row={r} /> },
+    { id: "locations", header: "Locations", className: DENSITY_CELL, cell: (r) => <LocationsCell row={r} /> },
   ]
 
   const selectionProps = { selected, onChange: setSelected, rowLabel: (r: SessionRow) => r.label }
@@ -268,7 +273,7 @@ export function SessionsPage() {
               Index registered locations
             </Button>
           ) : (
-            <Button size="sm" variant="outline" render={<Link to="/settings/locations" />}>
+            <Button size="sm" render={<Link to="/settings/locations" />}>
               {locationCount === 0 ? "Add a capture location" : "Open Settings › Locations"}
             </Button>
           )
@@ -309,9 +314,7 @@ export function SessionsPage() {
         description="Metadata-homogeneous capture groups, read from your locations in place. Grouping by night changes the display only."
       />
       <PageBody className="space-y-4">
-        <IndexingNotices />
-        <ScopeProblemNotices kind={kind} />
-        <LibraryScopeStrip kind={kind} />
+        <LibraryStatus kind={kind} />
         {rows.length > 0 ? (
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm tabular-nums" aria-live="polite">
             <span className="font-medium">{plural(filtered.length, isLight ? "session" : "calibration set")}</span>
