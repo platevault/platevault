@@ -19,6 +19,7 @@
     clippy::cast_lossless
 )]
 
+pub mod decode;
 #[cfg(feature = "fixtures")]
 pub mod fixtures;
 pub mod plane;

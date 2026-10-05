@@ -18,6 +18,9 @@ lz4_flex = "0.14"
 
 [dev-dependencies]
 platevault_pixels = { path = ".", features = ["fixtures"] }
+sha2.workspace = true
+hex.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true
