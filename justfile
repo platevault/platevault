@@ -208,6 +208,43 @@ tauri-dev:
 tauri-dev-mcp bind="127.0.0.1":
     cd apps/desktop && PV_MCP_BRIDGE_ENABLE=1 PV_MCP_BRIDGE_BIND={{quote(bind)}} pnpm tauri dev --config src-tauri/tauri.dev.conf.json --features dev-tools
 
+# Debug `.app` bundle of the isolated library shell with the dev bridge (spec 072
+# R26). macOS authorizes notifications only for a process with a bundle
+# identifier, and `cargo run` starts the shell unbundled. The bundle wraps the
+# `dev-tools` debug binary in an Info.plist carrying the identifier and product
+# name from `library-dev/tauri.conf.json`, signed ad hoc, and prints its path.
+# Run `<app>/Contents/MacOS/platevault-library` directly so PV_LIBRARY_DATA_DIR
+# reaches it; `open` drops the environment.
+library-dev-bundle:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(uname -s)" != Darwin ]; then
+        echo "library-dev-bundle: macOS only" >&2
+        exit 1
+    fi
+    conf=apps/desktop/src-tauri/library-dev/tauri.conf.json
+    identifier=$(plutil -extract identifier raw -o - "$conf")
+    name=$(plutil -extract productName raw -o - "$conf")
+    cargo build -p desktop_shell --features dev-tools --bin platevault-library
+    target=$(cargo metadata --format-version 1 --no-deps | plutil -extract target_directory raw -o - -)
+    version=$(cargo pkgid -p desktop_shell)
+    version=${version##*@}
+    app="$target/debug/bundle/library-dev/$name.app"
+    rm -rf "$app"
+    mkdir -p "$app/Contents/MacOS"
+    cp "$target/debug/platevault-library" "$app/Contents/MacOS/platevault-library"
+    plist="$app/Contents/Info.plist"
+    plutil -create xml1 "$plist"
+    plutil -insert CFBundleIdentifier -string "$identifier" "$plist"
+    plutil -insert CFBundleName -string "$name" "$plist"
+    plutil -insert CFBundleExecutable -string platevault-library "$plist"
+    plutil -insert CFBundlePackageType -string APPL "$plist"
+    plutil -insert CFBundleShortVersionString -string "$version" "$plist"
+    plutil -insert CFBundleVersion -string "$version" "$plist"
+    plutil -insert NSHighResolutionCapable -bool YES "$plist"
+    codesign --force --sign - "$app"
+    echo "$app"
+
 # Clean build artifacts
 clean:
     cargo clean
