@@ -22,6 +22,11 @@
 pub mod decode;
 #[cfg(feature = "fixtures")]
 pub mod fixtures;
+mod hfr;
+pub mod measure;
 pub mod plane;
+mod psf;
+mod stars;
+mod stats;
 
 pub use plane::*;
