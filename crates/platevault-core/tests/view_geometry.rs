@@ -194,6 +194,25 @@ fn a_target_framing_matches_only_inside_every_rotated_frame_rectangle() {
 }
 
 #[test]
+fn a_target_frame_label_reads_icrs_whatever_its_case() {
+    let mut upper = target(0x7000, RA, DEC);
+    upper.coordinates.as_mut().unwrap().frame = "ICRS".into();
+    let mut fk5 = target(0x7001, RA, DEC);
+    fk5.coordinates.as_mut().unwrap().frame = "fk5".into();
+    let framing = criteria(vec![upper, fk5], Vec::new());
+    let centres: Vec<bool> = framing_footprints(&framing.framing)
+        .iter()
+        .map(|element| element.centre.is_some())
+        .collect();
+    assert_eq!(centres, [true, false], "only another frame label stays unknown");
+    let inside = [frame(1, RA, DEC, Some(10.0))];
+    assert_eq!(
+        session(&inside, &framing).matched.map(|m| m.element),
+        Some(FramingElement::Target { target_id: Uuid::from_u128(0x7000) })
+    );
+}
+
+#[test]
 fn a_panel_framing_matches_by_normalized_coverage_at_the_threshold() {
     let height = width_deg(4176.0);
     let framing = criteria(Vec::new(), vec![panel(0xA, DEC, Some(0.0))]);

@@ -226,7 +226,7 @@ pub fn framing_footprints(framing: &FramingSnapshot) -> Vec<FramingFootprint> {
         centre: target
             .coordinates
             .as_ref()
-            .filter(|coordinates| coordinates.frame == ICRS_FRAME)
+            .filter(|coordinates| coordinates.frame.eq_ignore_ascii_case(ICRS_FRAME))
             .and_then(|coordinates| {
                 valid_point(Some(coordinates.ra_deg), Some(coordinates.dec_deg))
             }),

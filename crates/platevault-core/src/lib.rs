@@ -10,4 +10,5 @@ pub mod model;
 pub mod projects;
 pub mod targets;
 pub mod view_geometry;
+pub mod view_selection;
 pub use model::*;
