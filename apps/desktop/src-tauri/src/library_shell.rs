@@ -4,12 +4,15 @@
 //! Isolated rebuilt library shell (spec 064): its own Tauri runtime over the
 //! clean catalog.
 //!
-//! It boots only [`Library`] with the [`crate::commands::library`] and
-//! [`crate::commands::project_goals`] IPC surfaces, the catalog in its own data
-//! directory. Nothing from the legacy
-//! composition root runs here: no `AppState`, legacy database, bootstrap job,
-//! watcher or legacy command registration. The legacy code stays archivable and
-//! is never booted by this binary.
+//! It boots only [`Library`] with the [`crate::commands::library`],
+//! [`crate::commands::project_goals`] and [`crate::commands::observing_plans`]
+//! IPC surfaces, the catalog in its own data directory. The dialog and opener
+//! plugins serve the planning handlers' Rust calls, and the platform reminder
+//! notifier with the system clock is attached before any command runs. Nothing
+//! from the legacy composition root runs here: no `AppState`, legacy database,
+//! bootstrap job, watcher or legacy command registration; the legacy `plan`,
+//! `plans` and `plan_apply` commands stay unregistered. The legacy code stays
+//! archivable and is never booted by this binary.
 //!
 //! In `dev-tools` (debug-only) builds the MCP bridge always starts, bound to IPv4
 //! loopback, and the webview loads the hosted dev URL so the bridge has a page
@@ -35,6 +38,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use platevault_core::library::Library;
+use platevault_core::notifier::SystemClock;
 use platevault_core::targets::SimbadConfig;
 use platevault_core::{LibraryError, NativePath, Revision, ScanOperation, ScanProgress, ScanState};
 use serde::Serialize;
@@ -43,6 +47,7 @@ use tokio::sync::broadcast::error::RecvError;
 use uuid::Uuid;
 
 use crate::commands::library as ipc;
+use crate::commands::observing_plans as planning;
 use crate::commands::project_goals as projects;
 
 /// Catalog directory override, used verbatim.
@@ -68,7 +73,8 @@ const RESYNC_PAGE: u32 = 64;
 /// # Errors
 /// Every startup failure: a refused bridge address, invalid provider
 /// configuration, an unusable data directory, a catalog that cannot be opened
-/// (including a foreign or legacy database) or the Tauri runtime itself.
+/// (including a foreign or legacy database), reminder subscriptions that
+/// cannot be read when the notifier attaches, or the Tauri runtime itself.
 pub fn run() -> Result<(), Box<dyn Error>> {
     let provider = provider_config()?;
     let builder = tauri::Builder::default().invoke_handler(tauri::generate_handler![
@@ -105,7 +111,22 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         projects::project_set_rejection,
         projects::project_list,
         projects::project_detail,
+        planning::planning_list_sites,
+        planning::planning_save_site,
+        planning::planning_set_default_site,
+        planning::planning_target_overview,
+        planning::planning_compute_windows,
+        planning::planning_set_planned,
+        planning::planning_review_reminders,
+        planning::planning_enable_reminders,
+        planning::planning_disable_reminders,
+        planning::planning_reminder_status,
+        planning::planning_open_notification_settings,
+        planning::planning_review_calendar_export,
+        planning::planning_export_calendar,
     ]);
+    // The planning handlers call these through their Rust APIs; no capability is added.
+    let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);
 
@@ -120,6 +141,9 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         online_provider = provider.is_some(),
         "library catalog opened"
     );
+    let notifier = crate::library_notifier::platform_notifier();
+    tauri::async_runtime::block_on(library.attach_notifier(notifier, Arc::new(SystemClock)))
+        .map_err(|error| format!("cannot attach the reminder notifier: {error}"))?;
     ProgressBridge::spawn(app.handle().clone(), Arc::clone(&library));
     app.manage(library);
     app.run(|_, _| {});
