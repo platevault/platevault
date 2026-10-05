@@ -599,6 +599,8 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
     let bad = copy("Copy-Bad", b"frame TWO bytes");
     let good = copy("Copy-Good", b"frame two bytes");
     let original_tree = tree(&fx.root);
+    let stamped = last_verified(&catalog, &assets).await;
+    assert!(stamped[0].is_some() && stamped[1].is_none(), "{stamped:?}");
 
     let review = catalog
         .review_remap(
@@ -615,6 +617,7 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
         catalog.apply_remap(review.id, location.decision_revision, DiskProbe).await.unwrap_err();
     assert_eq!(kind(&error), "identity_conflict");
     assert_eq!(catalog.location(location.id).await.unwrap().path, location.path);
+    assert_eq!(last_verified(&catalog, &assets).await, stamped, "a refused remap stamps nothing");
 
     let away = fx.root.with_extension("offline");
     std::fs::rename(&fx.root, &away).unwrap();
@@ -643,6 +646,7 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
         catalog.location(location.id).await.unwrap().decision_revision,
         location.decision_revision
     );
+    assert_eq!(last_verified(&catalog, &assets).await, stamped, "a refused remap stamps nothing");
     std::fs::rename(&away, &fx.root).unwrap();
 
     let review = catalog
@@ -656,6 +660,16 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
         .await
         .unwrap();
     assert!(review.blocked.is_empty(), "{:?}", review.blocked);
+
+    // The candidate changes after the review with its stats kept: apply hashes
+    // it, refuses, and stamps nothing. The reviewed bytes return.
+    let candidate = good.join("Ha_002.fits");
+    rewrite_path_same_stat(&candidate, b"frame TWO bytes");
+    let error =
+        catalog.apply_remap(review.id, location.decision_revision, DiskProbe).await.unwrap_err();
+    assert_eq!(kind(&error), "identity_conflict");
+    assert_eq!(last_verified(&catalog, &assets).await, stamped, "a refused remap stamps nothing");
+    rewrite_path_same_stat(&candidate, b"frame two bytes");
     let remapped =
         catalog.apply_remap(review.id, location.decision_revision, DiskProbe).await.unwrap();
     assert_eq!(remapped.path, NativePath::from_path(&good));
@@ -665,6 +679,12 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
         assets.iter().map(|a| a.id).collect::<Vec<_>>()
     );
     assert_eq!(moved[0].applicable_quality(), ApplicableQuality::Usable, "decision kept");
+    // Apply rehashed every asset against its review: each is verified now.
+    let verified = last_verified(&catalog, &assets).await;
+    assert!(
+        verified.iter().zip(&stamped).all(|(now, was)| now.is_some() && now != was),
+        "every remapped asset is verified at apply: {verified:?} after {stamped:?}"
+    );
     assert_eq!(tree(&fx.root), original_tree, "no source writes");
 }
 
@@ -2325,6 +2345,85 @@ async fn a_re_registered_folder_forms_new_sessions_that_inherit_nothing_retired(
     assert_eq!(tree(&fx.root), before, "originals unchanged");
 }
 
+/// A session holding copies in an Active and a Retired location still absorbs
+/// new assets: when the retired folder registers again, its new copy joins that
+/// session, which keeps its id and gains no successor. The retired copy stays
+/// outside every total.
+#[tokio::test]
+async fn a_session_with_an_active_copy_absorbs_its_re_registered_retired_folder() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"frame on the T7");
+    let cold = fx.temp.path().join("Cold-1");
+    std::fs::create_dir_all(&cold).unwrap();
+    std::fs::write(cold.join("Ha_002.fits"), b"frame on the cold drive").unwrap();
+    let before = (tree(&fx.root), tree(&cold));
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let active = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &active, &["Ha_001.fits"]).await;
+    let retiring = catalog.register_location(&registration_at(&cold)).await.unwrap();
+    scan_at(&catalog, &retiring, &cold, &["Ha_002.fits"]).await;
+    let retired_copies = catalog.location_assets(retiring.id).await.unwrap();
+    let mut held = catalog.location_assets(active.id).await.unwrap();
+    held.extend(retired_copies.iter().cloned());
+    for asset in &held {
+        catalog.set_quality(&[expected(asset)], Quality::Usable, DiskProbe).await.unwrap();
+    }
+    let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    assert_eq!(sessions.len(), 1, "one capture key across both locations: {sessions:?}");
+    let session = sessions[0].session.clone();
+    assert_eq!(session.asset_ids.iter().copied().collect::<BTreeSet<_>>(), ids_of(&held));
+    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
+    let totals = |coverage: &platevault_model::TargetCoverage| {
+        (
+            coverage_sum(coverage, |c| c.captured_seconds),
+            coverage_sum(coverage, |c| c.usable_seconds),
+            coverage_sum(coverage, |c| c.unreviewed_seconds),
+        )
+    };
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert_eq!(totals(&coverage), (600.0, 600.0, 0.0), "{coverage:?}");
+
+    // Cold-1 is retired: its copy leaves every total.
+    let unplugged = cold.with_extension("unplugged");
+    std::fs::rename(&cold, &unplugged).unwrap();
+    let retiring = catalog
+        .mark_location_unavailable(retiring.id, Availability::Offline, "unplugged")
+        .await
+        .unwrap();
+    let references = read_references(&retired_copies, Vec::new());
+    let review = catalog.review_retire_location(retiring.id, &references).await.unwrap();
+    catalog
+        .retire_location(review.id, retiring.id, review.expected_revision, &references)
+        .await
+        .unwrap();
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert_eq!(totals(&coverage), (300.0, 300.0, 0.0), "{coverage:?}");
+
+    // Its folder registers again. The session still holds an Active copy, so it
+    // absorbs the new copy: same id, no successor, every copy a member.
+    std::fs::rename(&unplugged, &cold).unwrap();
+    let again = catalog.register_location(&registration_at(&cold)).await.unwrap();
+    scan_at(&catalog, &again, &cold, &["Ha_002.fits"]).await;
+    let fresh = catalog.location_assets(again.id).await.unwrap();
+    let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    assert_eq!(sessions.len(), 1, "no new session: {sessions:?}");
+    let kept = catalog.session(session.id).await.unwrap().summary;
+    assert!(kept.successors.is_empty(), "{kept:?}");
+    held.extend(fresh.iter().cloned());
+    assert_eq!(kept.session.asset_ids.iter().copied().collect::<BTreeSet<_>>(), ids_of(&held));
+    assert_eq!(kept.capture_count, 2, "the retired copy is not counted: {kept:?}");
+
+    // The retired copy stays out of totals; the new copy counts Unreviewed.
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert_eq!(totals(&coverage), (600.0, 300.0, 300.0), "{coverage:?}");
+    let covered: Vec<Uuid> =
+        [active.id, again.id].into_iter().collect::<BTreeSet<_>>().into_iter().collect();
+    assert_eq!(coverage.covered_location_ids, covered);
+    assert!(!coverage.provisional, "{coverage:?}");
+    assert_eq!((tree(&fx.root), tree(&cold)), before, "originals unchanged");
+}
+
 #[tokio::test]
 async fn a_deleted_root_without_folder_identity_is_freed_by_a_reviewed_retire() {
     let fx = Fixture::new();
@@ -2446,15 +2545,19 @@ async fn root_loss_during_a_subtree_retry_changes_availability_only_inside_its_s
 
 /// Replace a fixture's bytes in place with equal length and its original mtime.
 fn rewrite_same_stat(fx: &Fixture, name: &str, bytes: &[u8]) {
-    let source = fx.root.join(name);
-    let before = file_fingerprint(&source).unwrap();
+    rewrite_path_same_stat(&fx.root.join(name), bytes);
+}
+
+/// Replace a file's bytes in place with equal length and its original mtime.
+fn rewrite_path_same_stat(source: &Path, bytes: &[u8]) {
+    let before = file_fingerprint(source).unwrap();
     assert_eq!(before.size_bytes, bytes.len() as u64);
-    let modified = std::fs::metadata(&source).unwrap().modified().unwrap();
-    let file = std::fs::OpenOptions::new().write(true).truncate(true).open(&source).unwrap();
+    let modified = std::fs::metadata(source).unwrap().modified().unwrap();
+    let file = std::fs::OpenOptions::new().write(true).truncate(true).open(source).unwrap();
     std::io::Write::write_all(&mut &file, bytes).unwrap();
     file.set_modified(modified).unwrap();
     drop(file);
-    assert!(before.equivalent(&file_fingerprint(&source).unwrap()), "stats cannot detect it");
+    assert!(before.equivalent(&file_fingerprint(source).unwrap()), "stats cannot detect it");
 }
 
 #[tokio::test]
@@ -2702,6 +2805,7 @@ async fn coverage_counts_decisions_as_of_their_last_verification_and_reading_reh
 
     // While a started rehash runs, both read verification pending: outside the
     // total and its label.
+    let reviewed_stamps = last_verified(&catalog, &decided).await;
     let operation = catalog.begin_scan(location.id, None).await.unwrap();
     let root = DiskProbe.root_identity(&location).unwrap();
     catalog.apply_scan_batch(operation.id, &root, &ScanBatch::default(), group).await.unwrap();
@@ -2709,7 +2813,14 @@ async fn coverage_counts_decisions_as_of_their_last_verification_and_reading_reh
     assert!(usable(&pending).abs() < 1e-9, "{pending:?}");
     assert_eq!(pending.contributions.iter().map(|c| c.verification_pending).sum::<u64>(), 2);
     assert_eq!(labels(&pending), (None, vec![None]));
+    // Canceling verifies nothing: each keeps its last verification, stays pending
+    // and stays outside the total and its label.
     catalog.abort_scan(operation.id, ScanState::Canceled, "canceled by user").await.unwrap();
+    assert_eq!(last_verified(&catalog, &decided).await, reviewed_stamps, "a cancel stamps nothing");
+    let canceled = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!(usable(&canceled).abs() < 1e-9, "{canceled:?}");
+    assert_eq!(canceled.contributions.iter().map(|c| c.verification_pending).sum::<u64>(), 2);
+    assert_eq!(labels(&canceled), (None, vec![None]));
     scan(&catalog, &fx, &location, &names).await;
     let verified = catalog.asset(decided[0].id).await.unwrap().last_verified_at;
 
@@ -2726,6 +2837,67 @@ async fn coverage_counts_decisions_as_of_their_last_verification_and_reading_reh
     assert_eq!(labels(&offline), (verified.clone(), vec![verified]));
     std::fs::rename(&unplugged, &fx.root).unwrap();
     assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
+/// D19: a capture is labelled with the oldest last verification among the copies
+/// whose decision makes it Usable. An Unreviewed copy's earlier hash never labels
+/// it, and the copy it is counted on does not pick the time shown.
+#[tokio::test]
+async fn a_capture_is_labelled_with_the_oldest_verification_of_its_usable_copies() {
+    let fx = Fixture::new();
+    let name = "Ha_001.fits";
+    fx.write(name, b"one capture, two copies");
+    let nas = fx.temp.path().join("NAS");
+    std::fs::create_dir_all(&nas).unwrap();
+    std::fs::copy(fx.root.join(name), nas.join(name)).unwrap();
+    let before = (tree(&fx.root), tree(&nas));
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let t7 = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &t7, &[name]).await;
+    let nas_location = catalog.register_location(&registration_at(&nas)).await.unwrap();
+    scan_at(&catalog, &nas_location, &nas, &[name]).await;
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
+    // Coverage counts a capture on its available copy in the smallest location id.
+    let mut copies = Vec::new();
+    for location in [&t7, &nas_location] {
+        copies.extend(catalog.location_assets(location.id).await.unwrap());
+    }
+    copies.sort_by_key(|copy| copy.location_id);
+    let (counted, other) = (copies[0].id, copies[1].id);
+    let decide = |id: Uuid| {
+        let catalog = &catalog;
+        async move {
+            let asset = expected(&catalog.asset(id).await.unwrap());
+            let decided = catalog.set_quality(&[asset], Quality::Usable, DiskProbe).await;
+            decided.unwrap()[0].last_verified_at.clone().expect("review verifies")
+        }
+    };
+    let labels = |coverage: &platevault_model::TargetCoverage| {
+        let each: Vec<Option<String>> =
+            coverage.contributions.iter().map(|c| c.last_verified_at.clone()).collect();
+        (coverage.last_verified_at.clone(), each)
+    };
+
+    // The counted copy is inspected first, then only the other copy is reviewed:
+    // the decision speaks for the capture, labelled with its review only.
+    catalog.verify_digest(counted, DiskProbe).await.unwrap();
+    let inspected = catalog.asset(counted).await.unwrap().last_verified_at.unwrap();
+    let first = decide(other).await;
+    assert_ne!(inspected, first);
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!((coverage_sum(&coverage, |c| c.usable_seconds) - 300.0).abs() < 1e-9, "{coverage:?}");
+    let label = Some(first.clone());
+    assert_eq!(labels(&coverage), (label.clone(), vec![label.clone()]), "not {inspected}");
+
+    // Reviewing the counted copy later keeps the oldest Usable verification.
+    let second = decide(counted).await;
+    assert_ne!(second, first);
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!((coverage_sum(&coverage, |c| c.usable_seconds) - 300.0).abs() < 1e-9, "{coverage:?}");
+    assert_eq!(labels(&coverage), (label.clone(), vec![label]), "not {second}");
+    assert_eq!((tree(&fx.root), tree(&nas)), before, "originals unchanged");
 }
 
 /// Real probe that requests cancellation as soon as the first file is probed.
@@ -2751,6 +2923,63 @@ async fn hashed_assets(catalog: &Catalog, locations: &[&Location]) -> usize {
     hashed
 }
 
+/// The last verification of each asset, read now.
+async fn last_verified(catalog: &Catalog, assets: &[Asset]) -> Vec<Option<String>> {
+    let mut stamps = Vec::with_capacity(assets.len());
+    for asset in assets {
+        stamps.push(catalog.asset(asset.id).await.unwrap().last_verified_at);
+    }
+    stamps
+}
+
+/// Every copy carries a last verification exactly when its digest is bound.
+async fn assert_stamped_when_hashed(catalog: &Catalog, locations: &[&Location]) {
+    for location in locations {
+        for asset in catalog.location_assets(location.id).await.unwrap() {
+            assert_eq!(
+                asset.last_verified_at.is_some(),
+                asset.fingerprint.content_sha256.is_some(),
+                "{asset:?}"
+            );
+        }
+    }
+}
+
+fn scan_file_at(root: &Path, name: &str) -> ScanFile {
+    ScanFile {
+        relative_path: NativePath::from_path(Path::new(name)),
+        fingerprint: file_fingerprint(&root.join(name)).unwrap(),
+        format: ImageFormat::Fits,
+        metadata: metadata_for(name),
+    }
+}
+
+/// Scan these files below `root` to a Completed observation in one batch.
+async fn scan_at(
+    catalog: &Catalog,
+    location: &Location,
+    root: &Path,
+    names: &[&str],
+) -> ScanOperation {
+    let operation = running_scan_of(catalog, location, root, names).await;
+    let observation = ScanObservation {
+        location_id: location.id,
+        root_identity: DiskProbe.root_identity(location).unwrap(),
+        files: names.iter().map(|name| scan_file_at(root, name)).collect(),
+        issues: Vec::new(),
+        complete_scopes: vec![root_scope()],
+        incomplete_scopes: Vec::new(),
+        progress: ScanProgress::default(),
+        state: ScanState::Completed,
+    };
+    let finished = catalog
+        .finish_scan(operation, &observation, |location| DiskProbe.root_identity(location), group)
+        .await
+        .unwrap();
+    assert_eq!(finished.state, ScanState::Completed, "{finished:?}");
+    finished
+}
+
 /// Begin a scan of `root` and apply these files in one batch, leaving it running.
 async fn running_scan_of(
     catalog: &Catalog,
@@ -2759,15 +2988,7 @@ async fn running_scan_of(
     names: &[&str],
 ) -> Uuid {
     let operation = catalog.begin_scan(location.id, None).await.unwrap();
-    let files = names
-        .iter()
-        .map(|name| ScanFile {
-            relative_path: NativePath::from_path(Path::new(name)),
-            fingerprint: file_fingerprint(&root.join(name)).unwrap(),
-            format: ImageFormat::Fits,
-            metadata: metadata_for(name),
-        })
-        .collect();
+    let files = names.iter().map(|name| scan_file_at(root, name)).collect();
     let root_identity = DiskProbe.root_identity(location).unwrap();
     let batch = ScanBatch { files, ..ScanBatch::default() };
     catalog.apply_scan_batch(operation.id, &root_identity, &batch, group).await.unwrap();
@@ -2803,6 +3024,7 @@ async fn duplicate_verification_stops_at_cancel_and_keeps_each_bound_digest() {
         .unwrap();
     assert_eq!(status.progress.duplicates_verified, 1, "stops before the next file");
     assert_eq!(hashed_assets(&catalog, &[&t7, &nas_location]).await, 1);
+    assert_stamped_when_hashed(&catalog, &[&t7, &nas_location]).await;
 
     // The bound digest survives a restart; the next readable scan does the rest.
     catalog.close().await.unwrap();
@@ -2816,6 +3038,7 @@ async fn duplicate_verification_stops_at_cancel_and_keeps_each_bound_digest() {
         catalog.verify_duplicate_candidates(operation, &work, DiskProbe, clear).await.unwrap();
     assert_eq!((status.progress.duplicate_candidates, status.progress.duplicates_verified), (3, 3));
     assert_eq!(hashed_assets(&catalog, &[&t7, &nas_location]).await, 4);
+    assert_stamped_when_hashed(&catalog, &[&t7, &nas_location]).await;
     assert!(catalog.duplicate_verification_work(operation).await.unwrap().is_empty());
     assert_eq!((tree(&fx.root), tree(&nas)), before, "sources unchanged");
 }
