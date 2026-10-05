@@ -120,9 +120,16 @@ copies read Retired, leave totals, change no file and stay named in the View.
 - **Expect (negative):** Nothing is retired before confirmation.
 - **Trace:** flow A4, cross-flow "Location offline" · LIB-FR-15 · LIB-AC-16 · D11
 
+### S11a — Confirm after the archive returns {#S11a}
+
+- **Do:** Leave the S11 review open, plug `Archive` back in until its location reads Online, then confirm **Retire location**.
+- **Expect:** Retirement is refused because the location's availability changed since the review, and a new review is required. Unplug `Archive` again and click **Retire location** to open a fresh review that reads Offline.
+- **Expect (negative):** Nothing is retired and no copy reads Retired or Missing. PlateVault reads no archived file bytes for the refusal and changes no file.
+- **Trace:** flow A4 · LIB-FR-15 · LIB-AC-16 · D11, D19
+
 ### S12 — Retire the location {#S12}
 
-- **Do:** Confirm **Retire location**. Open Sessions, NGC 7000 and `NGC7000 HOO - Siril`, and click **Open in Siril**.
+- **Do:** Confirm the fresh **Retire location** review. Open Sessions, NGC 7000 and `NGC7000 HOO - Siril`, and click **Open in Siril**.
 - **Expect:** The location reads Retired, and its 214 copies read Retired. NGC 7000 captured integration falls by exactly 17h 50m, and its usable integration reads 0h 00m. The View still lists its 208 members and six exclusions and reads Complete; each member is named unresolved and Retired. Opening is refused and names the retired inputs.
 - **Expect (negative):** No copy reads Missing. The View's membership, exclusions and prepared revision are unchanged, and no retired copy is offered as an input.
 - **Trace:** flow A4 · LIB-FR-15, VSEL-FR-09 · LIB-AC-16 · D02, D11
@@ -144,6 +151,7 @@ copies read Retired, leave totals, change no file and stay named in the View.
 - SC6: With `Archive` unplugged, Open is refused and 0 inputs are omitted (S10).
 - SC7: The drifted source is retired 0 times while it differs from its snapshot (S7a, S8); it retires only after re-verification (S9a).
 - SC8: Retiring changes 0 files and 0 copies read Missing (S12); after S13 captured integration equals its S10 value, so no capture is counted twice.
+- SC9: Confirming a review whose availability has since changed retires 0 locations (S11a).
 
 ## Known gaps
 

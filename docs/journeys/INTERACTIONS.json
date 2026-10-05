@@ -29,11 +29,11 @@
     },
     {
       "flowStep": "A4",
-      "journeyStep": "J19/S5, J19/S6, J19/S7, J19/S8, J19/S15, J28/S11, J28/S12, J28/S13",
-      "spec": "064-library-inventory LIB-FR-03, LIB-FR-07, LIB-FR-15, LIB-AC-16; 066-view-selection VSEL-FR-09; D02, D11",
-      "action": "Browse while indexing runs, recover a denied location with Retry, and take a location offline. Later review and retire a lost location, then register its folder again.",
-      "expect": "Totals are provisional and name their locations. The denied row offers Choose folder again and Retry. The offline location keeps its last-observed metadata. Retirement review names the location and its referencing sessions, Views, Projects and Results; retired copies read Retired, leave totals and stay named unresolved in fixed Views. The folder registers again as a new location.",
-      "negative": "No total implies unscanned data. Offline, denied or retired files are not reported Missing or empty. Retirement changes no file, reselect is refused afterwards, and no capture is counted twice."
+      "journeyStep": "J19/S5, J19/S6, J19/S7, J19/S8, J19/S15, J28/S11, J28/S11a, J28/S12, J28/S13",
+      "spec": "064-library-inventory LIB-FR-03, LIB-FR-07, LIB-FR-15, LIB-AC-16; 066-view-selection VSEL-FR-09; D02, D11, D19",
+      "action": "Browse while indexing runs, recover a denied location with Retry, and take a location offline. Later review retiring a lost location, meet a refusal after its availability changes, retire it from a fresh review, then register its folder again.",
+      "expect": "Totals are provisional and name their locations. The denied row offers Choose folder again and Retry. The offline location keeps its last-observed metadata. Retirement review names the location and its referencing sessions, Views, Projects and Results; confirmation after an availability change is refused until a new review. Retired copies read Retired, leave totals and stay named unresolved in fixed Views. The folder registers again as a new location.",
+      "negative": "No total implies unscanned data. Offline, denied or retired files are not reported Missing or empty. Retirement reads and changes no file, reselect is refused afterwards, and no capture is counted twice."
     },
     {
       "flowStep": "B1",

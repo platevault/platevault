@@ -31,7 +31,7 @@ Fingerprint `modifiedNs` is a signed decimal string, preserving nanoseconds acro
 | library_retry_scope | locationId, native relative subtree | New recorded scan of the failed scope; uncertain scopes never imply Missing. |
 | library_reselect_location | locationId, path, expectedDecisionRevision | Restores access only to the verified same volume/root identity; mismatch needs remap review. A Retired location is refused. |
 | library_review_retire_location | locationId | Durable reviewId naming the location, root, availability and decision revision, the assets, sessions, Views, Projects and Results that reference its copies, and that retiring deletes, moves or modifies no file. |
-| library_retire_location | reviewId, locationId, expectedRevision | Commits lifecycle Retired; copies read Retired and leave integration totals, fixed Views name them unresolved, and the root stops blocking registration. Conflict on a stale review or revision, or while an operation affecting the location is Running or unfinished. No file changes. |
+| library_retire_location | reviewId, locationId, expectedRevision | Re-reads the location, then commits lifecycle Retired; copies read Retired and leave integration totals, fixed Views name them unresolved, and the root stops blocking registration. Conflict on a stale review or revision, on availability that differs from the review, or while an operation affecting the location is Running or unfinished. Reads and changes no file bytes, so no rehash applies. |
 | library_list_operations | filters, offset, limit | Durable Activity operations, including interrupted scans after restart. |
 
 ## Errors
