@@ -4,8 +4,9 @@
 //! Isolated rebuilt library shell (spec 064): its own Tauri runtime over the
 //! clean catalog.
 //!
-//! It boots only [`Library`] and the [`crate::commands::library`] IPC surface,
-//! with the catalog in its own data directory. Nothing from the legacy
+//! It boots only [`Library`] with the [`crate::commands::library`] and
+//! [`crate::commands::project_goals`] IPC surfaces, the catalog in its own data
+//! directory. Nothing from the legacy
 //! composition root runs here: no `AppState`, legacy database, bootstrap job,
 //! watcher or legacy command registration. The legacy code stays archivable and
 //! is never booted by this binary.
@@ -42,6 +43,7 @@ use tokio::sync::broadcast::error::RecvError;
 use uuid::Uuid;
 
 use crate::commands::library as ipc;
+use crate::commands::project_goals as projects;
 
 /// Catalog directory override, used verbatim.
 pub const DATA_DIR_ENV: &str = "PV_LIBRARY_DATA_DIR";
@@ -95,6 +97,14 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ipc::library_review_retire_location,
         ipc::library_retire_location,
         ipc::library_list_operations,
+        projects::project_create,
+        projects::project_update,
+        projects::project_set_checklist,
+        projects::project_link_sessions,
+        projects::project_unlink_sessions,
+        projects::project_set_rejection,
+        projects::project_list,
+        projects::project_detail,
     ]);
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);

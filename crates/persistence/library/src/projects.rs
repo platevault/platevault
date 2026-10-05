@@ -7,22 +7,27 @@
 //! the Project tables and adds one to the revision. Nothing here reads or writes
 //! an image file or changes a library record.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
-    ChecklistItem, ChecklistItemInput, ChecklistKind, ExpectedAsset, ExpectedSession, LibraryError,
-    LinkState, PanelInput, Project, ProjectInput, ProjectPanel, ProjectQuery, ProjectRejection,
-    ProjectSessionLink, ProjectSummary, ProjectTarget, Revision, SessionLinkInput, SkyCoordinates,
-    TargetFraming,
+    ApplicableQuality, Asset, AssetReference, AssociationKind, Availability, AvailabilityShare,
+    CaptureSite, ChannelProgress, ChecklistItem, ChecklistItemInput, ChecklistKind,
+    EffectiveRejection, ExpectedAsset, ExpectedSession, LibraryError, LinkState,
+    LinkedSessionEvidence, Microseconds, PanelInput, Project, ProjectInput, ProjectPanel,
+    ProjectProgress, ProjectProgressBasis, ProjectQuery, ProjectRejection, ProjectSessionLink,
+    ProjectSummary, ProjectTarget, ReferenceKind, Revision, SessionExposure, SessionLinkInput,
+    SkyCoordinates, TargetFraming,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::{
-    check_expected_assets, check_expected_sessions, conflict, db_revision, from_json,
-    load_equipment, load_session_row, load_target, now, parse_uuid, require_revision, revision,
-    successors_of, to_json, Catalog, Result, MAX_PAGE,
+    check_expected_assets, check_expected_sessions, conflict, current_member_assets, db_revision,
+    from_json, is_light, json_ids, load_association, load_equipment, load_session_row, load_target,
+    now, oldest, parse_uuid, require_revision, revision, successors_of, summarize_rows, to_json,
+    CaptureView, Catalog, Result, MAX_PAGE,
 };
 
 impl Catalog {
@@ -318,6 +323,55 @@ impl Catalog {
             });
         }
         Ok(summaries)
+    }
+
+    /// What checklist evaluation reads, from one catalog snapshot: per exact
+    /// channel, captured, library-usable and Project-accepted integer microseconds
+    /// and logical light frames over the current members of the Current links,
+    /// each logical capture once, with per-session evidence and the effective
+    /// rejections. Reads no source, starts no rehash and writes nothing.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; `PersistenceFailure` when the catalog
+    /// cannot be read.
+    pub async fn project_progress(&self, id: Uuid) -> Result<ProjectProgressBasis> {
+        let mut conn = self.reader().await?;
+        // One deferred transaction, so every read below sees the same snapshot.
+        let mut snapshot = conn.begin().await?;
+        let basis = progress_basis(&mut snapshot, id).await?;
+        snapshot.rollback().await?;
+        Ok(basis)
+    }
+
+    /// The Projects holding any of `assets`, through a Current or `NeedsReview`
+    /// link of the session holding them or through an effective rejection. Each
+    /// reference names the asked assets it holds and carries the Project revision.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn project_references(&self, assets: &BTreeSet<Uuid>) -> Result<Vec<AssetReference>> {
+        if assets.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut conn = self.reader().await?;
+        let rows =
+            sqlx::query(PROJECT_REFERENCES).bind(json_ids(assets)?).fetch_all(&mut *conn).await?;
+        let mut references: BTreeMap<Uuid, AssetReference> = BTreeMap::new();
+        for row in &rows {
+            let id = parse_uuid(&row.try_get::<String, _>("project_id")?)?;
+            let reference = match references.entry(id) {
+                Entry::Occupied(entry) => entry.into_mut(),
+                Entry::Vacant(entry) => entry.insert(AssetReference {
+                    kind: ReferenceKind::Project,
+                    id,
+                    name: row.try_get("name")?,
+                    revision: revision(row.try_get("revision")?)?,
+                    asset_ids: Vec::new(),
+                }),
+            };
+            reference.asset_ids.push(parse_uuid(&row.try_get::<String, _>("asset_id")?)?);
+        }
+        Ok(references.into_values().collect())
     }
 }
 
@@ -709,6 +763,280 @@ async fn load_rejections(conn: &mut SqliteConnection, id: Uuid) -> Result<Vec<Pr
             })
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Progress and references
+// ---------------------------------------------------------------------------
+
+/// Projects holding asked assets through a link of the session that holds them
+/// now (Current links), the session's recorded members (links needing review)
+/// or the latest rejection decision, when it rejects.
+const PROJECT_REFERENCES: &str = "\
+    WITH asked(id) AS (SELECT value FROM json_each(?1)), \
+    held(project_id, asset_id) AS ( \
+        SELECT l.project_id, a.id FROM assets a \
+        JOIN project_session_links l ON l.session_id = a.session_id \
+        WHERE a.id IN (SELECT id FROM asked) \
+        UNION SELECT l.project_id, m.asset_id FROM session_members m \
+        JOIN project_session_links l ON l.session_id = m.session_id \
+        WHERE m.asset_id IN (SELECT id FROM asked) \
+        UNION SELECT r.project_id, r.asset_id FROM project_rejections r \
+        WHERE r.asset_id IN (SELECT id FROM asked) AND r.rejected = 1 AND r.id = ( \
+            SELECT max(x.id) FROM project_rejections x \
+            WHERE x.project_id = r.project_id AND x.asset_id = r.asset_id)) \
+    SELECT p.id AS project_id, p.name, p.revision, h.asset_id FROM held h \
+    JOIN projects p ON p.id = h.project_id ORDER BY p.id, h.asset_id";
+
+/// Availability labels in display order; Retired copies count toward no total.
+const SHARE_ORDER: [Availability; 5] = [
+    Availability::Available,
+    Availability::Offline,
+    Availability::IdentityConflict,
+    Availability::Unreadable,
+    Availability::Missing,
+];
+
+/// Per-session evidence of a Current link's logical captures.
+#[derive(Default)]
+struct SessionTally {
+    sites: Vec<CaptureSite>,
+    unknown_site_frames: u64,
+    exposures: BTreeMap<(Option<String>, Option<Microseconds>), u64>,
+}
+
+impl SessionTally {
+    #[expect(clippy::float_cmp, reason = "exact observed coordinates: no clustering tolerance")]
+    fn count(&mut self, primary: &Asset, exposure: Option<Microseconds>) {
+        let metadata = &primary.effective;
+        *self.exposures.entry((metadata.filter.clone(), exposure)).or_default() += 1;
+        let (Some(latitude_deg), Some(longitude_deg)) =
+            (metadata.site_latitude_deg, metadata.site_longitude_deg)
+        else {
+            self.unknown_site_frames += 1;
+            return;
+        };
+        match self
+            .sites
+            .iter_mut()
+            .find(|site| site.latitude_deg == latitude_deg && site.longitude_deg == longitude_deg)
+        {
+            Some(site) => site.frames += 1,
+            None => self.sites.push(CaptureSite { latitude_deg, longitude_deg, frames: 1 }),
+        }
+    }
+}
+
+/// Add a known exposure; an unknown one is counted by the caller, never added.
+fn add(total: &mut Microseconds, exposure: Option<Microseconds>) {
+    if let Some(exposure) = exposure {
+        *total = total.saturating_add(exposure);
+    }
+}
+
+/// Count one logical light capture, on its primary copy, into its channel row.
+fn count_light(
+    row: &mut ChannelProgress,
+    primary: &Asset,
+    exposure: Option<Microseconds>,
+    quality: ApplicableQuality,
+    verified_at: Option<&String>,
+    rejected: bool,
+) {
+    row.captured_frames += 1;
+    add(&mut row.captured_seconds, exposure);
+    if exposure.is_none() {
+        row.unknown_exposure_count += 1;
+    }
+    let at = primary.availability;
+    let index = row.availability.iter().position(|share| share.availability == at);
+    let index = index.unwrap_or_else(|| {
+        row.availability.push(AvailabilityShare {
+            availability: at,
+            captured_seconds: Microseconds::default(),
+            captured_frames: 0,
+        });
+        row.availability.len() - 1
+    });
+    let share = &mut row.availability[index];
+    share.captured_frames += 1;
+    add(&mut share.captured_seconds, exposure);
+    if rejected {
+        row.rejected_frames += 1;
+    }
+    match quality {
+        ApplicableQuality::Usable => {
+            row.usable_frames += 1;
+            add(&mut row.usable_seconds, exposure);
+            row.usable_last_verified_at =
+                oldest(row.usable_last_verified_at.iter().chain(verified_at));
+            if !rejected {
+                row.accepted_frames += 1;
+                add(&mut row.accepted_seconds, exposure);
+                row.accepted_last_verified_at =
+                    oldest(row.accepted_last_verified_at.iter().chain(verified_at));
+            }
+        }
+        ApplicableQuality::Unreviewed => add(&mut row.unreviewed_seconds, exposure),
+        ApplicableQuality::ChangedContent { .. } => row.drifted_decisions += 1,
+        ApplicableQuality::VerificationPending { .. } => row.verification_pending += 1,
+        ApplicableQuality::Conflicting => row.conflicting_decisions += 1,
+        ApplicableQuality::ConflictingCopies => row.conflicting_copies += 1,
+        ApplicableQuality::Unusable => {}
+    }
+}
+
+/// The progress basis of Project `id`, read on `conn`'s snapshot.
+async fn progress_basis(conn: &mut SqliteConnection, id: Uuid) -> Result<ProjectProgressBasis> {
+    let project = load_project(conn, id).await?;
+    let mut rows = Vec::with_capacity(project.links.len());
+    for link in &project.links {
+        rows.push(load_session_row(conn, link.session_id).await?);
+    }
+    // The linked session holding each asset: the recorded members of a link that
+    // needs review, overridden below by the current members of Current links.
+    let mut holder: HashMap<Uuid, Uuid> = HashMap::new();
+    for row in rows.iter().filter(|row| row.superseded_by.is_some()) {
+        for asset in &row.session.asset_ids {
+            holder.entry(*asset).or_insert(row.session.id);
+        }
+    }
+    let current: Vec<Uuid> = project
+        .links
+        .iter()
+        .filter(|link| link.state == LinkState::Current)
+        .map(|link| link.session_id)
+        .collect();
+    let mut assets = Vec::new();
+    for session in &current {
+        for asset in current_member_assets(conn, *session).await? {
+            holder.insert(asset.id, *session);
+            // Retired copies stay as history and count toward no total.
+            if asset.availability != Availability::Retired {
+                assets.push(asset);
+            }
+        }
+    }
+    let rejected: BTreeSet<Uuid> = project
+        .rejections
+        .iter()
+        .filter(|decision| decision.rejected)
+        .map(|decision| decision.asset_id)
+        .collect();
+    let view = CaptureView::read(conn, &current, &assets).await?;
+    let (progress, mut tallies) = tally_progress(&view, &assets, &holder, &rejected);
+    let summaries = summarize_rows(conn, rows).await?;
+    let mut sessions = Vec::with_capacity(project.links.len());
+    for (link, summary) in project.links.iter().zip(summaries) {
+        let tally = tallies.remove(&link.session_id).unwrap_or_default();
+        sessions.push(LinkedSessionEvidence {
+            session_id: link.session_id,
+            panel_id: link.panel_id,
+            state: link.state,
+            successors: link.successors.clone(),
+            summary,
+            capture_sites: tally.sites,
+            unknown_site_frames: tally.unknown_site_frames,
+            exposures: tally
+                .exposures
+                .into_iter()
+                .map(|((channel, exposure_seconds), frames)| SessionExposure {
+                    channel,
+                    exposure_seconds,
+                    frames,
+                })
+                .collect(),
+            equipment: load_association(conn, link.session_id, AssociationKind::Equipment).await?,
+        });
+    }
+    let rejections = project
+        .rejections
+        .iter()
+        .filter(|decision| decision.rejected)
+        .map(|decision| EffectiveRejection {
+            asset_id: decision.asset_id,
+            session_id: holder.get(&decision.asset_id).copied(),
+            decided_at: decision.decided_at.clone(),
+            project_revision: decision.project_revision,
+        })
+        .collect();
+    Ok(ProjectProgressBasis {
+        project_id: project.id,
+        project_revision: project.revision,
+        progress,
+        sessions,
+        rejections,
+    })
+}
+
+/// Per-channel progress of these current members, each logical capture once on
+/// its primary copy, and the per-session evidence of the session holding it.
+fn tally_progress(
+    view: &CaptureView,
+    assets: &[Asset],
+    holder: &HashMap<Uuid, Uuid>,
+    rejected: &BTreeSet<Uuid>,
+) -> (ProjectProgress, HashMap<Uuid, SessionTally>) {
+    let mut locations = BTreeSet::new();
+    let mut channels: BTreeMap<Option<String>, ChannelProgress> = BTreeMap::new();
+    let mut tallies: HashMap<Uuid, SessionTally> = HashMap::new();
+    for (key, present) in view.group(assets) {
+        locations.extend(present.iter().map(|asset| asset.location_id));
+        // Each logical capture counts once, on an available copy when there is one.
+        let Some(primary) = present.iter().min_by_key(|asset| {
+            (asset.availability != Availability::Available, asset.location_id, asset.id)
+        }) else {
+            continue;
+        };
+        let exposure = primary.effective.exposure_seconds.and_then(Microseconds::from_seconds);
+        tallies.entry(holder[&primary.id]).or_default().count(primary, exposure);
+        let light = is_light(&primary.effective);
+        if light == Some(false) {
+            continue;
+        }
+        let channel = primary.effective.filter.clone();
+        let row = channels
+            .entry(channel.clone())
+            .or_insert_with(|| ChannelProgress { channel, ..ChannelProgress::default() });
+        if light.is_none() {
+            row.unknown_image_type_count += 1;
+            continue;
+        }
+        if candidate(view, primary) {
+            row.duplicate_candidates += 1;
+        }
+        let quality = view.quality(&key);
+        let verified_at =
+            if quality == ApplicableQuality::Usable { view.verified_at(&key) } else { None };
+        let rejected = view.copies_of(&key).iter().any(|copy| rejected.contains(&copy.id));
+        count_light(row, primary, exposure, quality, verified_at.as_ref(), rejected);
+    }
+    for row in channels.values_mut() {
+        row.availability
+            .sort_by_key(|share| SHARE_ORDER.iter().position(|state| *state == share.availability));
+    }
+    for tally in tallies.values_mut() {
+        tally.sites.sort_by(|left, right| {
+            left.latitude_deg
+                .total_cmp(&right.latitude_deg)
+                .then(left.longitude_deg.total_cmp(&right.longitude_deg))
+        });
+    }
+    let provisional = locations.iter().any(|location| view.location_provisional(*location))
+        || assets.iter().any(|asset| candidate(view, asset));
+    let unknown_channel = channels.remove(&None);
+    let progress = ProjectProgress {
+        channels: channels.into_values().collect(),
+        unknown_channel,
+        provisional,
+        covered_location_ids: locations.into_iter().collect(),
+    };
+    (progress, tallies)
+}
+
+/// An unhashed copy matching a copy in another location: totals stay provisional.
+fn candidate(view: &CaptureView, asset: &Asset) -> bool {
+    view.candidates.contains(&asset.id)
 }
 
 #[cfg(test)]

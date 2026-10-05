@@ -16,13 +16,14 @@ use uuid::Uuid;
 
 use crate::grouping::group_assets;
 use crate::inventory;
+use crate::projects::evaluate_checklist;
 use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
 };
 use crate::{
     AssetReference, AssociationKind, AssociationState, Availability, FileIdentity, LibraryError,
-    Location, LocationRole, NativePath, ObservationFingerprint, ReferenceKind, RemapReview,
-    RetireReview, Revision, ScanOperation, ScanOptions, ScanState, TargetCandidate,
+    Location, LocationRole, NativePath, ObservationFingerprint, ProjectDetail, ReferenceKind,
+    RemapReview, RetireReview, Revision, ScanOperation, ScanOptions, ScanState, TargetCandidate,
 };
 use persistence_library::{
     Catalog, CorrectionOutcome, LocationReferences, LocationRegistration, SessionDetail,
@@ -43,6 +44,22 @@ pub trait AssetReferences: Send + Sync + 'static {
     fn kind(&self) -> ReferenceKind;
     /// Every record that holds any of `assets`, each naming which of them.
     fn references_to<'a>(&'a self, assets: &'a BTreeSet<Uuid>) -> ReferencesFuture<'a>;
+}
+
+/// Projects (spec 065) as a reference source: a Project holds the assets of its
+/// linked sessions and of its effective rejections.
+struct ProjectReferences {
+    catalog: Arc<Catalog>,
+}
+
+impl AssetReferences for ProjectReferences {
+    fn kind(&self) -> ReferenceKind {
+        ReferenceKind::Project
+    }
+
+    fn references_to<'a>(&'a self, assets: &'a BTreeSet<Uuid>) -> ReferencesFuture<'a> {
+        Box::pin(self.catalog.project_references(assets))
+    }
 }
 
 pub struct Library {
@@ -105,8 +122,9 @@ impl persistence_library::SourceProbe for InventoryProbe {
 }
 
 impl Library {
-    /// Open a fresh-schema catalog and load the offline target dataset.
-    /// Interrupted scan recovery is owned by the catalog.
+    /// Open a fresh-schema catalog and load the offline target dataset, with the
+    /// catalog's Projects registered as a reference source. Interrupted scan
+    /// recovery is owned by the catalog.
     ///
     /// # Errors
     /// Returns catalog persistence, seed validation or provider configuration errors.
@@ -118,6 +136,8 @@ impl Library {
         let targets = blocking(TargetIndex::bundled).await?;
         let provider = provider.map(SimbadTargetResolver::simbad).transpose()?;
         let (progress, _) = broadcast::channel(128);
+        let projects: Arc<dyn AssetReferences> =
+            Arc::new(ProjectReferences { catalog: Arc::clone(&catalog) });
         Ok(Arc::new(Self {
             catalog,
             targets: Arc::new(targets),
@@ -125,7 +145,7 @@ impl Library {
             scans: Mutex::new(HashMap::new()),
             saved_targets: Mutex::new(None),
             progress,
-            references: tokio::sync::RwLock::new(Vec::new()),
+            references: tokio::sync::RwLock::new(vec![projects]),
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         }))
@@ -194,6 +214,32 @@ impl Library {
     /// Register a feature's records that hold asset ids (see [`AssetReferences`]).
     pub async fn register_references(&self, source: Arc<dyn AssetReferences>) {
         self.references.write().await.push(source);
+    }
+
+    /// A Project with its linked-session evidence, per-channel progress, checklist
+    /// progress and effective rejections, all at one Project revision. Read-only:
+    /// it reads no source, starts no rehash and changes no Project field.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; `PersistenceFailure` when the catalog
+    /// cannot be read.
+    pub async fn project_detail(&self, id: Uuid) -> Result<ProjectDetail, LibraryError> {
+        loop {
+            let basis = self.catalog.project_progress(id).await?;
+            let project = self.catalog.project(id).await?;
+            // A Project write committed between the reads: evaluate one revision.
+            if project.revision != basis.project_revision {
+                continue;
+            }
+            let checklist = evaluate_checklist(&project, &basis);
+            return Ok(ProjectDetail {
+                project,
+                links: basis.sessions,
+                progress: basis.progress,
+                checklist,
+                rejections: basis.rejections,
+            });
+        }
     }
 
     /// Durably review Retire location, naming the Views, Projects and Results of
