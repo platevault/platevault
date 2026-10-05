@@ -37,7 +37,6 @@ export function ViewNotFound() {
 
 function InputCell({ row }: { row: RequirementRow }) {
   const kind = KIND_LABEL[row.kind].toLowerCase()
-  if (row.state === "excluded") return <span className="text-muted-foreground">Not handed off</span>
   if (row.state === "deferred") return <span className="text-muted-foreground">Decision deferred</span>
   if (!row.source) {
     return (
@@ -175,11 +174,7 @@ export function ViewCalibrationArea() {
                 >
                   Defer
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => run(() => decideRow(view, row, { state: "excluded", input: null, criteria: [] }, `Hand off without a ${kind}`), `The ${name} will not be handed off.`)}
-                >
-                  Hand off without a {kind}
-                </DropdownMenuItem>
+                <DropdownMenuItem render={<Link to="/views/$viewId/sessions" params={{ viewId: view.id }} />}>Exclude the session…</DropdownMenuItem>
                 {row.assignment ? (
                   <>
                     <DropdownMenuSeparator />
@@ -211,7 +206,6 @@ export function ViewCalibrationArea() {
             {plan.counts.suggested + pendingCount ? <StatusBadge kind="assignment" value="suggested" label={`${formatCount(plan.counts.suggested + pendingCount)} Suggested`} /> : null}
             {plan.counts.unresolved ? <StatusBadge kind="assignment" value="unresolved" label={`${formatCount(plan.counts.unresolved)} Unresolved`} /> : null}
             {plan.counts.deferred ? <StatusBadge kind="assignment" value="deferred" label={`${formatCount(plan.counts.deferred)} Deferred`} /> : null}
-            {plan.counts.excluded ? <StatusBadge kind="assignment" value="excluded" label={`${formatCount(plan.counts.excluded)} Excluded`} /> : null}
             {plan.drifted ? <StatusBadge kind="content" value="drifted" label={`${formatCount(plan.drifted)} Drifted`} /> : null}
           </span>
         }
@@ -268,7 +262,7 @@ export function ViewCalibrationArea() {
           <>
             {blockingCount > 0 ? (
               <Notice tone="warning" title={`${plural(blockingCount, "requirement")} not resolved`}>
-                Review preparation stays blocked until each is accepted, resolved with an exception or another input, or handed off without that kind. Deferred items also block
+                Review preparation stays blocked until each is accepted, resolved with an exception or another input, or its session is excluded. Deferred items also block
                 {plan.drifted ? ", and so does an input whose bytes changed since it was accepted" : ""}.
               </Notice>
             ) : (

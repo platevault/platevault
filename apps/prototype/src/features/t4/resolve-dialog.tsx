@@ -1,11 +1,13 @@
 /**
  * Resolve one calibration requirement (CAL-FR-05, J23 S5-S6): choose another
- * input, record a scoped exception with a reason, defer, or hand off without
- * this kind. Choosing a non-compatible input without a reason stores it as
- * Unresolved (CAL-AC-02); only a reason makes it an exception. The criterion
- * and the reason are both kept, and the input's evidence never changes.
+ * input, exclude the session from the View, defer, or record a scoped
+ * exception with a reason. Choosing a non-compatible input without a reason
+ * stores it as Unresolved (CAL-AC-02); only a reason makes it an exception.
+ * The criterion and the reason are both kept, and the input's evidence never
+ * changes. Excluding the session is a View membership change, made and saved
+ * in Sessions in this View (VSEL-FR-12).
  */
-import { Link } from "@tanstack/react-router"
+import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useId, useState } from "react"
 import { ActionError } from "@/components/app/feedback"
 import { StatusBadge } from "@/components/app/status"
@@ -24,7 +26,6 @@ type Choice = { type: "input"; key: string } | { type: "defer" } | { type: "excl
 
 function initialChoice(row: RequirementRow, preferException: boolean): string {
   if (row.state === "deferred") return "defer"
-  if (row.state === "excluded") return "exclude"
   const current = row.input ?? row.closest?.source.input ?? null
   if (preferException) {
     const nonCompatible = row.candidates.find((c) => !c.summary.allCompatible && (current ? sameInput(c.source.input, current) : true)) ?? row.candidates.find((c) => !c.summary.allCompatible)
@@ -42,6 +43,7 @@ export interface ResolveDialogProps {
 }
 
 export function ResolveDialog({ view, row, preferException, onOpenChange }: ResolveDialogProps) {
+  const navigate = useNavigate()
   const [value, setValue] = useState("defer")
   const [reason, setReason] = useState("")
   const [reasonError, setReasonError] = useState<string | null>(null)
@@ -74,8 +76,9 @@ export function ResolveDialog({ view, row, preferException, onOpenChange }: Reso
       decision = { state: "deferred", input: null, criteria: [] }
       label = `Defer ${kind} for ${sessionLabel(row.member.session)}`
     } else if (choice.type === "exclude") {
-      decision = { state: "excluded", input: null, criteria: [] }
-      label = `Hand off without a ${kind} for ${sessionLabel(row.member.session)}`
+      onOpenChange(false)
+      void navigate({ to: "/views/$viewId/sessions", params: { viewId: view.id } })
+      return
     } else if (candidate && needsReason) {
       if (!reason.trim() && preferException) {
         setReasonError("Enter a reason for this exception. It is kept with the criteria that are not compatible.")
@@ -113,7 +116,7 @@ export function ResolveDialog({ view, row, preferException, onOpenChange }: Reso
     choice.type === "defer"
       ? "Defer this decision"
       : choice.type === "exclude"
-        ? `Hand off without a ${kind}`
+        ? "Open Sessions in this View"
         : needsReason
           ? reason.trim() || preferException
             ? "Record exception"
@@ -128,7 +131,7 @@ export function ResolveDialog({ view, row, preferException, onOpenChange }: Reso
             Resolve {kind} for {sessionLabel(row.member.session)}
           </DialogTitle>
           <DialogDescription>
-            {plural(row.member.included.length, "frame")} in this View. Choose an input, record an exception with a reason, defer, or hand off without a {kind}.
+            {plural(row.member.included.length, "frame")} in this View. Choose another input, exclude the session, defer, or record an exception with a reason.
           </DialogDescription>
         </DialogHeader>
         <fieldset className="space-y-2">
@@ -172,8 +175,10 @@ export function ResolveDialog({ view, row, preferException, onOpenChange }: Reso
             <label className={cn("flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 text-sm hover:bg-muted/60", value === "exclude" && "border-primary bg-primary/8")}>
               <RadioGroupItem value="exclude" className="mt-0.5" />
               <span className="space-y-0.5">
-                <span className="block font-medium">Hand off without a {kind}</span>
-                <span className="block text-xs text-muted-foreground">The application receives no {kind} for these lights. The frames stay in the View.</span>
+                <span className="block font-medium">Exclude the session</span>
+                <span className="block text-xs text-muted-foreground">
+                  Remove {sessionLabel(row.member.session)} from this View in Sessions in this View, then save the View. Its files stay where they are.
+                </span>
               </span>
             </label>
           </RadioGroup>
@@ -206,13 +211,6 @@ export function ResolveDialog({ view, row, preferException, onOpenChange }: Reso
             ) : null}
           </div>
         ) : null}
-        <p className="text-xs text-muted-foreground">
-          To drop these lights from the View instead, use{" "}
-          <Link to="/views/$viewId/sessions" params={{ viewId: view.id }} className="text-primary underline-offset-4 hover:underline">
-            Sessions in this View
-          </Link>
-          .
-        </p>
         {error ? <ActionError message={error} onRetry={submit} /> : null}
         <DialogFooter>
           {row.assignment ? (

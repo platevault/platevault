@@ -126,7 +126,6 @@ export const STATUS = {
     suggested: s("Suggested", "info", CircleDot),
     accepted: s("Accepted", "success", Check),
     exception: s("Exception", "warning", Wrench),
-    excluded: s("Excluded", "neutral", CircleSlash),
     deferred: s("Deferred", "muted", Clock),
     unresolved: s("Unresolved", "warning", CircleHelp),
   },

@@ -660,7 +660,7 @@ export interface CalibrationAssignment {
   kind: CalibrationKind
   input: CalibrationInput | null
   /** Suggestions never enter a verified handoff until accepted. */
-  state: "suggested" | "accepted" | "exception" | "excluded" | "deferred" | "unresolved"
+  state: "suggested" | "accepted" | "exception" | "deferred" | "unresolved"
   criteria: MatchCriterion[]
   /** View-scoped; never rewrites master evidence. */
   exception: { reason: string; at: IsoDateTime } | null

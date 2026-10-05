@@ -224,11 +224,6 @@ function ReviewPanel({ view, plan, confirmed, onConfirmChange, onPrepare, error 
                 . Reason: “{r.assignment?.exception?.reason}”
               </p>
             ))}
-            {plan.calibration.rows.filter((r) => r.state === "excluded").map((r) => (
-              <p key={r.key} className="text-xs text-muted-foreground">
-                {sessionLabel(r.member.session)}: handed off without a {KIND_LABEL[r.kind].toLowerCase()}.
-              </p>
-            ))}
             {plan.calibration.blocking.length > 0 ? (
               <Notice tone="refusal" title={`${plural(plan.calibration.blocking.length, "requirement")} unresolved`} actions={<Button size="sm" variant="outline" render={<Link to="/views/$viewId/calibration" params={{ viewId: view.id }} />}>Resolve in Calibration</Button>}>
                 {plan.calibration.blocking
@@ -244,7 +239,7 @@ function ReviewPanel({ view, plan, confirmed, onConfirmChange, onPrepare, error 
                     return `${sessionLabel(r.member.session)} ${KIND_LABEL[r.kind].toLowerCase()} (${status})`
                   })
                   .join("; ")}
-                . Choose another input, record a scoped exception with a reason, hand off without it, or defer preparation. Unaccepted suggestions are never handed off.
+                . Choose another input, exclude the session, defer preparation, or record a scoped exception with a reason. Unaccepted suggestions are never handed off.
               </Notice>
             ) : null}
           </section>

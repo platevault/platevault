@@ -117,7 +117,7 @@ export function WhyThisMatchSheet({ row, viewId, applicationName, onOpenChange, 
                 </section>
               ) : (
                 <Notice tone="warning" title={`No ${kind} candidate in the library`}>
-                  No master or raw set of this kind is indexed. Add a calibration location or hand off without a {kind}.
+                  No master or raw set of this kind is indexed. Add a calibration location, or exclude the session in Sessions in this View.
                 </Notice>
               )}
               {row.criteria.length > 0 ? (

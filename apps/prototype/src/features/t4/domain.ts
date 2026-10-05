@@ -541,7 +541,7 @@ export function calibrationPlan(catalog: Catalog, disk: Disk, view: View, conten
     if (group) group.rows.push(row)
     else groups.push({ key: row.groupKey, label: row.groupLabel, rows: [row] })
   }
-  const counts: Record<RowState, number> = { suggested: 0, accepted: 0, exception: 0, excluded: 0, deferred: 0, unresolved: 0 }
+  const counts: Record<RowState, number> = { suggested: 0, accepted: 0, exception: 0, deferred: 0, unresolved: 0 }
   for (const row of rows) counts[row.state] += 1
   const blocking = rows.filter((r) => r.state === "suggested" || r.state === "deferred" || r.state === "unresolved" || r.drift !== null)
   return { rows, groups, counts, drifted: rows.filter((r) => r.drift !== null).length, blocking }
