@@ -108,12 +108,9 @@ export function Notice({ tone, title, children, actions, className }: NoticeProp
     <Alert role={meta.role} className={cn("px-3 py-2.5", meta.className, className)}>
       <Icon aria-hidden="true" />
       <AlertTitle>{title}</AlertTitle>
-      {children || actions ? (
-        <AlertDescription className="space-y-2">
-          {children ? <div>{children}</div> : null}
-          {actions ? <div className="flex flex-wrap gap-2 pt-1">{actions}</div> : null}
-        </AlertDescription>
-      ) : null}
+      {children ? <AlertDescription>{children}</AlertDescription> : null}
+      {/* Actions sit outside the muted description so each keeps its own button style (no link underline). */}
+      {actions ? <div className="flex flex-wrap gap-2 pt-1.5 group-has-[>svg]/alert:col-start-2">{actions}</div> : null}
     </Alert>
   )
 }

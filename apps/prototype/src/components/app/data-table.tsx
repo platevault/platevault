@@ -400,7 +400,8 @@ export function TableToolbar({
 /**
  * Selection summary for multi-select tables (VSEL-FR-06): how many are
  * selected, how many of those are hidden by the current filters, and the
- * bulk actions that apply. Renders nothing when nothing is selected.
+ * bulk actions that apply. With nothing selected only an empty live region
+ * stays mounted, so the first count is announced too (WCAG 4.1.3).
  */
 export function SelectionBar({
   count,
@@ -422,13 +423,21 @@ export function SelectionBar({
   actions?: ReactNode
 }) {
   const clearReasonId = useId()
-  if (count === 0) return null
+  const live = (
+    <span className={count === 0 ? undefined : "font-medium tabular-nums"} aria-live="polite">
+      {count === 0 ? null : (
+        <>
+          {count} {count === 1 ? noun : `${noun}s`} selected
+          {hiddenByFilters > 0 ? <span className="font-normal text-muted-foreground"> · Selected outside current filters: {hiddenByFilters}</span> : null}
+        </>
+      )}
+    </span>
+  )
+  // Out of the layout flow, so an empty bar adds no gap between its siblings.
+  if (count === 0) return <div className="sr-only">{live}</div>
   return (
     <div role="region" aria-label="Selection" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/8 px-3 py-1.5 text-sm">
-      <span className="font-medium tabular-nums" aria-live="polite">
-        {count} {count === 1 ? noun : `${noun}s`} selected
-        {hiddenByFilters > 0 ? <span className="font-normal text-muted-foreground"> · Selected outside current filters: {hiddenByFilters}</span> : null}
-      </span>
+      {live}
       {onShowSelected ? (
         <Button size="sm" variant="ghost" onClick={onShowSelected}>
           Show selected

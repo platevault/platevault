@@ -61,7 +61,7 @@ export function PageHeader({ title, description, eyebrow, meta, actions, classNa
         </div>
         {description ? <p className="max-w-prose text-sm text-pretty text-muted-foreground">{description}</p> : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div> : null}
     </header>
   )
 }
@@ -111,12 +111,18 @@ export interface ListDetailProps {
 
 /**
  * List + detail pattern: the list stays visible while the detail changes.
- * At 1024 px the list keeps 18rem and the detail takes the rest.
+ * At 1024 px the list keeps 18rem and the detail takes the rest. Below
+ * 768 px the panes stack and scroll with the page (WCAG 1.4.10).
  */
 export function ListDetail({ list, detail, listLabel, className }: ListDetailProps) {
   return (
-    <div className={cn("grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[22rem_minmax(0,1fr)]", className)}>
-      <nav aria-label={listLabel} className="min-h-0 overflow-y-auto border-r">
+    <div
+      className={cn(
+        "grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] max-md:flex-none max-md:grid-cols-1 xl:grid-cols-[22rem_minmax(0,1fr)]",
+        className,
+      )}
+    >
+      <nav aria-label={listLabel} className="min-h-0 overflow-y-auto border-r max-md:border-r-0 max-md:border-b">
         {list}
       </nav>
       <div className="min-h-0 min-w-0 overflow-y-auto">{detail}</div>

@@ -4,7 +4,7 @@
  */
 import { Link, Outlet, useRouterState } from "@tanstack/react-router"
 import { Aperture, FlaskConical, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
-import { type ReactNode, useEffect, useState } from "react"
+import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { EmptyState, LiveAnnouncer } from "@/components/app/feedback"
 import { useDocumentTitle } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Kbd } from "@/components/ui/kbd"
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { t1Shell } from "@/features/t1/shell"
@@ -90,14 +91,27 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   )
 }
 
-function Sidebar() {
-  const { sidebarCollapsed: collapsed } = useShellUi()
+/**
+ * Below 768 px (WCAG 1.4.10 reflow, 1280 px at 200 % and up) the sidebar
+ * leaves the layout and opens as an overlay from the header instead.
+ */
+const NARROW_QUERY = "(max-width: 767.98px)"
+
+function useNarrowViewport(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      const query = window.matchMedia(NARROW_QUERY)
+      query.addEventListener("change", listener)
+      return () => query.removeEventListener("change", listener)
+    },
+    () => window.matchMedia(NARROW_QUERY).matches,
+  )
+}
+
+function SidebarContent({ collapsed }: { collapsed: boolean }) {
   return (
-    <aside
-      className={cn("flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground", collapsed ? "w-12" : "w-56")}
-      aria-label="Sidebar"
-    >
-      <div className={cn("flex h-11 items-center gap-2 border-b border-sidebar-border px-3", collapsed && "justify-center px-0")}>
+    <>
+      <div className={cn("flex h-11 shrink-0 items-center gap-2 border-b border-sidebar-border px-3", collapsed && "justify-center px-0")}>
         <Aperture aria-hidden="true" className="size-5 shrink-0 text-primary" />
         {collapsed ? <span className="sr-only">PlateVault</span> : <span className="font-semibold">PlateVault</span>}
       </div>
@@ -129,7 +143,55 @@ function Sidebar() {
           ))}
         </ul>
       </div>
+    </>
+  )
+}
+
+function Sidebar() {
+  const { sidebarCollapsed: collapsed } = useShellUi()
+  return (
+    <aside
+      className={cn("flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground", collapsed ? "w-12" : "w-56")}
+      aria-label="Sidebar"
+    >
+      <SidebarContent collapsed={collapsed} />
     </aside>
+  )
+}
+
+/**
+ * The sidebar as an overlay below 768 px, opened from the header. Choosing a
+ * link closes it and focus moves to the new page's heading; Escape or the
+ * backdrop returns focus to the menu button.
+ */
+function SidebarDrawer() {
+  const [open, setOpen] = useState(false)
+  const navigated = useRef(false)
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (next) navigated.current = false
+        setOpen(next)
+      }}
+    >
+      <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open navigation" />}>
+        <PanelLeftOpen aria-hidden="true" />
+      </SheetTrigger>
+      <SheetContent
+        side="left"
+        className="w-64 max-w-[85vw] gap-0 bg-sidebar p-0 text-sidebar-foreground"
+        finalFocus={() => (navigated.current ? (routeFocusTarget(null) ?? true) : true)}
+        onClick={(event) => {
+          if (!(event.target as Element).closest("a[href]")) return
+          navigated.current = true
+          setOpen(false)
+        }}
+      >
+        <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <SidebarContent collapsed={false} />
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -158,7 +220,7 @@ function ThemeMenu() {
 }
 
 /** Header status area: running work, interrupted work and offline locations. */
-function StatusArea() {
+function StatusArea({ narrow }: { narrow: boolean }) {
   const running = useStore((s) => Object.values(s.operations).filter((op) => op.status === "running"))
   const interrupted = useStore((s) => Object.values(s.operations).filter((op) => op.status === "interrupted").length)
   const offline = useStore((s) => Object.values(s.catalog.locations).filter((l) => !s.disk.volumes[l.volumeId]?.mounted))
@@ -196,18 +258,27 @@ function StatusArea() {
           <span className="hidden xl:inline">{offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}</span>
         </Button>
       ) : null}
-      <Button variant="outline" size="sm" onClick={() => openPanel("simulation")}>
+      <Button variant="outline" size={narrow ? "icon-sm" : "sm"} onClick={() => openPanel("simulation")}>
         <FlaskConical data-icon="inline-start" aria-hidden="true" />
-        Prototype
+        <span className={cn(narrow && "sr-only")}>Prototype</span>
       </Button>
       <ThemeMenu />
     </div>
   )
 }
 
-function PaletteTrigger() {
+/** The palette trigger keeps its whole label from 768 px up; below that it is an icon button with the same name. */
+function PaletteTrigger({ narrow }: { narrow: boolean }) {
+  if (narrow) {
+    return (
+      <Button variant="outline" size="icon-sm" className="text-muted-foreground" onClick={() => openPanel("palette")}>
+        <Search aria-hidden="true" />
+        <span className="sr-only">Search or jump to…</span>
+      </Button>
+    )
+  }
   return (
-    <Button variant="outline" size="sm" className="w-44 min-w-0 shrink justify-start text-muted-foreground xl:w-72" onClick={() => openPanel("palette")}>
+    <Button variant="outline" size="sm" className="w-60 min-w-0 shrink justify-start text-muted-foreground xl:w-72" onClick={() => openPanel("palette")}>
       <Search data-icon="inline-start" aria-hidden="true" />
       <span className="min-w-0 flex-1 truncate text-left">Search or jump to…</span>
       <Kbd>{MOD_LABEL} K</Kbd>
@@ -243,11 +314,7 @@ function useRouteFocus(): string {
       const lost = !active || active === document.body || !active.isConnected
       const anchor = anchorId ? document.getElementById(anchorId) : null
       if (!lost && !(force && anchor)) return
-      const main = document.getElementById("main")
-      const target = anchor ?? main?.querySelector<HTMLElement>("h1") ?? main
-      if (!target) return
-      if (!target.hasAttribute("tabindex") && target.tabIndex < 0) target.setAttribute("tabindex", "-1")
-      target.focus()
+      routeFocusTarget(anchorId)?.focus()
     }
     const frame = requestAnimationFrame(() => {
       pendingRoute = null
@@ -262,6 +329,15 @@ function useRouteFocus(): string {
     }
   }, [route])
   return announcement
+}
+
+/** Where focus lands after a navigation: the URL's anchor, else the page h1, else #main. */
+function routeFocusTarget(anchorId: string | null): HTMLElement | null {
+  const anchor = anchorId ? document.getElementById(anchorId) : null
+  const main = document.getElementById("main")
+  const target = anchor ?? main?.querySelector<HTMLElement>("h1") ?? main
+  if (target && !target.hasAttribute("tabindex") && target.tabIndex < 0) target.setAttribute("tabindex", "-1")
+  return target
 }
 
 /** The single scroll container; the skip link targets it. */
@@ -280,18 +356,23 @@ function MainArea({ children }: { children: ReactNode }) {
 /** Sidebar, header and main area; the page goes in `children`. */
 function AppFrame({ children }: { children: ReactNode }) {
   const { sidebarCollapsed } = useShellUi()
+  const narrow = useNarrowViewport()
   return (
     <div className="flex h-dvh overflow-hidden">
       <SkipLink />
-      <Sidebar />
+      {narrow ? null : <Sidebar />}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="z-20 flex h-11 min-w-0 shrink-0 items-center gap-2 border-b px-2">
-          <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
-            {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
-          </Button>
-          <PaletteTrigger />
+        <header className="z-20 flex min-h-11 min-w-0 shrink-0 flex-wrap items-center gap-2 border-b px-2 py-1">
+          {narrow ? (
+            <SidebarDrawer />
+          ) : (
+            <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
+              {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+            </Button>
+          )}
+          <PaletteTrigger narrow={narrow} />
           <div className="min-w-0 flex-1" />
-          <StatusArea />
+          <StatusArea narrow={narrow} />
         </header>
         <MainArea>{children}</MainArea>
       </div>
