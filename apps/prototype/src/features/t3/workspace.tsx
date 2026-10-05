@@ -362,6 +362,8 @@ export function ViewWorkspacePage() {
       <div className="flex min-h-0 flex-1 flex-col">
         <PageHeader
           title={view.name}
+          // The title column keeps at least 20rem: when the actions (Reopen View on a Complete View) do not fit beside it, they wrap under the title instead of squeezing it.
+          className="[&>:first-child]:basis-80"
           eyebrow={
             <span className="flex flex-wrap items-center gap-1">
               <Link to="/views" className="hover:text-foreground hover:underline">

@@ -53,7 +53,7 @@ export function PageHeader({ title, description, eyebrow, meta, actions, classNa
   const Heading = level === 1 ? "h1" : "h2"
   return (
     <header className={cn("flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b px-6 py-4", className)}>
-      <div className="min-w-0 flex-1 space-y-1">
+      <div className="min-w-0 flex-[1_1_16rem] space-y-1">
         {eyebrow ? <div className="text-xs text-muted-foreground">{eyebrow}</div> : null}
         <div className="flex flex-wrap items-center gap-2">
           <Heading className={cn("font-semibold text-balance", level === 1 ? "text-lg" : "text-base")}>{title}</Heading>

@@ -261,7 +261,6 @@ export function SessionsArea() {
         }
       />
       <PageBody className="space-y-4">
-        {readOnlyReason ? <p className="text-sm text-muted-foreground">{readOnlyReason}</p> : null}
         {summary.unavailableSessions.map(({ session, members, state, locationId }) => {
           // The location holding the copies in this state, so "on Archive" names where they are, not the first-seen copy.
           const location = locationId ? catalog.locations[locationId] : undefined
@@ -338,7 +337,7 @@ export function SessionsArea() {
           hiddenByFilters={hiddenSelected}
           noun="session"
           onShowSelected={() => setSessionFilters(view.id, { ...defaultSessionFilters(), scope: filters.scope, selectedOnly: true })}
-          // Read-only Views (Complete, recovered draft) disable Clear with the same reason as Select matching (D09).
+          // Read-only Views (Complete, recovered draft) disable Clear with the workspace reason, shown once here (D09).
           onClear={() => setClearOpen(true)}
           clearDisabledReason={readOnlyReason ?? undefined}
         />
@@ -366,7 +365,8 @@ export function SessionsArea() {
                   Select matching ({shown.filter((r) => !r.reason).length})
                 </Button>
                 {matchReason ? (
-                  <span id={`${view.id}-match-reason`} className="text-xs text-muted-foreground">
+                  // The read-only reason is already shown beside Clear selection: keep it for assistive tech only.
+                  <span id={`${view.id}-match-reason`} className={editable ? "text-xs text-muted-foreground" : "sr-only"}>
                     {matchReason}
                   </span>
                 ) : null}

@@ -61,15 +61,29 @@ export function RevealLocation({ path, label = "Reveal location" }: { path: stri
 
 /**
  * Prototype controls stand in for events outside PlateVault. They are
- * labelled as such and never write the catalog.
+ * labelled as such and never write the catalog. `headingLevel` is 4 when the
+ * box sits inside an h3 section.
  */
-export function PrototypeControls({ title = "Prototype controls", description, children, outcome }: { title?: string; description: ReactNode; children: ReactNode; outcome?: ControlOutcome | null }) {
+export function PrototypeControls({
+  title = "Prototype controls",
+  description,
+  children,
+  outcome,
+  headingLevel = 3,
+}: {
+  title?: string
+  description: ReactNode
+  children: ReactNode
+  outcome?: ControlOutcome | null
+  headingLevel?: 3 | 4
+}) {
+  const Heading = headingLevel === 4 ? "h4" : "h3"
   return (
     <section aria-label={title} className="space-y-3 rounded-lg border border-dashed p-4">
       <div className="flex items-start gap-2">
         <FlaskConical aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <div className="space-y-0.5">
-          <h3 className="text-sm font-semibold">{title}</h3>
+          <Heading className="text-sm font-semibold">{title}</Heading>
           <p className="text-xs text-pretty text-muted-foreground">Prototype: stands in for a change outside PlateVault. {description}</p>
         </div>
       </div>

@@ -239,12 +239,12 @@ export function openApplication(view: View, preparationId: PreparationId): OpenO
     if (unavailable.length > 0) {
       // Availability is read live, so nothing durable is written: reconnecting and opening again re-verifies.
       const text = unavailableText(appName, unavailable, changed.length)
-      recordActivity({ kind: "operation", title: `Open in ${appName} refused`, detail: text, operationId: null, href: `/views/${view.id}/prepare` })
+      recordActivity({ kind: "refusal", title: `Open in ${appName} refused`, detail: text, operationId: null, href: `/views/${view.id}/prepare` })
       return { outcome: "unavailable", message: text, result: { ok: true }, unavailable }
     }
     if (changed.length > 0) {
       const text = `${appName} was not opened: ${plural(changed.length, "prepared entry", "prepared entries")} no longer ${changed.length === 1 ? "matches" : "match"} the preparation snapshot. PlateVault wrote nothing to the sources or the entries.`
-      recordActivity({ kind: "operation", title: `Open in ${appName} refused`, detail: text, operationId: null, href: `/views/${view.id}/prepare` })
+      recordActivity({ kind: "refusal", title: `Open in ${appName} refused`, detail: text, operationId: null, href: `/views/${view.id}/prepare` })
       return { outcome: "unverified", message: text, result: { ok: true } }
     }
     if (app.launchFails) {

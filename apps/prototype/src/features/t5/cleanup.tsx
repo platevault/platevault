@@ -93,7 +93,6 @@ function CleanupArea({ view }: { view: View }) {
       level={2}
       title="Clean up View"
       description="Choose files to send to the OS Trash. Originals outside this View, accepted Results and calibration masters stay protected. Nothing is deleted permanently."
-      meta={view.completedAt ? <StatusBadge kind="view" value="complete" /> : null}
     />
   )
 
@@ -353,7 +352,7 @@ function GroupRow({
           </div>
           <div className="flex flex-col items-end gap-1.5">
             {group === "keep" ? <StatusBadge kind="custody" value="keep" /> : <span className="text-xs text-muted-foreground">{chosen.length > 0 ? "Send to OS Trash" : "Keep"}</span>}
-            <CollapsibleTrigger render={<Button size="sm" variant="ghost" />}>Inspect files</CollapsibleTrigger>
+            <CollapsibleTrigger render={<Button size="sm" variant="outline" />}>Inspect files</CollapsibleTrigger>
           </div>
         </div>
         <CollapsibleContent>
@@ -502,7 +501,7 @@ function ReviewList({ title, entries, empty }: { title: string; entries: Cleanup
         </ul>
       )}
       {entries.length > 12 ? (
-        <Button size="sm" variant="ghost" onClick={() => setAll((v) => !v)}>
+        <Button size="sm" variant="outline" onClick={() => setAll((v) => !v)}>
           {all ? "Show fewer" : `Show all ${formatCount(entries.length)}`}
         </Button>
       ) : null}
@@ -523,13 +522,13 @@ function FileChangeControls() {
   return (
     <PrototypeControls title="Prototype: change a file" outcome={outcome} description="Overwrites a named file in place with same-size bytes and keeps its modification time, then restores the saved bytes.">
       <div className="flex w-full flex-wrap items-end gap-2">
-        <div className="space-y-1">
+        <div className="w-96 max-w-full space-y-1">
           <Label htmlFor={pathId} className="text-xs">
             File path
           </Label>
-          <Input id={pathId} value={path} placeholder="/Volumes/Astro-T7/…" onChange={(e) => setPath(e.target.value)} className="w-96 max-w-full font-mono text-xs" />
+          <Input id={pathId} value={path} placeholder="/Volumes/Astro-T7/…" onChange={(e) => setPath(e.target.value)} className="w-full font-mono text-xs" />
         </div>
-        <Button size="sm" variant="outline" disabled={!target} onClick={() => setOutcome(overwriteKeepingStat(target))}>
+        <Button size="sm" variant="outline" disabled={!target} className="h-auto min-h-7 max-w-full text-left whitespace-normal" onClick={() => setOutcome(overwriteKeepingStat(target))}>
           Overwrite in place (same size and mtime)
         </Button>
         <Button size="sm" variant="outline" disabled={!target} onClick={() => setOutcome(restoreKeepingStat(target))}>
@@ -588,7 +587,7 @@ function CleanupRecord({ opId, viewPath }: { opId: string; viewPath: string }) {
         </div>
       ) : null}
       {settled && inTrash.length > 0 ? (
-        <PrototypeControls outcome={outcome} title="Prototype: OS Trash" description="Stand-in for Finder's Put Back on files this cleanup moved.">
+        <PrototypeControls outcome={outcome} title="Prototype: OS Trash" headingLevel={4} description="Stand-in for Finder's Put Back on files this cleanup moved.">
           <ul className="max-h-48 w-full space-y-1 overflow-y-auto text-xs">
             {(allTrash ? inTrash : inTrash.slice(0, 20)).map((t) => (
               <li key={t.originalPath} className="flex flex-wrap items-center justify-between gap-2">
@@ -604,7 +603,7 @@ function CleanupRecord({ opId, viewPath }: { opId: string; viewPath: string }) {
               <span className="text-xs text-muted-foreground">
                 Showing {allTrash ? "all" : "20 of"} {formatCount(inTrash.length)} items in the Trash from {viewPath}.
               </span>
-              <Button size="xs" variant="ghost" onClick={() => setAllTrash((v) => !v)}>
+              <Button size="xs" variant="outline" onClick={() => setAllTrash((v) => !v)}>
                 {allTrash ? "Show fewer" : `Show all ${formatCount(inTrash.length)} in the Trash`}
               </Button>
             </div>

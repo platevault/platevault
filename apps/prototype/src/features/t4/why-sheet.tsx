@@ -111,7 +111,7 @@ export function WhyThisMatchSheet({ row, viewId, applicationName, onOpenChange, 
                       { label: "Path", value: <PathText path={source.path} />, mono: false },
                     ]}
                   />
-                  <Button variant="link" size="sm" className="h-auto px-0" render={<Link to="/calibration/$calibrationId" params={{ calibrationId: source.id }} search={{ viewId }} />}>
+                  <Button variant="link" size="sm" className="h-auto min-h-0 px-0 py-0" render={<Link to="/calibration/$calibrationId" params={{ calibrationId: source.id }} search={{ viewId }} />}>
                     Open {source.isMaster ? "master" : "raw set"} evidence
                   </Button>
                 </section>

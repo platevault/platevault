@@ -600,6 +600,9 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
 // Area
 // ---------------------------------------------------------------------------
 
+/** Prototype control labels name long paths: let them wrap so the box reflows at 320 CSS px (WCAG 1.4.10). */
+const WRAP_BUTTON = "h-auto min-h-7 max-w-full text-left whitespace-normal [overflow-wrap:anywhere]"
+
 export function ViewPrepareArea() {
   const { viewId, view } = useRouteView()
   const plan = usePreparationPlan(view)
@@ -753,7 +756,7 @@ export function ViewPrepareArea() {
               <div className="space-y-1.5 rounded-md border px-3 py-2">
                 <p className="text-xs">Paused after the snapshot of:</p>
                 <PathText path={pausedItem.path} />
-                <Button size="sm" variant="outline" onClick={() => modifyFileExternally(pausedItem.path!)}>
+                <Button size="sm" variant="outline" className={WRAP_BUTTON} onClick={() => modifyFileExternally(pausedItem.path!)}>
                   Overwrite this source with same-size different bytes
                 </Button>
               </div>
@@ -767,7 +770,7 @@ export function ViewPrepareArea() {
               </div>
             ))}
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" disabled={lastThree.length === 0} onClick={() => lastThree.forEach((p) => setFolderAccess(p, !threeDenied))}>
+              <Button size="sm" variant="outline" className={WRAP_BUTTON} disabled={lastThree.length === 0} onClick={() => lastThree.forEach((p) => setFolderAccess(p, !threeDenied))}>
                 {threeDenied ? "Restore read access to 3 source frames" : "Deny read access to 3 source frames"}
               </Button>
               <span className="text-xs text-muted-foreground">J24 S15: the last {lastThree.length} light frames of this View.</span>
@@ -776,14 +779,14 @@ export function ViewPrepareArea() {
               <div className="space-y-1.5 rounded-md border px-3 py-2">
                 <p className="text-xs text-muted-foreground">J24 P8 (S10a, S11): a prepared frame changed in place, outside PlateVault.</p>
                 <PathText path={p8Path} />
-                <Button size="sm" variant="outline" onClick={() => (p8Changed ? restoreFileExternally(p8Path) : modifyFileExternally(p8Path))}>
+                <Button size="sm" variant="outline" className={WRAP_BUTTON} onClick={() => (p8Changed ? restoreFileExternally(p8Path) : modifyFileExternally(p8Path))}>
                   {p8Changed ? "Restore this frame's original bytes" : "Overwrite this frame with a same-size variant"}
                 </Button>
               </div>
             ) : null}
             {app ? (
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => updateApp(app.id, { present: !app.present })}>
+                <Button size="sm" variant="outline" className={WRAP_BUTTON} onClick={() => updateApp(app.id, { present: !app.present })}>
                   {app.present ? `Move ${app.name} out of ${app.path}` : `Put ${app.name} back at ${app.path}`}
                 </Button>
                 <Button size="sm" variant="outline" disabled={app.launchFails} onClick={() => updateApp(app.id, { launchFails: true })}>

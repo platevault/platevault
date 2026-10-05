@@ -149,7 +149,7 @@ export function ViewCalibrationArea() {
         const name = `${KIND_LABEL[row.kind].toLowerCase()} for ${formatNight(row.member.session.night)} ${row.member.session.channel ?? ""}`.trim()
         // Visible summary first, so the accessible name contains the visible label (WCAG 2.5.3).
         return (
-          <Button size="sm" variant="link" className="h-auto max-w-48 justify-start px-0 text-left text-xs whitespace-normal" onClick={() => setWhyKey(row.key)}>
+          <Button size="sm" variant="link" className="h-auto min-h-0 max-w-48 justify-start px-0 py-0 text-left text-xs whitespace-normal" onClick={() => setWhyKey(row.key)}>
             {row.criteria.length > 0 ? summaryText(row.criteria) : row.candidates.length > 0 ? `${plural(row.candidates.length, "candidate")} considered` : "No candidate"}
             <span className="sr-only">: why this match, {name}</span>
           </Button>

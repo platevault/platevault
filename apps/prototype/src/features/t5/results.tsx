@@ -171,7 +171,7 @@ function ResultsArea({ view }: { view: View }) {
       rowHeader: true,
       sortValue: (r) => r.fileName,
       cell: (r) => (
-        <Button variant="link" size="sm" className="h-auto px-0 font-normal" aria-label={`Inspect ${r.fileName}`} onClick={() => inspect(r)}>
+        <Button variant="link" size="sm" className="h-auto min-h-0 px-0 py-0 font-normal" aria-label={`Inspect ${r.fileName}`} onClick={() => inspect(r)}>
           {r.fileName}
         </Button>
       ),
@@ -207,7 +207,7 @@ function ResultsArea({ view }: { view: View }) {
       sortValue: (r) => r.fileName,
       cell: (r) => (
         <>
-          <Button variant="link" size="sm" className="h-auto px-0 font-normal" aria-label={`Inspect ${r.fileName}`} onClick={() => inspect(r)}>
+          <Button variant="link" size="sm" className="h-auto min-h-0 px-0 py-0 font-normal" aria-label={`Inspect ${r.fileName}`} onClick={() => inspect(r)}>
             {r.fileName}
           </Button>
           <span className="block text-xs text-muted-foreground">{kindLabel(r.kind, r.channel)}</span>
@@ -809,7 +809,7 @@ function AttachDialog({ open, onOpenChange, view }: { open: boolean; onOpenChang
             <div className="space-y-1.5">
               <Label id={ids.view}>View</Label>
               <Select items={viewItems} value={targetView} onValueChange={(v) => setTargetView(v as string)}>
-                <SelectTrigger aria-labelledby={ids.view} className="w-72">
+                <SelectTrigger aria-labelledby={ids.view} className="w-72 max-w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1006,23 +1006,23 @@ function ResultsPrototypeControls({ view, root, products, onChanged }: { view: V
       </Button>
       {!root ? <span className="text-xs text-muted-foreground">Output controls need a prepared View.</span> : null}
       <div className="flex w-full flex-wrap items-end gap-2">
-        <div className="space-y-1">
+        <div className="w-96 max-w-full space-y-1">
           <Label htmlFor={pathId} className="text-xs">
             Final image path outside the View
           </Label>
-          <Input id={pathId} value={externalPath} onChange={(e) => setExternalPath(e.target.value)} className="w-96 font-mono text-xs" />
+          <Input id={pathId} value={externalPath} onChange={(e) => setExternalPath(e.target.value)} className="w-full font-mono text-xs" />
         </div>
         <Button size="sm" variant="outline" onClick={() => run(saveExternalImage(externalPath.trim()))}>
           Save final image
         </Button>
       </div>
       <div className="flex w-full flex-wrap items-end gap-2">
-        <div className="space-y-1">
+        <div className="w-72 max-w-full space-y-1">
           <Label id={productId} className="text-xs">
             Product (P5 helper)
           </Label>
           <Select items={productItems} value={productPath} onValueChange={(v) => setProductPath(v as string)}>
-            <SelectTrigger aria-labelledby={productId} size="sm" className="w-72">
+            <SelectTrigger aria-labelledby={productId} size="sm" className="w-full">
               <SelectValue placeholder="Choose a product" />
             </SelectTrigger>
             <SelectContent>
@@ -1034,7 +1034,7 @@ function ResultsPrototypeControls({ view, root, products, onChanged }: { view: V
             </SelectContent>
           </Select>
         </div>
-        <Button size="sm" variant="outline" disabled={!productPath} onClick={() => productPath && run(overwriteKeepingStat(productPath))}>
+        <Button size="sm" variant="outline" disabled={!productPath} className="h-auto min-h-7 max-w-full text-left whitespace-normal" onClick={() => productPath && run(overwriteKeepingStat(productPath))}>
           Overwrite in place (same size and mtime)
         </Button>
         <Button size="sm" variant="outline" disabled={!productPath} onClick={() => productPath && run(restoreKeepingStat(productPath))}>
