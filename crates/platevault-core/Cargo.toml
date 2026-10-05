@@ -24,6 +24,12 @@ unicode-normalization.workspace = true
 simbad-resolver = "0.5.0"
 skymath = "0.7.2"
 target-match = "0.5.1"
+# Spec 072 R3: the bundled IANA database only, so every platform and test
+# resolves the same zone rules for nights, local times and calendar text.
+jiff = { version = "0.2.37", default-features = false, features = [
+  "std",
+  "tzdb-bundle-always",
+] }
 
 [target.'cfg(windows)'.dependencies]
 winapi-util = "0.1.11"

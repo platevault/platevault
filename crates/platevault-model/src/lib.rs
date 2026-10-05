@@ -8,7 +8,9 @@ use metadata_core::RawFileMetadata;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod planning;
 mod project;
+pub use planning::*;
 pub use project::*;
 
 pub type Revision = u64;
