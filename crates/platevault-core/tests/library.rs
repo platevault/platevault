@@ -980,8 +980,9 @@ async fn a_deleted_or_moved_root_never_blocks_an_unrelated_sibling() {
 }
 
 /// Records of a feature that holds library asset ids (VSEL Views and their
-/// prepared revisions, PRJ Projects, Results), served through the seam those
-/// features implement. The library only reads them.
+/// prepared revisions, Results), served through the seam those features
+/// implement. Projects are the real catalog records `Library::open` registers.
+/// The library only reads them.
 struct Records {
     kind: ReferenceKind,
     held: tokio::sync::Mutex<Vec<AssetReference>>,
@@ -1053,6 +1054,7 @@ fn assert_names_every_reference(
     location: &Location,
     assets: &[Uuid],
     session: Uuid,
+    project: Uuid,
 ) {
     assert_eq!(
         (review.location_name.as_str(), &review.root, review.availability),
@@ -1070,7 +1072,7 @@ fn assert_names_every_reference(
     let expected = [
         (ReferenceKind::View, 0x7000),
         (ReferenceKind::View, 0x7001),
-        (ReferenceKind::Project, 0x31),
+        (ReferenceKind::Project, project.as_u128()),
     ];
     assert_eq!(referenced, expected);
     assert_eq!(
@@ -1117,6 +1119,29 @@ async fn rereview_after_return(
     (location, again)
 }
 
+/// A real Project, framed by one panel, linking the current record of `session`.
+async fn mosaic_linking(catalog: &persistence_library::Catalog, session: Uuid) -> Project {
+    let input = ProjectInput {
+        name: "M 31 mosaic".into(),
+        notes: None,
+        targets: Vec::new(),
+        panels: vec![PanelInput {
+            id: None,
+            name: "Core".into(),
+            ra_deg: 10.684_708,
+            dec_deg: 41.268_75,
+            width_deg: 3.0,
+            height_deg: 2.0,
+            position_angle_deg: None,
+        }],
+        equipment_ids: Vec::new(),
+    };
+    let project = catalog.create_project(&input).await.unwrap();
+    let session = catalog.session(session).await.unwrap().summary.session;
+    let links = [SessionLinkInput { session: expected_session_of(&session), panel_id: None }];
+    catalog.link_sessions(project.id, project.revision, &links).await.unwrap()
+}
+
 /// LIB-AC-16: an offline location whose copies are fixed View members leaves the
 /// library only through a reviewed Retire location, and its folder registers again
 /// counting each capture once.
@@ -1160,12 +1185,9 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
             record(ReferenceKind::View, 0x7001, "M 31 Ha prepared", 1, &assets),
         ],
     );
-    let projects = Records::new(
-        ReferenceKind::Project,
-        vec![record(ReferenceKind::Project, 0x31, "M 31 mosaic", 5, &assets)],
-    );
+    let project = mosaic_linking(catalog, summary.session.id).await;
     let results = Records::new(ReferenceKind::Result, Vec::new());
-    for source in [&views, &projects, &results] {
+    for source in [&views, &results] {
         library.register_references(Arc::clone(source) as Arc<dyn AssetReferences>).await;
     }
     let fixed = views.snapshot().await;
@@ -1179,7 +1201,7 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
     assert_eq!(totals(&catalog.target_coverage(m31).await.unwrap()), (600.0, 300.0, 300.0));
 
     let review = library.review_retire_location(location.id).await.unwrap();
-    assert_names_every_reference(&review, &location, &assets, summary.session.id);
+    assert_names_every_reference(&review, &location, &assets, summary.session.id, project.id);
 
     // If its availability changes after the review, confirmation needs a new one.
     let (location, review) = rereview_after_return(&library, &review, &root).await;
@@ -1207,6 +1229,8 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
     let coverage = catalog.target_coverage(m31).await.unwrap();
     assert!(coverage.contributions.is_empty() && !coverage.provisional, "{coverage:?}");
     assert_eq!(views.snapshot().await, fixed);
+    let progress = catalog.project_progress(project.id).await.unwrap().progress;
+    assert!(progress.channels.is_empty() && progress.unknown_channel.is_none(), "{progress:?}");
     let expected: Vec<_> = assets.iter().map(|id| (*id, Availability::Retired)).collect();
     assert_eq!(unresolved_members(catalog, &fixed[0].asset_ids).await, expected);
 
