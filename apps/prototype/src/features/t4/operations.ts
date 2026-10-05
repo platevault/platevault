@@ -4,9 +4,9 @@
  * reads the simulated disk, so prototype controls that change files between
  * ticks (drift, denied access, collisions) are observed honestly.
  */
-import { copyAvailability, preferredCopy } from "@/domain/derive"
+import { assetAvailability, copyAvailability, preferredCopy } from "@/domain/derive"
 import { createFolder, fakeSha256, fileAt, filesUnder, makeFile, removeFile, volumeForPath, writeFiles } from "@/domain/disk"
-import { assetIdForPath, isUnder } from "@/domain/indexing"
+import { assetIdForPath, deniedAncestor, isUnder } from "@/domain/indexing"
 import type { Asset, CorrectionField, Disk, FrameHeader, InputMode, Operation, OperationItem, Preparation, PreparationInput } from "@/domain/types"
 import { formatCount, plural } from "@/lib/format"
 import { nowIso, type PrototypeState } from "@/store/core"
@@ -69,27 +69,81 @@ function sourceProblem(state: PrototypeState, entry: PrepareEntry): string | nul
   return null
 }
 
+/** A prepared input the application cannot read now: Offline, Unreadable or Retired (STO-FR-08, D19). */
+export interface UnavailableInput {
+  path: string
+  availability: "offline" | "unreadable" | "retired"
+  /** Location holding the input when it is a recorded copy. */
+  location: string | null
+  /** Volume to reconnect when the input is offline. */
+  volume: string | null
+  /** Another readable copy carries the recorded bytes, so a new review can prepare from it. */
+  otherVerifiedCopy: boolean
+}
+
+export interface PreparedCheck {
+  /** Inputs that cannot be read now; Open refuses rather than omits them. */
+  unavailable: UnavailableInput[]
+  /** Readable entries that no longer match their preparation snapshot (drift). */
+  changed: Array<{ path: string; reason: string }>
+}
+
+/** Null when `path` can be read now; a recorded copy of `asset` at that path reads its own availability. */
+function unavailableAt(state: PrototypeState, asset: Asset | undefined, path: string): UnavailableInput | null {
+  const { disk, catalog } = state
+  const copy = asset?.copies.find((c) => c.path === path)
+  if (asset && copy) {
+    const availability = copyAvailability(disk, catalog, copy)
+    if (availability === "available" || availability === "absent") return null
+    const location = catalog.locations[copy.locationId]
+    return {
+      path,
+      availability,
+      location: location?.displayName ?? null,
+      volume: availability === "offline" ? (disk.volumes[location?.volumeId ?? copy.volumeId]?.name ?? null) : null,
+      otherVerifiedCopy: asset.copies.some((c) => c !== copy && c.sha256 === asset.sha256 && copyAvailability(disk, catalog, c) === "available"),
+    }
+  }
+  const volumeId = volumeForPath(disk, path)
+  if (!volumeId || !disk.volumes[volumeId]?.mounted) return { path, availability: "offline", location: null, volume: volumeId ? (disk.volumes[volumeId]?.name ?? null) : null, otherVerifiedCopy: false }
+  if (deniedAncestor(disk, path)) return { path, availability: "unreadable", location: null, volume: null, otherVerifiedCopy: false }
+  return null
+}
+
 /**
- * Prepared entries that no longer match their preparation snapshot: the
- * source bytes or availability changed, or the written entry did (PREP-FR-10,
- * PREP-AC-15). Open runs this before every launch. Reads only. A preparation
- * without a run journal (recorded before this session) is checked against
- * each frame's recorded catalog digest and the View entry for it; one with
- * nothing recorded cannot be re-verified, so it fails closed.
+ * Open runs this before every launch (PREP-FR-10, PREP-AC-15). Reads only.
+ * An input the application cannot read now (Offline, Unreadable, Retired) is
+ * unavailable, never matched or omitted (STO-FR-08, D19). A readable entry
+ * that no longer matches its preparation snapshot is changed: its source
+ * bytes or the written entry differ. A symlink entry is checked at its
+ * current target, which an archive's reference repair may have rebuilt onto
+ * another recorded copy of the same frame (STO-FR-07). A preparation without
+ * a run journal (recorded before this session) is checked against each
+ * frame's recorded catalog digest and the View entry for it; one with nothing
+ * recorded cannot be re-verified, so it fails closed.
  */
-export function changedPreparedEntries(state: PrototypeState, prep: Preparation): Array<{ path: string; reason: string }> {
+export function verifyPreparedEntries(state: PrototypeState, prep: Preparation): PreparedCheck {
+  const unavailable: UnavailableInput[] = []
+  const changed: Array<{ path: string; reason: string }> = []
   const op = prep.operationId ? state.operations[prep.operationId] : undefined
   const payload = op?.payload as unknown as PreparePayload | undefined
   if (!payload?.entries) {
     if (prep.preparedAssetIds.length === 0) {
-      return [{ path: prep.viewPath, reason: "No preparation snapshot is recorded for its entries, so they cannot be re-verified. Prepare the View again." }]
+      changed.push({ path: prep.viewPath, reason: "No preparation snapshot is recorded for its entries, so they cannot be re-verified. Prepare the View again." })
+      return { unavailable, changed }
     }
     const written = filesUnder(state.disk, prep.viewPath)
-    const changed: Array<{ path: string; reason: string }> = []
     for (const assetId of prep.preparedAssetIds) {
       const asset = state.catalog.assets[assetId]
       if (!asset) {
         changed.push({ path: prep.viewPath, reason: `A prepared frame (${assetId}) is no longer in the catalog.` })
+        continue
+      }
+      const best = assetAvailability(state.disk, state.catalog, asset)
+      const held = asset.copies.find((c) => copyAvailability(state.disk, state.catalog, c) === best)
+      const missing = held ? unavailableAt(state, asset, held.path) : null
+      if (missing) {
+        unavailable.push(missing)
         continue
       }
       const sourcePath = preferredCopy(state.disk, state.catalog, asset).path
@@ -109,31 +163,46 @@ export function changedPreparedEntries(state: PrototypeState, prep: Preparation)
           : written.some((f) => f.sha256 === asset.sha256 && f.path.endsWith(`/${asset.fileName}`)))
       if (!intact) changed.push({ path: sourcePath, reason: "Its View entry is missing or no longer matches what was prepared." })
     }
-    return changed
+    return { unavailable, changed }
   }
   const assets = new Set(prep.preparedAssetIds)
   const results = new Set(prep.preparedResultIds)
   const calibration = new Set(payload.calibrationPrepared)
-  const changed: Array<{ path: string; reason: string }> = []
   for (const [id, entry] of Object.entries(payload.entries)) {
     const prepared = entry.kind === "calibration" ? calibration.has(id) : entry.resultId ? results.has(entry.resultId) : entry.assetId !== null && assets.has(entry.assetId)
     const snapshot = payload.snapshots[id]
     if (!prepared || !snapshot) continue
-    const problem = sourceProblem(state, entry)
-    if (problem) {
-      changed.push({ path: entry.sourcePath, reason: problem })
+    const asset = entry.assetId ? state.catalog.assets[entry.assetId] : undefined
+    const viewHeld = payload.mode === "direct-source" ? null : unavailableAt(state, undefined, entry.destPath)
+    if (viewHeld) {
+      unavailable.push(viewHeld)
       continue
     }
-    if (fileAt(state.disk, entry.sourcePath)?.sha256 !== snapshot) {
-      changed.push({ path: entry.sourcePath, reason: "Changed since its preparation snapshot: its SHA-256 differs." })
+    const viewEntry = payload.mode === "direct-source" ? undefined : fileAt(state.disk, entry.destPath)
+    const source = viewEntry?.linkTarget ?? entry.sourcePath
+    const missing = unavailableAt(state, asset, source)
+    if (missing) {
+      unavailable.push(missing)
+      continue
+    }
+    const problem = sourceProblem(state, { ...entry, sourcePath: source })
+    if (problem) {
+      changed.push({ path: source, reason: problem })
+      continue
+    }
+    if (fileAt(state.disk, source)?.sha256 !== snapshot) {
+      changed.push({ path: source, reason: "Changed since its preparation snapshot: its SHA-256 differs." })
       continue
     }
     if (payload.mode === "direct-source") continue
-    const written = fileAt(state.disk, entry.destPath)
-    const intact = payload.mode === "linked" && payload.linkType === "symlink" ? written?.linkTarget === entry.sourcePath : written?.sha256 === payload.expected[id]
+    const intact = viewEntry?.linkTarget
+      ? asset
+        ? asset.copies.some((c) => c.path === viewEntry.linkTarget)
+        : viewEntry.linkTarget === entry.sourcePath
+      : !(payload.mode === "linked" && payload.linkType === "symlink") && viewEntry?.sha256 === payload.expected[id]
     if (!intact) changed.push({ path: entry.destPath, reason: "This entry no longer matches what was prepared." })
   }
-  return changed
+  return { unavailable, changed }
 }
 
 interface StepResult {

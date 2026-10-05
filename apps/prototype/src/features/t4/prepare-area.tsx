@@ -26,7 +26,7 @@ import { useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { modifyFileExternally, restoreFileExternally, setFolderAccess } from "@/store/simulation"
 import { openApplication, quitApplication, retryPreparation, startPrepare, updateApp, updatePrep, updateWorld } from "./actions"
-import type { PreparePayload } from "./operations"
+import type { PreparePayload, UnavailableInput } from "./operations"
 import { T4Badge } from "./badges"
 import { ViewNotFound } from "./calibration-area"
 import { CRITERION_LABEL, FIELD_LABEL, handoffCountText, KIND_LABEL, METADATA_CHOICE_LABEL, MODE_LABEL, type PreparationPlan, sameInput, sessionLabel, summaryText } from "./domain"
@@ -383,6 +383,8 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
   const [reveal, setReveal] = useState(false)
   const [locating, setLocating] = useState(false)
   const [message, setMessage] = useState<{ tone: "info" | "refusal" | "warning"; text: string; missing: boolean } | null>(null)
+  // Left by an Open refused because inputs cannot be read now (STO-FR-08); availability is live, so it is not stored.
+  const [unavailable, setUnavailable] = useState<{ text: string; inputs: UnavailableInput[] } | null>(null)
   const [retryError, setRetryError] = useState<string | null>(null)
   const settled = op ? isSettled(op.status) : true
   const prepared = prep.state === "prepared"
@@ -398,9 +400,10 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
 
   function open() {
     const outcome = openApplication(view, prep.id)
+    setUnavailable(outcome.outcome === "unavailable" && outcome.unavailable ? { text: outcome.message, inputs: outcome.unavailable } : null)
     if (!outcome.result.ok) return setMessage({ tone: "refusal", text: outcome.result.message, missing: false })
-    // A refused re-verification is shown by the persistent Unverified notice below.
-    if (outcome.outcome === "unverified") return setMessage(null)
+    // A refused re-verification is shown by the persistent Unverified notice below; unavailable inputs by their own notice.
+    if (outcome.outcome === "unverified" || outcome.outcome === "unavailable") return setMessage(null)
     setMessage({ tone: outcome.outcome === "opened" ? "info" : outcome.outcome === "missing-executable" ? "refusal" : "warning", text: outcome.message, missing: outcome.outcome !== "opened" })
   }
 
@@ -485,6 +488,34 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
               },
             ]}
           />
+          {unavailable ? (
+            <Notice
+              tone="refusal"
+              title={`Inputs unavailable: ${appName} was not opened`}
+              actions={
+                <>
+                  <Button size="sm" variant="outline" onClick={onReviewAgain}>
+                    Review another verified location
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={open}>
+                    Open again
+                  </Button>
+                </>
+              }
+            >
+              <p>{unavailable.text}</p>
+              {view.completedAt ? <p className="mt-1">This View is Complete: the review shows where each input can be read now, and preparing from another location needs Reopen first.</p> : null}
+              <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto" aria-label="Unavailable inputs">
+                {unavailable.inputs.map((input) => (
+                  <li key={input.path} className="flex flex-wrap items-center gap-2">
+                    <StatusBadge kind="availability" value={input.availability} />
+                    <PathText path={input.path} />
+                    {input.location ? <span className="text-xs text-muted-foreground">{input.location}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </Notice>
+          ) : null}
           {unverified ? (
             <Notice tone="refusal" title={`Unverified: ${appName} was not opened`}>
               <p>

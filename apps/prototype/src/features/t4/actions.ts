@@ -6,12 +6,12 @@
 import { filesUnder } from "@/domain/disk"
 import { stableHash } from "@/domain/indexing"
 import type { CalibrationAssignment, CalibrationInput, CalibrationMaster, Catalog, Location, MatchCriterion, MetadataDecision, Preparation, PreparationId, ProfileId, View, ViewId } from "@/domain/types"
-import { plural } from "@/lib/format"
+import { formatCount, plural } from "@/lib/format"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
 import { isSettled, startOperation } from "@/store/operations"
 import { emptyPrepDraft, type PrepDraft, type SimulatedApp } from "@/store/slices/t4"
 import { assignmentId, basisFiles, entryPath, inputDrift, inputKey, type PreparationPlan, type RequirementRow, savedMembership, sourceFor } from "./domain"
-import { ADOPT_PHASES, type AdoptPayload, changedPreparedEntries, type PrepareEntry, type PreparePayload } from "./operations"
+import { ADOPT_PHASES, type AdoptPayload, type PrepareEntry, type PreparePayload, type UnavailableInput, verifyPreparedEntries } from "./operations"
 
 // ---------------------------------------------------------------------------
 // Slice helpers
@@ -168,13 +168,49 @@ export function setLaunchArgs(profileId: ProfileId, launchArgs: string): CommitR
   return patchProfile(profileId, "Launch arguments", () => ({ launchArgs }))
 }
 
-export type OpenOutcome = { outcome: "opened" | "missing-executable" | "launch-failed" | "unverified"; message: string; result: CommitResult }
+export type OpenOutcome = {
+  outcome: "opened" | "missing-executable" | "launch-failed" | "unverified" | "unavailable"
+  message: string
+  result: CommitResult
+  /** Set when the outcome is "unavailable": every input the application cannot read now, none omitted. */
+  unavailable?: UnavailableInput[]
+}
+
+const UNAVAILABLE_LABEL: Record<UnavailableInput["availability"], string> = { offline: "Offline", unreadable: "Unreadable", retired: "Retired" }
+
+/** "Opening is refused: 214 inputs are unavailable (214 Offline on Archive)." plus how to recover. */
+function unavailableText(appName: string, inputs: UnavailableInput[], changed: number): string {
+  const groups = new Map<string, number>()
+  for (const input of inputs) {
+    const where = input.location ?? input.volume
+    const key = `${UNAVAILABLE_LABEL[input.availability]}${where ? ` ${input.availability === "offline" ? "on" : "in"} ${where}` : ""}`
+    groups.set(key, (groups.get(key) ?? 0) + 1)
+  }
+  const parts = [...groups].map(([key, count]) => `${formatCount(count)} ${key}`)
+  const volumes = [...new Set(inputs.flatMap((i) => (i.availability === "offline" && i.volume ? [i.volume] : [])))]
+  const others = inputs.filter((i) => i.otherVerifiedCopy).length
+  const lines = [
+    `Opening is refused: ${plural(inputs.length, "input")} ${inputs.length === 1 ? "is" : "are"} unavailable (${parts.join("; ")}). ${appName} was not opened and no input was left out of the handoff.`,
+  ]
+  if (volumes.length) lines.push(`Reconnect ${volumes.join(" and ")}, then open again.`)
+  if (inputs.some((i) => i.availability === "retired")) lines.push("A copy in a retired location is never an input.")
+  lines.push(
+    others === 0
+      ? "No other verified location holds these inputs, so a new review lists them as unavailable."
+      : others === inputs.length
+        ? "Another verified location holds each of them; review preparation again to prepare from it."
+        : `Another verified location holds ${formatCount(others)} of them; review preparation again to prepare those from it.`,
+  )
+  if (changed) lines.push(`${plural(changed, "readable entry", "readable entries")} also changed since preparation and the View reads Unverified until their bytes return.`)
+  return lines.join(" ")
+}
 
 /**
  * Simulated launch. Every prepared entry is re-verified against its
  * preparation snapshot first; a changed entry refuses the launch and writes
- * nothing (PREP-FR-10, PREP-AC-15). Launching is not processing; closing never
- * marks Complete.
+ * nothing (PREP-FR-10, PREP-AC-15). An input that cannot be read now refuses
+ * the whole launch rather than being omitted (STO-FR-08, D19). Launching is
+ * not processing; closing never marks Complete.
  */
 export function openApplication(view: View, preparationId: PreparationId): OpenOutcome {
   const state = store.getState()
@@ -191,15 +227,23 @@ export function openApplication(view: View, preparationId: PreparationId): OpenO
       ? `${appName} was not found at ${profile.executablePath}. Choose application or reveal the View folder; the preparation is unchanged.`
       : `No application is located for ${profile.name}. Choose application or reveal the View folder; the preparation is unchanged.`
   } else {
-    const changed = changedPreparedEntries(state, prep)
+    const { unavailable, changed } = verifyPreparedEntries(state, prep)
     if (changed.length > 0) {
-      const text = `${appName} was not opened: ${plural(changed.length, "prepared entry", "prepared entries")} no longer ${changed.length === 1 ? "matches" : "match"} the preparation snapshot. PlateVault wrote nothing to the sources or the entries.`
       // Durable, so every surface reads the View as Unverified (viewStatus) until an Open re-verifies it.
       commit(
         `Open in ${appName} refused`,
         (s) => withCatalog(s, (c) => (c.preparations[preparationId] ? { ...c, preparations: { ...c.preparations, [preparationId]: { ...c.preparations[preparationId]!, unverified: { at: nowIso(), changed } } } } : c)),
         { href: `/views/${view.id}/prepare` },
       )
+    }
+    if (unavailable.length > 0) {
+      // Availability is read live, so nothing durable is written: reconnecting and opening again re-verifies.
+      const text = unavailableText(appName, unavailable, changed.length)
+      recordActivity({ kind: "operation", title: `Open in ${appName} refused`, detail: text, operationId: null, href: `/views/${view.id}/prepare` })
+      return { outcome: "unavailable", message: text, result: { ok: true }, unavailable }
+    }
+    if (changed.length > 0) {
+      const text = `${appName} was not opened: ${plural(changed.length, "prepared entry", "prepared entries")} no longer ${changed.length === 1 ? "matches" : "match"} the preparation snapshot. PlateVault wrote nothing to the sources or the entries.`
       recordActivity({ kind: "operation", title: `Open in ${appName} refused`, detail: text, operationId: null, href: `/views/${view.id}/prepare` })
       return { outcome: "unverified", message: text, result: { ok: true } }
     }
