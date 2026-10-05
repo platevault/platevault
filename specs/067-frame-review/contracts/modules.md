@@ -91,6 +91,7 @@ pub fn match_rows(export: &SubframeExport, candidates: &[ImportCandidate]) -> Ve
 ```rust
 impl FrameReview {
     pub async fn frame_states(&self, assets: &[Uuid]) -> Result<Vec<FrameState>, LibraryError>;
+    pub async fn running_run(&self) -> Result<Option<MeasurementRun>, LibraryError>;
     pub async fn start_measurement(&self, assets: &[Uuid], priority: &[Uuid]) -> Result<MeasurementRun, LibraryError>;
     pub async fn prioritize(&self, run: Uuid, assets: &[Uuid]) -> Result<MeasurementRun, LibraryError>;
     pub async fn cancel_measurement(&self, run: Uuid) -> Result<MeasurementRun, LibraryError>;
