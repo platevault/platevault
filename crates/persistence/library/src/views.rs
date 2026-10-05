@@ -11,24 +11,28 @@
 //! file. Members are logical captures (D16) whose starting state comes from
 //! their applicable quality inside the write transaction (D02) and is then kept.
 
-use std::collections::BTreeSet;
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
-    initial_member_state, ApplicableQuality, CriteriaInput, DraftEdit, ExpectedSession,
-    FramingPanel, FramingSnapshot, FramingSource, FramingTarget, GeometryEvidence, LibraryError,
-    MemberCopy, MemberReason, MemberState, NewView, Revision, SelectionReason, Session,
-    SessionChoice, SessionChoiceState, SuggestedChoice, View, ViewCriteria, ViewDraftHeader,
-    ViewListing, ViewMember, ViewOrigin, ViewOriginInput, ViewQuery, ViewRecord, ViewRevision,
-    ViewRevisionHeader,
+    initial_member_state, ApplicableQuality, AssessedMembers, Asset, AssetReference,
+    AssociationKind, Availability, CandidateBasis, CandidateCapture, CandidateSession, CaptureCopy,
+    ChoiceBasis, CopyState, CriteriaInput, DraftEdit, ExpectedAsset, ExpectedSession,
+    FrameEvidence, FramingPanel, FramingSnapshot, FramingSource, FramingTarget, GeometryEvidence,
+    LibraryError, MemberBasis, MemberCopy, MemberReason, MemberState, Membership, MembershipBasis,
+    NewView, ReferenceKind, Revision, SelectionReason, Session, SessionChoice, SessionChoiceState,
+    SuggestedChoice, View, ViewCriteria, ViewDraftHeader, ViewListing, ViewMember, ViewOrigin,
+    ViewOriginInput, ViewQuery, ViewRecord, ViewRevision, ViewRevisionHeader,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::{
-    check_expected_sessions, conflict, current_member_assets, db_revision, from_json, from_text,
-    load_target, members_unchanged, now, parse_uuid, projects, require_revision, revision, to_json,
-    to_text, CaptureView, Catalog, Result, MAX_PAGE,
+    check_expected_sessions, conflict, current_member_assets, db_revision, fingerprint_matches,
+    from_json, from_text, is_light, json_ids, load_assets, load_associations, load_equipment,
+    load_session_row, load_target, members_unchanged, now, parse_uuid, projects, require_revision,
+    revision, summarize_rows, to_json, to_text, CaptureView, Catalog, Result, MAX_PAGE,
 };
 
 fn invalid(message: String) -> LibraryError {
@@ -286,6 +290,335 @@ impl Catalog {
             members: load_members(&mut conn, row).await?,
         })
     }
+}
+
+// ---------------------------------------------------------------------------
+// Candidate and membership reads
+// ---------------------------------------------------------------------------
+
+impl Catalog {
+    /// Everything candidate evaluation reads, from one catalog snapshot: each
+    /// current session with a light or unknown-image-type capture (R20) and its
+    /// summary, its logical captures (D16) with their copies, applicable quality
+    /// and header evidence, its associations and the member observations the
+    /// evidence describes, plus every equipment record an association names.
+    /// Hashes, measures and writes nothing.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn candidate_basis(&self) -> Result<CandidateBasis> {
+        let mut conn = self.reader().await?;
+        // One deferred transaction, so every read below sees the same snapshot.
+        let mut snapshot = conn.begin().await?;
+        let basis = read_candidate_basis(&mut snapshot).await?;
+        snapshot.rollback().await?;
+        Ok(basis)
+    }
+
+    /// The draft or the latest committed revision with live member state, from
+    /// one catalog snapshot: each choice with its session as recorded now, and
+    /// each member with its copies' availability, location failure and current
+    /// expectation. Unresolved (included, no Available copy) and changed since
+    /// review (a copy's fingerprint differs from its basis) are derived here
+    /// and never stored. Hashes, measures and writes nothing.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown View, or for a membership it does not have.
+    pub async fn view_membership(
+        &self,
+        id: Uuid,
+        membership: Membership,
+    ) -> Result<MembershipBasis> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let basis = read_membership(&mut snapshot, id, membership).await?;
+        snapshot.rollback().await?;
+        Ok(basis)
+    }
+
+    /// Each View whose committed revisions or draft hold any of `assets` as a
+    /// member copy, naming the asked assets it holds. The reference revision
+    /// is the View's latest committed revision, 0 for a never-saved draft.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn view_references(&self, assets: &BTreeSet<Uuid>) -> Result<Vec<AssetReference>> {
+        if assets.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut conn = self.reader().await?;
+        let rows =
+            sqlx::query(VIEW_REFERENCES).bind(json_ids(assets)?).fetch_all(&mut *conn).await?;
+        let mut references: BTreeMap<Uuid, AssetReference> = BTreeMap::new();
+        for row in &rows {
+            let id = parse_uuid(&row.try_get::<String, _>("view_id")?)?;
+            let asset = parse_uuid(&row.try_get::<String, _>("asset_id")?)?;
+            if let Some(reference) = references.get_mut(&id) {
+                reference.asset_ids.push(asset);
+                continue;
+            }
+            references.insert(
+                id,
+                AssetReference {
+                    kind: ReferenceKind::View,
+                    id,
+                    name: row.try_get("name")?,
+                    revision: revision(row.try_get("revision")?)?,
+                    asset_ids: vec![asset],
+                },
+            );
+        }
+        Ok(references.into_values().collect())
+    }
+}
+
+/// Views holding asked assets in any revision row, committed or draft, with
+/// the latest committed name (else the draft's) and revision.
+const VIEW_REFERENCES: &str = "\
+    SELECT DISTINCT v.id AS view_id, v.revision, coalesce(c.name, d.name) AS name, \
+    m.asset_id FROM view_member_copies m \
+    JOIN view_revisions r ON r.id = m.revision_row JOIN views v ON v.id = r.view_id \
+    LEFT JOIN view_revisions c ON c.view_id = v.id AND c.revision = v.revision \
+    LEFT JOIN view_revisions d ON d.view_id = v.id AND d.state = 'draft' \
+    WHERE m.asset_id IN (SELECT value FROM json_each(?1)) ORDER BY v.id, m.asset_id";
+
+async fn read_candidate_basis(conn: &mut SqliteConnection) -> Result<CandidateBasis> {
+    let ids: Vec<String> =
+        sqlx::query_scalar("SELECT id FROM sessions WHERE superseded_by IS NULL ORDER BY id")
+            .fetch_all(&mut *conn)
+            .await?;
+    let mut rows = Vec::with_capacity(ids.len());
+    let mut members = Vec::with_capacity(ids.len());
+    let mut all = Vec::new();
+    for id in &ids {
+        let id = parse_uuid(id)?;
+        let assets = current_member_assets(conn, id).await?;
+        // Calibration sessions belong to CAL: a candidate has a light or
+        // unknown-type capture.
+        if !assets.iter().any(|asset| is_light(&asset.effective) != Some(false)) {
+            continue;
+        }
+        rows.push(load_session_row(conn, id).await?);
+        all.extend(assets.iter().cloned());
+        members.push(assets);
+    }
+    let session_ids: Vec<Uuid> = rows.iter().map(|row| row.session.id).collect();
+    let view = CaptureView::read(conn, &session_ids, &all).await?;
+    let mut sessions = Vec::with_capacity(rows.len());
+    let mut equipment_ids = BTreeSet::new();
+    for (row, assets) in rows.into_iter().zip(members) {
+        let associations = load_associations(conn, row.session.id).await?;
+        equipment_ids.extend(
+            associations
+                .iter()
+                .filter(|association| association.kind == AssociationKind::Equipment)
+                .filter_map(|association| association.subject_id),
+        );
+        let captures = view
+            .group(&assets)
+            .into_iter()
+            .filter_map(|(key, present)| candidate_capture(&view, &key, &present))
+            .collect();
+        sessions.push(CandidateSession {
+            captures,
+            associations,
+            assessed: assessed_members(&assets),
+            summary: view.summary(row, &assets, Vec::new()),
+        });
+    }
+    let mut equipment = Vec::with_capacity(equipment_ids.len());
+    for id in equipment_ids {
+        equipment.push(load_equipment(conn, id).await?);
+    }
+    Ok(CandidateBasis { sessions, equipment })
+}
+
+/// One logical capture with every recorded copy, keyed like a member: the
+/// smallest copy id. The evidence is the session's own copy.
+fn candidate_capture(
+    view: &CaptureView,
+    key: &str,
+    present: &[&Asset],
+) -> Option<CandidateCapture> {
+    let mut copies = view.copies_of(key);
+    copies.sort_by_key(|copy| copy.id);
+    Some(CandidateCapture {
+        member_key: copies.first()?.id,
+        copies: copies
+            .iter()
+            .map(|copy| CaptureCopy {
+                asset_id: copy.id,
+                location_id: copy.location_id,
+                availability: copy.availability,
+                decision_revision: copy.decision_revision,
+                fingerprint: copy.fingerprint.clone(),
+            })
+            .collect(),
+        quality: view.quality(key),
+        frame: frame_evidence(present.first()?),
+    })
+}
+
+/// The member observations a criteria-based choice binds (R11).
+fn assessed_members(assets: &[Asset]) -> AssessedMembers {
+    AssessedMembers {
+        observations: assets.iter().map(|a| (a.id, a.fingerprint.clone())).collect(),
+        decisions: assets.iter().map(|a| (a.id, a.decision_revision)).collect(),
+        observation_revisions: assets.iter().map(|a| (a.id, a.observation_revision)).collect(),
+    }
+}
+
+/// Header evidence projected from a copy's effective metadata.
+fn frame_evidence(asset: &Asset) -> FrameEvidence {
+    let m = &asset.effective;
+    FrameEvidence {
+        asset_id: asset.id,
+        light: is_light(m),
+        object: m.object.clone(),
+        filter: m.filter.clone(),
+        exposure_seconds: m.exposure_seconds,
+        camera: m.camera.clone(),
+        telescope: m.telescope.clone(),
+        gain: m.gain,
+        offset: m.offset,
+        binning_x: m.binning_x,
+        binning_y: m.binning_y,
+        width: m.width,
+        height: m.height,
+        set_temperature_c: m.set_temperature_c,
+        date_obs: m.date_obs.clone(),
+        date_local: m.date_local.clone(),
+        ra_deg: m.ra_deg,
+        dec_deg: m.dec_deg,
+        wcs_ra_deg: m.wcs_ra_deg,
+        wcs_dec_deg: m.wcs_dec_deg,
+        sky_rotation_deg: m.sky_rotation_deg,
+        focal_length_mm: m.focal_length_mm,
+        pixel_size_um: m.pixel_size_um,
+    }
+}
+
+/// A location's name and, while it is unavailable, its recorded failure.
+async fn location_state(conn: &mut SqliteConnection, id: Uuid) -> Result<(String, Option<String>)> {
+    let row =
+        sqlx::query("SELECT name, availability, unavailable_reason FROM locations WHERE id = ?1")
+            .bind(id.to_string())
+            .fetch_one(&mut *conn)
+            .await?;
+    let availability: Availability = from_text(&row.try_get::<String, _>("availability")?)?;
+    let reason = if availability == Availability::Available {
+        None
+    } else {
+        row.try_get("unavailable_reason")?
+    };
+    Ok((row.try_get("name")?, reason))
+}
+
+async fn read_membership(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    membership: Membership,
+) -> Result<MembershipBasis> {
+    let view = load_view(conn, id).await?;
+    let (row, revision, project_id, criteria) = match membership {
+        Membership::Draft => {
+            let (row, header) = draft_header(conn, &view)
+                .await?
+                .ok_or_else(|| LibraryError::NotFound(format!("draft of view {id}")))?;
+            (row, header.draft_revision, header.project_id, header.criteria)
+        }
+        Membership::Committed => {
+            if view.revision == 0 {
+                return Err(LibraryError::NotFound(format!("committed revision of view {id}")));
+            }
+            let (row, header) = committed_header(conn, id, view.revision).await?;
+            (row, header.revision, header.project_id, header.criteria)
+        }
+    };
+    let choices = load_choices(conn, row).await?;
+    let mut session_rows = Vec::with_capacity(choices.len());
+    for choice in &choices {
+        session_rows.push(load_session_row(conn, choice.session_id).await?);
+    }
+    let summaries = summarize_rows(conn, session_rows).await?;
+    let sessions = choices
+        .into_iter()
+        .zip(summaries)
+        .map(|(choice, current)| ChoiceBasis { choice, current })
+        .collect();
+    let members = load_members(conn, row).await?;
+    let ids: BTreeSet<Uuid> =
+        members.iter().flat_map(|m| m.copies.iter().map(|copy| copy.asset_id)).collect();
+    let assets = load_assets(conn, &ids).await?;
+    let member_sessions: Vec<Uuid> =
+        members.iter().map(|m| m.session_id).collect::<BTreeSet<_>>().into_iter().collect();
+    let captures = CaptureView::read(conn, &member_sessions, &assets).await?;
+    let mut locations = HashMap::new();
+    for asset in &assets {
+        if let Entry::Vacant(entry) = locations.entry(asset.location_id) {
+            entry.insert(location_state(conn, asset.location_id).await?);
+        }
+    }
+    let by_id: HashMap<Uuid, &Asset> = assets.iter().map(|asset| (asset.id, asset)).collect();
+    let members = members
+        .into_iter()
+        .map(|member| member_basis(member, &by_id, &locations, &captures))
+        .collect::<Result<_>>()?;
+    Ok(MembershipBasis {
+        view_id: id,
+        membership,
+        revision,
+        project_id,
+        criteria,
+        sessions,
+        members,
+    })
+}
+
+fn member_basis(
+    member: ViewMember,
+    assets: &HashMap<Uuid, &Asset>,
+    locations: &HashMap<Uuid, (String, Option<String>)>,
+    captures: &CaptureView,
+) -> Result<MemberBasis> {
+    let asset = |id: &Uuid| {
+        assets
+            .get(id)
+            .copied()
+            .ok_or_else(|| LibraryError::PersistenceFailure(format!("member copy {id} is unknown")))
+    };
+    let mut copies = Vec::with_capacity(member.copies.len());
+    let mut changed = false;
+    for recorded in &member.copies {
+        let current = asset(&recorded.asset_id)?;
+        changed |= !fingerprint_matches(&current.fingerprint, &recorded.fingerprint);
+        let (name, reason) = &locations[&current.location_id];
+        copies.push(CopyState {
+            asset_id: current.id,
+            location_id: current.location_id,
+            location_name: name.clone(),
+            path: current.relative_path.clone(),
+            availability: current.availability,
+            failure_reason: reason.clone(),
+            last_observed_at: current.last_observed_at.clone(),
+            current: ExpectedAsset {
+                asset_id: current.id,
+                decision_revision: current.decision_revision,
+                fingerprint: current.fingerprint.clone(),
+            },
+        });
+    }
+    let representative = asset(&member.member_key)?;
+    let unresolved = member.state == MemberState::Included
+        && copies.iter().all(|copy| copy.availability != Availability::Available);
+    Ok(MemberBasis {
+        quality: captures.quality(captures.key(representative)),
+        frame: frame_evidence(representative),
+        unresolved,
+        changed_since_review: changed,
+        copies,
+        member,
+    })
 }
 
 // ---------------------------------------------------------------------------

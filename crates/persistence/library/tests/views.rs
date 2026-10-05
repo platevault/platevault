@@ -9,19 +9,24 @@
 
 mod support;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use persistence_library::{Catalog, LocationRegistration, SessionQuery};
 use platevault_model::{
-    ApplicableQuality, AssessedMembers, Asset, AssociationState, Availability, CorrectionInput,
-    CriteriaInput, DraftEdit, Equipment, GeometryClass, GeometryEvidence, LibraryError,
-    LocationRole, MemberReason, MemberState, NativePath, NewView, Project, ProjectInput,
-    Provenance, Quality, Revision, SelectionReason, Session, SessionChoice, SessionChoiceState,
-    SuggestedChoice, TargetFraming, TargetRecord, ViewMember, ViewOriginInput, ViewRecord,
+    ApplicableQuality, AssessedMembers, Asset, AssetReference, AssociationState, Availability,
+    CorrectionInput, CriteriaInput, DraftEdit, Equipment, GeometryClass, GeometryEvidence,
+    LibraryError, LocationRole, MemberReason, MemberState, Membership, NativePath, NewView,
+    Project, ProjectInput, Provenance, Quality, ReferenceKind, Revision, SelectionReason, Session,
+    SessionChoice, SessionChoiceState, SuggestedChoice, TargetFraming, TargetRecord, ViewMember,
+    ViewOriginInput, ViewRecord,
 };
 use sqlx::Connection;
 use support::*;
 use uuid::Uuid;
+
+fn json<T: serde::Serialize>(value: &T) -> serde_json::Value {
+    serde_json::to_value(value).unwrap()
+}
 
 const FRAMES: [&str; 5] = [
     "night1/Ha_001.fits",
@@ -65,14 +70,20 @@ struct Indexed {
 /// Five real frames indexed into one location (an Ha and an OIII session), a
 /// saved NGC 7000 Target and saved equipment.
 async fn indexed() -> Indexed {
+    indexed_with(&[]).await
+}
+
+/// [`indexed`] with `extra` frames in the same location.
+async fn indexed_with(extra: &[&str]) -> Indexed {
     let fx = Fixture::new();
-    for name in FRAMES {
+    let names: Vec<&str> = FRAMES.iter().chain(extra).copied().collect();
+    for name in &names {
         fx.write(name, name.as_bytes());
     }
     let before = tree(&fx.root);
     let catalog = Catalog::open(&fx.db).await.unwrap();
     let location = catalog.register_location(&fx.registration()).await.unwrap();
-    scan(&catalog, &fx, &location, &FRAMES).await;
+    scan(&catalog, &fx, &location, &names).await;
     let target = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
     let equipment = catalog.save_equipment(&redcat(), None).await.unwrap();
     Indexed { fx, catalog, location, target, equipment, before }
@@ -808,4 +819,342 @@ async fn a_catalog_recorded_at_schema_version_7_is_refused_before_any_ddl() {
     .unwrap();
     conn.close().await.unwrap();
     assert!(tables.is_empty(), "no DDL of this version ran: {tables:?}");
+}
+
+// ---------------------------------------------------------------------------
+// Candidate and membership reads, revisions and references (T005)
+// ---------------------------------------------------------------------------
+
+/// The current session holding `asset`.
+async fn session_holding(catalog: &Catalog, asset: Uuid) -> Session {
+    let summaries = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    summaries.into_iter().find(|s| s.session.asset_ids.contains(&asset)).unwrap().session
+}
+
+/// Cold-1: a second location holding a byte-identical copy of `Ha_001` and an
+/// `Ha_004` only it has; both `Ha_001` copies are hashed so they join (D16).
+async fn cold_copy(lib: &Indexed) -> platevault_model::Location {
+    let catalog = &lib.catalog;
+    let cold = lib.fx.temp.path().join("Cold-1");
+    std::fs::create_dir_all(cold.join("night1")).unwrap();
+    std::fs::copy(lib.fx.root.join(FRAMES[0]), cold.join(FRAMES[0])).unwrap();
+    std::fs::write(cold.join("night1/Ha_004.fits"), b"night1/Ha_004.fits").unwrap();
+    let location = catalog
+        .register_location(&LocationRegistration {
+            name: "Cold-1/Captures".into(),
+            path: NativePath::from_path(&cold),
+            role: LocationRole::Captures,
+            identity: folder_identity(&cold).unwrap(),
+        })
+        .await
+        .unwrap();
+    let cold_fx = Fixture { temp: tempfile::tempdir().unwrap(), db: lib.fx.db.clone(), root: cold };
+    scan(catalog, &cold_fx, &location, &[FRAMES[0], "night1/Ha_004.fits"]).await;
+    for id in [lib.location.id, location.id] {
+        let assets = catalog.location_assets(id).await.unwrap();
+        catalog.verify_digest(by_name(&assets, "Ha_001.fits").id, DiskProbe).await.unwrap();
+    }
+    location
+}
+
+#[tokio::test]
+async fn candidate_basis_lists_current_light_and_unknown_sessions_without_hashing() {
+    let lib = indexed_with(&["night1/Dark_001.fits", "night1/Unknown_001.fits"]).await;
+    let catalog = &lib.catalog;
+    let cold = cold_copy(&lib).await;
+    let assets = catalog.location_assets(lib.location.id).await.unwrap();
+    let dark = session_holding(catalog, by_name(&assets, "Dark_001.fits").id).await;
+    // The unknown-type session is superseded by a filter correction.
+    let unknown = by_name(&assets, "Unknown_001.fits").clone();
+    let superseded = session_holding(catalog, unknown.id).await;
+    let correction = CorrectionInput {
+        asset_id: unknown.id,
+        field: "filter".into(),
+        value: serde_json::json!("SII"),
+    };
+    catalog
+        .apply_correction_and_regroup(&[expected(&unknown)], &[correction], group)
+        .await
+        .unwrap();
+    let unknown_now = session_holding(catalog, unknown.id).await;
+    assert_ne!(unknown_now.id, superseded.id);
+    let unusable = by_name(&assets, "Ha_003.fits").clone();
+    catalog.set_quality(&[expected(&unusable)], Quality::Unusable, DiskProbe).await.unwrap();
+    let ha = session_holding(catalog, by_name(&assets, "Ha_001.fits").id).await;
+    catalog.confirm_equipment(&[expected_session(&ha)], lib.equipment.id).await.unwrap();
+    let ha = session_holding(catalog, by_name(&assets, "Ha_001.fits").id).await;
+    let oiii = session_holding(catalog, by_name(&assets, "OIII_001.fits").id).await;
+    let cold_assets = catalog.location_assets(cold.id).await.unwrap();
+    assert!(ha.asset_ids.contains(&by_name(&cold_assets, "Ha_004.fits").id), "Ha spans Cold-1");
+    let library = dump_tables(&lib.fx.db, &LIBRARY_TABLES).await;
+
+    let basis = catalog.candidate_basis().await.unwrap();
+    let ids: Vec<Uuid> = basis.sessions.iter().map(|s| s.summary.session.id).collect();
+    assert_eq!(
+        sorted(ids),
+        sorted(vec![ha.id, oiii.id, unknown_now.id]),
+        "current light and unknown-type sessions; never the dark {} or superseded {}",
+        dark.id,
+        superseded.id
+    );
+    let candidate = |id: Uuid| basis.sessions.iter().find(|s| s.summary.session.id == id).unwrap();
+
+    // The Ha session: D16 captures with their copies, live state and quality.
+    let ha_candidate = candidate(ha.id);
+    assert_eq!(ha_candidate.summary.session.decision_revision, ha.decision_revision);
+    assert_eq!(ha_candidate.captures.len(), 4, "the Ha_001 copy pair is one capture");
+    assert_eq!(ha_candidate.summary.location_ids, sorted(vec![lib.location.id, cold.id]));
+    let main_ha1 = by_name(&assets, "Ha_001.fits").id;
+    let pair = ha_candidate
+        .captures
+        .iter()
+        .find(|c| c.copies.iter().any(|copy| copy.asset_id == main_ha1))
+        .unwrap();
+    let pair_ids: Vec<Uuid> = pair.copies.iter().map(|copy| copy.asset_id).collect();
+    let cold_ha1 = by_name(&cold_assets, "Ha_001.fits").id;
+    assert_eq!(pair_ids, sorted(vec![main_ha1, cold_ha1]), "one capture, both copies");
+    assert_eq!(pair.member_key, pair_ids[0], "the key is the smallest copy");
+    for copy in &pair.copies {
+        let current = catalog.asset(copy.asset_id).await.unwrap();
+        assert_eq!(
+            (copy.location_id, copy.availability, copy.decision_revision, &copy.fingerprint),
+            (
+                current.location_id,
+                Availability::Available,
+                current.decision_revision,
+                &current.fingerprint
+            )
+        );
+    }
+    let quality_of = |id: Uuid| {
+        let capture = ha_candidate.captures.iter().find(|c| c.member_key == id).unwrap();
+        capture.quality
+    };
+    assert_eq!(quality_of(unusable.id), ApplicableQuality::Unusable);
+    assert_eq!(quality_of(pair.member_key), ApplicableQuality::Unreviewed);
+    for capture in &ha_candidate.captures {
+        let frame = &capture.frame;
+        assert!(ha.asset_ids.contains(&frame.asset_id), "evidence of the session's own copy");
+        assert_eq!(
+            (frame.light, frame.filter.as_deref(), frame.exposure_seconds, frame.camera.as_deref()),
+            (Some(true), Some("Ha"), Some(300.0), Some("ASI2600MM"))
+        );
+    }
+    let equipment: Vec<_> = ha_candidate
+        .associations
+        .iter()
+        .filter(|a| a.kind == platevault_model::AssociationKind::Equipment)
+        .map(|a| (a.subject_id, a.state.clone()))
+        .collect();
+    assert_eq!(equipment, vec![(Some(lib.equipment.id), AssociationState::Confirmed)]);
+    let members: Vec<Uuid> = ha_candidate.assessed.observations.keys().copied().collect();
+    assert_eq!(members, ha.asset_ids, "the evidence names the current members");
+    assert_eq!(basis.equipment.iter().map(|e| e.id).collect::<Vec<_>>(), vec![lib.equipment.id]);
+
+    // The unknown-type session reads frame type unknown with its corrected filter.
+    let unknown_candidate = candidate(unknown_now.id);
+    let frame = &unknown_candidate.captures[0].frame;
+    assert_eq!((frame.light, frame.filter.as_deref()), (None, Some("SII")));
+
+    // Reading hashed nothing: no library row (last_verified_at included) moved.
+    assert_eq!(dump_tables(&lib.fx.db, &LIBRARY_TABLES).await, library);
+    assert_eq!(tree(&lib.fx.root), lib.before);
+}
+
+#[tokio::test]
+async fn view_membership_reads_live_availability_unresolved_and_changed_since_review() {
+    let lib = indexed().await;
+    let catalog = &lib.catalog;
+    let by_filter = sessions(catalog).await;
+    let (ha, oiii) = (&by_filter["Ha"], &by_filter["OIII"]);
+    let id = catalog.create_view(&origin_sessions(&[ha, oiii])).await.unwrap().view.id;
+    let draft = catalog.view_membership(id, Membership::Draft).await.unwrap();
+    assert_eq!((draft.view_id, draft.membership, draft.revision), (id, Membership::Draft, 1));
+    let chosen: Vec<Uuid> = draft.sessions.iter().map(|c| c.current.session.id).collect();
+    assert_eq!(chosen, sorted(vec![ha.id, oiii.id]));
+    assert_eq!(draft.members.len(), FRAMES.len());
+    for member in &draft.members {
+        assert!(!member.unresolved && !member.changed_since_review, "{member:?}");
+        assert_eq!(member.quality, ApplicableQuality::Unreviewed);
+        assert_eq!(member.frame.asset_id, member.member.member_key);
+        let copy = &member.copies[0];
+        let asset = catalog.asset(copy.asset_id).await.unwrap();
+        assert_eq!(
+            (copy.location_name.as_str(), copy.availability, copy.failure_reason.as_deref()),
+            ("Astro-T7/Captures", Availability::Available, None)
+        );
+        assert_eq!(copy.path, asset.relative_path);
+        assert_eq!(json(&copy.current), json(&expected(&asset)));
+    }
+    let none = catalog.view_membership(id, Membership::Committed).await.unwrap_err();
+    assert_eq!(kind(&none), "not_found", "nothing is committed yet");
+    catalog.save_view(id, 0, 1).await.unwrap();
+    let committed = catalog.view_membership(id, Membership::Committed).await.unwrap();
+    assert_eq!((committed.membership, committed.revision), (Membership::Committed, 1));
+    let recorded = |basis: &platevault_model::MembershipBasis| {
+        serde_json::to_value(basis.members.iter().map(|m| &m.member).collect::<Vec<_>>()).unwrap()
+    };
+    let states = |basis: &platevault_model::MembershipBasis| {
+        basis.members.iter().map(|m| (m.member.member_key, m.member.state)).collect::<Vec<_>>()
+    };
+    assert_eq!(states(&committed), states(&draft), "Save committed the draft's members");
+    assert!(committed.members.iter().all(|m| m.member.added_in_revision == Some(1)));
+    assert_eq!(
+        kind(&catalog.view_membership(id, Membership::Draft).await.unwrap_err()),
+        "not_found"
+    );
+
+    // A new modification time on unchanged bytes, rescanned: the member is
+    // changed since review and its copy reads the current fingerprint.
+    let assets = catalog.location_assets(lib.location.id).await.unwrap();
+    let touched = by_name(&assets, "OIII_001.fits").clone();
+    let file = std::fs::File::options().write(true).open(lib.fx.root.join(FRAMES[3])).unwrap();
+    file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(60)).unwrap();
+    drop(file);
+    scan(catalog, &lib.fx, &lib.location, &FRAMES).await;
+    let drifted = catalog.view_membership(id, Membership::Committed).await.unwrap();
+    let changed: Vec<Uuid> = drifted
+        .members
+        .iter()
+        .filter(|m| m.changed_since_review)
+        .map(|m| m.member.member_key)
+        .collect();
+    assert_eq!(changed, vec![touched.id]);
+    let now = catalog.asset(touched.id).await.unwrap();
+    let member = drifted.members.iter().find(|m| m.member.member_key == touched.id).unwrap();
+    assert_eq!(json(&member.copies[0].current), json(&expected(&now)));
+    assert_eq!(recorded(&drifted), recorded(&committed), "the stored members never move");
+
+    // Offline and then Unreadable: every included member reads unresolved with
+    // its location, failure reason and last observation; an excluded one does not.
+    catalog
+        .edit_view_draft(
+            id,
+            0,
+            &DraftEdit::SetFrames { member_keys: vec![touched.id], state: MemberState::Excluded },
+        )
+        .await
+        .unwrap();
+    for (availability, reason) in
+        [(Availability::Offline, "unplugged"), (Availability::Unreadable, "permission denied")]
+    {
+        catalog.mark_location_unavailable(lib.location.id, availability, reason).await.unwrap();
+        for membership in [Membership::Committed, Membership::Draft] {
+            let basis = catalog.view_membership(id, membership).await.unwrap();
+            assert_eq!(basis.members.len(), FRAMES.len(), "never an empty session");
+            for member in &basis.members {
+                let excluded = member.member.state == MemberState::Excluded;
+                assert_eq!(member.unresolved, !excluded, "{membership:?} {member:?}");
+                let copy = &member.copies[0];
+                assert_eq!(
+                    (copy.availability, copy.failure_reason.as_deref(), copy.location_id),
+                    (availability, Some(reason), lib.location.id)
+                );
+                assert_eq!(copy.location_name, "Astro-T7/Captures");
+                assert!(!copy.last_observed_at.is_empty());
+            }
+            let captures: u64 = basis.sessions.iter().map(|c| c.current.capture_count).sum();
+            assert_eq!(captures, FRAMES.len() as u64, "last-observed sessions keep their captures");
+        }
+    }
+    assert_eq!(tree(&lib.fx.root), lib.before, "only the modification time moved");
+}
+
+#[tokio::test]
+async fn an_older_revision_reads_unchanged_after_a_later_save_and_a_verified_remap() {
+    let lib = indexed().await;
+    let catalog = &lib.catalog;
+    let by_filter = sessions(catalog).await;
+    let (ha, oiii) = (&by_filter["Ha"], &by_filter["OIII"]);
+    let id = catalog.create_view(&origin_sessions(&[ha])).await.unwrap().view.id;
+    catalog.save_view(id, 0, 1).await.unwrap();
+    let first = catalog.view_revision(id, 1).await.unwrap();
+    let (choices, members) = stored(&lib.fx.db, id, Some(1)).await;
+    assert_eq!(
+        serde_json::to_value(&first.sessions).unwrap(),
+        serde_json::to_value(&choices).unwrap()
+    );
+    assert_eq!(
+        serde_json::to_value(&first.members).unwrap(),
+        serde_json::to_value(&members).unwrap()
+    );
+    assert!(first.members.iter().all(|m| !m.copies.is_empty()), "every review basis is returned");
+    let first = serde_json::to_value(first).unwrap();
+
+    let manual = DraftEdit::SelectSessions { sessions: vec![expected_session(oiii)] };
+    catalog.edit_view_draft(id, 0, &manual).await.unwrap();
+    assert_eq!(catalog.save_view(id, 1, 1).await.unwrap().view.revision, 2);
+    let older = catalog.view_revision(id, 1).await.expect("an older revision is never Conflict");
+    assert_eq!(serde_json::to_value(older).unwrap(), first);
+    let second = serde_json::to_value(catalog.view_revision(id, 2).await.unwrap()).unwrap();
+    assert_ne!(second, first);
+
+    // A verified remap onto a byte-identical copy keeps every member asset id.
+    let copy = lib.fx.temp.path().join("Captures copy");
+    for name in FRAMES {
+        std::fs::create_dir_all(copy.join(name).parent().unwrap()).unwrap();
+        std::fs::copy(lib.fx.root.join(name), copy.join(name)).unwrap();
+    }
+    let location = catalog.location(lib.location.id).await.unwrap();
+    let review = catalog
+        .review_remap(
+            location.id,
+            location.decision_revision,
+            &NativePath::from_path(&copy),
+            &folder_identity(&copy).unwrap(),
+            DiskProbe,
+        )
+        .await
+        .unwrap();
+    assert!(review.blocked.is_empty(), "{:?}", review.blocked);
+    let remapped = catalog.apply_remap(review.id, location.decision_revision, DiskProbe).await;
+    assert_eq!(remapped.unwrap().path, NativePath::from_path(&copy));
+    for (revision, before) in [(1, &first), (2, &second)] {
+        let after = serde_json::to_value(catalog.view_revision(id, revision).await.unwrap());
+        assert_eq!(&after.unwrap(), before, "revision {revision} unchanged by the remap");
+    }
+    let remapped = catalog.view_membership(id, Membership::Committed).await.unwrap();
+    assert!(remapped.members.iter().all(|m| !m.unresolved), "the copies are available again");
+    assert_eq!(tree(&lib.fx.root), lib.before);
+}
+
+#[tokio::test]
+async fn view_references_name_every_view_whose_revisions_or_draft_hold_an_asked_asset() {
+    let lib = indexed().await;
+    let catalog = &lib.catalog;
+    let by_filter = sessions(catalog).await;
+    let (ha, oiii) = (&by_filter["Ha"], &by_filter["OIII"]);
+    // Saved with Ha; its draft adds OIII.
+    let saved = catalog.create_view(&origin_sessions(&[ha])).await.unwrap().view.id;
+    catalog.save_view(saved, 0, 1).await.unwrap();
+    let manual = DraftEdit::SelectSessions { sessions: vec![expected_session(oiii)] };
+    catalog.edit_view_draft(saved, 0, &manual).await.unwrap();
+    // Never saved: only its draft holds OIII.
+    let unsaved = NewView { name: Some("Bicolor draft".into()), ..origin_sessions(&[oiii]) };
+    let unsaved = catalog.create_view(&unsaved).await.unwrap().view.id;
+    let assets = catalog.location_assets(lib.location.id).await.unwrap();
+    let (ha1, oiii1) = (by_name(&assets, "Ha_001.fits").id, by_name(&assets, "OIII_001.fits").id);
+
+    let asked = BTreeSet::from([ha1, oiii1, Uuid::new_v4()]);
+    let mut want = vec![
+        AssetReference {
+            kind: ReferenceKind::View,
+            id: saved,
+            name: "NGC7000 HOO - Siril".into(),
+            revision: 1,
+            asset_ids: sorted(vec![ha1, oiii1]),
+        },
+        AssetReference {
+            kind: ReferenceKind::View,
+            id: unsaved,
+            name: "Bicolor draft".into(),
+            revision: 0,
+            asset_ids: vec![oiii1],
+        },
+    ];
+    want.sort_by_key(|reference| reference.id);
+    assert_eq!(catalog.view_references(&asked).await.unwrap(), want);
+    assert!(catalog.view_references(&BTreeSet::new()).await.unwrap().is_empty());
+    let elsewhere = BTreeSet::from([Uuid::new_v4()]);
+    assert!(catalog.view_references(&elsewhere).await.unwrap().is_empty());
 }

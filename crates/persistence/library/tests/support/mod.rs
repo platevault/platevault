@@ -97,10 +97,17 @@ pub fn group(assets: &[Asset]) -> GroupingResult {
     }
 }
 
+/// Header metadata of a fixture frame named by its path: OIII or Ha, a DARK
+/// frame type for `Dark` names and an unknown frame type for `Unknown` names.
 pub fn metadata_for(relative: &str) -> CaptureMetadata {
     let filter = if relative.contains("OIII") { "OIII" } else { "Ha" };
+    let image_type = if relative.contains("Unknown") {
+        None
+    } else {
+        Some(if relative.contains("Dark") { "DARK" } else { "LIGHT" }.into())
+    };
     CaptureMetadata {
-        image_type: Some(if relative.contains("Dark") { "DARK" } else { "LIGHT" }.into()),
+        image_type,
         filter: Some(filter.into()),
         exposure_seconds: Some(300.0),
         camera: Some("ASI2600MM".into()),
