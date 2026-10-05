@@ -26,11 +26,11 @@ No command reads or writes an image file.
 
 ## Project detail
 
-- `framing.targets[]`: confirmed snapshot, `currentRevision` and `framingChanged`. `framing.panels[]` as stored.
-- `links[]`: `sessionId`, `panelId`, `state` Current or NeedsReview with `successors`, the session summary, `captureSites[]` `{latitudeDeg, longitudeDeg, frames}` plus `unknownSiteFrames`, `exposureSeconds[]` and the equipment association.
-- `progress`: `channels[]` and `unknownChannel` rows with `capturedSeconds`, `capturedFrames`, `usableSeconds`, `usableFrames`, `acceptedSeconds`, `acceptedFrames`, `unreviewedSeconds`, `rejectedFrames`, `unknownExposureCount`, `unknownImageTypeCount`, `driftedDecisions`, `verificationPending`, `conflictingDecisions`, `conflictingCopies`, `duplicateCandidates`, `usableLastVerifiedAt` and `acceptedLastVerifiedAt`. The response also carries `provisional` and `coveredLocationIds`.
-- `checklist[]`: the item, `basis`, and either `{captured, usable, accepted, goal, met}` for integration and frame_count or `evidence[]` per session or panel. Evidence states are `matches`, `suggested_match`, `differs`, `unknown` and `no_linked_session`, each with a reason.
-- `rejections[]`: asset ID, session ID when linked, decision time and the Project revision that wrote it.
+- `project`: the committed Project. `project.targets[]` carry the confirmed snapshot with `confirmedRevision`, `currentRevision` and `framingChanged`; `project.panels[]` are as stored; `project.rejections[]` hold the latest decision per asset.
+- `links[]`: `sessionId`, `panelId`, `state` (`current` or `needs_review`) with `successors`, the session `summary`, `captureSites[]` `{latitudeDeg, longitudeDeg, frames}` plus `unknownSiteFrames`, `exposures[]` `{channel, exposureSeconds, frames}` with `exposureSeconds` null when unknown, and the `equipment` association.
+- `progress`: `channels[]` and `unknownChannel` rows with `channel`, `capturedSeconds`, `capturedFrames`, `usableSeconds`, `usableFrames`, `acceptedSeconds`, `acceptedFrames`, `unreviewedSeconds`, `rejectedFrames`, `unknownExposureCount`, `unknownImageTypeCount`, `driftedDecisions`, `verificationPending`, `conflictingDecisions`, `conflictingCopies`, `duplicateCandidates`, `usableLastVerifiedAt`, `acceptedLastVerifiedAt` and `availability[]` `{availability, capturedSeconds, capturedFrames}`. The progress also carries `provisional` and `coveredLocationIds`.
+- `checklist[]`: the `item`, its `basis`, and `progress` `seconds` or `frames` with `{captured, usable, accepted, goal, met}` for integration and frame_count, or `evidence` with `evidence[]` per session or panel `{sessionId, panelId, sessionIds, state, reason}`. Evidence states are `matches`, `suggested_match`, `differs`, `unknown` and `no_linked_session`.
+- `rejections[]`: effective rejections with asset ID, session ID when linked, decision time and the Project revision that wrote it.
 
 ## Errors
 

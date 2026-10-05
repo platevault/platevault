@@ -553,6 +553,50 @@ fn target_of(
         .map(|association| (association.state.clone(), association.subject_id))
 }
 
+/// Light integration reads IMAGETYP exactly as grouping does: OBJECT (written by
+/// ACP and `MaxIm DL`) and SCIENCE frames are lights. Grouping puts them in one
+/// session with a Light Frame, and captured integration counts each of them like it.
+#[tokio::test]
+async fn object_and_science_frames_count_toward_light_integration_like_light_frames() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("captures");
+    std::fs::create_dir(&root).unwrap();
+    let mut originals = Vec::new();
+    let frames = [
+        ("light.fits", "'Light Frame'", "2026-09-18T22:00:00"),
+        ("object.fits", "'OBJECT'", "2026-09-18T22:05:00"),
+        ("science.fits", "'SCIENCE'", "2026-09-18T22:10:00"),
+    ];
+    for (name, image_type, start) in frames {
+        let mut fields = m31_frame(start);
+        fields[0].1 = image_type.into();
+        let fields: Vec<(&str, &str)> =
+            fields.iter().map(|(key, value)| (*key, value.as_str())).collect();
+        let path = root.join(name);
+        support::fits(&path, &fields).unwrap();
+        originals.push((path.clone(), support::digest(&path)));
+    }
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let location = library
+        .register_location(NativePath::from_path(&root), "Captured".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+    let (summary, detail) = only_session(&library).await;
+    assert_eq!(summary.capture_count, 3, "grouping reads all three as one light session");
+    let m31 = target_of(&detail).unwrap().1.unwrap();
+    let coverage = library.catalog().target_coverage(m31).await.unwrap();
+    let counted = (
+        summed(&coverage, |c| c.captured_seconds),
+        summed(&coverage, |c| c.unreviewed_seconds),
+        coverage.contributions.iter().map(|c| c.unknown_exposure_count).sum::<u64>(),
+    );
+    assert_eq!(counted, (900.0, 900.0, 0), "{coverage:?}");
+    for (path, digest) in &originals {
+        assert_eq!(&support::digest(path), digest, "originals unchanged");
+    }
+}
+
 #[tokio::test]
 async fn a_partial_filter_correction_refreshes_every_successor_session() {
     let temp = tempfile::tempdir().unwrap();
@@ -865,9 +909,7 @@ async fn two_location_library(
     (library, locations, originals)
 }
 
-async fn only_session(
-    library: &Library,
-) -> (persistence_library::SessionSummary, persistence_library::SessionDetail) {
+async fn only_session(library: &Library) -> (SessionSummary, persistence_library::SessionDetail) {
     let sessions = library.catalog().list_sessions(&SessionQuery::default()).await.unwrap();
     assert_eq!(sessions.len(), 1, "one capture key across both locations");
     let detail = library.catalog().session(sessions[0].session.id).await.unwrap();
@@ -982,8 +1024,9 @@ async fn a_deleted_or_moved_root_never_blocks_an_unrelated_sibling() {
 }
 
 /// Records of a feature that holds library asset ids (VSEL Views and their
-/// prepared revisions, PRJ Projects, Results), served through the seam those
-/// features implement. The library only reads them.
+/// prepared revisions, Results), served through the seam those features
+/// implement. Projects are the real catalog records `Library::open` registers.
+/// The library only reads them.
 struct Records {
     kind: ReferenceKind,
     held: tokio::sync::Mutex<Vec<AssetReference>>,
@@ -1032,21 +1075,6 @@ fn record(
     }
 }
 
-/// The members a View names unresolved: every asset not currently Available.
-async fn unresolved_members(
-    catalog: &persistence_library::Catalog,
-    members: &[Uuid],
-) -> Vec<(Uuid, Availability)> {
-    let mut unresolved = Vec::new();
-    for id in members {
-        let asset = catalog.asset(*id).await.unwrap();
-        if asset.availability != Availability::Available {
-            unresolved.push((asset.id, asset.availability));
-        }
-    }
-    unresolved
-}
-
 /// The review names the location, its root and availability, every copy, the
 /// session holding them and each View, Project and Result record, and says that
 /// no file changes.
@@ -1055,6 +1083,7 @@ fn assert_names_every_reference(
     location: &Location,
     assets: &[Uuid],
     session: Uuid,
+    (view, project): (Uuid, Uuid),
 ) {
     assert_eq!(
         (review.location_name.as_str(), &review.root, review.availability),
@@ -1070,9 +1099,9 @@ fn assert_names_every_reference(
         .map(|reference| (reference.kind, reference.id.as_u128()))
         .collect();
     let expected = [
-        (ReferenceKind::View, 0x7000),
         (ReferenceKind::View, 0x7001),
-        (ReferenceKind::Project, 0x31),
+        (ReferenceKind::View, view.as_u128()),
+        (ReferenceKind::Project, project.as_u128()),
     ];
     assert_eq!(referenced, expected);
     assert_eq!(
@@ -1119,9 +1148,34 @@ async fn rereview_after_return(
     (location, again)
 }
 
+/// A real Project, framed by one panel, linking the current record of `session`.
+async fn mosaic_linking(catalog: &persistence_library::Catalog, session: Uuid) -> Project {
+    let input = ProjectInput {
+        name: "M 31 mosaic".into(),
+        notes: None,
+        targets: Vec::new(),
+        panels: vec![PanelInput {
+            id: None,
+            name: "Core".into(),
+            ra_deg: 10.684_708,
+            dec_deg: 41.268_75,
+            width_deg: 3.0,
+            height_deg: 2.0,
+            position_angle_deg: None,
+        }],
+        equipment_ids: Vec::new(),
+    };
+    let project = catalog.create_project(&input).await.unwrap();
+    let session = catalog.session(session).await.unwrap().summary.session;
+    let links = [SessionLinkInput { session: expected_session_of(&session), panel_id: None }];
+    catalog.link_sessions(project.id, project.revision, &links).await.unwrap()
+}
+
 /// LIB-AC-16: an offline location whose copies are fixed View members leaves the
 /// library only through a reviewed Retire location, and its folder registers again
-/// counting each capture once.
+/// counting each capture once. The fixed View is a real saved View (spec 066);
+/// its prepared revision stays a stand-in record until PREP (069).
+#[expect(clippy::too_many_lines, reason = "one composed retire scenario over one indexed library")]
 #[tokio::test]
 async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_once_again() {
     let temp = tempfile::tempdir().unwrap();
@@ -1155,19 +1209,18 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
     assert_eq!(totals(&catalog.target_coverage(m31).await.unwrap()), (600.0, 300.0, 300.0));
 
     // A fixed View membership and its prepared revision, and a Project, hold the copies.
+    let session = catalog.session(summary.session.id).await.unwrap().summary.session;
+    let origin = ViewOriginInput::Sessions { sessions: vec![expected_session_of(&session)] };
+    let view = library.create_view(&origin, Some("M 31 Ha".into())).await.unwrap().view.id;
+    assert_eq!(catalog.save_view(view, 0, 1).await.unwrap().view.revision, 1);
+    let fixed_view = serde_json::to_value(catalog.view_revision(view, 1).await.unwrap()).unwrap();
     let views = Records::new(
         ReferenceKind::View,
-        vec![
-            record(ReferenceKind::View, 0x7000, "M 31 Ha", 2, &assets),
-            record(ReferenceKind::View, 0x7001, "M 31 Ha prepared", 1, &assets),
-        ],
+        vec![record(ReferenceKind::View, 0x7001, "M 31 Ha prepared", 1, &assets)],
     );
-    let projects = Records::new(
-        ReferenceKind::Project,
-        vec![record(ReferenceKind::Project, 0x31, "M 31 mosaic", 5, &assets)],
-    );
+    let project = mosaic_linking(catalog, summary.session.id).await;
     let results = Records::new(ReferenceKind::Result, Vec::new());
-    for source in [&views, &projects, &results] {
+    for source in [&views, &results] {
         library.register_references(Arc::clone(source) as Arc<dyn AssetReferences>).await;
     }
     let fixed = views.snapshot().await;
@@ -1181,7 +1234,13 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
     assert_eq!(totals(&catalog.target_coverage(m31).await.unwrap()), (600.0, 300.0, 300.0));
 
     let review = library.review_retire_location(location.id).await.unwrap();
-    assert_names_every_reference(&review, &location, &assets, summary.session.id);
+    assert_names_every_reference(
+        &review,
+        &location,
+        &assets,
+        summary.session.id,
+        (view, project.id),
+    );
 
     // If its availability changes after the review, confirmation needs a new one.
     let (location, review) = rereview_after_return(&library, &review, &root).await;
@@ -1209,8 +1268,23 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
     let coverage = catalog.target_coverage(m31).await.unwrap();
     assert!(coverage.contributions.is_empty() && !coverage.provisional, "{coverage:?}");
     assert_eq!(views.snapshot().await, fixed);
-    let expected: Vec<_> = assets.iter().map(|id| (*id, Availability::Retired)).collect();
-    assert_eq!(unresolved_members(catalog, &fixed[0].asset_ids).await, expected);
+    let progress = catalog.project_progress(project.id).await.unwrap().progress;
+    assert!(progress.channels.is_empty() && progress.unknown_channel.is_none(), "{progress:?}");
+    let mut expected: Vec<_> = assets.iter().map(|id| (*id, Availability::Retired)).collect();
+    expected.sort_by_key(|(id, _)| *id);
+    let membership = catalog.view_membership(view, Membership::Committed).await.unwrap();
+    let unresolved: Vec<(Uuid, Availability)> = membership
+        .members
+        .iter()
+        .filter(|member| member.unresolved)
+        .flat_map(|member| member.copies.iter().map(|copy| (copy.asset_id, copy.availability)))
+        .collect();
+    assert_eq!(unresolved, expected);
+    assert_eq!(
+        serde_json::to_value(catalog.view_revision(view, 1).await.unwrap()).unwrap(),
+        fixed_view
+    );
+    assert_eq!(catalog.view(view).await.unwrap().view.revision, 1, "no revision changed");
 
     // The folder returns: reselecting the retired location is refused, and
     // registering the folder again succeeds and counts each capture once.
@@ -1237,6 +1311,10 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
         "{sessions:?}"
     );
     assert_eq!(views.snapshot().await, fixed, "never changed silently");
+    assert_eq!(
+        serde_json::to_value(catalog.view_revision(view, 1).await.unwrap()).unwrap(),
+        fixed_view
+    );
     for (path, digest) in frames.iter().zip(&originals) {
         assert_eq!(&support::digest(path), digest, "originals unchanged");
     }

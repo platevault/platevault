@@ -3,7 +3,7 @@
 
 //! Application operations over the clean catalog. Image paths are read-only.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
@@ -16,13 +16,23 @@ use uuid::Uuid;
 
 use crate::grouping::group_assets;
 use crate::inventory;
+use crate::projects::evaluate_checklist;
 use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
 };
+use crate::view_selection::{
+    evaluate_candidates, matching_sessions, page_candidates, preselect, refresh_items, summarize,
+};
 use crate::{
-    AssetReference, AssociationKind, AssociationState, Availability, FileIdentity, LibraryError,
-    Location, LocationRole, NativePath, ObservationFingerprint, ReferenceKind, RemapReview,
-    RetireReview, Revision, ScanOperation, ScanOptions, ScanState, TargetCandidate,
+    AssetReference, AssociationKind, AssociationState, Availability, CandidateFilters,
+    CandidatePage, CandidateQuery, CriteriaInput, DraftEdit, FileIdentity, FramingPanel,
+    FramingSnapshot, FramingSource, FramingTarget, LibraryError, Location, LocationRole,
+    MemberBasis, MemberReason, MemberState, Membership, MembershipBasis, MembershipSummary,
+    Microseconds, NativePath, NewView, ObservationFingerprint, OpenChoice, OpenChoiceKind, Project,
+    ProjectDetail, QualityAction, QualityScope, QualityState, ReferenceKind, RefreshReview,
+    RefreshState, RemapReview, RetireReview, Revision, ScanOperation, ScanOptions, ScanState,
+    ScopeChannel, ScopeOwner, SessionChoice, SuggestedChoice, TargetCandidate, ViewDetail,
+    ViewOriginInput, ViewQuery, ViewRecord,
 };
 use persistence_library::{
     Catalog, CorrectionOutcome, LocationReferences, LocationRegistration, SessionDetail,
@@ -43,6 +53,39 @@ pub trait AssetReferences: Send + Sync + 'static {
     fn kind(&self) -> ReferenceKind;
     /// Every record that holds any of `assets`, each naming which of them.
     fn references_to<'a>(&'a self, assets: &'a BTreeSet<Uuid>) -> ReferencesFuture<'a>;
+}
+
+/// Projects (spec 065) as a reference source: a Project holds the assets of its
+/// linked sessions and of its effective rejections.
+struct ProjectReferences {
+    catalog: Arc<Catalog>,
+}
+
+impl AssetReferences for ProjectReferences {
+    fn kind(&self) -> ReferenceKind {
+        ReferenceKind::Project
+    }
+
+    fn references_to<'a>(&'a self, assets: &'a BTreeSet<Uuid>) -> ReferencesFuture<'a> {
+        Box::pin(self.catalog.project_references(assets))
+    }
+}
+
+/// Views (spec 066) as a reference source: a View holds the copies of the
+/// members of its committed revisions and of its draft. Its revision is the
+/// latest committed revision (R26).
+struct ViewReferences {
+    catalog: Arc<Catalog>,
+}
+
+impl AssetReferences for ViewReferences {
+    fn kind(&self) -> ReferenceKind {
+        ReferenceKind::View
+    }
+
+    fn references_to<'a>(&'a self, assets: &'a BTreeSet<Uuid>) -> ReferencesFuture<'a> {
+        Box::pin(self.catalog.view_references(assets))
+    }
 }
 
 pub struct Library {
@@ -105,8 +148,9 @@ impl persistence_library::SourceProbe for InventoryProbe {
 }
 
 impl Library {
-    /// Open a fresh-schema catalog and load the offline target dataset.
-    /// Interrupted scan recovery is owned by the catalog.
+    /// Open a fresh-schema catalog and load the offline target dataset, with the
+    /// catalog's Projects and Views registered as reference sources. Interrupted
+    /// scan recovery is owned by the catalog.
     ///
     /// # Errors
     /// Returns catalog persistence, seed validation or provider configuration errors.
@@ -118,6 +162,10 @@ impl Library {
         let targets = blocking(TargetIndex::bundled).await?;
         let provider = provider.map(SimbadTargetResolver::simbad).transpose()?;
         let (progress, _) = broadcast::channel(128);
+        let projects: Arc<dyn AssetReferences> =
+            Arc::new(ProjectReferences { catalog: Arc::clone(&catalog) });
+        let views: Arc<dyn AssetReferences> =
+            Arc::new(ViewReferences { catalog: Arc::clone(&catalog) });
         Ok(Arc::new(Self {
             catalog,
             targets: Arc::new(targets),
@@ -125,7 +173,7 @@ impl Library {
             scans: Mutex::new(HashMap::new()),
             saved_targets: Mutex::new(None),
             progress,
-            references: tokio::sync::RwLock::new(Vec::new()),
+            references: tokio::sync::RwLock::new(vec![projects, views]),
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         }))
@@ -194,6 +242,301 @@ impl Library {
     /// Register a feature's records that hold asset ids (see [`AssetReferences`]).
     pub async fn register_references(&self, source: Arc<dyn AssetReferences>) {
         self.references.write().await.push(source);
+    }
+
+    /// A Project with its linked-session evidence, per-channel progress, checklist
+    /// progress, effective rejections and Views, all at one Project revision.
+    /// Read-only: it reads no source, starts no rehash and changes no Project field.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; `PersistenceFailure` when the catalog
+    /// cannot be read.
+    pub async fn project_detail(&self, id: Uuid) -> Result<ProjectDetail, LibraryError> {
+        loop {
+            let basis = self.catalog.project_progress(id).await?;
+            let project = self.catalog.project(id).await?;
+            // A Project write committed between the reads: evaluate one revision.
+            if project.revision != basis.project_revision {
+                continue;
+            }
+            let checklist = evaluate_checklist(&project, &basis);
+            let views = self
+                .catalog
+                .list_views(&ViewQuery { project_id: Some(id), ..ViewQuery::default() })
+                .await?;
+            return Ok(ProjectDetail {
+                project,
+                links: basis.sessions,
+                progress: basis.progress,
+                checklist,
+                rejections: basis.rejections,
+                views,
+            });
+        }
+    }
+
+    /// Create a View from a Project, a Target or chosen sessions (FR-01). A
+    /// Project origin preselects its footprint matches on Project equipment
+    /// (R10), re-reading up to three times when the catalog refuses stale
+    /// evidence (R11); other origins hold only their chosen sessions. Writes
+    /// only View rows.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project, Target or session; `Conflict` for a
+    /// stale Target or session, or Project evidence that kept changing.
+    pub async fn create_view(
+        &self,
+        origin: &ViewOriginInput,
+        name: Option<String>,
+    ) -> Result<ViewDetail, LibraryError> {
+        let mut attempt = 1;
+        let record = loop {
+            let input = self.new_view(origin, name.clone()).await?;
+            match self.catalog.create_view(&input).await {
+                Err(LibraryError::Conflict { .. })
+                    if input.framing_revision.is_some() && attempt < ASSESSMENT_ATTEMPTS =>
+                {
+                    attempt += 1;
+                }
+                result => break result?,
+            }
+        };
+        self.view_detail(record.view.id).await
+    }
+
+    /// The create input of `origin`: a Project origin's framing revision and
+    /// preselected suggestions with the evidence and members they came from.
+    async fn new_view(
+        &self,
+        origin: &ViewOriginInput,
+        name: Option<String>,
+    ) -> Result<NewView, LibraryError> {
+        let mut input = NewView {
+            origin: origin.clone(),
+            name,
+            criteria: CriteriaInput::default(),
+            framing_revision: None,
+            suggestions: Vec::new(),
+        };
+        if let ViewOriginInput::Project { project_id } = origin {
+            let project = self.catalog.project(*project_id).await?;
+            let criteria =
+                input.criteria.criteria(project_framing(&project), project.equipment_ids.clone());
+            let basis = self.catalog.candidate_basis().await?;
+            let evaluations = evaluate_candidates(&basis, &criteria);
+            input.framing_revision = Some(project.revision);
+            input.suggestions = preselect(&evaluations, &criteria)
+                .into_iter()
+                .filter_map(|choice| {
+                    let evaluation =
+                        evaluations.iter().find(|e| e.session_id() == choice.session_id)?;
+                    Some(SuggestedChoice {
+                        session: evaluation.session.expected(),
+                        reason: choice.reason,
+                        evidence: choice.evidence?,
+                        assessed: evaluation.session.assessed.clone(),
+                    })
+                })
+                .collect();
+        }
+        Ok(input)
+    }
+
+    /// The View review surface's read: headers, the session choices and
+    /// unresolved sources of the draft (else the revision), both summaries,
+    /// whether the Project changed since its snapshot (R23) and the open
+    /// choices. Read-only; one View state across its reads.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown View; `PersistenceFailure` when the catalog
+    /// cannot be read.
+    pub async fn view_detail(&self, id: Uuid) -> Result<ViewDetail, LibraryError> {
+        loop {
+            let record = self.catalog.view(id).await?;
+            let read = self.memberships(&record).await;
+            // A View write committed between the reads: read one state again.
+            if self.catalog.view(id).await? != record {
+                continue;
+            }
+            let (committed, draft) = read?;
+            return self.detail(record, committed, draft).await;
+        }
+    }
+
+    async fn memberships(
+        &self,
+        record: &ViewRecord,
+    ) -> Result<(Option<MembershipBasis>, Option<MembershipBasis>), LibraryError> {
+        let id = record.view.id;
+        let committed = match record.revision {
+            Some(_) => Some(self.catalog.view_membership(id, Membership::Committed).await?),
+            None => None,
+        };
+        let draft = match record.draft {
+            Some(_) => Some(self.catalog.view_membership(id, Membership::Draft).await?),
+            None => None,
+        };
+        Ok((committed, draft))
+    }
+
+    async fn detail(
+        &self,
+        record: ViewRecord,
+        committed: Option<MembershipBasis>,
+        draft: Option<MembershipBasis>,
+    ) -> Result<ViewDetail, LibraryError> {
+        let revision_summary = committed.as_ref().map(summarize);
+        let draft_summary = draft.as_ref().map(summarize);
+        let (chosen, summary) = match (draft, draft_summary.as_ref()) {
+            (Some(draft), Some(summary)) => (Some(draft), Some(summary)),
+            _ => (committed, revision_summary.as_ref()),
+        };
+        let project_context_changed = match (
+            record.view.origin_project_id,
+            chosen.as_ref().and_then(|basis| basis.criteria.framing.project_revision),
+        ) {
+            (Some(project), Some(snapshot)) => {
+                self.catalog.project(project).await?.revision != snapshot
+            }
+            _ => false,
+        };
+        let open_choices = open_choices(&record, chosen.as_ref(), summary, project_context_changed);
+        let unresolved = summary.map(|summary| summary.unresolved.clone()).unwrap_or_default();
+        let sessions = chosen
+            .map(|basis| {
+                basis
+                    .sessions
+                    .into_iter()
+                    .map(|choice| crate::SessionDetail {
+                        choice: choice.choice,
+                        current: choice.current,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(ViewDetail {
+            view: record.view,
+            revision: record.revision,
+            draft: record.draft,
+            profile: None,
+            sessions,
+            revision_summary,
+            draft_summary,
+            unresolved,
+            project_context_changed,
+            open_choices,
+        })
+    }
+
+    /// One page of candidates against the chosen membership's criteria, with
+    /// each row's selection state. Browsing changes nothing: no measurement,
+    /// rehash or write starts (FR-05, FR-06).
+    ///
+    /// # Errors
+    /// `InvalidInput` for an invalid query; `NotFound` for an unknown View or
+    /// a membership it does not have.
+    pub async fn view_candidates(
+        &self,
+        id: Uuid,
+        query: &CandidateQuery,
+    ) -> Result<CandidatePage, LibraryError> {
+        query.validate()?;
+        let membership = self.catalog.view_membership(id, query.membership).await?;
+        let basis = self.catalog.candidate_basis().await?;
+        let evaluations = evaluate_candidates(&basis, &membership.criteria);
+        let selection: Vec<SessionChoice> =
+            membership.sessions.into_iter().map(|basis| basis.choice).collect();
+        Ok(page_candidates(&evaluations, query, &selection))
+    }
+
+    /// Choose every candidate matching `filters` as `select_matching`,
+    /// recording the filters (FR-06). Starts the draft from the latest
+    /// revision when `expected_draft` is 0.
+    ///
+    /// # Errors
+    /// `InvalidInput` for invalid filters or no match; `Conflict` for a stale
+    /// draft or session; `NotFound` for an unknown View.
+    pub async fn view_select_matching(
+        &self,
+        id: Uuid,
+        expected_draft: Revision,
+        filters: &CandidateFilters,
+    ) -> Result<ViewRecord, LibraryError> {
+        filters.validate()?;
+        let record = self.catalog.view(id).await?;
+        let criteria = record
+            .draft
+            .map(|draft| draft.criteria)
+            .or_else(|| record.revision.map(|revision| revision.criteria))
+            .ok_or_else(|| LibraryError::NotFound(format!("membership of view {id}")))?;
+        let basis = self.catalog.candidate_basis().await?;
+        let sessions = matching_sessions(&evaluate_candidates(&basis, &criteria), filters);
+        let edit = DraftEdit::SelectMatching { filters: Box::new(filters.clone()), sessions };
+        self.catalog.edit_view_draft(id, expected_draft, &edit).await
+    }
+
+    /// Durably review the differences between the latest committed revision
+    /// and the current library under the View's saved criteria (R24),
+    /// re-reading up to three times when a Save lands meanwhile. Changes no
+    /// membership.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown or never-saved View; `Conflict` when Saves
+    /// kept landing.
+    pub async fn refresh_view(&self, id: Uuid) -> Result<RefreshReview, LibraryError> {
+        let mut attempt = 1;
+        loop {
+            let committed = self.catalog.view_membership(id, Membership::Committed).await?;
+            let basis = self.catalog.candidate_basis().await?;
+            let evaluations = evaluate_candidates(&basis, &committed.criteria);
+            let review = RefreshReview {
+                id: Uuid::new_v4(),
+                view_id: id,
+                base_revision: committed.revision,
+                items: refresh_items(&committed, &evaluations, &committed.criteria),
+                criteria: committed.criteria,
+                state: RefreshState::Reviewed,
+                created_at: String::new(),
+                applied_at: None,
+            };
+            match self.catalog.record_refresh_review(&review).await {
+                Err(LibraryError::Conflict { .. }) if attempt < ASSESSMENT_ATTEMPTS => attempt += 1,
+                result => return result,
+            }
+        }
+    }
+
+    /// The named scope of a quality action before confirmation (R18): the
+    /// library or the View's Project, the accepted members' frames, sessions
+    /// and seconds per channel, the asked keys it refuses and the current
+    /// expectations of every accepted copy. Mark usable accepts included
+    /// members only. Read-only.
+    ///
+    /// # Errors
+    /// `InvalidInput` for no member keys or Reject for Project on a View
+    /// without a Project; `NotFound` for an unknown View or membership.
+    pub async fn view_quality_scope(
+        &self,
+        id: Uuid,
+        membership: Membership,
+        action: QualityAction,
+        members: &[Uuid],
+    ) -> Result<QualityScope, LibraryError> {
+        if members.is_empty() {
+            return Err(LibraryError::InvalidInput("memberKeys must not be empty".into()));
+        }
+        let basis = self.catalog.view_membership(id, membership).await?;
+        let owner = match action {
+            QualityAction::MarkUsable | QualityAction::MarkUnusable => ScopeOwner::Library,
+            QualityAction::RejectForProject => {
+                let project_id = basis.project_id.ok_or_else(|| {
+                    LibraryError::InvalidInput(format!("view {id} has no Project to reject for"))
+                })?;
+                let project = self.catalog.project(project_id).await?;
+                ScopeOwner::Project { project_id, name: project.name, revision: project.revision }
+            }
+        };
+        Ok(quality_scope(&basis, action, owner, members))
     }
 
     /// Durably review Retire location, naming the Views, Projects and Results of
@@ -723,6 +1066,135 @@ impl Library {
                 Err(error)
             }
         }
+    }
+}
+
+/// The framing snapshot a Project origin takes, as the catalog records it.
+fn project_framing(project: &Project) -> FramingSnapshot {
+    FramingSnapshot {
+        source: FramingSource::Project,
+        project_revision: Some(project.revision),
+        targets: project
+            .targets
+            .iter()
+            .map(|target| FramingTarget {
+                target_id: target.target_id,
+                revision: target.confirmed_revision,
+                designation: target.designation.clone(),
+                coordinates: target.coordinates.clone(),
+            })
+            .collect(),
+        panels: project
+            .panels
+            .iter()
+            .map(|panel| FramingPanel {
+                id: panel.id,
+                name: panel.name.clone(),
+                ra_deg: panel.ra_deg,
+                dec_deg: panel.dec_deg,
+                width_deg: panel.width_deg,
+                height_deg: panel.height_deg,
+                position_angle_deg: panel.position_angle_deg,
+            })
+            .collect(),
+    }
+}
+
+/// A member whose quality needs a look before handoff: a starting exclusion
+/// for its quality, or an included member whose live quality is neither
+/// Unreviewed nor Usable.
+fn needs_quality_review(member: &MemberBasis) -> bool {
+    matches!(member.member.reason, MemberReason::QualityNeedsReview { .. })
+        || (member.member.state == MemberState::Included
+            && !matches!(
+                QualityState::of(&member.quality),
+                QualityState::Unreviewed | QualityState::Usable
+            ))
+}
+
+/// The choices Review preparation gathers, each with its count; the profile
+/// stays unset until PREP (069) supplies one.
+fn open_choices(
+    record: &ViewRecord,
+    chosen: Option<&MembershipBasis>,
+    summary: Option<&MembershipSummary>,
+    project_context_changed: bool,
+) -> Vec<OpenChoice> {
+    let count = |value: usize| u64::try_from(value).unwrap_or(u64::MAX);
+    let draft = record.draft.as_ref();
+    let counts = [
+        (OpenChoiceKind::UnsavedDraft, u64::from(draft.is_some())),
+        (OpenChoiceKind::StaleDraft, u64::from(draft.is_some_and(|draft| draft.stale))),
+        (
+            OpenChoiceKind::UnresolvedMembers,
+            summary.map_or(0, |summary| {
+                count(summary.unresolved.iter().map(|source| source.member_keys.len()).sum())
+            }),
+        ),
+        (
+            OpenChoiceKind::QualityNeedsReview,
+            chosen.map_or(0, |basis| {
+                count(basis.members.iter().filter(|member| needs_quality_review(member)).count())
+            }),
+        ),
+        (
+            OpenChoiceKind::ChangedSinceReview,
+            summary.map_or(0, |summary| count(summary.changed_since_review.len())),
+        ),
+        (OpenChoiceKind::ProjectContextChanged, u64::from(project_context_changed)),
+        (OpenChoiceKind::ProfileUnset, 1),
+    ];
+    counts
+        .into_iter()
+        .filter(|(_, count)| *count > 0)
+        .map(|(kind, count)| OpenChoice { kind, count })
+        .collect()
+}
+
+/// The scope of `action` over the asked `keys` of `basis` (R18).
+fn quality_scope(
+    basis: &MembershipBasis,
+    action: QualityAction,
+    owner: ScopeOwner,
+    keys: &[Uuid],
+) -> QualityScope {
+    let asked: BTreeSet<Uuid> = keys.iter().copied().collect();
+    let accepted: Vec<&MemberBasis> = basis
+        .members
+        .iter()
+        .filter(|member| asked.contains(&member.member.member_key))
+        .filter(|member| {
+            action != QualityAction::MarkUsable || member.member.state == MemberState::Included
+        })
+        .collect();
+    let held: BTreeSet<Uuid> = accepted.iter().map(|member| member.member.member_key).collect();
+    let mut channels: BTreeMap<Option<&str>, (u64, Microseconds)> = BTreeMap::new();
+    for member in &accepted {
+        let channel = channels.entry(member.frame.filter.as_deref()).or_default();
+        channel.0 += 1;
+        if let Some(exposure) = member.frame.exposure_seconds.and_then(Microseconds::from_seconds) {
+            channel.1 = channel.1.saturating_add(exposure);
+        }
+    }
+    let sessions: BTreeSet<Uuid> = accepted.iter().map(|member| member.member.session_id).collect();
+    QualityScope {
+        action,
+        owner,
+        frames: u64::try_from(accepted.len()).unwrap_or(u64::MAX),
+        sessions: u64::try_from(sessions.len()).unwrap_or(u64::MAX),
+        channels: channels
+            .into_iter()
+            .map(|(channel, (frames, seconds))| ScopeChannel {
+                channel: channel.map(str::to_owned),
+                frames,
+                seconds,
+            })
+            .collect(),
+        refused: asked.difference(&held).copied().collect(),
+        expected: accepted
+            .iter()
+            .flat_map(|member| member.copies.iter().map(|copy| copy.current.clone()))
+            .collect(),
     }
 }
 

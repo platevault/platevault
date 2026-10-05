@@ -6,10 +6,10 @@
 //! the probe reads actual no-follow file and folder metadata.
 #![cfg(unix)]
 
+mod support;
+
 use std::collections::{BTreeMap, BTreeSet};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
 
 use persistence_library::{
     Catalog, LocationReferences, LocationRegistration, SessionQuery, SourceProbe,
@@ -17,261 +17,14 @@ use persistence_library::{
 };
 use platevault_model::{
     ApplicableQuality, Asset, AssetReference, Association, AssociationKind, AssociationState,
-    Availability, CaptureKey, CaptureMetadata, CorrectionInput, EvidenceItem, ExpectedAsset,
-    ExpectedSession, FileIdentity, GroupingResult, ImageFormat, LibraryError, Location,
-    LocationLifecycle, LocationRole, NativePath, ObservationFingerprint, PathSensitivity,
-    Provenance, Quality, ReferenceKind, RemapBlockReason, RetryAction, Revision, ScanBatch,
-    ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState, Session,
-    SessionCandidate, TargetAlias, TargetCandidate, VolumeIdentity,
+    Availability, CorrectionInput, EvidenceItem, ExpectedSession, FileIdentity, GroupingResult,
+    ImageFormat, LibraryError, Location, LocationLifecycle, LocationRole, NativePath,
+    ObservationFingerprint, PathSensitivity, Provenance, Quality, ReferenceKind, RemapBlockReason,
+    RetryAction, Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation,
+    ScanProgress, ScanState, Session, VolumeIdentity,
 };
-use sha2::{Digest, Sha256};
+use support::*;
 use uuid::Uuid;
-
-fn volume() -> VolumeIdentity {
-    VolumeIdentity {
-        filesystem: "apfs".into(),
-        stable_id: Some("0F1E2D3C-test-volume".into()),
-        file_ids_stable: true,
-        case: PathSensitivity::Sensitive,
-        normalization: PathSensitivity::Sensitive,
-    }
-}
-
-fn io_error(path: &Path, error: &std::io::Error) -> LibraryError {
-    LibraryError::from_io(path, error)
-}
-
-fn file_fingerprint(path: &Path) -> Result<ObservationFingerprint, LibraryError> {
-    let metadata = std::fs::symlink_metadata(path).map_err(|error| io_error(path, &error))?;
-    if !metadata.file_type().is_file() {
-        return Err(LibraryError::InvalidInput("not a regular file".into()));
-    }
-    let modified = metadata.modified().map_err(|error| io_error(path, &error))?;
-    let modified_ns =
-        i128::try_from(modified.duration_since(UNIX_EPOCH).unwrap().as_nanos()).unwrap();
-    Ok(ObservationFingerprint {
-        identity: FileIdentity { volume: volume(), file_id: Some(metadata.ino().to_string()) },
-        size_bytes: metadata.len(),
-        modified_ns,
-        content_sha256: None,
-    })
-}
-
-fn folder_identity(path: &Path) -> Result<FileIdentity, LibraryError> {
-    let metadata = std::fs::symlink_metadata(path).map_err(|error| io_error(path, &error))?;
-    if !metadata.is_dir() {
-        return Err(LibraryError::IdentityConflict("root is not a folder".into()));
-    }
-    Ok(FileIdentity { volume: volume(), file_id: Some(metadata.ino().to_string()) })
-}
-
-/// Real no-follow probe of the fixture volume.
-#[derive(Clone)]
-struct DiskProbe;
-
-impl SourceProbe for DiskProbe {
-    fn fingerprint(&self, path: &Path) -> Result<ObservationFingerprint, LibraryError> {
-        file_fingerprint(path)
-    }
-    fn root_identity(&self, location: &Location) -> Result<FileIdentity, LibraryError> {
-        folder_identity(&location.path.to_path_buf()?)
-    }
-}
-
-/// Simple behavioral grouping: frame type, filter, exposure and camera.
-fn group(assets: &[Asset]) -> GroupingResult {
-    let mut sessions: BTreeMap<String, Vec<Uuid>> = BTreeMap::new();
-    for asset in assets {
-        let m = &asset.effective;
-        let key =
-            format!("{:?}|{:?}|{:?}|{:?}", m.image_type, m.filter, m.exposure_seconds, m.camera);
-        sessions.entry(key).or_default().push(asset.id);
-    }
-    GroupingResult {
-        sessions: sessions
-            .into_iter()
-            .map(|(key, mut asset_ids)| {
-                asset_ids.sort_unstable();
-                SessionCandidate {
-                    key: CaptureKey(key),
-                    asset_ids,
-                    provisional: Vec::new(),
-                    date_basis: Some("2026-09-12".into()),
-                }
-            })
-            .collect(),
-    }
-}
-
-fn metadata_for(relative: &str) -> CaptureMetadata {
-    let filter = if relative.contains("OIII") { "OIII" } else { "Ha" };
-    CaptureMetadata {
-        image_type: Some(if relative.contains("Dark") { "DARK" } else { "LIGHT" }.into()),
-        filter: Some(filter.into()),
-        exposure_seconds: Some(300.0),
-        camera: Some("ASI2600MM".into()),
-        date_local: Some("2026-09-12T23:00:00".into()),
-        ..CaptureMetadata::default()
-    }
-}
-
-fn sha_of(path: &Path) -> String {
-    hex::encode(Sha256::digest(std::fs::read(path).unwrap()))
-}
-
-/// Names, sizes and SHA-256 of every file below `root`.
-fn tree(root: &Path) -> BTreeMap<PathBuf, (u64, String)> {
-    let mut files = BTreeMap::new();
-    let mut pending = vec![root.to_path_buf()];
-    while let Some(dir) = pending.pop() {
-        for entry in std::fs::read_dir(&dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                pending.push(path);
-            } else {
-                let size = std::fs::metadata(&path).unwrap().len();
-                files.insert(path.strip_prefix(root).unwrap().to_path_buf(), (size, sha_of(&path)));
-            }
-        }
-    }
-    files
-}
-
-struct Fixture {
-    temp: tempfile::TempDir,
-    db: PathBuf,
-    root: PathBuf,
-}
-
-impl Fixture {
-    fn new() -> Self {
-        let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().join("Astro-T7").join("Captures");
-        std::fs::create_dir_all(&root).unwrap();
-        Self { db: temp.path().join("catalog.sqlite"), root, temp }
-    }
-    fn write(&self, relative: &str, bytes: &[u8]) {
-        let path = self.root.join(relative);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, bytes).unwrap();
-    }
-    fn registration(&self) -> LocationRegistration {
-        LocationRegistration {
-            name: "Astro-T7/Captures".into(),
-            path: NativePath::from_path(&self.root),
-            role: LocationRole::Captures,
-            identity: folder_identity(&self.root).unwrap(),
-        }
-    }
-    fn scan_file(&self, relative: &str) -> ScanFile {
-        ScanFile {
-            relative_path: NativePath::from_path(Path::new(relative)),
-            fingerprint: file_fingerprint(&self.root.join(relative)).unwrap(),
-            format: ImageFormat::Fits,
-            metadata: metadata_for(relative),
-        }
-    }
-}
-
-fn root_scope() -> NativePath {
-    NativePath::UnixBytes(Vec::new())
-}
-
-fn kind(error: &LibraryError) -> String {
-    error.response(None, None).kind
-}
-
-fn expected(asset: &Asset) -> ExpectedAsset {
-    ExpectedAsset {
-        asset_id: asset.id,
-        decision_revision: asset.decision_revision,
-        fingerprint: asset.fingerprint.clone(),
-    }
-}
-
-fn expected_session(session: &Session) -> ExpectedSession {
-    ExpectedSession {
-        session_id: session.id,
-        grouping_revision: session.grouping_revision,
-        decision_revision: session.decision_revision,
-    }
-}
-
-fn target(designation: &str, alias: &str) -> TargetCandidate {
-    TargetCandidate {
-        id: Uuid::new_v4(),
-        designation: designation.into(),
-        aliases: vec![TargetAlias {
-            text: designation.into(),
-            normalized: alias.into(),
-            kind: "designation".into(),
-            provenance: Provenance::User,
-        }],
-        common_name: None,
-        object_type: "nebula".into(),
-        coordinates: Some(platevault_model::SkyCoordinates {
-            ra_deg: 314.75,
-            dec_deg: 44.33,
-            frame: "ICRS".into(),
-        }),
-        provenance: Provenance::User,
-        provider_id: None,
-    }
-}
-
-async fn scan_with(
-    catalog: &Catalog,
-    fx: &Fixture,
-    location: &Location,
-    files: &[&str],
-    issues: Vec<ScanIssue>,
-    state: ScanState,
-) -> ScanOperation {
-    let operation = catalog.begin_scan(location.id, None).await.unwrap();
-    let files: Vec<ScanFile> = files.iter().map(|relative| fx.scan_file(relative)).collect();
-    let root = DiskProbe.root_identity(location).unwrap();
-    let progress = ScanProgress {
-        discovered: files.len() as u64,
-        metadata_read: files.len() as u64,
-        ..ScanProgress::default()
-    };
-    let batch =
-        ScanBatch { files: files.clone(), issues: issues.clone(), progress: progress.clone() };
-    catalog.apply_scan_batch(operation.id, &root, &batch, group).await.unwrap();
-    let terminal = matches!(state, ScanState::Completed | ScanState::Partial);
-    let observation = ScanObservation {
-        location_id: location.id,
-        root_identity: root,
-        incomplete_scopes: issues.iter().map(|issue| issue.relative_path.clone()).collect(),
-        files,
-        issues,
-        complete_scopes: if terminal { vec![root_scope()] } else { Vec::new() },
-        progress,
-        state,
-    };
-    catalog
-        .finish_scan(
-            operation.id,
-            &observation,
-            |location| DiskProbe.root_identity(location),
-            group,
-        )
-        .await
-        .unwrap()
-}
-
-async fn scan(
-    catalog: &Catalog,
-    fx: &Fixture,
-    location: &Location,
-    files: &[&str],
-) -> ScanOperation {
-    scan_with(catalog, fx, location, files, Vec::new(), ScanState::Completed).await
-}
-
-fn by_name<'a>(assets: &'a [Asset], name: &str) -> &'a Asset {
-    assets.iter().find(|asset| asset.relative_path.display().ends_with(name)).unwrap()
-}
 
 #[tokio::test]
 async fn writer_connection_reports_actual_wal_full_and_fullfsync() {
@@ -599,6 +352,8 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
     let bad = copy("Copy-Bad", b"frame TWO bytes");
     let good = copy("Copy-Good", b"frame two bytes");
     let original_tree = tree(&fx.root);
+    let stamped = last_verified(&catalog, &assets).await;
+    assert!(stamped[0].is_some() && stamped[1].is_none(), "{stamped:?}");
 
     let review = catalog
         .review_remap(
@@ -615,6 +370,7 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
         catalog.apply_remap(review.id, location.decision_revision, DiskProbe).await.unwrap_err();
     assert_eq!(kind(&error), "identity_conflict");
     assert_eq!(catalog.location(location.id).await.unwrap().path, location.path);
+    assert_eq!(last_verified(&catalog, &assets).await, stamped, "a refused remap stamps nothing");
 
     let away = fx.root.with_extension("offline");
     std::fs::rename(&fx.root, &away).unwrap();
@@ -643,6 +399,7 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
         catalog.location(location.id).await.unwrap().decision_revision,
         location.decision_revision
     );
+    assert_eq!(last_verified(&catalog, &assets).await, stamped, "a refused remap stamps nothing");
     std::fs::rename(&away, &fx.root).unwrap();
 
     let review = catalog
@@ -656,6 +413,16 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
         .await
         .unwrap();
     assert!(review.blocked.is_empty(), "{:?}", review.blocked);
+
+    // The candidate changes after the review with its stats kept: apply hashes
+    // it, refuses, and stamps nothing. The reviewed bytes return.
+    let candidate = good.join("Ha_002.fits");
+    rewrite_path_same_stat(&candidate, b"frame TWO bytes");
+    let error =
+        catalog.apply_remap(review.id, location.decision_revision, DiskProbe).await.unwrap_err();
+    assert_eq!(kind(&error), "identity_conflict");
+    assert_eq!(last_verified(&catalog, &assets).await, stamped, "a refused remap stamps nothing");
+    rewrite_path_same_stat(&candidate, b"frame two bytes");
     let remapped =
         catalog.apply_remap(review.id, location.decision_revision, DiskProbe).await.unwrap();
     assert_eq!(remapped.path, NativePath::from_path(&good));
@@ -665,6 +432,12 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
         assets.iter().map(|a| a.id).collect::<Vec<_>>()
     );
     assert_eq!(moved[0].applicable_quality(), ApplicableQuality::Usable, "decision kept");
+    // Apply rehashed every asset against its review: each is verified now.
+    let verified = last_verified(&catalog, &assets).await;
+    assert!(
+        verified.iter().zip(&stamped).all(|(now, was)| now.is_some() && now != was),
+        "every remapped asset is verified at apply: {verified:?} after {stamped:?}"
+    );
     assert_eq!(tree(&fx.root), original_tree, "no source writes");
 }
 
@@ -2229,7 +2002,7 @@ async fn a_retired_folder_registers_again_and_counts_each_capture_once() {
 }
 
 /// The current session holding every one of these assets.
-fn session_holding(summaries: &[persistence_library::SessionSummary], assets: &[Asset]) -> Session {
+fn session_holding(summaries: &[platevault_model::SessionSummary], assets: &[Asset]) -> Session {
     let ids = ids_of(assets);
     let holders: Vec<&Session> = summaries
         .iter()
@@ -2323,6 +2096,85 @@ async fn a_re_registered_folder_forms_new_sessions_that_inherit_nothing_retired(
     let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
     assert!(coverage.contributions.is_empty(), "{coverage:?}");
     assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
+/// A session holding copies in an Active and a Retired location still absorbs
+/// new assets: when the retired folder registers again, its new copy joins that
+/// session, which keeps its id and gains no successor. The retired copy stays
+/// outside every total.
+#[tokio::test]
+async fn a_session_with_an_active_copy_absorbs_its_re_registered_retired_folder() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"frame on the T7");
+    let cold = fx.temp.path().join("Cold-1");
+    std::fs::create_dir_all(&cold).unwrap();
+    std::fs::write(cold.join("Ha_002.fits"), b"frame on the cold drive").unwrap();
+    let before = (tree(&fx.root), tree(&cold));
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let active = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &active, &["Ha_001.fits"]).await;
+    let retiring = catalog.register_location(&registration_at(&cold)).await.unwrap();
+    scan_at(&catalog, &retiring, &cold, &["Ha_002.fits"]).await;
+    let retired_copies = catalog.location_assets(retiring.id).await.unwrap();
+    let mut held = catalog.location_assets(active.id).await.unwrap();
+    held.extend(retired_copies.iter().cloned());
+    for asset in &held {
+        catalog.set_quality(&[expected(asset)], Quality::Usable, DiskProbe).await.unwrap();
+    }
+    let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    assert_eq!(sessions.len(), 1, "one capture key across both locations: {sessions:?}");
+    let session = sessions[0].session.clone();
+    assert_eq!(session.asset_ids.iter().copied().collect::<BTreeSet<_>>(), ids_of(&held));
+    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
+    let totals = |coverage: &platevault_model::TargetCoverage| {
+        (
+            coverage_sum(coverage, |c| c.captured_seconds),
+            coverage_sum(coverage, |c| c.usable_seconds),
+            coverage_sum(coverage, |c| c.unreviewed_seconds),
+        )
+    };
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert_eq!(totals(&coverage), (600.0, 600.0, 0.0), "{coverage:?}");
+
+    // Cold-1 is retired: its copy leaves every total.
+    let unplugged = cold.with_extension("unplugged");
+    std::fs::rename(&cold, &unplugged).unwrap();
+    let retiring = catalog
+        .mark_location_unavailable(retiring.id, Availability::Offline, "unplugged")
+        .await
+        .unwrap();
+    let references = read_references(&retired_copies, Vec::new());
+    let review = catalog.review_retire_location(retiring.id, &references).await.unwrap();
+    catalog
+        .retire_location(review.id, retiring.id, review.expected_revision, &references)
+        .await
+        .unwrap();
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert_eq!(totals(&coverage), (300.0, 300.0, 0.0), "{coverage:?}");
+
+    // Its folder registers again. The session still holds an Active copy, so it
+    // absorbs the new copy: same id, no successor, every copy a member.
+    std::fs::rename(&unplugged, &cold).unwrap();
+    let again = catalog.register_location(&registration_at(&cold)).await.unwrap();
+    scan_at(&catalog, &again, &cold, &["Ha_002.fits"]).await;
+    let fresh = catalog.location_assets(again.id).await.unwrap();
+    let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+    assert_eq!(sessions.len(), 1, "no new session: {sessions:?}");
+    let kept = catalog.session(session.id).await.unwrap().summary;
+    assert!(kept.successors.is_empty(), "{kept:?}");
+    held.extend(fresh.iter().cloned());
+    assert_eq!(kept.session.asset_ids.iter().copied().collect::<BTreeSet<_>>(), ids_of(&held));
+    assert_eq!(kept.capture_count, 2, "the retired copy is not counted: {kept:?}");
+
+    // The retired copy stays out of totals; the new copy counts Unreviewed.
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert_eq!(totals(&coverage), (600.0, 300.0, 300.0), "{coverage:?}");
+    let covered: Vec<Uuid> =
+        [active.id, again.id].into_iter().collect::<BTreeSet<_>>().into_iter().collect();
+    assert_eq!(coverage.covered_location_ids, covered);
+    assert!(!coverage.provisional, "{coverage:?}");
+    assert_eq!((tree(&fx.root), tree(&cold)), before, "originals unchanged");
 }
 
 #[tokio::test]
@@ -2446,15 +2298,19 @@ async fn root_loss_during_a_subtree_retry_changes_availability_only_inside_its_s
 
 /// Replace a fixture's bytes in place with equal length and its original mtime.
 fn rewrite_same_stat(fx: &Fixture, name: &str, bytes: &[u8]) {
-    let source = fx.root.join(name);
-    let before = file_fingerprint(&source).unwrap();
+    rewrite_path_same_stat(&fx.root.join(name), bytes);
+}
+
+/// Replace a file's bytes in place with equal length and its original mtime.
+fn rewrite_path_same_stat(source: &Path, bytes: &[u8]) {
+    let before = file_fingerprint(source).unwrap();
     assert_eq!(before.size_bytes, bytes.len() as u64);
-    let modified = std::fs::metadata(&source).unwrap().modified().unwrap();
-    let file = std::fs::OpenOptions::new().write(true).truncate(true).open(&source).unwrap();
+    let modified = std::fs::metadata(source).unwrap().modified().unwrap();
+    let file = std::fs::OpenOptions::new().write(true).truncate(true).open(source).unwrap();
     std::io::Write::write_all(&mut &file, bytes).unwrap();
     file.set_modified(modified).unwrap();
     drop(file);
-    assert!(before.equivalent(&file_fingerprint(&source).unwrap()), "stats cannot detect it");
+    assert!(before.equivalent(&file_fingerprint(source).unwrap()), "stats cannot detect it");
 }
 
 #[tokio::test]
@@ -2702,6 +2558,7 @@ async fn coverage_counts_decisions_as_of_their_last_verification_and_reading_reh
 
     // While a started rehash runs, both read verification pending: outside the
     // total and its label.
+    let reviewed_stamps = last_verified(&catalog, &decided).await;
     let operation = catalog.begin_scan(location.id, None).await.unwrap();
     let root = DiskProbe.root_identity(&location).unwrap();
     catalog.apply_scan_batch(operation.id, &root, &ScanBatch::default(), group).await.unwrap();
@@ -2709,7 +2566,14 @@ async fn coverage_counts_decisions_as_of_their_last_verification_and_reading_reh
     assert!(usable(&pending).abs() < 1e-9, "{pending:?}");
     assert_eq!(pending.contributions.iter().map(|c| c.verification_pending).sum::<u64>(), 2);
     assert_eq!(labels(&pending), (None, vec![None]));
+    // Canceling verifies nothing: each keeps its last verification, stays pending
+    // and stays outside the total and its label.
     catalog.abort_scan(operation.id, ScanState::Canceled, "canceled by user").await.unwrap();
+    assert_eq!(last_verified(&catalog, &decided).await, reviewed_stamps, "a cancel stamps nothing");
+    let canceled = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!(usable(&canceled).abs() < 1e-9, "{canceled:?}");
+    assert_eq!(canceled.contributions.iter().map(|c| c.verification_pending).sum::<u64>(), 2);
+    assert_eq!(labels(&canceled), (None, vec![None]));
     scan(&catalog, &fx, &location, &names).await;
     let verified = catalog.asset(decided[0].id).await.unwrap().last_verified_at;
 
@@ -2725,6 +2589,117 @@ async fn coverage_counts_decisions_as_of_their_last_verification_and_reading_reh
     assert!(offline.contributions.iter().all(|c| c.availability == Availability::Offline));
     assert_eq!(labels(&offline), (verified.clone(), vec![verified]));
     std::fs::rename(&unplugged, &fx.root).unwrap();
+    assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
+/// D19: a capture is labelled with the oldest last verification among the copies
+/// whose decision makes it Usable. An Unreviewed copy's earlier hash never labels
+/// it, and the copy it is counted on does not pick the time shown.
+#[tokio::test]
+async fn a_capture_is_labelled_with_the_oldest_verification_of_its_usable_copies() {
+    let fx = Fixture::new();
+    let name = "Ha_001.fits";
+    fx.write(name, b"one capture, two copies");
+    let nas = fx.temp.path().join("NAS");
+    std::fs::create_dir_all(&nas).unwrap();
+    std::fs::copy(fx.root.join(name), nas.join(name)).unwrap();
+    let before = (tree(&fx.root), tree(&nas));
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let t7 = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &t7, &[name]).await;
+    let nas_location = catalog.register_location(&registration_at(&nas)).await.unwrap();
+    scan_at(&catalog, &nas_location, &nas, &[name]).await;
+    let session = catalog.list_sessions(&SessionQuery::default()).await.unwrap()[0].session.clone();
+    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&[expected_session(&session)], saved.candidate.id).await.unwrap();
+    // Coverage counts a capture on its available copy in the smallest location id.
+    let mut copies = Vec::new();
+    for location in [&t7, &nas_location] {
+        copies.extend(catalog.location_assets(location.id).await.unwrap());
+    }
+    copies.sort_by_key(|copy| copy.location_id);
+    let (counted, other) = (copies[0].id, copies[1].id);
+    let decide = |id: Uuid| {
+        let catalog = &catalog;
+        async move {
+            let asset = expected(&catalog.asset(id).await.unwrap());
+            let decided = catalog.set_quality(&[asset], Quality::Usable, DiskProbe).await;
+            decided.unwrap()[0].last_verified_at.clone().expect("review verifies")
+        }
+    };
+    let labels = |coverage: &platevault_model::TargetCoverage| {
+        let each: Vec<Option<String>> =
+            coverage.contributions.iter().map(|c| c.last_verified_at.clone()).collect();
+        (coverage.last_verified_at.clone(), each)
+    };
+
+    // The counted copy is inspected first, then only the other copy is reviewed:
+    // the decision speaks for the capture, labelled with its review only.
+    catalog.verify_digest(counted, DiskProbe).await.unwrap();
+    let inspected = catalog.asset(counted).await.unwrap().last_verified_at.unwrap();
+    let first = decide(other).await;
+    assert_ne!(inspected, first);
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!((coverage_sum(&coverage, |c| c.usable_seconds) - 300.0).abs() < 1e-9, "{coverage:?}");
+    let label = Some(first.clone());
+    assert_eq!(labels(&coverage), (label.clone(), vec![label.clone()]), "not {inspected}");
+
+    // Reviewing the counted copy later keeps the oldest Usable verification.
+    let second = decide(counted).await;
+    assert_ne!(second, first);
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    assert!((coverage_sum(&coverage, |c| c.usable_seconds) - 300.0).abs() < 1e-9, "{coverage:?}");
+    assert_eq!(labels(&coverage), (label.clone(), vec![label]), "not {second}");
+    assert_eq!((tree(&fx.root), tree(&nas)), before, "originals unchanged");
+}
+
+/// Light integration reads IMAGETYP as grouping does: OBJECT and SCIENCE count
+/// exactly like Light Frame, a calibration frame counts toward no light total,
+/// and IMAGETYP text that names no recognised frame type stays unknown exposure
+/// instead of light.
+#[tokio::test]
+async fn coverage_counts_every_imagetyp_recognised_as_a_light_frame() {
+    let fx = Fixture::new();
+    let frames = [
+        ("light.fits", "Light Frame"),
+        ("object.fits", "OBJECT"),
+        ("science.fits", "Science"),
+        ("dark.fits", "DARK"),
+        ("unclassified.fits", "Lights"),
+    ];
+    for (name, image_type) in frames {
+        fx.write(name, image_type.as_bytes());
+    }
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    let files = frames
+        .iter()
+        .map(|(name, image_type)| {
+            let mut file = fx.scan_file(name);
+            file.metadata.image_type = Some((*image_type).into());
+            file
+        })
+        .collect();
+    rescan_files(&catalog, &location, files).await;
+    let sessions: Vec<ExpectedSession> = catalog
+        .list_sessions(&SessionQuery::default())
+        .await
+        .unwrap()
+        .iter()
+        .map(|summary| expected_session(&summary.session))
+        .collect();
+    assert_eq!(sessions.len(), frames.len());
+    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&sessions, saved.candidate.id).await.unwrap();
+
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    let counted = (
+        coverage_sum(&coverage, |c| c.captured_seconds),
+        coverage_sum(&coverage, |c| c.unreviewed_seconds),
+        coverage.contributions.iter().map(|c| c.unknown_exposure_count).sum::<u64>(),
+    );
+    assert_eq!(counted, (900.0, 900.0, 1), "{coverage:?}");
     assert_eq!(tree(&fx.root), before, "originals unchanged");
 }
 
@@ -2751,6 +2726,63 @@ async fn hashed_assets(catalog: &Catalog, locations: &[&Location]) -> usize {
     hashed
 }
 
+/// The last verification of each asset, read now.
+async fn last_verified(catalog: &Catalog, assets: &[Asset]) -> Vec<Option<String>> {
+    let mut stamps = Vec::with_capacity(assets.len());
+    for asset in assets {
+        stamps.push(catalog.asset(asset.id).await.unwrap().last_verified_at);
+    }
+    stamps
+}
+
+/// Every copy carries a last verification exactly when its digest is bound.
+async fn assert_stamped_when_hashed(catalog: &Catalog, locations: &[&Location]) {
+    for location in locations {
+        for asset in catalog.location_assets(location.id).await.unwrap() {
+            assert_eq!(
+                asset.last_verified_at.is_some(),
+                asset.fingerprint.content_sha256.is_some(),
+                "{asset:?}"
+            );
+        }
+    }
+}
+
+fn scan_file_at(root: &Path, name: &str) -> ScanFile {
+    ScanFile {
+        relative_path: NativePath::from_path(Path::new(name)),
+        fingerprint: file_fingerprint(&root.join(name)).unwrap(),
+        format: ImageFormat::Fits,
+        metadata: metadata_for(name),
+    }
+}
+
+/// Scan these files below `root` to a Completed observation in one batch.
+async fn scan_at(
+    catalog: &Catalog,
+    location: &Location,
+    root: &Path,
+    names: &[&str],
+) -> ScanOperation {
+    let operation = running_scan_of(catalog, location, root, names).await;
+    let observation = ScanObservation {
+        location_id: location.id,
+        root_identity: DiskProbe.root_identity(location).unwrap(),
+        files: names.iter().map(|name| scan_file_at(root, name)).collect(),
+        issues: Vec::new(),
+        complete_scopes: vec![root_scope()],
+        incomplete_scopes: Vec::new(),
+        progress: ScanProgress::default(),
+        state: ScanState::Completed,
+    };
+    let finished = catalog
+        .finish_scan(operation, &observation, |location| DiskProbe.root_identity(location), group)
+        .await
+        .unwrap();
+    assert_eq!(finished.state, ScanState::Completed, "{finished:?}");
+    finished
+}
+
 /// Begin a scan of `root` and apply these files in one batch, leaving it running.
 async fn running_scan_of(
     catalog: &Catalog,
@@ -2759,15 +2791,7 @@ async fn running_scan_of(
     names: &[&str],
 ) -> Uuid {
     let operation = catalog.begin_scan(location.id, None).await.unwrap();
-    let files = names
-        .iter()
-        .map(|name| ScanFile {
-            relative_path: NativePath::from_path(Path::new(name)),
-            fingerprint: file_fingerprint(&root.join(name)).unwrap(),
-            format: ImageFormat::Fits,
-            metadata: metadata_for(name),
-        })
-        .collect();
+    let files = names.iter().map(|name| scan_file_at(root, name)).collect();
     let root_identity = DiskProbe.root_identity(location).unwrap();
     let batch = ScanBatch { files, ..ScanBatch::default() };
     catalog.apply_scan_batch(operation.id, &root_identity, &batch, group).await.unwrap();
@@ -2803,6 +2827,7 @@ async fn duplicate_verification_stops_at_cancel_and_keeps_each_bound_digest() {
         .unwrap();
     assert_eq!(status.progress.duplicates_verified, 1, "stops before the next file");
     assert_eq!(hashed_assets(&catalog, &[&t7, &nas_location]).await, 1);
+    assert_stamped_when_hashed(&catalog, &[&t7, &nas_location]).await;
 
     // The bound digest survives a restart; the next readable scan does the rest.
     catalog.close().await.unwrap();
@@ -2816,6 +2841,7 @@ async fn duplicate_verification_stops_at_cancel_and_keeps_each_bound_digest() {
         catalog.verify_duplicate_candidates(operation, &work, DiskProbe, clear).await.unwrap();
     assert_eq!((status.progress.duplicate_candidates, status.progress.duplicates_verified), (3, 3));
     assert_eq!(hashed_assets(&catalog, &[&t7, &nas_location]).await, 4);
+    assert_stamped_when_hashed(&catalog, &[&t7, &nas_location]).await;
     assert!(catalog.duplicate_verification_work(operation).await.unwrap().is_empty());
     assert_eq!((tree(&fx.root), tree(&nas)), before, "sources unchanged");
 }

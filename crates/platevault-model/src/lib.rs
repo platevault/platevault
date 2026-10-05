@@ -1,12 +1,21 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
+use std::sync::LazyLock;
 
-use metadata_core::RawFileMetadata;
+use metadata_core::{
+    v1_normalization_table, FrameType, ImageTypNormalizationTable, RawFileMetadata,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+mod project;
+mod view;
+pub use project::*;
+pub use view::*;
 
 pub type Revision = u64;
 
@@ -525,6 +534,60 @@ impl From<&RawFileMetadata> for CaptureMetadata {
     }
 }
 
+/// The frame type capture evidence records in its effective IMAGETYP: the one
+/// classification that capture grouping keys sessions by and integration totals
+/// count light frames by.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ImageTypeEvidence<'a> {
+    /// No IMAGETYP was recorded.
+    Absent,
+    /// IMAGETYP is blank.
+    Blank,
+    /// A frame type of the shared IMAGETYP normalization table.
+    Known(FrameType),
+    /// Trimmed NFC text that names no recognised frame type.
+    Unclassified(Cow<'a, str>),
+}
+
+impl CaptureMetadata {
+    /// Classify the effective IMAGETYP: trimmed NFC text looked up in the shared
+    /// normalization table.
+    #[must_use]
+    pub fn image_type_evidence(&self) -> ImageTypeEvidence<'_> {
+        static TABLE: LazyLock<ImageTypNormalizationTable> = LazyLock::new(v1_normalization_table);
+        let Some(value) = self.image_type.as_deref() else {
+            return ImageTypeEvidence::Absent;
+        };
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return ImageTypeEvidence::Blank;
+        }
+        let text = if unicode_normalization::is_nfc(trimmed) {
+            Cow::Borrowed(trimmed)
+        } else {
+            use unicode_normalization::UnicodeNormalization;
+            Cow::Owned(trimmed.nfc().collect())
+        };
+        match TABLE.normalize(&text) {
+            Some(frame) => ImageTypeEvidence::Known(frame),
+            None => ImageTypeEvidence::Unclassified(text),
+        }
+    }
+
+    /// Whether this is a light frame, by [`Self::image_type_evidence`]. `None`
+    /// when IMAGETYP is absent, blank or names no recognised frame type: such a
+    /// frame is unknown evidence, neither light nor calibration.
+    #[must_use]
+    pub fn is_light(&self) -> Option<bool> {
+        match self.image_type_evidence() {
+            ImageTypeEvidence::Known(frame) => Some(frame == FrameType::Light),
+            ImageTypeEvidence::Absent
+            | ImageTypeEvidence::Blank
+            | ImageTypeEvidence::Unclassified(_) => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Asset {
@@ -650,6 +713,21 @@ pub struct Session {
     pub asset_ids: Vec<Uuid>,
     pub provisional: Vec<String>,
     pub date_basis: Option<String>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSummary {
+    pub session: Session,
+    pub location_ids: Vec<Uuid>,
+    pub asset_count: u64,
+    /// Logical captures: content-identical copies in different locations count once.
+    pub capture_count: u64,
+    pub availability: Availability,
+    /// Last recorded observation; never a claim about current live bytes.
+    pub last_observed_at: Option<String>,
+    pub provisional: bool,
+    /// Successor sessions when this record was superseded by a regroup.
+    pub successors: Vec<Uuid>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
