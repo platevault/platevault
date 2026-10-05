@@ -4,7 +4,7 @@
  * states, using live prototype data where a component reads the store.
  * Tracks use it as the visual contract; reviewers use it as evidence.
  */
-import { Inbox, Play } from "lucide-react"
+import { Inbox, Play, Sparkles } from "lucide-react"
 import { useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { FolderPicker } from "@/components/app/folder-picker"
@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
+import { Toggle } from "@/components/ui/toggle"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { emptyBreakdown, sessionBreakdown } from "@/domain/derive"
 import type { Session } from "@/domain/types"
 import { formatDuration, formatExposure, formatNight, plural } from "@/lib/format"
@@ -50,13 +52,14 @@ const TYPE_SCALE = [
 
 const Z_SCALE = [
   ["z-0", "Page content"],
+  ["z-1", "Pinned table column (under the sticky header row)"],
   ["z-10", "Sticky table headers"],
   ["z-20", "Shell chrome (header)"],
   ["z-30", "Non-modal flyouts anchored to the shell"],
   ["z-50", "Portalled layers: dialogs, sheets, menus, popovers, tooltips (DOM order decides)"],
 ] as const
 
-function SessionTable({ loading, empty, grouped }: { loading: boolean; empty: boolean; grouped: boolean }) {
+function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: boolean; empty: boolean; grouped: boolean; pinned: boolean; locked: boolean }) {
   const sessions = useStore((s) => Object.values(s.catalog.sessions).filter((x) => x.imageType === "light"))
   const disk = useStore((s) => s.disk)
   const catalog = useStore((s) => s.catalog)
@@ -75,6 +78,16 @@ function SessionTable({ loading, empty, grouped }: { loading: boolean; empty: bo
     },
     { id: "object", header: "OBJECT", cell: (s) => s.objectLabel ?? <UnknownValue label="Missing OBJECT" />, sortValue: (s) => s.objectLabel },
     { id: "target", header: "Target", cell: (s) => <StatusBadge kind="association" value={s.target.status} /> },
+    // Wide-table sample: the extra columns make the table scroll sideways at 1024px.
+    ...(pinned
+      ? ([
+          { id: "camera", header: "Camera", cell: (s) => s.cameraName ?? <UnknownValue label="Not set" />, sortValue: (s) => s.cameraName },
+          { id: "telescope", header: "Telescope", cell: (s) => s.telescopeName ?? <UnknownValue label="Not set" />, sortValue: (s) => s.telescopeName },
+          { id: "gain", header: "Gain / offset", cell: (s) => `${s.gain ?? "–"} / ${s.offset ?? "–"}`, align: "right" },
+          { id: "binning", header: "Binning", cell: (s) => `${s.binning}×${s.binning}`, align: "right" },
+          { id: "equipment", header: "Equipment", cell: (s) => <StatusBadge kind="association" value={s.equipment.status} /> },
+        ] satisfies Column<Session>[])
+      : []),
   ]
   const [query, setQuery] = useState("")
   const shown = sessions.filter((s) => `${s.channel ?? ""} ${s.objectLabel ?? "Missing OBJECT"} ${formatNight(s.night)}`.toLowerCase().includes(query.toLowerCase()))
@@ -88,6 +101,7 @@ function SessionTable({ loading, empty, grouped }: { loading: boolean; empty: bo
         noun="session"
         onShowSelected={() => setQuery("")}
         onClear={() => setSelected([])}
+        clearDisabledReason={locked ? "Selection is locked while the View is being prepared." : undefined}
       />
       <DataTable
         label="Light sessions (design-system sample)"
@@ -112,6 +126,7 @@ function SessionTable({ loading, empty, grouped }: { loading: boolean; empty: bo
             className="border-0"
           />
         }
+        stickyFirstColumn={pinned}
       />
     </div>
   )
@@ -179,6 +194,11 @@ export function DesignSystemPage() {
   const [tableLoading, setTableLoading] = useState(false)
   const [tableEmpty, setTableEmpty] = useState(false)
   const [tableGrouped, setTableGrouped] = useState(false)
+  const [tablePinned, setTablePinned] = useState(false)
+  const [selectionLocked, setSelectionLocked] = useState(false)
+  const [zoom, setZoom] = useState("fit")
+  const [stretch, setStretch] = useState("auto")
+  const [starsOn, setStarsOn] = useState(true)
   const [chips, setChips] = useState([
     { id: "ha", label: "Channel: Ha" },
     { id: "object", label: "Missing OBJECT" },
@@ -248,7 +268,7 @@ export function DesignSystemPage() {
           </div>
         </Section>
 
-        <Section title="Buttons" description="Default, focus-visible (Tab to a button), active (press), disabled with a reason, and loading.">
+        <Section title="Buttons" description="Default, focus-visible (Tab to a button), active (press), disabled with a reason, loading, and toggles (pressed shows a fill and an accent bar).">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <Button>Start indexing</Button>
@@ -273,6 +293,22 @@ export function DesignSystemPage() {
                 Saving
               </Button>
               <p className="text-xs text-muted-foreground">Loading: full opacity with a spinner and aria-busy; disabled: 50% opacity with its reason beside it.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <ToggleGroup value={[zoom]} onValueChange={(value) => value[0] && setZoom(value[0])} variant="outline" size="sm" spacing={0} aria-label="Zoom">
+                <ToggleGroupItem value="fit">Fit</ToggleGroupItem>
+                <ToggleGroupItem value="1">1:1</ToggleGroupItem>
+                <ToggleGroupItem value="2">2:1</ToggleGroupItem>
+              </ToggleGroup>
+              <ToggleGroup value={[stretch]} onValueChange={(value) => value[0] && setStretch(value[0])} variant="outline" size="sm" aria-label="Display stretch">
+                <ToggleGroupItem value="linear">Linear</ToggleGroupItem>
+                <ToggleGroupItem value="auto">Auto</ToggleGroupItem>
+                <ToggleGroupItem value="strong">Strong</ToggleGroupItem>
+              </ToggleGroup>
+              <Toggle variant="outline" size="sm" pressed={starsOn} onPressedChange={setStarsOn}>
+                <Sparkles aria-hidden="true" data-icon="inline-start" />
+                Stars
+              </Toggle>
             </div>
           </div>
         </Section>
@@ -384,10 +420,16 @@ export function DesignSystemPage() {
               <Button size="sm" variant="outline" aria-pressed={tableGrouped} onClick={() => setTableGrouped((v) => !v)}>
                 Group by channel
               </Button>
+              <Button size="sm" variant="outline" aria-pressed={tablePinned} onClick={() => setTablePinned((v) => !v)}>
+                Wide, pinned first column
+              </Button>
+              <Button size="sm" variant="outline" aria-pressed={selectionLocked} onClick={() => setSelectionLocked((v) => !v)}>
+                Lock selection
+              </Button>
             </>
           }
         >
-          <SessionTable loading={tableLoading} empty={tableEmpty} grouped={tableGrouped} />
+          <SessionTable loading={tableLoading} empty={tableEmpty} grouped={tableGrouped} pinned={tablePinned} locked={selectionLocked} />
         </Section>
 
         <Section title="Confirmation" description="Destructive or scope-changing actions always confirm in an AlertDialog that names the scope.">

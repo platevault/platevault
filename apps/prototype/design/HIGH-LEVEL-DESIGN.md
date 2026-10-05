@@ -341,7 +341,7 @@ themes; dark is the default for night use.
 | `--muted-foreground` | `oklch(0.72 0 0)` | `oklch(0.47 0 0)` | Secondary text, ≥ 4.5:1 on canvas |
 | `--primary` (accent) | `oklch(0.74 0.11 238)` | `oklch(0.5 0.13 242)` | Primary action, selection, links, focus ring, current-item bar. One accent per view |
 | `--ring` | = primary | = primary | Focus: one 2 px outline, 2 px offset (inset −2 px inside popups and cells), unlayered rule in `index.css` |
-| `--success` | `oklch(0.75 0.13 155)` | `oklch(0.48 0.12 155)` | Usable, verified, Prepared, Online |
+| `--success` | `oklch(0.75 0.13 155)` | `oklch(0.43 0.12 155)` | Usable, verified, Prepared, Online. Light badge text (over its 12% tint) is ≥ 4.5:1 on every row surface, including the active row |
 | `--warning` | `oklch(0.8 0.13 80)` | `oklch(0.5 0.12 65)` | Needs review, Offline, Partial, Changed content, Unresolved |
 | `--destructive` | `oklch(0.71 0.17 22)` | `oklch(0.48 0.2 27)` | Failed, refused, blocked, destructive action |
 | `--info` | = primary | = primary | Icon colour only for Running, Provisional, Associated, Suggested; the badge text stays neutral |
@@ -374,7 +374,8 @@ No letter-spacing changes. Headings `text-balance`, paragraphs `text-pretty`.
 - Density (dial 7): `--row-h` 28 / **32** / 40 px for compact / comfortable /
   spacious, set by `html[data-density]` (Settings › Appearance). Controls are
   32 px (`h-8`, base-nova), small controls 28 px, icon-xs 24 px minimum.
-- Z-index (fixed scale, no arbitrary values): `z-10` sticky table headers,
+- Z-index (fixed scale, no arbitrary values): `z-1` pinned table cells (under
+  the header row), `z-10` sticky table headers,
   `z-20` shell header, `z-30` non-modal flyouts anchored to the shell (J18
   checklist), `z-50` portalled layers (dialogs, sheets, menus, popovers,
   tooltips; DOM order decides).
@@ -405,7 +406,8 @@ Overlays have no backdrop blur.
 | `EmptyState` | feedback.tsx | icon, title (`titleAs` h1/h2/h3, default h3), description, one required action | empty |
 | `Notice` | feedback.tsx | info, offline, warning, refusal (role=alert) | default; actions inherit button states |
 | `ActionError` | feedback.tsx | message, Retry | error |
-| `SaveState` | feedback.tsx | saved, unsaved, saving, failed (Retry), stale (Review current revision) | loading (saving), error (failed, stale) |
+| `SaveState` | feedback.tsx | saved, unsaved, saving, failed (Retry), stale (Review current revision). Announced through `announce`: every change while mounted, and failed or stale when it appears with them; never "Unsaved changes", nor "Saved" on appearing | loading (saving), error (failed, stale) |
+| `LiveAnnouncer`, `announce(message)` | feedback.tsx | the one persistent polite live region, mounted by `RootLayout` before any dialog opens (Base UI leaves `[aria-live]` outside a modal's inert area); for status shown by an element that mounts with its text | N/A: not visible |
 | `UnknownValue` | feedback.tsx | Unknown, Not measured, Position unknown, FOV unknown, Not set; a `reason` makes it a button (tooltip trigger, dotted underline) named "label: reason" | default, focus-visible when it has a reason |
 | `TableSkeleton`, `DetailSkeleton` | feedback.tsx | rows, columns; `role=status` with sr-only label text | loading |
 | `KeyValueList` | data.tsx | mono, source (mono, wraps); `columns={2}`. Layout is a container query on the list's own width, so it follows text zoom: two columns from 46rem, label beside value from 22rem, label above value below | default |
@@ -413,9 +415,9 @@ Overlays have no backdrop blur.
 | `Stat`, `PathText` | data.tsx | hint; paths wrap by default, `truncate` only in table cells whose detail pane shows the full path | default |
 | `ChannelCoverage` | data.tsx | breakdown, goal | default, empty (0h 00m shown, never hidden) |
 | `FilterChips` | data.tsx | chips, match label; stays mounted so the live count announces; removing a chip focuses the next chip, else the previous, else the page search (`data-page-search`), else the group | default, hover, focus-visible, active; empty shows nothing visible |
-| `DataTable` | data-table.tsx | columns (sort, `truncate`, row header), controlled selection, active row (inset accent bar), `scroll` frame with pinned header, empty, loading (keeps the real header), `groups` (`key`, `label`, `compare`: group header rows, `th scope="rowgroup"`, in one table so columns line up across groups; sort applies within groups, select-all and ↑/↓ span groups). Use `groups` instead of one table per group | default, hover, focus-visible, active, disabled (row not selectable), loading, empty, selected (and selected + hover); error is the caller's `Notice` |
+| `DataTable` | data-table.tsx | columns (sort, `truncate`, row header), controlled selection, active row (inset accent bar), `scroll` frame with pinned header, empty, loading (keeps the real header), `groups` (`key`, `label`, `compare`: group header rows, `th scope="rowgroup"`, in one table so columns line up across groups; sort applies within groups, select-all and ↑/↓ span groups). Use `groups` instead of one table per group. `stickyFirstColumn` (wide tables at 1024 px): the selection column and the first column stay in view while the table scrolls sideways; pinned cells sit under the header row and take the row's tint, scroll padding their width keeps a focused cell clear of them, group labels stay in view; the frame takes the card surface, and `rowClassName` backgrounds do not reach pinned cells | default, hover, focus-visible, active, disabled (row not selectable), loading, empty, selected (and selected + hover); error is the caller's `Notice` |
 | `TableToolbar` | data-table.tsx | search (`data-page-search`, focused by `/`), filters, actions | default, focus-visible; empty N/A |
-| `SelectionBar` | data-table.tsx | count, "Selected outside current filters: N", Show selected, Clear selection, bulk actions | selected; renders nothing when empty |
+| `SelectionBar` | data-table.tsx | count, "Selected outside current filters: N", Show selected, Clear selection (`clearDisabledReason`: disabled, still focusable, the reason beside it and in its description), bulk actions | selected, disabled (Clear with a reason); renders nothing when empty |
 | `ConfirmDialog` | confirm-dialog.tsx | changes, unchanged, tone, CommitResult error | default, focus-visible, error (stays open with Retry); loading N/A: commits are synchronous |
 | `OperationPanel` | operation-panel.tsx | Pause, Resume, Retry, Cancel by kind; `headingLevel` (2/3/4, default 3: pass 2 directly under the page h1); a pressed control that is replaced hands focus to its replacement, else to the panel title; progressbar keeps a stable name, the count is its `aria-valuetext` | loading (running), error (failed/blocked items), empty (no items), success, partial, interrupted |
 | `FolderPicker` | folder-picker.tsx | simulated OS folder chooser: volumes (offline shown with reason), breadcrumb, Up, child folders including empty ones, denied folders marked; returns a path, writes nothing | default, hover, focus-visible, active, disabled (offline volume, Up at a volume root), empty (no subfolders), error (access denied: listed with a Notice, still choosable), selected (current volume `aria-current`); loading N/A: the simulated disk is synchronous |
@@ -451,8 +453,12 @@ unlayered rule in `index.css`, a 2 px `--ring` outline at 2 px offset (inset
 inside menus, listboxes and table cells; programmatic `tabindex=-1` targets
 excluded); the highlighted option in menus, selects and the palette adds a 2 px
 inset `--primary` bar to the fill; disabled with a visible reason next to the
-control (never a silent disabled button), loading as Spinner or skeleton,
+control (never a silent disabled button; a `focusableWhenDisabled` button looks
+disabled too, through `data-disabled`), loading as Spinner or skeleton,
 selected as `bg-primary/8` rows, `aria-current`, `aria-pressed` or checked state.
+A pressed `Toggle` or `ToggleGroupItem` adds a 2 px `--primary` bar along its
+bottom edge to a `primary/12` fill, so it differs from unpressed items by shape
+and at ≥ 3:1 (5.7:1 light, 8.7:1 dark).
 
 ## 9. State conventions
 
@@ -579,8 +585,9 @@ exact need. It does not edit the file or work around it.
    they own on the entity as read inside `mutate`. View membership edits stay
    in `view.draft` (a commit without `expect`); Save View is the revisioned
    commit. A draft that survives a reload is shown as "Recovered unsaved
-   changes" with Save and Discard. Slice state persists UI state only, never
-   domain data.
+   changes" with Resume and Discard: until it is resumed the workspace shows
+   the committed revision, and editing and Save wait for that choice. Slice
+   state persists UI state only, never domain data.
 5. Long work is an `Operation`. A track owns a kind by adding an
    `OperationHandler` to its slice's `operations` (T3 `measure`,
    `import-measurements`; T4 `prepare`, `adopt-master`; T5 `cleanup`,
@@ -618,7 +625,7 @@ exact need. It does not edit the file or work around it.
 | View `calibration`, `locationParent`, `outputPath` | T4 | T3, T5 |
 | View `completedAt`, `notes` | T5 | T3, T4 |
 | View status | derived (`viewStatus`); nobody stores it | all |
-| FrameMeasurement | T3 | T3 |
+| FrameMeasurement, MeasurementImport (`catalog.measurementImports`: import review rows) | T3 | T3 |
 | CalibrationMaster, ApplicationProfile, Preparation | T4; T5 rebuilds entries after a transfer and removes them through cleanup | T3, T5 |
 | ResultRecord | T5 | T2, T3, T4 |
 | ObservingPlan, ReminderSettings, CalendarExport | T5 (`removeSite` turns reminders off when their site is deleted) | T2 |

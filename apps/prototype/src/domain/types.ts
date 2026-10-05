@@ -34,6 +34,7 @@ export type TelescopeId = string
 export type OpticalTrainId = string
 export type FilterId = string
 export type SiteId = string
+export type MeasurementImportId = string
 
 // ---------------------------------------------------------------------------
 // Simulated disk
@@ -569,6 +570,32 @@ export interface FrameMeasurement {
   history: MeasurementRecord[]
 }
 
+/** A row of an external measurement import that attaches to no frame until the user resolves it (PIX-FR-07). */
+export interface MeasurementImportRow {
+  index: number
+  file: string
+  status: "ambiguous" | "unmatched" | "resolved"
+  candidates: AssetId[]
+  assetId: AssetId | null
+  values: Partial<Record<MetricKey, number>>
+}
+
+/**
+ * One external measurement import (for example a SubframeSelector CSV) and
+ * the rows still to review. Matched values live in `measurements`; this keeps
+ * the review rows durable across reloads.
+ */
+export interface MeasurementImport {
+  id: MeasurementImportId
+  viewId: ViewId
+  path: string
+  importedAt: IsoDateTime
+  matched: number
+  /** Matched rows whose frame is outside this View; values still attach to the frame. */
+  outsideView: number
+  rows: MeasurementImportRow[]
+}
+
 // ---------------------------------------------------------------------------
 // Calibration (PV-CAL)
 // ---------------------------------------------------------------------------
@@ -904,6 +931,7 @@ export interface Catalog {
   projects: Record<ProjectId, Project>
   views: Record<ViewId, View>
   measurements: Record<AssetId, FrameMeasurement>
+  measurementImports: Record<MeasurementImportId, MeasurementImport>
   masters: Record<MasterId, CalibrationMaster>
   profiles: Record<ProfileId, ApplicationProfile>
   preparations: Record<PreparationId, Preparation>

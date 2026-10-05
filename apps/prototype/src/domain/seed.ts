@@ -376,6 +376,7 @@ export function emptyCatalog(): Catalog {
     projects: {},
     views: {},
     measurements: {},
+    measurementImports: {},
     masters: {},
     profiles: builtInProfiles(),
     preparations: {},

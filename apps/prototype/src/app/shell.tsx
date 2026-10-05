@@ -5,7 +5,7 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router"
 import { Aperture, FlaskConical, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
-import { EmptyState } from "@/components/app/feedback"
+import { EmptyState, LiveAnnouncer } from "@/components/app/feedback"
 import { useDocumentTitle } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import {
@@ -40,6 +40,7 @@ export function RootLayout() {
   useGlobalShortcuts()
   return (
     <TooltipProvider delay={400}>
+      <LiveAnnouncer />
       <Outlet />
       <CommandPalette />
       <ShortcutsDialog />

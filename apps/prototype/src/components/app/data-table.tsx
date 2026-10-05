@@ -9,9 +9,11 @@
  *   groups; Tab order stays natural. Row height follows the density token `--row-h`.
  * - Grouping (opt-in `groups`): group header rows inside this one table, so
  *   every group shares the column widths and the pinned header row.
+ * - Pinned first column (opt-in `stickyFirstColumn`): the selection column
+ *   and the first column stay in view while a wide table scrolls sideways.
  */
 import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react"
-import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react"
+import { type KeyboardEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -71,6 +73,13 @@ export interface DataTableProps<T> {
    * select-all covers every group shown.
    */
   groups?: DataTableGrouping<T>
+  /**
+   * Keep the selection column and the first column in view while the table
+   * scrolls sideways (wide tables at 1024px). The frame takes the card
+   * surface so pinned cells match the rows they cover; `rowClassName`
+   * backgrounds do not reach the pinned cells.
+   */
+  stickyFirstColumn?: boolean
 }
 
 export function DataTable<T>({
@@ -87,8 +96,24 @@ export function DataTable<T>({
   className,
   scroll = "frame",
   groups,
+  stickyFirstColumn = false,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState(initialSort ?? null)
+  const frame = useRef<HTMLDivElement>(null)
+  const lastPinnedHeader = useRef<HTMLTableCellElement>(null)
+
+  // Scroll padding the width of the pinned columns, so Tab never leaves a
+  // focused cell under them (WCAG 2.4.11); it follows column resizes.
+  useLayoutEffect(() => {
+    const container = frame.current
+    const header = lastPinnedHeader.current
+    if (!stickyFirstColumn || !container || !header) return
+    const update = () => container.style.setProperty("--pinned-w", `${header.offsetLeft + header.offsetWidth}px`)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(header)
+    return () => observer.disconnect()
+  }, [stickyFirstColumn])
 
   const sorted = useMemo(() => {
     const column = sort ? columns.find((c) => c.id === sort.columnId) : undefined
@@ -158,13 +183,29 @@ export function DataTable<T>({
   }
 
   const columnCount = columns.length + (selection ? 1 : 0)
+  // Pinned cells are opaque (card plus the row's tint, `--row-bg`) and sit
+  // under the sticky header (z-10). The last pinned cell draws the edge.
+  const pinned = (position: "first" | "only" | "last", head = false) =>
+    stickyFirstColumn
+      ? cn(
+          "sticky",
+          head ? "bg-card" : "z-1 bg-card [background-image:linear-gradient(var(--row-bg),var(--row-bg))]",
+          position === "last" ? "left-10" : "left-0",
+          position !== "first" && "shadow-[inset_-1px_0_0_var(--border)]",
+          !head && position !== "last" && "group-aria-[current=true]/row:shadow-[inset_2px_0_0_var(--primary)]",
+          !head && position === "only" && "group-aria-[current=true]/row:shadow-[inset_2px_0_0_var(--primary),inset_-1px_0_0_var(--border)]",
+        )
+      : undefined
+  const columnPin = selection ? "last" : "only"
   return (
     <div
+      ref={frame}
       className={cn(
         // The frame is the scroll container in both axes so the header row
         // stays pinned while long tables scroll inside it. Scroll padding the
         // height of that header keeps a focused row out from under it (WCAG 2.4.11).
         "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-lg border",
+        stickyFirstColumn && "scroll-pl-(--pinned-w) bg-card",
         scroll === "frame" && "max-h-[calc(100dvh-14rem)]",
         className,
       )}
@@ -175,7 +216,7 @@ export function DataTable<T>({
         <thead className="sticky top-0 z-10 bg-card text-xs text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
           <tr>
             {selection ? (
-              <th scope="col" className="h-(--row-h) w-10 px-3">
+              <th scope="col" className={cn("h-(--row-h) w-10 px-3", pinned("first", true))}>
                 <Checkbox
                   aria-label={`Select all ${selectable.length} shown`}
                   checked={allShownSelected}
@@ -185,15 +226,21 @@ export function DataTable<T>({
                 />
               </th>
             ) : null}
-            {columns.map((column) => {
+            {columns.map((column, columnIndex) => {
               const active = sort?.columnId === column.id
               const ariaSort = active ? (sort.direction === "asc" ? "ascending" : "descending") : column.sortValue ? "none" : undefined
               return (
                 <th
                   key={column.id}
+                  ref={columnIndex === 0 ? lastPinnedHeader : undefined}
                   scope="col"
                   aria-sort={ariaSort}
-                  className={cn("h-(--row-h) px-3 font-medium whitespace-nowrap", column.align === "right" ? "text-right" : "text-left", column.className)}
+                  className={cn(
+                    "h-(--row-h) px-3 font-medium whitespace-nowrap",
+                    column.align === "right" ? "text-right" : "text-left",
+                    column.className,
+                    columnIndex === 0 && pinned(columnPin, true),
+                  )}
                 >
                   {column.sortValue ? (
                     <button
@@ -248,7 +295,8 @@ export function DataTable<T>({
               {body.key !== null && groups ? (
                 <tr className={cn("border-b bg-muted/40", bodyIndex > 0 && "border-t")}>
                   <th scope="rowgroup" colSpan={columnCount} className="h-(--row-h) px-3 text-left text-xs font-semibold">
-                    {groups.label(body.key, body.rows)}
+                    {/* The label stays in view while the table scrolls sideways. */}
+                    <span className={cn(stickyFirstColumn && "sticky left-3")}>{groups.label(body.key, body.rows)}</span>
                   </th>
                 </tr>
               ) : null}
@@ -263,14 +311,18 @@ export function DataTable<T>({
                     aria-current={activeRowId === id ? "true" : undefined}
                     data-selected={isSelected || undefined}
                     className={cn(
-                      "h-(--row-h) border-b last:border-0 hover:bg-muted/60",
+                      "group/row h-(--row-h) border-b last:border-0 hover:bg-muted/60",
                       "data-selected:bg-primary/10 data-selected:hover:bg-primary/16",
                       "aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
+                      // The same tints as a variable, for pinned cells that paint over the row.
+                      "[--row-bg:transparent] hover:[--row-bg:color-mix(in_oklab,var(--muted)_60%,transparent)]",
+                      "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_10%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_16%,transparent)]",
+                      "aria-[current=true]:[--row-bg:var(--accent)]",
                       rowClassName?.(row),
                     )}
                   >
                     {selection ? (
-                      <td className="w-10 px-3">
+                      <td className={cn("w-10 px-3", pinned("first"))}>
                         <Checkbox
                           aria-label={`Select ${selection.rowLabel(row)}`}
                           checked={isSelected}
@@ -279,7 +331,7 @@ export function DataTable<T>({
                         />
                       </td>
                     ) : null}
-                    {columns.map((column) => {
+                    {columns.map((column, columnIndex) => {
                       const Cell = column.rowHeader ? "th" : "td"
                       return (
                         <Cell
@@ -290,6 +342,7 @@ export function DataTable<T>({
                             column.truncate ? "max-w-72 truncate" : "whitespace-nowrap",
                             column.align === "right" ? "text-right" : "text-left",
                             column.className,
+                            columnIndex === 0 && pinned(columnPin),
                           )}
                         >
                           {column.cell(row)}
@@ -355,6 +408,7 @@ export function SelectionBar({
   noun,
   onShowSelected,
   onClear,
+  clearDisabledReason,
   actions,
 }: {
   count: number
@@ -363,8 +417,11 @@ export function SelectionBar({
   noun: string
   onShowSelected?: () => void
   onClear: () => void
+  /** When set, Clear selection stays focusable but disabled, with this reason beside it. */
+  clearDisabledReason?: string
   actions?: ReactNode
 }) {
+  const clearReasonId = useId()
   if (count === 0) return null
   return (
     <div role="region" aria-label="Selection" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/8 px-3 py-1.5 text-sm">
@@ -377,9 +434,21 @@ export function SelectionBar({
           Show selected
         </Button>
       ) : null}
-      <Button size="sm" variant="ghost" onClick={onClear}>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={onClear}
+        disabled={clearDisabledReason !== undefined}
+        focusableWhenDisabled
+        aria-describedby={clearDisabledReason !== undefined ? clearReasonId : undefined}
+      >
         Clear selection
       </Button>
+      {clearDisabledReason !== undefined ? (
+        <span id={clearReasonId} className="text-xs text-muted-foreground">
+          {clearDisabledReason}
+        </span>
+      ) : null}
       <div className="flex-1" />
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
