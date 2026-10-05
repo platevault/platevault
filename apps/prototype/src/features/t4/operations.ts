@@ -5,13 +5,13 @@
  * ticks (drift, denied access, collisions) are observed honestly.
  */
 import { copyAvailability, preferredCopy } from "@/domain/derive"
-import { createFolder, fakeSha256, fileAt, makeFile, removeFile, volumeForPath, writeFiles } from "@/domain/disk"
+import { createFolder, fakeSha256, fileAt, filesUnder, makeFile, removeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { assetIdForPath, isUnder } from "@/domain/indexing"
-import type { Asset, CorrectionField, Disk, InputMode, Operation, OperationItem, Preparation, PreparationInput } from "@/domain/types"
+import type { Asset, CorrectionField, Disk, FrameHeader, InputMode, Operation, OperationItem, Preparation, PreparationInput } from "@/domain/types"
 import { formatCount, plural } from "@/lib/format"
 import { nowIso, type PrototypeState } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
-import { HANDOFF_FILE } from "./domain"
+import { FIELD_KEYWORD, HANDOFF_FILE } from "./domain"
 
 // ---------------------------------------------------------------------------
 // Prepare
@@ -24,7 +24,8 @@ export interface PrepareEntry {
   sourcePath: string
   destPath: string
   fileName: string
-  patch: { field: CorrectionField; value: string } | null
+  /** Reviewed catalog values an isolated entry carries in its header; empty when not patched (D15). */
+  patches: Array<{ field: CorrectionField; value: string }>
 }
 
 export interface PreparePayload {
@@ -68,12 +69,45 @@ function sourceProblem(state: PrototypeState, entry: PrepareEntry): string | nul
 /**
  * Prepared entries that no longer match their preparation snapshot: the
  * source bytes or availability changed, or the written entry did (PREP-FR-10,
- * PREP-AC-15). Open runs this before every launch. Reads only.
+ * PREP-AC-15). Open runs this before every launch. Reads only. A preparation
+ * without a run journal (recorded before this session) is checked against
+ * each frame's recorded catalog digest and the View entry for it; one with
+ * nothing recorded cannot be re-verified, so it fails closed.
  */
 export function changedPreparedEntries(state: PrototypeState, prep: Preparation): Array<{ path: string; reason: string }> {
   const op = prep.operationId ? state.operations[prep.operationId] : undefined
   const payload = op?.payload as unknown as PreparePayload | undefined
-  if (!payload?.entries) return []
+  if (!payload?.entries) {
+    if (prep.preparedAssetIds.length === 0) {
+      return [{ path: prep.viewPath, reason: "No preparation snapshot is recorded for its entries, so they cannot be re-verified. Prepare the View again." }]
+    }
+    const written = filesUnder(state.disk, prep.viewPath)
+    const changed: Array<{ path: string; reason: string }> = []
+    for (const assetId of prep.preparedAssetIds) {
+      const asset = state.catalog.assets[assetId]
+      if (!asset) {
+        changed.push({ path: prep.viewPath, reason: `A prepared frame (${assetId}) is no longer in the catalog.` })
+        continue
+      }
+      const sourcePath = preferredCopy(state.disk, state.catalog, asset).path
+      const problem = sourceProblem(state, { kind: "light", assetId, resultId: null, sourcePath, destPath: sourcePath, fileName: asset.fileName, patches: [] })
+      if (problem) {
+        changed.push({ path: sourcePath, reason: problem })
+        continue
+      }
+      if (fileAt(state.disk, sourcePath)?.sha256 !== asset.sha256) {
+        changed.push({ path: sourcePath, reason: "Changed since it was prepared: its SHA-256 differs from the recorded digest." })
+        continue
+      }
+      const intact =
+        prep.mode === "direct-source" ||
+        (prep.mode === "linked" && prep.linkType === "symlink"
+          ? written.some((f) => f.linkTarget === sourcePath)
+          : written.some((f) => f.sha256 === asset.sha256 && f.path.endsWith(`/${asset.fileName}`)))
+      if (!intact) changed.push({ path: sourcePath, reason: "Its View entry is missing or no longer matches what was prepared." })
+    }
+    return changed
+  }
   const assets = new Set(prep.preparedAssetIds)
   const results = new Set(prep.preparedResultIds)
   const calibration = new Set(payload.calibrationPrepared)
@@ -167,9 +201,19 @@ function prepareEntry(state: PrototypeState, payload: PreparePayload, item: Oper
     written = makeFile({ path: entry.destPath, volumeId, sizeBytes: source.sizeBytes, kind: source.kind, header: source.header, pixelTruth: source.pixelTruth, inode: source.inode, sha256: source.sha256, modifiedAt: at })
     payload.expected[item.id] = snapshot
   } else {
-    // Copy or Clone: an isolated entry. A patched entry differs only by its reviewed header change.
-    const header = entry.patch && source.header ? { ...source.header, ...(entry.patch.field === "focal-length" ? { focalLengthMm: Number.parseFloat(entry.patch.value) } : {}), ...(entry.patch.field === "filter" ? { filter: entry.patch.value } : {}) } : source.header
-    const sha256 = entry.patch ? fakeSha256(entry.destPath, 7) : snapshot
+    // Copy or Clone: an isolated entry. A patched entry differs only by its reviewed header changes, one per field.
+    let header: FrameHeader | null = source.header
+    if (header && entry.patches.length > 0) {
+      header = { ...header }
+      for (const { field, value } of entry.patches) {
+        if (field === "target") header.object = value
+        else if (field === "equipment") header.telescope = value
+        else if (field === "filter") header.filter = value
+        else if (field === "exposure") header.exposureS = Number.parseFloat(value)
+        else header.focalLengthMm = Number.parseFloat(value)
+      }
+    }
+    const sha256 = entry.patches.length > 0 ? fakeSha256(entry.destPath, 7) : snapshot
     written = makeFile({ path: entry.destPath, volumeId, sizeBytes: source.sizeBytes, kind: source.kind, header, pixelTruth: source.pixelTruth, sha256, modifiedAt: at })
     payload.expected[item.id] = sha256
   }
@@ -178,7 +222,10 @@ function prepareEntry(state: PrototypeState, payload: PreparePayload, item: Oper
   const reread = fileAt(next.disk, entry.destPath)
   const verified = payload.mode === "linked" && payload.linkType === "symlink" ? fileAt(next.disk, reread?.linkTarget ?? "")?.sha256 === snapshot : reread?.sha256 === payload.expected[item.id]
   if (!verified) return { state: next, item: { ...item, status: "failed", phase: null, detail: `The entry at ${entry.destPath} did not re-read to the expected digest.` }, pause: false }
-  const detail = entry.patch ? `Patched copy verified: ${entry.patch.field === "focal-length" ? "FOCALLEN" : "FILTER"} = ${entry.patch.value}; original unchanged.` : "Written and re-read against its snapshot."
+  const detail =
+    entry.patches.length > 0
+      ? `Patched copy verified: ${entry.patches.map((p) => `${FIELD_KEYWORD[p.field]} = ${p.value}`).join(", ")}; original unchanged.`
+      : "Written and re-read against its snapshot."
   return { state: next, item: { ...item, status: "done", phase: "verified", detail }, pause: false }
 }
 

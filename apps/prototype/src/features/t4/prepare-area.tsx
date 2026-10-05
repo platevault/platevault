@@ -6,7 +6,7 @@
  */
 import { Link } from "@tanstack/react-router"
 import { ArrowRight, ChevronRight, FolderOpen } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { ActionError, Notice } from "@/components/app/feedback"
@@ -26,10 +26,11 @@ import { useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { modifyFileExternally, restoreFileExternally, setFolderAccess } from "@/store/simulation"
 import { openApplication, quitApplication, retryPreparation, startPrepare, updateApp, updatePrep, updateWorld } from "./actions"
+import type { PreparePayload } from "./operations"
 import { T4Badge } from "./badges"
 import { ViewNotFound } from "./calibration-area"
-import { CRITERION_LABEL, FIELD_LABEL, handoffCountText, KIND_LABEL, METADATA_CHOICE_LABEL, MODE_LABEL, type PreparationPlan, sessionLabel } from "./domain"
-import { usePrepDraft, usePreparationPlan, useRouteView } from "./hooks"
+import { CRITERION_LABEL, FIELD_LABEL, handoffCountText, KIND_LABEL, METADATA_CHOICE_LABEL, MODE_LABEL, type PreparationPlan, sameInput, sessionLabel, summaryText } from "./domain"
+import { usePrepDraft, usePreparationPlan, useRouteView, useUnverified } from "./hooks"
 import { ApplicationSection, LocationSection, MetadataSection, ModeSection } from "./prepare-sections"
 import { LocateApplicationDialog } from "./profile-parts"
 import { PrototypeControls, PrototypeToggle } from "./prototype-controls"
@@ -61,7 +62,7 @@ function Readiness({ view, plan }: { view: View; plan: PreparationPlan }) {
       plan.calibration.blocking.length === 0
         ? `${handoffCountText(plan.calibration, plan.calibrationSources.length)} handed off.`
         : plan.calibration.blocking
-            .map((r) => `${formatNight(r.member.session.night)} ${r.member.session.channel ?? ""} ${KIND_LABEL[r.kind].toLowerCase()}: ${r.state === "suggested" ? "suggested, not accepted" : r.state}`)
+            .map((r) => `${formatNight(r.member.session.night)} ${r.member.session.channel ?? ""} ${KIND_LABEL[r.kind].toLowerCase()}: ${r.drift ? "drifted" : r.state === "suggested" ? "suggested, not accepted" : r.state}`)
             .join("; "),
     action:
       plan.calibration.blocking.length === 0 ? undefined : (
@@ -109,11 +110,17 @@ function ReviewPanel({ view, plan, confirmed, onConfirmChange, onPrepare, error 
   const [confirmOpen, setConfirmOpen] = useState(false)
   const entryWord = plan.mode === "direct-source" ? "listed path" : plan.mode === "linked" ? (plan.linkType === "hardlink" ? "hard link" : "symbolic link") : plan.mode === "clone" ? "clone" : "copy"
   const entryWords = plan.mode === "copy" ? "copies" : `${entryWord}s`
+  // Opening the review, from any control or on arrival from Calibration, moves focus to it (WCAG 2.4.3).
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    headingRef.current?.scrollIntoView({ block: "start" })
+    headingRef.current?.focus({ preventScroll: true })
+  }, [])
 
   return (
     <section aria-labelledby="review-title" className="space-y-4 rounded-lg border-2 border-primary/40 bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id="review-title" className="text-base font-semibold">
+        <h3 id="review-title" ref={headingRef} tabIndex={-1} className="text-base font-semibold outline-none">
           Review preparation
         </h3>
         <span className="text-xs text-muted-foreground">Nothing is created until you confirm Prepare View.</span>
@@ -224,7 +231,20 @@ function ReviewPanel({ view, plan, confirmed, onConfirmChange, onPrepare, error 
             ))}
             {plan.calibration.blocking.length > 0 ? (
               <Notice tone="refusal" title={`${plural(plan.calibration.blocking.length, "requirement")} unresolved`} actions={<Button size="sm" variant="outline" render={<Link to="/views/$viewId/calibration" params={{ viewId: view.id }} />}>Resolve in Calibration</Button>}>
-                {plan.calibration.blocking.map((r) => `${sessionLabel(r.member.session)} ${KIND_LABEL[r.kind].toLowerCase()} (${r.state === "suggested" ? "suggestion not accepted" : r.state})`).join("; ")}. Choose another candidate, record a scoped exception with a reason, hand off without it, or defer preparation. Unaccepted suggestions are never handed off.
+                {plan.calibration.blocking
+                  .map((r) => {
+                    const alternative = r.candidates.find((c) => c.summary.allCompatible && !(r.input && sameInput(c.source.input, r.input)))
+                    const status = r.drift
+                      ? `drifted: ${r.drift}`
+                      : r.state === "suggested"
+                        ? "suggestion not accepted"
+                        : r.state === "unresolved" && r.source
+                          ? `unresolved: ${r.source.name} chosen, ${summaryText(r.criteria).toLowerCase()}${alternative ? `; compatible alternative ${alternative.source.name}` : ""}`
+                          : r.state
+                    return `${sessionLabel(r.member.session)} ${KIND_LABEL[r.kind].toLowerCase()} (${status})`
+                  })
+                  .join("; ")}
+                . Choose another input, record a scoped exception with a reason, hand off without it, or defer preparation. Unaccepted suggestions are never handed off.
               </Notice>
             ) : null}
           </section>
@@ -363,7 +383,7 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
   const op = useStore((s) => (prep.operationId ? s.operations[prep.operationId] : undefined))
   const profile = useStore((s) => s.catalog.profiles[prep.profileId])
   const running = useStore((s) => s.slices.t4.running[view.id])
-  const unverified = useStore((s) => s.slices.t4.unverified[prep.id] ?? null)
+  const unverified = useUnverified(prep)
   const [reveal, setReveal] = useState(false)
   const [locating, setLocating] = useState(false)
   const [message, setMessage] = useState<{ tone: "info" | "refusal" | "warning"; text: string; missing: boolean } | null>(null)
@@ -373,7 +393,12 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
   const stale = latestRevision !== null && prep.membershipRevision !== latestRevision
   const appName = profile?.application === "generic" ? "the application" : (profile?.name.split(" /")[0] ?? "the application")
   const blockedEntries = prep.blocked
+  const entryKinds = (op?.payload as unknown as PreparePayload | undefined)?.entries ?? {}
+  const blockedCalibration = blockedEntries.filter((b) => b.input.kind === "asset" && entryKinds[`a:${b.input.assetId}`]?.kind === "calibration").length
   const preparedCount = prep.preparedAssetIds.length + prep.preparedResultIds.length
+  // The entries Retry runs again: blocked or failed ones, and after Cancel every unfinished one.
+  const retryCount = op ? op.items.filter((i) => i.status === "blocked" || i.status === "failed" || (op.status === "canceled" && i.status !== "done")).length : 0
+  const recoverable = settled && (prep.state === "partial" || prep.state === "failed" || (prep.state === "canceled" && retryCount > 0))
 
   function open() {
     const outcome = openApplication(view, prep.id)
@@ -402,16 +427,22 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
         </Notice>
       ) : null}
       {/* Once prepared, Open in leads; the per-entry outcome follows it as detail. */}
-      {op && !(prepared && settled) ? <OperationPanel operationId={op.id} onRetry={retry} /> : null}
+      {op && !(prepared && settled) ? <OperationPanel operationId={op.id} onRetry={recoverable ? undefined : retry} /> : null}
       {retryError ? <ActionError message={retryError} /> : null}
-      {settled && (prep.state === "partial" || prep.state === "failed") ? (
+      {recoverable ? (
         <Notice
           tone="warning"
-          title={prep.state === "partial" ? `Partial: ${formatCount(preparedCount)} prepared, ${formatCount(blockedEntries.filter((b) => !b.reason.startsWith("Calibration")).length)} blocked` : "Failed: nothing was prepared"}
+          title={
+            prep.state === "partial"
+              ? `Partial: ${formatCount(preparedCount)} prepared, ${formatCount(blockedEntries.length - blockedCalibration)} blocked${blockedCalibration ? `, ${plural(blockedCalibration, "calibration file")} blocked` : ""}`
+              : prep.state === "canceled"
+                ? `Canceled: ${formatCount(preparedCount)} prepared, ${formatCount(retryCount)} not finished`
+                : "Failed: nothing was prepared"
+          }
           actions={
             <>
-              <Button size="sm" onClick={retry}>
-                Retry {plural(blockedEntries.length, "blocked entry", "blocked entries")}
+              <Button size="sm" onClick={retry} disabled={retryCount === 0}>
+                Retry {plural(retryCount, prep.state === "canceled" ? "unfinished entry" : "blocked entry", prep.state === "canceled" ? "unfinished entries" : "blocked entries")}
               </Button>
               <Button size="sm" variant="outline" onClick={onReviewAgain}>
                 Review preparation again
@@ -550,7 +581,7 @@ export function ViewPrepareArea() {
   // J24 P8: one prepared 26 Sep frame (else the first light frame), changed in place to exercise Open's re-verification.
   const p8Path = latest?.state === "prepared" ? ((plan?.entries.find((e) => e.kind === "light" && e.sourcePath.includes("/2026-09-26/")) ?? plan?.entries.find((e) => e.kind === "light"))?.sourcePath ?? null) : null
   const p8Changed = useStore((s) => (p8Path ? Boolean(fileAt(s.disk, p8Path)?.previousSha256) : false))
-  const latestUnverified = useStore((s) => (latest ? (s.slices.t4.unverified[latest.id] ?? null) : null))
+  const latestUnverified = useUnverified(latest ?? null)
 
   if (!view || !plan) return <ViewNotFound />
   const complete = Boolean(view.completedAt)
@@ -583,11 +614,8 @@ export function ViewPrepareArea() {
           <Button
             variant={preparedNow ? "outline" : "default"}
             disabled={locked || !plan.revision}
-            aria-describedby="review-disabled"
-            onClick={() => {
-              updatePrep(viewId, { reviewing: true })
-              requestAnimationFrame(() => document.getElementById("review-title")?.scrollIntoView({ block: "start" }))
-            }}
+            aria-describedby={locked || !plan.revision ? "review-disabled" : undefined}
+            onClick={() => updatePrep(viewId, { reviewing: true })}
           >
             Review preparation
             <ArrowRight aria-hidden="true" data-icon="inline-end" />

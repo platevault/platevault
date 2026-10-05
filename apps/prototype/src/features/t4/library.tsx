@@ -18,14 +18,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { fileAt } from "@/domain/disk"
-import type { CalibrationMaster, Catalog, Session } from "@/domain/types"
+import type { CalibrationMaster, Catalog, Disk, Session } from "@/domain/types"
 import { formatDateTime, formatExposure, formatNight, plural } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { createExternalFile, modifyFileExternally, restoreFileExternally, setFault } from "@/store/simulation"
 import { calibrationLocationFor, detectCandidates, startAdoption, updateWorld } from "./actions"
-import { KIND_LABEL, masterSource, rawSetSource, sameInput, trainName, type CalSource } from "./domain"
+import { inputDrift, KIND_LABEL, masterSource, rawSetSource, sameInput, trainName, type CalSource } from "./domain"
 import { PrototypeControls, PrototypeToggle } from "./prototype-controls"
 
 interface LibraryItem {
@@ -34,18 +34,21 @@ interface LibraryItem {
   master: CalibrationMaster | null
   session: Session | null
   candidate: boolean
+  /** An adopted master whose bytes no longer match their basis (CAL-AC-10). */
+  drift: string | null
 }
 
-function libraryItems(catalog: Catalog): LibraryItem[] {
+function libraryItems(catalog: Catalog, disk: Disk): LibraryItem[] {
   const items: LibraryItem[] = []
   for (const master of Object.values(catalog.masters)) {
     const source = masterSource(catalog, master.id)
-    items.push({ id: master.id, source, master, session: null, candidate: master.state === "candidate" })
+    const drift = master.state === "adopted" ? inputDrift(catalog, disk, { type: "master", masterId: master.id }) : null
+    items.push({ id: master.id, source, master, session: null, candidate: master.state === "candidate", drift })
   }
   for (const session of Object.values(catalog.sessions)) {
     if (session.supersededBy) continue
     const source = rawSetSource(catalog, session)
-    if (source) items.push({ id: session.id, source, master: null, session, candidate: false })
+    if (source) items.push({ id: session.id, source, master: null, session, candidate: false, drift: null })
   }
   return items
 }
@@ -99,6 +102,7 @@ function LibraryList({ items, activeId }: { items: LibraryItem[]; activeId: stri
         <span className="flex items-center justify-between gap-2">
           <MiddleTruncate text={item.source?.name ?? ""} className="font-medium" />
           {item.master ? <StatusBadge kind="master" value={item.master.state} /> : null}
+          {item.drift ? <StatusBadge kind="content" value="drifted" /> : null}
         </span>
         <span className="block truncate text-xs text-muted-foreground">{itemLine(item)}</span>
       </Link>
@@ -339,6 +343,23 @@ function Adoption({ master }: { master: CalibrationMaster }) {
   )
 }
 
+/** J26 S9a/S9b (P5 helper): change the adopted library copy outside PlateVault, then put its adopted bytes back. */
+function AdoptedCopyControls({ path }: { path: string }) {
+  const file = useStore((s) => fileAt(s.disk, path))
+  return (
+    <PrototypeControls title="outside changes to the library copy">
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" disabled={!file} onClick={() => modifyFileExternally(path)}>
+          Overwrite the library copy with same-size different bytes
+        </Button>
+        <Button size="sm" variant="outline" disabled={!file?.previousSha256} onClick={() => restoreFileExternally(path)}>
+          Restore the adopted bytes
+        </Button>
+      </div>
+    </PrototypeControls>
+  )
+}
+
 function Detail({ item, viewId }: { item: LibraryItem; viewId: string | undefined }) {
   const catalog = useStore((s) => s.catalog)
   const s = item.source!
@@ -351,7 +372,12 @@ function Detail({ item, viewId }: { item: LibraryItem; viewId: string | undefine
         title={s.name}
         eyebrow={<Link to="/calibration" className="hover:underline">Calibration</Link>}
         description={itemLine(item)}
-        meta={item.master ? <StatusBadge kind="master" value={item.master.state} /> : <StatusBadge kind="custody" value="protected" label="Raw set" />}
+        meta={
+          <span className="flex flex-wrap gap-1.5">
+            {item.master ? <StatusBadge kind="master" value={item.master.state} /> : <StatusBadge kind="custody" value="protected" />}
+            {item.drift ? <StatusBadge kind="content" value="drifted" /> : null}
+          </span>
+        }
         actions={
           item.session ? (
             <Button variant="outline" render={<Link to="/sessions/$sessionId" params={{ sessionId: item.session.id }} />}>
@@ -364,6 +390,11 @@ function Detail({ item, viewId }: { item: LibraryItem; viewId: string | undefine
         {item.candidate ? (
           <Notice tone="info" title="Detected candidate">
             Found in a recorded output location. It is not reusable and no View preselects it until you add it to the calibration library.
+          </Notice>
+        ) : null}
+        {item.drift ? (
+          <Notice tone="warning" title="Drifted: needs review">
+            {item.drift} No View suggests or accepts it until its adopted bytes return. It stays protected and keeps its adoption provenance as history.
           </Notice>
         ) : null}
         <Evidence catalog={catalog} item={item} />
@@ -392,6 +423,7 @@ function Detail({ item, viewId }: { item: LibraryItem; viewId: string | undefine
           />
         </Section>
         {item.master?.state === "candidate" ? <Adoption master={item.master} /> : null}
+        {item.master?.state === "adopted" && item.master.adoption ? <AdoptedCopyControls path={item.master.path} /> : null}
         <Usage catalog={catalog} source={s} viewId={viewId} />
       </PageBody>
     </div>
@@ -402,8 +434,9 @@ export function CalibrationLibraryPage() {
   const params = useParams({ strict: false }) as { calibrationId?: string }
   const search = useSearch({ strict: false }) as { viewId?: string }
   const catalog = useStore((s) => s.catalog)
+  const disk = useStore((s) => s.disk)
   const [announcement, setAnnouncement] = useState("")
-  const items = useMemo(() => libraryItems(catalog), [catalog])
+  const items = useMemo(() => libraryItems(catalog, disk), [catalog, disk])
   const activeId = params.calibrationId ?? null
   const active = items.find((i) => i.id === activeId) ?? null
   const denied = Object.values(catalog.locations).filter((l) => l.role === "calibration" && l.access === "denied")
@@ -437,7 +470,7 @@ export function CalibrationLibraryPage() {
       <div className="flex min-h-0 flex-1 flex-col">
         {header}
         <PageBody>
-          <p className="sr-only" aria-live="polite">{announcement}</p>
+          <p className="text-sm text-muted-foreground empty:hidden" aria-live="polite">{announcement}</p>
           <EmptyState
             icon={FolderSearch}
             titleAs="h2"
@@ -453,7 +486,7 @@ export function CalibrationLibraryPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {header}
-      <p className="sr-only" aria-live="polite">{announcement}</p>
+      <p className="px-6 pt-3 text-sm text-muted-foreground empty:hidden" aria-live="polite">{announcement}</p>
       {denied.length > 0 ? (
         <div className="px-6 pt-4">
           <Notice tone="warning" title={`${denied.map((l) => l.displayName).join(", ")}: access denied`} actions={<Button size="sm" variant="outline" render={<Link to="/settings/locations" />}>Open Locations</Button>}>

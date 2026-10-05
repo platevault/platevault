@@ -15,7 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import type { CommitResult } from "@/store/core"
 import { useStore } from "@/store/core"
 import { formatCount, formatNight, plural } from "@/lib/format"
-import { acceptSuggestions, decideRow } from "./actions"
+import { acceptSuggestions, decideRow, updatePrep } from "./actions"
 import { KIND_LABEL, type RequirementRow, sameInput, sessionLabel, summaryText } from "./domain"
 import { useCalibrationPlan, useRouteView } from "./hooks"
 import { ResolveDialog } from "./resolve-dialog"
@@ -57,8 +57,14 @@ function InputCell({ row }: { row: RequirementRow }) {
       <span className="block [overflow-wrap:anywhere]">{row.source.name}</span>
       <span className="block text-xs text-muted-foreground">
         {row.source.isMaster ? "Library master" : `Raw set · ${plural(row.source.frameCount ?? 0, "frame")}`}
-        {others > 0 && row.state !== "suggested" ? ` · ${plural(others, "compatible alternative")}` : ""}
+        {others > 0 && row.state !== "suggested" && !row.pending ? ` · ${plural(others, "compatible alternative")}` : ""}
       </span>
+      {row.drift ? <span className="block text-xs text-pretty">{row.drift} Not handed off until its accepted bytes return.</span> : null}
+      {row.pending ? (
+        <span className="block text-xs text-pretty text-muted-foreground [overflow-wrap:anywhere]">
+          Suggested instead: {row.pending.source.name}, a newly adopted master. This decision stands until you accept it.
+        </span>
+      ) : null}
     </span>
   )
 }
@@ -73,8 +79,8 @@ export function ViewCalibrationArea() {
   const [error, setError] = useState<{ message: string; retry: () => void } | null>(null)
   const [announcement, setAnnouncement] = useState("")
 
-  const suggestedKeys = useMemo(() => plan?.rows.filter((r) => r.state === "suggested").map((r) => r.key) ?? [], [plan])
-  const selected = suggestedKeys.filter((key) => !deselected.includes(key))
+  const offerKeys = useMemo(() => plan?.rows.filter((r) => r.state === "suggested" || r.pending).map((r) => r.key) ?? [], [plan])
+  const selected = offerKeys.filter((key) => !deselected.includes(key))
 
   if (!view || !plan) return <ViewNotFound />
   const complete = Boolean(view.completedAt)
@@ -95,7 +101,11 @@ export function ViewCalibrationArea() {
   function acceptSelected() {
     if (!view || !plan) return
     const rows = plan.rows.filter((r) => selected.includes(r.key))
-    if (run(() => acceptSuggestions(view, rows), `${plural(rows.length, "suggestion")} accepted.`)) setDeselected([])
+    if (run(() => acceptSuggestions(view, rows), `${plural(rows.length, "suggestion")} accepted.`)) {
+      setDeselected([])
+      // The Accept button unmounts once nothing is left to accept; keep focus on the next step (WCAG 2.4.3).
+      requestAnimationFrame(() => document.getElementById("cal-review-preparation")?.focus())
+    }
   }
 
   const columns: Column<RequirementRow>[] = [
@@ -122,13 +132,23 @@ export function ViewCalibrationArea() {
         // Visible summary first, so the accessible name contains the visible label (WCAG 2.5.3).
         return (
           <Button size="sm" variant="link" className="h-auto max-w-48 justify-start px-0 text-left text-xs whitespace-normal" onClick={() => setWhyKey(row.key)}>
-            {row.criteria.length === 0 ? "No candidate" : summaryText(row.criteria)}
+            {row.criteria.length > 0 ? summaryText(row.criteria) : row.candidates.length > 0 ? `${plural(row.candidates.length, "candidate")} considered` : "No candidate"}
             <span className="sr-only">: why this match, {name}</span>
           </Button>
         )
       },
     },
-    { id: "state", header: "State", cell: (row) => <StatusBadge kind="assignment" value={row.state} /> },
+    {
+      id: "state",
+      header: "State",
+      cell: (row) => (
+        <span className="flex flex-col items-start gap-1">
+          <StatusBadge kind="assignment" value={row.state} />
+          {row.drift ? <StatusBadge kind="content" value="drifted" /> : null}
+          {row.pending ? <StatusBadge kind="assignment" value="suggested" /> : null}
+        </span>
+      ),
+    },
     {
       id: "actions",
       header: "Actions",
@@ -143,8 +163,10 @@ export function ViewCalibrationArea() {
                 <Ellipsis aria-hidden="true" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60">
-                {row.state === "suggested" ? (
-                  <DropdownMenuItem onClick={() => run(() => acceptSuggestions(view, [row]), `Accepted ${row.suggestion?.source.name ?? kind}.`)}>Accept suggestion</DropdownMenuItem>
+                {row.state === "suggested" || row.pending ? (
+                  <DropdownMenuItem onClick={() => run(() => acceptSuggestions(view, [row]), `Accepted ${(row.pending ?? row.suggestion)?.source.name ?? kind}.`)}>
+                    Accept suggestion
+                  </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem onClick={() => setResolve({ key: row.key, exception: false })}>Choose another input…</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setResolve({ key: row.key, exception: true })}>Record exception…</DropdownMenuItem>
@@ -173,6 +195,7 @@ export function ViewCalibrationArea() {
   ]
 
   const blockingCount = plan.blocking.length
+  const pendingCount = plan.rows.filter((r) => r.pending).length
   const unsavedDraft = Boolean(view.draft)
 
   return (
@@ -185,19 +208,25 @@ export function ViewCalibrationArea() {
           <span className="flex flex-wrap gap-1.5" aria-live="polite">
             {plan.counts.accepted ? <StatusBadge kind="assignment" value="accepted" label={`${formatCount(plan.counts.accepted)} Accepted`} /> : null}
             {plan.counts.exception ? <StatusBadge kind="assignment" value="exception" label={`${formatCount(plan.counts.exception)} Exception`} /> : null}
-            {plan.counts.suggested ? <StatusBadge kind="assignment" value="suggested" label={`${formatCount(plan.counts.suggested)} Suggested`} /> : null}
+            {plan.counts.suggested + pendingCount ? <StatusBadge kind="assignment" value="suggested" label={`${formatCount(plan.counts.suggested + pendingCount)} Suggested`} /> : null}
             {plan.counts.unresolved ? <StatusBadge kind="assignment" value="unresolved" label={`${formatCount(plan.counts.unresolved)} Unresolved`} /> : null}
             {plan.counts.deferred ? <StatusBadge kind="assignment" value="deferred" label={`${formatCount(plan.counts.deferred)} Deferred`} /> : null}
             {plan.counts.excluded ? <StatusBadge kind="assignment" value="excluded" label={`${formatCount(plan.counts.excluded)} Excluded`} /> : null}
+            {plan.drifted ? <StatusBadge kind="content" value="drifted" label={`${formatCount(plan.drifted)} Drifted`} /> : null}
           </span>
         }
         actions={
           <>
-            <Button variant={suggestedKeys.length > 0 && !complete ? "outline" : "default"} render={<Link to="/views/$viewId/prepare" params={{ viewId }} />}>
+            <Button
+              id="cal-review-preparation"
+              variant={offerKeys.length > 0 && !complete ? "outline" : "default"}
+              onClick={() => updatePrep(viewId, { reviewing: true })}
+              render={<Link to="/views/$viewId/prepare" params={{ viewId }} />}
+            >
               Review preparation
               <ArrowRight aria-hidden="true" data-icon="inline-end" />
             </Button>
-            {suggestedKeys.length > 0 && !complete ? (
+            {offerKeys.length > 0 && !complete ? (
               <>
                 {selected.length === 0 ? (
                   <span id="accept-reason" className="text-xs text-muted-foreground">
@@ -239,7 +268,8 @@ export function ViewCalibrationArea() {
           <>
             {blockingCount > 0 ? (
               <Notice tone="warning" title={`${plural(blockingCount, "requirement")} not resolved`}>
-                Review preparation stays blocked until each is accepted, resolved with an exception or another input, or handed off without that kind. Deferred items also block.
+                Review preparation stays blocked until each is accepted, resolved with an exception or another input, or handed off without that kind. Deferred items also block
+                {plan.drifted ? ", and so does an input whose bytes changed since it was accepted" : ""}.
               </Notice>
             ) : (
               <Notice tone="info" title="Every requirement is decided">
@@ -258,15 +288,17 @@ export function ViewCalibrationArea() {
                   selection={{
                     selected: selected.filter((key) => group.rows.some((r) => r.key === key)),
                     onChange: (ids) => {
-                      const groupSuggested = group.rows.filter((r) => r.state === "suggested").map((r) => r.key)
-                      setDeselected((current) => [...current.filter((key) => !groupSuggested.includes(key)), ...groupSuggested.filter((key) => !ids.includes(key))])
+                      const groupOffers = group.rows.filter((r) => offerKeys.includes(r.key)).map((r) => r.key)
+                      setDeselected((current) => [...current.filter((key) => !groupOffers.includes(key)), ...groupOffers.filter((key) => !ids.includes(key))])
                     },
                     // The shared table prefixes "Select" and disables decided rows; the name says why, matching the State column.
                     rowLabel: (row) =>
                       row.state === "suggested"
                         ? `${KIND_LABEL[row.kind].toLowerCase()} suggestion for ${sessionLabel(row.member.session)}`
-                        : `${KIND_LABEL[row.kind].toLowerCase()} for ${sessionLabel(row.member.session)} (${row.state}, nothing to accept)`,
-                    isSelectable: (row) => row.state === "suggested" && !complete,
+                        : row.pending
+                          ? `${KIND_LABEL[row.kind].toLowerCase()} replacement suggestion for ${sessionLabel(row.member.session)} (the ${row.state} decision stays until you accept it)`
+                          : `${KIND_LABEL[row.kind].toLowerCase()} for ${sessionLabel(row.member.session)} (${row.state}, nothing to accept)`,
+                    isSelectable: (row) => offerKeys.includes(row.key) && !complete,
                   }}
                 />
               </section>
