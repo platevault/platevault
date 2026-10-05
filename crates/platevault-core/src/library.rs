@@ -211,10 +211,12 @@ impl Library {
     }
 
     /// Confirm a reviewed Retire location after reading every reference again.
+    /// Catalog-only: no file bytes are read or changed.
     ///
     /// # Errors
-    /// `Conflict` when the review is stale or a scan of the location is Running;
-    /// see [`Catalog::retire_location`].
+    /// `Conflict` when the review is stale, the location's availability differs
+    /// from the review or a scan of the location is Running; see
+    /// [`Catalog::retire_location`].
     pub async fn retire_location(
         &self,
         review_id: Uuid,

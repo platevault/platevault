@@ -1086,6 +1086,39 @@ fn assert_names_every_reference(
     );
 }
 
+/// The reviewed offline `root` returns and a readable rescan makes it Available:
+/// confirming `review` is refused, naming the location, and leaves it Active.
+/// Offline again, a new review names the same copies, sessions and references.
+async fn rereview_after_return(
+    library: &Arc<Library>,
+    review: &RetireReview,
+    root: &Path,
+) -> (Location, RetireReview) {
+    let catalog = library.catalog();
+    let id = review.location_id;
+    let unplugged = root.with_file_name("Cold-1 unplugged");
+    std::fs::rename(&unplugged, root).unwrap();
+    assert_eq!(scan_to_end(library, id).await.state, ScanState::Completed);
+    assert_eq!(catalog.location(id).await.unwrap().availability, Availability::Available);
+    let changed = library.retire_location(review.id, id, review.expected_revision).await;
+    let response = changed.unwrap_err().response(None, None);
+    assert_eq!(
+        (response.kind.as_str(), response.identity, response.retry),
+        ("conflict", Some(id), RetryAction::Review)
+    );
+    assert_eq!(catalog.location(id).await.unwrap().lifecycle, LocationLifecycle::Active);
+    std::fs::rename(root, &unplugged).unwrap();
+    assert_eq!(scan_to_end(library, id).await.state, ScanState::Failed);
+    let location = catalog.location(id).await.unwrap();
+    let again = library.review_retire_location(id).await.unwrap();
+    assert_ne!(again.id, review.id);
+    assert_eq!(
+        (again.availability, &again.assets, &again.sessions, &again.references),
+        (Availability::Offline, &review.assets, &review.sessions, &review.references)
+    );
+    (location, again)
+}
+
 /// LIB-AC-16: an offline location whose copies are fixed View members leaves the
 /// library only through a reviewed Retire location, and its folder registers again
 /// counting each capture once.
@@ -1149,6 +1182,9 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
 
     let review = library.review_retire_location(location.id).await.unwrap();
     assert_names_every_reference(&review, &location, &assets, summary.session.id);
+
+    // If its availability changes after the review, confirmation needs a new one.
+    let (location, review) = rereview_after_return(&library, &review, &root).await;
 
     // A Result that references a copy after the review makes it stale.
     results.held.lock().await.push(record(

@@ -483,13 +483,15 @@ pub async fn library_review_retire_location(
     library.review_retire_location(location_id).await.map_err(fail(Some(location_id)))
 }
 
-/// Confirm a reviewed Retire location: copies read Retired and leave integration
-/// totals, fixed Views name them unresolved and the root stops blocking
-/// registration. No file changes.
+/// Confirm a reviewed Retire location: the location is re-read, copies read
+/// Retired and leave integration totals, fixed Views name them unresolved and the
+/// root stops blocking registration. Reads and changes no file bytes, so no
+/// rehash applies.
 ///
 /// # Errors
-/// `Conflict` for a stale review or revision, or while a scan of the location is
-/// Running; `InvalidInput` for an applied review or a retired location.
+/// `Conflict` for a stale review or revision, for availability that differs from
+/// the review, or while a scan of the location is Running; `InvalidInput` for an
+/// applied review or a retired location.
 #[tauri::command]
 pub async fn library_retire_location(
     library: State<'_, Arc<Library>>,

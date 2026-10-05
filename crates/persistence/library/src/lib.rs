@@ -1961,16 +1961,18 @@ impl Catalog {
 
     /// Confirm a reviewed Retire location. The location becomes Retired with its
     /// last-observed state; its copies read Retired, stay as history and leave every
-    /// total; its root stops counting as an overlap. No file changes.
+    /// total; its root stops counting as an overlap. Retirement is catalog-only: it
+    /// reads and changes no file bytes, so no rehash applies (D19).
     ///
-    /// The copies, the sessions holding them, the location's availability and
-    /// `references`, read again by the caller, must still be exactly what the
-    /// review named.
+    /// The location is re-read in the transaction. The copies, the sessions holding
+    /// them, the location's availability and `references`, read again by the
+    /// caller, must still be exactly what the review named.
     ///
     /// # Errors
-    /// `Conflict` naming the location for a stale revision or review, or naming the
-    /// operation while a scan of the location is Running; `InvalidInput` for a
-    /// review of another location, an applied review or a retired location.
+    /// `Conflict` naming the location for a stale revision or review or for
+    /// availability that differs from the review, or naming the operation while a
+    /// scan of the location is Running; `InvalidInput` for a review of another
+    /// location, an applied review or a retired location.
     pub async fn retire_location(
         &self,
         review_id: Uuid,
