@@ -1,7 +1,8 @@
 -- Copyright (C) 2024-2026 Sjors Robroek
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
--- Clean PlateVault library catalog (spec 064). No legacy schema is imported.
+-- Clean PlateVault library catalog (spec 064), with the Project tables of spec
+-- 065 appended from projects.sql. No legacy schema is imported.
 -- Paths are lossless native keys: one encoding byte (0 unix bytes, 1 UTF-16LE)
 -- followed by the payload. Structured evidence is JSON of the shared model.
 
@@ -10,7 +11,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
     value INTEGER NOT NULL
 ) STRICT;
 
-INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 6);
+INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 7);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('grouping_revision', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('scan_sequence', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('target_generation', 0);

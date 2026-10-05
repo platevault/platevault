@@ -26,8 +26,8 @@ use platevault_model::{
     NativePath, ObservationFingerprint, PathSensitivity, Provenance, Quality, ReferenceKind,
     RemapBlock, RemapBlockReason, RemapItem, RemapReview, RetireAsset, RetireReview, RetireSession,
     Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress,
-    ScanState, Session, SessionCandidate, SessionLineage, TargetCandidate, TargetCone,
-    TargetCoverage, TargetRecord, VolumeIdentity,
+    ScanState, Session, SessionCandidate, SessionLineage, SessionSummary, TargetCandidate,
+    TargetCone, TargetCoverage, TargetRecord, VolumeIdentity,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -42,8 +42,8 @@ use uuid::Uuid;
 
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
 
-const SCHEMA: &str = include_str!("schema.sql");
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA: &str = concat!(include_str!("schema.sql"), include_str!("projects.sql"));
+const SCHEMA_VERSION: i64 = 7;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -75,6 +75,8 @@ macro_rules! asset_sql {
         )
     };
 }
+
+mod projects;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -140,22 +142,6 @@ pub struct SessionQuery {
     pub include_superseded: bool,
     pub offset: u32,
     pub limit: u32,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionSummary {
-    pub session: Session,
-    pub location_ids: Vec<Uuid>,
-    pub asset_count: u64,
-    /// Logical captures: content-identical copies in different locations count once.
-    pub capture_count: u64,
-    pub availability: Availability,
-    /// Last recorded observation; never a claim about current live bytes.
-    pub last_observed_at: Option<String>,
-    pub provisional: bool,
-    /// Successor sessions when this record was superseded by a regroup.
-    pub successors: Vec<Uuid>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
