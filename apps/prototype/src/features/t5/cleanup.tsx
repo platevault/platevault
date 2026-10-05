@@ -203,6 +203,8 @@ function CleanupArea({ view }: { view: View }) {
           const opId = startCleanup(view.id, view.name, review.viewPath, review.selected)
           setDraft(view.id, { operationId: opId, stage: "choose", selected: [], review: null })
         }}
+        // The opener unmounts once the review closes; land on the record that now names the outcome.
+        focusAfterConfirm={() => document.getElementById("t5-cleanup-record-title")}
       />
     </div>
   )
@@ -220,7 +222,7 @@ function CleanupChooser({ plan, selected, onChange, onReview }: { plan: CleanupP
   const count = [...selected].length
   return (
     <>
-      <Section id="t5-trash-support" title="OS Trash support" description="Shown per location. An OS action that deletes immediately counts as unsupported.">
+      <Section id="t5-trash-support" level={3} title="OS Trash support" description="Shown per location. An OS action that deletes immediately counts as unsupported.">
         <ul className="flex flex-wrap gap-2">
           {support.map((row) => (
             <li key={row.volumeId} className="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm">
@@ -234,6 +236,7 @@ function CleanupChooser({ plan, selected, onChange, onReview }: { plan: CleanupP
 
       <Section
         id="t5-cleanup-groups"
+        level={3}
         title="Files in this View"
         description="Recognized regenerable groups start selected. Selecting a group selects its files one by one; it never authorizes deleting a whole folder."
         actions={
@@ -394,6 +397,7 @@ function CleanupReview({ review, entries, onBack, onConfirm }: { review: ReviewS
   return (
     <Section
       id="t5-cleanup-review"
+      level={3}
       title="Review cleanup"
       description={`Exactly these entries, recorded at ${formatDateTime(review.at)}. Each one moves only if it still matches this review. The default action is Send to OS Trash; there is no permanent delete.`}
       actions={
@@ -480,7 +484,7 @@ function ReviewList({ title, entries, empty }: { title: string; entries: Cleanup
   const shown = all ? entries : entries.slice(0, 12)
   return (
     <div className="space-y-1.5">
-      <h3 className="text-sm font-semibold">{title}</h3>
+      <h4 className="text-sm font-semibold">{title}</h4>
       {entries.length === 0 ? (
         <p className="text-sm text-muted-foreground">{empty}</p>
       ) : (
@@ -553,16 +557,16 @@ function CleanupRecord({ opId, viewPath }: { opId: string; viewPath: string }) {
     return shared
   }, refusedFolders[0] ?? "")
   return (
-    <Section id="t5-cleanup-record" title="Cleanup record" description={`Last cleanup, started ${formatDateTime(op.createdAt)}. The View records what was removed and what remains.`}>
-      <OperationPanel operationId={opId} />
+    <Section id="t5-cleanup-record" level={3} title="Cleanup record" description={`Last cleanup, started ${formatDateTime(op.createdAt)}. The View records what was removed and what remains.`}>
+      <OperationPanel operationId={opId} headingLevel={4} />
       {settled ? (
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-1.5">
-            <h3 className="text-sm font-semibold">Removed to the OS Trash ({formatCount(payload.removed.length)})</h3>
+            <h4 className="text-sm font-semibold">Removed to the OS Trash ({formatCount(payload.removed.length)})</h4>
             <p className="text-xs text-pretty text-muted-foreground">Restoring relies on the OS Trash. PlateVault cannot restore files after the Trash is emptied.</p>
           </div>
           <div className="space-y-1.5">
-            <h3 className="text-sm font-semibold">Refused and still in place ({formatCount(payload.refused.length)})</h3>
+            <h4 className="text-sm font-semibold">Refused and still in place ({formatCount(payload.refused.length)})</h4>
             {payload.refused.length > 0 ? (
               <>
                 <p className="text-xs text-pretty text-muted-foreground">No permanent-delete fallback exists. Keep the files, or reveal their location to handle them yourself.</p>

@@ -211,6 +211,7 @@ function RetireReviewPanel({
   onClose: () => void
 }) {
   const headingId = useId()
+  const refusalId = useId()
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => heading.current?.focus(), [])
   const none = (list: string[]) => (list.length ? list.join(", ") : "None")
@@ -236,15 +237,25 @@ function RetireReviewPanel({
         location is never reselected, rescanned or remapped.
       </p>
       {refusal ? (
-        <Notice tone="refusal" title="Availability changed since this review">
-          {refusal}
-        </Notice>
+        <div id={refusalId}>
+          <Notice tone="refusal" title="Availability changed since this review">
+            {refusal}
+          </Notice>
+        </div>
       ) : null}
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="outline" size="sm" onClick={onClose}>
           {refusal ? "Close review" : "Cancel"}
         </Button>
-        <Button variant="destructive" size="sm" disabled={refusal !== null} onClick={onConfirm}>
+        {/* Stays focusable once refused, so keyboard focus is not dropped to the page and the refusal is its description. */}
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={refusal !== null}
+          focusableWhenDisabled
+          aria-describedby={refusal ? refusalId : undefined}
+          onClick={onConfirm}
+        >
           Retire location
         </Button>
       </div>
@@ -413,6 +424,8 @@ export function LocationsPage() {
                       location={location}
                       current={highlight === location.id || search.locationId === location.id}
                       actions={rowActions(location)}
+                      // rowActions offers Rescan on every row that can still be indexed.
+                      actionsIncludeRescan
                       onChooseAgain={actions.chooseAgain}
                       onRetry={actions.retry}
                       onLocate={actions.locate}

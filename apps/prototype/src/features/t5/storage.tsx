@@ -76,24 +76,46 @@ export function StoragePage() {
     .filter((op) => op.kind === "archive" || op.kind === "filing")
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
+  // Ranked to fit the 1280 content width: each path sits under the name it belongs to, nominal
+  // state reads as plain text, and action labels keep their object for screen readers only.
   const locationColumns: Column<Location>[] = [
-    { id: "name", header: "Location", rowHeader: true, sortValue: (l) => l.displayName, cell: (l) => l.displayName },
+    {
+      id: "name",
+      header: "Location",
+      rowHeader: true,
+      sortValue: (l) => l.displayName,
+      cell: (l) => (
+        <span className="block space-y-0.5">
+          <span className="block">{l.displayName}</span>
+          <PathText path={l.path} truncate className="max-w-56 text-xs text-muted-foreground" />
+        </span>
+      ),
+    },
     { id: "role", header: "Role", cell: (l) => <StatusBadge kind="role" value={l.role} /> },
-    { id: "path", header: "Path", cell: (l) => <PathText path={l.path} truncate className="max-w-64" /> },
     {
       id: "volume",
       header: "Volume and identity",
       cell: (l) => {
         const v = disk.volumes[l.volumeId]
         return (
-          <span className="text-xs">
-            {v?.name ?? "Unknown"} <span className="font-mono text-muted-foreground">{v?.volumeUuid}</span>
+          <span className="block text-xs">
+            <span className="block">{v?.name ?? "Unknown"}</span>
+            <span className="block font-mono text-muted-foreground">{v?.volumeUuid}</span>
           </span>
         )
       },
     },
     { id: "availability", header: "Availability", cell: (l) => <StatusBadge kind="availability" value={locationAvailability(disk, l)} /> },
-    { id: "trash", header: "OS Trash", cell: (l) => <StatusBadge kind="trash" value={disk.volumes[l.volumeId]?.trash ?? "unsupported"} /> },
+    {
+      id: "trash",
+      header: "OS Trash",
+      cell: (l) =>
+        disk.volumes[l.volumeId]?.trash === "supported" ? (
+          <span className="text-xs text-muted-foreground">Supported</span>
+        ) : (
+          <StatusBadge kind="trash" value="unsupported" />
+        ),
+    },
     {
       id: "free",
       header: "Free space",
@@ -106,7 +128,7 @@ export function StoragePage() {
       cell: (l) =>
         locationAvailability(disk, l) === "offline" ? (
           <Button size="xs" variant="outline" render={<Link to="/settings/locations" search={{ locationId: l.id, return: "/storage" }} />}>
-            Locate or remap {l.displayName}
+            Locate or remap<span className="sr-only"> {l.displayName}</span>
           </Button>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
@@ -115,18 +137,40 @@ export function StoragePage() {
   ]
 
   const footprintColumns: Column<FootprintRow>[] = [
-    { id: "view", header: "View", rowHeader: true, sortValue: (r) => r.view.name, cell: (r) => <Link to="/views/$viewId/results" params={{ viewId: r.view.id }} className="text-primary hover:underline">{r.view.name}</Link> },
+    {
+      id: "view",
+      header: "View",
+      rowHeader: true,
+      sortValue: (r) => r.view.name,
+      cell: (r) => (
+        <span className="block space-y-0.5">
+          <Link to="/views/$viewId/results" params={{ viewId: r.view.id }} className="block text-primary hover:underline">
+            {r.view.name}
+          </Link>
+          <PathText path={r.preparation.viewPath} truncate className="max-w-52 text-xs text-muted-foreground" />
+        </span>
+      ),
+    },
     { id: "status", header: "Status", cell: (r) => <StatusBadge kind="view" value={viewStatus(catalog, r.view)} /> },
-    { id: "folder", header: "View folder", cell: (r) => <PathText path={r.preparation.viewPath} truncate className="max-w-64" /> },
-    { id: "mode", header: "Entries and mode", cell: (r) => <span className="text-xs">{plural(r.entries, "entry", "entries")} · {r.mode}</span> },
+    {
+      id: "mode",
+      header: "Entries and mode",
+      cell: (r) => (
+        <span className="block text-xs">
+          <span className="block tabular-nums">{plural(r.entries, "entry", "entries")}</span>
+          <span className="block text-muted-foreground">{r.mode}</span>
+        </span>
+      ),
+    },
     {
       id: "footprint",
       header: "Footprint",
       align: "right",
       cell: (r) =>
         r.online ? (
-          <span className="text-xs">
-            {formatBytes(r.entryBytes)} entries · {formatBytes(r.outputBytes)} output
+          <span className="block text-xs tabular-nums">
+            <span className="block">{formatBytes(r.entryBytes)} entries</span>
+            <span className="block">{formatBytes(r.outputBytes)} output</span>
           </span>
         ) : (
           <StatusBadge kind="availability" value="offline" />
@@ -138,10 +182,10 @@ export function StoragePage() {
       cell: (r) => (
         <span className="flex flex-wrap gap-1.5">
           <Button size="xs" variant="outline" render={<Link to="/views/$viewId/cleanup" params={{ viewId: r.view.id }} />}>
-            Clean up {r.view.name}
+            Clean up<span className="sr-only"> {r.view.name}</span>
           </Button>
           <Button size="xs" variant="outline" render={<Link to="/storage/archive" search={{ viewId: r.view.id }} />}>
-            Archive sessions of {r.view.name}
+            Archive sessions<span className="sr-only"> of {r.view.name}</span>
           </Button>
         </span>
       ),
@@ -211,6 +255,8 @@ export function StoragePage() {
             columns={locationColumns}
             getRowId={(l) => l.id}
             scroll="none"
+            // At 1024 the table still scrolls sideways; the pinned Location column keeps each row named.
+            stickyFirstColumn
             empty={
               <EmptyState icon={HardDrive} title="No locations registered" description="Add a capture location to start indexing." action={<Button render={<Link to="/settings/locations" />}>Add a location</Button>} />
             }
