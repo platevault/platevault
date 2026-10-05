@@ -35,6 +35,7 @@ jiff = { version = "0.2.37", default-features = false, features = [
 winapi-util = "0.1.11"
 
 [dev-dependencies]
+parking_lot = "0.12.5"
 tempfile.workspace = true
 
 [lints]
