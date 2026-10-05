@@ -52,7 +52,7 @@ pub fn sample_region(plane: &Plane, region: Region) -> Result<Vec<Sample>, Pixel
 pub struct ContainedRead<T> { pub value: T, pub asset: Asset, pub sha256: String, pub fingerprint: ObservationFingerprint }
 
 impl Catalog {
-    pub async fn read_contained<P, T, F>(&self, asset_id: Uuid, probe: P, consume: F) -> Result<ContainedRead<T>>
+    pub async fn open_contained<P, T, F>(&self, asset_id: Uuid, probe: P, consume: F) -> Result<ContainedRead<T>>
     where P: SourceProbe, T: Send + 'static, F: FnOnce(&mut dyn Read) -> Result<T> + Send + 'static;
     pub async fn frame_records(&self, assets: &[Uuid], method: &MeasurementMethod) -> Result<Vec<FrameRecordBasis>>;
     pub async fn begin_measurement_run(&self, method: &MeasurementMethod, queued: &[Uuid], already_cached: u64) -> Result<MeasurementRun>;
@@ -71,7 +71,7 @@ impl Catalog {
 }
 ```
 
-`read_contained` resolves the asset and its location in a reader transaction and verifies the root through `probe`. In a blocking task it opens the file with the existing no-follow chain and checks stats. It passes a hashing reader to `consume` and hashes any unread remainder. It checks stats and the folder chain again and returns the value with the SHA-256 of every byte. It writes no row. `frame_records` returns each asset with its latest record and the validity of R12, decided in one reader snapshot. `record_measurement` refuses to store a record whose basis no longer matches the asset and records an issue instead. `import_candidates` returns each non-Retired scope asset's absolute native path, basename, fingerprint and a SHA-256 already recorded for that fingerprint. A `#[cfg(test)]` unit test in the module forces SQLITE_FULL through `limit_writer_pages_for_test` for `record_measurement` and `confirm_import`.
+`open_contained` resolves the asset and its location in a reader transaction and verifies the root through `probe`. In a blocking task it opens the file with the existing private no-follow chain and checks stats. It passes a hashing reader to `consume` and hashes any unread remainder. It checks stats and the folder chain again and returns the value with the SHA-256 of every byte. It writes no row. `frame_records` returns each asset with its latest record and the validity of R12, decided in one reader snapshot. `record_measurement` refuses to store a record whose basis no longer matches the asset and records an issue instead. `import_candidates` returns each non-Retired scope asset's absolute native path, basename, fingerprint and a SHA-256 already recorded for that fingerprint. A `#[cfg(test)]` unit test in the module forces SQLITE_FULL through `limit_writer_pages_for_test` for `record_measurement` and `confirm_import`.
 
 ## CSV owner
 
@@ -110,7 +110,7 @@ impl FrameReview {
 }
 ```
 
-`frame_states` combines `Catalog::frame_records`, the in-memory queue and `Catalog::imported_values`. It starts no work and reads no source. The run queue, the cancel flag, the priority order, the worker tasks and the 1 GiB decode budget follow R14. Each worker calls `read_contained` with `InventoryProbe`, then `decode` and `measure`. It records the result, a failed outcome or an issue, and publishes a snapshot. The preview cache follows R15 and decodes through the same contained read. `review_import` reads the chosen CSV read-only, then calls `parse`, `import_candidates` and `match_rows`. It hashes, through `read_contained`, only attached assets without a recorded digest, then stores the review.
+`frame_states` combines `Catalog::frame_records`, the in-memory queue and `Catalog::imported_values`. It starts no work and reads no source. The run queue, the cancel flag, the priority order, the worker tasks and the 1 GiB decode budget follow R14. Each worker calls `open_contained` with `InventoryProbe`, then `decode` and `measure`. It records the result, a failed outcome or an issue, and publishes a snapshot. The preview cache follows R15 and decodes through the same contained read. `review_import` reads the chosen CSV read-only, then calls `parse`, `import_candidates` and `match_rows`. It hashes, through `open_contained`, only attached assets without a recorded digest, then stores the review.
 
 `apps/desktop/src-tauri/src/commands/frame_review.rs` holds the sixteen `pix_*` handlers with the library `Reply`, `fail` and `report` conventions. `commands/mod.rs` declares the module. `library_shell.rs` adds the handlers to its `generate_handler!` list and spawns a bridge that forwards `pix_measurement_progress` like `ProgressBridge`.
 

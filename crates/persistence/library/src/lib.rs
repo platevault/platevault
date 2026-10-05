@@ -42,8 +42,12 @@ use uuid::Uuid;
 
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
 
-const SCHEMA: &str = concat!(include_str!("schema.sql"), include_str!("projects.sql"));
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA: &str = concat!(
+    include_str!("schema.sql"),
+    include_str!("projects.sql"),
+    include_str!("measurements.sql")
+);
+const SCHEMA_VERSION: i64 = 8;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -76,7 +80,10 @@ macro_rules! asset_sql {
     };
 }
 
+mod measurements;
 mod projects;
+
+pub use measurements::{FrameRecordBasis, ImportReviewInput};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -320,6 +327,7 @@ impl Catalog {
         read_settings(&mut writer).await?.require_durable()?;
         install_schema(&mut writer).await?;
         recover_interrupted(&mut writer).await?;
+        measurements::recover_interrupted(&mut writer).await?;
         let readers = SqlitePoolOptions::new()
             .max_connections(READER_CONNECTIONS)
             .connect_with(base.read_only(true))
@@ -6136,6 +6144,114 @@ fn hash_contained(
     }
     chain.verify_unchanged()?;
     Ok(hex::encode(hasher.finalize()))
+}
+
+/// What a consumer read from a contained source: its value, the asset as
+/// loaded, the SHA-256 of every byte of the file and the fingerprint observed
+/// around the read with that digest.
+#[derive(Clone, Debug)]
+pub struct ContainedRead<T> {
+    pub value: T,
+    pub asset: Asset,
+    pub sha256: String,
+    pub fingerprint: ObservationFingerprint,
+}
+
+impl Catalog {
+    /// Stream one asset's source to `consume` through the no-follow contained
+    /// open, hashing every byte it reads and any unread remainder. Writes no row
+    /// and never calls `verify_digest`.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown asset; `SourceUnavailable` for a Retired asset or
+    /// an unreadable source; `IdentityConflict` when the root, a folder or the
+    /// file's size or mtime changed around the read; `InvalidInput` for a link;
+    /// any error `consume` returns. No value is returned on error.
+    pub async fn open_contained<P, T, F>(
+        &self,
+        asset_id: Uuid,
+        probe: P,
+        consume: F,
+    ) -> Result<ContainedRead<T>>
+    where
+        P: SourceProbe,
+        T: Send + 'static,
+        F: FnOnce(&mut dyn Read) -> Result<T> + Send + 'static,
+    {
+        let (asset, location) = {
+            let mut conn = self.reader().await?;
+            let asset = load_asset(&mut conn, asset_id).await?;
+            let location = load_location(&mut conn, asset.location_id).await?;
+            (asset, location)
+        };
+        if asset.availability == Availability::Retired {
+            return Err(scoped(
+                LibraryError::SourceUnavailable("the asset's location is retired".into()),
+                location.path,
+                Some(asset_id),
+            ));
+        }
+        let relative = asset.relative_path.relative_path()?;
+        let root = SourceRoot::new(location)?;
+        let (value, sha256, fingerprint) = blocking(move || {
+            read_contained_source(&root, &relative, &probe, consume)
+                .map_err(|error| scoped(error, root.source(&relative), Some(asset_id)))
+        })
+        .await?;
+        Ok(ContainedRead { value, asset, sha256, fingerprint })
+    }
+}
+
+/// Verify the root, probe and open the file without following links, pass a
+/// hashing reader to `consume`, hash the remainder, then require unchanged
+/// stats, folder chain and root.
+fn read_contained_source<P, T, F>(
+    root: &SourceRoot,
+    relative: &Path,
+    probe: &P,
+    consume: F,
+) -> Result<(T, String, ObservationFingerprint)>
+where
+    P: SourceProbe,
+    F: FnOnce(&mut dyn Read) -> Result<T>,
+{
+    root.verify(probe)?;
+    let path = root.path.join(relative);
+    let mut observed = probe.fingerprint(&path)?;
+    let (mut file, chain) = open_contained(root, relative)?;
+    let io = |error: std::io::Error| LibraryError::from_io(&path, &error);
+    if !stat_matches(&file.metadata().map_err(io)?, observed.size_bytes, observed.modified_ns) {
+        return Err(changed_source(root, relative));
+    }
+    let mut hasher = Sha256::new();
+    let value = {
+        let mut reader = HashingReader { inner: &mut file, hasher: &mut hasher };
+        let value = consume(&mut reader)?;
+        std::io::copy(&mut reader, &mut std::io::sink()).map_err(io)?;
+        value
+    };
+    if !stat_matches(&file.metadata().map_err(io)?, observed.size_bytes, observed.modified_ns) {
+        return Err(changed_source(root, relative));
+    }
+    chain.verify_unchanged()?;
+    root.verify(probe)?;
+    let sha256 = hex::encode(hasher.finalize());
+    observed.content_sha256 = Some(sha256.clone());
+    Ok((value, sha256, observed))
+}
+
+/// Hashes exactly the bytes read through it.
+struct HashingReader<'a> {
+    inner: &'a mut std::fs::File,
+    hasher: &'a mut Sha256,
+}
+
+impl Read for HashingReader<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.inner.read(buffer)?;
+        self.hasher.update(&buffer[..read]);
+        Ok(read)
+    }
 }
 
 /// In-transaction recheck that a contained source still has its verified stats.

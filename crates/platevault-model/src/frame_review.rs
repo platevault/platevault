@@ -1103,3 +1103,97 @@ pub struct ImportCandidate {
     /// A SHA-256 already recorded for this fingerprint.
     pub sha256: Option<String>,
 }
+
+/// Whether a stored record applies to the asset's current evidence (R12).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordValidity {
+    /// No record for this asset and method name.
+    Absent,
+    /// Not Retired, the method version is current and the fingerprint (and any
+    /// recorded digest) matches the record's basis.
+    Valid,
+    /// The record's basis or method version no longer applies.
+    Stale,
+}
+
+/// The wire name of an availability, used as an `unavailable` reason.
+#[must_use]
+pub const fn availability_reason(availability: Availability) -> &'static str {
+    match availability {
+        Availability::Available => "available",
+        Availability::Offline => "offline",
+        Availability::Missing => "missing",
+        Availability::Unreadable => "unreadable",
+        Availability::IdentityConflict => "identity_conflict",
+        Availability::Retired => reasons::RETIRED,
+    }
+}
+
+impl FrameState {
+    /// Derives the state on read (data model "Frame state"): Retired reads
+    /// unavailable; a valid measured record is cached (current, or last
+    /// observed for an unavailable copy); a valid failed record is failed;
+    /// another unavailable copy is unavailable; a queued frame is pending;
+    /// otherwise not measured. A stale record supplies no value. Imported
+    /// values attach beside the state and never change it.
+    #[must_use]
+    pub fn derive(
+        asset: &Asset,
+        record: Option<&MeasurementRecord>,
+        validity: RecordValidity,
+        pending: bool,
+        imported: Vec<ImportedValue>,
+    ) -> Self {
+        let mut state = Self {
+            asset_id: asset.id,
+            state: FrameStateKind::NotMeasured,
+            reason: None,
+            availability: asset.availability,
+            measurement_id: None,
+            measured_at: None,
+            verification: None,
+            basis: None,
+            values: Vec::new(),
+            imported,
+        };
+        let valid = record.filter(|_| validity == RecordValidity::Valid);
+        if asset.availability == Availability::Retired {
+            state.state = FrameStateKind::Unavailable;
+            state.reason = Some(reasons::RETIRED.to_owned());
+            return state;
+        }
+        if let Some(record) = valid {
+            state.measurement_id = Some(record.id);
+            state.measured_at = Some(record.measured_at.clone());
+            state.basis = Some(FrameBasis {
+                fingerprint: record.basis.fingerprint.clone(),
+                plane: record.basis.decoded.as_ref().map(|decoded| decoded.plane.clone()),
+                saturation: record.basis.decoded.as_ref().map(|decoded| decoded.saturation),
+            });
+            match &record.outcome {
+                MeasurementOutcome::Measured { metrics, .. } => {
+                    state.state = FrameStateKind::Cached;
+                    state.verification = Some(if asset.availability == Availability::Available {
+                        Verification::Current
+                    } else {
+                        Verification::LastObserved
+                    });
+                    state.values.clone_from(metrics);
+                }
+                MeasurementOutcome::Failed { reason, .. } => {
+                    state.state = FrameStateKind::Failed;
+                    state.reason = Some(reason.clone());
+                }
+            }
+            return state;
+        }
+        if asset.availability != Availability::Available {
+            state.state = FrameStateKind::Unavailable;
+            state.reason = Some(availability_reason(asset.availability).to_owned());
+        } else if pending {
+            state.state = FrameStateKind::Pending;
+        }
+        state
+    }
+}

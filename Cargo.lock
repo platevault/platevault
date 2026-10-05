@@ -4741,9 +4741,12 @@ version = "0.1.0"
 dependencies = [
  "fits-header",
  "flate2",
+ "hex",
  "lz4_flex",
  "platevault_pixels",
  "quick-xml",
+ "sha2 0.10.9",
+ "tempfile",
  "xisf-header",
 ]
 

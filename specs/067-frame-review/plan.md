@@ -52,7 +52,7 @@ No `tasks.md`: executable task state lives under the molecule implement step in 
 
 - `crates/platevault-pixels/`: new workspace crate. `src/plane.rs` holds stored samples, scaling, masks and plane kinds. `src/decode/` holds FITS and XISF decoding. `src/{measure,stats,stars,psf,hfr}.rs` hold method version 1, `src/display.rs` stretch, tiles and regions, and `src/fixtures.rs` the seeded generator and writers behind the `fixtures` feature.
 - `crates/platevault-model/src/frame_review.rs`: shared wire types and validation, re-exported from `lib.rs`.
-- `crates/persistence/library/src/measurements.sql` and `src/measurements.rs`: run, record and import tables, frame-record validity, import confirmation and `read_contained`. `lib.rs` wires the module, the schema increment and interrupted-run recovery.
+- `crates/persistence/library/src/measurements.sql` and `src/measurements.rs`: run, record and import tables, frame-record validity and import confirmation. `lib.rs` adds `Catalog::open_contained` and wires the module, the schema increment and interrupted-run recovery.
 - `crates/platevault-core/src/subframe_csv.rs`: pure CSV parsing, column classification and row matching.
 - `crates/platevault-core/src/frame_review.rs`: the queue, workers, preview cache and import review. `library.rs` creates it in `Library::open` and exposes `frame_review()`.
 - `apps/desktop/src-tauri/src/commands/frame_review.rs`: the sixteen `pix_*` handlers, registered in `library_shell.rs` with a `pix_measurement_progress` bridge.
@@ -82,5 +82,5 @@ Workers skip repository-wide builds, tests, lint and formatters. The lead runs t
 | --- | --- | --- |
 | New `platevault_pixels` crate | Pixel decoding and numerical methods need fixture qualification without SQLite or Tauri | The header crates and `metadata_core` are header-only by contract; adding pixels there would make indexing read image data |
 | Measurement tables in the library catalog | Records reference assets and validity joins asset fingerprints in one snapshot | A separate store needs a second writer and cannot hold foreign keys to assets |
-| `Catalog::read_contained` | Decoding must read exactly the bytes it hashes under the existing no-follow checks | A second opener in core would duplicate the link, junction and stat checks |
+| `Catalog::open_contained` | Decoding must read exactly the bytes it hashes under the existing no-follow checks | A second opener in core would duplicate the link, junction and stat checks |
 | lz4_flex dependency | XISF lights are often written with lz4 or lz4hc | Naming lz4 unsupported would refuse common capture files |
