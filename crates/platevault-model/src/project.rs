@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::{
     Association, Availability, ExpectedSession, LibraryError, ObservationFingerprint, Provenance,
-    Revision, SessionSummary, SkyCoordinates,
+    Revision, SessionSummary, SkyCoordinates, ViewListing,
 };
 
 fn invalid(message: String) -> LibraryError {
@@ -635,8 +635,8 @@ pub struct ChecklistProgress {
     pub outcome: ChecklistOutcome,
 }
 
-/// A Project with its linked sessions, progress, checklist and effective
-/// rejections, read without changing anything.
+/// A Project with its linked sessions, progress, checklist, effective
+/// rejections and Views, read without changing anything.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectDetail {
@@ -645,4 +645,6 @@ pub struct ProjectDetail {
     pub progress: ProjectProgress,
     pub checklist: Vec<ChecklistProgress>,
     pub rejections: Vec<EffectiveRejection>,
+    /// Views whose Project is this Project (VSEL contract extension).
+    pub views: Vec<ViewListing>,
 }
