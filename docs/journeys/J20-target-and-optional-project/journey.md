@@ -97,6 +97,7 @@ state or existing View.
 - G1: Not validated — the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D07, D10, D12, and D18; no implementation has been validated against them.
 - G2: Out of scope for this journey — mosaic panels (user-defined panel footprints, D12) and automatic panel coverage are not exercised. Blocks readiness until covered by a step or a journey.
 - G3: Unresolved implementation qualification — the flow names no control for explicit session linkage (S3) or for saving sites in Settings (P2). Blocks readiness.
+- G4: Out of scope for this journey: external resolver enrichment of a saved target, its provider provenance and a resolver failure (LIB-AC-12, D18) are not exercised. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 

@@ -171,7 +171,7 @@ inputs and offers no verified Open. Retry completes only recorded items.
 
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D02, D04, D09, D13, D15, and D19; no implementation has been validated against them.
 - G2: Unresolved implementation qualification — Siril's exact handoff, folder-versus-list input, and input-write behavior (P2) need a profile capability probe (D04); S2's branch and S3 depend on it. Blocks readiness.
-- G3: Unresolved: whether a View supports mixed per-item input modes is not settled by D01 through D19, and per-item mode changes are not exercised. Blocks readiness.
+- G3: Out of scope for this journey: per-item input-mode changes within one preparation (D04, PREP-FR-08) are not exercised. Blocks readiness until covered by a step or a journey.
 - G4: Unresolved implementation qualification — which preparation phases offer Cancel or Pause "where safe" is unspecified; Canceled and Paused outcomes are not exercised. Blocks readiness.
 - G5: Unresolved implementation qualification: no fault control yet pauses Prepare between a source snapshot and terminal success (P7), and S15a depends on it. Blocks readiness.
 

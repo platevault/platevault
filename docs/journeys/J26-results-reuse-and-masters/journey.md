@@ -77,10 +77,10 @@ automatically.
 
 ### S6 — Prepare and open the product View {#S6}
 
-- **Do:** Only if S5 listed both products: confirm membership, keep the suggested location, prepare, and click **Open in Siril**; then quit Siril.
-- **Expect:** The suggested location is a new unique subfolder under `Work/Processing`. The View reads Prepared with exactly two entries, and Siril opens on it.
-- **Expect (negative):** Quitting Siril does not mark the View Complete.
-- **Trace:** flow H3a, F5, F6 · PREP-FR-06, PREP-FR-09, PREP-FR-10
+- **Do:** Only if S5 listed both products: confirm membership and read the suggested View location. Click **Choose location...**, choose `Work/Processing` and keep the suggested name. Prepare, and click **Open in Siril**; then quit Siril.
+- **Expect:** The suggestion is a new unique subfolder under `Scratch/Processing`, the last parent chosen in J24/S13. After the choice the View location is a new unique subfolder under `Work/Processing`. The View reads Prepared with exactly two entries, and Siril opens on it.
+- **Expect (negative):** No parent is substituted without the user's choice. Quitting Siril does not mark the View Complete.
+- **Trace:** flow H3a, F2, F5, F6 · PREP-FR-06, PREP-FR-09, PREP-FR-10
 
 ### S7 — Detect same-stat reference drift {#S7}
 

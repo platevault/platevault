@@ -33,7 +33,7 @@
       "spec": "064-library-inventory LIB-FR-03, LIB-FR-07, LIB-FR-15, LIB-AC-16; 066-view-selection VSEL-FR-09; D02, D11, D19",
       "action": "Browse while indexing runs, recover a denied location with Retry, and take a location offline. Later review retiring a lost location, meet a refusal after its availability changes, retire it from a fresh review, then register its folder again.",
       "expect": "Totals are provisional and name their locations. The denied row offers Choose folder again and Retry. The offline location keeps its last-observed metadata. Retirement review names the location and its referencing sessions, Views, Projects and Results; confirmation after an availability change is refused until a new review. Retired copies read Retired, leave totals and stay named unresolved in fixed Views. The folder registers again as a new location.",
-      "negative": "No total implies unscanned data. Offline, denied or retired files are not reported Missing or empty. Retirement reads and changes no file, reselect is refused afterwards, and no capture is counted twice."
+      "negative": "No total implies unscanned data. Offline, denied or retired files are not reported Missing or empty. Retirement reads and changes no file, reselect is refused afterwards, no capture is counted twice, and no retired decision, association or correction transfers to the re-registered copies."
     },
     {
       "flowStep": "B1",
@@ -233,7 +233,7 @@
       "spec": "069-application-handoff PREP-FR-09, PREP-AC-05, PREP-AC-14; D09",
       "action": "Prepare, prepare with three blocked inputs while trying Mark complete, Retry while one source changes after its snapshot, then restore it and Retry.",
       "expect": "Prepared appears only when the entries match the membership and their source snapshots. Partial reads 53/3, then 55/1 with drift named. Retry completes the journaled entries to 56.",
-      "negative": "An acknowledgment is not success and no verified Open is offered on Partial. Complete is refused while preparation runs. A drifted item never reads Prepared. Sources are untouched."
+      "negative": "An acknowledgment is not success and no verified Open is offered on Partial. Complete is refused for this View while its preparation runs, and the unrelated View is not blocked. A drifted item never reads Prepared. Sources are untouched."
     },
     {
       "flowStep": "F6",
@@ -248,7 +248,7 @@
       "journeyStep": "J25/S1–S7",
       "spec": "066-view-selection VSEL-FR-08, VSEL-FR-12, VSEL-FR-13, VSEL-FR-14, VSEL-AC-06, VSEL-AC-12, VSEL-AC-15; 064-library-inventory LIB-FR-08, LIB-AC-15; 069-application-handoff PREP-FR-11; D02, D08, D09, D16, D19",
       "action": "Index new arrivals, one session also copied to a second Captures location, make a member unreadable, Refresh selection, keep the View unchanged, then accept one addition, decline one, and save. Finally change one copy of a copied frame and rescan.",
-      "expect": "The copied session's frames count once and name both copies. Additions show with reasons, manual inclusions and exclusions stay recorded, and the unreadable member reads Unavailable. Refresh proposes the changes; Save View commits the accepted change as a new reviewed membership revision that survives restart and needs its own Review preparation. A changed copy reads as conflicting copies.",
+      "expect": "The copied session's frames count once and name both copies. Additions show with reasons, manual inclusions stay pinned across the repeated refresh and exclusions stay recorded, and the unreadable member reads Unavailable. Refresh proposes the changes; Save View commits the accepted change as a new reviewed membership revision that survives restart and needs its own Review preparation. A changed copy reads as conflicting copies.",
       "negative": "Membership never changes without approval, and no copied frame enters it twice. The prepared revision and the inputs Siril reads stay identical. A conflicting copy is not counted twice or substituted."
     },
     {
@@ -294,10 +294,10 @@
     {
       "flowStep": "I1",
       "journeyStep": "J27/S1, J27/S2, J27/S3, J24/S15",
-      "spec": "070-results-reuse RES-FR-06, RES-AC-06; D09",
+      "spec": "070-results-reuse RES-FR-06, RES-FR-07, RES-AC-06, RES-AC-07; D09",
       "action": "Mark Complete on a View without a Result and on the main View, then try edits on the Complete View.",
       "expect": "Complete is recorded and Clean up View is offered separately. Membership edits need an explicit Reopen; notes can be edited.",
-      "negative": "Completion removes nothing and claims no external success. Complete is refused while a PlateVault operation is running. Complete is refused only while a running PlateVault mutation affects this View; notes, Result acceptance, reviewed cleanup and archive/filing repair do not reopen it."
+      "negative": "Completion removes nothing and claims no external success. Complete is refused only while a running PlateVault mutation affects this View; notes, Result acceptance, reviewed cleanup and archive/filing repair do not reopen it."
     },
     {
       "flowStep": "I2",

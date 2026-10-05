@@ -137,9 +137,9 @@ copies read Retired, leave totals, change no file and stay named in the View.
 ### S13 — Register the archive folder again {#S13}
 
 - **Do:** Plug `Archive` back in. In Locations, try to reselect the retired location. Then add `Archive/NGC7000` as a Captures location and index it.
-- **Expect:** Reselect is not offered for the retired location. The new location registers without an overlap conflict, and the 214 archived lights appear as its Unreviewed assets beside the retired copies. NGC 7000 captured integration rises by exactly 17h 50m.
-- **Expect (negative):** No retired copy is counted again and no retired decision transfers, so usable integration still reads 0h 00m. `NGC7000 HOO - Siril` still names its members unresolved and Retired. The archived files match P3.
-- **Trace:** flow A4 · LIB-FR-15 · LIB-AC-16 · D11
+- **Expect:** Reselect is not offered for the retired location. The new location registers without an overlap conflict, and the 214 archived lights appear as its Unreviewed assets in new sessions beside the retired copies. 18, 28 and 30 Sep read Target NGC 7000 suggested from their own agreeing OBJECT and pointing evidence. 24 Sep reads an unresolved Target and 26 Sep a conflicting one, both **Needs review**, as in J19/S9. NGC 7000 captured integration rises by exactly 13h 15m.
+- **Expect (negative):** No retired copy is counted again. No retired quality decision, Target or equipment confirmation, or correction transfers, so usable integration still reads 0h 00m and 24 Sep and 26 Sep count toward no NGC 7000 total until confirmed again. `NGC7000 HOO - Siril` still names its members unresolved and Retired. The archived files match P3.
+- **Trace:** flow A4 · LIB-FR-05, LIB-FR-15 · LIB-AC-16 · D01, D11
 
 ## Success criteria
 
@@ -150,7 +150,7 @@ copies read Retired, leave totals, change no file and stay named in the View.
 - SC5: The impostor volume blocks approval (S2).
 - SC6: With `Archive` unplugged, Open is refused and 0 inputs are omitted (S10).
 - SC7: The drifted source is retired 0 times while it differs from its snapshot (S7a, S8); it retires only after re-verification (S9a).
-- SC8: Retiring changes 0 files and 0 copies read Missing (S12); after S13 captured integration equals its S10 value, so no capture is counted twice.
+- SC8: Retiring changes 0 files and 0 copies read Missing (S12). After S13 captured integration rises by exactly 13h 15m, so no capture is counted twice and no retired association transfers.
 - SC9: Confirming a review whose availability has since changed retires 0 locations (S11a).
 
 ## Known gaps
@@ -160,6 +160,7 @@ copies read Retired, leave totals, change no file and stay named in the View.
 - G3: Unresolved implementation qualification — the prepared View layout that P4 depends on is unspecified, and the method of source retirement after verification is not named by the flow. Blocks readiness.
 - G4: Out of scope for this journey — Direct-source configuration paths affected by a move are not exercised because no journey prepares a Direct-source View. Blocks readiness until covered by a step or a journey.
 - G5: Unresolved implementation qualification: no fault control yet pauses an item after destination verification and before retirement (P5). S7a depends on it, and no source-retirement acceptance is complete until S7a passes. Blocks readiness.
+- G6: Out of scope for this journey: the Storage surface's separate display of location availability, View footprints, duplicate candidates and transfer phases (STO-AC-12, D16) is not exercised. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 

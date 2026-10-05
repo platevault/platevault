@@ -142,10 +142,10 @@ PlateVault writes no source file.
 
 ### S15a — Replace a reviewed frame in place {#S15a}
 
-- **Do:** Outside PlateVault, overwrite the P5 frame with its replacement and restore its recorded mtime. Index `Astro-T7 captures` again, then click **Review frames**.
-- **Expect:** After the rescan completes, the frame reads ChangedContent with its previous Usable decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, and Project `NGC 7000 HOO` reads Ha usable 9h 10m, still met. In Review frames its cached values never read valid, and its imported S14 values show as history. The frame is measured again from its current bytes, and the earlier cached values show as history for the earlier content.
-- **Expect (negative):** The frame counts as neither Usable nor Unreviewed. No quality decision is recorded, and the View still reads 208 lights / 17h 20m.
-- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01, PIX-FR-06, PRJ-FR-04 · LIB-AC-14, PIX-AC-10 · D10, D19 · J19/G4
+- **Do:** Outside PlateVault, overwrite the P5 frame with its replacement and restore its recorded mtime. Open NGC 7000 and read its usable Ha integration. Index `Astro-T7 captures` again, then click **Review frames**.
+- **Expect:** Before the rescan, usable Ha still reads 9h 15m, labelled as last verified at S11. After the rescan completes, the frame reads ChangedContent with its previous Usable decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, labelled as verified at this rescan, and Project `NGC 7000 HOO` reads Ha usable 9h 10m, still met. In Review frames its cached values never read valid, and its imported S14 values show as history. The frame is measured again from its current bytes, and the earlier cached values show as history for the earlier content.
+- **Expect (negative):** Opening NGC 7000 starts no rehash. The frame counts as neither Usable nor Unreviewed after the rescan. No quality decision is recorded, and the View still reads 208 lights / 17h 20m.
+- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01, PIX-FR-06, PRJ-FR-04 · LIB-AC-14, PIX-AC-10 · root FR-017 · D10, D19 · J19/G4
 
 ### S15b — Restore the reviewed bytes {#S15b}
 
@@ -175,6 +175,8 @@ PlateVault writes no source file.
 
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D02, D03, D08, D10, and D19; no implementation has been validated against them.
 - G2: Unresolved implementation qualification — numerical measurement methods, metric set, masks, saturation, background, aperture, and tolerances need fixture qualification in PIX planning (D03). The P2 fixture is mono; CFA inspection as the recorded mosaic plane (D03) is not exercised. Blocks readiness.
+- G3: Out of scope for this journey: no fixture holds NaN, infinity or masked samples, so PIX-AC-08's invalid-sample evidence is not exercised. Blocks readiness until covered by a step or a journey.
+- G4: Out of scope for this journey: S12 meets the Ha item by lowering the goal, not by Project-accepted progress reaching it (PRJ-AC-03). S13 rejects a library-Unreviewed frame, so the drop in Project-accepted progress for a rejected library-Usable frame (PRJ-AC-08) is not observed. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 

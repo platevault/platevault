@@ -103,6 +103,7 @@ selection.
 - G1: Not validated — the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D01, D02, and D08; no implementation has been validated against them.
 - G2: Unresolved implementation qualification — the configured overlap criterion (D01) has no fixed value; the S3/S4 fixture geometry must overlap or miss NGC 7000 by an unambiguous margin once the value is chosen. Blocks readiness.
 - G3: Out of scope for this journey — D08 stale-overwrite refusal with reload/review needs a second concurrent writer and is not exercised. Blocks readiness until covered by a step or a journey.
+- G4: Out of scope for this journey: a View started from a Target with no reviewed session selection (VSEL-AC-14) is not exercised. S9 starts a standalone View from selected sessions instead. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 

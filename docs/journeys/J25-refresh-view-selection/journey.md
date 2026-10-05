@@ -62,8 +62,8 @@ locations count once.
 ### S5 — Accept one change and decline another {#S5}
 
 - **Do:** Click **Refresh selection** again. Accept the new Ha session and decline the new OIII session. Click **Save View**.
-- **Expect:** A new reviewed membership revision is saved, adding the new Ha session's 10 available frames, each once with its `Spare` copy named; the new OIII session is not in it. After an app restart the View still opens at this saved revision. It asks for frame and calibration review of the changed inputs and needs a new Review preparation before it can be prepared.
-- **Expect (negative):** The prepared revision, its 208 entries, and the inputs Siril reads are unchanged (P1 listing). No new arrival enters any prepared View silently.
+- **Expect:** The repeated comparison again lists 18 Sep and 24 Sep as manual inclusions, not as proposed removals. A new reviewed membership revision is saved, adding the new Ha session's 10 available frames, each once with its `Spare` copy named; the new OIII session is not in it. After an app restart the View still opens at this saved revision. It asks for frame and calibration review of the changed inputs and needs a new Review preparation before it can be prepared.
+- **Expect (negative):** The prepared revision, its 208 entries, and the inputs Siril reads are unchanged (P1 listing). No new arrival enters any prepared View silently, and no manual inclusion leaves membership without an explicit removal.
 - **Trace:** flow G · VSEL-FR-08, VSEL-FR-12, VSEL-FR-13, VSEL-FR-14, PREP-FR-11 · VSEL-AC-12, VSEL-AC-15 · D02, D08, D09
 
 ### S6 — Restore the unreadable member {#S6}
@@ -91,7 +91,7 @@ locations count once.
 ## Known gaps
 
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D02, D08, D09, D16, and D19; no implementation has been validated against them.
-- G2: Unresolved: whether repeated refresh keeps manual inclusions pinned, and the folder used to prepare a new revision, are not settled by D01 through D19 (flow decision 9). Preparing the S5 revision, and cleanup of replaced entries, are not exercised. Blocks readiness.
+- G2: Out of scope for this journey: preparing the S5 revision into a new reviewed View folder (D09) and cleanup of the replaced entries are not exercised. Blocks readiness until covered by a step or a journey.
 - G3: Out of scope for this journey — path repair after an archive transfer is distinct from refresh and is exercised in J28/S8.
 
 ## Delta log

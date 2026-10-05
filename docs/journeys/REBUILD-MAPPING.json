@@ -101,7 +101,7 @@
       "negativesAtTrustPoints": "pass (all 12; every mutation, deletion, transfer, patch, and quality step has an Expect (negative))",
       "actorsSurfacesInterfacesTrace": "pass, with the README surface and interface confirmation pending (see readmeUpdates)",
       "preconditionsEstablishable": "fail where a G entry names an unresolved implementation qualification",
-      "errorBranchesScoped": "pass, either as steps or as G entries scoped out of the journey",
+      "errorBranchesScoped": "pass only together with the G entries that scope acceptance scenarios no step observes (J19/G6-G7, J20/G4, J21/G4, J22/G3-G4, J28/G6: LIB-AC-03, LIB-AC-12, LIB-AC-13, PIX-AC-08, PRJ-AC-03, PRJ-AC-08, STO-AC-12, VSEL-AC-14); each of those entries blocks readiness",
       "statusOutcome": "All 12 remain status: draft. G1 in each says the rebuilt application does not exist and nothing has been validated. Promotion needs a fresh validation run in which every step passes."
     },
     "perJourney": [
@@ -111,27 +111,33 @@
           "G2 equipment-record control; locate/remap not exercised",
           "G3 catalog-write fault fixture",
           "G4 re-index control",
-          "G5 indexing duration for S6"
+          "G5 indexing duration for S6",
+          "G6 same-night Ha/OIII fixture for LIB-AC-03",
+          "G7 release-build exclusion of the development bridge (LIB-AC-13)"
         ]
       },
       {
         "id": "J20",
         "blocking": [
           "G2 mosaic panels not exercised",
-          "G3 session-linkage and site-saving controls"
+          "G3 session-linkage and site-saving controls",
+          "G4 resolver enrichment and failure (LIB-AC-12)"
         ]
       },
       {
         "id": "J21",
         "blocking": [
           "G2 overlap criterion value",
-          "G3 stale-overwrite concurrency not exercised"
+          "G3 stale-overwrite concurrency not exercised",
+          "G4 Target-originated View without auto-selection (VSEL-AC-14)"
         ]
       },
       {
         "id": "J22",
         "blocking": [
-          "G2 PIX numerical method and tolerance qualification; CFA not exercised"
+          "G2 PIX numerical method and tolerance qualification; CFA not exercised",
+          "G3 invalid-sample fixture (PIX-AC-08)",
+          "G4 Project-accepted progress reaching a goal and dropping on rejection (PRJ-AC-03, PRJ-AC-08)"
         ]
       },
       {
@@ -144,7 +150,7 @@
         "id": "J24",
         "blocking": [
           "G2 Siril handoff and input-write probe",
-          "G3 mixed per-item modes not settled by D01–D19",
+          "G3 per-item input-mode changes not exercised",
           "G4 Cancel/Pause phases",
           "G5 fault control pausing Prepare between snapshot and success"
         ]
@@ -152,7 +158,7 @@
       {
         "id": "J25",
         "blocking": [
-          "G2 manual-inclusion pins and the folder for a new revision not settled by D01–D19"
+          "G2 preparing the S5 revision into a new folder and cleanup of replaced entries not exercised"
         ]
       },
       {
@@ -176,7 +182,8 @@
           "G2 hash-mismatch fault fixture",
           "G3 View layout for P4 and the source-retirement method",
           "G4 Direct-source path updates not exercised",
-          "G5 fault control pausing an item before source retirement"
+          "G5 fault control pausing an item before source retirement",
+          "G6 Storage surface (STO-AC-12)"
         ]
       },
       {
