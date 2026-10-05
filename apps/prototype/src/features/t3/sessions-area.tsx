@@ -16,9 +16,10 @@ import { STATUS, StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { assetAvailability, measurementApplies, sessionBreakdown, sessionLocationIds } from "@/domain/derive"
+import { assetAvailability, captureSite, measurementApplies, sessionBreakdown, sessionLocationIds } from "@/domain/derive"
 import type { Catalog, Disk, SelectionReason, Session } from "@/domain/types"
-import { formatDec, formatDegrees, formatDuration, formatExposure, formatNight, formatRa, formatTime, plural } from "@/lib/format"
+import { formatDateTime, formatDec, formatDegrees, formatDuration, formatExposure, formatNight, formatRa, formatTime, plural } from "@/lib/format"
+import { sessionTimeZone, zonedHeader } from "@/lib/time"
 import { useStore } from "@/store/core"
 import { defaultSessionFilters } from "@/store/slices/t3"
 import { setActiveSession, setSessionFilters, setSky } from "./actions"
@@ -51,6 +52,8 @@ interface CandidateRow extends FilterableRow {
   avail: SessionAvailability
   reason: SelectionReason | null
   fwhm: { median: number; unit: string; measured: number } | null
+  /** Zone the session's capture times read in (capture site, else UTC). */
+  zone: string
 }
 
 function medianFwhm(catalog: Catalog, session: Session): CandidateRow["fwhm"] {
@@ -86,6 +89,7 @@ function buildRows(disk: Disk, catalog: Catalog, sessions: Session[], ctx: ViewC
       avail,
       reason: reasons.get(session.id) ?? null,
       fwhm: medianFwhm(catalog, session),
+      zone: sessionTimeZone(catalog, session),
     }
   })
 }
@@ -113,14 +117,6 @@ function AvailabilityCell({ row }: { row: CandidateRow }) {
   if (state === "available") return <StatusBadge kind="availability" value="available" />
   const label = { offline: "Offline", unreadable: "Unreadable", absent: "Not found", retired: "Retired" }[state]
   return <StatusBadge kind="availability" value={state} label={unavailable === total ? label : `${label} ${unavailable} of ${total}`} />
-}
-
-function FootprintCell({ row }: { row: CandidateRow }) {
-  const g = row.geometry
-  if (g.kind === "position-unknown") return <UnknownValue label="Position unknown" reason="No RA/DEC in the headers; OBJECT never stands in for coordinates." />
-  if (g.kind === "pointing-only") return <UnknownValue label="Pointing only" reason={g.fov ? "No orientation (ROTATANG), so no footprint." : "No orientation and no confirmed equipment, so no footprint."} />
-  if (g.coverage === null) return <UnknownValue label="No framing" />
-  return <span>Covers {Math.round(g.coverage * 100)}%</span>
 }
 
 export function SessionsArea() {
@@ -166,6 +162,11 @@ export function SessionsArea() {
     })
   }
 
+  // Mixed zones name each cell's zone; one zone is named once, in the header.
+  const zones = new Set(shown.map((r) => r.zone))
+  // Ranked for 1024–1280px: identity, time, then what the View counts (frames,
+  // integration, availability); equipment, footprint, quality counts and FWHM
+  // sit in the session's evidence below the table.
   const columns: Column<CandidateRow>[] = [
     {
       id: "session",
@@ -173,42 +174,32 @@ export function SessionsArea() {
       rowHeader: true,
       sortValue: (r) => r.session.night,
       cell: (r) => (
-        <button
-          type="button"
-          id={`session-${r.session.id}`}
-          className="rounded-sm font-medium hover:underline"
-          aria-label={`${formatNight(r.session.night)} ${r.session.channel ?? "no filter"}: show evidence`}
-          onClick={() => setActiveSession(view.id, r.session.id)}
-        >
-          {formatNight(r.session.night)}
-        </button>
+        <span className="inline-flex items-baseline gap-1">
+          <button
+            type="button"
+            id={`session-${r.session.id}`}
+            className="rounded-sm font-medium hover:underline"
+            aria-label={`${formatNight(r.session.night)} ${r.session.channel ?? "no filter"}: show evidence`}
+            onClick={() => setActiveSession(view.id, r.session.id)}
+          >
+            {formatNight(r.session.night)}
+          </button>
+          <span className="text-muted-foreground">
+            · {r.session.channel ?? "No filter"} · {formatExposure(sessionExposureS(r.session))}
+          </span>
+        </span>
       ),
     },
     {
-      id: "reason",
-      header: "Reason",
-      sortValue: (r) => (r.reason ? REASON_LABEL[r.reason.kind] : `~${r.suggestion.label}`),
-      cell: (r) =>
-        r.reason ? (
-          <span className="font-medium">{REASON_LABEL[r.reason.kind]}</span>
-        ) : (
-          <span className="text-muted-foreground">Not selected · {r.suggestion.label}</span>
-        ),
-    },
-    { id: "start", header: "Start (UTC)", sortValue: (r) => r.session.startedAt, cell: (r) => formatTime(r.session.startedAt, "UTC") },
-    { id: "channel", header: "Channel", sortValue: (r) => r.session.channel, cell: (r) => r.session.channel ?? <UnknownValue label="No filter" /> },
-    { id: "exposure", header: "Exposure", align: "right", sortValue: (r) => sessionExposureS(r.session), cell: (r) => formatExposure(sessionExposureS(r.session)) },
-    {
-      id: "equipment",
-      header: "Camera / optical train",
-      sortValue: (r) => r.trainName,
+      id: "start",
+      header: zonedHeader("Start", zones),
+      className: "whitespace-normal",
+      sortValue: (r) => r.session.startedAt,
       cell: (r) => (
-        <span className="inline-flex items-center gap-1.5">
-          <span className="max-w-44 truncate" title={r.trainName ?? r.session.cameraName ?? undefined}>
-            {r.trainName ?? r.session.cameraName ?? "Unknown"}
-          </span>
-          <StatusBadge kind="association" value={r.session.equipment.status} />
-        </span>
+        <>
+          <span className="block whitespace-nowrap">{formatTime(r.session.startedAt, r.zone)}</span>
+          {zones.size > 1 ? <span className="block text-xs text-muted-foreground">{r.zone}</span> : null}
+        </>
       ),
     },
     {
@@ -220,6 +211,18 @@ export function SessionsArea() {
     },
     { id: "integration", header: "Integration", align: "right", sortValue: (r) => r.breakdown.captured.seconds, cell: (r) => formatDuration(r.breakdown.captured.seconds) },
     { id: "availability", header: "Availability", sortValue: (r) => r.avail.unavailable, cell: (r) => <AvailabilityCell row={r} /> },
+    {
+      id: "reason",
+      header: "Reason",
+      className: "min-w-48 whitespace-normal",
+      sortValue: (r) => (r.reason ? REASON_LABEL[r.reason.kind] : `~${r.suggestion.label}`),
+      cell: (r) =>
+        r.reason ? (
+          <span className="font-medium">{REASON_LABEL[r.reason.kind]}</span>
+        ) : (
+          <span className="text-muted-foreground">Not selected · {r.suggestion.label}</span>
+        ),
+    },
     {
       id: "distance",
       header: "Sky distance",
@@ -233,15 +236,6 @@ export function SessionsArea() {
         ) : (
           <UnknownValue label="Position unknown" />
         ),
-    },
-    { id: "footprint", header: "Footprint", sortValue: (r) => r.geometry.coverage, cell: (r) => <FootprintCell row={r} /> },
-    { id: "quality", header: "Frames by quality", cell: (r) => <QualityCounts row={r} /> },
-    {
-      id: "fwhm",
-      header: "FWHM (median)",
-      align: "right",
-      sortValue: (r) => r.fwhm?.median ?? null,
-      cell: (r) => (r.fwhm ? formatMetric({ value: Number(r.fwhm.median.toFixed(2)), unit: r.fwhm.unit }) : <UnknownValue label="Not measured" />),
     },
   ]
 
@@ -344,8 +338,9 @@ export function SessionsArea() {
           hiddenByFilters={hiddenSelected}
           noun="session"
           onShowSelected={() => setSessionFilters(view.id, { ...defaultSessionFilters(), scope: filters.scope, selectedOnly: true })}
-          // Read-only Views refuse beside the bar instead of opening a confirmation they would then refuse (D09).
-          onClear={() => (editable ? setClearOpen(true) : edit("Clear selection", (current) => current))}
+          // Read-only Views (Complete, recovered draft) disable Clear with the same reason as Select matching (D09).
+          onClear={() => setClearOpen(true)}
+          clearDisabledReason={readOnlyReason ?? undefined}
         />
         {errorNode}
         <TableToolbar
@@ -400,6 +395,7 @@ export function SessionsArea() {
           initialSort={{ columnId: "distance", direction: "asc" }}
           activeRowId={active?.session.id ?? null}
           scroll="frame"
+          stickyFirstColumn
           className="max-h-[28rem]"
           selection={{
             selected: selectedIds,
@@ -526,6 +522,11 @@ function SessionEvidence({ row, ctx, editable, onToggle }: { row: CandidateRow; 
         <KeyValueList
           items={[
             {
+              label: "Captured",
+              value: `${formatDateTime(session.startedAt, row.zone)} – ${formatTime(session.endedAt, row.zone)} (${row.zone})`,
+              source: captureSite(catalog, session) ? "Capture site zone" : "UTC: no saved site matches the headers",
+            },
+            {
               label: "Pointing",
               value: session.pointing ? `${formatRa(session.pointing.ra)}, ${formatDec(session.pointing.dec)}` : <UnknownValue label="Position unknown" reason="No RA/DEC keywords in the headers." />,
               source: session.pointing ? "Header RA/DEC, mean of frames" : undefined,
@@ -599,6 +600,12 @@ function SessionEvidence({ row, ctx, editable, onToggle }: { row: CandidateRow; 
             },
             { label: "Locations", value: locations.join(", ") || <UnknownValue label="Not set" /> },
             { label: "Availability", value: <AvailabilityCell row={row} /> },
+            { label: "Frames by quality", value: <QualityCounts row={row} /> },
+            {
+              label: "FWHM (median)",
+              value: row.fwhm ? formatMetric({ value: Number(row.fwhm.median.toFixed(2)), unit: row.fwhm.unit }) : <UnknownValue label="Not measured" />,
+              source: row.fwhm ? `Built-in measurement of ${plural(row.fwhm.measured, "frame")}` : undefined,
+            },
           ]}
         />
       </div>

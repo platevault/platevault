@@ -117,8 +117,15 @@ export function updateDraft(
   change: (content: MembershipContent, state: PrototypeState) => MembershipContent,
 ): CommitResult {
   const view = store.getState().catalog.views[viewId]
-  if (view?.completedAt) return { ok: false, reason: "write-failed", message: `${label} was refused: this View is Complete. Reopen it to change membership.` }
-  if (view?.draft && !touched.has(viewId)) return { ok: false, reason: "write-failed", message: `${label} was refused: resume or discard the recovered changes first.` }
+  const refusal = view?.completedAt
+    ? `${label} was refused: this View is Complete. Reopen it to change membership.`
+    : view?.draft && !touched.has(viewId)
+      ? `${label} was refused: resume or discard the recovered changes first.`
+      : null
+  if (refusal) {
+    recordActivity({ kind: "write-refused", title: `${label} refused`, detail: refusal, operationId: null, href: sessionsHref(viewId) })
+    return { ok: false, reason: "write-failed", message: refusal }
+  }
   const result = commit(
     label,
     (s) => {

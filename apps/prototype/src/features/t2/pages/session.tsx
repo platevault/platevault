@@ -22,6 +22,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { type AssetAvailability, assetAvailability, captureSite, copyConflict } from "@/domain/derive"
 import type { Asset, Catalog, QualityValue, Session } from "@/domain/types"
 import { formatCount, formatDateTime, formatDec, formatDegrees, formatDuration, formatExposure, formatNight, formatRa, formatTime, plural } from "@/lib/format"
+import { sessionTimeZone, zonedHeader } from "@/lib/time"
 import { store, useStore } from "@/store/core"
 import { startIndexing } from "@/store/operations"
 import { confirmEquipment, confirmTarget, correctFilter, type FilterCorrectionPreview, previewFilterCorrection, setLibraryQuality } from "../actions"
@@ -212,6 +213,7 @@ function MetadataList({ session, catalog }: { session: Session; catalog: Catalog
   const first = catalog.assets[session.assetIds[0] ?? ""]
   const header = first?.observed
   const site = captureSite(catalog, session)
+  const zone = sessionTimeZone(catalog, session)
   const filterCorrection = [...session.corrections].reverse().find((c) => c.field === "filter")
   // "Missing" is reserved for absent files; an absent header keyword reads "Not in headers".
   const missing = (keyword: string) => <UnknownValue label="Not in headers" reason={`The headers have no ${keyword} keyword.`} />
@@ -219,7 +221,8 @@ function MetadataList({ session, catalog }: { session: Session; catalog: Catalog
     { label: "Night", value: formatNight(session.night, true), source: "From DATE-OBS" },
     {
       label: "Captured",
-      value: `${formatDateTime(session.startedAt, site?.timeZone)} – ${formatTime(session.endedAt, site?.timeZone)}${site ? ` (${site.timeZone})` : ""}`,
+      value: `${formatDateTime(session.startedAt, zone)} – ${formatTime(session.endedAt, zone)} (${zone})`,
+      source: site ? "Capture site zone" : "UTC: no saved site matches the headers",
     },
     {
       label: "Channel",
@@ -813,6 +816,8 @@ interface FrameRow {
   availability: AssetAvailability
   /** Display names of the locations whose copies of this frame hold different bytes (LIB-AC-15). */
   conflict: string[] | null
+  /** Where the frame's bytes are now: the paths of its copies that were not removed (a filed frame reads its library path). */
+  paths: string[]
 }
 
 const DECISION_WORD: Record<QualityValue, string> = { usable: "Usable", unusable: "Unusable", unreviewed: "Unreviewed" }
@@ -824,11 +829,13 @@ function FramesSection({ session, editable }: { session: Session; editable: bool
       .filter((a): a is Asset => a !== undefined)
       .map((asset): FrameRow => {
         const conflict = copyConflict(s.catalog, asset)
+        const present = asset.copies.filter((c) => c.presence !== "absent")
         return {
           asset,
           quality: frameQuality(asset),
           availability: assetAvailability(s.disk, s.catalog, asset),
           conflict: conflict ? conflict.locationIds.map((id) => s.catalog.locations[id]?.displayName ?? "Unknown location") : null,
+          paths: (present.length > 0 ? present : asset.copies).map((c) => c.path),
         }
       }),
   )
@@ -843,10 +850,37 @@ function FramesSection({ session, editable }: { session: Session; editable: bool
   const target = session.target.value ? catalog.targets[session.target.value] : undefined
   const projects = projectsLinking(catalog, session.id)
   const changedSelected = selected.filter((id) => frames.find((r) => r.asset.id === id)?.quality === "changed-content").length
+  const zone = sessionTimeZone(catalog, session)
 
   const columns: Column<FrameRow>[] = [
-    { id: "file", header: "File", rowHeader: true, truncate: true, sortValue: (r) => r.asset.fileName, cell: (r) => <span className="font-mono text-xs" title={r.asset.fileName}>{r.asset.fileName}</span> },
-    { id: "time", header: "Captured", sortValue: (r) => r.asset.observed.dateObs, cell: (r) => formatTime(r.asset.observed.dateObs) },
+    {
+      id: "file",
+      header: "File",
+      rowHeader: true,
+      className: "min-w-56 whitespace-normal",
+      sortValue: (r) => r.paths[0] ?? r.asset.fileName,
+      // The folder wraps anywhere; the file name stays whole, so a filed frame reads its full library path.
+      cell: (r) => (
+        <span className="flex flex-col gap-0.5 py-0.5">
+          {r.paths.map((path) => {
+            const slash = path.lastIndexOf("/") + 1
+            return (
+              <span key={path} className="block font-mono text-xs [overflow-wrap:anywhere]" title={path}>
+                <span className="text-muted-foreground">{path.slice(0, slash)}</span>
+                <span className="whitespace-nowrap">{path.slice(slash)}</span>
+              </span>
+            )
+          })}
+        </span>
+      ),
+    },
+    {
+      id: "time",
+      header: zonedHeader("Captured", [zone]),
+      className: "whitespace-normal",
+      sortValue: (r) => r.asset.observed.dateObs,
+      cell: (r) => <span className="whitespace-nowrap">{formatTime(r.asset.observed.dateObs, zone)}</span>,
+    },
     {
       id: "quality",
       header: "Library quality",
@@ -886,17 +920,17 @@ function FramesSection({ session, editable }: { session: Session; editable: bool
       header: "Copies",
       align: "right",
       className: "whitespace-normal",
-      sortValue: (r) => r.asset.copies.length,
+      sortValue: (r) => r.paths.length,
       cell: (r) =>
         r.conflict ? (
           <span className="flex flex-col items-end gap-0.5 py-0.5">
             <StatusBadge kind="copies" value="conflicting" />
             <span className="text-xs text-muted-foreground">
-              {formatCount(r.asset.copies.length)} on {r.conflict.join(" and ")} · Needs review
+              {formatCount(r.paths.length)} on {r.conflict.join(" and ")} · Needs review
             </span>
           </span>
         ) : (
-          formatCount(r.asset.copies.length)
+          formatCount(r.paths.length)
         ),
     },
   ]
