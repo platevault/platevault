@@ -8,6 +8,9 @@ use metadata_core::RawFileMetadata;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod project;
+pub use project::*;
+
 pub type Revision = u64;
 
 #[derive(Debug, thiserror::Error)]
@@ -650,6 +653,21 @@ pub struct Session {
     pub asset_ids: Vec<Uuid>,
     pub provisional: Vec<String>,
     pub date_basis: Option<String>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSummary {
+    pub session: Session,
+    pub location_ids: Vec<Uuid>,
+    pub asset_count: u64,
+    /// Logical captures: content-identical copies in different locations count once.
+    pub capture_count: u64,
+    pub availability: Availability,
+    /// Last recorded observation; never a claim about current live bytes.
+    pub last_observed_at: Option<String>,
+    pub provisional: bool,
+    /// Successor sessions when this record was superseded by a regroup.
+    pub successors: Vec<Uuid>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
