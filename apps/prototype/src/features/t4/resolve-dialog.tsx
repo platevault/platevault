@@ -1,8 +1,9 @@
 /**
  * Resolve one calibration requirement (CAL-FR-05, J23 S5-S6): choose another
  * input, record a scoped exception with a reason, defer, or hand off without
- * this kind. A non-compatible input always needs a reason; the criterion and
- * the reason are both kept, and the input's evidence never changes.
+ * this kind. Choosing a non-compatible input without a reason stores it as
+ * Unresolved (CAL-AC-02); only a reason makes it an exception. The criterion
+ * and the reason are both kept, and the input's evidence never changes.
  */
 import { Link } from "@tanstack/react-router"
 import { useEffect, useId, useState } from "react"
@@ -76,13 +77,19 @@ export function ResolveDialog({ view, row, preferException, onOpenChange }: Reso
       decision = { state: "excluded", input: null, criteria: [] }
       label = `Hand off without a ${kind} for ${sessionLabel(row.member.session)}`
     } else if (candidate && needsReason) {
-      if (!reason.trim()) {
+      if (!reason.trim() && preferException) {
         setReasonError("Enter a reason for this exception. It is kept with the criteria that are not compatible.")
         document.getElementById(reasonId)?.focus()
         return
       }
-      decision = { state: "exception", input: candidate.source.input, criteria: candidate.criteria, reason: reason.trim() }
-      label = `Exception for ${sessionLabel(row.member.session)} ${kind}`
+      if (!reason.trim()) {
+        // Chosen instead of the suggestion: recorded, never handed off, and blocking until an exception or another input.
+        decision = { state: "unresolved", input: candidate.source.input, criteria: candidate.criteria }
+        label = `Choose ${candidate.source.name} for ${sessionLabel(row.member.session)} ${kind}`
+      } else {
+        decision = { state: "exception", input: candidate.source.input, criteria: candidate.criteria, reason: reason.trim() }
+        label = `Exception for ${sessionLabel(row.member.session)} ${kind}`
+      }
     } else if (candidate) {
       decision = { state: "accepted", input: candidate.source.input, criteria: candidate.criteria }
       label = `Accept ${candidate.source.name}`
@@ -108,7 +115,9 @@ export function ResolveDialog({ view, row, preferException, onOpenChange }: Reso
       : choice.type === "exclude"
         ? `Hand off without a ${kind}`
         : needsReason
-          ? "Record exception"
+          ? reason.trim() || preferException
+            ? "Record exception"
+            : `Choose ${candidate?.source.name ?? "this input"} (unresolved)`
           : `Use ${candidate?.source.name ?? "this input"}`
 
   return (
@@ -176,8 +185,9 @@ export function ResolveDialog({ view, row, preferException, onOpenChange }: Reso
             </p>
             <p className="text-xs text-pretty text-muted-foreground">
               An exception applies to this View only. {candidate.source.name}'s evidence stays as recorded everywhere else.
+              {preferException ? null : ` Without a reason it is chosen but stays Unresolved, and is not handed off, until you record an exception or choose another input.`}
             </p>
-            <Label htmlFor={reasonId}>Reason</Label>
+            <Label htmlFor={reasonId}>{preferException ? "Reason" : "Reason (records an exception)"}</Label>
             <Textarea
               id={reasonId}
               value={reason}

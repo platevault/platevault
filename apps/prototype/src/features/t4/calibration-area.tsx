@@ -15,7 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import type { CommitResult } from "@/store/core"
 import { useStore } from "@/store/core"
 import { formatCount, formatNight, plural } from "@/lib/format"
-import { acceptSuggestions, decideRow } from "./actions"
+import { acceptSuggestions, decideRow, updatePrep } from "./actions"
 import { KIND_LABEL, type RequirementRow, sameInput, sessionLabel, summaryText } from "./domain"
 import { useCalibrationPlan, useRouteView } from "./hooks"
 import { ResolveDialog } from "./resolve-dialog"
@@ -101,7 +101,11 @@ export function ViewCalibrationArea() {
   function acceptSelected() {
     if (!view || !plan) return
     const rows = plan.rows.filter((r) => selected.includes(r.key))
-    if (run(() => acceptSuggestions(view, rows), `${plural(rows.length, "suggestion")} accepted.`)) setDeselected([])
+    if (run(() => acceptSuggestions(view, rows), `${plural(rows.length, "suggestion")} accepted.`)) {
+      setDeselected([])
+      // The Accept button unmounts once nothing is left to accept; keep focus on the next step (WCAG 2.4.3).
+      requestAnimationFrame(() => document.getElementById("cal-review-preparation")?.focus())
+    }
   }
 
   const columns: Column<RequirementRow>[] = [
@@ -213,7 +217,12 @@ export function ViewCalibrationArea() {
         }
         actions={
           <>
-            <Button variant={offerKeys.length > 0 && !complete ? "outline" : "default"} render={<Link to="/views/$viewId/prepare" params={{ viewId }} />}>
+            <Button
+              id="cal-review-preparation"
+              variant={offerKeys.length > 0 && !complete ? "outline" : "default"}
+              onClick={() => updatePrep(viewId, { reviewing: true })}
+              render={<Link to="/views/$viewId/prepare" params={{ viewId }} />}
+            >
               Review preparation
               <ArrowRight aria-hidden="true" data-icon="inline-end" />
             </Button>

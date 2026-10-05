@@ -6,7 +6,7 @@
  */
 import { Link } from "@tanstack/react-router"
 import { ArrowRight, ChevronRight, FolderOpen } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { ActionError, Notice } from "@/components/app/feedback"
@@ -29,7 +29,7 @@ import { openApplication, quitApplication, retryPreparation, startPrepare, updat
 import type { PreparePayload } from "./operations"
 import { T4Badge } from "./badges"
 import { ViewNotFound } from "./calibration-area"
-import { CRITERION_LABEL, FIELD_LABEL, handoffCountText, KIND_LABEL, METADATA_CHOICE_LABEL, MODE_LABEL, type PreparationPlan, sessionLabel } from "./domain"
+import { CRITERION_LABEL, FIELD_LABEL, handoffCountText, KIND_LABEL, METADATA_CHOICE_LABEL, MODE_LABEL, type PreparationPlan, sameInput, sessionLabel, summaryText } from "./domain"
 import { usePrepDraft, usePreparationPlan, useRouteView, useUnverified } from "./hooks"
 import { ApplicationSection, LocationSection, MetadataSection, ModeSection } from "./prepare-sections"
 import { LocateApplicationDialog } from "./profile-parts"
@@ -62,7 +62,7 @@ function Readiness({ view, plan }: { view: View; plan: PreparationPlan }) {
       plan.calibration.blocking.length === 0
         ? `${handoffCountText(plan.calibration, plan.calibrationSources.length)} handed off.`
         : plan.calibration.blocking
-            .map((r) => `${formatNight(r.member.session.night)} ${r.member.session.channel ?? ""} ${KIND_LABEL[r.kind].toLowerCase()}: ${r.state === "suggested" ? "suggested, not accepted" : r.state}`)
+            .map((r) => `${formatNight(r.member.session.night)} ${r.member.session.channel ?? ""} ${KIND_LABEL[r.kind].toLowerCase()}: ${r.drift ? "drifted" : r.state === "suggested" ? "suggested, not accepted" : r.state}`)
             .join("; "),
     action:
       plan.calibration.blocking.length === 0 ? undefined : (
@@ -110,11 +110,17 @@ function ReviewPanel({ view, plan, confirmed, onConfirmChange, onPrepare, error 
   const [confirmOpen, setConfirmOpen] = useState(false)
   const entryWord = plan.mode === "direct-source" ? "listed path" : plan.mode === "linked" ? (plan.linkType === "hardlink" ? "hard link" : "symbolic link") : plan.mode === "clone" ? "clone" : "copy"
   const entryWords = plan.mode === "copy" ? "copies" : `${entryWord}s`
+  // Opening the review, from any control or on arrival from Calibration, moves focus to it (WCAG 2.4.3).
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    headingRef.current?.scrollIntoView({ block: "start" })
+    headingRef.current?.focus({ preventScroll: true })
+  }, [])
 
   return (
     <section aria-labelledby="review-title" className="space-y-4 rounded-lg border-2 border-primary/40 bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 id="review-title" className="text-base font-semibold">
+        <h3 id="review-title" ref={headingRef} tabIndex={-1} className="text-base font-semibold outline-none">
           Review preparation
         </h3>
         <span className="text-xs text-muted-foreground">Nothing is created until you confirm Prepare View.</span>
@@ -225,7 +231,20 @@ function ReviewPanel({ view, plan, confirmed, onConfirmChange, onPrepare, error 
             ))}
             {plan.calibration.blocking.length > 0 ? (
               <Notice tone="refusal" title={`${plural(plan.calibration.blocking.length, "requirement")} unresolved`} actions={<Button size="sm" variant="outline" render={<Link to="/views/$viewId/calibration" params={{ viewId: view.id }} />}>Resolve in Calibration</Button>}>
-                {plan.calibration.blocking.map((r) => `${sessionLabel(r.member.session)} ${KIND_LABEL[r.kind].toLowerCase()} (${r.state === "suggested" ? "suggestion not accepted" : r.state})`).join("; ")}. Choose another candidate, record a scoped exception with a reason, hand off without it, or defer preparation. Unaccepted suggestions are never handed off.
+                {plan.calibration.blocking
+                  .map((r) => {
+                    const alternative = r.candidates.find((c) => c.summary.allCompatible && !(r.input && sameInput(c.source.input, r.input)))
+                    const status = r.drift
+                      ? `drifted: ${r.drift}`
+                      : r.state === "suggested"
+                        ? "suggestion not accepted"
+                        : r.state === "unresolved" && r.source
+                          ? `unresolved: ${r.source.name} chosen, ${summaryText(r.criteria).toLowerCase()}${alternative ? `; compatible alternative ${alternative.source.name}` : ""}`
+                          : r.state
+                    return `${sessionLabel(r.member.session)} ${KIND_LABEL[r.kind].toLowerCase()} (${status})`
+                  })
+                  .join("; ")}
+                . Choose another input, record a scoped exception with a reason, hand off without it, or defer preparation. Unaccepted suggestions are never handed off.
               </Notice>
             ) : null}
           </section>
@@ -596,10 +615,7 @@ export function ViewPrepareArea() {
             variant={preparedNow ? "outline" : "default"}
             disabled={locked || !plan.revision}
             aria-describedby={locked || !plan.revision ? "review-disabled" : undefined}
-            onClick={() => {
-              updatePrep(viewId, { reviewing: true })
-              requestAnimationFrame(() => document.getElementById("review-title")?.scrollIntoView({ block: "start" }))
-            }}
+            onClick={() => updatePrep(viewId, { reviewing: true })}
           >
             Review preparation
             <ArrowRight aria-hidden="true" data-icon="inline-end" />
