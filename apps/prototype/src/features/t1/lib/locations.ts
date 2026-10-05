@@ -4,10 +4,13 @@
  * (`access`, `scanScope`, `unreadablePaths`, `lastIndexedAt`) is written by the
  * foundation `index` operation.
  */
+import { locationAvailability } from "@/domain/derive"
 import { fileAt, volumeForPath } from "@/domain/disk"
 import { isUnder, stableHash } from "@/domain/indexing"
-import type { Catalog, Disk, Location, LocationId, LocationRole, Volume } from "@/domain/types"
-import { type CommitResult, nowIso, store, withCatalog } from "@/store/core"
+import type { Availability, Catalog, Disk, Location, LocationId, LocationRole, Volume } from "@/domain/types"
+import { formatExposure, formatNight } from "@/lib/format"
+import { type CommitResult, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
+import { isSettled } from "@/store/operations"
 import { save } from "./writes"
 
 export const ROLE_ORDER: LocationRole[] = ["captures", "calibration", "results", "archive"]
@@ -64,7 +67,8 @@ export function suggestDisplayName(disk: Disk, path: string): string {
 /** Errors name the field and the problem (HLD §10). `exceptId` skips the location being edited. */
 export function validateLocation(catalog: Catalog, draft: LocationDraft, exceptId?: LocationId): LocationErrors {
   const errors: LocationErrors = {}
-  const others = Object.values(catalog.locations).filter((l) => l.id !== exceptId)
+  // A retired location keeps its record but no longer holds its folder (D11: register it again).
+  const others = Object.values(catalog.locations).filter((l) => l.id !== exceptId && !l.retiredAt)
   const name = draft.displayName.trim()
   if (!name) errors.displayName = "Display name: enter a name, for example Astro-T7 captures."
   else if (others.some((l) => l.displayName.toLowerCase() === name.toLowerCase())) errors.displayName = `Display name: ${name} is already used by another location.`
@@ -82,7 +86,9 @@ export function registerLocation(draft: LocationDraft, href: string): { result: 
   const state = store.getState()
   const volumeId = volumeForPath(state.disk, draft.path)
   if (!volumeId) return { result: { ok: false, reason: "write-failed", message: `Folder: ${draft.path} is not on a known volume.` }, id: null }
-  const id: LocationId = `loc_${stableHash(`${volumeId}|${draft.path}`)}`
+  const baseId: LocationId = `loc_${stableHash(`${volumeId}|${draft.path}`)}`
+  // Registering a retired location's folder again is a new location (D11).
+  const id: LocationId = state.catalog.locations[baseId] ? `loc_${stableHash(`${volumeId}|${draft.path}|${nowIso()}`)}` : baseId
   const displayName = draft.displayName.trim()
   const location: Location = {
     id,
@@ -178,6 +184,87 @@ export function removeLocation(id: LocationId, href: string): CommitResult {
 }
 
 // ---------------------------------------------------------------------------
+// Retire location (LIB-FR-15, LIB-AC-16, D11)
+// ---------------------------------------------------------------------------
+
+export interface RetireReview {
+  locationId: LocationId
+  displayName: string
+  path: string
+  /** Availability when the review was read; confirmation refuses if it differs. */
+  availability: Availability
+  frames: number
+  sessions: string[]
+  views: string[]
+  projects: string[]
+  results: string[]
+}
+
+/** What retiring would affect, read now. Catalog-only: no file bytes are read. */
+export function reviewRetire(state: PrototypeState, locationId: LocationId): RetireReview | null {
+  const { catalog, disk } = state
+  const location = catalog.locations[locationId]
+  if (!location || location.retiredAt) return null
+  const assetIds = new Set(Object.values(catalog.assets).filter((a) => a.copies.some((c) => c.locationId === locationId)).map((a) => a.id))
+  const sessions = Object.values(catalog.sessions)
+    .filter((s) => !s.supersededBy && s.assetIds.some((id) => assetIds.has(id)))
+    .sort((a, b) => a.night.localeCompare(b.night))
+  const views = Object.values(catalog.views).filter((v) =>
+    [...v.revisions, ...(v.draft ? [v.draft] : [])].some((m) => [...m.included, ...m.excluded, ...m.unresolved].some((id) => assetIds.has(id))),
+  )
+  const viewIds = new Set(views.map((v) => v.id))
+  const projectIds = new Set(views.map((v) => v.projectId).filter((id) => id !== null))
+  return {
+    locationId,
+    displayName: location.displayName,
+    path: location.path,
+    availability: locationAvailability(disk, location),
+    frames: assetIds.size,
+    sessions: sessions.map((s) => [formatNight(s.night), s.channel ?? "No filter", formatExposure(s.exposureS)].join(" · ")),
+    views: views.map((v) => v.name),
+    projects: [...projectIds].map((id) => catalog.projects[id]?.name ?? id),
+    results: Object.values(catalog.results)
+      .filter((r) => viewIds.has(r.viewId))
+      .map((r) => r.path.slice(r.path.lastIndexOf("/") + 1)),
+  }
+}
+
+/**
+ * Confirm a reviewed retirement. It re-reads the location first and refuses
+ * when its availability differs from the review, or while an operation that
+ * affects it is unsettled. Changes the catalog only: no file is deleted,
+ * moved, modified or read.
+ */
+export function retireLocation(review: RetireReview, href: string): CommitResult {
+  const state = store.getState()
+  const location = state.catalog.locations[review.locationId]
+  if (!location || location.retiredAt) return { ok: false, reason: "stale", message: `${review.displayName} is no longer registered as reviewed. Nothing was retired.` }
+  const now = locationAvailability(state.disk, location)
+  if (now !== review.availability) {
+    return {
+      ok: false,
+      reason: "stale",
+      message: `Retire location refused: ${review.displayName} reads ${now === "online" ? "Online" : "Offline"} now, but this review was made while it read ${review.availability === "online" ? "Online" : "Offline"}. Nothing was retired. Close this review and choose Retire location again for a new review.`,
+    }
+  }
+  const busy = Object.values(state.operations).find((op) => !isSettled(op.status) && op.scope.locationIds?.includes(review.locationId))
+  if (busy) return { ok: false, reason: "stale", message: `Retire location refused: ${busy.title} is not finished. Nothing was retired.` }
+  return save(
+    {
+      label: `Retirement of ${review.displayName}`,
+      saved: `Retired ${review.displayName}`,
+      detail: `${review.frames} copies at ${review.path} read Retired and leave integration totals. No file was deleted, moved or modified.`,
+      href,
+    },
+    (s) =>
+      withCatalog(s, (c) => {
+        const current = c.locations[review.locationId]
+        return current ? { ...c, locations: { ...c.locations, [review.locationId]: { ...current, retiredAt: nowIso() } } } : c
+      }),
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Locate or remap with same-asset proof (D11, LIB-AC-11, LIB-FR-07)
 // ---------------------------------------------------------------------------
 
@@ -217,7 +304,7 @@ export function computeRemap(catalog: Catalog, disk: Disk, locationId: LocationI
     notFound: [],
     refusal: null,
   }
-  const other = Object.values(catalog.locations).find((l) => l.id !== locationId && (isUnder(toPath, l.path) || isUnder(l.path, toPath)))
+  const other = Object.values(catalog.locations).find((l) => l.id !== locationId && !l.retiredAt && (isUnder(toPath, l.path) || isUnder(l.path, toPath)))
   if (toPath === location.path && toVolumeId === location.volumeId) {
     proof.refusal = `${toPath} is the folder ${location.displayName} already uses. Choose a different folder, or use Rescan to read it again.`
     return proof

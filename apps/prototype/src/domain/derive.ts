@@ -28,6 +28,7 @@ import type {
 } from "./types"
 
 export function locationAvailability(disk: Disk, location: Location): Availability {
+  if (location.retiredAt) return "retired"
   return disk.volumes[location.volumeId]?.mounted ? "online" : "offline"
 }
 
@@ -36,17 +37,24 @@ export function locationAvailability(disk: Disk, location: Location): Availabili
  * - offline: its volume is not mounted (last-observed values still count as captured).
  * - unreadable: access is denied.
  * - absent: a complete scan did not find it.
+ * - retired: its location was retired (D11); never an input, never Missing.
  */
-export type AssetAvailability = "available" | "offline" | "unreadable" | "absent"
+export type AssetAvailability = "available" | "offline" | "unreadable" | "absent" | "retired"
 
-const AVAILABILITY_ORDER: AssetAvailability[] = ["available", "offline", "unreadable", "absent"]
+const AVAILABILITY_ORDER: AssetAvailability[] = ["available", "offline", "unreadable", "absent", "retired"]
 
 export function copyAvailability(disk: Disk, catalog: Catalog, copy: AssetCopy): AssetAvailability {
   const location = catalog.locations[copy.locationId]
+  if (location?.retiredAt) return "retired"
   if (!location || !disk.volumes[location.volumeId]?.mounted) return "offline"
   if (deniedAncestor(disk, copy.path)) return "unreadable"
   if (copy.presence === "absent") return "absent"
   return "available"
+}
+
+/** Every copy of the asset is in a retired location: it leaves integration totals (LIB-FR-15). */
+export function isRetiredAsset(catalog: Catalog, asset: Asset): boolean {
+  return asset.copies.every((copy) => catalog.locations[copy.locationId]?.retiredAt)
 }
 
 /** An asset is as available as its best copy. */
@@ -147,8 +155,9 @@ export function emptyBreakdown(): QualityBreakdown {
   }
 }
 
-/** Adds one logical asset. Copies never count twice. */
+/** Adds one logical asset. Copies never count twice; a retired asset adds nothing (D11). */
 export function addToBreakdown(breakdown: QualityBreakdown, disk: Disk, catalog: Catalog, asset: Asset) {
+  if (isRetiredAsset(catalog, asset)) return
   const seconds = effectiveExposureS(catalog, asset)
   add(breakdown.captured, seconds)
   if (assetAvailability(disk, catalog, asset) !== "available") add(breakdown.unavailable, seconds)

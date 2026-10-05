@@ -111,7 +111,7 @@ function QualityCounts({ row }: { row: CandidateRow }) {
 function AvailabilityCell({ row }: { row: CandidateRow }) {
   const { state, unavailable, total } = row.avail
   if (state === "available") return <StatusBadge kind="availability" value="available" />
-  const label = { offline: "Offline", unreadable: "Unreadable", absent: "Not found" }[state]
+  const label = { offline: "Offline", unreadable: "Unreadable", absent: "Not found", retired: "Retired" }[state]
   return <StatusBadge kind="availability" value={state} label={unavailable === total ? label : `${label} ${unavailable} of ${total}`} />
 }
 

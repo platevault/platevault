@@ -371,13 +371,16 @@ function rebuildSession(catalog: Catalog, session: Session, now: IsoDateTime): S
 /**
  * The asset a file belongs to: the asset with a copy at this path in this
  * location, else a byte-identical asset of the same image type (a copy or a
- * move elsewhere, LIB-AC-15), else none.
+ * move elsewhere, LIB-AC-15), else none. A retired asset (every copy in a
+ * retired location) is never matched: registering its folder again makes new
+ * assets that inherit no decision, association or correction (D11).
  */
 function assetForFile(catalog: Catalog, location: Location, file: DiskFile): Asset | undefined {
   let sameBytes: Asset | undefined
   for (const asset of Object.values(catalog.assets)) {
     if (asset.copies.some((c) => c.locationId === location.id && c.path === file.path)) return asset
-    if (!sameBytes && asset.sha256 === file.sha256 && asset.imageType === file.header!.imageType) sameBytes = asset
+    if (sameBytes || asset.sha256 !== file.sha256 || asset.imageType !== file.header!.imageType) continue
+    if (!asset.copies.every((c) => catalog.locations[c.locationId]?.retiredAt)) sameBytes = asset
   }
   return sameBytes
 }
@@ -403,7 +406,9 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
   const keyToSession = new Map<string, SessionId>()
   const takenSessionIds = new Set<SessionId>()
   for (const session of Object.values(catalog.sessions)) {
-    if (!session.supersededBy) keyToSession.set(sessionKeyOf(session), session.id)
+    // A session whose frames are all retired never absorbs new files (D11).
+    const retired = session.assetIds.length > 0 && session.assetIds.every((id) => catalog.assets[id]?.copies.every((c) => catalog.locations[c.locationId]?.retiredAt))
+    if (!session.supersededBy && !retired) keyToSession.set(sessionKeyOf(session), session.id)
     takenSessionIds.add(session.id)
     for (const previous of session.previousSessionIds) takenSessionIds.add(previous)
     if (session.supersededBy) takenSessionIds.add(session.supersededBy)
@@ -424,7 +429,9 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
       catalog.assets[existing.id] = { ...existing, sha256: file.sha256, sizeBytes: file.sizeBytes, copies, quality }
       continue
     }
-    const id = assetIdForPath(file.path)
+    // A retired asset can hold this path's id; a re-registered file gets its own.
+    const pathId = assetIdForPath(file.path)
+    const id = catalog.assets[pathId] ? assetIdForPath(`${location.id}|${file.path}`) : pathId
     const isMaster = header.imageType.startsWith("master-")
     if (isMaster && location.role === "calibration") {
       // Masters stored in a Calibration location are library masters.

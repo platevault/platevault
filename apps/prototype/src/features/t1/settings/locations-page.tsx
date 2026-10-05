@@ -1,16 +1,17 @@
 /**
- * Settings › Locations (J19 S2-S3, S5, S7, S12-S13, S15; LIB-FR-01, -06, -07;
- * LIB-AC-04, -05, -11; D11). Registered locations by role with access, online
- * state and scan scope; Index now, Rescan, Choose folder again, Retry,
- * Locate or remap, Edit and Remove. `?locationId=` opens one location,
- * `?add=<role>` starts adding one, `?return=` links back.
+ * Settings › Locations (J19 S2-S3, S5, S7, S12-S13, S15; J28 S11-S13;
+ * LIB-FR-01, -06, -07, -15; LIB-AC-04, -05, -11, -16; D11). Registered
+ * locations by role with access, online state and scan scope; Index now,
+ * Rescan, Choose folder again, Retry, Locate or remap, Retire location, Edit
+ * and Remove. `?locationId=` opens one location, `?add=<role>` starts adding
+ * one, `?return=` links back.
  */
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { MoreHorizontal, Play, RotateCw } from "lucide-react"
 import { type ReactNode, useEffect, useId, useRef, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList, PathText } from "@/components/app/data"
-import { ActionError } from "@/components/app/feedback"
+import { ActionError, Notice } from "@/components/app/feedback"
 import { OperationPanel } from "@/components/app/operation-panel"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
@@ -30,7 +31,18 @@ import { AddLocationFlow } from "../components/add-location-flow"
 import { focusFirstInvalid, TextField } from "../components/form-field"
 import { useLocationActions } from "../components/location-actions"
 import { latestIndexRun, LocationRow } from "../components/location-row"
-import { framesInLocation, removeLocation, ROLE_COPY, ROLE_ORDER, sessionsInLocation, updateLocation, validateLocation } from "../lib/locations"
+import {
+  framesInLocation,
+  type RetireReview,
+  removeLocation,
+  retireLocation,
+  reviewRetire,
+  ROLE_COPY,
+  ROLE_ORDER,
+  sessionsInLocation,
+  updateLocation,
+  validateLocation,
+} from "../lib/locations"
 import { ReturnNotice } from "./settings-layout"
 
 const HREF = "/settings/locations"
@@ -182,6 +194,64 @@ function LocationDetail({ location, onClose, actions }: { location: Location | n
   )
 }
 
+/**
+ * Inline review for Retire location (LIB-FR-15). Inline rather than modal, so
+ * the volume can be reconnected while it is open and confirming refuses the
+ * stale review (J28 S11a).
+ */
+function RetireReviewPanel({
+  review,
+  refusal,
+  onConfirm,
+  onClose,
+}: {
+  review: RetireReview
+  refusal: string | null
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  const headingId = useId()
+  const heading = useRef<HTMLHeadingElement>(null)
+  useEffect(() => heading.current?.focus(), [])
+  const none = (list: string[]) => (list.length ? list.join(", ") : "None")
+  return (
+    <section aria-labelledby={headingId} className="space-y-3 rounded-lg border border-destructive/40 bg-background p-3">
+      <h5 id={headingId} ref={heading} tabIndex={-1} className="text-sm font-semibold outline-none">
+        Review: retire {review.displayName}
+      </h5>
+      <KeyValueList
+        items={[
+          { label: "Location", value: review.displayName },
+          { label: "Root", value: review.path, mono: true },
+          { label: "Availability at review", value: <StatusBadge kind="availability" value={review.availability} /> },
+          { label: "Copies", value: plural(review.frames, "copy", "copies") },
+          { label: "Sessions", value: review.sessions.length ? `${review.sessions.length}: ${review.sessions.join(", ")}` : "None" },
+          { label: "Views", value: none(review.views) },
+          { label: "Projects", value: none(review.projects) },
+          { label: "Results", value: none(review.results) },
+        ]}
+      />
+      <p className="text-sm text-pretty">
+        Retiring deletes, moves or modifies no file. These copies will read Retired, leave integration totals and stay named unresolved in fixed Views. A retired
+        location is never reselected, rescanned or remapped.
+      </p>
+      {refusal ? (
+        <Notice tone="refusal" title="Availability changed since this review">
+          {refusal}
+        </Notice>
+      ) : null}
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={onClose}>
+          {refusal ? "Close review" : "Cancel"}
+        </Button>
+        <Button variant="destructive" size="sm" disabled={refusal !== null} onClick={onConfirm}>
+          Retire location
+        </Button>
+      </div>
+    </section>
+  )
+}
+
 export function LocationsPage() {
   const search = useSearch({ strict: false }) as Record<string, string | undefined>
   const navigate = useNavigate()
@@ -199,6 +269,7 @@ export function LocationsPage() {
   }, [search.add])
   const [editing, setEditing] = useState<Location | null>(null)
   const [removing, setRemoving] = useState<Location | null>(null)
+  const [retiring, setRetiring] = useState<{ review: RetireReview; refusal: string | null } | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
   const actions = useLocationActions({ href: HREF })
   const detail = search.locationId ? (catalog.locations[search.locationId] ?? null) : null
@@ -213,12 +284,43 @@ export function LocationsPage() {
     document.querySelector(`[data-location-id="${CSS.escape(search.locationId)}"]`)?.scrollIntoView({ block: "nearest" })
   }, [search.locationId])
 
+  function openRetire(location: Location) {
+    const review = reviewRetire(store.getState(), location.id)
+    if (review) setRetiring({ review, refusal: null })
+  }
+
+  function confirmRetire() {
+    if (!retiring) return
+    const result = retireLocation(retiring.review, HREF)
+    if (!result.ok) {
+      setRetiring({ ...retiring, refusal: result.message })
+      return
+    }
+    const id = retiring.review.locationId
+    setRetiring(null)
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-location-id="${CSS.escape(id)}"] button[aria-label^="More actions"]`)?.focus())
+  }
+
   function rowActions(location: Location) {
     const frames = framesInLocation(catalog, location.id)
-    const online = locationAvailability(store.getState().disk, location) === "online"
+    const availability = locationAvailability(store.getState().disk, location)
+    const online = availability === "online"
     const run = latestIndexRun(store.getState().operations, location.id)
     const busy = run !== null && !isSettled(run.op.status) && run.op.status !== "interrupted"
     const never = location.scanScope === "never"
+    // A retired location is never reselected, rescanned or remapped (LIB-FR-15).
+    if (availability === "retired") {
+      return (
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={`More actions for ${location.displayName}`} />}>
+            <MoreHorizontal aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-60">
+            <DropdownMenuItem onClick={() => setDetail(location.id)}>Details</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )
+    }
     return (
       <>
         <Button
@@ -243,9 +345,12 @@ export function LocationsPage() {
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => actions.chooseAgain(location)}>Choose folder again</DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem disabled={frames === 0} onClick={() => openRetire(location)}>
+              {frames === 0 ? "Retire location (nothing indexed; use Remove)" : "Retire location"}
+            </DropdownMenuItem>
             <DropdownMenuItem variant="destructive" disabled={frames > 0} onClick={() => setRemoving(location)} className={frames > 0 ? "flex-col items-start gap-0.5" : undefined}>
               Remove
-              {frames > 0 ? <span className="text-xs text-muted-foreground">Holds {plural(frames, "indexed frame")}. Use Locate or remap instead.</span> : null}
+              {frames > 0 ? <span className="text-xs text-muted-foreground">Holds {plural(frames, "indexed frame")}. Use Locate or remap, or Retire location.</span> : null}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -311,7 +416,15 @@ export function LocationsPage() {
                       onChooseAgain={actions.chooseAgain}
                       onRetry={actions.retry}
                       onLocate={actions.locate}
-                      feedback={actions.feedbackFor(location)}
+                      // While its review is open, the review's own button is the only "Retire location" on the row.
+                      onRetire={retiring?.review.locationId === location.id ? undefined : openRetire}
+                      feedback={
+                        retiring?.review.locationId === location.id ? (
+                          <RetireReviewPanel review={retiring.review} refusal={retiring.refusal} onConfirm={confirmRetire} onClose={() => setRetiring(null)} />
+                        ) : (
+                          actions.feedbackFor(location)
+                        )
+                      }
                     />
                   ))}
                 </ul>

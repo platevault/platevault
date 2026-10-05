@@ -346,11 +346,12 @@ function finishIndex(state: PrototypeState, id: OperationId, payload: IndexPaylo
 
 /**
  * Index the given locations in place. Registering never indexes by itself;
- * this records metadata only and never changes source files.
+ * this records metadata only and never changes source files. A retired
+ * location is never rescanned (LIB-FR-15).
  */
 export function startIndexing(locationIds: LocationId[]): OperationId {
   const state = store.getState()
-  const locations = locationIds.map((id) => state.catalog.locations[id]).filter((l) => l !== undefined)
+  const locations = locationIds.map((id) => state.catalog.locations[id]).filter((l): l is NonNullable<typeof l> => l !== undefined && !l.retiredAt)
   const total = locations.reduce((sum, l) => sum + listLocation(state.disk, l).readable.length, 0)
   const payload: IndexPayload = {
     queue: locations.map((l) => l.id),

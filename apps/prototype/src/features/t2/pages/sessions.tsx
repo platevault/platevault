@@ -220,6 +220,8 @@ export function SessionsPage() {
               <QualityCounts breakdown={r.breakdown} />
             </span>
           ) : null}
+          {/* Retired copies leave every total (D11), so the row names them instead. */}
+          {r.availability.retired > 0 ? <StatusBadge kind="availability" value="retired" label={`${formatCount(r.availability.retired)} Retired`} /> : null}
         </span>
       ),
     },

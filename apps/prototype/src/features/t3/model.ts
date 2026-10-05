@@ -254,13 +254,14 @@ export interface SessionAvailability {
 }
 
 export function sessionAvailability(disk: Disk, catalog: Catalog, session: Session): SessionAvailability {
-  const counts: Record<AssetAvailability, number> = { available: 0, offline: 0, unreadable: 0, absent: 0 }
+  const counts: Record<AssetAvailability, number> = { available: 0, offline: 0, unreadable: 0, absent: 0, retired: 0 }
   for (const id of session.assetIds) {
     const asset = catalog.assets[id]
     if (asset) counts[assetAvailability(disk, catalog, asset)] += 1
   }
-  const unavailable = counts.offline + counts.unreadable + counts.absent
-  const worst: AssetAvailability = counts.offline > 0 ? "offline" : counts.unreadable > 0 ? "unreadable" : counts.absent > 0 ? "absent" : "available"
+  const unavailable = counts.offline + counts.unreadable + counts.absent + counts.retired
+  const worst: AssetAvailability =
+    counts.retired > 0 ? "retired" : counts.offline > 0 ? "offline" : counts.unreadable > 0 ? "unreadable" : counts.absent > 0 ? "absent" : "available"
   return { state: unavailable === 0 ? "available" : worst, unavailable, total: session.assetIds.length }
 }
 

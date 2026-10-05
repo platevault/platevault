@@ -57,6 +57,9 @@ function sourceProblem(state: PrototypeState, entry: PrepareEntry): string | nul
   if (asset) {
     const copy = preferredCopy(state.disk, state.catalog, asset)
     const availability = copyAvailability(state.disk, state.catalog, copy)
+    if (availability === "retired") {
+      return `Source retired: ${copy.path} is in retired location ${state.catalog.locations[copy.locationId]?.displayName ?? "unknown"} and is never an input. Nothing was written for it.`
+    }
     if (availability === "offline") return `Source offline: ${copy.path} is on a volume that is not mounted. Nothing was written for it.`
     if (availability === "unreadable") return `Source unreadable: read access to ${copy.path} is denied. Nothing was written for it.`
     if (availability === "absent") return `Source not found at ${copy.path} at the last scan.`

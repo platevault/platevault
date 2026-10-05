@@ -18,6 +18,7 @@ import {
 import { angularSeparationDeg, normalizeName } from "@/domain/sky"
 import type {
   Asset,
+  Availability,
   Catalog,
   ChecklistItem,
   Location,
@@ -92,7 +93,7 @@ export function groupingRevision(catalog: Catalog, session: Session): number {
 
 export interface LocationPresence {
   location: Location
-  availability: "online" | "offline"
+  availability: Availability
   /** Frames of this session with a copy in this location. */
   frames: number
 }
@@ -114,7 +115,7 @@ export interface SessionRow {
 export function sessionRow(state: PrototypeState, session: Session): SessionRow {
   const { disk, catalog } = state
   const breakdown = emptyBreakdown()
-  const availability: Record<AssetAvailability, number> = { available: 0, offline: 0, unreadable: 0, absent: 0 }
+  const availability: Record<AssetAvailability, number> = { available: 0, offline: 0, unreadable: 0, absent: 0, retired: 0 }
   const framesPerLocation = new Map<LocationId, number>()
   let multiCopyFrames = 0
   let lastObservedAt: string | null = null
@@ -178,7 +179,7 @@ export type ScopeState = "never" | "complete" | "incomplete" | "provisional"
 
 export interface LocationScopeRow {
   location: Location
-  availability: "online" | "offline"
+  availability: Availability
   state: ScopeState
   /** The index operation currently reading or queued for this location. */
   activeOperation: Operation | null

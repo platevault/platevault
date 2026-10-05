@@ -206,10 +206,16 @@ export interface Location {
   /** Folders that could not be read during the last run. */
   unreadablePaths: string[]
   lastScanOperationId: OperationId | null
+  /**
+   * Set by a reviewed Retire location (LIB-FR-15, D11). A retired location is
+   * never reselected, rescanned or remapped; its copies read Retired and leave
+   * integration totals. Absent on locations saved before retirement existed.
+   */
+  retiredAt?: IsoDateTime
 }
 
-/** Live availability, derived from the disk (volume mounted). */
-export type Availability = "online" | "offline"
+/** Live availability, derived from the disk (volume mounted); "retired" after Retire location (D11). */
+export type Availability = "online" | "offline" | "retired"
 
 export type QualityValue = "unreviewed" | "usable" | "unusable"
 

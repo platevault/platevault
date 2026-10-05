@@ -128,7 +128,7 @@ function locationFor(catalog: Catalog, disk: Disk, path: string): Location | nul
   const volumeId = volumeForPath(disk, path)
   return (
     Object.values(catalog.locations)
-      .filter((l) => l.volumeId === volumeId && isUnder(path, l.path))
+      .filter((l) => !l.retiredAt && l.volumeId === volumeId && isUnder(path, l.path))
       .sort((a, b) => b.path.length - a.path.length)[0] ?? null
   )
 }

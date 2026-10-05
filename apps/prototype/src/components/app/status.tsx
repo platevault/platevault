@@ -53,6 +53,7 @@ export const STATUS = {
     offline: s("Offline", "warning", Unplug),
     unreadable: s("Unreadable", "danger", Lock),
     absent: s("Not found", "danger", CircleX),
+    retired: s("Retired", "muted", Archive),
     available: s("Available", "success", Check),
   },
   access: {

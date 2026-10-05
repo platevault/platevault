@@ -4,7 +4,7 @@
  * (access denied, incomplete scope, offline). Used by the setup steps and by
  * Settings › Locations.
  */
-import { FolderSearch, RotateCw } from "lucide-react"
+import { Archive, FolderSearch, RotateCw } from "lucide-react"
 import type { ReactNode } from "react"
 import { PathText } from "@/components/app/data"
 import { Notice } from "@/components/app/feedback"
@@ -38,13 +38,15 @@ export interface LocationRowProps {
   onChooseAgain: (location: Location) => void
   onRetry: (location: Location) => void
   onLocate?: (location: Location) => void
+  /** Opens the Retire location review (LIB-FR-15); offered on an offline row that holds frames. */
+  onRetire?: (location: Location) => void
   /** Outcome of the last recovery action on this row (refusal or failed write). */
   feedback?: ReactNode
   /** Heading level of the name inside its section. */
   headingLevel?: 3 | 4
 }
 
-export function LocationRow({ location, current, actions, onChooseAgain, onRetry, onLocate, feedback, headingLevel = 3 }: LocationRowProps) {
+export function LocationRow({ location, current, actions, onChooseAgain, onRetry, onLocate, onRetire, feedback, headingLevel = 3 }: LocationRowProps) {
   const availability = useStore((s) => locationAvailability(s.disk, location))
   const volume = useStore((s) => s.disk.volumes[location.volumeId])
   const frames = useStore((s) => framesInLocation(s.catalog, location.id))
@@ -52,8 +54,9 @@ export function LocationRow({ location, current, actions, onChooseAgain, onRetry
   const indexing = run !== null && !isSettled(run.op.status) && run.op.status !== "interrupted" && (run.item?.status === "running" || run.item?.status === "pending")
   const Heading = headingLevel === 3 ? "h3" : "h4"
   const offline = availability === "offline"
-  const denied = !offline && location.access === "denied"
-  const incomplete = !offline && !denied && location.scanScope === "incomplete"
+  const retired = availability === "retired"
+  const denied = !offline && !retired && location.access === "denied"
+  const incomplete = !offline && !denied && !retired && location.scanScope === "incomplete"
 
   // A scan that could not read the folder is an attempt, never an index; a denied folder with nothing read shows no frame count.
   const facts = [
@@ -75,13 +78,13 @@ export function LocationRow({ location, current, actions, onChooseAgain, onRetry
         </div>
         <div className="flex flex-wrap items-center gap-1.5" aria-label={`${location.displayName} state`} role="group">
           <StatusBadge kind="role" value={location.role} />
-          {/* While offline the last-observed access and scope are history, not current state; the Offline notice says so. */}
-          {offline ? null : <StatusBadge kind="access" value={location.access} />}
+          {/* While offline or retired the last-observed access and scope are history, not current state; the notice says so. */}
+          {offline || retired ? null : <StatusBadge kind="access" value={location.access} />}
           <StatusBadge kind="availability" value={availability} />
           {indexing ? (
             <StatusBadge kind="operation" value="running" label="Indexing" />
           ) : (
-            offline ? null : <StatusBadge kind="scanScope" value={location.scanScope} />
+            offline || retired ? null : <StatusBadge kind="scanScope" value={location.scanScope} />
           )}
         </div>
         {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
@@ -95,11 +98,21 @@ export function LocationRow({ location, current, actions, onChooseAgain, onRetry
           tone="offline"
           title={`${location.displayName} is offline`}
           actions={
-            onLocate && frames > 0 ? (
-              <Button size="sm" variant="outline" onClick={() => onLocate(location)}>
-                <FolderSearch aria-hidden="true" data-icon="inline-start" />
-                Locate or remap
-              </Button>
+            frames > 0 && (onLocate || onRetire) ? (
+              <>
+                {onLocate ? (
+                  <Button size="sm" variant="outline" onClick={() => onLocate(location)}>
+                    <FolderSearch aria-hidden="true" data-icon="inline-start" />
+                    Locate or remap
+                  </Button>
+                ) : null}
+                {onRetire ? (
+                  <Button size="sm" variant="outline" onClick={() => onRetire(location)}>
+                    <Archive aria-hidden="true" data-icon="inline-start" />
+                    Retire location
+                  </Button>
+                ) : null}
+              </>
             ) : undefined
           }
         >
@@ -156,6 +169,14 @@ export function LocationRow({ location, current, actions, onChooseAgain, onRetry
           ) : (
             "Indexing stopped before it finished. Sessions read so far are kept; the rest reads Unknown until you rescan."
           )}
+        </Notice>
+      ) : null}
+
+      {retired ? (
+        <Notice tone="info" title={`Retired ${formatDateTime(location.retiredAt!)}`}>
+          Its {formatCount(frames)} {frames === 1 ? "copy reads" : "copies read"} Retired, never missing, and {frames === 1 ? "is" : "are"} no longer counted or offered as
+          inputs. Fixed Views still name them unresolved. A retired location is never reselected, rescanned or remapped; add its folder again to index it as a new
+          location. No file was deleted, moved or modified.
         </Notice>
       ) : null}
 
