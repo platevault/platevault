@@ -32,9 +32,10 @@ use tokio::task::JoinHandle;
 use crate::notifier::{Clock, Notifier, ReminderNotice, SubmitOutcome};
 use crate::planning::{compute_windows, night_of};
 use crate::{
-    LibraryError, ObservingWindow, ReminderSubscription, SubscriptionState, UpcomingReminder,
-    WindowQuery, WindowSet,
+    LibraryError, ObservingSite, ObservingWindow, PlanCriteria, ReminderInput,
+    ReminderSubscription, Revision, SubscriptionState, UpcomingReminder, WindowQuery, WindowSet,
 };
+use uuid::Uuid;
 
 /// The longest the scheduler goes without re-reading the wall clock, so it
 /// catches up after system sleep stalls monotonic timers (R16).
@@ -52,9 +53,9 @@ pub fn due_reminders(
     windows: &WindowSet,
     now: OffsetDateTime,
 ) -> Vec<UpcomingReminder> {
-    due_windows(subscription, windows, now)
-        .map(|window| reminder(subscription, windows, window))
-        .collect()
+    Schedule::of(subscription).map_or_else(Vec::new, |schedule| {
+        schedule.due(windows, now).map(|window| schedule.reminder(windows, window)).collect()
+    })
 }
 
 /// Every reminder of the subscription's schedule whose window has not started
@@ -65,16 +66,44 @@ pub fn upcoming_reminders(
     windows: &WindowSet,
     now: OffsetDateTime,
 ) -> Vec<UpcomingReminder> {
-    if !schedules(subscription, windows) {
-        return Vec::new();
+    Schedule::of(subscription).map_or_else(Vec::new, |schedule| schedule.upcoming(windows, now))
+}
+
+/// The reminders a reviewed activation at `site` would produce, by due
+/// instant, under the same rules as an enabled subscription.
+#[must_use]
+pub fn prospective_reminders(
+    input: &ReminderInput,
+    site: &ObservingSite,
+    windows: &WindowSet,
+    now: OffsetDateTime,
+) -> Vec<UpcomingReminder> {
+    Schedule {
+        target_id: input.target_id,
+        site_id: site.id,
+        site_revision: site.revision,
+        criteria: &input.criteria,
+        lead_minutes: input.lead_minutes,
     }
-    let mut upcoming: Vec<_> = windows
-        .windows()
-        .filter(|window| now < window.start_utc)
-        .map(|window| reminder(subscription, windows, window))
-        .collect();
-    upcoming.sort_by_key(|reminder| (reminder.due_at, reminder.window_key));
-    upcoming
+    .upcoming(windows, now)
+}
+
+/// The window request a schedule at `site` covers at `now`: the night before
+/// the current site-local night through two nights after it.
+///
+/// # Errors
+/// `InvalidInput` when the site's zone is not bundled or no earlier night
+/// exists.
+pub fn schedule_query(
+    target_id: Uuid,
+    site: &ObservingSite,
+    criteria: PlanCriteria,
+    now: OffsetDateTime,
+) -> Result<WindowQuery, LibraryError> {
+    let first_night = night_of(now, site)?.previous_day().ok_or_else(|| {
+        LibraryError::InvalidInput(format!("no night before {now} at site {}", site.id))
+    })?;
+    Ok(WindowQuery { target_id, site_id: site.id, first_night, nights: SCHEDULED_NIGHTS, criteria })
 }
 
 /// The notification for one window: the Target at the site, the local start
@@ -99,53 +128,83 @@ pub fn notice(
     }
 }
 
-/// Whether `windows` are this subscription's schedule: it is enabled, and the
-/// windows were computed for its Target at its site, site revision and criteria.
-fn schedules(subscription: &ReminderSubscription, windows: &WindowSet) -> bool {
-    let basis = &windows.basis;
-    subscription.state == SubscriptionState::Enabled
-        && windows.unavailable_reason.is_none()
-        && basis.target_id == subscription.target_id
-        && basis.site.id == subscription.site_id
-        && basis.site.revision == subscription.site_revision
-        && basis.criteria == subscription.criteria
+/// The values a schedule is computed from.
+struct Schedule<'a> {
+    target_id: Uuid,
+    site_id: Uuid,
+    site_revision: Revision,
+    criteria: &'a PlanCriteria,
+    lead_minutes: u32,
 }
 
-fn lead(subscription: &ReminderSubscription) -> Duration {
-    Duration::minutes(i64::from(subscription.lead_minutes))
-}
+impl<'a> Schedule<'a> {
+    /// The schedule of an enabled subscription; every other state has none.
+    fn of(subscription: &'a ReminderSubscription) -> Option<Self> {
+        (subscription.state == SubscriptionState::Enabled).then_some(Self {
+            target_id: subscription.target_id,
+            site_id: subscription.site_id,
+            site_revision: subscription.site_revision,
+            criteria: &subscription.criteria,
+            lead_minutes: subscription.lead_minutes,
+        })
+    }
 
-fn due_windows<'a>(
-    subscription: &'a ReminderSubscription,
-    windows: &'a WindowSet,
-    now: OffsetDateTime,
-) -> impl Iterator<Item = &'a ObservingWindow> + 'a {
-    let lead = lead(subscription);
-    let scheduled = schedules(subscription, windows);
-    windows
-        .windows()
-        .filter(move |window| scheduled && window.start_utc - lead <= now && now < window.start_utc)
-}
+    /// Whether `windows` were computed for this Target at this site, site
+    /// revision and criteria.
+    fn covers(&self, windows: &WindowSet) -> bool {
+        let basis = &windows.basis;
+        windows.unavailable_reason.is_none()
+            && basis.target_id == self.target_id
+            && basis.site.id == self.site_id
+            && basis.site.revision == self.site_revision
+            && basis.criteria == *self.criteria
+    }
 
-fn reminder(
-    subscription: &ReminderSubscription,
-    windows: &WindowSet,
-    window: &ObservingWindow,
-) -> UpcomingReminder {
-    UpcomingReminder {
-        target_id: subscription.target_id,
-        designation: windows.basis.designation.clone(),
-        site_id: subscription.site_id,
-        site_name: window.site_name.clone(),
-        window_key: window.key,
-        due_at: window.start_utc - lead(subscription),
-        start_utc: window.start_utc,
-        end_utc: window.end_utc,
-        start_local: window.start_local,
-        end_local: window.end_local,
-        time_zone: window.time_zone.clone(),
-        night: window.night,
-        lead_minutes: subscription.lead_minutes,
+    fn lead(&self) -> Duration {
+        Duration::minutes(i64::from(self.lead_minutes))
+    }
+
+    fn due<'w>(
+        &self,
+        windows: &'w WindowSet,
+        now: OffsetDateTime,
+    ) -> impl Iterator<Item = &'w ObservingWindow> + 'w {
+        let lead = self.lead();
+        let covered = self.covers(windows);
+        windows.windows().filter(move |window| {
+            covered && window.start_utc - lead <= now && now < window.start_utc
+        })
+    }
+
+    fn upcoming(&self, windows: &WindowSet, now: OffsetDateTime) -> Vec<UpcomingReminder> {
+        if !self.covers(windows) {
+            return Vec::new();
+        }
+        let mut upcoming: Vec<_> = windows
+            .windows()
+            .filter(|window| now < window.start_utc)
+            .map(|window| self.reminder(windows, window))
+            .collect();
+        upcoming.sort_by_key(|reminder| (reminder.due_at, reminder.window_key));
+        upcoming
+    }
+
+    fn reminder(&self, windows: &WindowSet, window: &ObservingWindow) -> UpcomingReminder {
+        UpcomingReminder {
+            target_id: self.target_id,
+            designation: windows.basis.designation.clone(),
+            site_id: self.site_id,
+            site_name: window.site_name.clone(),
+            window_key: window.key,
+            due_at: window.start_utc - self.lead(),
+            start_utc: window.start_utc,
+            end_utc: window.end_utc,
+            start_local: window.start_local,
+            end_local: window.end_local,
+            time_zone: window.time_zone.clone(),
+            night: window.night,
+            lead_minutes: self.lead_minutes,
+        }
     }
 }
 
@@ -216,6 +275,25 @@ impl ReminderScheduler {
     }
 }
 
+/// A subscription's windows around the current site-local night, at its
+/// subscribed site with its criteria, computed off the async workers.
+///
+/// # Errors
+/// `NotFound` for a Target or site that no longer exists; `InvalidInput` for an
+/// unbundled zone; `PersistenceFailure` when the catalog cannot be read.
+pub async fn scheduled_windows(
+    catalog: &Catalog,
+    subscription: &ReminderSubscription,
+    now: OffsetDateTime,
+) -> Result<WindowSet, LibraryError> {
+    let target = catalog.target(subscription.target_id).await?;
+    let site = catalog.site(subscription.site_id).await?;
+    let query = schedule_query(subscription.target_id, &site, subscription.criteria, now)?;
+    tokio::task::spawn_blocking(move || compute_windows(&target, &site, &query)).await.map_err(
+        |error| LibraryError::SourceUnavailable(format!("reminder schedule interrupted: {error}")),
+    )?
+}
+
 /// Resolves once a stop was requested or the scheduler handle was dropped.
 async fn stopped(stop: &mut watch::Receiver<bool>) {
     // An error means the sender is gone, which is a stop as well.
@@ -267,7 +345,7 @@ impl Run {
                 return Err(Stopped);
             }
             let now = self.clock.now_utc();
-            let Ok(windows) = self.schedule(&subscription, now).await else {
+            let Ok(windows) = scheduled_windows(&self.catalog, &subscription, now).await else {
                 continue;
             };
             self.remind(&subscription, &windows, now, stop).await?;
@@ -281,31 +359,6 @@ impl Run {
         Ok(next_due)
     }
 
-    /// The subscription's windows around the current site-local night.
-    async fn schedule(
-        &self,
-        subscription: &ReminderSubscription,
-        now: OffsetDateTime,
-    ) -> Result<WindowSet, LibraryError> {
-        let target = self.catalog.target(subscription.target_id).await?;
-        let site = self.catalog.site(subscription.site_id).await?;
-        let first_night = night_of(now, &site)?.previous_day().ok_or_else(|| {
-            LibraryError::InvalidInput(format!("no night before {now} at site {}", site.id))
-        })?;
-        let query = WindowQuery {
-            target_id: subscription.target_id,
-            site_id: subscription.site_id,
-            first_night,
-            nights: SCHEDULED_NIGHTS,
-            criteria: subscription.criteria,
-        };
-        tokio::task::spawn_blocking(move || compute_windows(&target, &site, &query)).await.map_err(
-            |error| {
-                LibraryError::SourceUnavailable(format!("reminder schedule interrupted: {error}"))
-            },
-        )?
-    }
-
     /// Permission, claim, submission and outcome for each due window, in that
     /// order.
     async fn remind(
@@ -315,7 +368,10 @@ impl Run {
         now: OffsetDateTime,
         stop: &mut watch::Receiver<bool>,
     ) -> Result<(), Stopped> {
-        for window in due_windows(subscription, windows, now) {
+        let Some(schedule) = Schedule::of(subscription) else {
+            return Ok(());
+        };
+        for window in schedule.due(windows, now) {
             let permission = tokio::select! {
                 permission = self.notifier.permission() => permission,
                 () = stopped(stop) => return Err(Stopped),
@@ -343,7 +399,7 @@ impl Run {
                 key: window.key,
                 window_end_utc: window.end_utc,
                 night: window.night,
-                due_at: window.start_utc - lead(subscription),
+                due_at: window.start_utc - schedule.lead(),
             };
             // False: the identity was taken before, or the subscription is no
             // longer enabled at this site. A failed claim is retried next pass.
