@@ -174,9 +174,13 @@ function CleanupArea({ view }: { view: View }) {
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        tone="destructive"
-        title={`Send ${plural(sendable.length, "file")} to the OS Trash?`}
-        description="Each file is checked against its review again just before it moves. Anything that changed, lost its retained original or kept copy, or sits where the OS Trash is unsupported is refused and stays."
+        tone={movable.length > 0 ? "destructive" : "default"}
+        title={movable.length > 0 ? `Send ${plural(movable.length, "file")} to the OS Trash?` : "No selected file can move to the OS Trash"}
+        description={
+          movable.length > 0
+            ? "Each file is checked against its review again just before it moves. Anything that changed, lost its retained original or kept copy, or sits where the OS Trash is unsupported is refused and stays."
+            : `The OS Trash is unsupported on ${noTrashVolumes}. Confirming records the refusal and moves nothing; you can then keep the files or reveal their location.`
+        }
         changes={[
           movable.length > 0 ? `Move ${plural(movable.length, "file")} from ${view.name}'s folder to the OS Trash` : `No file moves: the OS Trash is unsupported on ${noTrashVolumes}`,
           ...(links.length > 0 ? [`Trash ${plural(links.length, "link entry", "link entries")} without following their targets`] : []),
@@ -190,7 +194,7 @@ function CleanupArea({ view }: { view: View }) {
           `${view.name} ${view.completedAt ? "stays Complete" : "keeps its status"}; membership does not change`,
           "No file is deleted permanently",
         ]}
-        confirmLabel={`Send ${plural(sendable.length, "file")} to Trash`}
+        confirmLabel={movable.length > 0 ? `Send ${plural(movable.length, "file")} to Trash` : "Record the refusal"}
         onConfirm={() => {
           if (!review) return
           const opId = startCleanup(view.id, view.name, review.viewPath, review.selected)
