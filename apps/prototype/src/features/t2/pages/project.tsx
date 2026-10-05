@@ -20,13 +20,13 @@ import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { captureSite, type ChecklistProgress, MIN_FOOTPRINT_OVERLAP, projectProgress, viewStatus } from "@/domain/derive"
-import type { Catalog, Project, SessionId } from "@/domain/types"
+import type { Catalog, ChecklistItem, Project, SessionId } from "@/domain/types"
 import { formatCount, formatDuration, formatExposure, plural } from "@/lib/format"
 import { type CommitResult, store, useStore } from "@/store/core"
 import { type ProjectPatch, updateProject } from "../actions"
 import { acceptedResultsForViews, checklistCriterion, sessionLabel, sessionRow, type SessionRow } from "../model"
 import { AssociationBadge, type CommitFlow, FlowStatus, useCommitFlow } from "../parts"
-import { AddChecklistItem, LabeledSelect, PanelsEditor, removeKeepingFocus, SessionLinkPicker, TargetsEditor } from "../project-form"
+import { AddChecklistItem, LabeledSelect, PanelsEditor, removeKeepingFocus, SessionLinkPicker, TargetsEditor, useChecklistItemEdit } from "../project-form"
 
 export function ProjectPage() {
   const { projectId = "" } = useParams({ strict: false }) as { projectId?: string }
@@ -205,6 +205,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
                   catalog={catalog}
                   project={project}
                   onRemove={() => edit(checklistFlow, { checklist: project.checklist.filter((i) => i.id !== p.item.id) }, "Checklist").ok}
+                  onEdit={(next, close) => edit(checklistFlow, { checklist: project.checklist.map((i) => (i.id === next.id ? next : i)) }, "Checklist", close).ok}
                 />
               ))}
             </ul>
@@ -339,7 +340,21 @@ function ProjectDetail({ projectId }: { projectId: string }) {
 // Checklist progress (PRJ-FR-04, D10)
 // ---------------------------------------------------------------------------
 
-function ChecklistRow({ progress, catalog, project, onRemove }: { progress: ChecklistProgress; catalog: Catalog; project: Project; onRemove: () => boolean }) {
+function ChecklistRow({
+  progress,
+  catalog,
+  project,
+  onRemove,
+  onEdit,
+}: {
+  progress: ChecklistProgress
+  catalog: Catalog
+  project: Project
+  onRemove: () => boolean
+  /** `close` runs inside the save, so a successful Retry also closes the form. */
+  onEdit: (item: ChecklistItem, close: () => void) => boolean
+}) {
+  const editor = useChecklistItemEdit()
   const { item, totals } = progress
   const criterion = checklistCriterion(catalog, project, item)
   const evidence = progress.evidenceSessionIds.map((id) => catalog.sessions[id]).filter((s) => s !== undefined)
@@ -355,11 +370,19 @@ function ChecklistRow({ progress, catalog, project, onRemove }: { progress: Chec
         <h3 className="text-sm font-medium">{criterion}</h3>
         <div className="flex items-center gap-2">
           <StatusBadge kind="checklist" value={progress.state} />
+          <Button size="sm" variant="ghost" ref={editor.editRef} aria-expanded={editor.editing} onClick={editor.toggle}>
+            Edit item<span className="sr-only"> {criterion}</span>
+          </Button>
           <Button size="sm" variant="ghost" data-remove="" onClick={(event) => removeKeepingFocus(event.currentTarget, onRemove)}>
             Remove item<span className="sr-only"> {criterion}</span>
           </Button>
         </div>
       </div>
+      {editor.editing ? (
+        <div className="rounded-lg border p-3">
+          <AddChecklistItem catalog={catalog} panels={project.panels} item={item} onCancel={editor.close} onAdd={(next) => onEdit(next, editor.close)} />
+        </div>
+      ) : null}
       {totals ? (
         <>
           <dl className="grid gap-x-6 gap-y-1 text-sm tabular-nums sm:grid-cols-3">

@@ -5,8 +5,8 @@
  * controlled: it reports a new value and never writes the catalog itself.
  */
 import { Link } from "@tanstack/react-router"
-import { Layers, X } from "lucide-react"
-import { type KeyboardEvent, type ReactNode, useId, useState } from "react"
+import { Layers, Pencil, X } from "lucide-react"
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { EmptyState, UnknownValue } from "@/components/app/feedback"
 import { Button } from "@/components/ui/button"
@@ -96,13 +96,28 @@ function enterAdds(add: () => void) {
   }
 }
 
-/** A removable row in an editor list; the remove button names the row. */
-function RemovableRow({ children, label, onRemove, disabledReason }: { children: ReactNode; label: string; onRemove: () => Applied; disabledReason?: string }) {
+/** A removable row in an editor list; the remove button names the row. `actions` sit before Remove; `detail` spans the row below. */
+function RemovableRow({
+  children,
+  label,
+  onRemove,
+  disabledReason,
+  actions,
+  detail,
+}: {
+  children: ReactNode
+  label: string
+  onRemove: () => Applied
+  disabledReason?: string
+  actions?: ReactNode
+  detail?: ReactNode
+}) {
   const reasonId = useId()
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
       <div className="min-w-0">{children}</div>
       <span className="flex items-center gap-2">
+        {actions}
         {disabledReason ? (
           <span id={reasonId} className="text-xs text-muted-foreground">
             {disabledReason}
@@ -122,6 +137,7 @@ function RemovableRow({ children, label, onRemove, disabledReason }: { children:
           Remove<span className="sr-only"> {label}</span>
         </Button>
       </span>
+      {detail ? <div className="basis-full">{detail}</div> : null}
     </li>
   )
 }
@@ -369,14 +385,17 @@ export function ChecklistEditor({
     <div className="space-y-3" data-editor="">
       {checklist.length > 0 ? (
         <ul className="divide-y rounded-lg border px-3">
-          {checklist.map((item) => {
-            const criterion = checklistCriterion(catalog, { panels }, item)
-            return (
-              <RemovableRow key={item.id} label={criterion} onRemove={() => onChange(checklist.filter((i) => i.id !== item.id))}>
-                {criterion}
-              </RemovableRow>
-            )
-          })}
+          {checklist.map((item) => (
+            <ChecklistEditorRow
+              key={item.id}
+              item={item}
+              criterion={checklistCriterion(catalog, { panels }, item)}
+              catalog={catalog}
+              panels={panels}
+              onRemove={() => onChange(checklist.filter((i) => i.id !== item.id))}
+              onEdit={(next) => onChange(checklist.map((i) => (i.id === next.id ? next : i)))}
+            />
+          ))}
         </ul>
       ) : (
         <p className="text-sm text-muted-foreground">No checklist items. The checklist is optional; an unmet item never blocks a View.</p>
@@ -386,23 +405,107 @@ export function ChecklistEditor({
   )
 }
 
-/** Form for one new checklist item; Add item stays disabled, with its reason, until the criterion is complete. */
+/**
+ * A checklist row's Edit toggles the criterion form, prefilled, below the row;
+ * Save item keeps the item's id, and Save or Cancel returns focus to Edit (WCAG 2.4.3).
+ */
+export function useChecklistItemEdit() {
+  const [editing, setEditing] = useState(false)
+  const editRef = useRef<HTMLButtonElement>(null)
+  function close() {
+    editRef.current?.focus()
+    setEditing(false)
+  }
+  return { editing, editRef, close, toggle: () => (editing ? close() : setEditing(true)) }
+}
+
+function ChecklistEditorRow({
+  item,
+  criterion,
+  catalog,
+  panels,
+  onRemove,
+  onEdit,
+}: {
+  item: ChecklistItem
+  criterion: string
+  catalog: Catalog
+  panels: MosaicPanel[]
+  onRemove: () => Applied
+  onEdit: (item: ChecklistItem) => Applied
+}) {
+  const edit = useChecklistItemEdit()
+  return (
+    <RemovableRow
+      label={criterion}
+      onRemove={onRemove}
+      actions={
+        <Button type="button" size="sm" variant="ghost" ref={edit.editRef} aria-expanded={edit.editing} onClick={edit.toggle}>
+          <Pencil aria-hidden="true" data-icon="inline-start" />
+          Edit<span className="sr-only"> {criterion}</span>
+        </Button>
+      }
+      detail={
+        edit.editing ? (
+          <div className="mb-1.5 rounded-lg border p-3">
+            <AddChecklistItem
+              catalog={catalog}
+              panels={panels}
+              item={item}
+              onCancel={edit.close}
+              onAdd={(next) => {
+                const applied = onEdit(next)
+                if (applied !== false) edit.close()
+                return applied
+              }}
+            />
+          </div>
+        ) : null
+      }
+    >
+      {criterion}
+    </RemovableRow>
+  )
+}
+
+/** Amount field text for an item being edited; integration goals are shown in hours. */
+function amountText(item: ChecklistItem | undefined): string {
+  if (item?.kind === "integration") return String(Math.round(item.goalS / 36) / 100)
+  if (item?.kind === "frame-count") return String(item.goalFrames)
+  if (item?.kind === "exposure") return String(item.exposureS)
+  return ""
+}
+
+/**
+ * Form for one checklist item; Add item stays disabled, with its reason, until the criterion is complete.
+ * Given `item`, it edits that item instead: prefilled, Save item keeps its id, and Cancel discards the change.
+ */
 export function AddChecklistItem({
   catalog,
   panels,
   onAdd,
+  item: editing,
+  onCancel,
 }: {
   catalog: Catalog
   panels: MosaicPanel[]
   /** `clear` empties the form; the caller runs it when a later Retry saves the item. */
   onAdd: (item: ChecklistItem, clear: () => void) => Applied
+  item?: ChecklistItem
+  onCancel?: () => void
 }) {
-  const [kind, setKind] = useState<ChecklistKind>("integration")
-  const [channel, setChannel] = useState<string | null>(null)
-  const [amount, setAmount] = useState("")
-  const [panelId, setPanelId] = useState<string | null>(null)
-  const [trainId, setTrainId] = useState<OpticalTrainId | null>(null)
-  const [calibrationKind, setCalibrationKind] = useState<CalibrationKind>("flat")
+  const [kind, setKind] = useState<ChecklistKind>(editing?.kind ?? "integration")
+  const [channel, setChannel] = useState<string | null>(editing && "channel" in editing ? editing.channel : null)
+  const [amount, setAmount] = useState(() => amountText(editing))
+  const [panelId, setPanelId] = useState<string | null>(editing?.kind === "panel-coverage" ? editing.panelId : null)
+  const [trainId, setTrainId] = useState<OpticalTrainId | null>(editing?.kind === "equipment" ? editing.opticalTrainId : null)
+  const [calibrationKind, setCalibrationKind] = useState<CalibrationKind>(editing?.kind === "calibration" ? editing.calibrationKind : "flat")
+  const fieldsetRef = useRef<HTMLFieldSetElement>(null)
+  const editOnOpen = useRef(Boolean(editing))
+  // Opening an edit moves focus into the form, to its first control.
+  useEffect(() => {
+    if (editOnOpen.current) fieldsetRef.current?.querySelector<HTMLElement>("button, input, [role='combobox']")?.focus()
+  }, [])
   const [amountError, setAmountError] = useState<string | null>(null)
   const amountId = useId()
   const reasonId = useId()
@@ -433,7 +536,7 @@ export function AddChecklistItem({
       setAmountError(kind === "frame-count" ? "Enter a whole number of frames greater than 0." : `Enter ${amountLabel.toLowerCase()} greater than 0.`)
       return
     }
-    const id = `chk_${stableHash(`${kind}|${channel}|${amount}|${Date.now()}`)}`
+    const id = editing?.id ?? `chk_${stableHash(`${kind}|${channel}|${amount}|${Date.now()}`)}`
     const channelOrAny = channel && channel !== ANY ? channel : null
     const item: ChecklistItem =
       kind === "integration"
@@ -455,8 +558,8 @@ export function AddChecklistItem({
   }
 
   return (
-    <fieldset className="space-y-2" data-editor-add="" onKeyDown={enterAdds(add)}>
-      <legend className="text-sm font-medium">Add a checklist item</legend>
+    <fieldset ref={fieldsetRef} className="space-y-2" data-editor-add={editing ? undefined : ""} onKeyDown={enterAdds(add)}>
+      <legend className="text-sm font-medium">{editing ? "Edit checklist item" : "Add a checklist item"}</legend>
       <div className="flex flex-wrap items-start gap-2">
         <LabeledSelect
           label="Kind"
@@ -504,11 +607,16 @@ export function AddChecklistItem({
         ) : null}
         <div className="mt-6 flex items-center gap-2">
           <Button type="button" variant="outline" onClick={add} disabled={Boolean(missing)} focusableWhenDisabled aria-describedby={missing ? reasonId : undefined}>
-            Add item
+            {editing ? "Save item" : "Add item"}
           </Button>
+          {onCancel ? (
+            <Button type="button" variant="ghost" onClick={onCancel}>
+              Cancel
+            </Button>
+          ) : null}
           {missing ? (
             <span id={reasonId} className="text-xs text-muted-foreground">
-              {missing} to add this item
+              {missing} to {editing ? "save" : "add"} this item
             </span>
           ) : null}
         </div>
