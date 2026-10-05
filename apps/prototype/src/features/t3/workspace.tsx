@@ -1,7 +1,7 @@
 /**
  * View workspace host (`/views/$viewId`, layout route): one persistent header
- * with the View name, Project, profile, status, membership summary and Save
- * View, then links to the areas (no forced wizard, VSEL-FR-02). Owns the page
+ * with the View name, Project, profile, status, membership summary, Save
+ * View and Reopen, then links to the areas (no forced wizard, VSEL-FR-02). Owns the page
  * h1; areas render level-2 headers. Hosts T4 and T5 areas through <Outlet />.
  */
 import { Link, Outlet, useNavigate, useParams } from "@tanstack/react-router"
@@ -19,7 +19,7 @@ import { viewStatus } from "@/domain/derive"
 import type { MembershipContent, MembershipRevision, View } from "@/domain/types"
 import { formatDateTime, formatDuration, plural } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { type CommitResult, useStore } from "@/store/core"
+import { type CommitResult, store, useStore } from "@/store/core"
 import { discardDraft, editViewDetails, reopenView, resumeDraft, saveView, updateDraft, useRecoveredDraft } from "./actions"
 import { SelectField } from "./fields"
 import {
@@ -54,15 +54,23 @@ export function useWorkspace(): Workspace {
   return value
 }
 
-/** Draft edits with the failure kept beside the control that caused it. */
+/**
+ * Draft edits with the failure kept beside the control that caused it. Only a
+ * failed catalog write offers Retry; a refusal (Complete View, recovered draft
+ * not resumed) shows its reason, because retrying it is refused the same way.
+ */
 export function useDraftEditor(viewId: string) {
-  const [error, setError] = useState<{ message: string; retry: () => void } | null>(null)
+  const view = useStore((s) => s.catalog.views[viewId])
+  const recovered = useRecoveredDraft(view)
+  const [error, setError] = useState<{ message: string; retry: (() => void) | null } | null>(null)
   function edit(label: string, change: Parameters<typeof updateDraft>[2]): CommitResult {
+    // The same preconditions updateDraft refuses on, read before the call.
+    const refused = Boolean(store.getState().catalog.views[viewId]?.completedAt) || recovered
     const result = updateDraft(viewId, label, change)
-    setError(result.ok ? null : { message: result.message, retry: () => edit(label, change) })
+    setError(result.ok ? null : { message: result.message, retry: refused ? null : () => edit(label, change) })
     return result
   }
-  const errorNode = error ? <ActionError message={error.message} onRetry={error.retry} /> : null
+  const errorNode = error ? <ActionError message={error.message} onRetry={error.retry ?? undefined} /> : null
   return { edit, errorNode }
 }
 
@@ -256,6 +264,7 @@ export function ViewWorkspacePage() {
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
+  const [reopenOpen, setReopenOpen] = useState(false)
   const navigate = useNavigate()
 
   if (!view) {
@@ -282,7 +291,7 @@ export function ViewWorkspacePage() {
   const summary = viewSummary(disk, catalog, content)
   const status = viewStatus(catalog, view)
   const readOnlyReason = view.completedAt
-    ? "This View is Complete. Reopen it to change membership."
+    ? "Reopen View in the header to change membership."
     : recovered
       ? "Resume or discard the recovered changes before editing."
       : null
@@ -303,8 +312,30 @@ export function ViewWorkspacePage() {
           : "No unsaved changes."
 
   function save() {
+    const draftBase = view!.draft?.baseRevision ?? null
     const result = saveView(viewId)
-    setSaveFeedback(result.ok ? null : result.reason === "stale" ? { state: "stale", message: result.message } : { state: "failed", message: result.message })
+    if (result.ok) {
+      setSaveFeedback(null)
+      return
+    }
+    // Name the membership revisions the header shows, never the internal record revision.
+    const current = store.getState().catalog.views[viewId]
+    const latest = current ? (latestRevision(current)?.revision ?? null) : null
+    const saved = latest === null ? "nothing is saved yet" : `revision ${latest} is the saved revision`
+    if (result.reason === "stale") {
+      setSaveFeedback({
+        state: "stale",
+        message:
+          latest !== draftBase
+            ? `Save View was refused: revision ${latest} was saved elsewhere after your draft started from ${draftBase === null ? "an unsaved View" : `revision ${draftBase}`}. Review current revision before saving again.`
+            : `Save View was refused: this View's details changed elsewhere; ${saved}. Review current revision before saving again.`,
+      })
+      return
+    }
+    setSaveFeedback({
+      state: "failed",
+      message: current ? `Save View failed: the catalog write did not complete, so ${saved}. Your unsaved changes are kept; choose Save View to try again.` : result.message,
+    })
   }
 
   /** After a stale refusal: say what changed elsewhere before Save View is offered again (D08, LIB-AC-08). */
@@ -312,16 +343,18 @@ export function ViewWorkspacePage() {
     const draftBase = view!.draft?.baseRevision ?? null
     const latest = base?.revision ?? null
     const before = view!.revisions.find((r) => r.revision === draftBase) ?? null
+    const draft = view!.draft ? describeDiff(catalog, diffContent(base, view!.draft)).join("; ") || "no member changes" : "no member changes"
     const note =
       base && draftBase !== latest
-        ? `Saved membership moved from ${draftBase === null ? "nothing saved" : `revision ${draftBase}`} to revision ${latest} elsewhere: ${describeDiff(catalog, diffContent(before, base)).join("; ") || "no member changed"}. Save View replaces it with your draft.`
-        : `Saved membership is unchanged (${latest === null ? "never saved" : `revision ${latest}`}); only the View record changed elsewhere and is now record revision ${view!.revision}. Your unsaved changes are kept; Save View commits them as revision ${(latest ?? 0) + 1}.`
+        ? `Saved membership moved from ${draftBase === null ? "nothing saved" : `revision ${draftBase}`} to revision ${latest} elsewhere: ${describeDiff(catalog, diffContent(before, base)).join("; ") || "no member changed"}. Your draft against revision ${latest}: ${draft}. Save View commits your draft as revision ${(latest ?? 0) + 1}.`
+        : `Saved membership is unchanged (${latest === null ? "never saved" : `revision ${latest}`}); only the View's details changed elsewhere. Your draft against ${latest === null ? "an empty View" : `revision ${latest}`}: ${draft}. Save View commits it as revision ${(latest ?? 0) + 1}.`
     setSaveFeedback({ state: "reviewed", note })
     // The Review button unmounts with the stale state: focus goes to Save View, the next step (WCAG 2.4.3).
     requestAnimationFrame(() => document.getElementById(`${viewId}-save`)?.focus())
   }
 
   const saveState = saveFeedback?.state === "failed" || saveFeedback?.state === "stale" ? saveFeedback.state : hasDraft || !base ? "unsaved" : "saved"
+  const saveError = saveFeedback?.state === "failed" || saveFeedback?.state === "stale" ? saveFeedback.message : null
   const workspace: Workspace = { view, content, base, ctx, summary, readOnlyReason }
 
   return (
@@ -344,17 +377,7 @@ export function ViewWorkspacePage() {
               )}
             </span>
           }
-          meta={
-            <>
-              {status !== "saved" ? <StatusBadge kind="view" value={status} /> : null}
-              <SaveState
-                state={saveState}
-                message={saveFeedback && "message" in saveFeedback ? saveFeedback.message : undefined}
-                onRetry={save}
-                onReview={reviewCurrent}
-              />
-            </>
-          }
+          meta={status !== "saved" ? <StatusBadge kind="view" value={status} /> : null}
           description={
             <span className="tabular-nums">
               {base ? `Revision ${base.revision} saved ${formatDateTime(base.savedAt)}` : "Not saved yet"}
@@ -376,21 +399,33 @@ export function ViewWorkspacePage() {
                   Discard…
                 </Button>
               ) : null}
-              <div className="flex flex-col items-end gap-0.5">
-                <Button
-                  id={`${viewId}-save`}
-                  size="sm"
-                  onClick={save}
-                  disabled={saveBlocked !== null}
-                  focusableWhenDisabled
-                  aria-describedby={saveBlocked ? `${viewId}-save-reason` : undefined}
-                  className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
-                >
-                  <Save aria-hidden="true" data-icon="inline-start" />
-                  Save View
+              {view.completedAt ? (
+                <Button variant="outline" size="sm" onClick={() => setReopenOpen(true)}>
+                  Reopen View…
                 </Button>
-                {saveBlocked ? (
-                  <span id={`${viewId}-save-reason`} className="text-xs text-muted-foreground">
+              ) : null}
+              <div className="flex flex-col items-end gap-1">
+                {/* Directly under Save View: the state, and for a stale refusal the review it needs (D08); Save View itself retries a failed write.
+                    Stacked rather than in the row, so the header row keeps its width for the View name. */}
+                <div className="flex flex-col-reverse items-end gap-1">
+                  <SaveState state={saveState} onReview={reviewCurrent} />
+                  <Button
+                    id={`${viewId}-save`}
+                    size="sm"
+                    onClick={save}
+                    disabled={saveBlocked !== null}
+                    focusableWhenDisabled
+                    aria-describedby={saveError ? `${viewId}-save-error` : saveBlocked ? `${viewId}-save-reason` : undefined}
+                    className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+                  >
+                    <Save aria-hidden="true" data-icon="inline-start" />
+                    Save View
+                  </Button>
+                </div>
+                {saveError ? (
+                  <ActionError id={`${viewId}-save-error`} message={saveError} className="max-w-sm justify-end text-right text-xs" />
+                ) : saveBlocked ? (
+                  <span id={`${viewId}-save-reason`} className="max-w-sm text-right text-xs text-muted-foreground">
                     {saveBlocked}
                   </span>
                 ) : null}
@@ -435,8 +470,9 @@ export function ViewWorkspacePage() {
             </Notice>
           ) : null}
           {view.completedAt ? (
-            <Notice tone="info" title={`Complete since ${formatDateTime(view.completedAt)}`} actions={<ReopenButton view={view} />}>
-              Membership edits are refused while the View is Complete. Results, cleanup records and preparations are unchanged by Reopen.
+            <Notice tone="info" title={`Complete since ${formatDateTime(view.completedAt)}`}>
+              Membership, calibration decisions and new preparations are read-only while the View is Complete. Reopen View in the header clears Complete;
+              Results, cleanup records and preparations stay as they are.
             </Notice>
           ) : null}
           {sincePrepared && sincePrepared.added > 0 && !view.completedAt ? (
@@ -480,24 +516,18 @@ export function ViewWorkspacePage() {
           return result
         }}
       />
+      {/* Mounted outside the header button so it survives the button unmounting when Complete clears. */}
+      <ConfirmDialog
+        open={reopenOpen}
+        onOpenChange={setReopenOpen}
+        title={`Reopen ${view.name}?`}
+        description="Reopen lets you change membership again."
+        changes={["Clear Complete on this View"]}
+        unchanged={["Accepted Results", "Cleanup records and files", "Prepared revisions and their entries", "Library quality decisions"]}
+        confirmLabel="Reopen View"
+        onConfirm={() => reopenView(viewId, view.revision)}
+        focusAfterConfirm={() => document.getElementById(`${viewId}-save`)}
+      />
     </WorkspaceContext.Provider>
-  )
-}
-
-function ReopenButton({ view }: { view: View }) {
-  return (
-    <ConfirmDialog
-      trigger={
-        <Button size="sm" variant="outline">
-          Reopen View…
-        </Button>
-      }
-      title={`Reopen ${view.name}?`}
-      description="Reopen lets you change membership again."
-      changes={["Clear Complete on this View"]}
-      unchanged={["Accepted Results", "Cleanup records and files", "Prepared revisions and their entries", "Library quality decisions"]}
-      confirmLabel="Reopen View"
-      onConfirm={() => reopenView(view.id, view.revision)}
-    />
   )
 }

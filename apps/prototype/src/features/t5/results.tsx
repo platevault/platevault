@@ -197,6 +197,8 @@ function ResultsArea({ view }: { view: View }) {
     { id: "acceptance", header: "Acceptance", cell: () => <StatusBadge kind="acceptance" value="candidate" /> },
   ]
 
+  // Ranked to fit the frame (no sideways scroll at 1280 or 1024): Kind rides under the file name and the
+  // acceptance digest under the date; below 1280 Lineage moves to the inspection pane, which already lists it.
   const acceptedColumns: Column<ResultRow>[] = [
     {
       id: "file",
@@ -204,15 +206,26 @@ function ResultsArea({ view }: { view: View }) {
       rowHeader: true,
       sortValue: (r) => r.fileName,
       cell: (r) => (
-        <Button variant="link" size="sm" className="h-auto px-0 font-normal" aria-label={`Inspect ${r.fileName}`} onClick={() => inspect(r)}>
-          {r.fileName}
-        </Button>
+        <>
+          <Button variant="link" size="sm" className="h-auto px-0 font-normal" aria-label={`Inspect ${r.fileName}`} onClick={() => inspect(r)}>
+            {r.fileName}
+          </Button>
+          <span className="block text-xs text-muted-foreground">{kindLabel(r.kind, r.channel)}</span>
+        </>
       ),
     },
-    { id: "kind", header: "Kind", cell: (r) => kindLabel(r.kind, r.channel) },
-    { id: "accepted", header: "Accepted", sortValue: (r) => r.acceptedAt ?? "", cell: (r) => (r.acceptedAt ? formatDateTime(r.acceptedAt) : "—") },
-    { id: "sha", header: "SHA-256 at acceptance", cell: (r) => <span className="font-mono text-xs">{shortSha(r.acceptedSha)}</span> },
-    { id: "lineage", header: "Lineage", cell: (r) => <StatusBadge kind="lineage" value={r.lineage} /> },
+    {
+      id: "accepted",
+      header: "Accepted",
+      sortValue: (r) => r.acceptedAt ?? "",
+      cell: (r) => (
+        <>
+          <span className="block">{r.acceptedAt ? formatDateTime(r.acceptedAt) : "—"}</span>
+          <span className="block font-mono text-xs text-muted-foreground">SHA-256 {shortSha(r.acceptedSha)}</span>
+        </>
+      ),
+    },
+    { id: "lineage", header: "Lineage", className: "max-xl:hidden", cell: (r) => <StatusBadge kind="lineage" value={r.lineage} /> },
     { id: "content", header: "Content", cell: (r) => <ProductStateBadge state={productState(r, rehash.verifying)} /> },
     { id: "custody", header: "Cleanup", cell: () => <StatusBadge kind="custody" value="keep" /> },
   ]
@@ -235,7 +248,6 @@ function ResultsArea({ view }: { view: View }) {
         level={2}
         title="Results"
         description="Files the application wrote into this View's output location, and Results you attached. Nothing is accepted until you accept it."
-        meta={complete ? <StatusBadge kind="view" value="complete" /> : null}
         actions={
           <>
             <Button variant="outline" onClick={() => setAttachOpen(true)}>
@@ -385,6 +397,7 @@ function ResultsArea({ view }: { view: View }) {
             getRowId={(r) => r.id}
             activeRowId={active}
             scroll="none"
+            stickyFirstColumn
             selection={{ selected: acceptedSelection, onChange: setAcceptedSelection, rowLabel: (r) => r.fileName }}
             empty={<p className="p-4 text-sm text-muted-foreground">No accepted Results yet. Select candidates above and choose Accept Result.</p>}
           />
@@ -398,10 +411,9 @@ function ResultsArea({ view }: { view: View }) {
           {complete ? (
             <KeyValueList
               items={[
-                { label: "Status", value: <StatusBadge kind="view" value="complete" /> },
                 { label: "Marked complete", value: formatDateTime(view.completedAt!) },
                 { label: "What it means", value: `The attempt is finished. It does not say that ${appName} stopped or succeeded, and nothing was removed.` },
-                { label: "Membership", value: "New membership or preparation revisions need Reopen in the View header." },
+                { label: "Membership", value: "New membership or preparation revisions need Reopen View in the header." },
               ]}
             />
           ) : (
@@ -981,7 +993,11 @@ function ResultsPrototypeControls({ view, root, products, onChanged }: { view: V
   }
   const productItems = products.map((r) => ({ value: r.path, label: `${r.fileName}${r.acceptance === "accepted" ? " (accepted)" : ""}` }))
   return (
-    <PrototypeControls outcome={outcome} description="Use these to stand in for the processing application and the journey's P5 helper.">
+    <PrototypeControls
+      title="Prototype: outside changes for this step"
+      outcome={outcome}
+      description="Stands in for the processing application and the journey's P5 helper; it never writes the catalog."
+    >
       <Button size="sm" variant="outline" disabled={!root} onClick={() => run(simulateApplicationOutput(view))}>
         Simulate application output
       </Button>

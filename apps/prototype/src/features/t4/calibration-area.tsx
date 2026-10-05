@@ -5,7 +5,7 @@
  */
 import { Link } from "@tanstack/react-router"
 import { ArrowRight, Ellipsis, FolderSearch } from "lucide-react"
-import { useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { ActionError, EmptyState, Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
@@ -35,6 +35,22 @@ export function ViewNotFound() {
   )
 }
 
+/** A file name that wraps only after "_", never mid-token ("MasterDark_120s_G100_O50_-10C.xsif"). */
+function FileName({ name }: { name: string }) {
+  const parts = name.split("_")
+  return parts.map((part, index) => (
+    // biome-ignore lint/suspicious/noArrayIndexKey: the parts of one fixed name
+    <Fragment key={index}>
+      {part}
+      {index < parts.length - 1 ? (
+        <>
+          _<wbr />
+        </>
+      ) : null}
+    </Fragment>
+  ))
+}
+
 function InputCell({ row }: { row: RequirementRow }) {
   const kind = KIND_LABEL[row.kind].toLowerCase()
   if (row.state === "deferred") return <span className="text-muted-foreground">Decision deferred</span>
@@ -44,7 +60,7 @@ function InputCell({ row }: { row: RequirementRow }) {
         <span className="block">No compatible {kind}</span>
         {row.closest ? (
           <span className="block text-xs text-muted-foreground">
-            Closest: {row.closest.source.name} ({summaryText(row.closest.criteria).toLowerCase()})
+            Closest: <FileName name={row.closest.source.name} /> ({summaryText(row.closest.criteria).toLowerCase()})
           </span>
         ) : null}
       </span>
@@ -53,15 +69,18 @@ function InputCell({ row }: { row: RequirementRow }) {
   const others = row.candidates.filter((c) => c.summary.allCompatible && !sameInput(c.source.input, row.input)).length
   return (
     <span className="block whitespace-normal">
-      <span className="block [overflow-wrap:anywhere]">{row.source.name}</span>
+      {/* break-word, not anywhere: anywhere shrinks the column's min-content to one character, so the table splits names mid-token. */}
+      <span className="block [overflow-wrap:break-word]">
+        <FileName name={row.source.name} />
+      </span>
       <span className="block text-xs text-muted-foreground">
         {row.source.isMaster ? "Library master" : `Raw set · ${plural(row.source.frameCount ?? 0, "frame")}`}
         {others > 0 && row.state !== "suggested" && !row.pending ? ` · ${plural(others, "compatible alternative")}` : ""}
       </span>
       {row.drift ? <span className="block text-xs text-pretty">{row.drift} Not handed off until its accepted bytes return.</span> : null}
       {row.pending ? (
-        <span className="block text-xs text-pretty text-muted-foreground [overflow-wrap:anywhere]">
-          Suggested instead: {row.pending.source.name}, a newly adopted master. This decision stands until you accept it.
+        <span className="block text-xs text-pretty text-muted-foreground [overflow-wrap:break-word]">
+          Suggested instead: <FileName name={row.pending.source.name} />, a newly adopted master. This decision stands until you accept it.
         </span>
       ) : null}
     </span>
@@ -240,11 +259,6 @@ export function ViewCalibrationArea() {
           {announcement}
         </p>
         {error ? <ActionError message={error.message} onRetry={error.retry} /> : null}
-        {complete ? (
-          <Notice tone="info" title="This View is Complete">
-            Calibration decisions are read-only. Reopen the View in its header to change them.
-          </Notice>
-        ) : null}
         {unsavedDraft ? (
           <Notice tone="info" title="Following the unsaved selection">
             These requirements follow this View's unsaved changes. Save View before Review preparation; decisions made here are kept.
@@ -270,33 +284,31 @@ export function ViewCalibrationArea() {
                 Accepted inputs and exceptions are handed off with this View's preparation.
               </Notice>
             )}
-            {plan.groups.map((group) => (
-              <section key={group.key} aria-label={group.label} className="space-y-2">
-                <h3 className="text-sm font-semibold text-balance">{group.label}</h3>
-                <DataTable
-                  label={`Calibration requirements: ${group.label}`}
-                  rows={group.rows}
-                  columns={columns}
-                  getRowId={(row) => row.key}
-                  scroll="none"
-                  selection={{
-                    selected: selected.filter((key) => group.rows.some((r) => r.key === key)),
-                    onChange: (ids) => {
-                      const groupOffers = group.rows.filter((r) => offerKeys.includes(r.key)).map((r) => r.key)
-                      setDeselected((current) => [...current.filter((key) => !groupOffers.includes(key)), ...groupOffers.filter((key) => !ids.includes(key))])
-                    },
-                    // The shared table prefixes "Select" and disables decided rows; the name says why, matching the State column.
-                    rowLabel: (row) =>
-                      row.state === "suggested"
-                        ? `${KIND_LABEL[row.kind].toLowerCase()} suggestion for ${sessionLabel(row.member.session)}`
-                        : row.pending
-                          ? `${KIND_LABEL[row.kind].toLowerCase()} replacement suggestion for ${sessionLabel(row.member.session)} (the ${row.state} decision stays until you accept it)`
-                          : `${KIND_LABEL[row.kind].toLowerCase()} for ${sessionLabel(row.member.session)} (${row.state}, nothing to accept)`,
-                    isSelectable: (row) => offerKeys.includes(row.key) && !complete,
-                  }}
-                />
-              </section>
-            ))}
+            {/* One table with a header row per group, so every group shares the column widths. */}
+            <DataTable
+              label="Calibration requirements"
+              rows={plan.rows}
+              columns={columns}
+              getRowId={(row) => row.key}
+              scroll="none"
+              groups={{
+                key: (row) => row.groupKey,
+                label: (key, rows) => rows[0]?.groupLabel ?? key,
+                compare: (a, b) => plan.groups.findIndex((g) => g.key === a) - plan.groups.findIndex((g) => g.key === b),
+              }}
+              selection={{
+                selected,
+                onChange: (ids) => setDeselected(offerKeys.filter((key) => !ids.includes(key))),
+                // The shared table prefixes "Select" and disables decided rows; the name says why, matching the State column.
+                rowLabel: (row) =>
+                  row.state === "suggested"
+                    ? `${KIND_LABEL[row.kind].toLowerCase()} suggestion for ${sessionLabel(row.member.session)}`
+                    : row.pending
+                      ? `${KIND_LABEL[row.kind].toLowerCase()} replacement suggestion for ${sessionLabel(row.member.session)} (the ${row.state} decision stays until you accept it)`
+                      : `${KIND_LABEL[row.kind].toLowerCase()} for ${sessionLabel(row.member.session)} (${row.state}, nothing to accept)`,
+                isSelectable: (row) => offerKeys.includes(row.key) && !complete,
+              }}
+            />
           </>
         )}
       </PageBody>

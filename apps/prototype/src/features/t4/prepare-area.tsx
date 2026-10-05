@@ -21,6 +21,7 @@ import { membershipSummary, sessionLocationIds } from "@/domain/derive"
 import { fileAt, filesUnder } from "@/domain/disk"
 import type { Preparation, View } from "@/domain/types"
 import { RESULT_KIND_LABEL } from "@/features/t5/lib/files"
+import { PrototypeControls } from "@/features/t5/shared"
 import type { CommitResult } from "@/store/core"
 import { formatBytes, formatCount, formatDateTime, formatDuration, formatNight, plural } from "@/lib/format"
 import { useStore } from "@/store/core"
@@ -34,7 +35,7 @@ import { CRITERION_LABEL, FIELD_LABEL, handoffCountText, KIND_LABEL, METADATA_CH
 import { usePrepDraft, usePreparationPlan, useRouteView } from "./hooks"
 import { ApplicationSection, LocationSection, MetadataSection, ModeSection } from "./prepare-sections"
 import { LocateApplicationDialog } from "./profile-parts"
-import { PrototypeControls, PrototypeToggle } from "./prototype-controls"
+import { PrototypeToggle } from "./prototype-controls"
 
 // ---------------------------------------------------------------------------
 // Readiness
@@ -522,7 +523,7 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
               }
             >
               <p>{unavailable.text}</p>
-              {view.completedAt ? <p className="mt-1">This View is Complete: the review shows where each input can be read now, and preparing from another location needs Reopen first.</p> : null}
+              {view.completedAt ? <p className="mt-1">The review shows where each input can be read now; preparing from another location needs Reopen View in the header first.</p> : null}
               <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto" aria-label="Unavailable inputs">
                 {unavailable.inputs.map((input) => (
                   <li key={input.path} className="flex flex-wrap items-center gap-2">
@@ -670,7 +671,7 @@ export function ViewPrepareArea() {
       <PageBody>
         {locked ? (
           <p id="review-disabled" className="text-xs text-muted-foreground">
-            {complete ? "This View is Complete. Reopen it in the header before preparing a new revision." : "A preparation is running. Choices are locked until it settles."}
+            {complete ? "Reopen View in the header before preparing a new revision." : "A preparation is running. Choices are locked until it settles."}
           </p>
         ) : !plan.revision ? (
           <p id="review-disabled" className="text-xs text-muted-foreground">
@@ -739,55 +740,58 @@ export function ViewPrepareArea() {
             </Button>
           </Section>
         ) : null}
-        <PrototypeControls title="outside changes for this step">
-          <PrototypeToggle
-            label="Pause the next Prepare after one source snapshot"
-            detail="J24 P7: lets you change that source before the entry is written."
-            checked={world.pauseAfterSnapshot}
-            onChange={(value) => updateWorld((w) => ({ ...w, pauseAfterSnapshot: value }))}
-          />
-          {pausedItem?.path ? (
-            <div className="space-y-1.5 rounded-md border px-3 py-2">
-              <p className="text-xs">Paused after the snapshot of:</p>
-              <PathText path={pausedItem.path} />
-              <Button size="sm" variant="outline" onClick={() => modifyFileExternally(pausedItem.path!)}>
-                Overwrite this source with same-size different bytes
-              </Button>
-            </div>
-          ) : null}
-          {driftItems.map((item) => (
-            <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
-              <PathText path={item.path!} className="min-w-0 flex-1" />
-              <Button size="sm" variant="outline" onClick={() => restoreFileExternally(item.path!)}>
-                Restore original bytes
-              </Button>
-            </div>
-          ))}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" disabled={lastThree.length === 0} onClick={() => lastThree.forEach((p) => setFolderAccess(p, !threeDenied))}>
-              {threeDenied ? "Restore read access to 3 source frames" : "Deny read access to 3 source frames"}
-            </Button>
-            <span className="text-xs text-muted-foreground">J24 S15: the last {lastThree.length} light frames of this View.</span>
-          </div>
-          {p8Path ? (
-            <div className="space-y-1.5 rounded-md border px-3 py-2">
-              <p className="text-xs text-muted-foreground">J24 P8 (S10a, S11): a prepared frame changed in place, outside PlateVault.</p>
-              <PathText path={p8Path} />
-              <Button size="sm" variant="outline" onClick={() => (p8Changed ? restoreFileExternally(p8Path) : modifyFileExternally(p8Path))}>
-                {p8Changed ? "Restore this frame's original bytes" : "Overwrite this frame with a same-size variant"}
-              </Button>
-            </div>
-          ) : null}
-          {app ? (
+        {/* The same Prototype controls section and label as Results (T5), so the two steps read alike. */}
+        <PrototypeControls title="Prototype: outside changes for this step" description="Changes the simulated disk and computer for the J24 steps; it never writes the catalog.">
+          <div className="w-full space-y-3">
+            <PrototypeToggle
+              label="Pause the next Prepare after one source snapshot"
+              detail="J24 P7: lets you change that source before the entry is written."
+              checked={world.pauseAfterSnapshot}
+              onChange={(value) => updateWorld((w) => ({ ...w, pauseAfterSnapshot: value }))}
+            />
+            {pausedItem?.path ? (
+              <div className="space-y-1.5 rounded-md border px-3 py-2">
+                <p className="text-xs">Paused after the snapshot of:</p>
+                <PathText path={pausedItem.path} />
+                <Button size="sm" variant="outline" onClick={() => modifyFileExternally(pausedItem.path!)}>
+                  Overwrite this source with same-size different bytes
+                </Button>
+              </div>
+            ) : null}
+            {driftItems.map((item) => (
+              <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
+                <PathText path={item.path!} className="min-w-0 flex-1" />
+                <Button size="sm" variant="outline" onClick={() => restoreFileExternally(item.path!)}>
+                  Restore original bytes
+                </Button>
+              </div>
+            ))}
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => updateApp(app.id, { present: !app.present })}>
-                {app.present ? `Move ${app.name} out of ${app.path}` : `Put ${app.name} back at ${app.path}`}
+              <Button size="sm" variant="outline" disabled={lastThree.length === 0} onClick={() => lastThree.forEach((p) => setFolderAccess(p, !threeDenied))}>
+                {threeDenied ? "Restore read access to 3 source frames" : "Deny read access to 3 source frames"}
               </Button>
-              <Button size="sm" variant="outline" disabled={app.launchFails} onClick={() => updateApp(app.id, { launchFails: true })}>
-                {app.launchFails ? "Next launch fails" : "Make the next launch fail"}
-              </Button>
+              <span className="text-xs text-muted-foreground">J24 S15: the last {lastThree.length} light frames of this View.</span>
             </div>
-          ) : null}
+            {p8Path ? (
+              <div className="space-y-1.5 rounded-md border px-3 py-2">
+                <p className="text-xs text-muted-foreground">J24 P8 (S10a, S11): a prepared frame changed in place, outside PlateVault.</p>
+                <PathText path={p8Path} />
+                <Button size="sm" variant="outline" onClick={() => (p8Changed ? restoreFileExternally(p8Path) : modifyFileExternally(p8Path))}>
+                  {p8Changed ? "Restore this frame's original bytes" : "Overwrite this frame with a same-size variant"}
+                </Button>
+              </div>
+            ) : null}
+            {app ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => updateApp(app.id, { present: !app.present })}>
+                  {app.present ? `Move ${app.name} out of ${app.path}` : `Put ${app.name} back at ${app.path}`}
+                </Button>
+                <Button size="sm" variant="outline" disabled={app.launchFails} onClick={() => updateApp(app.id, { launchFails: true })}>
+                  {app.launchFails ? "Next launch fails" : "Make the next launch fail"}
+                </Button>
+              </div>
+            ) : null}
+          </div>
         </PrototypeControls>
       </PageBody>
     </div>
