@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { membershipSummary, sessionLocationIds } from "@/domain/derive"
 import { fileAt, filesUnder } from "@/domain/disk"
 import type { Preparation, View } from "@/domain/types"
+import { RESULT_KIND_LABEL } from "@/features/t5/lib/files"
 import type { CommitResult } from "@/store/core"
 import { formatBytes, formatCount, formatDateTime, formatDuration, formatNight, plural } from "@/lib/format"
 import { useStore } from "@/store/core"
@@ -176,6 +177,23 @@ function ReviewPanel({ view, plan, confirmed, onConfirmChange, onPrepare, error 
                   </li>
                 )
               })}
+              {plan.entries
+                .filter((e) => e.kind === "product")
+                .map((e) => {
+                  // Each product input with its kind, exact path and originating View, listed apart from raw sessions (RES-FR-05).
+                  const result = e.resultId ? catalog.results[e.resultId] : undefined
+                  const from = result ? catalog.views[result.viewId]?.name : undefined
+                  return (
+                    <li key={e.id} className="space-y-0.5 px-3 py-1.5">
+                      <span>
+                        {e.fileName} · {result?.kind ? RESULT_KIND_LABEL[result.kind] : "Accepted Result"}
+                        {result?.channel ? ` · ${result.channel}` : ""}
+                        {from ? <span className="text-muted-foreground"> · from View {from}</span> : null}
+                      </span>
+                      <PathText path={e.sourcePath} className="text-xs text-muted-foreground" />
+                    </li>
+                  )
+                })}
             </ul>
           </section>
         </div>

@@ -60,8 +60,8 @@ export function simulateApplicationOutput(view: View): ControlOutcome {
       exposureS: assets.reduce((sum, a) => sum + a.observed.exposureS, 0),
     })
   }
-  // A master flat generated from raw flats of the first channel (J26 P1, H4).
-  const firstChannel = [...byChannel.keys()][0] ?? "L"
+  // A master flat generated from the Ha raw flats when the View has Ha lights, else the first channel's (J26 P1, H4).
+  const firstChannel = byChannel.has("Ha") ? "Ha" : ([...byChannel.keys()][0] ?? "L")
   add(`${out}/master/master_flat_${firstChannel}.fit`, sample.widthPx * sample.heightPx * 4, "fits", {
     ...sample,
     imageType: "master-flat",

@@ -23,6 +23,7 @@ import type {
   MembershipContent,
   MembershipRevision,
   MetadataDecision,
+  ResultKind,
   ResultRecord,
   Session,
   SessionId,
@@ -643,6 +644,14 @@ export const METADATA_CHOICE_LABEL: Record<MetadataChoice, string> = {
 
 export const MODE_LABEL: Record<InputMode, string> = { linked: "Linked View", "direct-source": "Direct source", copy: "Copy", clone: "Clone" }
 
+/** Plural product-input kinds, as a profile's capability names them. */
+export const PRODUCT_KIND_LABEL: Record<ResultKind, string> = {
+  "final-image": "final images",
+  "linear-integration": "linear integrations",
+  "channel-product": "channel products",
+  "mosaic-panel": "mosaic panels",
+}
+
 export interface PlanChoices {
   mode: InputMode | null
   linkType: "symlink" | "hardlink"
@@ -953,14 +962,18 @@ export function preparationPlan({ disk, catalog, view, lastViewParent, choices, 
     blocking: true,
     detail: revision ? `Revision ${revision.revision}, saved` : "Save the View first: Review preparation uses a saved revision.",
   })
+  const products = (content?.productInputs ?? []).map((id) => catalog.results[id]).filter((r): r is ResultRecord => r !== undefined)
   checks.push({
     id: "calibration",
     label: "Calibration",
-    ok: calibration.blocking.length === 0 && members.length > 0,
+    // A View of accepted Results only has no light to calibrate (RES-FR-05).
+    ok: calibration.blocking.length === 0 && (members.length > 0 || products.length > 0),
     blocking: true,
     detail:
       members.length === 0
-        ? "No light sessions in this View."
+        ? products.length > 0
+          ? "No light sessions: product inputs are handed off without calibration."
+          : "No light sessions in this View."
         : calibration.blocking.length === 0
           ? handoffCountText(calibration, calibrationSources.length)
           : `${plural(calibration.blocking.length, "requirement")} not resolved: ${calibration.blocking
@@ -968,6 +981,21 @@ export function preparationPlan({ disk, catalog, view, lastViewParent, choices, 
               .map((r) => `${formatNight(r.member.session.night)} ${KIND_LABEL[r.kind].toLowerCase()} ${r.drift ? "drifted" : r.state}`)
               .join(", ")}${calibration.blocking.length > 3 ? "…" : ""}`,
   })
+  if (products.length > 0 && profile) {
+    // A product input needs recorded capability evidence for its kind; nothing is converted (D04, RES-FR-05, RES-AC-05).
+    const unsupported = products.filter((r) => r.kind === null || !profile.capability.productInputKinds.includes(r.kind))
+    const kinds = [...new Set(products.map((r) => (r.kind ? PRODUCT_KIND_LABEL[r.kind] : "unknown kind")))]
+    checks.push({
+      id: "products",
+      label: "Product inputs",
+      ok: unsupported.length === 0,
+      blocking: true,
+      detail:
+        unsupported.length === 0
+          ? `${profile.name} reads ${kinds.join(" and ")}`
+          : `Refused: ${profile.name} has no recorded support for ${unsupported.map((r) => `${fileName(r.path)} (${r.kind ? PRODUCT_KIND_LABEL[r.kind] : "unknown kind"})`).join(", ")}. Nothing is converted; choose another application or remove ${unsupported.length === 1 ? "it" : "them"} from the View.`,
+    })
+  }
   checks.push({ id: "profile", label: "Application", ok: profile !== null, blocking: true, detail: profile ? profile.name : "Choose an application." })
   const undecided = diffs.filter((d) => !metadata[d.key])
   const badPatch = diffs.filter((d) => metadata[d.key] === "patched-copy" && mode !== "copy" && mode !== "clone")

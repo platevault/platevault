@@ -14,14 +14,7 @@ import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { locateExecutable } from "./actions"
 import { T4Badge } from "./badges"
-import { MODE_LABEL } from "./domain"
-
-const RESULT_KIND_LABEL: Record<string, string> = {
-  "final-image": "final images",
-  "linear-integration": "linear integrations",
-  "channel-product": "channel products",
-  "mosaic-panel": "mosaic panels",
-}
+import { MODE_LABEL, PRODUCT_KIND_LABEL } from "./domain"
 
 export function CapabilityList({ profile }: { profile: ApplicationProfile }) {
   const c = profile.capability
@@ -41,7 +34,7 @@ export function CapabilityList({ profile }: { profile: ApplicationProfile }) {
           },
           { label: "Input modes", value: c.inputModes.length ? c.inputModes.map((m) => MODE_LABEL[m]).join(", ") : "None recorded" },
           { label: "Direct source", value: c.directSource === "file-list" ? "Exact file list" : c.directSource === "whole-folder" ? "Whole folders only" : "Not supported" },
-          { label: "Product inputs", value: c.productInputKinds.length ? c.productInputKinds.map((k) => RESULT_KIND_LABEL[k] ?? k).join(", ") : "None recorded" },
+          { label: "Product inputs", value: c.productInputKinds.length ? c.productInputKinds.map((k) => PRODUCT_KIND_LABEL[k]).join(", ") : "None recorded" },
           { label: "Corrected values", value: c.correctedMetadata === "configuration" ? "Through configuration" : "Not through configuration" },
         ]}
       />
