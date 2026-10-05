@@ -11,15 +11,15 @@
 
 use std::sync::Arc;
 
-use persistence_library::{CorrectionPreview, LocationFailure, SessionQuery, SessionSummary};
+use persistence_library::{CorrectionPreview, LocationFailure, SessionQuery};
 use platevault_core::grouping::group_assets;
 use platevault_core::library::{ConfirmedCorrection, InventoryProbe, Library, LibrarySession};
 use platevault_core::targets::{user_target, TargetQuery, TargetSearchHit, UserTargetInput};
 use platevault_core::{
     Asset, Association, AssociationState, CorrectionInput, Equipment, ErrorResponse, ExpectedAsset,
     ExpectedSession, LibraryError, Location, LocationRole, NativePath, Provenance, Quality,
-    RemapReview, RetireReview, Revision, ScanOperation, TargetCandidate, TargetCone,
-    TargetCoverage, TargetRecord,
+    RemapReview, RetireReview, Revision, ScanOperation, SessionSummary, TargetCandidate,
+    TargetCone, TargetCoverage, TargetRecord,
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;

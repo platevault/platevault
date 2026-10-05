@@ -2229,7 +2229,7 @@ async fn a_retired_folder_registers_again_and_counts_each_capture_once() {
 }
 
 /// The current session holding every one of these assets.
-fn session_holding(summaries: &[persistence_library::SessionSummary], assets: &[Asset]) -> Session {
+fn session_holding(summaries: &[platevault_model::SessionSummary], assets: &[Asset]) -> Session {
     let ids = ids_of(assets);
     let holders: Vec<&Session> = summaries
         .iter()
