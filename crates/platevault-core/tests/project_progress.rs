@@ -475,6 +475,24 @@ async fn copies_count_once_offline_keeps_its_share_and_retired_copies_leave() {
     assert!(!basis.progress.provisional, "{:?}", basis.progress);
     assert_eq!(evidence(&basis, session.id).capture_sites, [site(BACKYARD, 3)]);
 
+    // Rejecting only the copy that is not counted still rejects the capture.
+    let usable: Vec<Asset> = [
+        copy_named(&library, t7_id, "ha_1.fits").await,
+        copy_named(&library, t7_id, "ha_2.fits").await,
+        copy_named(&library, t7_id, "ha_3.fits").await,
+    ]
+    .into();
+    mark_usable(&library, &usable.iter().collect::<Vec<_>>()).await;
+    let ha = row(&catalog.project_progress(project.id).await.unwrap(), "Ha").clone();
+    assert_eq!((ha.usable_frames, ha.accepted_frames), (3, 3), "{ha:?}");
+    let uncounted = copy_named(&library, t7_id.max(nas_id), "ha_1.fits").await;
+    let project = reject(&library, &project, &uncounted, true).await;
+    let basis = catalog.project_progress(project.id).await.unwrap();
+    let rejected = row(&basis, "Ha");
+    assert_eq!((rejected.accepted_frames, rejected.accepted_seconds), (2, us(600)), "{rejected:?}");
+    assert_eq!((rejected.captured_frames, rejected.captured_seconds), (3, us(900)));
+    assert_eq!((rejected.usable_frames, rejected.usable_seconds), (3, us(900)));
+
     // T7 goes offline: its only copy keeps its last-observed contribution, labelled.
     let unplugged = temp.path().join("T7 unplugged");
     std::fs::rename(&t7, &unplugged).unwrap();
@@ -498,6 +516,56 @@ async fn copies_count_once_offline_keeps_its_share_and_retired_copies_leave() {
     assert_eq!(ha.availability, [share(Availability::Available, 600, 2)]);
     assert_eq!(basis.progress.covered_location_ids, [nas_id]);
     std::fs::rename(&unplugged, &t7).unwrap();
+    originals.assert_unchanged();
+}
+
+/// PRJ-FR-08: a link or rejection batch holding one stale expectation commits
+/// nothing, not even its valid entries.
+#[tokio::test]
+async fn a_batch_with_one_stale_expectation_commits_nothing() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("Backyard");
+    std::fs::create_dir(&root).unwrap();
+    let mut originals = Originals::default();
+    originals.write(&root, "n1_ha.fits", &Frame::light("Ha", "300", "2026-09-18T22:00:00"));
+    originals.write(&root, "n2_ha.fits", &Frame::light("Ha", "300", "2026-09-19T22:00:00"));
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let location = indexed(&library, &root, "Backyard").await.id;
+    let catalog = library.catalog();
+    let target = ngc7000(&library).await;
+    let first = session_of(&library, location, "n1_ha.fits").await;
+    let second = session_of(&library, location, "n2_ha.fits").await;
+    assert_ne!(first.id, second.id, "one session per night");
+    let stale_second = expected_session(&second);
+    catalog
+        .associate_target(std::slice::from_ref(&stale_second), target.candidate.id)
+        .await
+        .unwrap();
+    let project = project_linking(&library, &target, "NGC 7000 Ha", &[]).await;
+
+    let links = [
+        SessionLinkInput { session: expected_session(&first), panel_id: None },
+        SessionLinkInput { session: stale_second, panel_id: None },
+    ];
+    let error = catalog.link_sessions(project.id, project.revision, &links).await.unwrap_err();
+    assert!(matches!(error, LibraryError::Conflict { .. }), "{error:?}");
+    let unchanged = catalog.project(project.id).await.unwrap();
+    assert_eq!((unchanged.revision, unchanged.links.len()), (project.revision, 0));
+
+    let second = session_of(&library, location, "n2_ha.fits").await;
+    let project = project_linking(&library, &target, "NGC 7000 Ha 2", &[&first, &second]).await;
+    let stale_n2 = copy_named(&library, location, "n2_ha.fits").await;
+    mark_usable(&library, &[&stale_n2]).await;
+    let valid_n1 = copy_named(&library, location, "n1_ha.fits").await;
+    let expected = [expected_of(&valid_n1), expected_of(&stale_n2)];
+    let error = catalog
+        .set_project_rejection(project.id, project.revision, &expected, true)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, LibraryError::Conflict { .. }), "{error:?}");
+    let unchanged = catalog.project(project.id).await.unwrap();
+    assert_eq!((unchanged.revision, unchanged.rejections.len()), (project.revision, 0));
+    assert_eq!(row(&catalog.project_progress(project.id).await.unwrap(), "Ha").rejected_frames, 0);
     originals.assert_unchanged();
 }
 

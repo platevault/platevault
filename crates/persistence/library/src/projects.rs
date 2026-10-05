@@ -25,8 +25,8 @@ use uuid::Uuid;
 
 use super::{
     check_expected_assets, check_expected_sessions, conflict, current_member_assets, db_revision,
-    from_json, is_light, json_ids, load_association, load_equipment, load_session_row, load_target,
-    now, oldest, parse_uuid, require_revision, revision, successors_of, summarize_rows, to_json,
+    from_json, json_ids, load_association, load_equipment, load_session_row, load_target, now,
+    oldest, parse_uuid, require_revision, revision, successors_of, summarize_rows, to_json,
     CaptureView, Catalog, Result, MAX_PAGE,
 };
 
@@ -1003,7 +1003,7 @@ fn tally_progress(
         };
         let exposure = primary.effective.exposure_seconds.and_then(Microseconds::from_seconds);
         tallies.entry(holder[&primary.id]).or_default().count(primary, exposure);
-        let light = is_light(&primary.effective);
+        let light = primary.effective.is_light();
         if light == Some(false) {
             continue;
         }
