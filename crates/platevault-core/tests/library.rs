@@ -553,6 +553,50 @@ fn target_of(
         .map(|association| (association.state.clone(), association.subject_id))
 }
 
+/// Light integration reads IMAGETYP exactly as grouping does: OBJECT (written by
+/// ACP and `MaxIm DL`) and SCIENCE frames are lights. Grouping puts them in one
+/// session with a Light Frame, and captured integration counts each of them like it.
+#[tokio::test]
+async fn object_and_science_frames_count_toward_light_integration_like_light_frames() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("captures");
+    std::fs::create_dir(&root).unwrap();
+    let mut originals = Vec::new();
+    let frames = [
+        ("light.fits", "'Light Frame'", "2026-09-18T22:00:00"),
+        ("object.fits", "'OBJECT'", "2026-09-18T22:05:00"),
+        ("science.fits", "'SCIENCE'", "2026-09-18T22:10:00"),
+    ];
+    for (name, image_type, start) in frames {
+        let mut fields = m31_frame(start);
+        fields[0].1 = image_type.into();
+        let fields: Vec<(&str, &str)> =
+            fields.iter().map(|(key, value)| (*key, value.as_str())).collect();
+        let path = root.join(name);
+        support::fits(&path, &fields).unwrap();
+        originals.push((path.clone(), support::digest(&path)));
+    }
+    let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
+    let location = library
+        .register_location(NativePath::from_path(&root), "Captured".into(), LocationRole::Captures)
+        .await
+        .unwrap();
+    assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
+    let (summary, detail) = only_session(&library).await;
+    assert_eq!(summary.capture_count, 3, "grouping reads all three as one light session");
+    let m31 = target_of(&detail).unwrap().1.unwrap();
+    let coverage = library.catalog().target_coverage(m31).await.unwrap();
+    let counted = (
+        summed(&coverage, |c| c.captured_seconds),
+        summed(&coverage, |c| c.unreviewed_seconds),
+        coverage.contributions.iter().map(|c| c.unknown_exposure_count).sum::<u64>(),
+    );
+    assert_eq!(counted, (900.0, 900.0, 0), "{coverage:?}");
+    for (path, digest) in &originals {
+        assert_eq!(&support::digest(path), digest, "originals unchanged");
+    }
+}
+
 #[tokio::test]
 async fn a_partial_filter_correction_refreshes_every_successor_session() {
     let temp = tempfile::tempdir().unwrap();

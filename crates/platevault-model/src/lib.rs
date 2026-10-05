@@ -1,10 +1,14 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
+use std::sync::LazyLock;
 
-use metadata_core::RawFileMetadata;
+use metadata_core::{
+    v1_normalization_table, FrameType, ImageTypNormalizationTable, RawFileMetadata,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -521,6 +525,60 @@ impl From<&RawFileMetadata> for CaptureMetadata {
             mechanical_rotation_deg: finite(raw.rotator_angle_deg),
             focal_length_mm: finite(raw.focal_length_mm),
             pixel_size_um: finite(raw.pixel_size_um),
+        }
+    }
+}
+
+/// The frame type capture evidence records in its effective IMAGETYP: the one
+/// classification that capture grouping keys sessions by and integration totals
+/// count light frames by.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ImageTypeEvidence<'a> {
+    /// No IMAGETYP was recorded.
+    Absent,
+    /// IMAGETYP is blank.
+    Blank,
+    /// A frame type of the shared IMAGETYP normalization table.
+    Known(FrameType),
+    /// Trimmed NFC text that names no recognised frame type.
+    Unclassified(Cow<'a, str>),
+}
+
+impl CaptureMetadata {
+    /// Classify the effective IMAGETYP: trimmed NFC text looked up in the shared
+    /// normalization table.
+    #[must_use]
+    pub fn image_type_evidence(&self) -> ImageTypeEvidence<'_> {
+        static TABLE: LazyLock<ImageTypNormalizationTable> = LazyLock::new(v1_normalization_table);
+        let Some(value) = self.image_type.as_deref() else {
+            return ImageTypeEvidence::Absent;
+        };
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return ImageTypeEvidence::Blank;
+        }
+        let text = if unicode_normalization::is_nfc(trimmed) {
+            Cow::Borrowed(trimmed)
+        } else {
+            use unicode_normalization::UnicodeNormalization;
+            Cow::Owned(trimmed.nfc().collect())
+        };
+        match TABLE.normalize(&text) {
+            Some(frame) => ImageTypeEvidence::Known(frame),
+            None => ImageTypeEvidence::Unclassified(text),
+        }
+    }
+
+    /// Whether this is a light frame, by [`Self::image_type_evidence`]. `None`
+    /// when IMAGETYP is absent, blank or names no recognised frame type: such a
+    /// frame is unknown evidence, neither light nor calibration.
+    #[must_use]
+    pub fn is_light(&self) -> Option<bool> {
+        match self.image_type_evidence() {
+            ImageTypeEvidence::Known(frame) => Some(frame == FrameType::Light),
+            ImageTypeEvidence::Absent
+            | ImageTypeEvidence::Blank
+            | ImageTypeEvidence::Unclassified(_) => None,
         }
     }
 }

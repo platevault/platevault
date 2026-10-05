@@ -5130,15 +5130,6 @@ fn counts_toward_coverage(state: &AssociationState, evidence: &[EvidenceItem]) -
     }
 }
 
-/// Light status from the effective frame type; `None` when unknown.
-fn is_light(metadata: &CaptureMetadata) -> Option<bool> {
-    let image_type = metadata.image_type.as_deref()?.trim().trim_matches('\'').trim();
-    if image_type.is_empty() {
-        return None;
-    }
-    Some(image_type.to_ascii_lowercase().contains("light"))
-}
-
 /// D16 state of one read request: logical captures of its assets, their
 /// duplicate candidates and the provisional state of their locations, each read
 /// with one indexed query (location state once per location).
@@ -5623,7 +5614,7 @@ fn contributions_for(
         BTreeMap::new();
     for CountedCapture { asset, quality, verified_at } in entries {
         let quality = *quality;
-        let light = is_light(&asset.effective);
+        let light = asset.effective.is_light();
         if light == Some(false) {
             continue;
         }

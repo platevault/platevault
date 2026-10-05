@@ -2900,6 +2900,56 @@ async fn a_capture_is_labelled_with_the_oldest_verification_of_its_usable_copies
     assert_eq!((tree(&fx.root), tree(&nas)), before, "originals unchanged");
 }
 
+/// Light integration reads IMAGETYP as grouping does: OBJECT and SCIENCE count
+/// exactly like Light Frame, a calibration frame counts toward no light total,
+/// and IMAGETYP text that names no recognised frame type stays unknown exposure
+/// instead of light.
+#[tokio::test]
+async fn coverage_counts_every_imagetyp_recognised_as_a_light_frame() {
+    let fx = Fixture::new();
+    let frames = [
+        ("light.fits", "Light Frame"),
+        ("object.fits", "OBJECT"),
+        ("science.fits", "Science"),
+        ("dark.fits", "DARK"),
+        ("unclassified.fits", "Lights"),
+    ];
+    for (name, image_type) in frames {
+        fx.write(name, image_type.as_bytes());
+    }
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    let files = frames
+        .iter()
+        .map(|(name, image_type)| {
+            let mut file = fx.scan_file(name);
+            file.metadata.image_type = Some((*image_type).into());
+            file
+        })
+        .collect();
+    rescan_files(&catalog, &location, files).await;
+    let sessions: Vec<ExpectedSession> = catalog
+        .list_sessions(&SessionQuery::default())
+        .await
+        .unwrap()
+        .iter()
+        .map(|summary| expected_session(&summary.session))
+        .collect();
+    assert_eq!(sessions.len(), frames.len());
+    let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
+    catalog.associate_target(&sessions, saved.candidate.id).await.unwrap();
+
+    let coverage = catalog.target_coverage(saved.candidate.id).await.unwrap();
+    let counted = (
+        coverage_sum(&coverage, |c| c.captured_seconds),
+        coverage_sum(&coverage, |c| c.unreviewed_seconds),
+        coverage.contributions.iter().map(|c| c.unknown_exposure_count).sum::<u64>(),
+    );
+    assert_eq!(counted, (900.0, 900.0, 1), "{coverage:?}");
+    assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
 /// Real probe that requests cancellation as soon as the first file is probed.
 struct CancelingProbe(std::sync::Arc<std::sync::atomic::AtomicBool>);
 

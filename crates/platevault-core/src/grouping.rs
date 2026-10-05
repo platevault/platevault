@@ -12,12 +12,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use metadata_core::{v1_normalization_table, ImageTypNormalizationTable};
 use time::{Date, Duration, Month, PrimitiveDateTime, Time, UtcOffset};
 use unicode_normalization::UnicodeNormalization;
 use uuid::Uuid;
 
-use crate::{Asset, CaptureKey, CaptureMetadata, GroupingResult, SessionCandidate};
+use crate::{
+    Asset, CaptureKey, CaptureMetadata, GroupingResult, ImageTypeEvidence, SessionCandidate,
+};
 
 /// Version prefix of the canonical key encoding.
 const KEY_VERSION: &str = "capture-v1";
@@ -37,10 +38,9 @@ pub const BASIS_UTC: &str = "utc-date-provisional";
 /// Sessions are ordered by key and their asset IDs ascending.
 #[must_use]
 pub fn group_assets(assets: &[Asset]) -> GroupingResult {
-    let table = v1_normalization_table();
     let mut sessions: BTreeMap<CaptureKey, Members> = BTreeMap::new();
     for asset in assets {
-        let capture = derive(&asset.effective, &table);
+        let capture = derive(&asset.effective);
         let members = sessions
             .entry(capture.key)
             .or_insert_with(|| Members { date_basis: capture.date_basis, ..Members::default() });
@@ -73,21 +73,18 @@ struct Capture {
     provisional: Vec<String>,
 }
 
-fn derive(meta: &CaptureMetadata, table: &ImageTypNormalizationTable) -> Capture {
+fn derive(meta: &CaptureMetadata) -> Capture {
     let mut key =
         KeyWriter { key: KEY_VERSION.to_owned(), provisional: Vec::new(), raw: &meta.raw };
 
-    match meta.image_type.as_deref().map(canonical_text) {
-        Some(Some(text)) => {
-            if let Some(frame) = table.normalize(&text) {
-                key.known("type", frame.as_str());
-            } else {
-                key.known("type", &format!("unclassified:{text}"));
-                key.note(format!("type: IMAGETYP {text:?} is not a recognised frame type"));
-            }
+    match meta.image_type_evidence() {
+        ImageTypeEvidence::Known(frame) => key.known("type", frame.as_str()),
+        ImageTypeEvidence::Unclassified(text) => {
+            key.known("type", &format!("unclassified:{text}"));
+            key.note(format!("type: IMAGETYP {text:?} is not a recognised frame type"));
         }
-        Some(None) => key.unknown("type", "IMAGETYP is blank"),
-        None => key.unknown_from_header("type", Some("IMAGETYP")),
+        ImageTypeEvidence::Blank => key.unknown("type", "IMAGETYP is blank"),
+        ImageTypeEvidence::Absent => key.unknown_from_header("type", Some("IMAGETYP")),
     }
 
     let night = night(meta);
