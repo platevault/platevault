@@ -14,6 +14,7 @@
 import { fileKey } from "@/domain/disk"
 import { listLocation, markScanStopped, markVerificationPending, readFiles, settleLocationScan } from "@/domain/indexing"
 import type { LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus } from "@/domain/types"
+import { plural } from "@/lib/format"
 import { nowIso, type PrototypeState, store } from "./core"
 
 export interface OperationHandler {
@@ -139,9 +140,19 @@ export function cancelOperation(id: OperationId) {
     if (!op || isSettled(op.status) || !op.canCancel) return s
     const done = op.items.filter((i) => i.status === "done").length
     let next = s
-    // A canceled index leaves the location it was reading incomplete, never provisional (LIB-FR-03).
-    const current = op.kind === "index" ? (op.payload as unknown as IndexPayload).current : null
-    if (current) next = { ...next, catalog: markScanStopped(next.catalog, current.locationId, nowIso()) }
+    if (op.kind === "index") {
+      const { current } = op.payload as unknown as IndexPayload
+      // A canceled index leaves the location it was reading incomplete, never provisional (LIB-FR-03).
+      if (current) next = { ...next, catalog: markScanStopped(next.catalog, current.locationId, nowIso()) }
+      const items = op.items.map((item): OperationItem => {
+        if (item.id === current?.locationId) {
+          return { ...item, status: "uncertain", detail: `Canceled after ${plural(current.observed.length, "file")}. Incomplete until indexed again.` }
+        }
+        if (item.status === "pending") return { ...item, status: "skipped", detail: "Not started: indexing was canceled." }
+        return item
+      })
+      next = patchOperation(next, id, { items })
+    }
     return settleOperation(
       next,
       id,
@@ -213,6 +224,8 @@ interface IndexPayload {
 }
 
 const BATCH = 14
+/** Files per tick while `faults.slowIndexing` is on. */
+const SLOW_BATCH = 2
 
 function startNextLocation(state: PrototypeState, op: Operation, payload: IndexPayload): { state: PrototypeState; payload: IndexPayload } {
   let next = state
@@ -261,7 +274,7 @@ const indexHandler: OperationHandler = {
     const current = payload.current!
     const location = next.catalog.locations[current.locationId]!
     const volumeMounted = next.disk.volumes[location.volumeId]?.mounted
-    const batchPaths = volumeMounted ? current.pending.slice(0, BATCH) : []
+    const batchPaths = volumeMounted ? current.pending.slice(0, next.faults.slowIndexing ? SLOW_BATCH : BATCH) : []
     const files = batchPaths.map((p) => next.disk.files[fileKey(location.volumeId, p)]).filter((f) => f !== undefined)
     if (files.length > 0) next = { ...next, catalog: readFiles(next.catalog, location, files, nowIso()) }
     const observed = [...current.observed, ...batchPaths]
@@ -338,6 +351,8 @@ export function startIndexing(locationIds: LocationId[]): OperationId {
     unit: "files",
     items: locations.map((l) => ({ id: l.id, label: l.displayName, path: l.path, status: "pending", phase: null, detail: null })),
     payload: payload as unknown as Record<string, unknown>,
+    // Pause stops between batches; Resume continues from `current.pending`.
+    canPause: true,
     canCancel: true,
   })
   return id

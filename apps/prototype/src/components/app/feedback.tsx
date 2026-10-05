@@ -141,8 +141,9 @@ export function SaveState({ state, onRetry, onReview, message }: SaveStateProps)
 /**
  * Renders a value that is not known. Unknown is never shown as zero, empty
  * or absent. Standard labels: "Unknown", "Not measured", "Position unknown",
- * "FOV unknown", "Not set". A reason is a focusable tooltip, so keyboard and
- * pointer users can both reach it.
+ * "FOV unknown", "Not set". A reason makes it a button (the tooltip trigger)
+ * named "label: reason", so keyboard, pointer and screen-reader users all
+ * reach the reason (WCAG 4.1.2).
  */
 export function UnknownValue({ label = "Unknown", reason }: { label?: string; reason?: string }) {
   const content = (
@@ -156,8 +157,8 @@ export function UnknownValue({ label = "Unknown", reason }: { label?: string; re
   return (
     <Tooltip>
       <TooltipTrigger
-        render={<span tabIndex={0} />}
-        className="inline-flex items-center gap-1 rounded-sm text-muted-foreground underline decoration-dotted underline-offset-2"
+        type="button"
+        className="inline-flex cursor-help items-center gap-1 rounded-sm text-left text-muted-foreground underline decoration-dotted underline-offset-2"
       >
         {content}
       </TooltipTrigger>

@@ -398,7 +398,7 @@ Overlays have no backdrop blur.
 | Component | File | Variants / props | Applicable states (N/A reason) |
 |---|---|---|---|
 | `StatusBadge` | status.tsx | `kind` × `value` from `STATUS` (availability, access, scanScope, role, quality, association, operation, item, view, preparation, assignment, match, lineage, acceptance, processing, content, custody, master, measurement, save, reminders, trash) | default; selected via row; others N/A: not interactive |
-| `PageHeader`, `Section`, `PageBody` | page.tsx | eyebrow, meta, actions; section level 2/3; `PageHeader` names the browser tab (`useDocumentTitle`: "Sessions · View workspace · PlateVault prototype") | default only: structural |
+| `PageHeader`, `Section`, `PageBody` | page.tsx | eyebrow, meta, actions; section level 2/3; the title block takes the free width and wraps, so actions stay top-right beside long descriptions; `PageHeader` names the browser tab (`useDocumentTitle`: "Sessions · View workspace · PlateVault prototype") | default only: structural |
 | `ListDetail` | page.tsx | list label | default; selected item is the list's concern |
 | `StepIndicator` | page.tsx | current, completed | default, selected (current step); not interactive |
 | `PlaceholderPage` | page.tsx | track owner | scaffold only; tracks replace it |
@@ -406,19 +406,21 @@ Overlays have no backdrop blur.
 | `Notice` | feedback.tsx | info, offline, warning, refusal (role=alert) | default; actions inherit button states |
 | `ActionError` | feedback.tsx | message, Retry | error |
 | `SaveState` | feedback.tsx | saved, unsaved, saving, failed (Retry), stale (Review current revision) | loading (saving), error (failed, stale) |
-| `UnknownValue` | feedback.tsx | Unknown, Not measured, Position unknown, FOV unknown, Not set; a `reason` is a focusable tooltip (dotted underline) | default, focus-visible when it has a reason |
+| `UnknownValue` | feedback.tsx | Unknown, Not measured, Position unknown, FOV unknown, Not set; a `reason` makes it a button (tooltip trigger, dotted underline) named "label: reason" | default, focus-visible when it has a reason |
 | `TableSkeleton`, `DetailSkeleton` | feedback.tsx | rows, columns; `role=status` with sr-only label text | loading |
-| `KeyValueList` | data.tsx | mono, source | default |
+| `KeyValueList` | data.tsx | mono, source (mono, wraps); `columns={2}`. Layout is a container query on the list's own width, so it follows text zoom: two columns from 46rem, label beside value from 22rem, label above value below | default |
 | `EvidenceList` | data.tsx | agrees / conflicts / unknown | default |
 | `Stat`, `PathText` | data.tsx | hint; paths wrap by default, `truncate` only in table cells whose detail pane shows the full path | default |
 | `ChannelCoverage` | data.tsx | breakdown, goal | default, empty (0h 00m shown, never hidden) |
 | `FilterChips` | data.tsx | chips, match label; stays mounted so the live count announces; removing a chip focuses the next chip, else the previous, else the page search (`data-page-search`), else the group | default, hover, focus-visible, active; empty shows nothing visible |
-| `DataTable` | data-table.tsx | columns (sort, `truncate`, row header), controlled selection, active row (inset accent bar), `scroll` frame with pinned header, empty, loading (keeps the real header) | default, hover, focus-visible, active, disabled (row not selectable), loading, empty, selected (and selected + hover); error is the caller's `Notice` |
+| `DataTable` | data-table.tsx | columns (sort, `truncate`, row header), controlled selection, active row (inset accent bar), `scroll` frame with pinned header, empty, loading (keeps the real header), `groups` (`key`, `label`, `compare`: group header rows, `th scope="rowgroup"`, in one table so columns line up across groups; sort applies within groups, select-all and ↑/↓ span groups). Use `groups` instead of one table per group | default, hover, focus-visible, active, disabled (row not selectable), loading, empty, selected (and selected + hover); error is the caller's `Notice` |
 | `TableToolbar` | data-table.tsx | search (`data-page-search`, focused by `/`), filters, actions | default, focus-visible; empty N/A |
 | `SelectionBar` | data-table.tsx | count, "Selected outside current filters: N", Show selected, Clear selection, bulk actions | selected; renders nothing when empty |
 | `ConfirmDialog` | confirm-dialog.tsx | changes, unchanged, tone, CommitResult error | default, focus-visible, error (stays open with Retry); loading N/A: commits are synchronous |
-| `OperationPanel` | operation-panel.tsx | Pause, Resume, Retry, Cancel by kind; progressbar keeps a stable name, the count is its `aria-valuetext` | loading (running), error (failed/blocked items), empty (no items), success, partial, interrupted |
+| `OperationPanel` | operation-panel.tsx | Pause, Resume, Retry, Cancel by kind; `headingLevel` (2/3/4, default 3: pass 2 directly under the page h1); a pressed control that is replaced hands focus to its replacement, else to the panel title; progressbar keeps a stable name, the count is its `aria-valuetext` | loading (running), error (failed/blocked items), empty (no items), success, partial, interrupted |
 | `FolderPicker` | folder-picker.tsx | simulated OS folder chooser: volumes (offline shown with reason), breadcrumb, Up, child folders including empty ones, denied folders marked; returns a path, writes nothing | default, hover, focus-visible, active, disabled (offline volume, Up at a volume root), empty (no subfolders), error (access denied: listed with a Notice, still choosable), selected (current volume `aria-current`); loading N/A: the simulated disk is synchronous |
+
+Route changes (`MainArea`, shell.tsx): when the activated control leaves with the old page, focus moves to the URL anchor, else the page h1, else `#main`; a surviving control (sidebar link, View tab) keeps focus; the new document title is announced in a polite live region. Search-param changes never move focus.
 
 Base UI usage notes (verified in the running build):
 
@@ -430,6 +432,14 @@ Base UI usage notes (verified in the running build):
   `aria-hidden="true"` for forms; snapshots list it, assistive technology does not.
 - `AlertDialog` puts initial focus on Cancel; the destructive action is never
   the default.
+- `DialogContent` and `AlertDialogContent` are at most the viewport height
+  minus 2rem and the safe-area insets, and scroll inside; their footers are
+  sticky, so a tall dialog's actions stay reachable. A footer with `m-0` in an
+  unpadded dialog passes `bottom-0` (FolderPicker does).
+- `Button render={<Link to … />}` (or `<a href>`) renders a plain link with
+  the button's look: no `role="button"`, no `type`, and no Base UI
+  `nativeButton` warning; Enter follows it, Space does not. Such a link
+  cannot be disabled. Any other `render` target keeps button behaviour.
 
 Shell components (`src/app/*`): `AppShell`, `SetupShell`, sidebar, status area,
 `CommandPalette`, `ShortcutsDialog`, `SimulationSheet` / `SimulationControls`,
@@ -653,13 +663,17 @@ exact need. It does not edit the file or work around it.
   adoption), fail the next Target resolver lookup (LIB-AC-12), set the
   PlateVault clock (`faults.clockOffsetMs`, honoured by `nowIso()` and kept
   across a reload, J29 P4), choose the next notification permission answer,
-  reset to the empty or demo seed. Operations honour these: writes into a
+  index slowly (`faults.slowIndexing`: 2 files per tick instead of 14, so
+  provisional browsing can be driven at human speed, J19 S6), reset to the
+  empty or demo seed. Operations honour these: writes into a
   `readOnlyPaths` entry fail, a handler that verifies hashes consumes
   `faults.failNextHashVerification`, and a resolver lookup consumes
-  `faults.failNextResolverLookup`.
-- Indexing that stops early (Cancel, or the volume goes offline) leaves the
-  location and its provisional sessions `incomplete`, never complete
-  (LIB-FR-03).
+  `faults.failNextResolverLookup`. Saved data missing a newer fault loads it
+  at its default.
+- Indexing can be paused between batches; Resume continues from the files not
+  yet read. Indexing that stops early (Cancel, from running or paused, or the
+  volume goes offline) leaves the location and its provisional sessions
+  `incomplete`, never complete (LIB-FR-03).
 - Production computes measurements and planning windows in Rust (PIX, PLAN-FR-08);
   the prototype uses `src/domain/measurement.ts` and track-owned simplified
   calculations, labelled "prototype calculation".

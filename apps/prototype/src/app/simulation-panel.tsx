@@ -59,10 +59,12 @@ function ToggleRow({
         <Label htmlFor={id} className="font-normal">
           {label}
         </Label>
-        {path ? <p className="truncate font-mono text-xs text-muted-foreground">{path}</p> : null}
+        {/* Wraps instead of truncating, so the whole path stays readable at 200% text (WCAG 1.4.4). */}
+        {path ? <p className="font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">{path}</p> : null}
         {detail ? <p className="text-xs text-pretty text-muted-foreground">{detail}</p> : null}
       </div>
-      <Switch id={id} checked={checked} onCheckedChange={(value) => onChange(value)} />
+      {/* 24 px tall target: these rows sit close to buttons and other switches (WCAG 2.5.8). */}
+      <Switch id={id} size="lg" checked={checked} onCheckedChange={(value) => onChange(value)} />
     </div>
   )
 }
@@ -318,6 +320,12 @@ export function SimulationControls() {
             detail="As if the network were unavailable"
             checked={faults.failNextResolverLookup}
             onChange={(value) => setFault("failNextResolverLookup", value)}
+          />
+          <ToggleRow
+            label="Index slowly"
+            detail="Reads 2 files at a time instead of 14, so partial results can be browsed while indexing runs"
+            checked={faults.slowIndexing}
+            onChange={(value) => setFault("slowIndexing", value)}
           />
         </div>
       </Section>
