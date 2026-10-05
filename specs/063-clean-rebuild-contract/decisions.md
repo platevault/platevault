@@ -47,6 +47,7 @@ Owners: PREP, RES.
 - Input-write behavior that is unknown or write-prone blocks Linked and Direct-source use; isolated Copy or supported Clone is offered.
 - A profile incapable of exact membership cannot receive an overinclusive folder.
 - Unsupported configuration or product-input kinds remain explicitly blocked.
+- One preparation may mix input modes per item. Items that cannot use the chosen mode are listed with paths and footprint, and each per-item change needs explicit approval (PREP-FR-08); no item changes mode silently.
 
 ### D05
 
@@ -93,6 +94,8 @@ Owners: VSEL, PREP, RES, STO.
 
 - Refresh proposes a membership revision. Accepting changes and choosing Save View commits them as a new reviewed membership revision that survives restart; it never mutates an existing prepared revision or an external application's inputs.
 - Reprepare needs review.
+- Every new preparation revision is materialized in a new reviewed View folder. An existing prepared folder is never replaced, reused or cleared in place (PREP-FR-06).
+- Manual inclusions stay pinned across every refresh. Refresh lists them with reason manual inclusion and never proposes removing them for falling outside the saved criteria; only an explicit user removal ends one.
 - Retry resumes recorded items, never filename-based inference.
 - Replaced prepared entries use reviewed STO cleanup even before Complete.
 - Mark Complete is blocked while an app-owned preparation or storage mutation affecting this View is Running. A Result is not required; Complete never implies an external job stopped or succeeded. Unrelated View operations do not block it.
@@ -116,7 +119,7 @@ Owners: LIB.
 - Equipment definitions are explicit camera/optical-train records with confirmed versus observed evidence.
 - Identity remap requires verified byte identity and location/volume evidence; same names or a reused mount path are insufficient.
 - Offline evidence remains last-observed, not current verification.
-- A location that cannot be re-verified leaves the library only through a reviewed Retire location that changes no file. Its copies read Retired, never Missing, leave integration totals and stay named unresolved in fixed Views. Reselect is refused afterwards, but registering the same folder again is allowed.
+- A location that cannot be re-verified leaves the library only through a reviewed Retire location that changes no file. Its copies read Retired, never Missing, leave integration totals and stay named unresolved in fixed Views. Reselect is refused afterwards, but registering the same folder again is allowed; its new assets inherit no retired quality decision, association or correction.
 
 ### D12
 
@@ -182,13 +185,13 @@ Owners: LIB, PLAN.
 
 Owners: LIB, PRJ, VSEL, PIX, CAL, PREP, RES, STO, PLAN.
 
-- PlateVault counts a recorded file toward a decision- or proof-bound total, or assigns, opens, prepares, reuses, cleans, archives, files or retires it, only against a recorded identity and SHA-256 basis. The basis is recorded when the user reviews, inspects or accepts the file, or when an operation starts and snapshots it. Bases include quality decisions, cached measurements, logical-capture proof, remap reviews, inspected and accepted products, adoption reviews and adopted masters, calibration assignments, retained-original and kept-copy proof, and cleanup, archive and filing plans.
+- PlateVault counts a recorded file toward a decision- or proof-bound total, or assigns, opens, prepares, reuses, cleans, archives, files or retires it as a source after archive or filing, only against a recorded identity and SHA-256 basis. The basis is recorded when the user reviews, inspects or accepts the file, or when an operation starts and snapshots it. Bases include quality decisions, cached measurements, logical-capture proof, remap reviews, inspected and accepted products, adoption reviews and adopted masters, calibration assignments, retained-original and kept-copy proof, and cleanup, archive and filing plans.
 - An observation that nothing ties to the value it supports stays labelled unverified, such as the import-time digest of a measurement matched only by file name. It detects later drift but never makes the value verified.
-- Immediately before each effect, the current identity and SHA-256 must match every basis that applies. Equal size and mtime never substitute.
+- Immediately before each effect other than a count, the current identity and SHA-256 must match every basis that applies. Equal size and mtime never substitute. A count uses each item's last completed verification, at review, inspection, acceptance, readable rescan or reuse, and labels its verification time. Displaying a total starts no rehash, and an item reads verification pending, outside applicable totals, while a started rehash runs.
 - A mismatch blocks that item and names the drift. The basis stays as history beside the current bytes, and nothing is launched, registered, overwritten, removed or retired. Counts exclude the item from applicable totals instead of blocking.
 - Offline or unreadable means unverified, never matched. Counts keep the labelled last-observed state; every other effect blocks.
 - Drift resolves only when bytes matching the basis return, the user explicitly reviews or accepts the current bytes, or the item is explicitly excluded. Nothing resolves it automatically.
-- D05 and D06 apply this rule to adoption and archive. Metadata-only indexing and captured totals of Unreviewed captures stay as LIB specifies; copies of a retired location (D11) leave totals instead of keeping a last-observed count. Calendar export consumes no recorded file. Verification ends at launch; PlateVault claims nothing about inputs while an external application runs.
+- D05 and D06 apply this rule to adoption and archive. Metadata-only indexing and captured totals of Unreviewed captures stay as LIB specifies; copies of a retired location (D11) leave totals instead of keeping a last-observed count. Retire location is catalog-only: it reads and changes no file bytes, so no rehash applies. It commits only against its review, the expected location revision and the availability recorded in that review. Calendar export consumes no recorded file. Verification ends at launch; PlateVault claims nothing about inputs while an external application runs.
 
 ## Verification still required
 

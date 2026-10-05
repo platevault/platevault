@@ -24,14 +24,14 @@ Fingerprint `modifiedNs` is a signed decimal string, preserving nanoseconds acro
 | library_associate_target | expected sessions, targetId | Explicit confirmed association/evidence revision; no capture-key change. |
 | library_save_equipment | camera/optical-train fields, expectedRevision | Durable evidence and confirmed state. |
 | library_confirm_equipment | expected sessions, equipmentId | Explicit confirmation revision; source evidence remains inspectable. |
-| library_target_coverage | targetId | Effective captured/applicable-usable/unreviewed exposure counting each logical capture once, unknownExposureCount, drift, verification-pending, duplicate-candidate and conflicting-copy counts, coveredLocationIds/provisional scope and per-contribution date/availability/last observation. |
+| library_target_coverage | targetId | Effective captured/applicable-usable/unreviewed exposure counting each logical capture once, unknownExposureCount, drift, verification-pending, duplicate-candidate and conflicting-copy counts, oldest lastVerifiedAt behind applicable-usable exposure, coveredLocationIds/provisional scope and per-contribution date/availability/last observation. Reading coverage starts no rehash. |
 | library_review_remap | locationId, native proposedPath | Durable catalog review of per-asset identity/digests/collisions; no image writes. NoByteProof is explicit. |
 | library_apply_remap | reviewed operationId, expectedRevision | Atomic per-location apply after every asset passes revalidated byte/identity checks; any refusal leaves all old paths unchanged. |
 | library_update_location | locationId, displayName, expectedDecisionRevision | Durable display name; no scan/source changes. |
 | library_retry_scope | locationId, native relative subtree | New recorded scan of the failed scope; uncertain scopes never imply Missing. |
 | library_reselect_location | locationId, path, expectedDecisionRevision | Restores access only to the verified same volume/root identity; mismatch needs remap review. A Retired location is refused. |
 | library_review_retire_location | locationId | Durable reviewId naming the location, root, availability and decision revision, the assets, sessions, Views, Projects and Results that reference its copies, and that retiring deletes, moves or modifies no file. |
-| library_retire_location | reviewId, locationId, expectedRevision | Commits lifecycle Retired; copies read Retired and leave integration totals, fixed Views name them unresolved, and the root stops blocking registration. Conflict on a stale review or revision, or while an operation affecting the location is Running or unfinished. No file changes. |
+| library_retire_location | reviewId, locationId, expectedRevision | Re-reads the location, then commits lifecycle Retired; copies read Retired and leave integration totals, fixed Views name them unresolved, and the root stops blocking registration. Conflict on a stale review or revision, on availability that differs from the review, or while an operation affecting the location is Running or unfinished. Reads and changes no file bytes, so no rehash applies. |
 | library_list_operations | filters, offset, limit | Durable Activity operations, including interrupted scans after restart. |
 
 ## Errors
