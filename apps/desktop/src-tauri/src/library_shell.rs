@@ -4,12 +4,13 @@
 //! Isolated rebuilt library shell (spec 064): its own Tauri runtime over the
 //! clean catalog.
 //!
-//! It boots only [`Library`] with the [`crate::commands::library`] and
-//! [`crate::commands::project_goals`] IPC surfaces, the catalog in its own data
-//! directory. Nothing from the legacy
+//! It boots only [`Library`] with the [`crate::commands::library`],
+//! [`crate::commands::project_goals`] and [`crate::commands::view_selection`]
+//! IPC surfaces, the catalog in its own data directory. Nothing from the legacy
 //! composition root runs here: no `AppState`, legacy database, bootstrap job,
-//! watcher or legacy command registration. The legacy code stays archivable and
-//! is never booted by this binary.
+//! watcher or legacy command registration; the legacy `preparedview_*` and
+//! `sourceview_*` commands stay unregistered. The legacy code stays archivable
+//! and is never booted by this binary.
 //!
 //! In `dev-tools` (debug-only) builds the MCP bridge always starts, bound to IPv4
 //! loopback, and the webview loads the hosted dev URL so the bridge has a page
@@ -44,6 +45,7 @@ use uuid::Uuid;
 
 use crate::commands::library as ipc;
 use crate::commands::project_goals as projects;
+use crate::commands::view_selection as views;
 
 /// Catalog directory override, used verbatim.
 pub const DATA_DIR_ENV: &str = "PV_LIBRARY_DATA_DIR";
@@ -105,6 +107,24 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         projects::project_set_rejection,
         projects::project_list,
         projects::project_detail,
+        views::view_create,
+        views::view_list,
+        views::view_detail,
+        views::view_candidates,
+        views::view_frames,
+        views::view_update_details,
+        views::view_select_sessions,
+        views::view_select_matching,
+        views::view_deselect_sessions,
+        views::view_clear_selection,
+        views::view_set_frames,
+        views::view_save,
+        views::view_discard_draft,
+        views::view_refresh,
+        views::view_apply_refresh,
+        views::view_quality_scope,
+        views::view_apply_quality,
+        views::view_revision,
     ]);
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);
