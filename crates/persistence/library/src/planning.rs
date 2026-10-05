@@ -810,6 +810,9 @@ mod tests {
         let large = site_input(format!("Backyard {}", "x".repeat(64 * 1024)));
         let error = catalog.save_site(None, None, &large).await.unwrap_err();
         assert_eq!(error.response(None, None).kind, "persistence_failure", "{error}");
+        // The failed write leaves the writer to be replaced by a fresh connection
+        // without the per-connection page limit; the disk is still full.
+        catalog.limit_writer_pages_for_test().await.unwrap();
 
         // Claims fill the free space of existing pages first; the first claim
         // that needs a new page fails and stores nothing.
