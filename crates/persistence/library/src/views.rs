@@ -31,11 +31,11 @@ use uuid::Uuid;
 
 use super::{
     check_expected_assets, check_expected_sessions, conflict, current_member_assets, db_revision,
-    decide_quality, fingerprint_matches, from_json, from_text, is_light, json_ids, load_asset,
-    load_assets, load_associations, load_equipment, load_session_row, load_target,
-    members_unchanged, now, parse_uuid, projects, require_decidable, require_revision,
-    require_unique_assets, revision, successors_of, summarize_rows, to_json, to_text, CaptureView,
-    Catalog, Result, SourceProbe, MAX_PAGE,
+    decide_quality, fingerprint_matches, from_json, from_text, json_ids, load_asset, load_assets,
+    load_associations, load_equipment, load_session_row, load_target, members_unchanged, now,
+    parse_uuid, projects, require_decidable, require_revision, require_unique_assets, revision,
+    successors_of, summarize_rows, to_json, to_text, CaptureView, Catalog, Result, SourceProbe,
+    MAX_PAGE,
 };
 
 fn invalid(message: String) -> LibraryError {
@@ -398,7 +398,7 @@ async fn read_candidate_basis(conn: &mut SqliteConnection) -> Result<CandidateBa
         let assets = current_member_assets(conn, id).await?;
         // Calibration sessions belong to CAL: a candidate has a light or
         // unknown-type capture.
-        if !assets.iter().any(|asset| is_light(&asset.effective) != Some(false)) {
+        if !assets.iter().any(|asset| asset.effective.is_light() != Some(false)) {
             continue;
         }
         rows.push(load_session_row(conn, id).await?);
@@ -476,7 +476,7 @@ fn frame_evidence(asset: &Asset) -> FrameEvidence {
     let m = &asset.effective;
     FrameEvidence {
         asset_id: asset.id,
-        light: is_light(m),
+        light: m.is_light(),
         object: m.object.clone(),
         filter: m.filter.clone(),
         exposure_seconds: m.exposure_seconds,
