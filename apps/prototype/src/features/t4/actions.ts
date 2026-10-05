@@ -194,7 +194,12 @@ export function openApplication(view: View, preparationId: PreparationId): OpenO
     const changed = changedPreparedEntries(state, prep)
     if (changed.length > 0) {
       const text = `${appName} was not opened: ${plural(changed.length, "prepared entry", "prepared entries")} no longer ${changed.length === 1 ? "matches" : "match"} the preparation snapshot. PlateVault wrote nothing to the sources or the entries.`
-      updateSlice("t4", (slice) => ({ ...slice, unverified: { ...slice.unverified, [preparationId]: { at: nowIso(), changed } } }))
+      // Durable, so every surface reads the View as Unverified (viewStatus) until an Open re-verifies it.
+      commit(
+        `Open in ${appName} refused`,
+        (s) => withCatalog(s, (c) => (c.preparations[preparationId] ? { ...c, preparations: { ...c.preparations, [preparationId]: { ...c.preparations[preparationId]!, unverified: { at: nowIso(), changed } } } } : c)),
+        { href: `/views/${view.id}/prepare` },
+      )
       recordActivity({ kind: "operation", title: `Open in ${appName} refused`, detail: text, operationId: null, href: `/views/${view.id}/prepare` })
       return { outcome: "unverified", message: text, result: { ok: true } }
     }
@@ -218,13 +223,12 @@ export function openApplication(view: View, preparationId: PreparationId): OpenO
         const executableState = outcome === "opened" ? "found" : outcome === "launch-failed" ? "launch-fails" : profile.executablePath ? "missing" : "not-configured"
         return {
           ...catalog,
-          preparations: { ...catalog.preparations, [preparationId]: { ...current, launches: [...current.launches, { at, outcome }] } },
+          preparations: { ...catalog.preparations, [preparationId]: { ...current, launches: [...current.launches, { at, outcome }], unverified: outcome === "missing-executable" ? current.unverified : null } },
           profiles: { ...catalog.profiles, [profile.id]: { ...currentProfile, executableState } },
         }
       }),
     { href: `/views/${view.id}/prepare` },
   )
-  if (result.ok && outcome !== "missing-executable") updateSlice("t4", (slice) => ({ ...slice, unverified: { ...slice.unverified, [preparationId]: null } }))
   if (result.ok && outcome === "opened") updateSlice("t4", (slice) => ({ ...slice, running: { ...slice.running, [view.id]: { profileId: profile.id, at } } }))
   if (result.ok) recordActivity({ kind: "operation", title: outcome === "opened" ? `Opened ${appName}` : `Open in ${appName} did not start`, detail: message, operationId: null, href: `/views/${view.id}/prepare` })
   return { outcome, message, result }

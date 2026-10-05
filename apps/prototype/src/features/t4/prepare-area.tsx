@@ -30,7 +30,7 @@ import type { PreparePayload } from "./operations"
 import { T4Badge } from "./badges"
 import { ViewNotFound } from "./calibration-area"
 import { CRITERION_LABEL, FIELD_LABEL, handoffCountText, KIND_LABEL, METADATA_CHOICE_LABEL, MODE_LABEL, type PreparationPlan, sameInput, sessionLabel, summaryText } from "./domain"
-import { usePrepDraft, usePreparationPlan, useRouteView, useUnverified } from "./hooks"
+import { usePrepDraft, usePreparationPlan, useRouteView } from "./hooks"
 import { ApplicationSection, LocationSection, MetadataSection, ModeSection } from "./prepare-sections"
 import { LocateApplicationDialog } from "./profile-parts"
 import { PrototypeControls, PrototypeToggle } from "./prototype-controls"
@@ -383,7 +383,8 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
   const op = useStore((s) => (prep.operationId ? s.operations[prep.operationId] : undefined))
   const profile = useStore((s) => s.catalog.profiles[prep.profileId])
   const running = useStore((s) => s.slices.t4.running[view.id])
-  const unverified = useUnverified(prep)
+  // Left by an Open that found entries changed (PREP-FR-10); the next Open re-verifies and clears it.
+  const unverified = prep?.unverified ?? null
   const [reveal, setReveal] = useState(false)
   const [locating, setLocating] = useState(false)
   const [message, setMessage] = useState<{ tone: "info" | "refusal" | "warning"; text: string; missing: boolean } | null>(null)
@@ -581,7 +582,7 @@ export function ViewPrepareArea() {
   // J24 P8: one prepared 26 Sep frame (else the first light frame), changed in place to exercise Open's re-verification.
   const p8Path = latest?.state === "prepared" ? ((plan?.entries.find((e) => e.kind === "light" && e.sourcePath.includes("/2026-09-26/")) ?? plan?.entries.find((e) => e.kind === "light"))?.sourcePath ?? null) : null
   const p8Changed = useStore((s) => (p8Path ? Boolean(fileAt(s.disk, p8Path)?.previousSha256) : false))
-  const latestUnverified = useUnverified(latest ?? null)
+  const latestUnverified = latest?.unverified ?? null
 
   if (!view || !plan) return <ViewNotFound />
   const complete = Boolean(view.completedAt)

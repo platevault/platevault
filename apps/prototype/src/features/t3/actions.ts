@@ -6,17 +6,24 @@
  */
 import { useSyncExternalStore } from "react"
 import { stableHash } from "@/domain/indexing"
-import type { AssetId, Catalog, FrameMeasurement, MembershipContent, ProfileId, ProjectId, QualityValue, TargetId, View, ViewId, ViewOrigin } from "@/domain/types"
+import type {
+  AssetId,
+  Catalog,
+  FrameMeasurement,
+  MeasurementImport,
+  MeasurementImportRow,
+  MembershipContent,
+  ProfileId,
+  ProjectId,
+  QualityValue,
+  TargetId,
+  View,
+  ViewId,
+  ViewOrigin,
+} from "@/domain/types"
 import { plural } from "@/lib/format"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
-import {
-  defaultFrameUi,
-  defaultSessionFilters,
-  type FrameUi,
-  type ImportReviewRow,
-  type MeasurementImport,
-  type SessionFilters,
-} from "@/store/slices/t3"
+import { defaultFrameUi, defaultSessionFilters, type FrameUi, type SessionFilters } from "@/store/slices/t3"
 import { type CsvRow, importedMetrics, type MappedRow } from "./csv"
 import { historyEntry } from "./measure"
 import { contentEquals, contentOf, deriveCriteria, emptyContent, latestRevision, viewContext } from "./model"
@@ -272,18 +279,7 @@ function withImported(catalog: Catalog, assetId: AssetId, row: Pick<CsvRow, "ind
 
 export function importMeasurements(viewId: ViewId, path: string, mapped: MappedRow[], viewAssetIds: Set<AssetId>): CommitResult {
   const attach = mapped.filter((m) => m.assetId !== null)
-  const result = commit(
-    "Import measurements",
-    (s) =>
-      withCatalog(s, (c) => {
-        const measurements = { ...c.measurements }
-        for (const m of attach) measurements[m.assetId!] = withImported({ ...c, measurements }, m.assetId!, m.row, path)
-        return { ...c, measurements }
-      }),
-    { href: `/views/${viewId}/frames` },
-  )
-  if (!result.ok) return result
-  const rows: ImportReviewRow[] = mapped
+  const rows: MeasurementImportRow[] = mapped
     .filter((m) => m.status === "ambiguous" || m.status === "unmatched")
     .map((m) => ({ index: m.row.index, file: m.row.file, status: m.status as "ambiguous" | "unmatched", candidates: m.candidates, assetId: null, values: m.row.values }))
   const record: MeasurementImport = {
@@ -295,7 +291,18 @@ export function importMeasurements(viewId: ViewId, path: string, mapped: MappedR
     outsideView: attach.filter((m) => !viewAssetIds.has(m.assetId!)).length,
     rows,
   }
-  updateSlice("t3", (slice) => ({ ...slice, imports: { ...slice.imports, [record.id]: record } }))
+  // Matched values and the rows left to review are one durable write.
+  const result = commit(
+    "Import measurements",
+    (s) =>
+      withCatalog(s, (c) => {
+        const measurements = { ...c.measurements }
+        for (const m of attach) measurements[m.assetId!] = withImported({ ...c, measurements }, m.assetId!, m.row, path)
+        return { ...c, measurements, measurementImports: { ...c.measurementImports, [record.id]: record } }
+      }),
+    { href: `/views/${viewId}/frames` },
+  )
+  if (!result.ok) return result
   recordActivity({
     kind: "saved",
     title: "Measurements imported",
@@ -308,22 +315,20 @@ export function importMeasurements(viewId: ViewId, path: string, mapped: MappedR
 
 /** Attach an ambiguous row to the frame the user chose. */
 export function resolveImportRow(importId: string, rowIndex: number, assetId: AssetId): CommitResult {
-  const record = store.getState().slices.t3.imports[importId]
+  const record = store.getState().catalog.measurementImports[importId]
   const row = record?.rows.find((r) => r.index === rowIndex)
   if (!record || !row) return { ok: false, reason: "write-failed", message: "The import row was not found; open Import measurements again." }
-  const result = commit(
+  const rows = record.rows.map((r) => (r.index === rowIndex ? { ...r, status: "resolved" as const, assetId } : r))
+  return commit(
     "Attach imported row",
-    (s) => withCatalog(s, (c) => ({ ...c, measurements: { ...c.measurements, [assetId]: withImported(c, assetId, row, record.path) } })),
+    (s) =>
+      withCatalog(s, (c) => ({
+        ...c,
+        measurements: { ...c.measurements, [assetId]: withImported(c, assetId, row, record.path) },
+        measurementImports: { ...c.measurementImports, [importId]: { ...record, rows } },
+      })),
     { href: `/views/${record.viewId}/frames` },
   )
-  if (result.ok) {
-    updateSlice("t3", (slice) => {
-      const current = slice.imports[importId]!
-      const rows = current.rows.map((r) => (r.index === rowIndex ? { ...r, status: "resolved" as const, assetId } : r))
-      return { ...slice, imports: { ...slice.imports, [importId]: { ...current, rows } } }
-    })
-  }
-  return result
 }
 
 // ---------------------------------------------------------------------------

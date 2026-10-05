@@ -76,27 +76,6 @@ export function defaultFrameUi(): FrameUi {
   return { activeAssetId: null, showExcluded: false, sessionId: null, search: "", metric: "fwhm" }
 }
 
-/** An import's rows that attach to no frame until the user resolves them (PIX-FR-07). */
-export interface ImportReviewRow {
-  index: number
-  file: string
-  status: "ambiguous" | "unmatched" | "resolved"
-  candidates: AssetId[]
-  assetId: AssetId | null
-  values: Partial<Record<MetricKey, number>>
-}
-
-export interface MeasurementImport {
-  id: string
-  viewId: ViewId
-  path: string
-  importedAt: string
-  matched: number
-  /** Matched rows whose frame is outside this View; values still attach to the frame. */
-  outsideView: number
-  rows: ImportReviewRow[]
-}
-
 export interface RefreshUi {
   decisions: Record<string, "accept" | "decline">
   /** Changes declined earlier, shown as such the next time. */
@@ -110,12 +89,11 @@ export interface T3State {
   sky: Record<ViewId, boolean>
   frames: Record<ViewId, FrameUi>
   refresh: Record<ViewId, RefreshUi>
-  imports: Record<string, MeasurementImport>
 }
 
 export const t3Slice: SliceDefinition<T3State> = {
   id: "t3",
-  version: 3,
-  initial: () => ({ sessionFilters: {}, activeSession: {}, sky: {}, frames: {}, refresh: {}, imports: {} }),
+  version: 4,
+  initial: () => ({ sessionFilters: {}, activeSession: {}, sky: {}, frames: {}, refresh: {} }),
   operations: [measureHandler],
 }

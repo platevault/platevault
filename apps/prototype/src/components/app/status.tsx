@@ -110,6 +110,7 @@ export const STATUS = {
     draft: s("Draft", "muted", CircleDashed),
     saved: s("Saved", "neutral", Check),
     prepared: s("Prepared", "success", CheckCheck),
+    unverified: s("Unverified", "warning", TriangleAlert),
     complete: s("Complete", "success", ShieldCheck),
   },
   preparation: {

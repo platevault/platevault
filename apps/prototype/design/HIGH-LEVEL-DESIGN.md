@@ -230,7 +230,7 @@ URLs read `#/targets/…`.
 
 | Route | Screen | Purpose and key states |
 |---|---|---|
-| `/views` | Views | All Views with status (Draft, Saved, Prepared, Complete), Project or standalone, membership totals |
+| `/views` | Views | All Views with status (Draft, Saved, Prepared, Unverified, Complete), Project or standalone, membership totals |
 | `/views/new` | New View | Creates a draft from `?from=project|target|sessions|results` with ids; name; optional Project |
 | `/views/$viewId` | Workspace host (layout) | View name, Project, profile, status, membership summary, Save View (D08), Reopen, area tabs: Sessions · Frames · Calibration · Prepare · Results · Cleanup; index redirects to Sessions |
 | `/views/$viewId/sessions` | Sessions in this View | C1-C6: suggestions with evidence, FOV/position unknown, filters and chips, Selected outside current filters, Show selected, sky coverage, unavailable sources |
@@ -342,7 +342,7 @@ themes; dark is the default for night use.
 | `--primary` (accent) | `oklch(0.74 0.11 238)` | `oklch(0.5 0.13 242)` | Primary action, selection, links, focus ring, current-item bar. One accent per view |
 | `--ring` | = primary | = primary | Focus: one 2 px outline, 2 px offset (inset −2 px inside popups and cells), unlayered rule in `index.css` |
 | `--success` | `oklch(0.75 0.13 155)` | `oklch(0.43 0.12 155)` | Usable, verified, Prepared, Online. Light badge text (over its 12% tint) is ≥ 4.5:1 on every row surface, including the active row |
-| `--warning` | `oklch(0.8 0.13 80)` | `oklch(0.5 0.12 65)` | Needs review, Offline, Partial, Changed content, Unresolved |
+| `--warning` | `oklch(0.8 0.13 80)` | `oklch(0.45 0.12 65)` | Needs review, Offline, Partial, Changed content, Unresolved. Light badge text is ≥ 4.5:1 on every row surface, including the active row |
 | `--destructive` | `oklch(0.71 0.17 22)` | `oklch(0.48 0.2 27)` | Failed, refused, blocked, destructive action |
 | `--info` | = primary | = primary | Icon colour only for Running, Provisional, Associated, Suggested; the badge text stays neutral |
 | `--accent` | `oklch(0.3 0 0)` | `oklch(0.91 0 0)` | shadcn hover and highlighted-option surface (not the brand accent) |
@@ -624,7 +624,7 @@ exact need. It does not edit the file or work around it.
 | View membership, drafts, criteria, `profileId` (workspace header, C1), Reopen (clears `completedAt`) | T3 | all |
 | View `calibration`, `locationParent`, `outputPath` | T4 | T3, T5 |
 | View `completedAt`, `notes` | T5 | T3, T4 |
-| View status | derived (`viewStatus`); nobody stores it | all |
+| View status | derived (`viewStatus`: Complete > Prepared or Unverified, from the latest preparation of the latest revision and its `unverified` record > Saved > Draft); nobody stores it | all |
 | FrameMeasurement, MeasurementImport (`catalog.measurementImports`: import review rows) | T3 | T3 |
 | CalibrationMaster, ApplicationProfile, Preparation | T4; T5 rebuilds entries after a transfer and removes them through cleanup | T3, T5 |
 | ResultRecord | T5 | T2, T3, T4 |

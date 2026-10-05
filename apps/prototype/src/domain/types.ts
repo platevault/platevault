@@ -466,7 +466,7 @@ export type ViewOrigin = "project" | "target" | "sessions" | "results"
  * - prepared: the latest preparation of the latest revision is verified.
  * - complete: the user marked the processing attempt complete.
  */
-export type ViewStatus = "draft" | "saved" | "prepared" | "complete"
+export type ViewStatus = "draft" | "saved" | "prepared" | "unverified" | "complete"
 
 export type SelectionReasonKind = "geometry" | "pointing" | "project-equipment" | "manual" | "refresh-added"
 
@@ -728,6 +728,12 @@ export interface Preparation {
   blocked: Array<{ input: PreparationInput; path: string; reason: string }>
   metadataDecisions: MetadataDecision[]
   launches: Array<{ at: IsoDateTime; outcome: "opened" | "missing-executable" | "launch-failed" }>
+  /**
+   * Set when Open found prepared entries that no longer match the preparation
+   * snapshot (PREP-FR-10); cleared by the next Open that re-verifies them.
+   * The View reads Unverified meanwhile.
+   */
+  unverified?: { at: IsoDateTime; changed: Array<{ path: string; reason: string }> } | null
   createdAt: IsoDateTime
   settledAt: IsoDateTime | null
 }

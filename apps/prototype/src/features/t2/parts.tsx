@@ -5,9 +5,9 @@
  */
 import { Link } from "@tanstack/react-router"
 import { ChevronDown } from "lucide-react"
-import { Fragment, useRef, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import { PathText } from "@/components/app/data"
-import { Notice, SaveState, UnknownValue } from "@/components/app/feedback"
+import { announce, Notice, SaveState, UnknownValue } from "@/components/app/feedback"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -62,7 +62,13 @@ export function FlowStatus({ flow, dirty, onReview, className }: { flow: CommitF
   const state = flow.state === "failed" || flow.state === "stale" ? flow.state : dirty ? "unsaved" : flow.state
   // Review resets the flow; until the next save the status says what Review did.
   const showReviewed = reviewed && !state
-  const announcement = state === "failed" ? `Not saved. ${flow.message ?? ""}` : state === "stale" ? `Changed elsewhere. ${flow.message ?? ""}` : state === "saved" ? "Saved." : ""
+  // SaveState announces its own changes and failed or stale on appearing; a
+  // save that makes it appear already "Saved" is announced here, once.
+  const shown = useRef(state)
+  useEffect(() => {
+    if (!shown.current && state === "saved") announce("Saved")
+    shown.current = state
+  }, [state])
   // Retry and Review remove their own button; move focus to this status first, so it never drops to the page (WCAG 2.4.3).
   const keepFocus = (action: () => void) => () => {
     holder.current?.focus()
@@ -72,9 +78,9 @@ export function FlowStatus({ flow, dirty, onReview, className }: { flow: CommitF
   }
   return (
     <div ref={holder} tabIndex={-1} className={cn("outline-none", className)}>
-      {/* Mounted before the first save, so each outcome changes its text and is announced (WCAG 4.1.3). */}
+      {/* Mounted before Review, so its outcome is announced (WCAG 4.1.3). */}
       <p role="status" className={showReviewed ? "text-xs text-pretty text-muted-foreground" : "sr-only"}>
-        {showReviewed ? "Showing the current revision. Make your change again to save it." : announcement}
+        {showReviewed ? "Showing the current revision. Make your change again to save it." : ""}
       </p>
       {state ? (
         <SaveState

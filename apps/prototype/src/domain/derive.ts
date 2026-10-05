@@ -245,18 +245,21 @@ export function membershipSummary(catalog: Catalog, content: MembershipContent):
 
 /**
  * View status, derived so no track has to keep it in step:
- * complete (Mark complete) > prepared (the latest preparation of the latest
- * revision is verified) > saved (a committed revision exists) > draft.
+ * complete (Mark complete) > prepared or unverified (the latest preparation of
+ * the latest revision is prepared; unverified while Open found its entries
+ * changed) > saved (a committed revision exists) > draft.
  * Saving a new revision therefore returns a prepared View to saved.
  */
 export function viewStatus(catalog: Catalog, view: View): ViewStatus {
   if (view.completedAt) return "complete"
   const latest = view.revisions.at(-1)
   if (!latest) return "draft"
-  const preparations = Object.values(catalog.preparations)
+  const preparation = Object.values(catalog.preparations)
     .filter((p) => p.viewId === view.id && p.membershipRevision === latest.revision)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-  return preparations.at(-1)?.state === "prepared" ? "prepared" : "saved"
+    .at(-1)
+  if (preparation?.state !== "prepared") return "saved"
+  return preparation.unverified ? "unverified" : "prepared"
 }
 
 // ---------------------------------------------------------------------------

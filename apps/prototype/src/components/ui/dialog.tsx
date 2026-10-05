@@ -53,6 +53,8 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        // Base UI traps focus and makes the outside inert but sets no aria-modal; say it for assistive technology.
+        aria-modal="true"
         className={cn(
           // Never taller than the viewport inside its safe area: a tall dialog scrolls inside itself and its footer stays reachable.
           // scroll-padding keeps a focused control from being scrolled under the sticky footer (WCAG 2.4.11).

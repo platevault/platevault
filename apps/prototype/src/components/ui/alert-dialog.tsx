@@ -53,6 +53,7 @@ function AlertDialogContent({
       <AlertDialogOverlay />
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
+        aria-modal="true"
         data-size={size}
         className={cn(
           // Same height bound, inner scroll and footer-aware scroll padding as DialogContent.

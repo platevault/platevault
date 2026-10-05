@@ -19,11 +19,11 @@ import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { assetAvailability, measurementApplies, qualityApplicability, targetCoverage } from "@/domain/derive"
-import type { Asset, AssetId, Catalog, Disk, Metric, MetricKey, Operation, Session } from "@/domain/types"
+import type { Asset, AssetId, Catalog, Disk, MeasurementImport, Metric, MetricKey, Operation, Session } from "@/domain/types"
 import { formatDuration, formatNight, plural } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { cancelOperation, isSettled } from "@/store/operations"
-import { defaultFrameUi, type MeasurementImport } from "@/store/slices/t3"
+import { defaultFrameUi } from "@/store/slices/t3"
 import { rejectForProject, resolveImportRow, setFrameUi, setLibraryQuality } from "./actions"
 import { SelectField } from "./fields"
 import { FramePreview } from "./frame-preview"
@@ -263,7 +263,7 @@ export function FramesArea() {
   const disk = useStore((s) => s.disk)
   const ui = useStore((s) => s.slices.t3.frames[view.id]) ?? defaultFrameUi()
   const op = useStore((s) => latestMeasureOp(s, view.id))
-  const imports = useStore((s) => Object.values(s.slices.t3.imports).filter((i) => i.viewId === view.id))
+  const imports = useStore((s) => Object.values(s.catalog.measurementImports).filter((i) => i.viewId === view.id))
   const { edit, errorNode } = useDraftEditor(view.id)
   const [importOpen, setImportOpen] = useState(false)
   const [confirm, setConfirm] = useState<"usable" | "unusable" | "reject" | null>(null)
