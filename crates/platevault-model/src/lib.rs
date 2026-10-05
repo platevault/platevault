@@ -12,8 +12,10 @@ use metadata_core::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod calibration;
 mod project;
 mod view;
+pub use calibration::*;
 pub use project::*;
 pub use view::*;
 
@@ -451,6 +453,9 @@ pub struct CaptureMetadata {
     pub mechanical_rotation_deg: Option<f64>,
     pub focal_length_mm: Option<f64>,
     pub pixel_size_um: Option<f64>,
+    /// Integration count: `STACKCNT`, else `NCOMBINE`. Absent stays `None`, never 0.
+    #[serde(default)]
+    pub stack_count: Option<u32>,
 }
 
 fn finite(value: Option<f64>) -> Option<f64> {
@@ -530,6 +535,7 @@ impl From<&RawFileMetadata> for CaptureMetadata {
             mechanical_rotation_deg: finite(raw.rotator_angle_deg),
             focal_length_mm: finite(raw.focal_length_mm),
             pixel_size_um: finite(raw.pixel_size_um),
+            stack_count: raw.stack_count,
         }
     }
 }
@@ -1046,6 +1052,8 @@ pub enum ReferenceKind {
     Project,
     /// A Result's recorded lineage.
     Result,
+    /// A View's effective calibration decisions or an adopted master (CAL).
+    Calibration,
 }
 
 /// One record of another feature naming the library assets it holds. The
