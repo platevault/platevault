@@ -603,7 +603,7 @@ async fn insert_item(
 // Reads
 // ---------------------------------------------------------------------------
 
-async fn load_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Project> {
+pub async fn load_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Project> {
     let row = sqlx::query(
         "SELECT name, notes, revision, created_at, updated_at FROM projects WHERE id = ?1",
     )

@@ -266,3 +266,41 @@ pub async fn scan(
 pub fn by_name<'a>(assets: &'a [Asset], name: &str) -> &'a Asset {
     assets.iter().find(|asset| asset.relative_path.display().ends_with(name)).unwrap()
 }
+
+pub async fn raw(db: &Path) -> sqlx::sqlite::SqliteConnection {
+    use sqlx::Connection;
+    let options = sqlx::sqlite::SqliteConnectOptions::new().filename(db);
+    sqlx::sqlite::SqliteConnection::connect_with(&options).await.unwrap()
+}
+
+/// Rows of `select` (a query over `table` with a trailing filter) in rowid
+/// order, each value quoted by SQLite.
+pub async fn dump_where(db: &Path, table: &str, filter: &str) -> Vec<String> {
+    use sqlx::Connection;
+    let mut conn = raw(db).await;
+    let columns: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT name FROM pragma_table_info('{table}')"
+    )))
+    .fetch_all(&mut conn)
+    .await
+    .unwrap();
+    let quoted = columns.iter().map(|column| format!("quote(\"{column}\")")).collect::<Vec<_>>();
+    let values: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT {} FROM {table} {filter} ORDER BY rowid",
+        quoted.join(" || '|' || ")
+    )))
+    .fetch_all(&mut conn)
+    .await
+    .unwrap();
+    conn.close().await.unwrap();
+    values
+}
+
+/// Every row of `tables` in rowid order, each value quoted by SQLite.
+pub async fn dump_tables(db: &Path, tables: &[&str]) -> BTreeMap<String, Vec<String>> {
+    let mut rows = BTreeMap::new();
+    for table in tables {
+        rows.insert((*table).to_owned(), dump_where(db, table, "").await);
+    }
+    rows
+}

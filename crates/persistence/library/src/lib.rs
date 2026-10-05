@@ -42,8 +42,9 @@ use uuid::Uuid;
 
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
 
-const SCHEMA: &str = concat!(include_str!("schema.sql"), include_str!("projects.sql"));
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA: &str =
+    concat!(include_str!("schema.sql"), include_str!("projects.sql"), include_str!("views.sql"));
+const SCHEMA_VERSION: i64 = 8;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -77,6 +78,7 @@ macro_rules! asset_sql {
 }
 
 mod projects;
+mod views;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -4941,17 +4943,32 @@ async fn confirm_one(
 /// The suggestion names exactly the current members with their current
 /// observation, observation sequence and decision revision.
 fn assessed_current(item: &SuggestedAssociation, members: &[Asset]) -> bool {
+    members_unchanged(
+        &item.expected_observations,
+        &item.expected_decisions,
+        &item.expected_observation_revisions,
+        members,
+    )
+}
+
+/// The members are exactly those assessed, with the same observations,
+/// decisions and observation sequences.
+fn members_unchanged(
+    observations: &BTreeMap<Uuid, ObservationFingerprint>,
+    decisions: &BTreeMap<Uuid, Revision>,
+    observation_revisions: &BTreeMap<Uuid, Revision>,
+    members: &[Asset],
+) -> bool {
     let count = members.len();
-    count == item.expected_observations.len()
-        && count == item.expected_decisions.len()
-        && count == item.expected_observation_revisions.len()
+    count == observations.len()
+        && count == decisions.len()
+        && count == observation_revisions.len()
         && members.iter().all(|asset| {
-            item.expected_observations
+            observations
                 .get(&asset.id)
                 .is_some_and(|expected| fingerprint_matches(&asset.fingerprint, expected))
-                && item.expected_decisions.get(&asset.id) == Some(&asset.decision_revision)
-                && item.expected_observation_revisions.get(&asset.id)
-                    == Some(&asset.observation_revision)
+                && decisions.get(&asset.id) == Some(&asset.decision_revision)
+                && observation_revisions.get(&asset.id) == Some(&asset.observation_revision)
         })
 }
 
