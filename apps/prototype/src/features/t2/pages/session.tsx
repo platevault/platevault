@@ -19,7 +19,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { type AssetAvailability, assetAvailability, captureSite } from "@/domain/derive"
+import { type AssetAvailability, assetAvailability, captureSite, copyConflict } from "@/domain/derive"
 import type { Asset, Catalog, QualityValue, Session } from "@/domain/types"
 import { formatCount, formatDateTime, formatDec, formatDegrees, formatDuration, formatExposure, formatNight, formatRa, formatTime, plural } from "@/lib/format"
 import { store, useStore } from "@/store/core"
@@ -734,16 +734,23 @@ function FilterCorrectionDialog({ open, onOpenChange, session, catalog }: { open
 
 function CopiesSection({ sessionId }: { sessionId: string }) {
   const row = useStore((s) => sessionRow(s, s.catalog.sessions[sessionId]!))
+  const conflictNames = row.conflictLocationIds.map((id) => row.locations.find((l) => l.location.id === id)?.location.displayName ?? "Unknown location")
   return (
     <Section
       id="copies"
       title="Copies"
       description={
         row.multiCopyFrames > 0
-          ? `${plural(row.multiCopyFrames, "frame")} have byte-identical copies in more than one location. Each frame counts once; every copy stays registered and protected.`
+          ? `${plural(row.multiCopyFrames, "frame")} have copies in more than one location. Each frame counts once; every copy stays registered and protected.`
           : "Where this session's frames are stored. Each frame counts once."
       }
     >
+      {row.conflictingFrames > 0 ? (
+        <Notice tone="warning" title={`${plural(row.conflictingFrames, "frame")} with conflicting copies · Needs review`} className="mb-3">
+          The copies on {conflictNames.join(" and ")} no longer hold the same bytes. Each frame still counts once, with the bytes PlateVault recorded. Both copies stay
+          registered and unchanged, and neither is used in place of the other. Restore the changed copy, then rescan its location.
+        </Notice>
+      ) : null}
       <ul className="divide-y rounded-lg border">
         {row.locations.map(({ location, availability, frames }) => (
           <li key={location.id} className="flex flex-wrap items-start justify-between gap-3 px-3 py-2">
@@ -788,6 +795,8 @@ interface FrameRow {
   asset: Asset
   quality: FrameQuality
   availability: AssetAvailability
+  /** Display names of the locations whose copies of this frame hold different bytes (LIB-AC-15). */
+  conflict: string[] | null
 }
 
 const DECISION_WORD: Record<QualityValue, string> = { usable: "Usable", unusable: "Unusable", unreviewed: "Unreviewed" }
@@ -797,7 +806,15 @@ function FramesSection({ session, editable }: { session: Session; editable: bool
     session.assetIds
       .map((id) => s.catalog.assets[id])
       .filter((a): a is Asset => a !== undefined)
-      .map((asset): FrameRow => ({ asset, quality: frameQuality(asset), availability: assetAvailability(s.disk, s.catalog, asset) })),
+      .map((asset): FrameRow => {
+        const conflict = copyConflict(s.catalog, asset)
+        return {
+          asset,
+          quality: frameQuality(asset),
+          availability: assetAvailability(s.disk, s.catalog, asset),
+          conflict: conflict ? conflict.locationIds.map((id) => s.catalog.locations[id]?.displayName ?? "Unknown location") : null,
+        }
+      }),
   )
   const catalog = useStore((s) => s.catalog)
   const [filter, setFilter] = useState<FrameFilter>("all")
@@ -848,7 +865,24 @@ function FramesSection({ session, editable }: { session: Session; editable: bool
         )
       },
     },
-    { id: "copies", header: "Copies", align: "right", sortValue: (r) => r.asset.copies.length, cell: (r) => formatCount(r.asset.copies.length) },
+    {
+      id: "copies",
+      header: "Copies",
+      align: "right",
+      className: "whitespace-normal",
+      sortValue: (r) => r.asset.copies.length,
+      cell: (r) =>
+        r.conflict ? (
+          <span className="flex flex-col items-end gap-0.5 py-0.5">
+            <StatusBadge kind="copies" value="conflicting" />
+            <span className="text-xs text-muted-foreground">
+              {formatCount(r.asset.copies.length)} on {r.conflict.join(" and ")} · Needs review
+            </span>
+          </span>
+        ) : (
+          formatCount(r.asset.copies.length)
+        ),
+    },
   ]
 
   const affected = [target ? `usable totals for ${target.name}` : null, projects.length > 0 ? `progress of ${projects.map((p) => p.name).join(", ")}` : null].filter(Boolean)

@@ -8,6 +8,7 @@ import {
   addToBreakdown,
   assetAvailability,
   type AssetAvailability,
+  copyConflict,
   emptyBreakdown,
   locationAvailability,
   type QualityBreakdown,
@@ -105,6 +106,9 @@ export interface SessionRow {
   locations: LocationPresence[]
   /** Frames with more than one physical copy (counted once). */
   multiCopyFrames: number
+  /** Frames whose copies record different bytes (LIB-AC-15), and the locations involved. */
+  conflictingFrames: number
+  conflictLocationIds: LocationId[]
   availability: Record<AssetAvailability, number>
   /** Most recent observation of any copy. */
   lastObservedAt: string | null
@@ -118,6 +122,8 @@ export function sessionRow(state: PrototypeState, session: Session): SessionRow 
   const availability: Record<AssetAvailability, number> = { available: 0, offline: 0, unreadable: 0, absent: 0, retired: 0 }
   const framesPerLocation = new Map<LocationId, number>()
   let multiCopyFrames = 0
+  let conflictingFrames = 0
+  const conflictLocationIds: LocationId[] = []
   let lastObservedAt: string | null = null
   for (const id of session.assetIds) {
     const asset = catalog.assets[id]
@@ -125,6 +131,11 @@ export function sessionRow(state: PrototypeState, session: Session): SessionRow 
     addToBreakdown(breakdown, disk, catalog, asset)
     availability[assetAvailability(disk, catalog, asset)] += 1
     if (asset.copies.length > 1) multiCopyFrames += 1
+    const conflict = copyConflict(catalog, asset)
+    if (conflict) {
+      conflictingFrames += 1
+      for (const locationId of conflict.locationIds) if (!conflictLocationIds.includes(locationId)) conflictLocationIds.push(locationId)
+    }
     const seen = new Set<LocationId>()
     for (const copy of asset.copies) {
       if (!lastObservedAt || copy.lastObservedAt > lastObservedAt) lastObservedAt = copy.lastObservedAt
@@ -145,6 +156,8 @@ export function sessionRow(state: PrototypeState, session: Session): SessionRow 
     breakdown,
     locations,
     multiCopyFrames,
+    conflictingFrames,
+    conflictLocationIds,
     availability,
     lastObservedAt,
     targetName: target?.name ?? null,

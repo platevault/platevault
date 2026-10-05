@@ -129,7 +129,7 @@ export function EquipmentCell({ row }: { row: SessionRow }) {
   )
 }
 
-/** Locations holding copies; an offline location says so. Copies of one frame count once. */
+/** Locations holding copies; an offline location says so. Copies of one frame count once; copies whose bytes differ read Conflicting copies. */
 export function LocationsCell({ row }: { row: SessionRow }) {
   return (
     <span className="inline-flex max-w-40 flex-wrap items-center gap-x-2 gap-y-0.5 py-0.5 whitespace-normal">
@@ -144,6 +144,7 @@ export function LocationsCell({ row }: { row: SessionRow }) {
           {row.multiCopyFrames === row.session.assetIds.length ? "every frame" : formatCount(row.multiCopyFrames)} in {row.locations.length} copies
         </span>
       ) : null}
+      {row.conflictingFrames > 0 ? <StatusBadge kind="copies" value="conflicting" label={`Conflicting copies · ${formatCount(row.conflictingFrames)}`} /> : null}
     </span>
   )
 }

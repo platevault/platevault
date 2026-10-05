@@ -64,9 +64,28 @@ export function assetAvailability(disk: Disk, catalog: Catalog, asset: Asset): A
   return AVAILABILITY_ORDER[best]!
 }
 
-/** The copy to read or link: the first available one, else the first recorded. */
+/**
+ * The copy to read or link: the first available copy holding the asset's
+ * recorded bytes, else the first such copy. A copy whose bytes differ from
+ * the recorded identity is never used in place of another (LIB-AC-15).
+ */
 export function preferredCopy(disk: Disk, catalog: Catalog, asset: Asset): AssetCopy {
-  return asset.copies.find((copy) => copyAvailability(disk, catalog, copy) === "available") ?? asset.copies[0]!
+  const basis = asset.copies.filter((copy) => copy.sha256 === asset.sha256)
+  const pool = basis.length > 0 ? basis : asset.copies
+  return pool.find((copy) => copyAvailability(disk, catalog, copy) === "available") ?? pool[0]!
+}
+
+/**
+ * Conflicting copies (LIB-AC-15): copies of one asset, outside retired
+ * locations, that record different bytes. The asset keeps its recorded
+ * identity and counts once; every copy stays registered and unchanged, and
+ * none is used in place of another until their bytes agree again (D19).
+ * Returns the locations of the copies involved, in copy order.
+ */
+export function copyConflict(catalog: Catalog, asset: Asset): { locationIds: LocationId[] } | null {
+  const live = asset.copies.filter((copy) => !catalog.locations[copy.locationId]?.retiredAt)
+  if (!live.some((copy) => copy.sha256 !== live[0]!.sha256)) return null
+  return { locationIds: [...new Set(live.map((copy) => copy.locationId))] }
 }
 
 /** Locations holding at least one copy of the session's frames, in first-seen order. */

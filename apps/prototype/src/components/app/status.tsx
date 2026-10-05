@@ -18,6 +18,7 @@ import {
   CircleHelp,
   CircleSlash,
   CircleX,
+  CopyX,
   Clock,
   FileDiff,
   Hourglass,
@@ -88,6 +89,9 @@ export const STATUS = {
     associated: s("Associated", "info", Link2),
     "needs-review": s("Needs review", "warning", TriangleAlert),
     unresolved: s("Unresolved", "warning", CircleHelp),
+  },
+  copies: {
+    conflicting: s("Conflicting copies", "warning", CopyX),
   },
   operation: {
     running: s("Running", "info", Loader),

@@ -244,7 +244,7 @@ export interface AssetCopy {
   locationId: LocationId
   volumeId: VolumeId
   path: string
-  /** Bytes observed at this copy; differs from `Asset.sha256` when this copy changed. */
+  /** Bytes observed at this copy; differs from `Asset.sha256` when this copy changed (conflicting copies, LIB-AC-15). */
   sha256: string
   presence: Presence
   lastObservedAt: IsoDateTime
@@ -260,7 +260,11 @@ export interface Asset {
   fileName: string
   format: "fits" | "xisf"
   sizeBytes: number
-  /** Content identity at the last observation of any copy. */
+  /**
+   * Recorded content identity: the bytes every copy agreed on at its last
+   * observation. A copy that changes while another keeps these bytes leaves
+   * it unchanged; the copies then conflict (LIB-AC-15, D19).
+   */
   sha256: string
   observed: FrameHeader
   imageType: ImageType

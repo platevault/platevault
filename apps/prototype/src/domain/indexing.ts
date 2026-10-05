@@ -390,6 +390,10 @@ function assetForFile(catalog: Catalog, location: Location, file: DiskFile): Ass
  * keep their identity, session and decisions; changed bytes update the
  * fingerprint, which makes earlier quality decisions "changed content". A
  * byte-identical file found elsewhere becomes another copy of its asset.
+ * When one copy's bytes change while another copy keeps the recorded bytes,
+ * the asset keeps its identity and the pair reads as conflicting copies
+ * (LIB-AC-15): both stay registered and neither is used in place of the
+ * other until their bytes agree again (D19).
  * Returns a new catalog object (collections are shallow-copied).
  */
 export function readFiles(source: Catalog, location: Location, files: DiskFile[], now: IsoDateTime): Catalog {
@@ -426,7 +430,9 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
         : [...existing.copies, copy]
       // Re-reading the bytes finishes any pending verification of this decision.
       const quality = existing.quality.verificationPending ? { ...existing.quality, verificationPending: false } : existing.quality
-      catalog.assets[existing.id] = { ...existing, sha256: file.sha256, sizeBytes: file.sizeBytes, copies, quality }
+      // The identity follows the bytes only while every copy outside a retired location agrees.
+      const agreed = copies.every((c) => c.sha256 === file.sha256 || catalog.locations[c.locationId]?.retiredAt)
+      catalog.assets[existing.id] = agreed ? { ...existing, sha256: file.sha256, sizeBytes: file.sizeBytes, copies, quality } : { ...existing, copies, quality }
       continue
     }
     // A retired asset can hold this path's id; a re-registered file gets its own.
