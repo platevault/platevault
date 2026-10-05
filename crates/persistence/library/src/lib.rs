@@ -4,12 +4,13 @@
 //! Clean durable `SQLite` library catalog: the sanctioned library schema and sole writer.
 //!
 //! One serialized writer connection commits every mutation inside `BEGIN IMMEDIATE`
-//! and reports success only after `COMMIT`; readers use separate read-only
-//! connections. Decision revisions are per record and independent of scan
-//! observation sequences. Source files are only ever opened for reading: content
-//! digests are computed lazily for reviewed decisions and verified remaps, and the
-//! digest lives in the fingerprint it was computed for, so a changed observation
-//! invalidates it.
+//! and reports success only after `COMMIT`; a writer connection that a failed
+//! rollback left unusable is replaced before its next use. Readers use separate
+//! read-only connections. Decision revisions are per record and independent of
+//! scan observation sequences. Source files are only ever opened for reading:
+//! content digests are computed lazily for reviewed decisions and verified remaps,
+//! and the digest lives in the fingerprint it was computed for, so a changed
+//! observation invalidates it.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::io::Read;
@@ -37,7 +38,7 @@ use sqlx::sqlite::{
     SqliteRow, SqliteSynchronous,
 };
 use sqlx::{Connection, Row};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 use uuid::Uuid;
 
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
@@ -50,10 +51,10 @@ const MAX_PAGE: u32 = 1000;
 const HASH_BUFFER: usize = 1 << 20;
 
 /// Run one writer transaction: `BEGIN IMMEDIATE`, body, `COMMIT`. An early `?`
-/// drops the transaction, which rolls back before the writer is reused.
+/// drops the transaction, which queues its rollback before the writer is reused.
 macro_rules! write_txn {
     ($catalog:expr, |$conn:ident| $body:expr) => {{
-        let mut writer = $catalog.writer.lock().await;
+        let mut writer = $catalog.writer().await?;
         let mut txn = writer.begin_with("BEGIN IMMEDIATE").await?;
         let $conn: &mut SqliteConnection = &mut txn;
         let value = $body;
@@ -250,6 +251,8 @@ pub trait SourceProbe: Send + Sync + 'static {
 
 pub struct Catalog {
     writer: Mutex<SqliteConnection>,
+    /// Durable options the writer was opened with; a replacement writer reuses them.
+    writer_options: SqliteConnectOptions,
     readers: SqlitePool,
     /// Test-only call made on the search thread before each stale-root search.
     #[cfg(test)]
@@ -330,8 +333,7 @@ impl Catalog {
                 .synchronous(SqliteSynchronous::Full)
                 .foreign_keys(true),
         );
-        let mut writer = SqliteConnection::connect_with(&writer_options).await?;
-        read_settings(&mut writer).await?.require_durable()?;
+        let mut writer = connect_writer(&writer_options).await?;
         install_schema(&mut writer).await?;
         recover_interrupted(&mut writer).await?;
         let readers = SqlitePoolOptions::new()
@@ -340,6 +342,7 @@ impl Catalog {
             .await?;
         Ok(Self {
             writer: Mutex::new(writer),
+            writer_options,
             readers,
             #[cfg(test)]
             stale_search_hook: Arc::default(),
@@ -359,9 +362,10 @@ impl Catalog {
     /// Read back the settings actually applied to the writer connection.
     ///
     /// # Errors
-    /// `PersistenceFailure` when a `PRAGMA` cannot be read.
+    /// `PersistenceFailure` when a `PRAGMA` cannot be read or an unusable writer
+    /// cannot be replaced.
     pub async fn writer_settings(&self) -> Result<WriterSettings> {
-        let mut writer = self.writer.lock().await;
+        let mut writer = self.writer().await?;
         let settings = read_settings(&mut writer).await;
         drop(writer);
         settings
@@ -371,18 +375,55 @@ impl Catalog {
         Ok(self.readers.acquire().await?)
     }
 
+    /// Lock the single writer, first replacing a connection that is unusable.
+    ///
+    /// After `SQLITE_FULL`, I/O and similar errors `SQLite` may already have rolled
+    /// the transaction back itself. The `ROLLBACK` the dropped transaction queues
+    /// (on an error or a cancelled call) then fails, sqlx keeps counting an open
+    /// transaction and refuses every later `BEGIN`; a connection worker that could
+    /// not roll back a cancelled `BEGIN` stops. The ping runs after any queued
+    /// rollback, so the depth read next is settled. An unusable connection is
+    /// swapped for a fresh durable one and closed, which rolls back anything it
+    /// still held; its close error is moot once it is no longer the writer.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the replacement cannot be opened durably; the
+    /// unusable writer then stays in place and the next call tries again.
+    async fn writer(&self) -> Result<MutexGuard<'_, SqliteConnection>> {
+        let mut writer = self.writer.lock().await;
+        if writer.ping().await.is_err() || writer.is_in_transaction() {
+            let fresh = connect_writer(&self.writer_options).await?;
+            std::mem::replace(&mut *writer, fresh).close().await.ok();
+        }
+        Ok(writer)
+    }
+
     /// Restrict the writer's database size so the next growth fails with `SQLITE_FULL`.
     ///
     /// # Errors
     /// `PersistenceFailure` when the limit cannot be applied.
     #[cfg(test)]
     pub async fn limit_writer_pages_for_test(&self) -> Result<i64> {
-        let mut writer = self.writer.lock().await;
+        let mut writer = self.writer().await?;
         let pages: i64 = sqlx::query_scalar("PRAGMA page_count").fetch_one(&mut *writer).await?;
         let limit: i64 =
             sqlx::query_scalar(sqlx::AssertSqlSafe(format!("PRAGMA max_page_count = {pages}")))
                 .fetch_one(&mut *writer)
                 .await?;
+        drop(writer);
+        Ok(limit)
+    }
+
+    /// Lift the writer's database size limit again, as if disk space was freed.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the limit cannot be lifted.
+    #[cfg(test)]
+    pub async fn lift_writer_page_limit_for_test(&self) -> Result<i64> {
+        let mut writer = self.writer().await?;
+        let limit: i64 = sqlx::query_scalar("PRAGMA max_page_count = 4294967294")
+            .fetch_one(&mut *writer)
+            .await?;
         drop(writer);
         Ok(limit)
     }
@@ -650,7 +691,7 @@ impl Catalog {
         let files: Vec<&ScanFile> = batch.files.iter().collect();
         let issues: Vec<&ScanIssue> = batch.issues.iter().collect();
         let digests = self.decided_digests(operation_id, &files).await?;
-        let mut writer = self.writer.lock().await;
+        let mut writer = self.writer().await?;
         let mut txn = writer.begin_with("BEGIN IMMEDIATE").await?;
         let op = load_operation_row(&mut txn, operation_id).await?;
         require_running(&op)?;
@@ -706,7 +747,7 @@ impl Catalog {
         }
         let pending = self.unapplied(operation_id, observation).await?;
         let digests = self.decided_digests(operation_id, &pending.files).await?;
-        let mut writer = self.writer.lock().await;
+        let mut writer = self.writer().await?;
         let mut txn = writer.begin_with("BEGIN IMMEDIATE").await?;
         let op = load_operation_row(&mut txn, operation_id).await?;
         require_running(&op)?;
@@ -1017,7 +1058,7 @@ impl Catalog {
     {
         validate_correction_request(expected, corrections)?;
         let proposal = {
-            let mut writer = self.writer.lock().await;
+            let mut writer = self.writer().await?;
             let mut txn = writer.begin_with("BEGIN IMMEDIATE").await?;
             let proposal =
                 correct_in_txn(&mut txn, expected, corrections, &mut grouping, Uuid::new_v4())
@@ -2044,6 +2085,14 @@ fn durable(options: SqliteConnectOptions) -> SqliteConnectOptions {
 #[cfg(not(target_os = "macos"))]
 fn durable(options: SqliteConnectOptions) -> SqliteConnectOptions {
     options
+}
+
+/// Connect the single writer and refuse it unless WAL, FULL synchronous, foreign
+/// keys and (on macOS) fullfsync are in effect.
+async fn connect_writer(options: &SqliteConnectOptions) -> Result<SqliteConnection> {
+    let mut writer = SqliteConnection::connect_with(options).await?;
+    read_settings(&mut writer).await?.require_durable()?;
+    Ok(writer)
 }
 
 async fn read_settings(conn: &mut SqliteConnection) -> Result<WriterSettings> {
@@ -6454,6 +6503,9 @@ fn from_text<T: DeserializeOwned>(text: &str) -> Result<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::future::Future;
+    use std::task::Poll;
+
     use super::*;
 
     fn large_target() -> TargetCandidate {
@@ -6500,6 +6552,90 @@ mod tests {
         );
         assert!(reopened.list_targets(0, 10).await.unwrap().is_empty());
         assert!(reopened.save_target(&candidate, None).await.is_ok(), "unlimited writer saves");
+    }
+
+    /// `SQLITE_FULL` makes `SQLite` roll the whole transaction back itself, so the
+    /// writer's own `ROLLBACK` fails; once space frees up, the same open catalog
+    /// must commit again on a durable writer.
+    #[tokio::test]
+    async fn sqlite_full_rollback_leaves_the_open_writer_durable_and_writable() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("catalog.sqlite");
+        let catalog = Catalog::open(&path).await.unwrap();
+        catalog.limit_writer_pages_for_test().await.unwrap();
+        let candidate = large_target();
+        let error = catalog.save_target(&candidate, None).await.unwrap_err();
+        assert_eq!(error.response(None, None).kind, "persistence_failure");
+        assert!(error.to_string().contains("full"), "{error}");
+        assert!(catalog.list_targets(0, 10).await.unwrap().is_empty());
+
+        catalog.lift_writer_page_limit_for_test().await.unwrap();
+        let saved = catalog.save_target(&candidate, None).await.unwrap();
+        assert_eq!(catalog.target(candidate.id).await.unwrap(), saved);
+        let macos = cfg!(target_os = "macos");
+        assert_eq!(
+            catalog.writer_settings().await.unwrap(),
+            WriterSettings {
+                journal_mode: "wal".into(),
+                synchronous: 2,
+                foreign_keys: true,
+                fullfsync: macos,
+                checkpoint_fullfsync: macos,
+            }
+        );
+        catalog.close().await.unwrap();
+
+        let reopened = Catalog::open(&path).await.unwrap();
+        assert_eq!(reopened.target(candidate.id).await.unwrap(), saved);
+    }
+
+    /// Poll `write` `polls` times, letting the writer thread finish the command each
+    /// poll sent, then drop it the way a cancelled caller does.
+    async fn cancel_after<T>(write: impl Future<Output = T>, polls: usize) -> Option<T> {
+        let mut write = std::pin::pin!(write);
+        for _ in 0..polls {
+            let step = std::future::poll_fn(|cx| Poll::Ready(write.as_mut().poll(cx)));
+            if let Poll::Ready(output) = step.await {
+                return Some(output);
+            }
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+        None
+    }
+
+    /// A write cancelled at each await point, including right after `SQLITE_FULL`
+    /// rolled its transaction back, saves nothing and leaves the open writer able
+    /// to commit the next write.
+    #[tokio::test]
+    async fn write_cancelled_under_sqlite_full_saves_nothing_and_the_writer_recovers() {
+        let dir = tempfile::tempdir().unwrap();
+        let catalog = Catalog::open(&dir.path().join("catalog.sqlite")).await.unwrap();
+        let mut committed = BTreeSet::new();
+        for polls in 1.. {
+            catalog.limit_writer_pages_for_test().await.unwrap();
+            let large = large_target();
+            let attempt = cancel_after(catalog.save_target(&large, None), polls).await;
+            catalog.lift_writer_page_limit_for_test().await.unwrap();
+            let next =
+                TargetCandidate { id: Uuid::new_v4(), aliases: Vec::new(), ..large_target() };
+            let saved = catalog.save_target(&next, None).await;
+            let cancelled = attempt.is_none();
+            assert!(saved.is_ok(), "after {polls} polls (cancelled: {cancelled}): {saved:?}");
+            committed.insert(next.id);
+            assert_eq!(
+                catalog.target(large.id).await.unwrap_err().response(None, None).kind,
+                "not_found"
+            );
+            if let Some(result) = attempt {
+                assert_eq!(result.unwrap_err().response(None, None).kind, "persistence_failure");
+                break;
+            }
+        }
+        let listed = catalog.list_targets(0, MAX_PAGE).await.unwrap();
+        assert_eq!(
+            listed.iter().map(|record| record.candidate.id).collect::<BTreeSet<_>>(),
+            committed
+        );
     }
 
     use platevault_model::ImageFormat;
