@@ -199,9 +199,10 @@ export function NewViewPage() {
   }
 
   const ctx = viewContext(catalog, { projectId: project?.id ?? null, targetId })
-  const preselected = from === "project" ? preselectedSessions(catalog, ctx) : []
   let origin: ViewOrigin = from ?? (project ? "project" : target ? "target" : "sessions")
   if (from === "project" && !project) origin = target ? "target" : "sessions"
+  // Geometry preselection follows the chosen Project, however the page was reached (generic New View included).
+  const preselected = origin === "project" && project ? preselectedSessions(catalog, ctx) : []
   let content: MembershipContent = emptyContent()
   let startingPoint: string
   if (origin === "project" && project) {
@@ -237,13 +238,13 @@ export function NewViewPage() {
   const originLabel: Record<ViewOrigin, string> = {
     project: project ? `From Project ${project.name}` : "From a Project",
     target: target ? `From Target ${target.name}` : "From a Target",
-    sessions: "From Sessions",
+    sessions: sessions.length > 0 ? "From Sessions" : "Standalone View",
     results: "From accepted Results",
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="New View" description="Name the View. Membership is reviewed in the workspace; nothing is saved until you choose Save View there." />
+      <PageHeader title="New View" description="Name the View. Create View adds it as a draft; its membership is committed only when you choose Save View in the workspace." />
       <PageBody className="max-w-2xl">
         {origin === "sessions" && sessions.length === 0 && sessionIds.length > 0 ? (
           <Notice tone="warning" title="The chosen sessions were not found">

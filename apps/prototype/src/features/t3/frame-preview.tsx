@@ -113,9 +113,9 @@ function StarDetail({ field, star, scaleArcsec }: { field: StarField; star: Star
   )
 }
 
-function MetricTable({ record, state, applies }: { record: FrameMeasurement | undefined; state: FrameMeasureState; applies: boolean }) {
+function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurement | undefined; state: FrameMeasureState; applies: boolean; sha256: string }) {
   const builtIn = applies ? builtInMetrics(record) : []
-  const imported = currentImportedMetrics(record, applies)
+  const imported = currentImportedMetrics(record, sha256)
   const byKey = (list: Metric[], key: MetricKey) => list.find((m) => m.key === key)
   const warning = builtIn.find((m) => m.warning)?.warning
   return (
@@ -269,16 +269,17 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
           <h3 id="preview-title" className="truncate text-sm font-semibold" title={asset.fileName}>
             {asset.fileName}
           </h3>
-          <p className="text-xs text-muted-foreground tabular-nums">
+          <p id={`${helpId}-position`} className="text-xs text-muted-foreground tabular-nums">
             Frame {position.index + 1} of {position.total} · {zoomLabel}
+            {position.total <= 1 ? " · Only frame shown" : position.index <= 0 ? " · First frame shown" : position.index >= position.total - 1 ? " · Last frame shown" : ""}
           </p>
         </div>
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="outline" onClick={onPrevious} disabled={position.index <= 0} aria-keyshortcuts="k">
+          <Button size="sm" variant="outline" onClick={onPrevious} disabled={position.index <= 0} focusableWhenDisabled aria-describedby={position.index <= 0 ? `${helpId}-position` : undefined} className="aria-disabled:pointer-events-none aria-disabled:opacity-50" aria-keyshortcuts="k">
             <ChevronLeft aria-hidden="true" data-icon="inline-start" />
             Previous <Kbd>K</Kbd>
           </Button>
-          <Button size="sm" variant="outline" onClick={onNext} disabled={position.index >= position.total - 1} aria-keyshortcuts="j">
+          <Button size="sm" variant="outline" onClick={onNext} disabled={position.index >= position.total - 1} focusableWhenDisabled aria-describedby={position.index >= position.total - 1 ? `${helpId}-position` : undefined} className="aria-disabled:pointer-events-none aria-disabled:opacity-50" aria-keyshortcuts="j">
             Next <Kbd>J</Kbd>
             <ChevronRight aria-hidden="true" data-icon="inline-end" />
           </Button>
@@ -291,7 +292,7 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <ToggleGroup value={[zoom]} onValueChange={(v) => v[0] && setZoom(v[0] as Zoom)} variant="outline" size="sm" aria-label="Zoom">
               <ToggleGroupItem value="fit">Fit</ToggleGroupItem>
               <ToggleGroupItem value="1">1:1</ToggleGroupItem>
@@ -383,7 +384,7 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" onClick={exclude.run} disabled={exclude.disabledReason !== null} aria-keyshortcuts="x" aria-describedby={`${helpId}-exclude`}>
+        <Button size="sm" variant="outline" onClick={exclude.run} disabled={exclude.disabledReason !== null} focusableWhenDisabled className="aria-disabled:pointer-events-none aria-disabled:opacity-50" aria-keyshortcuts="x" aria-describedby={`${helpId}-exclude`}>
           <CircleSlash aria-hidden="true" data-icon="inline-start" />
           {exclude.label} <Kbd>X</Kbd>
         </Button>
@@ -392,7 +393,7 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
         </span>
       </div>
 
-      <MetricTable record={record} state={state} applies={applies} />
+      <MetricTable record={record} state={state} applies={applies} sha256={asset.sha256} />
 
       {starsOn && field ? (
         <div className="space-y-2">
@@ -443,11 +444,11 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
         <CollapsibleContent className="space-y-4 border-t p-3">
           <section className="space-y-1.5">
             <h4 className="text-xs font-medium text-muted-foreground">Measurement provenance</h4>
-            {[...(applies ? builtInMetrics(record) : []), ...currentImportedMetrics(record, applies)].length === 0 ? (
+            {[...(applies ? builtInMetrics(record) : []), ...currentImportedMetrics(record, asset.sha256)].length === 0 ? (
               <p className="text-sm text-muted-foreground">No measurement applies to this frame's current bytes.</p>
             ) : (
               <ul className="space-y-1.5 text-xs">
-                {[...(applies ? builtInMetrics(record) : []), ...currentImportedMetrics(record, applies)].map((m) => (
+                {[...(applies ? builtInMetrics(record) : []), ...currentImportedMetrics(record, asset.sha256)].map((m) => (
                   <li key={`${m.source}-${m.key}`} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
                     <span className="text-muted-foreground">
                       {METRIC_LABEL[m.key]} ({m.source})

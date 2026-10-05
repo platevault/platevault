@@ -1,16 +1,19 @@
 /**
  * Built-in measurement during frame review (PIX-FR-01, PIX-AC-01, PIX-AC-10).
- * One "measure" operation per review: it first re-hashes frames with cached
- * values ("Verifying"), restores an earlier record when the bytes match it
- * again, then measures the rest, the current frame first. Cancel (foundation)
- * stops it; frames it never reached read "Not measured". Measurement never
- * changes membership or quality (PIX-FR-08).
+ * One "measure" operation per review, started only by the explicit Review
+ * frames control (J22 S1): opening or browsing Frames never measures
+ * (PIX-AC-06). It first re-hashes frames with cached values ("Verifying"),
+ * restores an earlier record when the bytes match it again, then measures the
+ * rest, the current frame first. Cancel (foundation) stops it; frames it never
+ * reached read "Not measured". Measurement never changes membership or quality
+ * (PIX-FR-08), so the operation names no View in its scope: Mark complete
+ * does not wait for it (D09).
  */
 import { BUILT_IN_METHOD, simulateMeasurement } from "@/domain/measurement"
 import type { AssetId, Catalog, FrameMeasurement, MeasurementRecord, Metric, Operation, OperationId, OperationItem, ViewId } from "@/domain/types"
 import { plural } from "@/lib/format"
 import { nowIso, type PrototypeState, store } from "@/store/core"
-import { type OperationHandler, isSettled, patchOperation, settleOperation, startOperation } from "@/store/operations"
+import { type OperationHandler, isSettled, patchOperation, resumeOperation, settleOperation, startOperation } from "@/store/operations"
 import { currentFile, pixelScaleFor, sessionLabel } from "./model"
 
 export interface MeasurePayload {
@@ -49,8 +52,10 @@ export function frameMeasureState(catalog: Catalog, assetId: AssetId, op: Operat
   const asset = catalog.assets[assetId]
   const record = catalog.measurements[assetId]
   if (!asset || !record || record.inputSha256 === null) return "not-measured"
-  if (record.state === "valid" && record.inputSha256 === asset.sha256) return "measured"
-  return "history-only"
+  if (record.inputSha256 !== asset.sha256) return "history-only"
+  // A record of the current bytes that holds only imported values has no built-in measurement yet.
+  if (builtInMetrics(record).length === 0) return "not-measured"
+  return record.state === "valid" ? "measured" : "history-only"
 }
 
 /** Built-in metrics of a record that applies to the frame's current bytes. */
@@ -63,27 +68,32 @@ export function importedMetricsOf(record: FrameMeasurement | undefined): Metric[
 }
 
 /**
- * Imported metrics that describe the frame's current bytes (PIX-AC-10): those
- * of a record that applies, or of a record no built-in run has pinned to bytes yet.
+ * Imported metrics that describe the frame's current bytes (PIX-AC-10). Every
+ * import is stamped with the digest of the bytes it was mapped to, so a value
+ * never applies to bytes it did not describe.
  */
-export function currentImportedMetrics(record: FrameMeasurement | undefined, applies: boolean): Metric[] {
-  return applies || record?.inputSha256 === null ? importedMetricsOf(record) : []
+export function currentImportedMetrics(record: FrameMeasurement | undefined, sha256: string): Metric[] {
+  return record && record.inputSha256 === sha256 ? importedMetricsOf(record) : []
 }
 
 /** History entry for a record: built-in and imported values stay with the bytes they describe. */
-function snapshot(record: FrameMeasurement): MeasurementRecord | null {
+export function historyEntry(record: FrameMeasurement): MeasurementRecord | null {
   if (!record.inputSha256 || !record.computedAt || record.state === "pending" || record.state === "verifying") return null
   return { inputSha256: record.inputSha256, state: record.state, metrics: record.metrics, computedAt: record.computedAt }
 }
 
 /**
- * Start review measurement for `assetIds` unless one is already unsettled for
- * this View. Returns the running operation id, or null when nothing needs work.
+ * Start review measurement for `assetIds` (Review frames). An interrupted or
+ * paused review resumes instead of starting a second one. Returns the
+ * operation id, or null when nothing needs work.
  */
 export function startMeasurement(viewId: ViewId, assetIds: AssetId[]): OperationId | null {
   const state = store.getState()
   const existing = latestMeasureOp(state, viewId)
-  if (existing && !isSettled(existing.status)) return existing.id
+  if (existing && !isSettled(existing.status)) {
+    if (existing.status !== "running") resumeOperation(existing.id)
+    return existing.id
+  }
   const { catalog } = state
   const verify: AssetId[] = []
   const queue: AssetId[] = []
@@ -107,7 +117,7 @@ export function startMeasurement(viewId: ViewId, assetIds: AssetId[]): Operation
   return startOperation({
     kind: "measure",
     title: "Measure frames",
-    scope: { viewIds: [viewId] },
+    scope: {},
     total,
     unit: "frames",
     items,
@@ -136,7 +146,7 @@ function verifyOne(state: PrototypeState, id: AssetId, payload: MeasurePayload):
     return null
   }
   payload.reused += 1
-  const current = snapshot(record)
+  const current = historyEntry(record)
   return {
     ...record,
     state: "valid",
@@ -158,11 +168,13 @@ function measureOne(state: PrototypeState, id: AssetId, payload: MeasurePayload)
   const session = asset.sessionId ? state.catalog.sessions[asset.sessionId] : undefined
   const result = simulateMeasurement(asset, file, pixelScaleFor(state.catalog, session), nowIso())
   const previous = state.catalog.measurements[id]
-  const earlier = previous && previous.inputSha256 !== result.inputSha256 ? snapshot(previous) : null
+  const sameBytes = previous?.inputSha256 === result.inputSha256
+  const earlier = previous && !sameBytes ? historyEntry(previous) : null
   payload.measured += 1
   return {
     ...result,
-    metrics: earlier ? result.metrics : [...result.metrics, ...importedMetricsOf(previous)],
+    // Imported values stay on the record only while it describes the bytes they were mapped to.
+    metrics: sameBytes ? [...result.metrics, ...importedMetricsOf(previous)] : result.metrics,
     history: [...(earlier ? [earlier] : []), ...(previous?.history ?? [])],
   }
 }

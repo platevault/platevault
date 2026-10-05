@@ -1,11 +1,14 @@
 /**
  * Linked sky coverage (VSEL-FR-07, C1, C5). The table stays primary: this
  * figure draws the framing or mosaic panels and each session footprint in
- * the tangent plane (north up, east left). Clicking a footprint highlights its
- * row; the row's current state highlights the footprint. Mosaic footprints are
- * drawn side by side, never stitched. Pointer only: the session table is the
- * keyboard path to the same selection.
+ * the tangent plane (north up, east left). Clicking a footprint outline, or its
+ * entry in the footprint list, highlights its row; the row's current state
+ * highlights the footprint. Near-coincident footprints share most of their
+ * area, so the drawing takes clicks on outlines only (a wide invisible stroke)
+ * and the list is the unambiguous pointer and keyboard path. Mosaic footprints
+ * are drawn side by side, never stitched.
  */
+import { Button } from "@/components/ui/button"
 import type { Footprint } from "@/domain/derive"
 import { cn } from "@/lib/utils"
 import type { Region } from "./model"
@@ -103,24 +106,22 @@ export function SkyCoverage({
         ))}
         {ordered.map(({ item, polygon, point }) => {
           const active = item.id === activeId
-          const tone = active ? "stroke-primary" : item.selected ? "stroke-primary/70" : "stroke-muted-foreground/60"
+          // Full-strength tokens: an unselected outline keeps at least 3:1 against the background in both themes (WCAG 1.4.11).
+          const tone = active || item.selected ? "stroke-primary" : "stroke-muted-foreground"
           if (polygon) {
             return (
-              <path
-                key={item.id}
-                d={path(polygon)}
-                onClick={() => onActivate(item.id)}
-                className={cn("cursor-pointer", tone, active ? "fill-primary/15" : "fill-transparent hover:fill-foreground/5")}
-                strokeWidth={active ? 3 : 1.25}
-              >
-                <title>{item.label}</title>
-              </path>
+              <g key={item.id} data-footprint={item.label} onClick={() => onActivate(item.id)} className="cursor-pointer">
+                <path d={path(polygon)} className={cn(tone, active ? "fill-primary/15" : "fill-none")} strokeWidth={active ? 3 : item.selected ? 1.75 : 1.25} strokeDasharray={item.selected || active ? undefined : "3 3"} pointerEvents="none" />
+                <path d={path(polygon)} className="fill-none stroke-transparent" strokeWidth={10} pointerEvents="stroke">
+                  <title>{item.label}</title>
+                </path>
+              </g>
             )
           }
           if (point) {
             const [x, y] = toSvg(point)
             return (
-              <g key={item.id} onClick={() => onActivate(item.id)} className="cursor-pointer">
+              <g key={item.id} data-footprint={item.label} onClick={() => onActivate(item.id)} className="cursor-pointer">
                 <circle cx={x} cy={y} r={12} className="fill-transparent" />
                 <circle cx={x} cy={y} r={active ? 5 : 3.5} className={cn(tone, "fill-background")} strokeWidth={active ? 2.5 : 1.5} />
                 <title>{`${item.label}: pointing only`}</title>
@@ -130,12 +131,24 @@ export function SkyCoverage({
           return null
         })}
       </svg>
-      <figcaption className="space-y-1 text-xs text-muted-foreground">
+      <figcaption className="space-y-2 text-xs text-muted-foreground">
         <p>
-          {drawn} of {items.length} sessions drawn; dashed: {regions.map((r) => r.name).join(", ") || "no framing"}. Dots are pointing-only sessions (no
-          orientation, so no footprint). North up, east left. Prototype geometry.
+          {drawn} of {items.length} sessions drawn; dashed frame: {regions.map((r) => r.name).join(", ") || "no framing"}. Solid outlines are selected sessions, dotted ones are not; dots are
+          pointing-only sessions (no orientation, so no footprint). North up, east left. Prototype geometry.
         </p>
         {unknown.length > 0 ? <p>Not drawn, Position unknown: {unknown.join(", ")}.</p> : null}
+        <ul aria-label="Footprints" className="flex flex-wrap gap-1.5">
+          {shapes
+            .filter((s) => s.polygon || s.point)
+            .map(({ item, point }) => (
+              <li key={item.id}>
+                <Button size="sm" variant={item.id === activeId ? "default" : "outline"} aria-pressed={item.id === activeId} onClick={() => onActivate(item.id)}>
+                  {item.label}
+                  {point ? " · pointing only" : ""}
+                </Button>
+              </li>
+            ))}
+        </ul>
       </figcaption>
     </figure>
   )

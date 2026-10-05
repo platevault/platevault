@@ -7,7 +7,7 @@
  */
 import { Link } from "@tanstack/react-router"
 import { ImageOff, Upload } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { type FocusEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { getPreferences } from "@/app/preferences"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { type Column, DataTable, SelectionBar, TableToolbar } from "@/components/app/data-table"
@@ -22,12 +22,13 @@ import { assetAvailability, measurementApplies, qualityApplicability, targetCove
 import type { Asset, AssetId, Catalog, Disk, Metric, MetricKey, Operation, Session } from "@/domain/types"
 import { formatDuration, formatNight, plural } from "@/lib/format"
 import { useStore } from "@/store/core"
-import { cancelOperation, isSettled, resumeOperation } from "@/store/operations"
+import { cancelOperation, isSettled } from "@/store/operations"
 import { defaultFrameUi, type MeasurementImport } from "@/store/slices/t3"
 import { rejectForProject, resolveImportRow, setFrameUi, setLibraryQuality } from "./actions"
 import { SelectField } from "./fields"
 import { FramePreview } from "./frame-preview"
 import { frameName, ImportDialog } from "./import-dialog"
+import { CSV_COLUMNS } from "./csv"
 import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, frameMeasureState, formatMetric, latestMeasureOp, type MeasurePayload, METRIC_LABEL, startMeasurement, unfinishedCount } from "./measure"
 import { MeasurementPlot } from "./measurement-plot"
 import { currentFile, excludeFrames, type MemberState, memberState, pixelScaleFor, restoreFrames, sessionLabel } from "./model"
@@ -77,7 +78,7 @@ function buildRows(catalog: Catalog, ids: AssetId[], content: { included: AssetI
       state,
       applies,
       builtIn: applies ? byKey(builtInMetrics(record)) : {},
-      imported: byKey(currentImportedMetrics(record, applies)),
+      imported: byKey(currentImportedMetrics(record, asset.sha256)),
       rejected: asset.id in projectRejections,
     }
   })
@@ -103,48 +104,89 @@ function isTyping(target: EventTarget | null) {
   return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.getAttribute("role") === "combobox")
 }
 
-function MeasureBar({ op, notMeasured, onMeasure, disabledReason }: { op: Operation | undefined; notMeasured: number; onMeasure: () => void; disabledReason: string | null }) {
-  const unsettled = op && !isSettled(op.status)
-  if (unsettled) {
+const ARIA_DISABLED = "aria-disabled:pointer-events-none aria-disabled:opacity-50"
+
+/**
+ * Measurement status and the Review frames control (J22 S1). Frames opens idle;
+ * only this control starts, resumes or completes a review. Its buttons swap as
+ * the run starts, is canceled or finishes, so focus that was in the bar moves
+ * to the bar's current control instead of the page body (WCAG 2.4.3).
+ */
+function MeasureBar({ op, notMeasured, scope, onReview, disabledReason }: { op: Operation | undefined; notMeasured: number; scope: string | null; onReview: () => void; disabledReason: string | null }) {
+  const reasonId = useId()
+  const barRef = useRef<HTMLDivElement>(null)
+  const focusInBar = useRef(false)
+  const status = op?.status
+  useLayoutEffect(() => {
+    const bar = barRef.current
+    if (!focusInBar.current || !bar || bar.contains(document.activeElement)) return
+    ;(bar.querySelector<HTMLElement>("button") ?? bar).focus()
+  }, [status, notMeasured])
+  const focusHandlers = {
+    onFocus: () => {
+      focusInBar.current = true
+    },
+    // A focused button that unmounts blurs with no related target: keep the flag so the layout effect can restore focus.
+    onBlur: (event: FocusEvent<HTMLDivElement>) => {
+      if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) focusInBar.current = false
+    },
+  }
+  const scopeLine = scope ? <p className="w-full text-xs text-muted-foreground">{scope}</p> : null
+  if (op && !isSettled(op.status)) {
     const pct = op.progress.total > 0 ? (op.progress.done / op.progress.total) * 100 : 0
     return (
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-card px-3 py-2">
+      <div ref={barRef} tabIndex={-1} {...focusHandlers} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-card px-3 py-2 outline-none">
         <Progress value={pct} aria-label="Measurement progress" getAriaValueText={() => `${op.progress.done} of ${op.progress.total} frames`} className="min-w-48 flex-1 gap-1">
           <span className="text-sm tabular-nums" aria-hidden="true">
             {op.status === "running" ? ((op.payload as unknown as MeasurePayload).verify.length > 0 ? "Verifying cached values" : "Measuring frames") : op.status === "interrupted" ? "Measurement interrupted by a restart" : "Measurement paused"}: {op.progress.done} of {op.progress.total} frames · current frame first
           </span>
         </Progress>
-        <div className="flex gap-2">
-          {op.status === "interrupted" || op.status === "paused" ? (
-            <Button size="sm" variant="outline" onClick={() => resumeOperation(op.id)}>
-              Retry
+        <div className="flex shrink-0 gap-2">
+          {op.status !== "running" ? (
+            <Button size="sm" onClick={onReview}>
+              {op.status === "interrupted" ? "Review frames" : "Resume"}
             </Button>
           ) : null}
           <Button size="sm" variant="outline" onClick={() => cancelOperation(op.id)}>
             Cancel
           </Button>
         </div>
+        {scopeLine}
       </div>
     )
   }
   const unfinished = unfinishedCount(op)
   if (!op && notMeasured === 0) return null
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm">
-      <p className="text-pretty">
+    <div ref={barRef} tabIndex={-1} {...focusHandlers} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2 text-sm outline-none">
+      <p className="min-w-0 flex-1 text-pretty">
         {op ? (
           <>
             <StatusBadge kind="operation" value={op.status} className="mr-2" />
-            {op.status === "canceled" ? `Measurement canceled: ${op.progress.done} of ${op.progress.total} frames reached; ${unfinished} not measured. ` : `${op.summary ?? ""} `}
+            {op.status === "canceled" ? `Measurement canceled: ${op.progress.done} of ${op.progress.total} frames reached; ${unfinished} not measured.` : `${op.summary ?? ""} `}
           </>
         ) : null}
-        {notMeasured > 0 ? `${plural(notMeasured, "frame")} read Not measured.` : "Every readable frame has a valid value."}
+        {notMeasured === 0
+          ? "Every readable frame has a valid value."
+          : op?.status === "canceled"
+            ? null
+            : op
+              ? `${plural(notMeasured, "frame")} read Not measured.`
+              : `${plural(notMeasured, "frame")} not measured yet. Measuring starts only when you choose Review frames; opening, browsing and filtering never measure.`}
       </p>
       {notMeasured > 0 ? (
-        <Button size="sm" variant="outline" onClick={onMeasure} disabled={disabledReason !== null} title={disabledReason ?? undefined}>
-          Measure remaining frames
-        </Button>
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <Button size="sm" onClick={onReview} disabled={disabledReason !== null} focusableWhenDisabled aria-describedby={disabledReason ? reasonId : undefined} className={ARIA_DISABLED}>
+            Review frames
+          </Button>
+          {disabledReason ? (
+            <span id={reasonId} className="text-xs text-muted-foreground">
+              {disabledReason}
+            </span>
+          ) : null}
+        </div>
       ) : null}
+      {scopeLine}
     </div>
   )
 }
@@ -159,8 +201,10 @@ function ImportReview({ record, catalog }: { record: MeasurementImport; catalog:
         <span className="font-medium">{record.path.slice(record.path.lastIndexOf("/") + 1)}</span>
         <span className="text-muted-foreground">
           {" "}
-          · {plural(record.matched, "row")} attached as imported values{record.outsideView > 0 ? ` (${record.outsideView} to frames outside this View)` : ""} · PSFSignalWeight unavailable · Approved not
-          imported
+          · {plural(record.matched, "row")} attached as imported values{record.outsideView > 0 ? ` (${record.outsideView} to frames outside this View)` : ""}
+          {CSV_COLUMNS.filter((c) => c.status === "unavailable" || c.status === "not-imported")
+            .map((c) => ` · ${c.name} ${c.status === "unavailable" ? "unavailable" : "not imported"}`)
+            .join("")}
         </span>
       </p>
       {open.length === 0 ? <p className="text-xs text-muted-foreground">Every row is reviewed.</p> : null}
@@ -234,19 +278,34 @@ export function FramesArea() {
   const measurable = rows.filter((r) => r.member !== "unresolved" && assetAvailability(disk, catalog, r.asset) === "available").map((r) => r.asset.id)
   const notMeasured = rows.filter((r) => r.member !== "unresolved" && (r.state === "not-measured" || r.state === "history-only") && measurable.includes(r.asset.id)).length
 
-  // Opening Review frames starts built-in measurement once (D1); browsing or filtering never does (PIX-AC-06).
-  const started = useRef(false)
+  const measurableExcluded = measurable.filter((id) => content.excluded.includes(id)).length
+  const measureScope = measurableExcluded > 0 ? `Review covers ${measurable.length} readable frames: ${measurable.length - measurableExcluded} included, ${measurableExcluded} excluded.` : null
+  const hintId = useId()
+
+  // DataTable owns its sort, so the rendered row order is the order the user sees; J/K and Previous/Next follow it (J22 S5).
+  const tableRef = useRef<HTMLDivElement>(null)
+  const [tableOrder, setTableOrder] = useState<AssetId[]>([])
+  const hasMembers = memberIds.length > 0
   useEffect(() => {
-    if (started.current || view.completedAt) return
-    started.current = true
-    startMeasurement(view.id, measurable)
-    // Only on opening the area.
-  }, [view.id])
+    const node = tableRef.current
+    if (!node) return
+    const read = () => {
+      const ids = Array.from(node.querySelectorAll<HTMLElement>("[data-frame-id]"), (el) => el.dataset.frameId ?? "")
+      setTableOrder((prev) => (prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids))
+    }
+    read()
+    const observer = new MutationObserver(read)
+    observer.observe(node, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [hasMembers])
 
   const query = ui.search.toLowerCase()
   const shown = rows.filter((r) => (ui.showExcluded || r.member !== "excluded") && (!ui.sessionId || r.asset.sessionId === ui.sessionId) && (!query || r.asset.fileName.toLowerCase().includes(query)))
-  const active = shown.find((r) => r.asset.id === ui.activeAssetId) ?? rows.find((r) => r.asset.id === ui.activeAssetId) ?? shown[0] ?? null
-  const position = active ? shown.indexOf(active) : -1
+  const shownById = new Map(shown.map((r) => [r.asset.id, r]))
+  const fromTable = tableOrder.flatMap((id) => shownById.get(id) ?? [])
+  const ordered = fromTable.length === shown.length ? fromTable : shown
+  const active = ordered.find((r) => r.asset.id === ui.activeAssetId) ?? rows.find((r) => r.asset.id === ui.activeAssetId) ?? ordered[0] ?? null
+  const position = active ? ordered.indexOf(active) : -1
   const checked = checkedIds.filter((id) => memberIds.includes(id))
   const checkedIncluded = checked.filter((id) => content.included.includes(id))
   const checkedExcluded = checked.filter((id) => content.excluded.includes(id))
@@ -261,16 +320,16 @@ export function FramesArea() {
   }
 
   function step(delta: number) {
-    const next = shown[Math.min(shown.length - 1, Math.max(0, position + delta))]
+    const next = ordered[Math.min(ordered.length - 1, Math.max(0, position + delta))]
     if (!next) return
     select(next.asset.id)
-    setAnnouncement(`${next.asset.fileName}, ${next.session ? sessionLabel(next.session) : "no session"}: frame ${shown.indexOf(next) + 1} of ${shown.length}.`)
+    setAnnouncement(`${next.asset.fileName}, ${next.session ? sessionLabel(next.session) : "no session"}: frame ${ordered.indexOf(next) + 1} of ${ordered.length}.`)
   }
 
   function toggleExclusion(row: FrameRow) {
     const excluding = row.member !== "excluded"
-    const index = shown.indexOf(row)
-    const successor = shown[index + 1] ?? shown[index - 1]
+    const index = ordered.indexOf(row)
+    const successor = ordered[index + 1] ?? ordered[index - 1]
     const hadFocus = document.getElementById(`frame-${row.asset.id}`)?.closest("tr")?.contains(document.activeElement) ?? false
     const result = edit(excluding ? `Exclude ${row.asset.fileName} from View` : `Restore ${row.asset.fileName} to View`, (current, state) =>
       excluding ? excludeFrames(current, [row.asset.id]) : restoreFrames(state.disk, state.catalog, current, [row.asset.id]),
@@ -349,7 +408,7 @@ export function FramesArea() {
         const name = r.asset.fileName.replace(/\.(fits|xisf)$/i, "")
         const cut = name.lastIndexOf("_") + 1
         return (
-          <button type="button" id={`frame-${r.asset.id}`} className="flex max-w-48 min-w-0 rounded-sm text-left font-medium hover:underline" title={r.asset.fileName} onClick={() => select(r.asset.id)}>
+          <button type="button" id={`frame-${r.asset.id}`} data-frame-id={r.asset.id} className="flex max-w-48 min-w-0 rounded-sm text-left font-medium hover:underline" title={r.asset.fileName} onClick={() => select(r.asset.id)}>
             <span className="truncate">{name.slice(0, cut)}</span>
             <span data-frame-tail className="shrink-0">
               {name.slice(cut)}
@@ -358,7 +417,6 @@ export function FramesArea() {
         )
       },
     },
-    { id: "session", header: "Session", sortValue: (r) => r.session?.startedAt ?? null, cell: (r) => (r.session ? sessionLabel(r.session) : <UnknownValue label="No session" />) },
     {
       id: "member",
       header: "In View",
@@ -372,6 +430,14 @@ export function FramesArea() {
           <StatusBadge kind="availability" value={assetAvailability(disk, catalog, r.asset) === "available" ? "available" : assetAvailability(disk, catalog, r.asset)} label="Unresolved" />
         ),
     },
+    { id: "state", header: "Measurement", sortValue: (r) => r.state, cell: (r) => <StatusBadge kind="measurement" value={STATE_BADGE[r.state].value} label={STATE_BADGE[r.state].label} /> },
+    { id: "fwhm", header: "FWHM", align: "right", sortValue: (r) => r.builtIn.fwhm?.value ?? null, cell: metricCell("fwhm") },
+    ...(anyImported
+      ? [{ id: "fwhm-imported", header: "FWHM imported", align: "right" as const, sortValue: (r: FrameRow) => r.imported.fwhm?.value ?? null, cell: (r: FrameRow) => (r.imported.fwhm ? formatMetric(r.imported.fwhm) : <span className="text-muted-foreground">None</span>) }]
+      : []),
+    { id: "hfr", header: "HFR", align: "right", sortValue: (r) => r.builtIn.hfr?.value ?? null, cell: metricCell("hfr") },
+    { id: "ecc", header: "Ecc.", align: "right", sortValue: (r) => r.builtIn.eccentricity?.value ?? null, cell: metricCell("eccentricity") },
+    { id: "stars", header: "Stars", align: "right", sortValue: (r) => r.builtIn["star-count"]?.value ?? null, cell: metricCell("star-count") },
     {
       id: "quality",
       header: "Library quality",
@@ -386,14 +452,7 @@ export function FramesArea() {
         )
       },
     },
-    { id: "state", header: "Measurement", sortValue: (r) => r.state, cell: (r) => <StatusBadge kind="measurement" value={STATE_BADGE[r.state].value} label={STATE_BADGE[r.state].label} /> },
-    { id: "fwhm", header: "FWHM", align: "right", sortValue: (r) => r.builtIn.fwhm?.value ?? null, cell: metricCell("fwhm") },
-    ...(anyImported
-      ? [{ id: "fwhm-imported", header: "FWHM imported", align: "right" as const, sortValue: (r: FrameRow) => r.imported.fwhm?.value ?? null, cell: (r: FrameRow) => (r.imported.fwhm ? formatMetric(r.imported.fwhm) : <span className="text-muted-foreground">None</span>) }]
-      : []),
-    { id: "hfr", header: "HFR", align: "right", sortValue: (r) => r.builtIn.hfr?.value ?? null, cell: metricCell("hfr") },
-    { id: "ecc", header: "Ecc.", align: "right", sortValue: (r) => r.builtIn.eccentricity?.value ?? null, cell: metricCell("eccentricity") },
-    { id: "stars", header: "Stars", align: "right", sortValue: (r) => r.builtIn["star-count"]?.value ?? null, cell: metricCell("star-count") },
+    { id: "session", header: "Session", sortValue: (r) => r.session?.startedAt ?? null, cell: (r) => (r.session ? sessionLabel(r.session) : <UnknownValue label="No session" />) },
     {
       id: "warnings",
       header: "Warnings",
@@ -408,7 +467,7 @@ export function FramesArea() {
   if (memberIds.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <PageHeader level={2} title="Review frames" />
+        <PageHeader level={2} title="Frames" />
         <PageBody>
           <EmptyState
             icon={ImageOff}
@@ -437,7 +496,7 @@ export function FramesArea() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         level={2}
-        title="Review frames"
+        title="Frames"
         description="Measurements never exclude, reject or mark frames Usable. Excluding a frame changes this View only."
         actions={
           <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
@@ -451,13 +510,7 @@ export function FramesArea() {
           {announcement}
         </p>
         {readOnlyReason ? <p className="text-sm text-muted-foreground">{readOnlyReason}</p> : null}
-        <MeasureBar op={op} notMeasured={notMeasured} disabledReason={view.completedAt ? "Complete Views are not measured; Reopen first." : null} onMeasure={() => startMeasurement(view.id, measurable)} />
-
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <SelectField className="w-44" label="Plot metric" value={ui.metric} options={metricOptions} onChange={(value) => setFrameUi(view.id, { metric: value as MetricKey })} />
-          <p className="text-xs text-muted-foreground">Click a point to make it the current frame; the table and preview follow.</p>
-        </div>
-        <MeasurementPlot points={plotPoints} metric={ui.metric} activeId={active?.asset.id ?? null} onSelect={select} />
+        <MeasureBar op={op} notMeasured={notMeasured} scope={measureScope} disabledReason={view.completedAt ? "Complete Views are not measured; Reopen first." : null} onReview={() => startMeasurement(view.id, measurable)} />
 
         {imports.length > 0 ? (
           <Section title="Imported measurements" level={3} description="Imported values sit next to built-in values with their source, method and units. Rows that match no single frame attach to nothing.">
@@ -474,13 +527,20 @@ export function FramesArea() {
           hiddenByFilters={hiddenChecked}
           noun="frame"
           onShowSelected={() => setFrameUi(view.id, { showExcluded: true, sessionId: null, search: "" })}
-          onClear={() => setCheckedIds([])}
+          onClear={() => {
+            setCheckedIds([])
+            // The bar unmounts with the selection: keep focus in the table (WCAG 2.4.3).
+            requestAnimationFrame(() => tableRef.current?.querySelector<HTMLElement>("thead [role=checkbox]")?.focus())
+          }}
           actions={
             <>
               <Button
                 size="sm"
                 variant="outline"
                 disabled={!editable || checkedIncluded.length === 0}
+                focusableWhenDisabled
+                aria-describedby={!editable || checkedIncluded.length === 0 ? hintId : undefined}
+                className={ARIA_DISABLED}
                 onClick={() => {
                   const result = edit(`Exclude ${plural(checkedIncluded.length, "frame")} from View`, (current) => excludeFrames(current, checkedIncluded))
                   if (result.ok) setAnnouncement(`Excluded ${plural(checkedIncluded.length, "frame")} from this View. Files and library quality unchanged.`)
@@ -492,6 +552,9 @@ export function FramesArea() {
                 size="sm"
                 variant="outline"
                 disabled={!editable || checkedExcluded.length === 0}
+                focusableWhenDisabled
+                aria-describedby={!editable || checkedExcluded.length === 0 ? hintId : undefined}
+                className={ARIA_DISABLED}
                 onClick={() => {
                   const result = edit(`Restore ${plural(checkedExcluded.length, "frame")} to View`, (current, state) => restoreFrames(state.disk, state.catalog, current, checkedExcluded))
                   if (result.ok) setAnnouncement(`Restored ${plural(checkedExcluded.length, "frame")} to this View.`)
@@ -499,16 +562,25 @@ export function FramesArea() {
               >
                 Restore to View{checkedExcluded.length > 0 ? ` (${checkedExcluded.length})` : ""}
               </Button>
-              <Button size="sm" variant="outline" disabled={!editable || checkedIncluded.length === 0} onClick={() => setConfirm("usable")}>
+              <Button size="sm" variant="outline" disabled={!editable || checkedIncluded.length === 0} focusableWhenDisabled aria-describedby={!editable || checkedIncluded.length === 0 ? hintId : undefined} className={ARIA_DISABLED} onClick={() => setConfirm("usable")}>
                 Mark included frames usable
               </Button>
-              <Button size="sm" variant="outline" disabled={!editable || checked.length === 0} onClick={() => setConfirm("unusable")}>
+              <Button size="sm" variant="outline" disabled={!editable} focusableWhenDisabled aria-describedby={!editable ? hintId : undefined} className={ARIA_DISABLED} onClick={() => setConfirm("unusable")}>
                 Mark unusable in library
               </Button>
               {project ? (
-                <Button size="sm" variant="outline" disabled={!editable || checked.length === 0} onClick={() => setConfirm("reject")}>
+                <Button size="sm" variant="outline" disabled={!editable} focusableWhenDisabled aria-describedby={!editable ? hintId : undefined} className={ARIA_DISABLED} onClick={() => setConfirm("reject")}>
                   Reject for Project
                 </Button>
+              ) : null}
+              {!editable || checkedIncluded.length === 0 || checkedExcluded.length === 0 ? (
+                <p id={hintId} className="w-full text-xs text-muted-foreground">
+                  {!editable
+                    ? readOnlyReason
+                    : checkedIncluded.length === 0
+                      ? "Exclude from View and Mark included frames usable need an included frame in the selection."
+                      : "Restore to View needs an excluded frame in the selection."}
+                </p>
               ) : null}
             </>
           }
@@ -537,6 +609,7 @@ export function FramesArea() {
         </p>
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_min(22rem,40%)] xl:grid-cols-[minmax(0,1fr)_min(26rem,40%)]">
+          <div ref={tableRef} className="min-w-0 self-start">
           <DataTable
             label="Frames in this View"
             rows={shown}
@@ -544,7 +617,7 @@ export function FramesArea() {
             getRowId={(r) => r.asset.id}
             initialSort={{ columnId: "frame", direction: "asc" }}
             activeRowId={active?.asset.id ?? null}
-            className="max-h-[40rem] self-start"
+            className="max-h-[40rem]"
             selection={{ selected: checked, onChange: setCheckedIds, rowLabel: (r) => `${r.asset.fileName}, ${r.session ? sessionLabel(r.session) : "no session"}` }}
             empty={
               <EmptyState
@@ -560,30 +633,39 @@ export function FramesArea() {
               />
             }
           />
-          {active ? (
-            <FramePreview
-              asset={active.asset}
-              file={activeFile}
-              record={catalog.measurements[active.asset.id]}
-              state={active.state}
-              applies={active.applies}
-              scaleArcsec={pixelScaleFor(catalog, active.session)}
-              position={{ index: Math.max(0, position), total: shown.length }}
-              copies={active.asset.copies.map((c) => ({ location: catalog.locations[c.locationId]?.displayName ?? "Unknown location", path: c.path }))}
-              onPrevious={() => step(-1)}
-              onNext={() => step(1)}
-              exclude={{ label: excludeLabel, disabledReason: readOnlyReason, run: () => toggleExclusion(active) }}
-              unavailableReason={
-                activeAvailability === "available"
-                  ? null
-                  : `Preview unavailable: the frame is ${activeAvailability === "offline" ? "offline" : activeAvailability === "unreadable" ? "unreadable (access denied)" : "not found at its last complete scan"}.`
-              }
-            />
-          ) : null}
+          </div>
+          <div className="min-w-0 space-y-4 self-start">
+            {active ? (
+              <FramePreview
+                asset={active.asset}
+                file={activeFile}
+                record={catalog.measurements[active.asset.id]}
+                state={active.state}
+                applies={active.applies}
+                scaleArcsec={pixelScaleFor(catalog, active.session)}
+                position={{ index: Math.max(0, position), total: ordered.length }}
+                copies={active.asset.copies.map((c) => ({ location: catalog.locations[c.locationId]?.displayName ?? "Unknown location", path: c.path }))}
+                onPrevious={() => step(-1)}
+                onNext={() => step(1)}
+                exclude={{ label: excludeLabel, disabledReason: readOnlyReason, run: () => toggleExclusion(active) }}
+                unavailableReason={
+                  activeAvailability === "available"
+                    ? null
+                    : `Preview unavailable: the frame is ${activeAvailability === "offline" ? "offline" : activeAvailability === "unreadable" ? "unreadable (access denied)" : "not found at its last complete scan"}.`
+                }
+              />
+            ) : null}
+            {/* The plot sits with the preview it drives, so the frames table starts higher (density 7). */}
+            <div className="space-y-2">
+              <SelectField className="w-44" label="Plot metric" value={ui.metric} options={metricOptions} onChange={(value) => setFrameUi(view.id, { metric: value as MetricKey })} />
+              <p className="text-xs text-muted-foreground">Click a point to make it the current frame; the table and preview follow.</p>
+              <MeasurementPlot points={plotPoints} metric={ui.metric} activeId={active?.asset.id ?? null} onSelect={select} />
+            </div>
+          </div>
         </div>
         {notMeasured > 0 && op?.status === "canceled" ? (
           <Notice tone="info" title="Cancel kept your selection and exclusions">
-            Frames that were not reached read Not measured. Leave Frames and open Review frames again, or choose Measure remaining frames.
+            Frames that were not reached read Not measured. Choose Review frames to reuse the values already computed and measure the rest.
           </Notice>
         ) : null}
       </PageBody>
