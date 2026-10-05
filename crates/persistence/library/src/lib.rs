@@ -1141,8 +1141,10 @@ impl Catalog {
     /// Unreviewed clears the basis.
     ///
     /// # Errors
-    /// `Conflict` for stale input; source access errors with path context; and
-    /// `IdentityConflict` when current bytes differ from the recorded observation.
+    /// `Conflict` for stale input; `InvalidInput` for a copy of a retired location,
+    /// refused before its root is probed or its file hashed; source access errors
+    /// with path context; and `IdentityConflict` when current bytes differ from the
+    /// recorded observation.
     pub async fn set_quality<P>(
         &self,
         expected: &[ExpectedAsset],
@@ -1153,6 +1155,12 @@ impl Catalog {
         P: SourceProbe,
     {
         require_unique_assets(expected)?;
+        {
+            let mut conn = self.reader().await?;
+            for item in expected {
+                require_decidable(&load_asset(&mut conn, item.asset_id).await?)?;
+            }
+        }
         let digests = if quality == Quality::Unreviewed {
             HashMap::new()
         } else {
@@ -1938,8 +1946,9 @@ impl Catalog {
     /// last-observed state; its copies read Retired, stay as history and leave every
     /// total; its root stops counting as an overlap. No file changes.
     ///
-    /// The copies, the sessions holding them and `references`, read again by the
-    /// caller, must still be exactly what the review named.
+    /// The copies, the sessions holding them, the location's availability and
+    /// `references`, read again by the caller, must still be exactly what the
+    /// review named.
     ///
     /// # Errors
     /// `Conflict` naming the location for a stale revision or review, or naming the
@@ -1979,7 +1988,8 @@ impl Catalog {
                 && assets.iter().map(|asset| asset.id).collect::<BTreeSet<_>>() == read.assets
                 && retire_sessions(conn, location_id).await? == review.sessions
                 && read.references == review.references
-                && read.consulted == review.consulted;
+                && read.consulted == review.consulted
+                && location.availability == review.availability;
             if !unchanged {
                 return Err(conflict(location_id, location.decision_revision));
             }
@@ -4298,16 +4308,7 @@ async fn check_expected_assets(
     let mut assets = Vec::with_capacity(expected.len());
     for item in expected {
         let asset = load_asset(conn, item.asset_id).await?;
-        if asset.availability == Availability::Retired {
-            return Err(scoped(
-                LibraryError::InvalidInput(format!(
-                    "asset {} is a copy of a retired location and takes no new decision",
-                    asset.id
-                )),
-                asset.relative_path,
-                Some(asset.id),
-            ));
-        }
+        require_decidable(&asset)?;
         if asset.decision_revision != item.decision_revision
             || !fingerprint_matches(&asset.fingerprint, &item.fingerprint)
         {
@@ -4316,6 +4317,21 @@ async fn check_expected_assets(
         assets.push(asset);
     }
     Ok(assets)
+}
+
+/// Refuse a new decision on a copy of a retired location, naming the copy.
+fn require_decidable(asset: &Asset) -> Result<()> {
+    if asset.availability == Availability::Retired {
+        return Err(scoped(
+            LibraryError::InvalidInput(format!(
+                "asset {} is a copy of a retired location and takes no new decision",
+                asset.id
+            )),
+            asset.relative_path.clone(),
+            Some(asset.id),
+        ));
+    }
+    Ok(())
 }
 
 fn capture_fields() -> Result<BTreeSet<String>> {

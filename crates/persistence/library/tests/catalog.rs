@@ -20,9 +20,9 @@ use platevault_model::{
     Availability, CaptureKey, CaptureMetadata, CorrectionInput, EvidenceItem, ExpectedAsset,
     ExpectedSession, FileIdentity, GroupingResult, ImageFormat, LibraryError, Location,
     LocationLifecycle, LocationRole, NativePath, ObservationFingerprint, PathSensitivity,
-    Provenance, Quality, ReferenceKind, RemapBlockReason, Revision, ScanBatch, ScanFile, ScanIssue,
-    ScanObservation, ScanOperation, ScanProgress, ScanState, Session, SessionCandidate,
-    TargetAlias, TargetCandidate, VolumeIdentity,
+    Provenance, Quality, ReferenceKind, RemapBlockReason, RetryAction, Revision, ScanBatch,
+    ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState, Session,
+    SessionCandidate, TargetAlias, TargetCandidate, VolumeIdentity,
 };
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -1991,6 +1991,141 @@ async fn refuses_reuse_of_retired(
     let decided = catalog.set_quality(&[expected(copy)], Quality::Usable, DiskProbe).await;
     assert_eq!(kind(&decided.unwrap_err()), "invalid_input");
     assert_eq!(catalog.location(retired.id).await.unwrap().decision_revision, revision);
+    assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
+#[tokio::test]
+async fn a_retire_review_whose_availability_changed_is_refused() {
+    let fx = Fixture::new();
+    let names = ["Ha_001.fits", "Ha_002.fits"];
+    fx.write(names[0], b"frame one bytes");
+    fx.write(names[1], b"frame two bytes");
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &names).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+
+    // The review is taken while the drive reads Offline.
+    let unplugged = fx.root.with_extension("unplugged");
+    std::fs::rename(&fx.root, &unplugged).unwrap();
+    let location = catalog
+        .mark_location_unavailable(location.id, Availability::Offline, "unplugged")
+        .await
+        .unwrap();
+    let references = read_references(&assets, Vec::new());
+    let review = catalog.review_retire_location(location.id, &references).await.unwrap();
+    assert_eq!(review.availability, Availability::Offline);
+
+    // The drive returns and a readable rescan of the same files completes; it
+    // changes no copy, session or revision, only the availability.
+    std::fs::rename(&unplugged, &fx.root).unwrap();
+    scan(&catalog, &fx, &location, &names).await;
+    let returned = catalog.location(location.id).await.unwrap();
+    assert_eq!(
+        (returned.availability, returned.decision_revision),
+        (Availability::Available, review.expected_revision)
+    );
+
+    // The review no longer holds: a Conflict naming the location sends the user
+    // back to review, and nothing changes.
+    let error = catalog
+        .retire_location(review.id, location.id, review.expected_revision, &references)
+        .await
+        .unwrap_err();
+    let response = error.response(None, None);
+    assert_eq!(
+        (response.kind.as_str(), response.identity, response.retry),
+        ("conflict", Some(location.id), RetryAction::Review)
+    );
+    let unchanged = catalog.location(location.id).await.unwrap();
+    assert_eq!(
+        (unchanged.lifecycle, unchanged.availability, unchanged.decision_revision),
+        (LocationLifecycle::Active, Availability::Available, review.expected_revision),
+        "refusal changes nothing"
+    );
+
+    // A fresh review names the current availability and confirms.
+    let fresh = catalog.review_retire_location(location.id, &references).await.unwrap();
+    assert_eq!(fresh.availability, Availability::Available);
+    let retired = catalog
+        .retire_location(fresh.id, location.id, fresh.expected_revision, &references)
+        .await
+        .unwrap();
+    assert_eq!(retired.lifecycle, LocationLifecycle::Retired);
+    assert_eq!(tree(&fx.root), before, "originals unchanged");
+}
+
+/// Real probe that records whether any source was probed.
+struct RecordingProbe(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl SourceProbe for RecordingProbe {
+    fn fingerprint(&self, path: &Path) -> Result<ObservationFingerprint, LibraryError> {
+        self.0.store(true, std::sync::atomic::Ordering::Release);
+        file_fingerprint(path)
+    }
+    fn root_identity(&self, location: &Location) -> Result<FileIdentity, LibraryError> {
+        self.0.store(true, std::sync::atomic::Ordering::Release);
+        folder_identity(&location.path.to_path_buf()?)
+    }
+}
+
+#[tokio::test]
+async fn a_decision_on_a_retired_copy_is_refused_before_its_root_is_read() {
+    let fx = Fixture::new();
+    let names = ["Ha_001.fits", "Ha_002.fits"];
+    fx.write(names[0], b"frame one bytes");
+    fx.write(names[1], b"frame two bytes");
+    let before = tree(&fx.root);
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &names).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let unplugged = fx.root.with_extension("unplugged");
+    std::fs::rename(&fx.root, &unplugged).unwrap();
+    let location = catalog
+        .mark_location_unavailable(location.id, Availability::Offline, "unplugged")
+        .await
+        .unwrap();
+    let references = read_references(&assets, Vec::new());
+    let review = catalog.review_retire_location(location.id, &references).await.unwrap();
+    catalog
+        .retire_location(review.id, location.id, review.expected_revision, &references)
+        .await
+        .unwrap();
+    let copy = catalog.asset(assets[0].id).await.unwrap();
+    assert_eq!(copy.availability, Availability::Retired);
+
+    let probed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let refuse = |stage: &str| {
+        let catalog = &catalog;
+        let copy = &copy;
+        let probed = &probed;
+        let stage = stage.to_owned();
+        async move {
+            for quality in [Quality::Usable, Quality::Unusable] {
+                let probe = RecordingProbe(probed.clone());
+                let error =
+                    catalog.set_quality(&[expected(copy)], quality, probe).await.unwrap_err();
+                let response = error.response(None, None);
+                assert_eq!(
+                    (response.kind.as_str(), response.identity, response.retry),
+                    ("invalid_input", Some(copy.id), RetryAction::Review),
+                    "{stage}: {error}"
+                );
+                assert!(error.to_string().contains("retired location"), "{stage}: {error}");
+            }
+        }
+    };
+    // Offline, the normal state after a retire, the refusal names the
+    // retirement rather than asking to reconnect the drive.
+    refuse("offline").await;
+    // Where its folder returns, its root is still never probed nor its files hashed.
+    std::fs::rename(&unplugged, &fx.root).unwrap();
+    refuse("returned").await;
+    assert!(!probed.load(std::sync::atomic::Ordering::Acquire), "no retired source is read");
+    let kept = catalog.asset(copy.id).await.unwrap();
+    assert_eq!((kept.quality, kept.decision_revision), (copy.quality, copy.decision_revision));
     assert_eq!(tree(&fx.root), before, "originals unchanged");
 }
 
