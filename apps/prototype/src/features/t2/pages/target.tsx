@@ -19,6 +19,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Spinner } from "@/components/ui/spinner"
 import { projectProgress, targetCoverage, viewStatus } from "@/domain/derive"
 import type { Target } from "@/domain/types"
+import { usableVerifiedAt } from "@/domain/verification"
 import { formatDateTime, formatDec, formatDegrees, formatDuration, formatRa, plural } from "@/lib/format"
 import { type CommitResult, store, useStore } from "@/store/core"
 import { acceptEnrichment, type EnrichmentProposal, LOOKUP_DELAY_MS, type LookupOutcome, PROVIDER_LABEL, resolveTargetLookup } from "../actions"
@@ -72,6 +73,10 @@ function TargetDetail({ targetId }: { targetId: string }) {
   const catalog = useStore((s) => s.catalog)
   const planned = Boolean(catalog.plans[targetId]?.planned)
   const totals = sumBreakdowns(coverage.channels.map((c) => c.breakdown))
+  // Verification time of each usable figure (D19): read from the catalog, never a rehash.
+  const channelAssetIds = coverage.channels.map((c) => c.sessionIds.flatMap((id) => catalog.sessions[id]?.assetIds ?? []))
+  const verifiedAt = channelAssetIds.map((ids) => usableVerifiedAt(catalog, ids))
+  const totalVerifiedAt = usableVerifiedAt(catalog, channelAssetIds.flat())
   const offline = contributing.filter((r) => r.availability.offline > 0)
   const projects = Object.values(catalog.projects).filter((p) => p.targetIds.includes(targetId))
   const views = viewsForTarget(catalog, targetId)
@@ -197,7 +202,21 @@ function TargetDetail({ targetId }: { targetId: string }) {
             <>
               <div className="grid grid-cols-2 gap-4 rounded-lg border p-3 sm:grid-cols-3 lg:grid-cols-6">
                 <Stat label="Captured" value={formatDuration(totals.captured.seconds)} hint={plural(totals.captured.frames, "frame")} />
-                <Stat label="Usable" value={formatDuration(totals.usable.seconds)} hint={plural(totals.usable.frames, "frame")} />
+                <Stat
+                  label="Usable"
+                  value={formatDuration(totals.usable.seconds)}
+                  hint={
+                    totalVerifiedAt && totals.usable.frames > 0 ? (
+                      <>
+                        {plural(totals.usable.frames, "frame")}
+                        <br />
+                        Last verified {formatDateTime(totalVerifiedAt)}
+                      </>
+                    ) : (
+                      plural(totals.usable.frames, "frame")
+                    )
+                  }
+                />
                 <Stat label="Unreviewed" value={formatDuration(totals.unreviewed.seconds)} hint={plural(totals.unreviewed.frames, "frame")} />
                 <Stat label="Unusable" value={formatDuration(totals.unusable.seconds)} hint={plural(totals.unusable.frames, "frame")} />
                 <Stat
@@ -208,9 +227,9 @@ function TargetDetail({ targetId }: { targetId: string }) {
                 <Stat label="Sessions" value={contributing.length} hint={plural(coverage.channels.length, "channel")} />
               </div>
               <ul className="grid gap-4 2xl:grid-cols-2">
-                {coverage.channels.map((c) => (
+                {coverage.channels.map((c, index) => (
                   <li key={c.channel} className="rounded-lg border p-3">
-                    <ChannelCoverage channel={c.channel} breakdown={c.breakdown} />
+                    <ChannelCoverage channel={c.channel} breakdown={c.breakdown} usableVerifiedAt={verifiedAt[index]} />
                   </li>
                 ))}
               </ul>

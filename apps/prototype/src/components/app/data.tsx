@@ -7,7 +7,7 @@ import { useRef, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import type { QualityBreakdown } from "@/domain/derive"
 import type { Evidence } from "@/domain/types"
-import { formatDuration, plural } from "@/lib/format"
+import { formatDateTime, formatDuration, plural } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 export interface KeyValueItem {
@@ -123,14 +123,17 @@ export interface ChannelCoverageProps {
   breakdown: QualityBreakdown
   /** Optional goal in seconds (Project checklist). */
   goalS?: number
+  /** Oldest last verification among the frames counted Usable (D19); labels the usable figure. */
+  usableVerifiedAt?: string | null
 }
 
 /**
  * Coverage for one channel: captured, library-usable and Unreviewed
  * integration, with unavailable and changed-content time named separately
- * (LIB-FR-08). The bar is decorative; the numbers carry the meaning.
+ * (LIB-FR-08). The usable figure names when its frames were last verified
+ * (D19). The bar is decorative; the numbers carry the meaning.
  */
-export function ChannelCoverage({ channel, breakdown, goalS }: ChannelCoverageProps) {
+export function ChannelCoverage({ channel, breakdown, goalS, usableVerifiedAt }: ChannelCoverageProps) {
   const scale = Math.max(breakdown.captured.seconds, goalS ?? 0, 1)
   const pct = (seconds: number) => `${(seconds / scale) * 100}%`
   return (
@@ -160,6 +163,9 @@ export function ChannelCoverage({ channel, breakdown, goalS }: ChannelCoveragePr
         <div className="flex min-w-0 flex-wrap gap-x-1.5">
           <dt className="text-muted-foreground">Usable</dt>
           <dd>{formatDuration(breakdown.usable.seconds)}</dd>
+          {usableVerifiedAt && breakdown.usable.frames > 0 ? (
+            <dd className="basis-full text-muted-foreground">Last verified {formatDateTime(usableVerifiedAt)}</dd>
+          ) : null}
         </div>
         <div className="flex min-w-0 flex-wrap gap-x-1.5">
           <dt className="text-muted-foreground">Unreviewed</dt>
