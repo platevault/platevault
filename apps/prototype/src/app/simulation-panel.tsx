@@ -17,7 +17,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Switch } from "@/components/ui/switch"
 import { fileAt } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
-import { formatDateTime } from "@/lib/format"
+import { displayZone, formatZonedDateTime, reminderSiteOf, wallTimeToIso } from "@/features/t5/lib/planning"
 import { cn } from "@/lib/utils"
 import { store, useStore } from "@/store/core"
 import { resetPrototype } from "@/store"
@@ -77,6 +77,7 @@ export function SimulationControls() {
   const explicitFolders = useStore((s) => s.disk.folders)
   const locations = useStore((s) => s.catalog.locations)
   const faults = useStore((s) => s.faults)
+  const clockZone = useStore((s) => reminderSiteOf(s.catalog.sites, s.catalog.reminders, s.settings.defaultSiteId)?.timeZone)
   const seed = useStore((s) => s.seed)
   const arrived = useStore(() => newCapturesArrived())
   const [folderQuery, setFolderQuery] = useState("")
@@ -333,20 +334,21 @@ export function SimulationControls() {
       <Section
         title="Clock"
         level={3}
-        description={`PlateVault time: ${formatDateTime(new Date(Date.now() + faults.clockOffsetMs).toISOString())}${faults.clockOffsetMs ? " (set by this control; kept after reload)" : " (system clock)"}.`}
+        description={`PlateVault time: ${formatZonedDateTime(new Date(Date.now() + faults.clockOffsetMs).toISOString(), clockZone)}${faults.clockOffsetMs ? " (set by this control; kept after reload)" : " (system clock)"}.`}
       >
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1.5">
-            <Label htmlFor={clockInput}>Set PlateVault time</Label>
+            <Label htmlFor={clockInput}>Set PlateVault time in {displayZone(clockZone)}</Label>
             <Input id={clockInput} type="datetime-local" className="w-56" value={clock} onChange={(e) => setClock(e.target.value)} />
           </div>
           <Button
             size="sm"
             variant="outline"
             onClick={() => {
-              if (!clock || Number.isNaN(new Date(clock).getTime())) return setClockMessage("Enter a date and time first.")
-              setClockTo(new Date(clock).toISOString())
-              setClockMessage(`PlateVault time set to ${formatDateTime(new Date(clock).toISOString())}. It keeps running from there.`)
+              const at = wallTimeToIso(clock, clockZone)
+              if (!at) return setClockMessage("Enter a date and time first.")
+              setClockTo(at)
+              setClockMessage(`PlateVault time set to ${formatZonedDateTime(at, clockZone)}. It keeps running from there.`)
             }}
           >
             Set time

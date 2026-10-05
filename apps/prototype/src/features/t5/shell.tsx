@@ -7,10 +7,10 @@ import { Bell, X } from "lucide-react"
 import { useEffect, useMemo, useRef } from "react"
 import type { PaletteCommand, ShellContribution } from "@/app/shell-contract"
 import { Button } from "@/components/ui/button"
-import { formatDateTime, formatNight, formatTime } from "@/lib/format"
+import { formatNight, formatTime } from "@/lib/format"
 import { updateSlice, useStore } from "@/store/core"
 import { recordDelivered } from "./lib/actions"
-import { computeWindows, nightAt, reminderKey, zoneAbbreviation } from "./lib/planning"
+import { computeWindows, formatZonedDateTime, nightAt, reminderKey, reminderSiteOf, zoneAbbreviation } from "./lib/planning"
 import { usePlateVaultNow } from "./plans"
 
 /**
@@ -63,6 +63,7 @@ function ReminderOverlay() {
   useReminderScheduler()
   const notifications = useStore((s) => s.slices.t5.notifications)
   const visible = notifications.filter((n) => !n.dismissed)
+  const timeZone = useStore((s) => reminderSiteOf(s.catalog.sites, s.catalog.reminders, s.settings.defaultSiteId)?.timeZone)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = ref.current
@@ -95,7 +96,7 @@ function ReminderOverlay() {
             <div className="flex items-start gap-2">
               <Bell aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1 space-y-0.5">
-                <p className="text-xs text-muted-foreground">Simulated OS notification · PlateVault · {formatDateTime(n.at)} · Esc hides</p>
+                <p className="text-xs text-muted-foreground">Simulated OS notification · PlateVault · {formatZonedDateTime(n.at, timeZone)} · Esc hides</p>
                 <p className="font-medium text-pretty">{n.title}</p>
                 <p className="text-pretty text-muted-foreground">{n.body}</p>
               </div>

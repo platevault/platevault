@@ -26,7 +26,7 @@ import { formatDateTime, formatDuration, formatNight, formatTime, plural } from 
 import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import { resetClock, setClockTo } from "@/store/simulation"
 import { disableNotifications, enableNotifications, type EnableOutcome, saveCalendarExport, savePlan, setPlanningSite } from "./lib/actions"
-import { calendarFile, computeWindows, criteriaSummary, defaultCriteria, downloadText, nightAt, PLAN_NIGHTS, reminderKey, zoneAbbreviation } from "./lib/planning"
+import { calendarFile, computeWindows, criteriaSummary, defaultCriteria, downloadText, formatZonedDateTime, nightAt, PLAN_NIGHTS, reminderKey, zoneAbbreviation } from "./lib/planning"
 import { PrototypeControls } from "./shared"
 
 const LEAD_TIMES = [
@@ -527,7 +527,7 @@ function RemindersSection({
                       {target.name} at {reminderSite?.name}: {formatNight(nightAt(Date.parse(w.start), reminderSite!))} {windowTimes(w, reminderSite!)}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {delivered ? `Delivered · scheduled for ${formatTime(at, reminderSite!.timeZone)}` : `Scheduled for ${formatDateTime(at, reminderSite!.timeZone)}, not delivered yet`}
+                      {delivered ? `Delivered · scheduled for ${formatZonedDateTime(at, reminderSite!.timeZone)}` : `Scheduled for ${formatZonedDateTime(at, reminderSite!.timeZone)}, not delivered yet`}
                     </span>
                   </li>
                 )
@@ -616,7 +616,7 @@ function RemindersSection({
               const first = upcoming.find((w) => !reminders.deliveredWindowKeys.includes(reminderKey(w, reminderSite!))) ?? upcoming[0]!
               const at = Date.parse(first.start) - ((reminders.leadTimeMin ?? 60) * 60_000) / 2
               setClockTo(new Date(at).toISOString())
-              setClockMessage({ ok: true, message: `Clock set to ${formatDateTime(new Date(at).toISOString(), reminderSite?.timeZone)}.` })
+              setClockMessage({ ok: true, message: `Clock set to ${formatZonedDateTime(new Date(at).toISOString(), reminderSite?.timeZone)}.` })
             }}
           >
             Set clock inside the next lead time

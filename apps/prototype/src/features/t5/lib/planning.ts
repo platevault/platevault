@@ -6,7 +6,8 @@
  * astronomical only (PLAN-FR-05).
  */
 import { angularSeparationDeg } from "@/domain/sky"
-import type { CalendarExport, ObservingSite, ObservingWindow, PlanCriteria, SiteId, Target, TargetId } from "@/domain/types"
+import type { CalendarExport, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, Target, TargetId } from "@/domain/types"
+import { formatDateTime } from "@/lib/format"
 
 const RAD = Math.PI / 180
 const SAMPLE_MIN = 10
@@ -157,6 +158,43 @@ export function computeWindows(target: Target, site: ObservingSite, criteria: Pl
 export function zoneAbbreviation(iso: string, timeZone: string): string {
   const part = new Intl.DateTimeFormat("en-GB", { timeZone, timeZoneName: "short" }).formatToParts(new Date(iso)).find((p) => p.type === "timeZoneName")
   return part?.value ?? timeZone
+}
+
+/**
+ * The site whose zone PlateVault's clock and reminder times read in: the
+ * reminder site while reminders are on, otherwise the default site.
+ */
+export function reminderSiteOf(sites: Record<SiteId, ObservingSite>, reminders: ReminderSettings, defaultSiteId: SiteId | null): ObservingSite | null {
+  const id = reminders.enabled && reminders.siteId ? reminders.siteId : defaultSiteId
+  return id ? (sites[id] ?? null) : null
+}
+
+/** The zone `formatZonedDateTime` reads in: the given one, else the browser's. */
+export function displayZone(timeZone?: string): string {
+  return timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+}
+
+/** Date, time and named zone: "5 Oct 2026, 20:40 CEST". Without a zone, the browser's zone, still named. */
+export function formatZonedDateTime(iso: string, timeZone?: string): string {
+  const zone = displayZone(timeZone)
+  return `${formatDateTime(iso, zone)} ${zoneAbbreviation(iso, zone)}`
+}
+
+/** A `datetime-local` value ("2026-10-05T20:40") read as wall-clock time in a zone; null when malformed. */
+export function wallTimeToIso(local: string, timeZone?: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(local)
+  if (!m) return null
+  const [y, mo, d, h, mi] = m.slice(1).map(Number) as [number, number, number, number, number]
+  const wall = Date.UTC(y, mo - 1, d, h, mi)
+  const format = new Intl.DateTimeFormat("en-GB", { timeZone: displayZone(timeZone), year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", hourCycle: "h23" })
+  const offset = (ms: number) => {
+    const p = Object.fromEntries(format.formatToParts(new Date(ms)).map((x) => [x.type, Number(x.value)]))
+    return Date.UTC(p.year!, p.month! - 1, p.day!, p.hour!, p.minute!) - Math.floor(ms / 60_000) * 60_000
+  }
+  // Two passes settle the offset across a daylight-saving change.
+  let at = wall - offset(wall)
+  at = wall - offset(at)
+  return Number.isNaN(at) ? null : new Date(at).toISOString()
 }
 
 export function criteriaSummary(c: PlanCriteria): string {
