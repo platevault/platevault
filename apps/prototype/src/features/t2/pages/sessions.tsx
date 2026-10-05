@@ -32,6 +32,7 @@ import {
   type SessionRow,
   sessionRow,
   sumBreakdowns,
+  targetNeedsReview,
 } from "../model"
 import { EquipmentCell, IndexingNotices, LibraryScopeStrip, LocationsCell, QualityCounts, ScopeCell, ScopeProblemNotices, TargetCell } from "../parts"
 
@@ -137,7 +138,7 @@ export function SessionsPage() {
     const s = row.session
     if (selectedOnly && !selected.includes(s.id)) return false
     if (channel !== ALL && (s.channel ?? "No filter") !== channel) return false
-    if (target === "needs-review" && s.target.status !== "needs-review") return false
+    if (target === "needs-review" && !targetNeedsReview(s)) return false
     if (target === "unresolved" && s.target.status !== "unresolved") return false
     if (target !== ALL && target !== "needs-review" && target !== "unresolved" && s.target.value !== target) return false
     if (!matchesQuality(row, quality)) return false

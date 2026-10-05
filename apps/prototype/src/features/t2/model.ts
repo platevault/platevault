@@ -165,6 +165,15 @@ export function sessionRow(state: PrototypeState, session: Session): SessionRow 
   }
 }
 
+/**
+ * A light session's Target needs the user's review when its evidence
+ * conflicts or is unknown, and when no Target could be associated at all:
+ * Unresolved reads with a Needs review prompt and is never guessed (LIB-AC-03).
+ */
+export function targetNeedsReview(session: Session): boolean {
+  return session.imageType === "light" && (session.target.status === "needs-review" || session.target.status === "unresolved")
+}
+
 /** Frame quality as shown per frame: the decision, or its applicability when that differs. */
 export type FrameQuality = "unreviewed" | "usable" | "unusable" | "changed-content" | "verification-pending"
 

@@ -17,7 +17,7 @@ import { formatCount, formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { type CommitResult, useStore } from "@/store/core"
 import { resumeOperation, startIndexing } from "@/store/operations"
-import { activeIndexOperations, interruptedIndexOperations, libraryScope, type LocationScopeRow, type SessionKind, type SessionRow } from "./model"
+import { activeIndexOperations, interruptedIndexOperations, libraryScope, type LocationScopeRow, type SessionKind, type SessionRow, targetNeedsReview } from "./model"
 
 // ---------------------------------------------------------------------------
 // Commit flow (D08): Saved only after commit() returned ok
@@ -105,7 +105,7 @@ export function AssociationBadge({ association }: { association: Association<str
   return <StatusBadge kind="association" value={association.status} />
 }
 
-/** Target column: the associated Target with its status; unresolved reads Unresolved, never a guess. */
+/** Target column: the associated Target with its status; unresolved reads Unresolved with Needs review, never a guess (LIB-AC-03). */
 export function TargetCell({ row }: { row: SessionRow }) {
   const { target } = row.session
   return (
@@ -116,6 +116,7 @@ export function TargetCell({ row }: { row: SessionRow }) {
         </Link>
       ) : null}
       <AssociationBadge association={target} />
+      {target.status === "unresolved" && targetNeedsReview(row.session) ? <StatusBadge kind="association" value="needs-review" /> : null}
     </span>
   )
 }

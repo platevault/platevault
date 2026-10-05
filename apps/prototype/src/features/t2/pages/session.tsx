@@ -25,7 +25,7 @@ import { formatCount, formatDateTime, formatDec, formatDegrees, formatDuration, 
 import { store, useStore } from "@/store/core"
 import { startIndexing } from "@/store/operations"
 import { confirmEquipment, confirmTarget, correctFilter, type FilterCorrectionPreview, previewFilterCorrection, setLibraryQuality } from "../actions"
-import { type FrameQuality, frameQuality, groupingRevision, knownChannels, projectsLinking, sessionLabel, sessionRow } from "../model"
+import { type FrameQuality, frameQuality, groupingRevision, knownChannels, projectsLinking, sessionLabel, sessionRow, targetNeedsReview } from "../model"
 import { AssociationBadge, FlowStatus, useCommitFlow } from "../parts"
 
 export function SessionPage() {
@@ -272,11 +272,22 @@ function MetadataList({ session, catalog }: { session: Session; catalog: Catalog
 // Associations
 // ---------------------------------------------------------------------------
 
+// Each field explains its own consequence: Target status decides what a session counts toward,
+// equipment status decides which optical train footprints and calibration matching use.
 const STATUS_EXPLANATION = {
-  confirmed: "",
-  associated: "Associated from agreeing evidence. Confirm it to record your decision.",
-  "needs-review": "The evidence is unknown or conflicts, so this is not counted for a Target until you confirm one.",
-  unresolved: "There is no OBJECT and not enough other evidence, so PlateVault does not guess.",
+  target: {
+    confirmed: "",
+    associated: "Associated from agreeing evidence. Confirm it to record your decision.",
+    "needs-review": "The evidence is unknown or conflicts, so this is not counted for a Target until you confirm one.",
+    unresolved: "Needs review: there is no OBJECT and not enough other evidence, so PlateVault does not guess. Confirm a Target to count this session toward it.",
+  },
+  equipment: {
+    confirmed: "",
+    associated: "Associated from agreeing header evidence. Confirm it to record your decision.",
+    "needs-review":
+      "The camera or telescope evidence is missing or conflicts, so PlateVault uses no optical train for this session until you confirm one: it has no field-of-view footprint, and calibration matching reads its optical train as unknown.",
+    unresolved: "No camera or telescope evidence identifies an optical train, so PlateVault does not guess one.",
+  },
 } as const
 
 function ConfirmedLine({ session, field }: { session: Session; field: "target" | "equipment" }) {
@@ -293,7 +304,7 @@ function ConfirmedLine({ session, field }: { session: Session; field: "target" |
   return (
     <p className="text-sm text-pretty">
       <span className="text-muted-foreground">Confirmed: </span>
-      Not confirmed. {STATUS_EXPLANATION[association.status]}
+      Not confirmed. {STATUS_EXPLANATION[field][association.status]}
     </p>
   )
 }
@@ -336,7 +347,12 @@ function TargetSection({ session, catalog, editable, revision }: { session: Sess
       id="target"
       title="Target"
       description="Observed evidence and your confirmation are kept separately."
-      actions={<AssociationBadge association={session.target} />}
+      actions={
+        <span className="inline-flex flex-wrap items-center gap-2">
+          <AssociationBadge association={session.target} />
+          {targetNeedsReview(session) && session.target.status === "unresolved" ? <StatusBadge kind="association" value="needs-review" /> : null}
+        </span>
+      }
     >
       <div className="space-y-3 rounded-lg border p-3">
         <EvidenceList evidence={observed} caption={`Observed Target evidence for ${sessionLabel(catalog, session)}`} />
