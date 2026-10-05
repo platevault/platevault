@@ -470,7 +470,7 @@ export function CalibrationLibraryPage() {
       <div className="flex min-h-0 flex-1 flex-col">
         {header}
         <PageBody>
-          <p className="sr-only" aria-live="polite">{announcement}</p>
+          <p className="text-sm text-muted-foreground empty:hidden" aria-live="polite">{announcement}</p>
           <EmptyState
             icon={FolderSearch}
             titleAs="h2"
@@ -486,7 +486,7 @@ export function CalibrationLibraryPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {header}
-      <p className="sr-only" aria-live="polite">{announcement}</p>
+      <p className="px-6 pt-3 text-sm text-muted-foreground empty:hidden" aria-live="polite">{announcement}</p>
       {denied.length > 0 ? (
         <div className="px-6 pt-4">
           <Notice tone="warning" title={`${denied.map((l) => l.displayName).join(", ")}: access denied`} actions={<Button size="sm" variant="outline" render={<Link to="/settings/locations" />}>Open Locations</Button>}>

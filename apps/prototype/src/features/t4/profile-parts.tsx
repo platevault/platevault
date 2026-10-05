@@ -80,7 +80,9 @@ export function LocateApplicationDialog({ profile, onOpenChange, onLocated }: Lo
   useEffect(() => {
     if (!profile) return
     const match = apps.find((a) => a.present && a.name === (profile.application === "generic" ? "" : profile.name.split(" /")[0]))
-    setPath(profile.executablePath ?? match?.path ?? apps.find((a) => a.present)?.path ?? "")
+    // A recorded path whose bundle is gone is not preselected: confirming it would record the missing path again.
+    const recorded = apps.find((a) => a.present && a.path === profile.executablePath)
+    setPath(recorded?.path ?? match?.path ?? apps.find((a) => a.present)?.path ?? "")
     setError(null)
   }, [profile])
   if (!profile) return null
@@ -118,7 +120,7 @@ export function LocateApplicationDialog({ profile, onOpenChange, onLocated }: Lo
             Cancel
           </Button>
           <Button
-            disabled={!path}
+            disabled={!present.some((a) => a.path === path)}
             onClick={() => {
               const result = locateExecutable(profile.id, path)
               if (!result.ok) return setError(result.message)

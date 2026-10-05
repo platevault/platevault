@@ -128,7 +128,7 @@ export function ViewCalibrationArea() {
         // Visible summary first, so the accessible name contains the visible label (WCAG 2.5.3).
         return (
           <Button size="sm" variant="link" className="h-auto max-w-48 justify-start px-0 text-left text-xs whitespace-normal" onClick={() => setWhyKey(row.key)}>
-            {row.criteria.length === 0 ? "No candidate" : summaryText(row.criteria)}
+            {row.criteria.length > 0 ? summaryText(row.criteria) : row.candidates.length > 0 ? `${plural(row.candidates.length, "candidate")} considered` : "No candidate"}
             <span className="sr-only">: why this match, {name}</span>
           </Button>
         )

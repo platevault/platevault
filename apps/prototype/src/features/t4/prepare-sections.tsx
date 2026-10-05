@@ -422,8 +422,8 @@ export function LocationSection({ view, plan, draft, locked }: { view: View; pla
             className="max-w-md font-mono text-xs"
             value={nameValue}
             disabled={locked}
-            aria-invalid={nameError || collision ? true : undefined}
-            aria-describedby={collision ? `${nameId}-hint ${nameId}-collision` : `${nameId}-hint`}
+            aria-invalid={nameError || collision || (ownPreparation && !parentProblem) ? true : undefined}
+            aria-describedby={collision ? `${nameId}-hint ${nameId}-collision` : ownPreparation && !parentProblem ? `${nameId}-hint ${nameId}-own` : `${nameId}-hint`}
             onChange={(event) => setName(event.target.value)}
             onBlur={(event) => commitName(event.target.value)}
             onKeyDown={(event) => {
@@ -439,20 +439,26 @@ export function LocationSection({ view, plan, draft, locked }: { view: View; pla
             {parentProblem.message}
           </Notice>
         ) : ownPreparation ? (
-          <Notice
-            tone="info"
-            title={`Prepared here for revision ${ownPreparation.membershipRevision}`}
-            actions={
-              freeName ? (
-                <Button size="sm" variant="outline" disabled={locked} onClick={() => updatePrep(view.id, { folderName: freeName })}>
-                  Use {freeName} for a new preparation
-                </Button>
-              ) : null
-            }
-          >
-            <PathText path={`${ownPreparation.viewPath}/`} />
-            <span className="block text-xs">A new preparation never reuses this folder; it needs a new name or location.</span>
-          </Notice>
+          <div id={`${nameId}-own`}>
+            <Notice
+              tone="info"
+              title={
+                ownPreparation.state === "prepared"
+                  ? `Prepared here for revision ${ownPreparation.membershipRevision}`
+                  : `A ${ownPreparation.state} preparation of revision ${ownPreparation.membershipRevision} is here`
+              }
+              actions={
+                freeName ? (
+                  <Button size="sm" variant="outline" disabled={locked} onClick={() => updatePrep(view.id, { folderName: freeName })}>
+                    Use {freeName} for a new preparation
+                  </Button>
+                ) : null
+              }
+            >
+              <PathText path={`${ownPreparation.viewPath}/`} />
+              <span className="block text-xs">A new preparation never reuses this folder; it needs a new name or location.</span>
+            </Notice>
+          </div>
         ) : collision ? (
           <div id={`${nameId}-collision`}>
           <Notice

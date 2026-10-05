@@ -784,7 +784,8 @@ export interface PreparationPlan {
   diffs: MetadataDiff[]
   metadata: Record<string, MetadataChoice | null>
   metadataExcluded: Set<AssetId>
-  patched: Map<AssetId, { field: CorrectionField; value: string }>
+  /** Every reviewed correction an isolated entry patches, per asset (D15). */
+  patched: Map<AssetId, Array<{ field: CorrectionField; value: string }>>
   entries: EntrySource[]
   calibrationEntries: EntrySource[]
   suggestedMode: InputMode
@@ -845,12 +846,12 @@ export function preparationPlan({ disk, catalog, view, lastViewParent, choices, 
 
   const metadata: Record<string, MetadataChoice | null> = {}
   const metadataExcluded = new Set<AssetId>()
-  const patched = new Map<AssetId, { field: CorrectionField; value: string }>()
+  const patched = new Map<AssetId, Array<{ field: CorrectionField; value: string }>>()
   for (const diff of diffs) {
     const choice = choices.metadata[diff.key] ?? null
     metadata[diff.key] = choice
     if (choice === "excluded") for (const id of diff.assetIds) metadataExcluded.add(id)
-    if (choice === "patched-copy") for (const id of diff.assetIds) patched.set(id, { field: diff.field, value: diff.catalogValue })
+    if (choice === "patched-copy") for (const id of diff.assetIds) patched.set(id, [...(patched.get(id) ?? []), { field: diff.field, value: diff.catalogValue }])
   }
 
   const included = content?.included ?? []
@@ -897,7 +898,8 @@ export function preparationPlan({ disk, catalog, view, lastViewParent, choices, 
   const destinationVolume = parent.volume && parent.volume.mounted ? parent.volume : null
   const free = destinationVolume ? freeBytes(disk, destinationVolume.id) : null
 
-  const readOnlyProfile = profile?.capability.inputWrite === "read-only"
+  // Linked and Direct source need verified read-only evidence, never a claim alone (D04, PREP-FR-04).
+  const readOnlyProfile = profile?.capability.verified === true && profile.capability.inputWrite === "read-only"
   const suggestedMode: InputMode = profile && readOnlyProfile && profile.capability.inputModes.includes("linked") ? "linked" : "copy"
   const mode = choices.mode ?? suggestedMode
   const totalBytes = all.reduce((sum, e) => sum + e.sizeBytes, 0)

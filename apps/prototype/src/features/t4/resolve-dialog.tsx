@@ -47,13 +47,16 @@ export function ResolveDialog({ view, row, preferException, onOpenChange }: Reso
   const [error, setError] = useState<string | null>(null)
   const reasonId = useId()
   const legendId = useId()
+  const rowKey = row?.key ?? null
+  // Reset only when another row opens: a write elsewhere recomputes the plan and must not clear a typed reason.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the row's identity, not the recomputed object
   useEffect(() => {
     if (!row) return
     setValue(initialChoice(row, preferException))
     setReason(row.assignment?.exception?.reason ?? "")
     setReasonError(null)
     setError(null)
-  }, [row, preferException])
+  }, [rowKey, preferException])
 
   if (!row) return <Dialog open={false} onOpenChange={onOpenChange} />
   const kind = KIND_LABEL[row.kind].toLowerCase()

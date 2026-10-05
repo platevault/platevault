@@ -272,7 +272,7 @@ export function startPrepare(view: View, plan: PreparationPlan): StartResult {
       sourcePath: entry.sourcePath,
       destPath: plan.mode === "direct-source" ? entry.sourcePath : entryPath(viewPath, entry),
       fileName: entry.fileName,
-      patch: entry.assetId && plan.mode !== "linked" && plan.mode !== "direct-source" ? (plan.patched.get(entry.assetId) ?? null) : null,
+      patches: entry.assetId && plan.mode !== "linked" && plan.mode !== "direct-source" ? (plan.patched.get(entry.assetId) ?? []) : [],
     }
   }
   const metadataDecisions: MetadataDecision[] = plan.diffs.flatMap((diff) =>
@@ -373,7 +373,8 @@ export function retryPreparation(preparationId: PreparationId): StartResult {
   if (!prep || !previous) return { ok: false, message: "This preparation has no recorded items to retry." }
   if (!isSettled(previous.status)) return { ok: false, message: "This preparation is still running." }
   const before = previous.payload as unknown as PreparePayload
-  const retryIds = previous.items.filter((item) => item.status === "blocked" || item.status === "failed").map((item) => item.id)
+  // A canceled run retries every entry it did not finish, as well as the blocked ones.
+  const retryIds = previous.items.filter((item) => item.status === "blocked" || item.status === "failed" || (previous.status === "canceled" && item.status !== "done")).map((item) => item.id)
   if (retryIds.length === 0) return { ok: false, message: "No blocked entries are recorded for this preparation." }
   const entries: Record<string, PrepareEntry> = {}
   for (const id of retryIds) if (before.entries[id]) entries[id] = before.entries[id]!

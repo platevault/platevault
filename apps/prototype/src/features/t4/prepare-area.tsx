@@ -26,6 +26,7 @@ import { useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { modifyFileExternally, restoreFileExternally, setFolderAccess } from "@/store/simulation"
 import { openApplication, quitApplication, retryPreparation, startPrepare, updateApp, updatePrep, updateWorld } from "./actions"
+import type { PreparePayload } from "./operations"
 import { T4Badge } from "./badges"
 import { ViewNotFound } from "./calibration-area"
 import { CRITERION_LABEL, FIELD_LABEL, handoffCountText, KIND_LABEL, METADATA_CHOICE_LABEL, MODE_LABEL, type PreparationPlan, sessionLabel } from "./domain"
@@ -373,7 +374,12 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
   const stale = latestRevision !== null && prep.membershipRevision !== latestRevision
   const appName = profile?.application === "generic" ? "the application" : (profile?.name.split(" /")[0] ?? "the application")
   const blockedEntries = prep.blocked
+  const entryKinds = (op?.payload as unknown as PreparePayload | undefined)?.entries ?? {}
+  const blockedCalibration = blockedEntries.filter((b) => b.input.kind === "asset" && entryKinds[`a:${b.input.assetId}`]?.kind === "calibration").length
   const preparedCount = prep.preparedAssetIds.length + prep.preparedResultIds.length
+  // The entries Retry runs again: blocked or failed ones, and after Cancel every unfinished one.
+  const retryCount = op ? op.items.filter((i) => i.status === "blocked" || i.status === "failed" || (op.status === "canceled" && i.status !== "done")).length : 0
+  const recoverable = settled && (prep.state === "partial" || prep.state === "failed" || (prep.state === "canceled" && retryCount > 0))
 
   function open() {
     const outcome = openApplication(view, prep.id)
@@ -402,16 +408,22 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
         </Notice>
       ) : null}
       {/* Once prepared, Open in leads; the per-entry outcome follows it as detail. */}
-      {op && !(prepared && settled) ? <OperationPanel operationId={op.id} onRetry={retry} /> : null}
+      {op && !(prepared && settled) ? <OperationPanel operationId={op.id} onRetry={recoverable ? undefined : retry} /> : null}
       {retryError ? <ActionError message={retryError} /> : null}
-      {settled && (prep.state === "partial" || prep.state === "failed") ? (
+      {recoverable ? (
         <Notice
           tone="warning"
-          title={prep.state === "partial" ? `Partial: ${formatCount(preparedCount)} prepared, ${formatCount(blockedEntries.filter((b) => !b.reason.startsWith("Calibration")).length)} blocked` : "Failed: nothing was prepared"}
+          title={
+            prep.state === "partial"
+              ? `Partial: ${formatCount(preparedCount)} prepared, ${formatCount(blockedEntries.length - blockedCalibration)} blocked${blockedCalibration ? `, ${plural(blockedCalibration, "calibration file")} blocked` : ""}`
+              : prep.state === "canceled"
+                ? `Canceled: ${formatCount(preparedCount)} prepared, ${formatCount(retryCount)} not finished`
+                : "Failed: nothing was prepared"
+          }
           actions={
             <>
-              <Button size="sm" onClick={retry}>
-                Retry {plural(blockedEntries.length, "blocked entry", "blocked entries")}
+              <Button size="sm" onClick={retry} disabled={retryCount === 0}>
+                Retry {plural(retryCount, prep.state === "canceled" ? "unfinished entry" : "blocked entry", prep.state === "canceled" ? "unfinished entries" : "blocked entries")}
               </Button>
               <Button size="sm" variant="outline" onClick={onReviewAgain}>
                 Review preparation again
@@ -583,7 +595,7 @@ export function ViewPrepareArea() {
           <Button
             variant={preparedNow ? "outline" : "default"}
             disabled={locked || !plan.revision}
-            aria-describedby="review-disabled"
+            aria-describedby={locked || !plan.revision ? "review-disabled" : undefined}
             onClick={() => {
               updatePrep(viewId, { reviewing: true })
               requestAnimationFrame(() => document.getElementById("review-title")?.scrollIntoView({ block: "start" }))
