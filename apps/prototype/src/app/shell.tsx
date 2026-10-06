@@ -199,7 +199,20 @@ function Sidebar() {
       {sidebarCollapsed ? (
         <div aria-hidden="true" className="w-px shrink-0 bg-border" />
       ) : (
-        <Splitter label="Resize sidebar" value={sidebarWidth} min={SIDEBAR_WIDTH.min} max={SIDEBAR_WIDTH.max} onChange={setSidebarWidth} pane="start" controls="source-list" onToggle={toggleSidebar} />
+        <Splitter
+          label="Resize sidebar"
+          value={sidebarWidth}
+          min={SIDEBAR_WIDTH.min}
+          max={SIDEBAR_WIDTH.max}
+          onChange={setSidebarWidth}
+          pane="start"
+          controls="source-list"
+          onToggle={() => {
+            // The splitter leaves with the pane; focus moves to the control that brings it back (WCAG 2.4.3).
+            toggleSidebar()
+            requestAnimationFrame(() => document.getElementById("sidebar-toggle")?.focus())
+          }}
+        />
       )}
     </>
   )
@@ -414,7 +427,19 @@ function InspectorPane({ compact }: { compact: boolean }) {
   return (
     <>
       {shown && !compact ? (
-        <Splitter label="Resize inspector" value={inspectorWidth} min={INSPECTOR_WIDTH.min} max={INSPECTOR_WIDTH.max} onChange={setInspectorWidth} pane="end" controls="inspector" onToggle={() => toggleInspector(false)} />
+        <Splitter
+          label="Resize inspector"
+          value={inspectorWidth}
+          min={INSPECTOR_WIDTH.min}
+          max={INSPECTOR_WIDTH.max}
+          onChange={setInspectorWidth}
+          pane="end"
+          controls="inspector"
+          onToggle={() => {
+            toggleInspector(false)
+            requestAnimationFrame(() => document.getElementById("inspector-toggle")?.focus())
+          }}
+        />
       ) : null}
       <aside
         id="inspector"
@@ -465,6 +490,7 @@ function InspectorToggleSlot({ compact, open, disabled, onToggle }: { compact: b
               size="icon"
               aria-label={label}
               aria-expanded={open}
+              id="inspector-toggle"
               aria-controls="inspector"
               disabled={disabled}
               focusableWhenDisabled
@@ -494,7 +520,15 @@ function Toolbar({ narrow }: { narrow: boolean }) {
       {narrow ? (
         <SidebarDrawer />
       ) : (
-        <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}>
+        <Button
+          id="sidebar-toggle"
+          variant="ghost"
+          size="icon"
+          onClick={toggleSidebar}
+          aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+          aria-expanded={!sidebarCollapsed}
+          aria-controls="source-list"
+        >
           {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
         </Button>
       )}
