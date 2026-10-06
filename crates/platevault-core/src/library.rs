@@ -1119,9 +1119,10 @@ impl Library {
     /// digest and a suggested file name. Writes nothing.
     ///
     /// # Errors
-    /// `InvalidInput` for an invalid selection; `Conflict` naming the Target
-    /// with its current revision when a selected key is not in the recomputed
-    /// set; `NotFound` for an unknown Target or site.
+    /// `InvalidInput` for an invalid selection; `WindowConflict` naming the
+    /// key and the site, with the Target's current revision, when a selected
+    /// key is not in the recomputed set; `NotFound` for an unknown Target or
+    /// site.
     pub async fn review_calendar_export(
         &self,
         selection: &ExportSelection,
@@ -1132,10 +1133,10 @@ impl Library {
         let mut windows: Vec<ObservingWindow> = Vec::with_capacity(selection.window_keys.len());
         for key in &selection.window_keys {
             let Some(window) = set.windows().find(|window| window.key == *key) else {
-                return Err(LibraryError::Conflict {
-                    id: basis.target_id,
+                return Err(LibraryError::WindowConflict {
+                    key: *key,
+                    site: basis.site.name.clone(),
                     current: basis.target_revision,
-                    successors: Vec::new(),
                 });
             };
             if !windows.iter().any(|selected| selected.key == *key) {

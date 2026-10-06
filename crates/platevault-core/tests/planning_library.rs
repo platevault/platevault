@@ -817,17 +817,6 @@ async fn calendar_export_writes_exactly_the_reviewed_snapshot() {
     assert_eq!(review.suggested_file_name, "NGC-7000-Backyard-2026-10-21-to-2026-10-27.ics");
     assert_eq!(worked.planning_rows().await, rows, "a review writes nothing");
 
-    // A key the recomputed set lacks is a Conflict.
-    let absent = WindowKey::new(
-        worked.target.candidate.id,
-        backyard.id,
-        all[0].start_utc + time::Duration::minutes(1),
-    )
-    .unwrap();
-    let stale = ExportSelection { query: query.clone(), window_keys: vec![absent] };
-    let error = library.review_calendar_export(&stale).await.unwrap_err();
-    assert_eq!(kind(&error), "conflict", "{error}");
-
     let path = worked.temp.path().join("ngc-7000.ics");
     let prepared =
         library.prepare_calendar_export(&selection, &review.snapshot_digest).await.unwrap();
@@ -880,6 +869,45 @@ async fn calendar_export_writes_exactly_the_reviewed_snapshot() {
     assert_ne!(other_review.snapshot_digest, review.snapshot_digest);
     assert_eq!(sha256(&std::fs::read(&path).unwrap()), written);
     worked.assert_originals();
+}
+
+/// contracts/planning.md: a selected key absent from the recomputed set, as
+/// after a site edit shifted a window, is a Conflict naming that key and the
+/// site with the Target's current revision, at review and at export.
+#[tokio::test]
+async fn a_selected_key_absent_from_the_recomputed_set_is_a_conflict_naming_it() {
+    let worked = Worked::new().await;
+    let library = &worked.library;
+    let (backyard, _athens) = worked.sites().await;
+    let query = worked.query(&backyard, 7, criteria());
+    let set = library.compute_windows(&query).await.unwrap();
+    let present = set.windows().next().unwrap().clone();
+    let reviewed = ExportSelection { query: query.clone(), window_keys: vec![present.key] };
+    let digest = library.review_calendar_export(&reviewed).await.unwrap().snapshot_digest;
+    let rows = worked.planning_rows().await;
+
+    let absent = WindowKey::new(
+        worked.target.candidate.id,
+        backyard.id,
+        present.start_utc + time::Duration::minutes(1),
+    )
+    .unwrap();
+    let stale = ExportSelection { query, window_keys: vec![present.key, absent] };
+    let review = library.review_calendar_export(&stale).await.unwrap_err().response(None, None);
+    assert_eq!(review.kind, "conflict", "{}", review.message);
+    assert_eq!(
+        (review.identity, review.current_revision),
+        (Some(worked.target.candidate.id), Some(worked.target.decision_revision))
+    );
+    assert!(
+        review.message.contains(&absent.to_string()) && review.message.contains("Backyard"),
+        "{}",
+        review.message
+    );
+    assert!(!review.message.contains(&present.key.to_string()), "{}", review.message);
+    let export = library.prepare_calendar_export(&stale, &digest).await.unwrap_err();
+    assert_eq!(export.response(None, None).message, review.message);
+    assert_eq!(worked.planning_rows().await, rows, "nothing written");
 }
 
 /// R1: the schema version is one above 065's version 7, and a catalog
