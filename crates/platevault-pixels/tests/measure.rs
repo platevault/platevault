@@ -167,6 +167,34 @@ fn detection_is_complete_above_snr_20_and_rejects_hot_pixels_and_cosmic_rays() {
     assert!(measurement.stars.is_empty());
 }
 
+/// With zero clipped noise the support threshold is the background itself:
+/// flat background samples must not count as connected support.
+#[test]
+fn on_a_noiseless_background_hot_pixels_lack_support_and_stars_keep_it() {
+    let star = SyntheticStar {
+        x: 64.3,
+        y: 63.6,
+        amplitude: 120.0,
+        sigma_major: 2.0,
+        sigma_minor: 1.8,
+        angle_deg: 20.0,
+    };
+    let frame = SyntheticFrame {
+        stars: vec![star],
+        hot_pixels: vec![(20, 20, 240.0), (100, 30, 200.0)],
+        ..SyntheticFrame::new(128, 128, 5, 100.0, 0.0)
+    };
+    for (format, maximum) in [(SampleFormat::U8, 255.0), (SampleFormat::U16, 65535.0)] {
+        let saturation = Saturation { level: Some(maximum), source: SaturationSource::TypeMaximum };
+        let measurement = measured(&image(vec![plane(&frame, format, saturation)]));
+        assert_eq!(measurement.background_median, Some(100.0), "{format:?}");
+        assert_eq!(measurement.background_noise, Some(0.0), "{format:?}");
+        let (star_count, ..) = star_metrics(&measurement);
+        assert_eq!(star_count, 1, "{format:?}: {:?}", measurement.stars);
+        assert!(nearest(&measurement.stars, star.x, star.y, 1.5).is_some(), "{format:?}");
+    }
+}
+
 fn angle_difference(a: f64, b: f64) -> f64 {
     let difference = (a - b).rem_euclid(180.0);
     difference.min(180.0 - difference)

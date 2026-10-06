@@ -62,8 +62,8 @@ fn is_local_maximum(plane: &Plane, x: u32, y: u32, value: f64) -> bool {
 }
 
 /// Whether at least `DETECT_MIN_CONNECTED` 8-connected samples, including the
-/// peak, lie at or above `threshold`.
-fn has_connected_support(plane: &Plane, x: u32, y: u32, threshold: f64) -> bool {
+/// peak, are support samples.
+fn has_connected_support(plane: &Plane, x: u32, y: u32, supports: impl Fn(f64) -> bool) -> bool {
     let mut visited = vec![(x, y)];
     let mut next = 0;
     while next < visited.len() && visited.len() < DETECT_MIN_CONNECTED {
@@ -73,9 +73,7 @@ fn has_connected_support(plane: &Plane, x: u32, y: u32, threshold: f64) -> bool 
             if visited.len() >= DETECT_MIN_CONNECTED {
                 break;
             }
-            if !visited.contains(&(nx, ny))
-                && detect_value(plane, nx, ny).is_some_and(|value| value >= threshold)
-            {
+            if !visited.contains(&(nx, ny)) && detect_value(plane, nx, ny).is_some_and(&supports) {
                 visited.push((nx, ny));
             }
         }
@@ -92,6 +90,16 @@ pub fn detect(
 ) -> Result<(Vec<Candidate>, bool), PixelError> {
     let peak_threshold = background.median + DETECT_PEAK_SIGMA * background.noise;
     let support_threshold = background.median + DETECT_CONNECTED_SIGMA * background.noise;
+    // Without noise both thresholds equal the background, so a peak and its
+    // support must lie strictly above it.
+    let noiseless = background.noise <= 0.0;
+    let supports = |value: f64| {
+        if noiseless {
+            value > background.median
+        } else {
+            value >= support_threshold
+        }
+    };
     let mut candidates = Vec::new();
     for y in 0..plane.height {
         check_canceled(canceled)?;
@@ -99,11 +107,10 @@ pub fn detect(
             let Some(value) = detect_value(plane, x, y) else {
                 continue;
             };
-            if value < peak_threshold || (background.noise <= 0.0 && value <= background.median) {
+            if value < peak_threshold || (noiseless && value <= background.median) {
                 continue;
             }
-            if is_local_maximum(plane, x, y, value)
-                && has_connected_support(plane, x, y, support_threshold)
+            if is_local_maximum(plane, x, y, value) && has_connected_support(plane, x, y, supports)
             {
                 candidates.push(Candidate { x, y, height: value - background.median });
             }
