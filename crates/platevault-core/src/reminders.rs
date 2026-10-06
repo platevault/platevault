@@ -21,6 +21,7 @@
 //! recorded, because the process stopped or the record failed, stays `sending`
 //! and reads `uncertain` after the next catalog open; it is never resubmitted.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
 
@@ -224,11 +225,24 @@ fn local_text(instant: OffsetDateTime) -> String {
     )
 }
 
+/// [`ReminderScheduler`] lifecycle word: this bit is set once the task ended
+/// on its own; the bits above it count wakes.
+const ENDED: u64 = 1;
+/// One wake in the lifecycle word.
+const WAKE: u64 = 2;
+
 /// The in-app scheduler task. It holds only planning catalog operations, the
 /// notifier and the clock, so it cannot start a scan or image work (R17).
 /// Dropping it without [`ReminderScheduler::stop`] stops the task as well.
+///
+/// The task ends on its own when a pass finds no enabled subscription, as
+/// after it blocked the last one (R17). It ends only if no wake arrived since
+/// that pass read the subscriptions, and a wake counts only before it ended,
+/// so a subscription enabled during that last pass either keeps the task
+/// going or makes [`wake`](Self::wake) report the end.
 pub struct ReminderScheduler {
     wake: Arc<Notify>,
+    lifecycle: Arc<AtomicU64>,
     stop: watch::Sender<bool>,
     task: JoinHandle<()>,
 }
@@ -244,22 +258,40 @@ impl ReminderScheduler {
         clock: Arc<dyn Clock>,
     ) -> Self {
         let wake = Arc::new(Notify::new());
+        let lifecycle = Arc::new(AtomicU64::new(0));
         let (stop, stopped) = watch::channel(false);
-        let run = Run { catalog, notifier, clock, wake: Arc::clone(&wake) };
+        let run = Run {
+            catalog,
+            notifier,
+            clock,
+            wake: Arc::clone(&wake),
+            lifecycle: Arc::clone(&lifecycle),
+        };
         let task = tokio::spawn(run.until_stopped(stopped));
-        Self { wake, stop, task }
+        Self { wake, lifecycle, stop, task }
     }
 
     /// Run a pass now: a subscription, site or permission changed. A wake
-    /// during a pass runs another pass right after it.
-    pub fn wake(&self) {
+    /// during a pass runs another pass right after it. False once the task
+    /// has ended, on its own or by a panic; only a new scheduler runs passes
+    /// then.
+    #[must_use]
+    pub fn wake(&self) -> bool {
+        let counted = self
+            .lifecycle
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |state| {
+                (state & ENDED == 0).then(|| state.wrapping_add(WAKE))
+            })
+            .is_ok();
         self.wake.notify_one();
+        counted && !self.task.is_finished()
     }
 
-    /// Whether the task is still running.
+    /// Whether the task is still running: it has not ended on its own, been
+    /// stopped or panicked.
     #[must_use]
     pub fn is_running(&self) -> bool {
-        !self.task.is_finished()
+        self.lifecycle.load(Ordering::SeqCst) & ENDED == 0 && !self.task.is_finished()
     }
 
     /// Stop the task and wait for it. A catalog write in progress completes; a
@@ -303,18 +335,47 @@ async fn stopped(stop: &mut watch::Receiver<bool>) {
 /// A stop arrived while waiting on the notifier.
 struct Stopped;
 
+/// What a pass found.
+enum Pass {
+    /// No subscription is enabled.
+    Idle,
+    /// The pass blocked a subscription; the next one runs at once, so the
+    /// task ends promptly when nothing stays enabled.
+    Blocked,
+    /// Wait for this due instant, a wake or [`RECHECK_INTERVAL`].
+    Wait(Option<OffsetDateTime>),
+}
+
 struct Run {
     catalog: Arc<Catalog>,
     notifier: Arc<dyn Notifier>,
     clock: Arc<dyn Clock>,
     wake: Arc<Notify>,
+    lifecycle: Arc<AtomicU64>,
 }
 
 impl Run {
     async fn until_stopped(self, mut stop: watch::Receiver<bool>) {
         loop {
-            let Ok(next_due) = self.pass(&mut stop).await else {
-                return;
+            // Read before the pass reads the subscriptions.
+            let seen = self.lifecycle.load(Ordering::SeqCst);
+            let next_due = match self.pass(&mut stop).await {
+                Err(Stopped) => return,
+                Ok(Pass::Wait(next_due)) => next_due,
+                Ok(Pass::Blocked) => continue,
+                // A wake since `seen` may follow a newly enabled subscription,
+                // so the task ends only without one, and looks again after one.
+                Ok(Pass::Idle) => {
+                    let ended = seen | ENDED;
+                    if self
+                        .lifecycle
+                        .compare_exchange(seen, ended, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok()
+                    {
+                        return;
+                    }
+                    continue;
+                }
             };
             let delay = next_due
                 .and_then(|due| StdDuration::try_from(due - self.clock.now_utc()).ok())
@@ -329,17 +390,19 @@ impl Run {
 
     /// Remind every due window of every enabled subscription, and return the
     /// next due instant still ahead. A subscription whose Target, site or
-    /// windows cannot be read is retried at the next pass.
-    async fn pass(
-        &self,
-        stop: &mut watch::Receiver<bool>,
-    ) -> Result<Option<OffsetDateTime>, Stopped> {
+    /// windows cannot be read, or a pass whose subscriptions cannot be read,
+    /// is retried at the next pass.
+    async fn pass(&self, stop: &mut watch::Receiver<bool>) -> Result<Pass, Stopped> {
         let Ok(subscriptions) =
             self.catalog.reminder_subscriptions(Some(SubscriptionState::Enabled)).await
         else {
-            return Ok(None);
+            return Ok(Pass::Wait(None));
         };
+        if subscriptions.is_empty() {
+            return Ok(Pass::Idle);
+        }
         let mut next_due: Option<OffsetDateTime> = None;
+        let mut blocked = false;
         for subscription in subscriptions {
             if *stop.borrow() {
                 return Err(Stopped);
@@ -348,7 +411,7 @@ impl Run {
             let Ok(windows) = scheduled_windows(&self.catalog, &subscription, now).await else {
                 continue;
             };
-            self.remind(&subscription, &windows, now, stop).await?;
+            blocked |= self.remind(&subscription, &windows, now, stop).await?;
             let now = self.clock.now_utc();
             let ahead = upcoming_reminders(&subscription, &windows, now)
                 .into_iter()
@@ -356,20 +419,21 @@ impl Run {
                 .find(|due| *due > now);
             next_due = next_due.into_iter().chain(ahead).min();
         }
-        Ok(next_due)
+        Ok(if blocked { Pass::Blocked } else { Pass::Wait(next_due) })
     }
 
     /// Permission, claim, submission and outcome for each due window, in that
-    /// order.
+    /// order. True when a permission that is not granted blocked the
+    /// subscription.
     async fn remind(
         &self,
         subscription: &ReminderSubscription,
         windows: &WindowSet,
         now: OffsetDateTime,
         stop: &mut watch::Receiver<bool>,
-    ) -> Result<(), Stopped> {
+    ) -> Result<bool, Stopped> {
         let Some(schedule) = Schedule::of(subscription) else {
-            return Ok(());
+            return Ok(false);
         };
         for window in schedule.due(windows, now) {
             let permission = tokio::select! {
@@ -380,7 +444,7 @@ impl Run {
                 // Blocked at the revision this pass read; a concurrent change
                 // to the subscription wins, and it schedules again only if it
                 // stays enabled.
-                let _ = self
+                let blocked = self
                     .catalog
                     .set_subscription_state(
                         subscription.target_id,
@@ -388,8 +452,9 @@ impl Run {
                         SubscriptionState::Blocked,
                         Some(reason),
                     )
-                    .await;
-                return Ok(());
+                    .await
+                    .is_ok();
+                return Ok(blocked);
             }
             // Never after window start, even when this pass ran long.
             if self.clock.now_utc() >= window.start_utc {
@@ -419,6 +484,6 @@ impl Run {
             // and `uncertain` after the next catalog open.
             let _ = self.catalog.finish_reminder_delivery(&window.key, &outcome).await;
         }
-        Ok(())
+        Ok(false)
     }
 }

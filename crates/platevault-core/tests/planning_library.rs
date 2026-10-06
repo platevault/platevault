@@ -12,10 +12,11 @@
 mod support;
 
 use std::collections::BTreeMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use persistence_library::SessionQuery;
@@ -99,6 +100,49 @@ impl Notifier for Recording {
             *permission
         };
         Box::pin(async move { answer })
+    }
+
+    fn submit<'a>(&'a self, notice: &'a ReminderNotice) -> NotifierFuture<'a, SubmitOutcome> {
+        self.submissions.lock().push(notice.clone());
+        Box::pin(async { SubmitOutcome::Submitted })
+    }
+}
+
+/// Grants the permission read an activation makes, then reads `denied`, as
+/// when the user turns notifications off in System Settings, until `allow`.
+struct Revoking {
+    reads: AtomicUsize,
+    allowed: AtomicBool,
+    submissions: Mutex<Vec<ReminderNotice>>,
+}
+
+impl Revoking {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            reads: AtomicUsize::new(0),
+            allowed: AtomicBool::new(false),
+            submissions: Mutex::new(Vec::new()),
+        })
+    }
+
+    fn allow(&self) {
+        self.allowed.store(true, Ordering::SeqCst);
+    }
+}
+
+impl Notifier for Revoking {
+    fn permission(&self) -> NotifierFuture<'_, PermissionState> {
+        let first = self.reads.fetch_add(1, Ordering::SeqCst) == 0;
+        let permission = if first || self.allowed.load(Ordering::SeqCst) {
+            PermissionState::Granted
+        } else {
+            PermissionState::Denied
+        };
+        Box::pin(async move { permission })
+    }
+
+    fn request_permission(&self) -> NotifierFuture<'_, PermissionState> {
+        self.permission()
     }
 
     fn submit<'a>(&'a self, notice: &'a ReminderNotice) -> NotifierFuture<'a, SubmitOutcome> {
@@ -259,10 +303,19 @@ impl Worked {
         site: &ObservingSite,
         expected: Option<Revision>,
     ) -> ReminderSubscription {
+        self.enable_with_lead(site, 60, expected).await
+    }
+
+    async fn enable_with_lead(
+        &self,
+        site: &ObservingSite,
+        lead_minutes: u32,
+        expected: Option<Revision>,
+    ) -> ReminderSubscription {
         let settings = self.library.catalog().list_sites().await.unwrap().settings_revision;
         self.library
             .enable_reminders(&EnableReminders {
-                reminder: self.reminder(60),
+                reminder: self.reminder(lead_minutes),
                 site_id: site.id,
                 site_revision: site.revision,
                 settings_revision: settings,
@@ -379,6 +432,19 @@ fn kind(error: &LibraryError) -> String {
 
 fn sha256(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
+}
+
+/// Poll `condition` for up to 20 s.
+async fn eventually<F, Fut>(what: &str, mut condition: F)
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = bool>,
+{
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while !condition().await {
+        assert!(Instant::now() < deadline, "timed out waiting for {what}");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -634,6 +700,43 @@ async fn activation_requests_an_undetermined_permission_and_commits_a_denial_as_
     let enabled = worked.enable(&backyard, Some(blocked.revision)).await;
     assert_eq!((enabled.state, enabled.block_reason), (SubscriptionState::Enabled, None));
     assert!(worked.status().await.scheduler_running);
+    worked.assert_originals();
+}
+
+/// R17, PLAN-FR-07: notifications turned off in System Settings while a
+/// reminder is enabled block the only subscription when its window comes due,
+/// and the scheduler then ends rather than polling with nothing enabled.
+/// Retry once allowed runs a scheduler again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_scheduler_ends_when_a_denial_blocks_the_only_subscription() {
+    let worked = Worked::new().await;
+    let (backyard, _athens) = worked.sites().await;
+    worked.default_site(&backyard).await;
+    let revoking = Revoking::new();
+    worked.library.attach_notifier(revoking.clone(), Arc::new(Fixed)).await.unwrap();
+
+    // A 1440-minute lead makes the next Backyard window due at NOW.
+    let enabled = worked.enable_with_lead(&backyard, 1440, None).await;
+    assert_eq!(enabled.state, SubscriptionState::Enabled);
+    eventually("the scheduler to end", || async { !worked.status().await.scheduler_running }).await;
+    let status = worked.status().await;
+    let [blocked] = status.subscriptions.as_slice() else {
+        panic!("one subscription: {:?}", status.subscriptions);
+    };
+    assert_eq!(
+        (blocked.state, blocked.block_reason),
+        (SubscriptionState::Blocked, Some(BlockReason::PermissionDenied))
+    );
+    assert_eq!(blocked.revision, enabled.revision + 1);
+    assert!(status.upcoming.is_empty() && status.deliveries.is_empty(), "{status:?}");
+    assert!(revoking.submissions.lock().is_empty());
+
+    revoking.allow();
+    let again = worked.enable_with_lead(&backyard, 1440, Some(blocked.revision)).await;
+    assert_eq!(again.state, SubscriptionState::Enabled);
+    assert!(worked.status().await.scheduler_running);
+    eventually("the due window's submission", || async { !revoking.submissions.lock().is_empty() })
+        .await;
     worked.assert_originals();
 }
 

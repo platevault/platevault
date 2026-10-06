@@ -318,7 +318,7 @@ where
 async fn settle(scheduler: &ReminderScheduler, notifier: &Recording) {
     for _ in 0..2 {
         let seen = notifier.reads();
-        scheduler.wake();
+        assert!(scheduler.wake(), "the scheduler is running");
         eventually("a pass after a wake", || async { notifier.reads() > seen }).await;
     }
 }
@@ -583,8 +583,10 @@ async fn permission_denied_before_submission_blocks_the_subscription_and_submits
         }
     })
     .await;
-    scheduler.wake();
-    tokio::time::sleep(StdDuration::from_millis(300)).await;
+    // Nothing is enabled any more, so the task ends on its own, and a wake
+    // reports that it ended.
+    eventually("the scheduler to end", || async { !scheduler.is_running() }).await;
+    assert!(!scheduler.wake());
     scheduler.stop().await;
 
     let blocked = planning.catalog.reminder_subscription(target).await.unwrap().unwrap();

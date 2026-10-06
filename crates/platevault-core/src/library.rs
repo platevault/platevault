@@ -795,7 +795,9 @@ const PROJECT_PAGE: u32 = 200;
 
 /// The planning runtime (spec 072): the attached notification adapter, the
 /// wall clock, and the reminder scheduler, which exists only while a notifier
-/// is attached and at least one subscription is enabled (R17).
+/// is attached and at least one subscription is enabled (R17). A scheduler
+/// that ended on its own, because a pass found nothing enabled, is replaced at
+/// the next sync that finds a subscription enabled.
 struct PlanningRuntime {
     notifier: Option<Arc<dyn Notifier>>,
     clock: Arc<dyn Clock>,
@@ -806,8 +808,7 @@ impl PlanningRuntime {
     /// Run, wake or stop the scheduler so it runs exactly while `enabled`.
     async fn sync(&mut self, catalog: &Arc<Catalog>, enabled: bool) {
         match self.scheduler.take() {
-            Some(scheduler) if enabled && scheduler.is_running() => {
-                scheduler.wake();
+            Some(scheduler) if enabled && scheduler.wake() => {
                 self.scheduler = Some(scheduler);
             }
             Some(scheduler) => {
