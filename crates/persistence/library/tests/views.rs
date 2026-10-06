@@ -1119,6 +1119,70 @@ async fn an_older_revision_reads_unchanged_after_a_later_save_and_a_verified_rem
     assert_eq!(tree(&lib.fx.root), lib.before);
 }
 
+/// D19: a verified remap is a completed byte verification, so it moves no member
+/// out of review and writes no View row; only a later byte change does.
+#[tokio::test]
+async fn a_verified_remap_keeps_every_member_reviewed_until_its_bytes_change() {
+    let lib = indexed().await;
+    let catalog = &lib.catalog;
+    let by_filter = sessions(catalog).await;
+    let origin = origin_sessions(&[&by_filter["Ha"], &by_filter["OIII"]]);
+    let id = catalog.create_view(&origin).await.unwrap().view.id;
+    catalog.save_view(id, 0, 1).await.unwrap();
+    let reviewed = |basis: &platevault_model::MembershipBasis| {
+        let members = basis.members.iter();
+        members
+            .map(|m| (m.member.member_key, m.member.state, m.unresolved, m.changed_since_review))
+            .collect::<Vec<_>>()
+    };
+    let before = catalog.view_membership(id, Membership::Committed).await.unwrap();
+    assert_eq!(before.members.len(), FRAMES.len());
+    assert!(before.members.iter().all(|m| m.member.state == MemberState::Included));
+    assert!(before.members.iter().all(|m| !m.changed_since_review && !m.unresolved));
+    let rows = serde_json::to_value(stored(&lib.fx.db, id, Some(1)).await).unwrap();
+
+    // Byte-identical copies under new file IDs and modification times.
+    let copy = lib.fx.temp.path().join("Captures copy");
+    for name in FRAMES {
+        std::fs::create_dir_all(copy.join(name).parent().unwrap()).unwrap();
+        std::fs::copy(lib.fx.root.join(name), copy.join(name)).unwrap();
+    }
+    let location = catalog.location(lib.location.id).await.unwrap();
+    let review = catalog
+        .review_remap(
+            location.id,
+            location.decision_revision,
+            &NativePath::from_path(&copy),
+            &folder_identity(&copy).unwrap(),
+            DiskProbe,
+        )
+        .await
+        .unwrap();
+    assert!(review.blocked.is_empty(), "{:?}", review.blocked);
+    let remapped =
+        catalog.apply_remap(review.id, location.decision_revision, DiskProbe).await.unwrap();
+    let after = catalog.view_membership(id, Membership::Committed).await.unwrap();
+    assert_eq!(reviewed(&after), reviewed(&before), "every member stays included and reviewed");
+    let rows_after = serde_json::to_value(stored(&lib.fx.db, id, Some(1)).await).unwrap();
+    assert_eq!(rows_after, rows, "the remap writes no View row");
+
+    // New bytes at the new root, rescanned: only that member is changed.
+    let assets = catalog.location_assets(lib.location.id).await.unwrap();
+    let rewritten = by_name(&assets, "Ha_001.fits").id;
+    std::fs::write(copy.join(FRAMES[0]), b"Ha_001 rewritten after the remap").unwrap();
+    let copy_fx = Fixture { temp: tempfile::tempdir().unwrap(), db: lib.fx.db.clone(), root: copy };
+    scan(catalog, &copy_fx, &remapped, &FRAMES).await;
+    let drifted = catalog.view_membership(id, Membership::Committed).await.unwrap();
+    let changed: Vec<Uuid> = drifted
+        .members
+        .iter()
+        .filter(|m| m.changed_since_review)
+        .map(|m| m.member.member_key)
+        .collect();
+    assert_eq!(changed, vec![rewritten]);
+    assert_eq!(tree(&lib.fx.root), lib.before);
+}
+
 #[tokio::test]
 async fn view_references_name_every_view_whose_revisions_or_draft_hold_an_asked_asset() {
     let lib = indexed().await;

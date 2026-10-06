@@ -20,10 +20,11 @@ use platevault_model::{
     ChoiceBasis, CopyState, CriteriaInput, DraftEdit, ExpectedAsset, ExpectedSession,
     FrameEvidence, FramingPanel, FramingSnapshot, FramingSource, FramingTarget, GeometryEvidence,
     LibraryError, MemberBasis, MemberCopy, MemberReason, MemberState, Membership, MembershipBasis,
-    NewView, Project, Quality, ReferenceKind, RefreshItem, RefreshItemKind, RefreshReview,
-    RefreshState, Revision, SelectionReason, Session, SessionChoice, SessionChoiceState,
-    SuggestedChoice, View, ViewCriteria, ViewDraftHeader, ViewListing, ViewMember, ViewOrigin,
-    ViewOriginInput, ViewQuery, ViewRecord, ViewRevision, ViewRevisionHeader,
+    NewView, ObservationFingerprint, Project, Quality, ReferenceKind, RefreshItem, RefreshItemKind,
+    RefreshReview, RefreshState, RemapItem, Revision, SelectionReason, Session, SessionChoice,
+    SessionChoiceState, SuggestedChoice, View, ViewCriteria, ViewDraftHeader, ViewListing,
+    ViewMember, ViewOrigin, ViewOriginInput, ViewQuery, ViewRecord, ViewRevision,
+    ViewRevisionHeader,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
@@ -553,6 +554,7 @@ async fn read_membership(
     let ids: BTreeSet<Uuid> =
         members.iter().flat_map(|m| m.copies.iter().map(|copy| copy.asset_id)).collect();
     let assets = load_assets(conn, &ids).await?;
+    let remaps = verified_remaps(conn, &ids).await?;
     let member_sessions: Vec<Uuid> =
         members.iter().map(|m| m.session_id).collect::<BTreeSet<_>>().into_iter().collect();
     let captures = CaptureView::read(conn, &member_sessions, &assets).await?;
@@ -565,7 +567,7 @@ async fn read_membership(
     let by_id: HashMap<Uuid, &Asset> = assets.iter().map(|asset| (asset.id, asset)).collect();
     let members = members
         .into_iter()
-        .map(|member| member_basis(member, &by_id, &locations, &captures))
+        .map(|member| member_basis(member, &by_id, &remaps, &locations, &captures))
         .collect::<Result<_>>()?;
     Ok(MembershipBasis {
         view_id: id,
@@ -578,9 +580,50 @@ async fn read_membership(
     })
 }
 
+/// Applied remap reviews of `ids`, each copy's in apply order. One remap is
+/// the hashed original fingerprint and the byte-identical candidate that
+/// replaced it; applying rehashed both just before commit (D19).
+type Remaps = HashMap<Uuid, Vec<(ObservationFingerprint, ObservationFingerprint)>>;
+
+async fn verified_remaps(conn: &mut SqliteConnection, ids: &BTreeSet<Uuid>) -> Result<Remaps> {
+    // A location's later review expects the revision its earlier apply produced.
+    let items: Vec<String> = sqlx::query_scalar(
+        "SELECT j.value FROM remap_reviews r, json_each(r.items) j WHERE r.state = 'applied' \
+         AND json_extract(j.value, '$.assetId') IN (SELECT value FROM json_each(?1)) \
+         ORDER BY r.location_id, r.expected_revision",
+    )
+    .bind(json_ids(ids)?)
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut remaps = Remaps::new();
+    for item in items {
+        let item: RemapItem = from_json(&item)?;
+        let step = (item.original_digest.fingerprint, item.candidate_fingerprint);
+        remaps.entry(item.asset_id).or_default().push(step);
+    }
+    Ok(remaps)
+}
+
+/// The recorded basis carried across verified remaps: a remap whose hashed
+/// original matches the basis proves its candidate holds the reviewed bytes.
+/// A later content change still differs from the carried basis.
+fn reviewed_basis<'a>(
+    recorded: &'a ObservationFingerprint,
+    remaps: Option<&'a Vec<(ObservationFingerprint, ObservationFingerprint)>>,
+) -> &'a ObservationFingerprint {
+    remaps.into_iter().flatten().fold(recorded, |basis, (original, candidate)| {
+        if fingerprint_matches(original, basis) {
+            candidate
+        } else {
+            basis
+        }
+    })
+}
+
 fn member_basis(
     member: ViewMember,
     assets: &HashMap<Uuid, &Asset>,
+    remaps: &Remaps,
     locations: &HashMap<Uuid, (String, Option<String>)>,
     captures: &CaptureView,
 ) -> Result<MemberBasis> {
@@ -594,7 +637,8 @@ fn member_basis(
     let mut changed = false;
     for recorded in &member.copies {
         let current = asset(&recorded.asset_id)?;
-        changed |= !fingerprint_matches(&current.fingerprint, &recorded.fingerprint);
+        let basis = reviewed_basis(&recorded.fingerprint, remaps.get(&recorded.asset_id));
+        changed |= !fingerprint_matches(&current.fingerprint, basis);
         let (name, reason) = &locations[&current.location_id];
         copies.push(CopyState {
             asset_id: current.id,
