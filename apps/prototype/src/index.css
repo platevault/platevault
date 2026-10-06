@@ -333,6 +333,11 @@ html[data-density="spacious"] {
   background-color: var(--background);
 }
 
+/* Search fields carry a leading magnifier glyph (TableToolbar). */
+[data-slot="input"][data-page-search] {
+  padding-left: 1.75rem;
+}
+
 [data-slot="textarea"] {
   border-radius: var(--radius);
   font-size: var(--text-sm);

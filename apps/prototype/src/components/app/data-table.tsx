@@ -11,11 +11,14 @@
  *   every group shares the column widths and the pinned header row.
  * - Pinned first column (opt-in `stickyFirstColumn`): the selection column
  *   and the first column stay in view while a wide table scrolls sideways.
+ * - Context menu (opt-in `contextMenu`): one native-style menu for the table;
+ *   right click, Shift+F10 or the Menu key on a row opens that row's items.
  */
 import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react"
-import { type KeyboardEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { type KeyboardEvent, type MouseEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -80,6 +83,8 @@ export interface DataTableProps<T> {
    * backgrounds do not reach the pinned cells.
    */
   stickyFirstColumn?: boolean
+  /** Items of the row's context menu; every item must also be reachable from the row itself. */
+  contextMenu?: (row: T) => ReactNode
 }
 
 export function DataTable<T>({
@@ -97,8 +102,10 @@ export function DataTable<T>({
   scroll = "frame",
   groups,
   stickyFirstColumn = false,
+  contextMenu,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState(initialSort ?? null)
+  const [menuRowId, setMenuRowId] = useState<string | null>(null)
   const frame = useRef<HTMLDivElement>(null)
   const lastPinnedHeader = useRef<HTMLTableCellElement>(null)
 
@@ -197,21 +204,25 @@ export function DataTable<T>({
         )
       : undefined
   const columnPin = selection ? "last" : "only"
-  return (
-    <div
-      ref={frame}
-      className={cn(
-        // The frame is the scroll container in both axes so the header row
-        // stays pinned while long tables scroll inside it. Scroll padding the
-        // height of that header keeps a focused row out from under it (WCAG 2.4.11).
-        "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-md border bg-background",
-        stickyFirstColumn && "scroll-pl-(--pinned-w) bg-card",
-        scroll === "frame" && "max-h-[calc(100dvh-14rem)]",
-        className,
-      )}
-      aria-busy={loading || undefined}
-    >
-      <table className="w-full text-sm">
+  // The row under the pointer (or the focused row for Shift+F10) picks the
+  // menu's items; outside a row the browser's own menu stays.
+  const onContextMenu = (event: MouseEvent) => {
+    const id = (event.target as HTMLElement).closest("tr[data-row-id]")?.getAttribute("data-row-id") ?? null
+    if (id === null) event.stopPropagation()
+    else setMenuRowId(id)
+  }
+  const menuRow = contextMenu && menuRowId !== null ? rows.find((row) => getRowId(row) === menuRowId) : undefined
+  const frameClass = cn(
+    // The frame is the scroll container in both axes so the header row
+    // stays pinned while long tables scroll inside it. Scroll padding the
+    // height of that header keeps a focused row out from under it (WCAG 2.4.11).
+    "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-md border bg-background",
+    stickyFirstColumn && "scroll-pl-(--pinned-w) bg-card",
+    scroll === "frame" && "max-h-[calc(100dvh-14rem)]",
+    className,
+  )
+  const table = (
+      <table className="w-full text-sm" onContextMenu={contextMenu ? onContextMenu : undefined}>
         <caption className="sr-only">{loading ? `Loading ${label}` : label}</caption>
         <thead data-chrome className="sticky top-0 z-10 bg-[color-mix(in_oklch,var(--chrome)_70%,var(--background))] text-[0.6875rem] font-medium text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
           <tr>
@@ -308,6 +319,7 @@ export function DataTable<T>({
                   <tr
                     key={id}
                     data-row
+                    data-row-id={contextMenu ? id : undefined}
                     aria-current={activeRowId === id ? "true" : undefined}
                     data-selected={isSelected || undefined}
                     className={cn(
@@ -356,7 +368,22 @@ export function DataTable<T>({
           ))
         )}
       </table>
-    </div>
+  )
+  const busy = loading || undefined
+  if (!contextMenu) {
+    return (
+      <div ref={frame} className={frameClass} aria-busy={busy}>
+        {table}
+      </div>
+    )
+  }
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger ref={frame} className={frameClass} aria-busy={busy}>
+        {table}
+      </ContextMenuTrigger>
+      <ContextMenuContent>{menuRow ? contextMenu(menuRow) : null}</ContextMenuContent>
+    </ContextMenu>
   )
 }
 
@@ -378,7 +405,7 @@ export function TableToolbar({
     <div className="flex flex-wrap items-center gap-2">
       {search ? (
         <div className="relative w-64 min-w-0">
-          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             data-page-search
             type="search"
@@ -386,7 +413,7 @@ export function TableToolbar({
             placeholder={search.placeholder}
             value={search.value}
             onChange={(event) => search.onChange(event.target.value)}
-            className="pl-8"
+            className="pl-7"
           />
         </div>
       ) : null}

@@ -2,28 +2,8 @@
  * App shell (foundation-owned): root providers, the main layout with sidebar,
  * header and status area, and the minimal onboarding layout.
  */
-import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
-import {
-  Aperture,
-  Circle,
-  CircleArrowRight,
-  CircleCheck,
-  CircleDashed,
-  FlaskConical,
-  HardDrive,
-  Loader,
-  MapPinOff,
-  Monitor,
-  Moon,
-  OctagonX,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Play,
-  Search,
-  Sun,
-  TriangleAlert,
-  Unplug,
-} from "lucide-react"
+import { Link, Outlet, useRouterState } from "@tanstack/react-router"
+import { Aperture, FlaskConical, HardDrive, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Play, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { EmptyState, LiveAnnouncer } from "@/components/app/feedback"
 import { useDocumentTitle } from "@/components/app/page"
@@ -50,7 +30,8 @@ import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { CommandPalette } from "./command-palette"
 import { NAV_GROUPS, type NavItem, PRIMARY_ITEMS, UTILITY_ITEMS } from "./navigation"
-import { GATE_LABEL, type GateState, type StageLink, stageForPath, viewPipeline } from "./pipeline"
+import { GATE_LABEL, stageForPath, viewPipeline } from "./pipeline"
+import { StageGlyph, useFollowLink } from "./pipeline-ui"
 import { setTheme, type ThemePreference, usePreferences } from "./preferences"
 import { MOD_LABEL, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
 import { SimulationSheet } from "./simulation-panel"
@@ -129,23 +110,6 @@ function useNarrowViewport(): boolean {
   )
 }
 
-const GATE_GLYPH: Record<GateState, { icon: typeof Circle; className: string }> = {
-  done: { icon: CircleCheck, className: "text-success" },
-  ready: { icon: CircleArrowRight, className: "text-link" },
-  review: { icon: TriangleAlert, className: "text-warning" },
-  blocked: { icon: OctagonX, className: "text-destructive" },
-  running: { icon: Loader, className: "text-link motion-safe:animate-spin" },
-  partial: { icon: CircleDashed, className: "text-warning" },
-  idle: { icon: Circle, className: "text-muted-foreground" },
-}
-
-/** C's state vocabulary: glyph shape plus word, colour only reinforces. */
-export function StageGlyph({ state, className }: { state: GateState; className?: string }) {
-  const meta = GATE_GLYPH[state]
-  const Icon = meta.icon
-  return <Icon aria-hidden="true" className={cn("size-3.5 shrink-0", meta.className, className)} />
-}
-
 /** The open View and its pipeline, derived from the route; null outside a View. */
 function useActivePipeline() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -154,15 +118,6 @@ function useActivePipeline() {
   const view = viewId && viewId !== "new" ? state.catalog.views[viewId] : undefined
   const pipeline = useMemo(() => (view ? viewPipeline(state, view) : null), [state, view])
   return { pathname, view, pipeline }
-}
-
-function useFollowLink() {
-  const navigate = useNavigate()
-  return (link: StageLink) => {
-    void navigate({ to: link.to as never, params: link.params as never, search: link.search as never }).then(() => {
-      if (link.focusId) requestAnimationFrame(() => document.getElementById(link.focusId!)?.focus())
-    })
-  }
 }
 
 /**
