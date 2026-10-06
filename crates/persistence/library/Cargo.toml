@@ -18,6 +18,7 @@ hex.workspace = true
 skymath = "0.7.2"
 
 [dev-dependencies]
+parking_lot = "0.12"
 tempfile.workspace = true
 
 [lints]

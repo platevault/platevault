@@ -43,9 +43,13 @@ use uuid::Uuid;
 
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
 
-const SCHEMA: &str =
-    concat!(include_str!("schema.sql"), include_str!("projects.sql"), include_str!("views.sql"));
-const SCHEMA_VERSION: i64 = 8;
+const SCHEMA: &str = concat!(
+    include_str!("schema.sql"),
+    include_str!("projects.sql"),
+    include_str!("views.sql"),
+    include_str!("calibration.sql")
+);
+const SCHEMA_VERSION: i64 = 9;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -78,8 +82,13 @@ macro_rules! asset_sql {
     };
 }
 
+mod calibration;
 mod projects;
 mod views;
+
+pub use calibration::{
+    CalibrationInputDetail, CalibrationInputSummary, InputCopy, InputGroup, InputMember, InputQuery,
+};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

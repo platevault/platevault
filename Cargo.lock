@@ -4484,6 +4484,7 @@ version = "0.1.0"
 dependencies = [
  "fs_pathsafe",
  "hex",
+ "parking_lot",
  "platevault_model",
  "serde",
  "serde_json",

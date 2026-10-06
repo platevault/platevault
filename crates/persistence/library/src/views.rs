@@ -1616,7 +1616,7 @@ fn optional_uuid(row: &SqliteRow, column: &str) -> Result<Option<Uuid>> {
     row.try_get::<Option<String>, _>(column)?.as_deref().map(parse_uuid).transpose()
 }
 
-async fn load_view(conn: &mut SqliteConnection, id: Uuid) -> Result<View> {
+pub async fn load_view(conn: &mut SqliteConnection, id: Uuid) -> Result<View> {
     let row = sqlx::query("SELECT * FROM views WHERE id = ?1")
         .bind(id.to_string())
         .fetch_optional(&mut *conn)
@@ -1666,7 +1666,7 @@ fn header_of(row: &SqliteRow, view_id: Uuid) -> Result<ViewRevisionHeader> {
 }
 
 /// The row id and header of committed `revision`.
-async fn committed_header(
+pub async fn committed_header(
     conn: &mut SqliteConnection,
     id: Uuid,
     revision: Revision,
@@ -1747,7 +1747,7 @@ async fn load_choices(conn: &mut SqliteConnection, row: i64) -> Result<Vec<Sessi
         .collect()
 }
 
-async fn load_members(conn: &mut SqliteConnection, row: i64) -> Result<Vec<ViewMember>> {
+pub async fn load_members(conn: &mut SqliteConnection, row: i64) -> Result<Vec<ViewMember>> {
     let rows =
         sqlx::query("SELECT * FROM view_members WHERE revision_row = ?1 ORDER BY member_key")
             .bind(row)
