@@ -5280,7 +5280,7 @@ impl CaptureView {
             asset_count: u64::try_from(assets.len()).unwrap_or(u64::MAX),
             capture_count: u64::try_from(captures.len()).unwrap_or(u64::MAX),
             availability: session_availability(assets),
-            last_observed_at: assets.iter().map(|asset| asset.last_observed_at.clone()).max(),
+            last_observed_at: latest(assets.iter().map(|asset| &asset.last_observed_at)),
             provisional,
             successors,
             location_ids: location_ids.into_iter().collect(),
@@ -5646,11 +5646,16 @@ struct CountedCapture {
 
 /// Recorded times are RFC 3339 with trailing fractional zeros trimmed, so their
 /// text order is not their time order: compare the instants.
+fn instant(text: &str) -> Option<time::OffsetDateTime> {
+    time::OffsetDateTime::parse(text, &time::format_description::well_known::Rfc3339).ok()
+}
+
 fn oldest<'a>(times: impl IntoIterator<Item = &'a String>) -> Option<String> {
-    let instant = |text: &String| {
-        time::OffsetDateTime::parse(text, &time::format_description::well_known::Rfc3339).ok()
-    };
     times.into_iter().min_by_key(|text| instant(text)).cloned()
+}
+
+fn latest<'a>(times: impl IntoIterator<Item = &'a String>) -> Option<String> {
+    times.into_iter().max_by_key(|text| instant(text)).cloned()
 }
 
 fn contributions_for(
@@ -5689,7 +5694,7 @@ fn contributions_for(
                 last_observed_at: asset.last_observed_at.clone(),
                 last_verified_at: None,
             });
-        if asset.last_observed_at > entry.last_observed_at {
+        if instant(&asset.last_observed_at) > instant(&entry.last_observed_at) {
             entry.last_observed_at.clone_from(&asset.last_observed_at);
         }
         match quality {
@@ -6776,6 +6781,75 @@ mod tests {
         let detail = catalog.session(sessions[0].session.id).await.unwrap();
         assert!(detail.members.iter().all(|member| member.duplicate_candidate));
         assert_eq!((reads("location_provisional"), reads("candidates")), (2, 1));
+    }
+
+    fn observed_asset(location_id: Uuid, last_observed_at: &str) -> Asset {
+        Asset {
+            id: Uuid::new_v4(),
+            location_id,
+            relative_path: NativePath::from_path(Path::new("f.fits")),
+            fingerprint: ObservationFingerprint {
+                identity: FileIdentity { volume: plan_volume("vol"), file_id: None },
+                size_bytes: 2880,
+                modified_ns: 1,
+                content_sha256: None,
+            },
+            observation_revision: 1,
+            decision_revision: 1,
+            format: ImageFormat::Fits,
+            availability: Availability::Available,
+            observed: CaptureMetadata::default(),
+            effective: CaptureMetadata {
+                image_type: Some("LIGHT".into()),
+                filter: Some("Ha".into()),
+                exposure_seconds: Some(60.0),
+                ..CaptureMetadata::default()
+            },
+            quality: Quality::Unreviewed,
+            quality_basis: None,
+            verification_pending: false,
+            last_observed_at: last_observed_at.into(),
+            last_verified_at: None,
+        }
+    }
+
+    /// Recorded times trim trailing fractional zeros, so `…00.12Z` sorts after
+    /// `…00.123Z` as text: sessions and coverage report the later instant.
+    #[tokio::test]
+    async fn the_latest_observation_is_the_later_instant_not_the_larger_text() {
+        let (earlier, later) = ("2026-09-18T22:00:00.12Z", "2026-09-18T22:00:00.123Z");
+        assert!(earlier > later, "text order inverts time order here");
+        let dir = tempfile::tempdir().unwrap();
+        let catalog = indexed_catalog(dir.path(), 1).await;
+        let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+        let ids = sessions[0].session.asset_ids.clone();
+        assert_eq!(ids.len(), 2, "one session across both locations");
+        let mut writer = catalog.writer.lock().await;
+        for (id, observed) in ids.iter().zip([later, earlier]) {
+            sqlx::query("UPDATE assets SET last_observed_at = ?1 WHERE id = ?2")
+                .bind(observed)
+                .bind(id.to_string())
+                .execute(&mut *writer)
+                .await
+                .unwrap();
+        }
+        drop(writer);
+        let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
+        assert_eq!(sessions[0].last_observed_at.as_deref(), Some(later));
+
+        // Captures of one location and channel form one coverage contribution.
+        let location_id = Uuid::new_v4();
+        let entries: Vec<CountedCapture> = [later, earlier]
+            .into_iter()
+            .map(|observed| CountedCapture {
+                asset: observed_asset(location_id, observed),
+                quality: ApplicableQuality::Unreviewed,
+                verified_at: None,
+            })
+            .collect();
+        let contributions = contributions_for(Uuid::new_v4(), None, &entries, &BTreeSet::new());
+        assert_eq!(contributions.len(), 1);
+        assert_eq!(contributions[0].last_observed_at, later);
     }
 
     /// Every D16 read is driven by an index; none scans the assets or link tables,
