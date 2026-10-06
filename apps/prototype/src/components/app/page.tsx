@@ -2,7 +2,7 @@
  * Page-level layout primitives (foundation-owned): page header, sections,
  * list + detail, step indicator and the pre-created placeholder page.
  */
-import { Check } from "lucide-react"
+import { Check, ChevronRight } from "lucide-react"
 import { useEffect, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 
@@ -48,20 +48,39 @@ export interface PageHeaderProps {
   level?: 1 | 2
 }
 
+/**
+ * Harness v4: a pane header, not a web page header. One compact bar: an
+ * optional path (the eyebrow, rendered inline as a path control before the
+ * title, never as a kicker above it), the title at 15 px, meta badges, and
+ * actions on the right; the description is a one-line caption. Level 1 sticks
+ * to the top of its pane so the title and actions never scroll away.
+ */
 export function PageHeader({ title, description, eyebrow, meta, actions, className, level = 1 }: PageHeaderProps) {
   useDocumentTitle(title, level)
   const Heading = level === 1 ? "h1" : "h2"
   return (
-    <header className={cn("flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b px-6 py-4", className)}>
-      <div className="min-w-0 flex-[1_1_16rem] space-y-1">
-        {eyebrow ? <div className="text-xs text-muted-foreground">{eyebrow}</div> : null}
-        <div className="flex flex-wrap items-center gap-2">
-          <Heading className={cn("font-semibold text-balance", level === 1 ? "text-lg" : "text-base")}>{title}</Heading>
-          {meta}
+    <header
+      data-chrome
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-5",
+        level === 1 ? "sticky top-0 z-10 border-b border-separator bg-background py-2" : "pt-3 pb-1",
+        className,
+      )}
+    >
+      <div className="min-w-0 flex-[1_1_16rem]">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          {eyebrow ? (
+            <span className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground [&_a]:hover:text-foreground">
+              {eyebrow}
+              <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 opacity-70" />
+            </span>
+          ) : null}
+          <Heading className={cn("font-semibold text-balance", level === 1 ? "text-lg" : "text-sm")}>{title}</Heading>
+          {meta ? <span className="ml-1 flex flex-wrap items-center gap-2">{meta}</span> : null}
         </div>
-        {description ? <p className="max-w-prose text-sm text-pretty text-muted-foreground">{description}</p> : null}
+        {description ? <p className="mt-0.5 max-w-[80ch] text-[0.75rem] leading-4 text-pretty text-muted-foreground">{description}</p> : null}
       </div>
-      {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">{actions}</div> : null}
     </header>
   )
 }
@@ -80,25 +99,25 @@ export interface SectionProps {
 export function Section({ title, description, actions, children, className, level = 2, id }: SectionProps) {
   const Heading = level === 2 ? "h2" : "h3"
   return (
-    <section aria-labelledby={id ? `${id}-title` : undefined} className={cn("space-y-3", className)}>
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <section aria-labelledby={id ? `${id}-title` : undefined} className={cn("space-y-2", className)}>
+      <div className="flex flex-wrap items-end justify-between gap-2" data-chrome>
         {/* Like PageHeader: the heading block takes the free space and wraps its description, so actions stay beside it. */}
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <Heading id={id ? `${id}-title` : undefined} className={cn("font-semibold", level === 2 ? "text-base" : "text-sm")}>
+        <div className="min-w-0 flex-1">
+          <Heading id={id ? `${id}-title` : undefined} className={cn("font-semibold", level === 2 ? "text-sm" : "text-[0.75rem] text-muted-foreground")}>
             {title}
           </Heading>
-          {description ? <p className="text-sm text-pretty text-muted-foreground">{description}</p> : null}
+          {description ? <p className="mt-0.5 max-w-[80ch] text-[0.75rem] leading-4 text-pretty text-muted-foreground">{description}</p> : null}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2 self-start">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap items-center gap-1.5 self-start">{actions}</div> : null}
       </div>
       {children}
     </section>
   )
 }
 
-/** Scrollable page body with the standard padding and vertical rhythm. */
+/** Scrollable pane body with the standard 20 px margins and vertical rhythm. */
 export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("space-y-6 px-6 py-5", className)}>{children}</div>
+  return <div className={cn("space-y-5 px-5 py-4", className)}>{children}</div>
 }
 
 export interface ListDetailProps {

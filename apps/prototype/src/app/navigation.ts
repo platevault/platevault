@@ -2,6 +2,10 @@
  * Information architecture (foundation-owned): sidebar groups, go-to
  * shortcuts and the static route table the command palette lists.
  * Route paths are fixed in HIGH-LEVEL-DESIGN.md §4 and must not drift.
+ *
+ * Harness v4 source list: two primary destinations (Pipeline, the start
+ * page, and Plan), one Library group, and Activity and Settings in the
+ * footer. Views are reached from the Pipeline board, not as menu items.
  */
 import {
   Activity,
@@ -10,10 +14,10 @@ import {
   Goal,
   HardDrive,
   Layers,
-  ListChecks,
   type LucideIcon,
   Settings,
   SlidersHorizontal,
+  Workflow,
 } from "lucide-react"
 
 export interface NavItem {
@@ -29,6 +33,12 @@ export interface NavGroup {
   items: NavItem[]
 }
 
+/** Pipeline is the start page: every View, grouped by its current stage. */
+export const PRIMARY_ITEMS: NavItem[] = [
+  { to: "/views", label: "Pipeline", icon: Workflow, goKey: "v" },
+  { to: "/plans", label: "Plan", icon: CalendarClock, goKey: "l" },
+]
+
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Library",
@@ -36,14 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/targets", label: "Targets", icon: Crosshair, goKey: "t" },
       { to: "/sessions", label: "Sessions", icon: Layers, goKey: "s" },
       { to: "/calibration", label: "Calibration", icon: SlidersHorizontal, goKey: "c" },
-    ],
-  },
-  {
-    label: "Work",
-    items: [
       { to: "/projects", label: "Projects", icon: Goal, goKey: "p" },
-      { to: "/views", label: "Views", icon: ListChecks, goKey: "v" },
-      { to: "/plans", label: "Plans", icon: CalendarClock, goKey: "l" },
       { to: "/storage", label: "Storage", icon: HardDrive, goKey: "o" },
     ],
   },
@@ -54,7 +57,7 @@ export const UTILITY_ITEMS: NavItem[] = [
   { to: "/settings", label: "Settings", icon: Settings, goKey: "," },
 ]
 
-export const ALL_NAV_ITEMS: NavItem[] = [...NAV_GROUPS.flatMap((g) => g.items), ...UTILITY_ITEMS]
+export const ALL_NAV_ITEMS: NavItem[] = [...PRIMARY_ITEMS, ...NAV_GROUPS.flatMap((g) => g.items), ...UTILITY_ITEMS]
 
 /** Static destinations listed in the command palette, beyond the sidebar. */
 export const STATIC_DESTINATIONS: Array<{ to: string; label: string; keywords: string }> = [

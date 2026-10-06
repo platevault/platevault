@@ -204,7 +204,7 @@ export function DataTable<T>({
         // The frame is the scroll container in both axes so the header row
         // stays pinned while long tables scroll inside it. Scroll padding the
         // height of that header keeps a focused row out from under it (WCAG 2.4.11).
-        "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-lg border",
+        "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-md border bg-background",
         stickyFirstColumn && "scroll-pl-(--pinned-w) bg-card",
         scroll === "frame" && "max-h-[calc(100dvh-14rem)]",
         className,
@@ -213,7 +213,7 @@ export function DataTable<T>({
     >
       <table className="w-full text-sm">
         <caption className="sr-only">{loading ? `Loading ${label}` : label}</caption>
-        <thead className="sticky top-0 z-10 bg-card text-xs text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
+        <thead data-chrome className="sticky top-0 z-10 bg-[color-mix(in_oklch,var(--chrome)_70%,var(--background))] text-[0.6875rem] font-medium text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
           <tr>
             {selection ? (
               <th scope="col" className={cn("h-(--row-h) w-10 px-3", pinned("first", true))}>
@@ -311,12 +311,12 @@ export function DataTable<T>({
                     aria-current={activeRowId === id ? "true" : undefined}
                     data-selected={isSelected || undefined}
                     className={cn(
-                      "group/row h-(--row-h) border-b last:border-0 hover:bg-muted/60",
-                      "data-selected:bg-primary/10 data-selected:hover:bg-primary/16",
+                      "group/row h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022] hover:bg-foreground/[0.05]",
+                      "data-selected:bg-primary/14 data-selected:hover:bg-primary/20",
                       "aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
                       // The same tints as a variable, for pinned cells that paint over the row.
-                      "[--row-bg:transparent] hover:[--row-bg:color-mix(in_oklab,var(--muted)_60%,transparent)]",
-                      "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_10%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_16%,transparent)]",
+                      "[--row-bg:transparent] even:[--row-bg:color-mix(in_oklab,var(--foreground)_2.2%,transparent)] hover:[--row-bg:color-mix(in_oklab,var(--foreground)_5%,transparent)]",
+                      "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_14%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_20%,transparent)]",
                       "aria-[current=true]:[--row-bg:var(--accent)]",
                       rowClassName?.(row),
                     )}

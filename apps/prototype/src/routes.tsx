@@ -55,7 +55,8 @@ const indexRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/",
   beforeLoad: () => {
-    throw redirect({ to: "/targets" })
+    // Harness v4: the start page is the Pipeline board (Views by stage), not Targets.
+    throw redirect({ to: "/views" })
   },
 })
 

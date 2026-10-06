@@ -329,7 +329,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
           {views.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No View uses {target.name} yet.{" "}
-              <Link to="/views/new" search={{ from: "target", targetId }} className="text-primary underline-offset-2 hover:underline">
+              <Link to="/views/new" search={{ from: "target", targetId }} className="text-link underline-offset-2 hover:underline">
                 Create View
               </Link>{" "}
               starts one from this Target.
@@ -451,7 +451,7 @@ function TargetRecordSection({ target }: { target: Target }) {
       {!lookup.enabled ? (
         <p id={reasonId} className="text-sm text-muted-foreground">
           Online lookup is off.{" "}
-          <Link to="/settings/targets" search={{ return: `/targets/${target.id}` }} className="text-primary underline-offset-2 hover:underline">
+          <Link to="/settings/targets" search={{ return: `/targets/${target.id}` }} className="text-link underline-offset-2 hover:underline">
             Turn it on in Settings › Target lookup
           </Link>
           . Local search and the library keep working without it.

@@ -115,7 +115,7 @@ export function ApplicationSection({ view, plan, locked }: { view: View; plan: P
             {profile.executableState === "missing" ? <p className="text-xs text-destructive">Not found at the located path. Locate it again before opening.</p> : null}
             <p className="text-xs text-muted-foreground">
               Needed to open the application, not to prepare. Also in{" "}
-              <Link to="/settings/applications" search={{ return: `/views/${view.id}/prepare` }} className="text-primary underline-offset-4 hover:underline">
+              <Link to="/settings/applications" search={{ return: `/views/${view.id}/prepare` }} className="text-link underline-offset-4 hover:underline">
                 Settings › Applications
               </Link>
               .

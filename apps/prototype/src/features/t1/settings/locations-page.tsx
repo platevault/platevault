@@ -388,7 +388,7 @@ export function LocationsPage() {
             <p className="text-sm text-muted-foreground tabular-nums">
               Last indexing: <StatusBadge kind="operation" value={latestIndex.status} /> {latestIndex.settledAt ? formatDateTime(latestIndex.settledAt) : ""}
               {latestIndex.summary ? ` · ${latestIndex.summary}` : ""} ·{" "}
-              <Link to="/activity" className="text-primary underline-offset-4 hover:underline">
+              <Link to="/activity" className="text-link underline-offset-4 hover:underline">
                 Activity
               </Link>
             </p>

@@ -144,7 +144,7 @@ export function StoragePage() {
       sortValue: (r) => r.view.name,
       cell: (r) => (
         <span className="block space-y-0.5">
-          <Link to="/views/$viewId/results" params={{ viewId: r.view.id }} className="block text-primary hover:underline">
+          <Link to="/views/$viewId/results" params={{ viewId: r.view.id }} className="block text-link hover:underline">
             {r.view.name}
           </Link>
           <PathText path={r.preparation.viewPath} truncate className="max-w-52 text-xs text-muted-foreground" />
@@ -214,7 +214,7 @@ export function StoragePage() {
   ]
 
   const transferColumns: Column<Operation>[] = [
-    { id: "title", header: "Transfer", rowHeader: true, cell: (op) => <Link to="/storage/transfers/$operationId" params={{ operationId: op.id }} className="text-primary hover:underline">{op.title}</Link> },
+    { id: "title", header: "Transfer", rowHeader: true, cell: (op) => <Link to="/storage/transfers/$operationId" params={{ operationId: op.id }} className="text-link hover:underline">{op.title}</Link> },
     { id: "kind", header: "Kind", cell: (op) => (op.kind === "archive" ? "Verified archive" : "Reviewed filing") },
     { id: "status", header: "Status", cell: (op) => <StatusBadge kind="operation" value={op.status} /> },
     {

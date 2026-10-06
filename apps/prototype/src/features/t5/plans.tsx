@@ -773,7 +773,7 @@ export function PlansPage() {
                 value: (
                   <span className="inline-flex flex-wrap items-center gap-x-2">
                     {defaultSite ? defaultSite.name : <UnknownValue label="Not set" reason="Set a default site in Settings › Observing sites." />}
-                    <Link to="/settings/sites" search={{ return: "/plans" }} className="text-xs text-primary underline underline-offset-2">
+                    <Link to="/settings/sites" search={{ return: "/plans" }} className="text-xs text-link underline underline-offset-2">
                       Settings › Observing sites
                     </Link>
                   </span>
@@ -816,7 +816,7 @@ export function PlansPage() {
               {rows.map(({ plan, target, next }) => (
                 <li key={plan.targetId} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
                   <span className="space-y-0.5">
-                    <Link to="/targets/$targetId/plan" params={{ targetId: plan.targetId }} className="font-medium text-primary hover:underline">
+                    <Link to="/targets/$targetId/plan" params={{ targetId: plan.targetId }} className="font-medium text-link hover:underline">
                       Plan {target!.name}
                     </Link>
                     <span className="block text-xs text-muted-foreground">{criteriaSummary(plan.criteria)}</span>

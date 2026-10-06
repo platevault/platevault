@@ -591,7 +591,7 @@ function SessionEvidence({ row, ctx, editable, onToggle }: { row: CandidateRow; 
                   {row.trainName ?? session.cameraName ?? "Unknown"}
                   <StatusBadge kind="association" value={session.equipment.status} />
                   {session.equipment.status !== "confirmed" ? (
-                    <Link to="/sessions/$sessionId" params={{ sessionId: session.id }} className="text-xs text-primary underline-offset-4 hover:underline">
+                    <Link to="/sessions/$sessionId" params={{ sessionId: session.id }} className="text-xs text-link underline-offset-4 hover:underline">
                       Confirm equipment in Sessions
                     </Link>
                   ) : null}

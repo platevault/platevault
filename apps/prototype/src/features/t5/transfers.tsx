@@ -587,7 +587,7 @@ export function TransferPage() {
             <ul className="divide-y rounded-lg border text-sm">
               {views.map((v) => (
                 <li key={v.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                  <Link to="/views/$viewId/results" params={{ viewId: v.id }} className="font-medium text-primary hover:underline">
+                  <Link to="/views/$viewId/results" params={{ viewId: v.id }} className="font-medium text-link hover:underline">
                     {v.name}
                   </Link>
                   <span className="flex items-center gap-2 text-xs tabular-nums text-muted-foreground">

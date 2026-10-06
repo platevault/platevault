@@ -207,15 +207,20 @@ export const STATUS = {
 export type StatusKind = keyof typeof STATUS
 export type StatusValue<K extends StatusKind> = keyof (typeof STATUS)[K] & string
 
+/**
+ * Harness v4: a status reads as a native status label, a tinted glyph and its
+ * word, never a filled pill. Tone colours are text colours that meet 4.5:1 on
+ * every surface; info keeps foreground text with an accent glyph.
+ */
+export const STATUS_CLASS = "h-auto min-h-5 gap-1 rounded-none border-0 bg-transparent px-0 py-0 text-[0.75rem] font-medium [&>svg]:size-3.5!"
+
 export const TONE_CLASS: Record<Tone, string> = {
-  neutral: "bg-secondary text-secondary-foreground",
-  muted: "border-border bg-transparent text-muted-foreground",
-  // Info stays neutral text with an accent icon so badges never compete with
-  // the one accent used for primary actions and selection.
-  info: "bg-secondary text-secondary-foreground [&>svg]:text-info",
-  success: "bg-success/12 text-success",
-  warning: "bg-warning/14 text-warning",
-  danger: "bg-destructive/12 text-destructive",
+  neutral: "text-foreground [&>svg]:text-muted-foreground",
+  muted: "text-muted-foreground",
+  info: "text-foreground [&>svg]:text-info",
+  success: "text-success",
+  warning: "text-warning",
+  danger: "text-destructive",
 }
 
 export function statusMeta<K extends StatusKind>(kind: K, value: StatusValue<K>): StatusMeta {
@@ -234,7 +239,7 @@ export function StatusBadge<K extends StatusKind>({ kind, value, label, classNam
   const meta = statusMeta(kind, value)
   const Icon = meta.icon
   return (
-    <Badge variant="outline" className={cn("rounded-md border-transparent", TONE_CLASS[meta.tone], className)} data-status={`${kind}:${value}`}>
+    <Badge variant="outline" className={cn(STATUS_CLASS, TONE_CLASS[meta.tone], className)} data-status={`${kind}:${value}`}>
       <Icon aria-hidden="true" className={cn(value === "running" && "motion-safe:animate-spin")} />
       {label ?? meta.label}
     </Badge>

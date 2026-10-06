@@ -582,7 +582,7 @@ function Outcome({ view, prep, latestRevision, onReviewAgain }: { view: View; pr
           ) : null}
           <p className="text-xs text-muted-foreground">
             Launching is not processing. When processing is done, use{" "}
-            <Link to="/views/$viewId/results" params={{ viewId: view.id }} className="text-primary underline-offset-4 hover:underline">
+            <Link to="/views/$viewId/results" params={{ viewId: view.id }} className="text-link underline-offset-4 hover:underline">
               Results
             </Link>{" "}
             to attach outputs and mark the attempt complete.

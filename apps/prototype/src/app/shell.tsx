@@ -2,9 +2,29 @@
  * App shell (foundation-owned): root providers, the main layout with sidebar,
  * header and status area, and the minimal onboarding layout.
  */
-import { Link, Outlet, useRouterState } from "@tanstack/react-router"
-import { Aperture, FlaskConical, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
-import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router"
+import {
+  Aperture,
+  Circle,
+  CircleArrowRight,
+  CircleCheck,
+  CircleDashed,
+  FlaskConical,
+  HardDrive,
+  Loader,
+  MapPinOff,
+  Monitor,
+  Moon,
+  OctagonX,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Play,
+  Search,
+  Sun,
+  TriangleAlert,
+  Unplug,
+} from "lucide-react"
+import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { EmptyState, LiveAnnouncer } from "@/components/app/feedback"
 import { useDocumentTitle } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
@@ -29,7 +49,8 @@ import { t5Shell } from "@/features/t5/shell"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { CommandPalette } from "./command-palette"
-import { NAV_GROUPS, type NavItem, UTILITY_ITEMS } from "./navigation"
+import { NAV_GROUPS, type NavItem, PRIMARY_ITEMS, UTILITY_ITEMS } from "./navigation"
+import { GATE_LABEL, type GateState, type StageLink, stageForPath, viewPipeline } from "./pipeline"
 import { setTheme, type ThemePreference, usePreferences } from "./preferences"
 import { MOD_LABEL, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
 import { SimulationSheet } from "./simulation-panel"
@@ -72,8 +93,8 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
     <Link
       to={item.to}
       className={cn(
-        "flex h-8 items-center gap-2.5 rounded-md px-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        "data-[status=active]:bg-sidebar-accent data-[status=active]:font-medium data-[status=active]:text-sidebar-accent-foreground data-[status=active]:shadow-[inset_2px_0_0_var(--sidebar-primary)]",
+        "flex h-6.5 items-center gap-2 rounded-[0.3125rem] px-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:text-link",
+        "data-[status=active]:bg-sidebar-primary data-[status=active]:font-medium data-[status=active]:text-sidebar-primary-foreground data-[status=active]:[&>svg]:text-sidebar-primary-foreground",
         collapsed && "justify-center px-0",
       )}
       aria-label={collapsed ? item.label : undefined}
@@ -108,22 +129,154 @@ function useNarrowViewport(): boolean {
   )
 }
 
+const GATE_GLYPH: Record<GateState, { icon: typeof Circle; className: string }> = {
+  done: { icon: CircleCheck, className: "text-success" },
+  ready: { icon: CircleArrowRight, className: "text-link" },
+  review: { icon: TriangleAlert, className: "text-warning" },
+  blocked: { icon: OctagonX, className: "text-destructive" },
+  running: { icon: Loader, className: "text-link motion-safe:animate-spin" },
+  partial: { icon: CircleDashed, className: "text-warning" },
+  idle: { icon: Circle, className: "text-muted-foreground" },
+}
+
+/** C's state vocabulary: glyph shape plus word, colour only reinforces. */
+export function StageGlyph({ state, className }: { state: GateState; className?: string }) {
+  const meta = GATE_GLYPH[state]
+  const Icon = meta.icon
+  return <Icon aria-hidden="true" className={cn("size-3.5 shrink-0", meta.className, className)} />
+}
+
+/** The open View and its pipeline, derived from the route; null outside a View. */
+function useActivePipeline() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const viewId = pathname.match(/^\/views\/([^/]+)/)?.[1]
+  const state = useStore((s) => s)
+  const view = viewId && viewId !== "new" ? state.catalog.views[viewId] : undefined
+  const pipeline = useMemo(() => (view ? viewPipeline(state, view) : null), [state, view])
+  return { pathname, view, pipeline }
+}
+
+function useFollowLink() {
+  const navigate = useNavigate()
+  return (link: StageLink) => {
+    void navigate({ to: link.to as never, params: link.params as never, search: link.search as never }).then(() => {
+      if (link.focusId) requestAnimationFrame(() => document.getElementById(link.focusId!)?.focus())
+    })
+  }
+}
+
+/**
+ * The pipeline navigator (Xcode-style): under Pipeline, the open View's seven
+ * numbered stages with their gate state. The current area is the selected row.
+ */
+function PipelineOutline() {
+  const { pathname, view, pipeline } = useActivePipeline()
+  if (!view || !pipeline) return null
+  const here = stageForPath(pathname)
+  return (
+    <div className="mt-0.5 mb-1 ml-3 border-l border-sidebar-border pl-1.5">
+      <p className="truncate px-1.5 py-1 text-[0.6875rem] font-semibold text-sidebar-foreground" title={view.name}>
+        {view.name}
+      </p>
+      <ol aria-label={`Pipeline of ${view.name}`} className="space-y-px">
+        {pipeline.stages.map((stage) => (
+          <li key={stage.id}>
+            <Link
+              to={stage.link.to as never}
+              params={stage.link.params as never}
+              aria-current={here === stage.id ? "page" : undefined}
+              className={cn(
+                "flex h-6 items-center gap-1.5 rounded-[0.3125rem] px-1.5 text-[0.75rem] hover:bg-sidebar-accent",
+                here === stage.id && "bg-sidebar-accent font-medium",
+                pipeline.current.id === stage.id && here !== stage.id && "shadow-[inset_2px_0_0_var(--link)]",
+              )}
+            >
+              <span className="w-3 text-right text-muted-foreground tabular-nums">{stage.n}</span>
+              <StageGlyph state={stage.state} />
+              <span className="min-w-0 flex-1 truncate">{stage.label}</span>
+              <span className="max-w-24 truncate text-[0.6875rem] text-muted-foreground">
+                <span className="sr-only">{GATE_LABEL[stage.state]}: </span>
+                {stage.status}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
+/**
+ * The one Next action of the open View, in the toolbar like a Run button:
+ * ⌘↩ runs it, ⌃1–⌃7 jump to a stage.
+ */
+function NextActionButton() {
+  const { pipeline } = useActivePipeline()
+  const follow = useFollowLink()
+  const followRef = useRef(follow)
+  followRef.current = follow
+  const pipelineRef = useRef(pipeline)
+  pipelineRef.current = pipeline
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const current = pipelineRef.current
+      if (!current) return
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && current.next) {
+        event.preventDefault()
+        followRef.current(current.next.link)
+        return
+      }
+      const n = Number(event.key)
+      if (event.ctrlKey && !event.metaKey && n >= 1 && n <= 7) {
+        event.preventDefault()
+        followRef.current(current.stages[n - 1]!.link)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
+  if (!pipeline?.next) return null
+  const next = pipeline.next
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="hidden min-w-0 items-center gap-1.5 truncate text-[0.75rem] text-muted-foreground lg:flex" title={next.reason}>
+        <StageGlyph state={next.stage.state} />
+        <span className="truncate">
+          {next.stage.n} {next.stage.label} · {next.reason}
+        </span>
+      </span>
+      <Button size="sm" onClick={() => follow(next.link)} title={`${next.reason} (${MOD_LABEL}↩)`}>
+        <Play aria-hidden="true" data-icon="inline-start" className="fill-current" />
+        Next: {next.label}
+      </Button>
+    </div>
+  )
+}
+
 function SidebarContent({ collapsed }: { collapsed: boolean }) {
   return (
     <>
-      <div className={cn("flex h-11 shrink-0 items-center gap-2 border-b border-sidebar-border px-3", collapsed && "justify-center px-0")}>
-        <Aperture aria-hidden="true" className="size-5 shrink-0 text-primary" />
-        {collapsed ? <span className="sr-only">PlateVault</span> : <span className="font-semibold">PlateVault</span>}
+      <div data-chrome className={cn("flex h-10 shrink-0 items-center gap-2 px-3", collapsed && "justify-center px-0")}>
+        <Aperture aria-hidden="true" className="size-4.5 shrink-0 text-link" />
+        {collapsed ? <span className="sr-only">PlateVault</span> : <span className="text-sm font-semibold">PlateVault</span>}
       </div>
-      <nav aria-label="Main" className="flex-1 space-y-4 overflow-y-auto p-2">
+      <nav aria-label="Main" data-chrome className="flex-1 space-y-3 overflow-y-auto px-2 pb-2">
+        <ul className="space-y-px">
+          {PRIMARY_ITEMS.map((item) => (
+            <li key={item.to}>
+              <NavLink item={item} collapsed={collapsed} />
+              {item.to === "/views" && !collapsed ? <PipelineOutline /> : null}
+            </li>
+          ))}
+        </ul>
         {NAV_GROUPS.map((group) => (
-          <div key={group.label} className="space-y-0.5">
+          <div key={group.label} className="space-y-px">
             {collapsed ? (
               <div className="mx-auto my-1 h-px w-6 bg-sidebar-border" aria-hidden="true" />
             ) : (
-              <div className="px-2 pb-1 text-xs text-sidebar-foreground/60">{group.label}</div>
+              <div className="px-2 pb-0.5 text-[0.6875rem] font-semibold text-muted-foreground">{group.label}</div>
             )}
-            <ul className="space-y-0.5">
+            <ul className="space-y-px">
               {group.items.map((item) => (
                 <li key={item.to}>
                   <NavLink item={item} collapsed={collapsed} />
@@ -133,9 +286,9 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
           </div>
         ))}
       </nav>
-      <div className="space-y-0.5 border-t border-sidebar-border p-2">
+      <div data-chrome className="space-y-px border-t border-sidebar-border p-2">
         {SHELLS.map((shell, index) => (shell.SidebarFooter ? <shell.SidebarFooter key={index} collapsed={collapsed} /> : null))}
-        <ul className="space-y-0.5" aria-label="Utilities">
+        <ul className="space-y-px" aria-label="Utilities">
           {UTILITY_ITEMS.map((item) => (
             <li key={item.to}>
               <NavLink item={item} collapsed={collapsed} />
@@ -151,7 +304,7 @@ function Sidebar() {
   const { sidebarCollapsed: collapsed } = useShellUi()
   return (
     <aside
-      className={cn("flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground", collapsed ? "w-12" : "w-56")}
+      className={cn("flex shrink-0 flex-col border-r border-separator bg-sidebar text-sidebar-foreground", collapsed ? "w-12" : "w-60")}
       aria-label="Sidebar"
     >
       <SidebarContent collapsed={collapsed} />
@@ -219,17 +372,43 @@ function ThemeMenu() {
   )
 }
 
-/** Header status area: running work, interrupted work and offline locations. */
+/** Status bar: locations, running and interrupted work. Each item opens where it is resolved. */
 function StatusArea({ narrow }: { narrow: boolean }) {
   const running = useStore((s) => Object.values(s.operations).filter((op) => op.status === "running"))
   const interrupted = useStore((s) => Object.values(s.operations).filter((op) => op.status === "interrupted").length)
+  const locations = useStore((s) => Object.values(s.catalog.locations))
   const offline = useStore((s) => Object.values(s.catalog.locations).filter((l) => !s.disk.volumes[l.volumeId]?.mounted))
   const first = running[0]
   const pct = first && first.progress.total > 0 ? Math.round((first.progress.done / first.progress.total) * 100) : null
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <div className="flex min-w-0 flex-1 items-center gap-1">
+      <Button variant="ghost" size="xs" render={<Link to="/settings/locations" />} className="text-muted-foreground">
+        <HardDrive data-icon="inline-start" aria-hidden="true" />
+        <span className="tabular-nums">
+          {locations.length - offline.length} of {locations.length} locations online
+        </span>
+      </Button>
+      {offline.length > 0 ? (
+        <Button
+          variant="ghost"
+          size="xs"
+          render={<Link to="/storage" />}
+          className="text-warning"
+          aria-label={offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}
+        >
+          <Unplug data-icon="inline-start" aria-hidden="true" />
+          <span className={cn(narrow && "sr-only")}>{offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}</span>
+        </Button>
+      ) : null}
+      <div className="min-w-0 flex-1" />
+      {interrupted > 0 ? (
+        <Button variant="ghost" size="xs" render={<Link to="/activity" />} className="text-warning" aria-label={`${interrupted} interrupted operation${interrupted === 1 ? "" : "s"}`}>
+          <TriangleAlert data-icon="inline-start" aria-hidden="true" />
+          <span className="tabular-nums">{interrupted} interrupted</span>
+        </Button>
+      ) : null}
       {first ? (
-        <Button variant="ghost" size="sm" render={<Link to="/activity" />} className="min-w-0 max-w-48 shrink tabular-nums xl:max-w-64">
+        <Button variant="ghost" size="xs" render={<Link to="/activity" />} className="min-w-0 max-w-72 shrink tabular-nums">
           <Spinner data-icon="inline-start" aria-hidden="true" />
           <span className="truncate">
             {first.title}
@@ -237,32 +416,9 @@ function StatusArea({ narrow }: { narrow: boolean }) {
             {running.length > 1 ? ` (+${running.length - 1})` : ""}
           </span>
         </Button>
-      ) : null}
-      {interrupted > 0 ? (
-        <Button variant="ghost" size="sm" render={<Link to="/activity" />} className="text-warning" aria-label={`${interrupted} interrupted operation${interrupted === 1 ? "" : "s"}`}>
-          <TriangleAlert data-icon="inline-start" aria-hidden="true" />
-          <span className="tabular-nums">{interrupted}</span>
-          <span className="hidden xl:inline">interrupted</span>
-        </Button>
-      ) : null}
-      {offline.length > 0 ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          render={<Link to="/storage" />}
-          className="text-warning"
-          aria-label={offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}
-        >
-          <Unplug data-icon="inline-start" aria-hidden="true" />
-          <span className="tabular-nums xl:hidden">{offline.length}</span>
-          <span className="hidden xl:inline">{offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}</span>
-        </Button>
-      ) : null}
-      <Button variant="outline" size={narrow ? "icon-sm" : "sm"} onClick={() => openPanel("simulation")}>
-        <FlaskConical data-icon="inline-start" aria-hidden="true" />
-        <span className={cn(narrow && "sr-only")}>Prototype</span>
-      </Button>
-      <ThemeMenu />
+      ) : (
+        <span className="px-2">No work running</span>
+      )}
     </div>
   )
 }
@@ -353,29 +509,43 @@ function MainArea({ children }: { children: ReactNode }) {
   )
 }
 
-/** Sidebar, header and main area; the page goes in `children`. */
+/**
+ * The window: a full-height source list, a unified toolbar over the content,
+ * the content pane (the only scroll container) and a status bar. The page
+ * itself never scrolls.
+ */
 function AppFrame({ children }: { children: ReactNode }) {
   const { sidebarCollapsed } = useShellUi()
   const narrow = useNarrowViewport()
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="flex h-dvh flex-col overflow-hidden">
       <SkipLink />
-      {narrow ? null : <Sidebar />}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="z-20 flex min-h-11 min-w-0 shrink-0 flex-wrap items-center gap-2 border-b px-2 py-1">
-          {narrow ? (
-            <SidebarDrawer />
-          ) : (
-            <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
-              {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+      <div className="flex min-h-0 flex-1">
+        {narrow ? null : <Sidebar />}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header data-chrome className="z-20 flex min-h-10 min-w-0 shrink-0 flex-wrap items-center gap-2 border-b border-separator bg-chrome px-2 py-1">
+            {narrow ? (
+              <SidebarDrawer />
+            ) : (
+              <Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}>
+                {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+              </Button>
+            )}
+            <NextActionButton />
+            <div className="min-w-0 flex-1" />
+            <PaletteTrigger narrow={narrow} />
+            <Button variant="ghost" size={narrow ? "icon-sm" : "sm"} onClick={() => openPanel("simulation")}>
+              <FlaskConical data-icon="inline-start" aria-hidden="true" />
+              <span className={cn(narrow && "sr-only")}>Prototype</span>
             </Button>
-          )}
-          <PaletteTrigger narrow={narrow} />
-          <div className="min-w-0 flex-1" />
-          <StatusArea narrow={narrow} />
-        </header>
-        <MainArea>{children}</MainArea>
+            <ThemeMenu />
+          </header>
+          <MainArea>{children}</MainArea>
+        </div>
       </div>
+      <footer data-chrome aria-label="Status" className="flex h-6 shrink-0 items-center gap-3 border-t border-separator bg-chrome px-2 text-[0.6875rem] text-muted-foreground">
+        <StatusArea narrow={narrow} />
+      </footer>
     </div>
   )
 }

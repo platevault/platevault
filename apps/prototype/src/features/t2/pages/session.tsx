@@ -414,7 +414,7 @@ function TargetSection({ session, catalog, editable, revision }: { session: Sess
             {items.length === 0 ? (
               <p className="w-full text-sm text-muted-foreground">
                 No Target record exists yet.{" "}
-                <Link to="/targets" className="text-primary underline-offset-2 hover:underline">
+                <Link to="/targets" className="text-link underline-offset-2 hover:underline">
                   Add a Target
                 </Link>{" "}
                 first.
@@ -561,7 +561,7 @@ function CorrectionsSection({ session, catalog, editable }: { session: Session; 
           {previous.map((p, index) => (
             <span key={p.id}>
               {index > 0 ? ", " : ""}
-              <Link to="/sessions/$sessionId" params={{ sessionId: p.id }} className="text-primary underline-offset-2 hover:underline">
+              <Link to="/sessions/$sessionId" params={{ sessionId: p.id }} className="text-link underline-offset-2 hover:underline">
                 {sessionLabel(catalog, p)} (grouping revision {groupingRevision(catalog, p)})
               </Link>
             </span>

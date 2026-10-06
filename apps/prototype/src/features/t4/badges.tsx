@@ -7,7 +7,7 @@
  * STATUS additions; replace with `StatusBadge` once they land.
  */
 import { Ban, Check, CircleDashed, CircleHelp, CircleX, type LucideIcon, ShieldCheck, ShieldQuestion, TriangleAlert } from "lucide-react"
-import { TONE_CLASS, type Tone } from "@/components/app/status"
+import { STATUS_CLASS, TONE_CLASS, type Tone } from "@/components/app/status"
 import { Badge } from "@/components/ui/badge"
 import type { ApplicationProfile } from "@/domain/types"
 import { cn } from "@/lib/utils"
@@ -34,7 +34,7 @@ export function T4Badge({ value, label, className }: { value: T4BadgeValue; labe
   const meta = META[value]
   const Icon = meta.icon
   return (
-    <Badge variant="outline" className={cn("rounded-md border-transparent", TONE_CLASS[meta.tone], className)} data-status={value}>
+    <Badge variant="outline" className={cn(STATUS_CLASS, TONE_CLASS[meta.tone], className)} data-status={value}>
       <Icon aria-hidden="true" />
       {label ?? meta.label}
     </Badge>

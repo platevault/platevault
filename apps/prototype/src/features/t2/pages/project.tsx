@@ -288,7 +288,7 @@ function ProjectDetail({ projectId }: { projectId: string }) {
           {views.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No View yet.{" "}
-              <Link to="/views/new" search={{ from: "project", projectId }} className="text-primary underline-offset-2 hover:underline">
+              <Link to="/views/new" search={{ from: "project", projectId }} className="text-link underline-offset-2 hover:underline">
                 Create View
               </Link>{" "}
               starts one with this Project's context, even with an unmet checklist.

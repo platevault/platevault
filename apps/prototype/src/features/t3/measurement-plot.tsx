@@ -88,7 +88,7 @@ export function MeasurementPlot({
         </span>
         <span>● included</span>
         <span>○ excluded from View</span>
-        <span className="text-primary">● current frame{active ? `: ${active.label} ${formatMetric(active)}` : ""}</span>
+        <span className="text-link">● current frame{active ? `: ${active.label} ${formatMetric(active)}` : ""}</span>
       </figcaption>
     </figure>
   )

@@ -66,7 +66,7 @@ export interface EmptyStateProps {
 
 export function EmptyState({ icon: Icon, title, description, action, className, titleAs: Title = "h3" }: EmptyStateProps) {
   return (
-    <Empty className={cn("border border-dashed py-10", className)}>
+    <Empty className={cn("border border-dashed border-border py-8", className)}>
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <Icon aria-hidden="true" />
@@ -81,11 +81,12 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
 
 export type NoticeTone = "info" | "offline" | "warning" | "refusal"
 
+// Harness v4: an inline info bar (as in Xcode or Mail), tinted by tone, hairline edge, 5 px radius.
 const NOTICE: Record<NoticeTone, { icon: LucideIcon; className: string; role: "status" | "alert" }> = {
-  info: { icon: Info, className: "border-border", role: "status" },
-  offline: { icon: Unplug, className: "border-warning/40 [&>svg]:text-warning", role: "status" },
-  warning: { icon: TriangleAlert, className: "border-warning/40 [&>svg]:text-warning", role: "status" },
-  refusal: { icon: OctagonX, className: "border-destructive/50 [&>svg]:text-destructive", role: "alert" },
+  info: { icon: Info, className: "border-border bg-foreground/[0.035] [&>svg]:text-info", role: "status" },
+  offline: { icon: Unplug, className: "border-warning/30 bg-warning/[0.07] [&>svg]:text-warning", role: "status" },
+  warning: { icon: TriangleAlert, className: "border-warning/30 bg-warning/[0.07] [&>svg]:text-warning", role: "status" },
+  refusal: { icon: OctagonX, className: "border-destructive/40 bg-destructive/[0.07] [&>svg]:text-destructive", role: "alert" },
 }
 
 export interface NoticeProps {
@@ -105,7 +106,7 @@ export function Notice({ tone, title, children, actions, className }: NoticeProp
   const meta = NOTICE[tone]
   const Icon = meta.icon
   return (
-    <Alert role={meta.role} className={cn("px-3 py-2.5", meta.className, className)}>
+    <Alert role={meta.role} className={cn("rounded-md px-3 py-2", meta.className, className)}>
       <Icon aria-hidden="true" />
       <AlertTitle>{title}</AlertTitle>
       {children ? <AlertDescription>{children}</AlertDescription> : null}
