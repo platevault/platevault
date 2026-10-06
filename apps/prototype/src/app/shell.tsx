@@ -584,11 +584,12 @@ function MainArea({ children, toolbar, trailing }: { children: ReactNode; toolba
         <div
           data-chrome=""
           data-tauri-drag-region=""
-          className="material-toolbar z-20 flex min-h-(--toolbar-h) shrink-0 items-center gap-2 border-b px-2"
+          className="material-toolbar z-20 flex min-h-(--toolbar-h) shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b px-2 py-1"
         >
           {toolbar}
-          <div ref={setTitle} data-toolbar-title="" className="flex min-w-0 flex-1 items-center" />
-          <div ref={setActions} data-toolbar-actions="" className="flex min-w-0 shrink items-center justify-end gap-1.5" />
+          {/* The title keeps 14rem; when the page's actions do not fit beside it they wrap to a second toolbar row (AppKit overflows instead, WCAG 1.4.10 needs reflow). */}
+          <div ref={setTitle} data-toolbar-title="" className="flex min-w-[12rem] flex-[1_1_14rem] items-center" />
+          <div ref={setActions} data-toolbar-actions="" className="ml-auto flex min-w-0 items-center justify-end gap-1.5" />
           {trailing}
         </div>
       )}
