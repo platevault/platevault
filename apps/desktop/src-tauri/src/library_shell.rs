@@ -26,7 +26,7 @@ compile_error!(
      release builds must not enable `dev-tools`"
 );
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::error::Error;
 #[cfg(feature = "dev-tools")]
 use std::net::Ipv4Addr;
@@ -60,6 +60,9 @@ pub const BRIDGE_BIND_ENV: &str = "PV_MCP_BRIDGE_BIND";
 
 /// Newest operations re-read from durable status after the progress channel lagged.
 const RESYNC_PAGE: u32 = 64;
+/// Most recent terminal snapshots a resync recovered whose channel terminal has
+/// not arrived yet; older ones are forgotten so a lost terminal cannot leak.
+const RETAINED_FINISHED: usize = 256;
 
 /// Build the shell, open its catalog and run the event loop.
 ///
@@ -216,10 +219,7 @@ impl ProgressBridge {
         tauri::async_runtime::spawn(async move {
             loop {
                 match events.recv().await {
-                    Ok(operation) => {
-                        bridge.forward(&operation, true);
-                        bridge.emitted.received();
-                    }
+                    Ok(operation) => bridge.forward(&operation, true),
                     Err(RecvError::Lagged(skipped)) => {
                         tracing::warn!(skipped, "scan progress lagged; re-reading durable status");
                         if let Err(error) = bridge.resync().await {
@@ -228,7 +228,6 @@ impl ProgressBridge {
                                 "scan progress resync failed; clients must poll library_scan_status"
                             );
                         }
-                        bridge.emitted.resynced(events.len());
                     }
                     Err(RecvError::Closed) => return,
                 }
@@ -268,14 +267,7 @@ impl ProgressBridge {
                 self.forward(operation, false);
             }
         }
-        let older = self
-            .emitted
-            .revisions
-            .keys()
-            .filter(|id| !refreshed.contains(*id))
-            .copied()
-            .collect::<Vec<_>>();
-        for id in older {
+        for id in self.emitted.rereads(&refreshed) {
             self.forward(&catalog.scan_status(id).await?, false);
         }
         Ok(())
@@ -285,16 +277,19 @@ impl ProgressBridge {
 /// Emitted revision of each operation that may still send a snapshot.
 ///
 /// A terminal snapshot from the channel is its operation's last message, so it
-/// ends tracking. A terminal snapshot a resync read from durable status may still
-/// have older snapshots of its operation queued from before that resync, so its
-/// revision is kept only until every message queued then has been received.
+/// ends tracking. `run_scan` commits a terminal state before it sends it, so a
+/// terminal a resync read from durable status may still be followed by its
+/// channel terminal and by older queued snapshots: its revision is kept until
+/// that channel terminal arrives, or until [`RETAINED_FINISHED`] later recovered
+/// terminals displace it when the channel never delivers one.
 #[derive(Default)]
 struct Emitted {
     revisions: HashMap<Uuid, Revision>,
-    /// Finished operations a resync delivered, forgotten once `queued` is zero.
+    /// Recovered terminals still awaiting their channel terminal.
     finished: HashSet<Uuid>,
-    /// Channel messages still pending from before the last resync.
-    queued: usize,
+    /// Recovery order of `finished`; entries a channel terminal already ended
+    /// are skipped when popped.
+    recovered: VecDeque<Uuid>,
 }
 
 impl Emitted {
@@ -309,8 +304,15 @@ impl Emitted {
         if newer {
             self.revisions.insert(operation.id, operation.revision);
         }
-        if operation.state != ScanState::Running {
-            self.finished.insert(operation.id);
+        if operation.state != ScanState::Running && self.finished.insert(operation.id) {
+            self.recovered.push_back(operation.id);
+            while self.recovered.len() > RETAINED_FINISHED {
+                if let Some(oldest) = self.recovered.pop_front() {
+                    if self.finished.remove(&oldest) {
+                        self.revisions.remove(&oldest);
+                    }
+                }
+            }
         }
         newer
     }
@@ -319,28 +321,14 @@ impl Emitted {
         self.revisions.contains_key(&id)
     }
 
-    /// One channel message was handled.
-    fn received(&mut self) {
-        if self.queued > 0 {
-            self.queued -= 1;
-            if self.queued == 0 {
-                self.forget_finished();
-            }
-        }
-    }
-
-    /// A resync ended with `queued` channel messages pending.
-    fn resynced(&mut self, queued: usize) {
-        self.queued = queued;
-        if queued == 0 {
-            self.forget_finished();
-        }
-    }
-
-    fn forget_finished(&mut self) {
-        for id in self.finished.drain() {
-            self.revisions.remove(&id);
-        }
+    /// Tracked operations a resync re-reads by id: those outside `refreshed`
+    /// that are still running. A recovered terminal has nothing newer to read.
+    fn rereads(&self, refreshed: &HashSet<Uuid>) -> Vec<Uuid> {
+        self.revisions
+            .keys()
+            .filter(|id| !refreshed.contains(*id) && !self.finished.contains(*id))
+            .copied()
+            .collect()
     }
 }
 
@@ -349,12 +337,14 @@ mod tests {
     #[cfg(feature = "dev-tools")]
     use std::net::Ipv4Addr;
 
+    use std::collections::HashSet;
+
     use platevault_core::{ScanOperation, ScanProgress, ScanState};
     use uuid::Uuid;
 
     #[cfg(feature = "dev-tools")]
     use super::loopback_bind;
-    use super::Emitted;
+    use super::{Emitted, RETAINED_FINISHED};
 
     fn snapshot(id: Uuid, revision: u64, state: ScanState) -> ScanOperation {
         ScanOperation {
@@ -371,33 +361,48 @@ mod tests {
         }
     }
 
-    /// A terminal snapshot recovered by a resync is emitted once and then
-    /// forgotten, but only after every message queued before that resync was
-    /// received, so a stale queued snapshot never follows it.
+    /// A terminal snapshot recovered by a resync is emitted once; a stale
+    /// snapshot still queued from before that resync never follows it.
     #[test]
-    fn finished_operations_recovered_by_resync_stop_being_tracked() {
+    fn no_stale_snapshot_follows_a_terminal_recovered_by_resync() {
         let id = Uuid::new_v4();
         let mut emitted = Emitted::default();
         assert!(emitted.admit(&snapshot(id, 1, ScanState::Running), true));
-        emitted.received();
-
         // The channel lagged past the terminal snapshot; resync reads it.
         assert!(emitted.admit(&snapshot(id, 3, ScanState::Completed), false));
         assert!(!emitted.admit(&snapshot(id, 3, ScanState::Completed), false), "emitted once");
-        emitted.resynced(2);
         assert!(!emitted.admit(&snapshot(id, 2, ScanState::Running), true), "stale queued");
-        emitted.received();
-        assert!(emitted.tracks(id), "older snapshots may still be queued");
-        emitted.received();
-        assert!(!emitted.tracks(id), "a finished operation is not tracked for the app's life");
+    }
 
-        // With nothing queued at the resync, it is forgotten at once.
-        let other = Uuid::new_v4();
-        assert!(emitted.admit(&snapshot(other, 1, ScanState::Running), true));
-        emitted.received();
-        assert!(emitted.admit(&snapshot(other, 2, ScanState::Canceled), false));
-        emitted.resynced(0);
-        assert!(!emitted.tracks(other));
+    /// `run_scan` commits the terminal state before it sends it: a resync in
+    /// that window emits the committed terminal, and the channel's own terminal
+    /// that follows is the same revision and is not emitted again.
+    #[test]
+    fn a_terminal_committed_before_its_channel_send_is_emitted_once() {
+        let id = Uuid::new_v4();
+        let mut emitted = Emitted::default();
+        assert!(emitted.admit(&snapshot(id, 1, ScanState::Running), true));
+        assert!(emitted.admit(&snapshot(id, 2, ScanState::Completed), false), "resync emits");
+        assert!(!emitted.admit(&snapshot(id, 2, ScanState::Completed), true), "emitted twice");
+        assert!(!emitted.tracks(id), "its channel terminal ends tracking");
+    }
+
+    /// A terminal whose channel message was lost is never re-read by later
+    /// resyncs, and retention of such terminals is bounded.
+    #[test]
+    fn finished_operations_recovered_by_resync_do_not_leak() {
+        let mut emitted = Emitted::default();
+        let running = Uuid::new_v4();
+        assert!(emitted.admit(&snapshot(running, 1, ScanState::Running), true));
+        let lost: Vec<Uuid> = (0..=RETAINED_FINISHED).map(|_| Uuid::new_v4()).collect();
+        for id in &lost {
+            assert!(emitted.admit(&snapshot(*id, 1, ScanState::Running), true));
+            assert!(emitted.admit(&snapshot(*id, 2, ScanState::Failed), false));
+        }
+        assert_eq!(emitted.rereads(&HashSet::new()), vec![running], "terminals are not re-read");
+        assert!(!emitted.tracks(lost[0]), "the oldest lost terminal is forgotten");
+        assert!(lost[1..].iter().all(|id| emitted.tracks(*id)));
+        assert!(emitted.revisions.len() <= RETAINED_FINISHED + 1, "bounded");
     }
 
     /// Only IPv4 loopback literals pass. Unspecified, private, IPv6 (including
