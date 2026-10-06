@@ -1,8 +1,9 @@
 # Harness v2 · Pro imaging studio
 
 Branch `ui-harness-v2` · app `apps/prototype` · served at `http://127.0.0.1:5502/` (service `pv-harness-v2`).
-Status: shell, tokens, primitives, start page, menu, Target finder and the View pipeline rail
-landed; Frames, Results and Plan inherit tokens and primitives only (see Known gaps).
+Status: shell, tokens, primitives, start page, menu, Target finder, the View pipeline rail, Frames
+review (loupe), the Results inspector and the Plan area's night timeline landed (see Known gaps).
+Tauri draws the native window: the harness draws no OS window chrome (no traffic lights or title bar).
 
 ## Premise
 
@@ -70,13 +71,14 @@ page; the full sortable table stays at *All Targets* (`/targets`).
 |---|---|---|
 | Surfaces | `seam` `canvas` `background` `panel` `panel-header` `toolbar` `raised` `hover` `selected` | one neutral ramp (dark: #0e→#3d); seams are the darkest step |
 | Text | `foreground` `muted-foreground` | ≥ 4.5:1 on every surface up to `hover` and `selected` (dark muted on selected 4.89) |
-| Accent | `primary` (= `ring`, `info`) | state only: selection edge, focus ring, current stage, Next action, links |
+| Accent | `primary` (= `ring`, `info`) | state only: selection edge, focus ring, current stage, Next action, selected window. Links are neutral text with an underline (`Button` `link` variant) |
 | Status | `success` `warning` `destructive` | muted studio tones, text-only tags with a hairline edge |
 | Plates | `mount` `mount-edge` | the matte around an image (B) |
 | Channels | `ch-l/r/g/b/ha/oiii/sii` | histogram traces and channel chips, always beside the channel name |
 | Type | `text-2xs` 10.5 · `xs` 11.5 · `sm` 13 · `base` 14 · `lg` 15 px | system UI face (SF Pro), tabular numerals via `num` |
 | Radius | `--radius` 4 px | buttons and fields 4 px, chips 2 px, no large rounded cards |
 | Metrics | `--toolbar-h` 38 · `--statusbar-h` 24 · `--pane-header-h` 32 · `--row-h` 28 px | compact 24, spacious 34 |
+| Sky | `band-day` `band-civil` `band-nautical` `band-astro` `band-dark` `band-moon` `curve` | night timeline only; one cool ramp, the curve warm |
 
 Utilities: `chrome` (no text selection, arrow cursor), `panel-title` (small-caps panel headers),
 `num` (tabular figures).
@@ -115,6 +117,48 @@ dashed **"in your app"** gap between Prepare and Results where processing happen
 PlateVault, and exactly **one Next action** (accent button) derived from the selection summary:
 Select sessions → Review frames → Prepare View. Readiness is shown only where the summary
 proves it; stages owned by other areas say "not checked here" instead of guessing.
+The View header is one strip at 1024: the routine actions (Edit details, Refresh selection) show
+only their glyphs below 1280 px and keep their names; the save cluster is one row (state, then
+Save View, the blocked reason as its description). Complete, recovered, stale and "added since
+prepared" messages are full-width **message bars** (`Notice layout="strip"`), not boxes. A
+Complete View's one Next action is **Clean up View**.
+
+## Frames review: the loupe (B)
+
+`/views/$viewId/frames` is Lightroom's Library loupe: one pane toolbar (file filter, Session,
+Show excluded, Import measurements, the inspector toggle), the frames table filling the pane, and
+the **Frame inspector** on the right: the loupe header (name, position, Previous K / Next J), the
+display toolbar (Fit/1:1/2:1, stretch, region, Stars), the frame as a **plate on its mount**
+(pixels in the dark well, `FILTER · exposure · DATE-OBS` and `W × H · stretch` printed on the
+matte), the View-scope Exclude, then panels: **Measurements** (each value with its source:
+`built-in`, `imported · content unverified`, `imported for earlier content`), **Histogram** (the
+preview's own pixels at the current stretch, labelled display only), Detected stars, Provenance
+and copies, Header metadata, and **Trend** (the plot). A **filmstrip** of the shown frames runs
+along the bottom with the shown-of and per-session counts above it; it is one tab stop, ←/→ walk
+and select, excluded prints fade with a ⃠ glyph. Preview-then-confirm is the existing scoped
+confirmation for Mark usable / Mark unusable / Reject for Project (what changes, what does not).
+Measured: frames table 14 rows visible at 1280 × 800 and 12 at 1024 × 768 (was about 4).
+
+## Results: the file on its mount (B)
+
+Message bars carry the recorded output location and refusals; the candidate and accepted tables
+fill the pane; **Inspect** opens the **Result inspector**: the file as a print on its mount (the
+well shows the file type, because PlateVault reads no product pixels and never invents an image),
+its kind and size on the matte, then File, Lineage and Identity-and-acceptance panels with each
+value's source (`file system`, `hashed now`, `recorded at inspection`, `recorded at acceptance`,
+`No input-frame record was read`). Accept Result keeps its preview-then-confirm dialog.
+
+## Plan: D's night timeline
+
+The Target Plan's inputs (Planning site, Criteria, Planned, Reminders) moved into the **Plan
+settings** inspector; the pane holds the nights. The chosen night is drawn large on a mount:
+noon to noon, sky bands from the Sun's altitude (day, civil, nautical, astronomical twilight,
+astronomical dark), a strip while the Moon is up, the Target's altitude curve and its windows
+(the selected one in the accent), hour ticks in the site's zone and a legend. Every window row
+carries its night's sky in miniature; its Night button draws that night above. The timeline's
+label writes out the dark interval and window times. Samples come from `nightProfile` in
+`lib/planning.ts`, on the same grid and positions as `computeWindows`; it decides nothing.
+
 
 ## Taken from A–E
 
@@ -133,7 +177,9 @@ proves it; stages owned by other areas say "not checked here" instead of guessin
 
 Under `design/harness-v2-shots/`. `v2-<surface>-1280.png` (1280 × 800) and `-1024.png`
 (1024 × 768) for: `recent`, `sessions`, `target` (NGC 7000), `view-frames`, `view-prepare`,
-`view-results`, `view-cleanup`, `plans`, `target-plan`. Walk evidence: `walk-j19-s1-locations-1280`,
+`view-results`, `view-cleanup`, `plans`, `target-plan`. This round: `c-frames-{1280,1024}` (loupe;
+`c-frames-before-*` are the earlier layout), `c-results-{1280,1024}` (Result inspector) and
+`c-plan-backyard-{1280,1024}` (night timeline). Walk evidence: `walk-j19-s1-locations-1280`,
 `walk-j19-s2-picker-1280`. Measured at both widths: document scroll height − viewport = 0 and
 scroll width − viewport = 0 (the window never scrolls; panes do).
 
@@ -150,7 +196,8 @@ scroll width − viewport = 0 (the window never scrolls; panes do).
 | J24 prepare | surface reached | `/views/view_m31/prepare`: "Prepare and open · M31 LRGB - PixInsight"; steps not driven |
 | J27 S10 | surface reached | `/views/view_m31/cleanup`: "Clean up View · M31 LRGB - PixInsight"; step not driven |
 | J29 S1 | pass | `/plans`: "Plans · Planned Targets, reminder status and calendar exports … Notifications off … Default site Not set: Set a default site in Settings › Observing sites" |
-| J29 S2–S7a | surface reached | `/targets/tgt_y2bxfy/plan`: "Plan NGC 7000 … Planning site · Choose a planning site · Manage sites · Criteria"; steps not driven |
+| J29 S1 | pass (timeline) | `/targets/tgt_y2bxfy/plan`, Backyard chosen: "Night of 6 Oct 2026 · Astronomical dark 21:00–05:50 · 1 window · Backyard, Europe/Amsterdam"; timeline label "6 Oct 2026 at Backyard: astronomical dark 21:00–05:50; window 21:00–04:10 CEST"; "Notifications off" |
+| J29 S2–S7a | surface reached | criteria, Planned and reminders in the Plan settings inspector; steps not driven |
 
 ## Critique (design-critic + a11y-auditor, 1280 and 1024)
 
@@ -167,11 +214,15 @@ scroll width − viewport = 0 (the window never scrolls; panes do).
 
 ## Known gaps
 
-- **Frames review** keeps the integrated layout (table beside preview) in studio tokens; B's
-  plate-on-mount preview, a bottom frame filmstrip and histogram/measurement inspector panels
-  are not built yet (`Filmstrip`, `Plate`, `Inspector`, `PanelSection` exist for them).
-- **Results/artifacts** and **Plan** (D's windows + timeline) inherit tokens and primitives
-  only; their layouts are unchanged.
+- **Frames review**: the loupe, filmstrip, histogram and values-with-source panels landed; no
+  B-style draft review marks (decisions still go straight to the scoped confirmations).
+- **Results**: no product pixels are shown (none are read); the tables keep the web Section heads.
+- **Plan**: the Plans overview (`/plans`) keeps its layout; nights with no window are not listed.
+- Remaining spot-walks (J22 S12–S15a, J24 prepare, J27 S10, J29 S2–S7a) not driven this round.
+- Inline links outside `Button` still use the accent in about 15 call sites (`text-primary` on
+  `Link`); the `Button` link variant is neutral.
+- The IA is about to be re-architected (Project → Plan → View pipeline, one workflow page), so
+  the Target page tabs and other structural work were stopped, not built.
 - **Target page** does not yet carry D's Target-scoped tabs (Overview · Sessions · Views ·
   Plan · Results); Plan is reached from the Recent inspector, its context menu and the page.
 - The Next action is derived from the selection summary only, so a Complete View still offers
