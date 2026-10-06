@@ -10,7 +10,10 @@
 #   2. the resolved default feature graph of `desktop_shell` pulls neither
 #      feature and neither gated plugin crate
 #   3. no shipped capability file grants a permission from a gated plugin
-#   4. no config the build reads by filename sets `withGlobalTauri`
+#   4. no config the build reads by filename sets `withGlobalTauri`, including
+#      the isolated library shell's shipped `library/tauri.conf.json`
+#   5. the library shell embeds `library-dev/tauri.conf.json` only behind
+#      `dev-tools` and the shipped `library/tauri.conf.json` otherwise
 #
 # Exit 0 requires a positive determination from every check. Each one first
 # asserts that its input exists and that its query returned a record it can
@@ -103,8 +106,69 @@ elif grep -lEi '"?with_?global_?tauri"?' "${SHIPPED_CONFIGS[@]}" | grep -q .; th
   fail "a config the build reads by filename sets withGlobalTauri"
 fi
 
+# --- 4b. library shell config: the default-feature library context ---
+# `library_shell.rs` embeds `library/tauri.conf.json` without `dev-tools`.
+# Tauri reads platform overlays from the directory of the named config, so
+# that directory gets the same filename-addressed treatment as check 4.
+LIBRARY_CONFIG_DIR=apps/desktop/src-tauri/library
+LIBRARY_CONFIG="$LIBRARY_CONFIG_DIR/tauri.conf.json"
+LIBRARY_CONFIGS=()
+for candidate in \
+  "$LIBRARY_CONFIG" \
+  "$LIBRARY_CONFIG_DIR"/tauri.{macos,linux,windows,android,ios}.conf.json{,5} \
+  "$LIBRARY_CONFIG_DIR"/Tauri{,.macos,.linux,.windows,.android,.ios}.toml; do
+  [ -f "$candidate" ] && LIBRARY_CONFIGS+=("$candidate")
+done
+if [ ! -f "$LIBRARY_CONFIG" ]; then
+  fail "$LIBRARY_CONFIG is missing, so the shipped library shell config was never read"
+elif grep -lEi '"?with_?global_?tauri"?' "${LIBRARY_CONFIGS[@]}" | grep -q .; then
+  fail "a library shell config the default build reads by filename sets withGlobalTauri"
+fi
+
+# --- 5. library shell contexts: the dev bridge config is dev-tools only ---
+# `library-dev/tauri.conf.json` sets `withGlobalTauri` for the loopback dev
+# bridge, so every `generate_context!` naming it must sit behind
+# `#[cfg(feature = "dev-tools")]`, and the default build must embed the
+# shipped `library/tauri.conf.json` behind `#[cfg(not(feature = "dev-tools"))]`.
+# Each context is paired with the nearest `#[cfg(...)]` attribute above it in
+# the same item; a context without one is reported as ungated.
+LIBRARY_DEV_CONFIG=apps/desktop/src-tauri/library-dev/tauri.conf.json
+SHELL_SOURCES=apps/desktop/src-tauri/src
+DEV_GATE='#[cfg(feature = "dev-tools")]'
+DEFAULT_GATE='#[cfg(not(feature = "dev-tools"))]'
+if [ ! -f "$LIBRARY_DEV_CONFIG" ]; then
+  fail "$LIBRARY_DEV_CONFIG is missing, so the dev library context was never observed"
+fi
+if [ ! -d "$SHELL_SOURCES" ]; then
+  fail "$SHELL_SOURCES is missing, so no library shell context was read"
+  CONTEXTS=""
+else
+  # shellcheck disable=SC2016 # the single-quoted text is an awk program
+  CONTEXTS=$(find "$SHELL_SOURCES" -name '*.rs' -print0 | xargs -0 awk '
+    FNR == 1 { gate = "" }
+    /^[[:space:]]*#\[cfg\(/ { line = $0; sub(/^[[:space:]]+/, "", line); sub(/[[:space:]]+$/, "", line); gate = line }
+    /^}/ { gate = "" }
+    /generate_context!\("library(-dev)?\/tauri\.conf\.json"/ {
+      match($0, /"library(-dev)?\/tauri\.conf\.json"/)
+      config = substr($0, RSTART + 1, RLENGTH - 2)
+      print FILENAME "\t" config "\t" (gate == "" ? "ungated" : gate)
+    }')
+fi
+DEV_CONTEXTS=$(awk -F'\t' '$2 == "library-dev/tauri.conf.json"' <<<"$CONTEXTS")
+SHIPPED_CONTEXTS=$(awk -F'\t' '$2 == "library/tauri.conf.json"' <<<"$CONTEXTS")
+if [ -z "$DEV_CONTEXTS" ]; then
+  fail "no generate_context! names library-dev/tauri.conf.json, so its gate was not observed"
+elif awk -F'\t' -v gate="$DEV_GATE" '$3 != gate' <<<"$DEV_CONTEXTS" | grep -q .; then
+  fail "library-dev/tauri.conf.json is embedded outside $DEV_GATE"
+fi
+if [ -z "$SHIPPED_CONTEXTS" ]; then
+  fail "no generate_context! names library/tauri.conf.json, so the shipped library context was not observed"
+elif awk -F'\t' -v gate="$DEFAULT_GATE" '$3 != gate' <<<"$SHIPPED_CONTEXTS" | grep -q .; then
+  fail "library/tauri.conf.json is embedded outside $DEFAULT_GATE"
+fi
+
 if [ "$FAILED" -ne 0 ]; then
   echo "dev surface gate: BLOCKED" >&2
   exit 1
 fi
-echo "dev surface gate: pass (${#CAPABILITIES[@]} capability files, $(grep -c . <<<"$TREE") feature-graph lines observed)"
+echo "dev surface gate: pass (${#CAPABILITIES[@]} capability files, $(grep -c . <<<"$TREE") feature-graph lines observed, $(grep -c . <<<"$CONTEXTS") library shell contexts gated)"

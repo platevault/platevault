@@ -32,6 +32,7 @@ pub mod inbox;
 pub mod ingestion;
 pub mod inventory;
 pub mod inventory_frame;
+pub mod library;
 pub mod lifecycle;
 pub mod log;
 pub mod manifests;

@@ -15,7 +15,9 @@
 //! `comment` attributes — exactly the FITS header keyword model.
 //!
 //! This extractor reads only the XML header (no pixel data) and extracts the
-//! same keywords as the FITS extractor via the `<FITSKeyword>` elements.
+//! same keywords as the FITS extractor via the `<FITSKeyword>` elements, plus
+//! the `<Image geometry>` attribute as native image structure. Native geometry
+//! stays separate from any copied `NAXIS1`/`NAXIS2` keywords.
 //!
 //! No heavy C dependencies — `xisf-header` is pure Rust.
 #![allow(clippy::doc_markdown)]
@@ -24,9 +26,9 @@ use std::path::Path;
 
 use metadata_core::{
     interpret_wcs_pointing, sexagesimal_dec_to_deg, sexagesimal_ra_to_deg, MetadataExtractError,
-    MetadataExtractor, RawFileMetadata,
+    MetadataExtractor, NativeGeometry, RawFileMetadata,
 };
-use xisf_header::{Error as XisfError, FromField, Header};
+use xisf_header::{Error as XisfError, FromField, GeometryError, Header, ImageGeometry};
 
 // ── XisfExtractor ─────────────────────────────────────────────────────────────
 
@@ -118,6 +120,26 @@ fn non_empty(s: Option<String>) -> Option<String> {
     })
 }
 
+/// Map the parsed `<Image geometry>` onto the shared two-dimensional contract.
+///
+/// Only an image with exactly two axes is `Planar`. Other dimensionalities and
+/// headers with several `<Image>` elements are `Unsupported`; a missing or
+/// invalid attribute is `Malformed`. Neither is projected to 2-D, and both stop
+/// callers from falling back to copied `NAXIS` keywords.
+fn native_geometry(parsed: Result<&ImageGeometry, GeometryError>) -> NativeGeometry {
+    match parsed {
+        Ok(geometry) => match geometry.dimensions() {
+            &[width, height] => {
+                NativeGeometry::Planar { width, height, channels: geometry.channels() }
+            }
+            _ => NativeGeometry::Unsupported,
+        },
+        Err(GeometryError::MultipleImages) => NativeGeometry::Unsupported,
+        // `Missing`, `Malformed` and any future reason: unknown structure.
+        Err(_) => NativeGeometry::Malformed,
+    }
+}
+
 /// Map header keywords (and, as a fallback, XISF `<Property>` elements) into
 /// [`RawFileMetadata`].
 ///
@@ -141,6 +163,9 @@ fn parse_header(header: &Header) -> RawFileMetadata {
     meta.y_binning = non_empty(get_str(header, "YBINNING"));
     meta.naxis1 = non_empty(get_str(header, "NAXIS1"));
     meta.naxis2 = non_empty(get_str(header, "NAXIS2"));
+    // Native structure of the single `<Image>`; `None` only without one.
+    meta.native_geometry = header.image_geometry().map(native_geometry);
+    meta.native_geometry_raw = header.image_geometry_raw().map(str::to_owned);
     meta.instrume = non_empty(get_str(header, "INSTRUME"));
     meta.cameraid = non_empty(get_str(header, "CAMERAID"));
     meta.telescop = non_empty(get_str(header, "TELESCOP"));
@@ -225,6 +250,18 @@ mod tests {
     /// containers only — `xisf_header::Header` validates this internally.
     const XISF_SIGNATURE: &[u8; 8] = b"XISF0100";
 
+    /// Wrap an XML header in the monolithic XISF preamble: signature, little-
+    /// endian header length and reserved bytes.
+    fn container(xml: &str) -> Vec<u8> {
+        let xml_len = u32::try_from(xml.len()).expect("test XML too large");
+        let mut out = Vec::new();
+        out.extend_from_slice(XISF_SIGNATURE);
+        out.extend_from_slice(&xml_len.to_le_bytes());
+        out.extend_from_slice(&[0u8; 4]); // reserved
+        out.extend_from_slice(xml.as_bytes());
+        out
+    }
+
     /// Build a minimal XISF byte stream with the given FITSKeyword entries.
     ///
     /// `keywords` is a list of `(name, value, comment)` triples.
@@ -248,16 +285,7 @@ mod tests {
  </Image>
 </xisf>"#
         );
-
-        let xml_bytes = xml.as_bytes();
-        let xml_len = u32::try_from(xml_bytes.len()).expect("test XML too large");
-
-        let mut out = Vec::new();
-        out.extend_from_slice(XISF_SIGNATURE);
-        out.extend_from_slice(&xml_len.to_le_bytes());
-        out.extend_from_slice(&[0u8; 4]); // reserved
-        out.extend_from_slice(xml_bytes);
-        out
+        container(&xml)
     }
 
     /// Build an XISF byte stream with explicit `<Property>` and `<FITSKeyword>`
@@ -285,14 +313,40 @@ mod tests {
 {body} </Image>
 </xisf>"#
         );
-        let xml_bytes = xml.as_bytes();
-        let xml_len = u32::try_from(xml_bytes.len()).expect("test XML too large");
-        let mut out = Vec::new();
-        out.extend_from_slice(XISF_SIGNATURE);
-        out.extend_from_slice(&xml_len.to_le_bytes());
-        out.extend_from_slice(&[0u8; 4]);
-        out.extend_from_slice(xml_bytes);
-        out
+        container(&xml)
+    }
+
+    /// Build an XISF header with one `<Image>` per entry of `images`, carrying
+    /// that `geometry` attribute (or none). `keywords` are `(name, value)`
+    /// pairs on the first image, or directly under `<xisf>` without images.
+    fn build_xisf_images(images: &[Option<&str>], keywords: &[(&str, &str)]) -> Vec<u8> {
+        use std::fmt::Write as _;
+        let mut keyword_xml = String::new();
+        for (name, value) in keywords {
+            let _ = writeln!(
+                keyword_xml,
+                "  <FITSKeyword name=\"{name}\" value=\"{value}\" comment=\"\" />"
+            );
+        }
+        let mut body = String::new();
+        if images.is_empty() {
+            body.push_str(&keyword_xml);
+        }
+        for (index, geometry) in images.iter().enumerate() {
+            body.push_str(" <Image sampleFormat=\"UInt16\" colorSpace=\"Gray\"");
+            if let Some(geometry) = geometry {
+                let _ = write!(body, " geometry=\"{geometry}\"");
+            }
+            body.push_str(">\n");
+            if index == 0 {
+                body.push_str(&keyword_xml);
+            }
+            body.push_str(" </Image>\n");
+        }
+        container(&format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+             <xisf version=\"1.0\" xmlns=\"http://www.pixinsight.com/xisf\">\n{body}</xisf>"
+        ))
     }
 
     /// Parse a built XISF byte stream via the real `Header::parse` +
@@ -542,5 +596,106 @@ mod tests {
         let data = build_xisf(&[("CRVAL1", "10.0", ""), ("CRVAL2", "20.0", "")]);
         let meta = parse(&data);
         assert!(meta.wcs_ra_deg.is_none());
+    }
+
+    // ── Native <Image geometry> (spec 064) ────────────────────────────────────
+
+    fn native(images: &[Option<&str>], keywords: &[(&str, &str)]) -> RawFileMetadata {
+        parse(&build_xisf_images(images, keywords))
+    }
+
+    #[test]
+    fn planar_geometry_gives_dimensions_without_naxis_keywords() {
+        let meta = native(&[Some("4:4:1")], &[]);
+        assert_eq!(
+            meta.native_geometry,
+            Some(NativeGeometry::Planar { width: 4, height: 4, channels: 1 })
+        );
+        assert_eq!(meta.native_geometry_raw.as_deref(), Some("4:4:1"));
+        assert_eq!((meta.naxis1, meta.naxis2), (None, None), "no keyword is invented");
+    }
+
+    #[test]
+    fn native_geometry_is_kept_apart_from_conflicting_naxis_keywords() {
+        let meta = native(&[Some("6248:4176:3")], &[("NAXIS1", "8"), ("NAXIS2", "8")]);
+        assert_eq!(
+            meta.native_geometry,
+            Some(NativeGeometry::Planar { width: 6248, height: 4176, channels: 3 })
+        );
+        assert_eq!(meta.naxis1.as_deref(), Some("8"), "copied keyword stays raw evidence");
+        assert_eq!(meta.naxis2.as_deref(), Some("8"));
+    }
+
+    #[test]
+    fn non_planar_or_multiple_images_are_unsupported_not_projected() {
+        for geometry in ["4:4:2:1", "16:1"] {
+            let meta = native(&[Some(geometry)], &[("NAXIS1", "4"), ("NAXIS2", "4")]);
+            assert_eq!(meta.native_geometry, Some(NativeGeometry::Unsupported), "{geometry}");
+            assert_eq!(meta.native_geometry_raw.as_deref(), Some(geometry));
+            assert_eq!(meta.naxis1.as_deref(), Some("4"), "keywords stay evidence only");
+        }
+        let meta = native(&[Some("4:4:1"), Some("8:8:1")], &[]);
+        assert_eq!(meta.native_geometry, Some(NativeGeometry::Unsupported));
+        assert_eq!(meta.native_geometry_raw, None, "no image is chosen");
+    }
+
+    #[test]
+    fn invalid_or_missing_geometry_is_malformed_never_zero() {
+        for geometry in
+            ["0:4:1", "4:4:0", "-4:4:1", "4:x:1", "4.0:4:1", "4", "4::1", "4294967296:4:1", ""]
+        {
+            let meta = native(&[Some(geometry)], &[]);
+            assert_eq!(meta.native_geometry, Some(NativeGeometry::Malformed), "{geometry:?}");
+            assert_eq!(meta.native_geometry_raw.as_deref(), Some(geometry), "verbatim evidence");
+        }
+        let missing = native(&[None], &[("NAXIS1", "4"), ("NAXIS2", "4")]);
+        assert_eq!(missing.native_geometry, Some(NativeGeometry::Malformed));
+        assert_eq!(missing.native_geometry_raw, None);
+    }
+
+    #[test]
+    fn header_without_image_element_has_no_native_geometry() {
+        let meta = native(&[], &[("NAXIS1", "4"), ("NAXIS2", "4")]);
+        assert_eq!(meta.native_geometry, None);
+        assert_eq!(meta.native_geometry_raw, None);
+        assert_eq!(meta.naxis1.as_deref(), Some("4"), "keywords remain the only evidence");
+    }
+
+    #[test]
+    fn extractor_reads_native_geometry_and_wcs_from_a_real_file_without_writing() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<xisf version="1.0" xmlns="http://www.pixinsight.com/xisf">
+ <Image geometry="4:4:1" sampleFormat="UInt16" colorSpace="Gray" location="attachment:4096:32">
+  <FITSKeyword name="IMAGETYP" value="'LIGHT'" comment="" />
+  <FITSKeyword name="CTYPE1" value="'RA---TAN'" comment="" />
+  <FITSKeyword name="CTYPE2" value="'DEC--TAN'" comment="" />
+  <FITSKeyword name="CRVAL1" value="314.68" comment="" />
+  <FITSKeyword name="CRVAL2" value="44.53" comment="" />
+ </Image>
+</xisf>"#;
+        let mut data = container(xml);
+        assert!(data.len() <= 4096, "header fits before the attachment");
+        data.resize(4096, 0);
+        for pixel in 0_u16..16 {
+            data.extend_from_slice(&pixel.to_le_bytes());
+        }
+        let path = std::env::temp_dir()
+            .join(format!("xisf_native_geometry_test_{}.xisf", std::process::id()));
+        std::fs::write(&path, &data).expect("write test fixture");
+
+        let result = XisfExtractor.extract(&path);
+        let after = std::fs::read(&path);
+        let _ = std::fs::remove_file(&path);
+
+        let meta = result.expect("readable header").expect("xisf extension");
+        assert_eq!(
+            meta.native_geometry,
+            Some(NativeGeometry::Planar { width: 4, height: 4, channels: 1 })
+        );
+        assert_eq!(meta.image_typ.as_deref(), Some("LIGHT"));
+        approx(meta.wcs_ra_deg, 314.68);
+        approx(meta.wcs_dec_deg, 44.53);
+        assert_eq!((meta.naxis1, meta.naxis2), (None, None));
+        assert_eq!(after.expect("fixture still readable"), data, "source bytes unchanged");
     }
 }

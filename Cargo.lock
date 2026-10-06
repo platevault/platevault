@@ -1430,9 +1430,11 @@ dependencies = [
  "futures-util",
  "persistence_core",
  "persistence_inbox",
+ "persistence_library",
  "persistence_lifecycle",
  "persistence_plans",
  "persistence_targets",
+ "platevault_core",
  "semver",
  "serde",
  "serde_json",
@@ -4477,6 +4479,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "persistence_library"
+version = "0.1.0"
+dependencies = [
+ "fs_pathsafe",
+ "hex",
+ "platevault_model",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "skymath 0.7.2",
+ "sqlx",
+ "tempfile",
+ "time",
+ "tokio",
+ "uuid",
+ "winapi-util",
+]
+
+[[package]]
 name = "persistence_lifecycle"
 version = "0.1.0"
 dependencies = [
@@ -4641,6 +4662,46 @@ name = "pkg-config"
 version = "0.3.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
+
+[[package]]
+name = "platevault_core"
+version = "0.1.0"
+dependencies = [
+ "fs_pathsafe",
+ "hex",
+ "metadata_core",
+ "metadata_fits",
+ "metadata_xisf",
+ "persistence_library",
+ "platevault_model",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "simbad-resolver",
+ "skymath 0.7.2",
+ "sqlx",
+ "target-match",
+ "tempfile",
+ "thiserror 2.0.19",
+ "time",
+ "tokio",
+ "unicode-normalization",
+ "uuid",
+ "winapi-util",
+]
+
+[[package]]
+name = "platevault_model"
+version = "0.1.0"
+dependencies = [
+ "metadata_core",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.19",
+ "unicode-normalization",
+ "uuid",
+]
 
 [[package]]
 name = "plist"
@@ -8707,9 +8768,9 @@ dependencies = [
 
 [[package]]
 name = "xisf-header"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5946a5236693506e10bf909a69d249b62affc50d0fcc5e37fa08b12ee614e033"
+checksum = "63302fc2304740b741a7f5cc136a2c27ae14b18b18c3614acb786a9d29281348"
 dependencies = [
  "quick-xml",
  "skymath 0.6.0",
