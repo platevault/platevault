@@ -688,6 +688,139 @@ async fn remap_refuses_mismatch_and_missing_byte_proof_then_verified_copy_keeps_
     assert_eq!(tree(&fx.root), original_tree, "no source writes");
 }
 
+/// Real probe that, at the first root check after `target` was fingerprinted
+/// `after` times, replaces `target` with a new file of different bytes at the same
+/// size and mtime: the window between hashing a source and committing its effect.
+struct ReplacingProbe {
+    target: PathBuf,
+    bytes: &'static [u8],
+    after: usize,
+    probed: std::sync::atomic::AtomicUsize,
+    replaced: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl ReplacingProbe {
+    fn new(
+        target: PathBuf,
+        bytes: &'static [u8],
+        after: usize,
+    ) -> (Self, std::sync::Arc<std::sync::atomic::AtomicBool>) {
+        let replaced = std::sync::Arc::default();
+        let probe = Self {
+            target,
+            bytes,
+            after,
+            probed: std::sync::atomic::AtomicUsize::new(0),
+            replaced: std::sync::Arc::clone(&replaced),
+        };
+        (probe, replaced)
+    }
+}
+
+impl SourceProbe for ReplacingProbe {
+    fn fingerprint(&self, path: &Path) -> Result<ObservationFingerprint, LibraryError> {
+        if path == self.target {
+            self.probed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+        file_fingerprint(path)
+    }
+    fn root_identity(&self, location: &Location) -> Result<FileIdentity, LibraryError> {
+        if self.probed.load(std::sync::atomic::Ordering::SeqCst) >= self.after
+            && !self.replaced.swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            replace_same_stat(&self.target, self.bytes);
+        }
+        folder_identity(&location.path.to_path_buf()?)
+    }
+}
+
+/// Rename a new file holding `bytes` over `path`, at its size and mtime.
+fn replace_same_stat(path: &Path, bytes: &[u8]) {
+    let before = file_fingerprint(path).unwrap();
+    let modified = std::fs::metadata(path).unwrap().modified().unwrap();
+    let staged = path.with_extension("staged");
+    std::fs::write(&staged, bytes).unwrap();
+    std::fs::File::options().write(true).open(&staged).unwrap().set_modified(modified).unwrap();
+    std::fs::rename(&staged, path).unwrap();
+    let after = file_fingerprint(path).unwrap();
+    assert_eq!((after.size_bytes, after.modified_ns), (before.size_bytes, before.modified_ns));
+    assert_ne!(after.identity.file_id, before.identity.file_id, "a new file replaced it");
+}
+
+#[tokio::test]
+async fn a_decision_on_a_source_replaced_with_equal_stats_after_hashing_binds_nothing() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"frame one bytes");
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &["Ha_001.fits"]).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let stamped = last_verified(&catalog, &assets).await;
+
+    // Hashing probes the source before and after reading it; the root check that
+    // follows is the last step before the decision commits.
+    let (probe, replaced) = ReplacingProbe::new(fx.root.join("Ha_001.fits"), b"frame ONE bytes", 2);
+    let error =
+        catalog.set_quality(&[expected(&assets[0])], Quality::Usable, probe).await.unwrap_err();
+
+    assert!(replaced.load(std::sync::atomic::Ordering::SeqCst), "replaced before commit");
+    assert_eq!(kind(&error), "identity_conflict", "{error}");
+    let unchanged = catalog.asset(assets[0].id).await.unwrap();
+    assert_eq!(unchanged.quality, Quality::Unreviewed, "no decision recorded");
+    assert_eq!(unchanged.decision_revision, assets[0].decision_revision);
+    assert_eq!(unchanged.fingerprint.content_sha256, None, "no digest bound");
+    assert_eq!(last_verified(&catalog, &assets).await, stamped, "nothing verified");
+}
+
+#[tokio::test]
+async fn a_remap_onto_a_candidate_replaced_with_equal_stats_after_hashing_moves_nothing() {
+    let fx = Fixture::new();
+    fx.write("Ha_001.fits", b"frame one bytes");
+    fx.write("Ha_002.fits", b"frame two bytes");
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &["Ha_001.fits", "Ha_002.fits"]).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let location = catalog.location(location.id).await.unwrap();
+    let copy = fx.temp.path().join("Copy");
+    std::fs::create_dir_all(&copy).unwrap();
+    for name in ["Ha_001.fits", "Ha_002.fits"] {
+        std::fs::copy(fx.root.join(name), copy.join(name)).unwrap();
+    }
+    let review = catalog
+        .review_remap(
+            location.id,
+            location.decision_revision,
+            &NativePath::from_path(&copy),
+            &folder_identity(&copy).unwrap(),
+            DiskProbe,
+        )
+        .await
+        .unwrap();
+    assert!(review.blocked.is_empty(), "{:?}", review.blocked);
+    let stamped = last_verified(&catalog, &assets).await;
+
+    // Apply fingerprints and hashes the candidate, then rechecks the candidate
+    // root last before the stale-root search and the commit.
+    let (probe, replaced) = ReplacingProbe::new(copy.join("Ha_002.fits"), b"frame TWO bytes", 1);
+    let error =
+        catalog.apply_remap(review.id, location.decision_revision, probe).await.unwrap_err();
+
+    assert!(replaced.load(std::sync::atomic::Ordering::SeqCst), "replaced before commit");
+    assert_eq!(kind(&error), "identity_conflict", "{error}");
+    let current = catalog.location(location.id).await.unwrap();
+    assert_eq!(current.path, location.path, "the root is not remapped");
+    assert_eq!(current.decision_revision, location.decision_revision);
+    let unchanged = catalog.location_assets(location.id).await.unwrap();
+    assert!(
+        unchanged.iter().zip(&assets).all(|(now, was)| now.id == was.id
+            && now.relative_path == was.relative_path
+            && now.fingerprint == was.fingerprint),
+        "every asset keeps its original fingerprint and no digest is bound"
+    );
+    assert_eq!(last_verified(&catalog, &assets).await, stamped, "a refused remap stamps nothing");
+}
+
 #[tokio::test]
 async fn seed_facts_are_recorded_without_adoption_and_qualified_suggestions_count() {
     let fx = Fixture::new();

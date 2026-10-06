@@ -6192,7 +6192,9 @@ fn hash_contained(
     Ok(hex::encode(hasher.finalize()))
 }
 
-/// In-transaction recheck that a contained source still has its verified stats.
+/// In-transaction recheck that a contained source is still the verified file:
+/// on the recorded volume, with the recorded file id on the opened handle and the
+/// verified size and nanosecond mtime. A replacement with equal stats is refused.
 fn require_unchanged_contained(
     root: &SourceRoot,
     relative: &Path,
@@ -6203,7 +6205,10 @@ fn require_unchanged_contained(
         .metadata()
         .map_err(|error| LibraryError::from_io(&root.path.join(relative), &error))?;
     chain.verify_unchanged()?;
-    if stat_matches(&metadata, fingerprint.size_bytes, fingerprint.modified_ns) {
+    if same_volume(&fingerprint.identity.volume, &root.location.identity.volume)
+        && handle_matches(&file, &metadata, &fingerprint.identity)
+        && stat_matches(&metadata, fingerprint.size_bytes, fingerprint.modified_ns)
+    {
         Ok(())
     } else {
         Err(changed_source(root, relative))
@@ -6257,7 +6262,7 @@ fn open_contained(root: &SourceRoot, relative: &Path) -> Result<(std::fs::File, 
     };
     let mut current = root.path.clone();
     let root_metadata = real_directory(&current)?;
-    if !root_stamp_matches(&root.location.identity, &root_metadata) {
+    if !file_id_matches(&root.location.identity, &root_metadata) {
         return Err(scoped(
             LibraryError::IdentityConflict("root folder is not the registered folder".into()),
             root.location.path.clone(),
@@ -6336,14 +6341,26 @@ fn device_of(metadata: &std::fs::Metadata) -> u64 {
 
 /// Unix file ids are recorded as decimal `st_ino` on remount-stable volumes.
 #[cfg(unix)]
-fn root_stamp_matches(identity: &FileIdentity, metadata: &std::fs::Metadata) -> bool {
+fn file_id_matches(identity: &FileIdentity, metadata: &std::fs::Metadata) -> bool {
     use std::os::unix::fs::MetadataExt;
     !identity.volume.file_ids_stable
         || identity.file_id.as_deref() == Some(metadata.ino().to_string().as_str())
 }
 
-// Without stable std handle identity, non-unix hosts rely on the probe's root and
-// leaf identity checks; this stamp still detects replaced folders by creation time.
+/// Whether an opened source handle is the recorded file. Unix compares the
+/// handle's `st_ino`; `open_contained` already holds it to the root's device.
+#[cfg(unix)]
+fn handle_matches(
+    _file: &std::fs::File,
+    handle: &std::fs::Metadata,
+    identity: &FileIdentity,
+) -> bool {
+    file_id_matches(identity, handle)
+}
+
+// Without stable std handle identity, non-unix hosts rely on the probe for the
+// root folder's identity; this stamp still detects replaced folders by creation
+// time.
 #[cfg(not(unix))]
 type Stamp = (bool, Option<std::time::SystemTime>);
 
@@ -6358,8 +6375,35 @@ const fn device_of(_metadata: &std::fs::Metadata) -> u64 {
 }
 
 #[cfg(not(unix))]
-const fn root_stamp_matches(_identity: &FileIdentity, _metadata: &std::fs::Metadata) -> bool {
+const fn file_id_matches(_identity: &FileIdentity, _metadata: &std::fs::Metadata) -> bool {
     true
+}
+
+/// Windows records the handle's volume serial as the stable volume id and its
+/// 64-bit file index, as 16 hex digits, as the file id.
+#[cfg(windows)]
+fn handle_matches(
+    file: &std::fs::File,
+    _handle: &std::fs::Metadata,
+    identity: &FileIdentity,
+) -> bool {
+    winapi_util::file::information(file).is_ok_and(|info| {
+        identity.volume.stable_id.as_deref()
+            == Some(format!("{:08X}", info.volume_serial_number()).as_str())
+            && (!identity.volume.file_ids_stable
+                || identity.file_id.as_deref()
+                    == Some(format!("{:016X}", info.file_index()).as_str()))
+    })
+}
+
+/// No handle identity query exists here, so no source is proven unchanged.
+#[cfg(not(any(unix, windows)))]
+const fn handle_matches(
+    _file: &std::fs::File,
+    _handle: &std::fs::Metadata,
+    _identity: &FileIdentity,
+) -> bool {
+    false
 }
 
 fn stat_matches(metadata: &std::fs::Metadata, size_bytes: u64, modified_ns: i128) -> bool {

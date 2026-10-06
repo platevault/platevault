@@ -17,6 +17,9 @@ sha2.workspace = true
 hex.workspace = true
 skymath = "0.7.2"
 
+[target.'cfg(windows)'.dependencies]
+winapi-util = "0.1.11"
+
 [dev-dependencies]
 tempfile.workspace = true
 
