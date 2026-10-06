@@ -258,6 +258,58 @@ fn the_dst_night_lasts_25_hours_and_local_times_change_offset_with_the_zone() {
     }
 }
 
+/// The spring change, 2026-03-29 01:00 UTC, falls in the night labeled
+/// 2026-03-28, which lasts 23 hours from local noon to local noon. NGC 7000 is
+/// above 20 degrees in the dark across that instant, so a window starting
+/// before it ends after it, and every boundary reads the offset of its own
+/// instant rather than the evening's.
+#[test]
+fn the_spring_dst_night_lasts_23_hours_and_a_window_spans_the_change() {
+    let ngc = ngc_7000();
+    let low = PlanCriteria {
+        min_altitude_deg: 20.0,
+        darkness: Darkness::Astronomical,
+        moon: MoonCriterion::None,
+        min_duration_minutes: 30,
+    };
+    let change = datetime!(2026-03-29 01:00 UTC);
+    let site = backyard();
+    let (before, after) = (offset!(+1), offset!(+2));
+    let night = night_spans(&ngc, &site, date!(2026 - 03 - 28), &low).unwrap();
+    assert_eq!(night.end - night.start, Duration::hours(23));
+    assert_eq!(night.start, datetime!(2026-03-28 12:00 +1));
+    assert_eq!(night.end, datetime!(2026-03-29 12:00 +2));
+    for ordinary in [date!(2026 - 03 - 27), date!(2026 - 03 - 29)] {
+        let span = night_spans(&ngc, &site, ordinary, &low).unwrap();
+        assert_eq!(span.end - span.start, Duration::hours(24), "{ordinary}");
+    }
+    assert_eq!(night_of(night.start, &site).unwrap(), date!(2026 - 03 - 28));
+    assert_eq!(night_of(night.end - Duration::seconds(1), &site).unwrap(), date!(2026 - 03 - 28));
+    assert_eq!(night_of(night.end, &site).unwrap(), date!(2026 - 03 - 29));
+
+    let set = windows(&ngc, &site, date!(2026 - 03 - 26), 5, low);
+    assert_every_minute_meets(&set, &ngc, &site);
+    let nights: Vec<Date> = set.nights.iter().map(|night| night.night).collect();
+    let expected = [26, 27, 28, 29, 30].map(|day| date!(2026 - 03 - 01).replace_day(day).unwrap());
+    assert_eq!(nights, expected, "consecutive calendar nights");
+    let spanning: Vec<_> = set
+        .windows()
+        .filter(|window| window.start_utc < change && change < window.end_utc)
+        .collect();
+    let [window] = spanning.as_slice() else {
+        panic!("one window across the change: {:?}", set.windows().collect::<Vec<_>>());
+    };
+    assert_eq!(window.night, date!(2026 - 03 - 28));
+    assert_eq!((window.start_local.offset(), window.end_local.offset()), (before, after));
+    for window in set.windows() {
+        for (utc, local) in
+            [(window.start_utc, window.start_local), (window.end_utc, window.end_local)]
+        {
+            assert_eq!(local, utc.to_offset(if utc < change { before } else { after }));
+        }
+    }
+}
+
 #[test]
 fn set_then_rise_never_dark_and_always_dark_nights_have_their_own_shapes() {
     let (ngc, backyard, polar) = (ngc_7000(), backyard(), polar());
