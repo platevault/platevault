@@ -152,6 +152,19 @@ scroll width − viewport = 0 (the window never scrolls; panes do).
 | J29 S1 | pass | `/plans`: "Plans · Planned Targets, reminder status and calendar exports … Notifications off … Default site Not set: Set a default site in Settings › Observing sites" |
 | J29 S2–S7a | surface reached | `/targets/tgt_y2bxfy/plan`: "Plan NGC 7000 … Planning site · Choose a planning site · Manage sites · Criteria"; steps not driven |
 
+## Critique (design-critic + a11y-auditor, 1280 and 1024)
+
+- Fixed and re-measured: the selected Recent plate now paints `selected` with a 2 px accent
+  inset edge (`oklch(0.35 0.06 252)` vs unselected `oklch(0.29 0 0)`); the offline thumbnail
+  text is no longer faded (`oklch(0.74 0 0)` at opacity 1 on the canvas, 7.9:1).
+- Rejected: impeccable `broken-image` at `studio.tsx` (a doc comment containing "<img>").
+- Open (major): at 1024 the View workspace header, summary, rail, Complete notice and filters
+  leave the frames table about four rows; the Save View / Saved / "cannot be saved" group
+  stacks on three lines; the Target page is stacked bordered boxes with no inspector.
+- Open (minor): source-list "All Targets" link and breadcrumb links under 24 px high (2.5.8);
+  splitters 8 px wide; "Show excluded" switch 18 px high; Sessions cells wrap at 1024; accent
+  also used by links; card-in-card on Prepare's Complete notice.
+
 ## Known gaps
 
 - **Frames review** keeps the integrated layout (table beside preview) in studio tokens; B's

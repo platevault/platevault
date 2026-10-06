@@ -287,22 +287,23 @@ export interface PlateProps {
 export function Plate({ image, title, subtitle, meta, selected, faded, ratio = "3 / 2", className }: PlateProps) {
   return (
     <div
-      data-selected={selected ? "" : undefined}
+      data-selected={selected ? "true" : undefined}
       className={cn(
         "group/plate flex min-w-0 flex-col rounded-md bg-mount p-1.5 pb-1 shadow-[inset_0_0_0_1px_var(--mount-edge)] transition-colors",
-        "hover:bg-[color-mix(in_oklch,var(--mount),var(--foreground)_5%)] data-selected:bg-selected data-selected:shadow-[inset_0_0_0_2px_var(--primary)]",
+        "hover:bg-[color-mix(in_oklch,var(--mount),var(--foreground)_5%)] data-[selected=true]:bg-selected data-[selected=true]:shadow-[inset_0_0_0_2px_var(--primary)]",
         className,
       )}
     >
-      <div className={cn("relative overflow-hidden rounded-sm bg-canvas", faded && "opacity-45 grayscale")} style={{ aspectRatio: ratio }}>
+      {/* Only the pixels fade for an offline print; any text in the well keeps full contrast. */}
+      <div className={cn("relative overflow-hidden rounded-sm bg-canvas", faded && "[&>canvas]:opacity-45 [&>canvas]:grayscale [&>img]:opacity-45 [&>img]:grayscale")} style={{ aspectRatio: ratio }}>
         {image}
       </div>
       <div className="flex min-w-0 items-start gap-2 px-0.5 pt-1.5">
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-medium text-foreground">{title}</div>
-          {subtitle ? <div className="truncate text-2xs text-muted-foreground group-data-selected/plate:text-selected-foreground/85">{subtitle}</div> : null}
+          {subtitle ? <div className="truncate text-2xs text-muted-foreground group-data-[selected=true]/plate:text-selected-foreground/85">{subtitle}</div> : null}
         </div>
-        {meta ? <div className="num shrink-0 text-right text-2xs text-muted-foreground group-data-selected/plate:text-selected-foreground/85">{meta}</div> : null}
+        {meta ? <div className="num shrink-0 text-right text-2xs text-muted-foreground group-data-[selected=true]/plate:text-selected-foreground/85">{meta}</div> : null}
       </div>
     </div>
   )
