@@ -1,7 +1,8 @@
 # Harness v2 · Pro imaging studio
 
 Branch `ui-harness-v2` · app `apps/prototype` · served at `http://127.0.0.1:5502/` (service `pv-harness-v2`).
-Status: in progress; this file is updated as each surface lands.
+Status: shell, tokens, primitives, start page, menu, Target finder and the View pipeline rail
+landed; Frames, Results and Plan inherit tokens and primitives only (see Known gaps).
 
 ## Premise
 
@@ -105,26 +106,63 @@ Utilities: `chrome` (no text selection, arrow cursor), `panel-title` (small-caps
 - Context menus with shortcuts; listbox grids with arrow keys and Enter to open.
 - Chrome never takes a text selection (`chrome`), arrow cursor everywhere except fields.
 
+## View workspace: C's pipeline
+
+The View areas tab strip became a **pipeline rail** in the toolbar tone under the selection
+summary: six numbered stages (Sessions, Frames, Calibration, Prepare, Results, Cleanup), each
+with a readiness glyph and word (`✓ 115 lights`, `⚠ 3 unreviewed`, `◌ not checked here`), the
+dashed **"in your app"** gap between Prepare and Results where processing happens outside
+PlateVault, and exactly **one Next action** (accent button) derived from the selection summary:
+Select sessions → Review frames → Prepare View. Readiness is shown only where the summary
+proves it; stages owned by other areas say "not checked here" instead of guessing.
+
 ## Taken from A–E
 
 - **A (Instrument panel)**: the always-on status bar (lamps for running, interrupted,
   offline, totals) and single-key station keys.
-- **B (Calm archive)**: plates on mounts for sessions, values shown with their source,
-  preview-then-confirm.
-- **C (Guided pipeline)**: *pending*
-- **D (Sky-first)**: Target-scoped IA, the Target finder (made concise), the planner (moved to
-  the Plan area).
+- **B (Calm archive)**: plates on mounts for sessions (Recent, Navigator), values shown with
+  their source (Session inspector), faded prints for offline sessions.
+- **C (Guided pipeline)**: the stage rail with readiness words, the dashed external-processing
+  gap, and the single accent Next action.
+- **D (Sky-first)**: Target-scoped IA, the Target finder (made concise, moved into the source
+  list), planning reached from each Target and from the Plan area.
 - **E (Command workspace)**: the IDE-style inspector that follows the selection and ⌘K for
   everything.
 
 ## Screenshots
 
-Under `design/harness-v2-shots/` (1280 × 800 unless the name says 1024).
+Under `design/harness-v2-shots/`. `v2-<surface>-1280.png` (1280 × 800) and `-1024.png`
+(1024 × 768) for: `recent`, `sessions`, `target` (NGC 7000), `view-frames`, `view-prepare`,
+`view-results`, `view-cleanup`, `plans`, `target-plan`. Walk evidence: `walk-j19-s1-locations-1280`,
+`walk-j19-s2-picker-1280`. Measured at both widths: document scroll height − viewport = 0 and
+scroll width − viewport = 0 (the window never scrolls; panes do).
 
-## Walks
+## Walks (private headless Chrome, observed text)
 
-*pending*
+| Step | Result | Observed |
+|---|---|---|
+| J19 S1 | pass | "Captures Required … Add capture location · Not set · Add at least one folder with light frames to continue. Calibration Optional … Set up later … Results Optional"; buttons: Add capture location, Set up later, Add calibration location, Set up later, Add results location, Continue |
+| J19 S2 | pass | picker "Choose a capture folder … Archive Astro-T7 Cold-1 Scratch Spare" → Choose Captures → "Folder /Volumes/Astro-T7/Captures … Add capture location" → row "/Volumes/Astro-T7/Captures Captures Not checked Not indexed Online" (driver appended the name to the prefilled one) |
+| J19 S3 | pass | second row "Cold-1 captures /Volumes/Cold-1/Captures Captures Not checked Not indexed Online"; first row unchanged |
+| J19 S4 | not completed | picker lists "Calibration Access denied" under Astro-T7 (the S5 fixture); the driver chose the volume root instead, so Calibration stayed "Not set" |
+| J19 S5–S7 | not reached | request budget; setup now ends on Recent (`/`), Sessions is one source-list click away |
+| J22 S12–S15a | surface reached | `/views/view_m31/frames`: rail "1 Sessions 115 lights, ready · 2 Frames reviewed, ready · 3 Calibration matches, not checked here · 4 Prepare inputs · in your app · 5 Results products · 6 Cleanup records"; "Import measurements", "Show excluded (5)", Library quality column; steps not driven |
+| J24 prepare | surface reached | `/views/view_m31/prepare`: "Prepare and open · M31 LRGB - PixInsight"; steps not driven |
+| J27 S10 | surface reached | `/views/view_m31/cleanup`: "Clean up View · M31 LRGB - PixInsight"; step not driven |
+| J29 S1 | pass | `/plans`: "Plans · Planned Targets, reminder status and calendar exports … Notifications off … Default site Not set: Set a default site in Settings › Observing sites" |
+| J29 S2–S7a | surface reached | `/targets/tgt_y2bxfy/plan`: "Plan NGC 7000 … Planning site · Choose a planning site · Manage sites · Criteria"; steps not driven |
 
 ## Known gaps
 
-*pending*
+- **Frames review** keeps the integrated layout (table beside preview) in studio tokens; B's
+  plate-on-mount preview, a bottom frame filmstrip and histogram/measurement inspector panels
+  are not built yet (`Filmstrip`, `Plate`, `Inspector`, `PanelSection` exist for them).
+- **Results/artifacts** and **Plan** (D's windows + timeline) inherit tokens and primitives
+  only; their layouts are unchanged.
+- **Target page** does not yet carry D's Target-scoped tabs (Overview · Sessions · Views ·
+  Plan · Results); Plan is reached from the Recent inspector, its context menu and the page.
+- The Next action is derived from the selection summary only, so a Complete View still offers
+  "Next: Prepare View".
+- The Sessions table has no row-following inspector; Recent has one.
+- Light theme is defined and contrast-checked by calculation, not walked.
+- Journey steps beyond those listed were not driven.
