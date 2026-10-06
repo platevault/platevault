@@ -11,6 +11,7 @@ import { createHashHistory, createRootRoute, createRoute, createRouter, redirect
 import type { ReactNode } from "react"
 import { AppShell, NotFoundPage, RootLayout, SetupShell } from "@/app/shell"
 import { DesignSystemPage } from "@/app/design-system-page"
+import { WorkQueuePage } from "@/app/work-queue"
 import { isLibraryEmpty } from "@/domain/derive"
 import { t1Pages } from "@/features/t1/routes"
 import { t2Pages } from "@/features/t2/routes"
@@ -51,13 +52,8 @@ function page<TPath extends string>(path: TPath, component: () => ReactNode) {
   return createRoute({ getParentRoute: () => appLayout, path, component, validateSearch: looseSearch })
 }
 
-const indexRoute = createRoute({
-  getParentRoute: () => appLayout,
-  path: "/",
-  beforeLoad: () => {
-    throw redirect({ to: "/targets" })
-  },
-})
+// Harness V3: the start page is the Work queue (design/HARNESS-V3.md §2).
+const indexRoute = createRoute({ getParentRoute: () => appLayout, path: "/", component: WorkQueuePage, validateSearch: looseSearch })
 
 // T1: onboarding (minimal shell) and Settings.
 const welcomeRoute = createRoute({ getParentRoute: () => setupLayout, path: "/welcome", component: t1Pages.welcome, validateSearch: looseSearch })

@@ -4,12 +4,14 @@
  * View and Reopen, then links to the areas (no forced wizard, VSEL-FR-02). Owns the page
  * h1; areas render level-2 headers. Hosts T4 and T5 areas through <Outlet />.
  */
-import { Link, Outlet, useNavigate, useParams } from "@tanstack/react-router"
+import { Link, Outlet, useNavigate, useParams, useRouterState } from "@tanstack/react-router"
 import { FolderSearch, RefreshCw, Save } from "lucide-react"
-import { createContext, type ReactNode, useContext, useId, useState } from "react"
+import { createContext, type ReactNode, useContext, useId, useMemo, useState } from "react"
+import { STAGE_LABEL, type StageId, viewPipeline } from "@/app/pipeline"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { ActionError, EmptyState, Notice, SaveState } from "@/components/app/feedback"
 import { PageHeader } from "@/components/app/page"
+import { NextActionBar, PipelineRail } from "@/components/app/pipeline"
 import { STATUS, StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -74,15 +76,6 @@ export function useDraftEditor(viewId: string) {
   return { edit, errorNode }
 }
 
-const AREAS = [
-  { to: "/views/$viewId/sessions", label: "Sessions" },
-  { to: "/views/$viewId/frames", label: "Frames" },
-  { to: "/views/$viewId/calibration", label: "Calibration" },
-  { to: "/views/$viewId/prepare", label: "Prepare" },
-  { to: "/views/$viewId/results", label: "Results" },
-  { to: "/views/$viewId/cleanup", label: "Cleanup" },
-] as const
-
 function SummaryStrip({ summary, content }: { summary: ViewSummary; content: MembershipContent }) {
   const items: Array<{ label: string; value: ReactNode; tone?: "warning" }> = [
     { label: "Included", value: `${plural(summary.included.frames, "light")} · ${formatDuration(summary.included.seconds)}` },
@@ -113,26 +106,26 @@ function SummaryStrip({ summary, content }: { summary: ViewSummary; content: Mem
   )
 }
 
-function AreaNav({ viewId }: { viewId: string }) {
+/**
+ * Harness V3: the View areas nav is C's pipeline rail (each area with its
+ * gate), the area scrolls in its own pane, and the one Next action docks
+ * under it. The pipeline is derived read-only (src/app/pipeline.ts).
+ */
+function PipelineFrame({ view, children }: { view: View; children: ReactNode }) {
+  const catalog = useStore((s) => s.catalog)
+  const disk = useStore((s) => s.disk)
+  const decisions = useStore((s) => s.slices.t4.decisions)
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const pipeline = useMemo(() => viewPipeline(catalog, disk, view, decisions), [catalog, disk, view, decisions])
+  const area = pathname.split("/")[3]
+  const active = (Object.keys(STAGE_LABEL) as StageId[]).find((id) => id === area) ?? null
   return (
-    <nav aria-label="View areas" className="border-b px-4">
-      <ul className="-mb-px flex flex-wrap gap-1">
-        {AREAS.map((area) => (
-          <li key={area.to}>
-            <Link
-              to={area.to}
-              params={{ viewId }}
-              className={cn(
-                "inline-flex h-9 items-center border-b-2 border-transparent px-2.5 text-sm text-muted-foreground hover:text-foreground",
-                "data-[status=active]:border-primary data-[status=active]:font-medium data-[status=active]:text-foreground",
-              )}
-            >
-              {area.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </nav>
+    <>
+      <PipelineRail viewId={view.id} pipeline={pipeline} active={active} />
+      {/* `relative`: sr-only and other absolute descendants stay inside this pane's scroll, not the main pane's. */}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">{children}</div>
+      <NextActionBar pipeline={pipeline} />
+    </>
   )
 }
 
@@ -436,7 +429,7 @@ export function ViewWorkspacePage() {
           }
         />
         <SummaryStrip summary={summary} content={content} />
-        <AreaNav viewId={viewId} />
+        <PipelineFrame view={view}>
         <div className="space-y-3 px-6 pt-4 empty:hidden">
           {saveFeedback?.state === "reviewed" ? (
             <Notice tone="info" title="Reviewed: the View changed elsewhere">
@@ -497,7 +490,8 @@ export function ViewWorkspacePage() {
             </Notice>
           ) : null}
         </div>
-        <Outlet />
+          <Outlet />
+        </PipelineFrame>
       </div>
       <EditDetailsDialog view={view} open={detailsOpen} onOpenChange={setDetailsOpen} />
       <ConfirmDialog
