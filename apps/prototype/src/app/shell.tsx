@@ -511,7 +511,7 @@ function registerToggleSlot(element: HTMLElement | null) {
   for (const listener of toggleListeners) listener()
 }
 
-/** Unified title bar + toolbar: navigation on the leading edge, the command field centred, window controls trailing. */
+/** App toolbar under the native (Tauri) title bar: navigation on the leading edge, the command field centred, pane toggles trailing. It draws no window chrome or title. */
 function Toolbar({ narrow }: { narrow: boolean }) {
   const { sidebarCollapsed } = useShellUi()
   const router = useRouter()
@@ -538,10 +538,6 @@ function Toolbar({ narrow }: { narrow: boolean }) {
       <Button variant="ghost" size="icon" aria-label="Forward" onClick={() => router.history.forward()}>
         <ChevronRight aria-hidden="true" />
       </Button>
-      <div className={cn("flex items-center gap-1.5 px-1.5", narrow && "sr-only")}>
-        <Aperture aria-hidden="true" className="size-4 text-primary" />
-        <span className="text-sm font-semibold">PlateVault</span>
-      </div>
       <div className="flex min-w-0 flex-1 justify-center">
         <PaletteTrigger narrow={narrow} />
       </div>

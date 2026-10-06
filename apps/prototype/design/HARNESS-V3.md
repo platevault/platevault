@@ -7,12 +7,15 @@ the Work queue instead of redirecting to `/targets`.
 
 ## 1. Premise
 
-Direction E's strongest idea, made robust: the app is one desktop **window**
-with **panes**, not a scrolling web page.
+Direction E's strongest idea, made robust: the app fills one native desktop
+**window** with **panes**, not a scrolling web page. The window itself, its
+title bar and controls, come from Tauri; the harness draws no OS chrome
+(no traffic lights, title-bar stand-in or window frame).
 
-- A unified **toolbar** (40 px): sidebar toggle, Back/Forward, the app mark,
-  the centred **command field** ("Search or run a command… ⌘K", the main verb
-  surface), Prototype, theme, and the inspector toggle (⌥⌘I).
+- An app **toolbar** (40 px) under the native title bar: sidebar toggle,
+  Back/Forward, the centred **command field** ("Search or run a command… ⌘K",
+  the main verb surface), Prototype, theme, and the inspector toggle (⌥⌘I).
+  It carries no app name or mark: the native title shows that.
 - A resizable **source list** on the leading edge (168–300 px, keyboard
   resizable, Enter/double-click collapses to a 48 px icon rail).
 - **Document tabs** over the main pane: each opened record (Target, Session,
@@ -141,3 +144,8 @@ primitives but did not get their bespoke treatment yet:
   journeys' wording ("the Target page shows…") still holds.
 - Command palette: restyle and context verbs (Next action, stage jumps) not added.
 - The J18 tour copy still says "Your library starts here" on its Targets stop.
+
+Paused by user direction (2026-10-06): the IA and workflow are being
+re-architected (Project → Plan → View pipeline, one main workflow page), so
+no further structural work (pages, navigation, start page) lands here. The
+tokens, primitives and surface treatments above carry into that round.
