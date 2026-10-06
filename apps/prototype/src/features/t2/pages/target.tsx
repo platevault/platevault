@@ -1,12 +1,14 @@
 /**
- * Target (`/targets/$targetId`): captured, library-usable and Unreviewed
+ * Target (`/targets/$targetId`), a document with D's Target-scoped tabs
+ * (Harness V3): Overview (captured, library-usable and Unreviewed
  * integration by channel with availability as a separate state, offline
- * contributions with their last observation, sessions that still need
- * review, the local record with resolver enrichment, and the Projects,
- * Views and accepted Results for this Target (J20 S1; B1; LIB-FR-08,
- * LIB-AC-05, LIB-AC-12, D18).
+ * contributions with their last observation, Project goals and the local
+ * record with resolver enrichment), Sessions (contributing and needs
+ * review), Views (each with its pipeline stage and Next action), Plan
+ * (`/targets/$targetId/plan`) and accepted Results. `?tab=` selects the tab
+ * (J20 S1; B1; LIB-FR-08, LIB-AC-05, LIB-AC-12, D18).
  */
-import { Link, useParams } from "@tanstack/react-router"
+import { Link, useParams, useSearch } from "@tanstack/react-router"
 import { CalendarClock, Crosshair } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
 import { ChannelCoverage, type KeyValueItem, KeyValueList, PathText, Stat } from "@/components/app/data"
@@ -20,11 +22,14 @@ import { Spinner } from "@/components/ui/spinner"
 import { projectProgress, targetCoverage, viewStatus } from "@/domain/derive"
 import type { Target } from "@/domain/types"
 import { usableVerifiedAt } from "@/domain/verification"
+import { viewPipeline } from "@/app/pipeline"
+import { StageStrip } from "@/components/app/pipeline"
+import type { SearchParams } from "@/routes"
 import { formatDateTime, formatDec, formatDegrees, formatDuration, formatRa, plural } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { type CommitResult, store, useStore } from "@/store/core"
 import { acceptEnrichment, type EnrichmentProposal, LOOKUP_DELAY_MS, type LookupOutcome, PROVIDER_LABEL, resolveTargetLookup } from "../actions"
-import { acceptedResultsForViews, sessionRow, type SessionRow, sumBreakdowns, viewsForTarget } from "../model"
+import { acceptedResultsForViews, COORDINATE_SOURCE, sessionRow, type SessionRow, sumBreakdowns, viewsForTarget } from "../model"
 import { AssociationBadge, DENSITY_CELL, LibraryStatus, QualityCounts, ScopeCell } from "../parts"
 import { TargetRecordDialog } from "../target-record-dialog"
 
@@ -54,15 +59,97 @@ export function TargetPage() {
   return <TargetDetail key={targetId} targetId={targetId} />
 }
 
-const COORDINATE_SOURCE = {
-  catalog: "Bundled reference catalog",
-  user: "Entered by you",
-  resolver: "Online resolver",
-  unknown: "Unknown",
-} as const
+type TargetTab = "overview" | "sessions" | "views" | "plan" | "results"
+
+const TABS: Array<{ tab: TargetTab; label: string }> = [
+  { tab: "overview", label: "Overview" },
+  { tab: "sessions", label: "Sessions" },
+  { tab: "views", label: "Views" },
+  { tab: "plan", label: "Plan" },
+  { tab: "results", label: "Results" },
+]
+
+/**
+ * The Target document's header (Harness V3, from direction D): the path,
+ * the name, the record-level actions, and the Target-scoped tabs as one
+ * segmented control. Every tab keeps this header, so the Target stays the
+ * place and its sessions, Views, plan and Results hang from it.
+ */
+export function TargetHeader({ target }: { target: Target }) {
+  const targetId = target.id
+  const planned = useStore((s) => Boolean(s.catalog.plans[targetId]?.planned))
+  const counts = useStore((s) => {
+    const coverage = targetCoverage(s.disk, s.catalog, targetId)
+    const views = viewsForTarget(s.catalog, targetId)
+    return {
+      sessions: coverage.channels.reduce((n, c) => n + c.sessionIds.length, 0) + coverage.needsReview.length,
+      views: views.length,
+      results: acceptedResultsForViews(s.catalog, views).length,
+    } as Partial<Record<TargetTab, number>>
+  })
+  return (
+    <>
+      <PageHeader
+        eyebrow={
+          <Link to="/targets" className="underline-offset-2 hover:underline">
+            Targets
+          </Link>
+        }
+        title={target.name}
+        meta={
+          planned ? (
+            <Link to="/targets/$targetId/plan" params={{ targetId }} className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:underline">
+              <CalendarClock aria-hidden="true" className="size-3.5" />
+              Planned
+            </Link>
+          ) : undefined
+        }
+        description={target.aliases.length > 0 ? target.aliases.join(" · ") : undefined}
+        className="border-b-0 pb-1.5"
+        actions={
+          <>
+            <Button size="sm" variant="outline" render={<Link to="/projects/new" search={{ targetId }} />}>
+              New Project
+            </Button>
+            <Button size="sm" render={<Link to="/views/new" search={{ from: "target", targetId }} />}>
+              Create View
+            </Button>
+          </>
+        }
+      />
+      <nav aria-label={`${target.name} sections`} className="shrink-0 border-b px-4 pb-2" data-chrome>
+        <ul className="inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-md border bg-muted/50 p-0.5">
+          {TABS.map((item) => {
+            const count = counts[item.tab]
+            return (
+              <li key={item.tab}>
+                <Link
+                  to={item.tab === "plan" ? "/targets/$targetId/plan" : "/targets/$targetId"}
+                  params={{ targetId }}
+                  search={item.tab === "plan" || item.tab === "overview" ? {} : { tab: item.tab }}
+                  // The router marks the current tab (aria-current="page"); exact, so Overview is not current on the other tabs.
+                  activeOptions={{ exact: true }}
+                  className={cn(
+                    "inline-flex h-6 items-center gap-1.5 rounded-[4px] px-2.5 text-sm text-muted-foreground hover:text-foreground",
+                    "aria-[current=page]:bg-background aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=page]:shadow-[0_0_0_1px_var(--border),0_1px_1px_rgb(0_0_0/0.18)]",
+                  )}
+                >
+                  {item.label}
+                  {count !== undefined ? <span className="text-xs font-normal text-muted-foreground tabular-nums"> {count}</span> : null}
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+    </>
+  )
+}
 
 function TargetDetail({ targetId }: { targetId: string }) {
   const target = useStore((s) => s.catalog.targets[targetId]!)
+  const search = useSearch({ strict: false }) as SearchParams
+  const tab: TargetTab = search.tab === "sessions" || search.tab === "views" || search.tab === "results" ? search.tab : "overview"
   const { coverage, contributing, needsReview } = useStore((s) => {
     const coverage = targetCoverage(s.disk, s.catalog, targetId)
     return {
@@ -72,7 +159,6 @@ function TargetDetail({ targetId }: { targetId: string }) {
     }
   })
   const catalog = useStore((s) => s.catalog)
-  const planned = Boolean(catalog.plans[targetId]?.planned)
   const totals = sumBreakdowns(coverage.channels.map((c) => c.breakdown))
   // Verification time of each usable figure (D19): read from the catalog, never a rehash.
   const channelAssetIds = coverage.channels.map((c) => c.sessionIds.flatMap((id) => catalog.sessions[id]?.assetIds ?? []))
@@ -135,243 +221,286 @@ function TargetDetail({ targetId }: { targetId: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        eyebrow={
-          <Link to="/targets" className="underline-offset-2 hover:underline">
-            Targets
-          </Link>
-        }
-        title={target.name}
-        meta={
-          planned ? (
-            <Link to="/targets/$targetId/plan" params={{ targetId }} className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:underline">
-              <CalendarClock aria-hidden="true" className="size-3.5" />
-              Planned
-            </Link>
-          ) : undefined
-        }
-        description={target.aliases.length > 0 ? target.aliases.join(" · ") : undefined}
-        actions={
-          <>
-            <Button variant="outline" render={<Link to="/targets/$targetId/plan" params={{ targetId }} />}>
-              Plan
-            </Button>
-            <Button variant="outline" render={<Link to="/projects/new" search={{ targetId }} />}>
-              New Project
-            </Button>
-            <Button render={<Link to="/views/new" search={{ from: "target", targetId }} />}>Create View</Button>
-          </>
-        }
-      />
+      <TargetHeader target={target} />
       <PageBody>
-        <LibraryStatus kind="light" />
-        {offline.length > 0 ? (
-          <Notice
-            tone="offline"
-            title={offline.length === 1 ? "1 contribution is offline" : `${offline.length} contributions are offline`}
-            actions={[...new Map(offline.flatMap((r) => r.locations.filter((l) => l.availability === "offline")).map((l) => [l.location.id, l.location])).values()].map(
-              (location) => (
-                <Button key={location.id} size="sm" variant="outline" render={<Link to="/settings/locations" search={{ locationId: location.id }} />}>
-                  Locate or remap {location.displayName}
-                </Button>
-              ),
-            )}
-          >
-            <ul className="space-y-0.5">
-              {offline.map((r) => (
-                <li key={r.session.id}>
-                  {r.label} ({plural(r.availability.offline, "frame")}, {formatDuration(r.breakdown.unavailable.seconds)}) counts in captured integration with values
-                  last observed {r.lastObservedAt ? formatDateTime(r.lastObservedAt) : "at the last scan"}. It is not available as a processing input.
-                </li>
-              ))}
-            </ul>
-          </Notice>
-        ) : null}
+        {tab === "overview" ? (
+          <>
+            <LibraryStatus kind="light" />
+            {offline.length > 0 ? (
+              <Notice
+                tone="offline"
+                title={offline.length === 1 ? "1 contribution is offline" : `${offline.length} contributions are offline`}
+                actions={[...new Map(offline.flatMap((r) => r.locations.filter((l) => l.availability === "offline")).map((l) => [l.location.id, l.location])).values()].map(
+                  (location) => (
+                    <Button key={location.id} size="sm" variant="outline" render={<Link to="/settings/locations" search={{ locationId: location.id }} />}>
+                      Locate or remap {location.displayName}
+                    </Button>
+                  ),
+                )}
+              >
+                <ul className="space-y-0.5">
+                  {offline.map((r) => (
+                    <li key={r.session.id}>
+                      {r.label} ({plural(r.availability.offline, "frame")}, {formatDuration(r.breakdown.unavailable.seconds)}) counts in captured integration with values
+                      last observed {r.lastObservedAt ? formatDateTime(r.lastObservedAt) : "at the last scan"}. It is not available as a processing input.
+                    </li>
+                  ))}
+                </ul>
+              </Notice>
+            ) : null}
 
-        <Section
-          id="coverage"
-          title="Coverage by channel"
-          description="Usable counts only library-scope quality decisions. Sessions that need review are not counted. Availability is shown separately."
-        >
-          {coverage.channels.length === 0 ? (
-            <EmptyState
-              icon={Crosshair}
-              title={`No session is associated with ${target.name} yet`}
-              description={
-                coverage.needsReview.length > 0
-                  ? `${plural(coverage.needsReview.length, "session")} below need review before they count.`
-                  : "Sessions count here once their pointing or a confirmed Target associates them."
-              }
-              action={
-                <Button size="sm" variant="outline" render={<Link to="/sessions" search={{ target: coverage.needsReview.length > 0 ? "needs-review" : "unresolved" }} />}>
-                  Review sessions
-                </Button>
-              }
-            />
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-4 rounded-lg border p-3 sm:grid-cols-3 lg:grid-cols-6">
-                <Stat label="Captured" value={formatDuration(totals.captured.seconds)} hint={plural(totals.captured.frames, "frame")} />
-                <Stat
-                  label="Usable"
-                  value={formatDuration(totals.usable.seconds)}
-                  hint={
-                    totalVerifiedAt && totals.usable.frames > 0 ? (
-                      <>
-                        {plural(totals.usable.frames, "frame")}
-                        <br />
-                        Last verified {formatDateTime(totalVerifiedAt)}
-                      </>
-                    ) : (
-                      plural(totals.usable.frames, "frame")
-                    )
+            <Section
+              id="coverage"
+              title="Coverage by channel"
+              description="Usable counts only library-scope quality decisions. Sessions that need review are not counted. Availability is shown separately."
+            >
+              {coverage.channels.length === 0 ? (
+                <EmptyState
+                  icon={Crosshair}
+                  title={`No session is associated with ${target.name} yet`}
+                  description={
+                    coverage.needsReview.length > 0
+                      ? `${plural(coverage.needsReview.length, "session")} below need review before they count.`
+                      : "Sessions count here once their pointing or a confirmed Target associates them."
+                  }
+                  action={
+                    <Button size="sm" variant="outline" render={<Link to="/sessions" search={{ target: coverage.needsReview.length > 0 ? "needs-review" : "unresolved" }} />}>
+                      Review sessions
+                    </Button>
                   }
                 />
-                <Stat label="Unreviewed" value={formatDuration(totals.unreviewed.seconds)} hint={plural(totals.unreviewed.frames, "frame")} />
-                <Stat label="Unusable" value={formatDuration(totals.unusable.seconds)} hint={plural(totals.unusable.frames, "frame")} />
-                <Stat
-                  label="Unavailable now"
-                  value={formatDuration(totals.unavailable.seconds)}
-                  hint={totals.unavailable.frames > 0 ? "offline or unreadable; still captured" : "every frame readable"}
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-md border px-3 py-2 sm:grid-cols-3 lg:grid-cols-6">
+                    <Stat label="Captured" value={formatDuration(totals.captured.seconds)} hint={plural(totals.captured.frames, "frame")} />
+                    <Stat
+                      label="Usable"
+                      value={formatDuration(totals.usable.seconds)}
+                      hint={
+                        totalVerifiedAt && totals.usable.frames > 0 ? (
+                          <>
+                            {plural(totals.usable.frames, "frame")}
+                            <br />
+                            Last verified {formatDateTime(totalVerifiedAt)}
+                          </>
+                        ) : (
+                          plural(totals.usable.frames, "frame")
+                        )
+                      }
+                    />
+                    <Stat label="Unreviewed" value={formatDuration(totals.unreviewed.seconds)} hint={plural(totals.unreviewed.frames, "frame")} />
+                    <Stat label="Unusable" value={formatDuration(totals.unusable.seconds)} hint={plural(totals.unusable.frames, "frame")} />
+                    <Stat
+                      label="Unavailable now"
+                      value={formatDuration(totals.unavailable.seconds)}
+                      hint={totals.unavailable.frames > 0 ? "offline or unreadable; still captured" : "every frame readable"}
+                    />
+                    <Stat label="Sessions" value={contributing.length} hint={plural(coverage.channels.length, "channel")} />
+                  </div>
+                  <ul className="divide-y rounded-md border">
+                    {coverage.channels.map((c, index) => (
+                      <li key={c.channel} className="px-3 py-2.5">
+                        <ChannelCoverage channel={c.channel} breakdown={c.breakdown} usableVerifiedAt={verifiedAt[index]} />
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </Section>
+
+            <Section
+              id="projects"
+              title="Projects"
+              description="Optional goals for this Target; New Project in the header starts one."
+            >
+              {projects.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No Project uses {target.name}. Projects are optional goals; the library and Views work without them.</p>
+              ) : (
+                <ul className="divide-y rounded-md border">
+                  {projects.map((p) => {
+                    const progress = projectProgress(catalog, p)
+                    const met = progress.filter((x) => x.state === "met").length
+                    return (
+                      <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm">
+                        <Link to="/projects/$projectId" params={{ projectId: p.id }} className="font-medium underline-offset-2 hover:underline">
+                          {p.name}
+                        </Link>
+                        <span className="text-muted-foreground tabular-nums">
+                          {progress.length > 0 ? `${met} of ${progress.length} checklist items met` : "No checklist"} · {plural(p.linkedSessionIds.length, "linked session")}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </Section>
+
+            <TargetRecordSection target={target} />
+          </>
+        ) : null}
+
+        {tab === "sessions" ? (
+          <>
+            {contributing.length > 0 ? (
+              <Section id="contributing" title="Contributing sessions" description="The sessions the coverage counts. Each frame counts once, however many copies exist.">
+                <DataTable
+                  label={`Sessions contributing to ${target.name}`}
+                  rows={contributing}
+                  columns={sessionColumns}
+                  getRowId={(r) => r.session.id}
+                  initialSort={{ columnId: "session", direction: "desc" }}
+                  scroll="none"
                 />
-                <Stat label="Sessions" value={contributing.length} hint={plural(coverage.channels.length, "channel")} />
-              </div>
-              <ul className="grid gap-4 2xl:grid-cols-2">
-                {coverage.channels.map((c, index) => (
-                  <li key={c.channel} className="rounded-lg border p-3">
-                    <ChannelCoverage channel={c.channel} breakdown={c.breakdown} usableVerifiedAt={verifiedAt[index]} />
+              </Section>
+            ) : null}
+
+            {needsReview.length > 0 ? (
+              <Section id="needs-review" title="Needs review" description={`Not counted for ${target.name} until you confirm the Target in Inspect session.`}>
+                <DataTable
+                  label={`Sessions that need review for ${target.name}`}
+                  rows={needsReview}
+                  columns={[
+                    sessionColumns[0]!,
+                    {
+                      id: "object",
+                      header: "OBJECT",
+                      className: DENSITY_CELL,
+                      cell: (r) => (r.session.objectLabel ? <span className="font-mono text-xs">{r.session.objectLabel}</span> : <span className="text-muted-foreground">No OBJECT</span>),
+                    },
+                    {
+                      id: "evidence",
+                      header: "Why",
+                      className: DENSITY_CELL,
+                      cell: (r) =>
+                        r.session.target.evidence
+                          .filter((e) => e.agrees === false)
+                          .map((e) => `${e.label} ${e.value} conflicts`)
+                          .join("; ") || "Evidence is unknown",
+                    },
+                    { id: "status", header: "Association", className: DENSITY_CELL, cell: (r) => <AssociationBadge association={r.session.target} /> },
+                    sessionColumns[2]!,
+                  ]}
+                  getRowId={(r) => r.session.id}
+                  scroll="none"
+                />
+              </Section>
+            ) : null}
+
+            {contributing.length === 0 && needsReview.length === 0 ? (
+              <EmptyState
+                icon={Crosshair}
+                title={`No session is associated with ${target.name} yet`}
+                description="Sessions appear here once their pointing or a confirmed Target associates them."
+                action={
+                  <Button size="sm" variant="outline" render={<Link to="/sessions" search={{ target: "unresolved" }} />}>
+                    Review sessions
+                  </Button>
+                }
+              />
+            ) : null}
+          </>
+        ) : null}
+
+        {tab === "views" ? <TargetViews target={target} /> : null}
+
+        {tab === "results" ? (
+          <Section id="results" title="Accepted Results" description="Results accepted inside this Target's Views, with their recorded lineage.">
+            {results.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No accepted Result yet. Results are accepted inside a View after processing.</p>
+            ) : (
+              <ul className="divide-y rounded-md border">
+                {results.map((r) => (
+                  <li key={r.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <Link to="/views/$viewId/results" params={{ viewId: r.viewId }} className="font-medium underline-offset-2 hover:underline">
+                        {r.path.slice(r.path.lastIndexOf("/") + 1)}
+                      </Link>
+                      <PathText path={r.path} className="text-muted-foreground" />
+                    </div>
+                    <span className="flex flex-wrap items-center gap-2">
+                      <StatusBadge kind="lineage" value={r.lineage} />
+                      {r.contentState === "drifted" ? <StatusBadge kind="content" value="drifted" /> : null}
+                    </span>
                   </li>
                 ))}
               </ul>
-            </>
-          )}
-        </Section>
-
-        {contributing.length > 0 ? (
-          <Section id="contributing" title="Contributing sessions" description="Each frame counts once, however many copies exist.">
-            <DataTable
-              label={`Sessions contributing to ${target.name}`}
-              rows={contributing}
-              columns={sessionColumns}
-              getRowId={(r) => r.session.id}
-              initialSort={{ columnId: "session", direction: "desc" }}
-              scroll="none"
-            />
+            )}
           </Section>
         ) : null}
-
-        {needsReview.length > 0 ? (
-          <Section id="needs-review" title="Needs review" description={`Not counted for ${target.name} until you confirm the Target in Inspect session.`}>
-            <DataTable
-              label={`Sessions that need review for ${target.name}`}
-              rows={needsReview}
-              columns={[
-                sessionColumns[0]!,
-                {
-                  id: "object",
-                  header: "OBJECT",
-                  className: DENSITY_CELL,
-                  cell: (r) => (r.session.objectLabel ? <span className="font-mono text-xs">{r.session.objectLabel}</span> : <span className="text-muted-foreground">No OBJECT</span>),
-                },
-                {
-                  id: "evidence",
-                  header: "Why",
-                  className: DENSITY_CELL,
-                  cell: (r) =>
-                    r.session.target.evidence
-                      .filter((e) => e.agrees === false)
-                      .map((e) => `${e.label} ${e.value} conflicts`)
-                      .join("; ") || "Evidence is unknown",
-                },
-                { id: "status", header: "Association", className: DENSITY_CELL, cell: (r) => <AssociationBadge association={r.session.target} /> },
-                sessionColumns[2]!,
-              ]}
-              getRowId={(r) => r.session.id}
-              scroll="none"
-            />
-          </Section>
-        ) : null}
-
-        <TargetRecordSection target={target} />
-
-        <Section
-          id="projects"
-          title="Projects"
-          actions={
-            <Button size="sm" variant="outline" render={<Link to="/projects/new" search={{ targetId }} />}>
-              New Project
-            </Button>
-          }
-        >
-          {projects.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No Project uses {target.name}. Projects are optional goals; the library and Views work without them.</p>
-          ) : (
-            <ul className="divide-y rounded-lg border">
-              {projects.map((p) => {
-                const progress = projectProgress(catalog, p)
-                const met = progress.filter((x) => x.state === "met").length
-                return (
-                  <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm">
-                    <Link to="/projects/$projectId" params={{ projectId: p.id }} className="font-medium underline-offset-2 hover:underline">
-                      {p.name}
-                    </Link>
-                    <span className="text-muted-foreground tabular-nums">
-                      {progress.length > 0 ? `${met} of ${progress.length} checklist items met` : "No checklist"} · {plural(p.linkedSessionIds.length, "linked session")}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </Section>
-
-        <Section id="views" title="Views">
-          {views.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No View uses {target.name} yet.{" "}
-              <Link to="/views/new" search={{ from: "target", targetId }} className="text-primary underline-offset-2 hover:underline">
-                Create View
-              </Link>{" "}
-              starts one from this Target.
-            </p>
-          ) : (
-            <ul className="divide-y rounded-lg border">
-              {views.map((v) => (
-                <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm">
-                  <Link to="/views/$viewId" params={{ viewId: v.id }} className="font-medium underline-offset-2 hover:underline">
-                    {v.name}
-                  </Link>
-                  <StatusBadge kind="view" value={viewStatus(catalog, v)} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-
-        <Section id="results" title="Accepted Results">
-          {results.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No accepted Result yet. Results are accepted inside a View after processing.</p>
-          ) : (
-            <ul className="divide-y rounded-lg border">
-              {results.map((r) => (
-                <li key={r.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-3 py-2 text-sm">
-                  <div className="min-w-0">
-                    <Link to="/views/$viewId/results" params={{ viewId: r.viewId }} className="font-medium underline-offset-2 hover:underline">
-                      {r.path.slice(r.path.lastIndexOf("/") + 1)}
-                    </Link>
-                    <PathText path={r.path} className="text-muted-foreground" />
-                  </div>
-                  <span className="flex flex-wrap items-center gap-2">
-                    <StatusBadge kind="lineage" value={r.lineage} />
-                    {r.contentState === "drifted" ? <StatusBadge kind="content" value="drifted" /> : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
       </PageBody>
     </div>
+  )
+}
+
+/** The Target's Views with C's stage strip and the one Next action each (D: Views hang from their Target). */
+function TargetViews({ target }: { target: Target }) {
+  const catalog = useStore((s) => s.catalog)
+  const disk = useStore((s) => s.disk)
+  const decisions = useStore((s) => s.slices.t4.decisions)
+  const views = viewsForTarget(catalog, target.id)
+  return (
+    <Section id="views" title="Views" description="Each View with the stage it stands in and its one Next action.">
+      {views.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No View uses {target.name} yet.{" "}
+          <Link to="/views/new" search={{ from: "target", targetId: target.id }} className="text-primary underline-offset-2 hover:underline">
+            Create View
+          </Link>{" "}
+          starts one from this Target.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <caption className="sr-only">Views of {target.name}</caption>
+            <thead className="bg-card text-xs text-muted-foreground" data-chrome>
+              <tr className="h-(--row-h) border-b">
+                <th scope="col" className="px-2.5 text-left font-medium">
+                  View
+                </th>
+                <th scope="col" className="px-2.5 text-left font-medium">
+                  Status
+                </th>
+                <th scope="col" className="px-2.5 text-left font-medium">
+                  Stage
+                </th>
+                <th scope="col" className="px-2.5 text-left font-medium">
+                  Next action
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {views.map((v) => {
+                const pipeline = viewPipeline(catalog, disk, v, decisions)
+                return (
+                  <tr key={v.id} className="h-(--row-h) border-b border-border/60 last:border-0 even:bg-foreground/[0.025] hover:bg-accent/70">
+                    <th scope="row" className="px-2.5 py-1 text-left font-normal">
+                      <Link to="/views/$viewId" params={{ viewId: v.id }} className="font-medium underline-offset-2 hover:underline">
+                        {v.name}
+                      </Link>
+                    </th>
+                    <td className="px-2.5 py-1 whitespace-nowrap">
+                      <StatusBadge kind="view" value={viewStatus(catalog, v)} />
+                    </td>
+                    <td className="px-2.5 py-1 whitespace-nowrap">
+                      <StageStrip pipeline={pipeline} />
+                    </td>
+                    <td className="px-2.5 py-1">
+                      {pipeline.next ? (
+                        <Link to={pipeline.next.to} className="text-sm text-primary underline-offset-2 hover:underline">
+                          Next: {pipeline.next.label}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground">Nothing waiting</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
   )
 }
 

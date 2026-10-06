@@ -263,6 +263,14 @@ export interface TargetSummary {
   separationDeg: number | null
 }
 
+/** Where a Target's coordinates came from, shown beside the value (B: value with its source). */
+export const COORDINATE_SOURCE = {
+  catalog: "Bundled reference catalog",
+  user: "Entered by you",
+  resolver: "Online resolver",
+  unknown: "Unknown",
+} as const
+
 export function targetSummary(state: PrototypeState, target: Target): TargetSummary {
   const coverage = targetCoverage(state.disk, state.catalog, target.id)
   return {

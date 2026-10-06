@@ -163,7 +163,7 @@ export function PropertyList({ rows, className }: { rows: Array<{ label: string;
           <dt className="text-muted-foreground">{row.label}</dt>
           <dd className="min-w-0">
             <span className="tabular-nums">{row.value}</span>
-            {row.source ? <span className="ml-1.5 text-xs text-muted-foreground">{row.source}</span> : null}
+            {row.source ? <span className="ml-1.5 inline-block text-xs text-muted-foreground">{row.source}</span> : null}
           </dd>
         </div>
       ))}

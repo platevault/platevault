@@ -61,8 +61,13 @@ export interface DataTableProps<T> {
   /** Shown instead of the body when there are no rows. */
   empty?: ReactNode
   loading?: boolean
-  /** The row whose detail is open; marked `aria-current`. */
+  /** The row whose detail is open (the page cursor); marked `aria-current`. */
   activeRowId?: string | null
+  /**
+   * Moves the page cursor to the row clicked or focused (Harness V3: the
+   * inspector follows it). The cursor is never the checked set.
+   */
+  onCursorChange?: (id: string) => void
   rowClassName?: (row: T) => string | undefined
   className?: string
   /** "frame" (default) scrolls long tables inside their frame with a pinned header; "none" grows with content. */
@@ -92,6 +97,7 @@ export function DataTable<T>({
   empty,
   loading,
   activeRowId,
+  onCursorChange,
   rowClassName,
   className,
   scroll = "frame",
@@ -309,6 +315,8 @@ export function DataTable<T>({
                     key={id}
                     data-row
                     aria-current={activeRowId === id ? "true" : undefined}
+                    onClick={onCursorChange ? () => onCursorChange(id) : undefined}
+                    onFocus={onCursorChange ? () => onCursorChange(id) : undefined}
                     data-selected={isSelected || undefined}
                     className={cn(
                       // Zebra rows (native table), a hover tint, the checked set (checkbox + faint tint) and
