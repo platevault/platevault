@@ -9,8 +9,8 @@ use crate::hfr::half_flux_radius;
 use crate::measure::{
     check_canceled, Star, StarReason, StarShape, StarState, StarWarning, BOX_RADIUS_MAX_PX,
     BOX_RADIUS_MIN_PX, BOX_SIGMA_MULTIPLE, DETECT_CONNECTED_SIGMA, DETECT_MIN_CONNECTED,
-    DETECT_PEAK_SIGMA, FWHM_PER_SIGMA, MAX_CANDIDATES, MAX_CENTER_SHIFT_PX, MAX_MASKED_FRACTION,
-    MIN_SIGMA_PX,
+    DETECT_PEAK_SIGMA, FWHM_PER_SIGMA, MAX_CANDIDATES, MAX_CENTER_SHIFT_PX, MAX_HWHM_STEPS,
+    MAX_MASKED_FRACTION, MIN_SIGMA_PX,
 };
 use crate::psf::{fit, FitError, FitSample, Gaussian};
 use crate::stats::{median, Background};
@@ -18,8 +18,6 @@ use crate::{Category, PixelError, Plane};
 
 /// HWHM per sigma, `sqrt(2 ln 2)`.
 const HWHM_PER_SIGMA: f64 = FWHM_PER_SIGMA / 2.0;
-/// Longest HWHM walk from a peak.
-const MAX_HWHM_STEPS: u32 = 64;
 
 /// A 3×3 local maximum that passed the detection thresholds.
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -451,26 +451,37 @@ fn measurement_is_deterministic_cancelable_and_its_method_is_recorded() {
     assert_eq!(first, second);
     assert!(matches!(measure(&image, &AtomicBool::new(true)), Err(PixelError::Canceled)));
     assert_eq!((METHOD.name, METHOD.version), ("platevault.stars", 1));
-    let names: Vec<&str> = PARAMETERS.iter().map(|(name, _)| *name).collect();
-    for expected in [
-        "clip_sigma",
-        "clip_max_passes",
-        "mad_to_sigma",
-        "detect_peak_sigma",
-        "detect_connected_sigma",
-        "detect_min_connected",
-        "max_candidates",
-        "box_sigma_multiple",
-        "box_radius_min_px",
-        "box_radius_max_px",
-        "max_masked_fraction",
-        "max_fit_iterations",
-        "min_sigma_px",
-        "max_center_shift_px",
-        "fwhm_per_sigma",
-    ] {
-        assert!(names.contains(&expected), "{expected} missing from {names:?}");
-    }
+    // Version 1 records every result-affecting constant with its value; a
+    // changed value or a new constant needs a new version.
+    let mut recorded = PARAMETERS.to_vec();
+    recorded.sort_by(|a, b| a.0.cmp(b.0));
+    let mut version_1 = vec![
+        ("clip_sigma", 3.0),
+        ("clip_max_passes", 10.0),
+        ("mad_to_sigma", 1.4826),
+        ("detect_peak_sigma", 5.0),
+        ("detect_connected_sigma", 3.0),
+        ("detect_min_connected", 5.0),
+        ("max_candidates", 2000.0),
+        ("box_sigma_multiple", 3.0),
+        ("box_radius_min_px", 4.0),
+        ("box_radius_max_px", 15.0),
+        ("max_hwhm_steps", 64.0),
+        ("max_masked_fraction", 0.10),
+        ("max_fit_iterations", 50.0),
+        ("initial_damping", 1e-3),
+        ("damping_step", 10.0),
+        ("min_damping", 1e-12),
+        ("max_damping", 1e12),
+        ("min_curvature", 1e-12),
+        ("min_pivot", 1e-300),
+        ("converged_relative_change", 1e-10),
+        ("min_sigma_px", 0.3),
+        ("max_center_shift_px", 1.5),
+        ("fwhm_per_sigma", FWHM_PER_SIGMA),
+    ];
+    version_1.sort_by(|a, b| a.0.cmp(b.0));
+    assert_eq!(recorded, version_1);
 }
 
 #[test]

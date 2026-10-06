@@ -7,12 +7,12 @@
 //! and `dy = y - y0`. The quadratic form avoids the angle degeneracy of round
 //! stars; widths and the major-axis angle come from its eigen-decomposition.
 
-use crate::measure::MAX_FIT_ITERATIONS;
+use crate::measure::{
+    CONVERGED_RELATIVE_CHANGE, DAMPING_STEP, INITIAL_DAMPING, MAX_DAMPING, MAX_FIT_ITERATIONS,
+    MIN_CURVATURE, MIN_DAMPING, MIN_PIVOT,
+};
 
 const PARAMETERS: usize = 7;
-const INITIAL_DAMPING: f64 = 1e-3;
-const MAX_DAMPING: f64 = 1e12;
-const CONVERGED_RELATIVE_CHANGE: f64 = 1e-10;
 
 /// One valid sample at its pixel center.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -158,7 +158,7 @@ fn solve(
     for column in 0..PARAMETERS {
         let pivot = (column..PARAMETERS)
             .max_by(|a, b| matrix[*a][column].abs().total_cmp(&matrix[*b][column].abs()))?;
-        if matrix[pivot][column].abs() < 1e-300 || !matrix[pivot][column].is_finite() {
+        if matrix[pivot][column].abs() < MIN_PIVOT || !matrix[pivot][column].is_finite() {
             return None;
         }
         matrix.swap(column, pivot);
@@ -180,8 +180,8 @@ fn solve(
 }
 
 /// Fits the model to `samples` from `initial`. Converges when an accepted
-/// step changes chi-square by less than 1e-10 relative, or when no step can
-/// reduce it further.
+/// step changes chi-square by less than `CONVERGED_RELATIVE_CHANGE`
+/// relative, or when no step can reduce it further.
 #[allow(clippy::needless_range_loop)]
 pub fn fit(samples: &[FitSample], initial: Gaussian) -> Result<Gaussian, FitError> {
     if samples.len() <= PARAMETERS {
@@ -211,7 +211,7 @@ pub fn fit(samples: &[FitSample], initial: Gaussian) -> Result<Gaussian, FitErro
         loop {
             let mut damped = normal;
             for (index, row) in damped.iter_mut().enumerate() {
-                row[index] += damping * normal[index][index].max(1e-12);
+                row[index] += damping * normal[index][index].max(MIN_CURVATURE);
             }
             let step = solve(damped, gradient);
             let candidate = step.map(|step| {
@@ -227,13 +227,13 @@ pub fn fit(samples: &[FitSample], initial: Gaussian) -> Result<Gaussian, FitErro
                 let change = (chi2 - candidate_chi2) / chi2.max(f64::MIN_POSITIVE);
                 model = candidate.unwrap_or(model);
                 chi2 = candidate_chi2;
-                damping = (damping / 10.0).max(1e-12);
+                damping = (damping / DAMPING_STEP).max(MIN_DAMPING);
                 if change < CONVERGED_RELATIVE_CHANGE {
                     return validated(model);
                 }
                 break;
             }
-            damping *= 10.0;
+            damping *= DAMPING_STEP;
             if damping > MAX_DAMPING {
                 return validated(model);
             }

@@ -35,8 +35,25 @@ pub const MAX_CANDIDATES: usize = 2000;
 pub const BOX_SIGMA_MULTIPLE: f64 = 3.0;
 pub const BOX_RADIUS_MIN_PX: u32 = 4;
 pub const BOX_RADIUS_MAX_PX: u32 = 15;
+/// Longest half-width walk from a peak, in steps.
+pub const MAX_HWHM_STEPS: u32 = 64;
 pub const MAX_MASKED_FRACTION: f64 = 0.10;
 pub const MAX_FIT_ITERATIONS: usize = 50;
+/// Levenberg-Marquardt damping at the start of a fit.
+pub const INITIAL_DAMPING: f64 = 1e-3;
+/// Damping divides by this after an accepted step and multiplies by it after
+/// a rejected one.
+pub const DAMPING_STEP: f64 = 10.0;
+pub const MIN_DAMPING: f64 = 1e-12;
+/// A fit whose damping passes this cannot reduce chi-square further.
+pub const MAX_DAMPING: f64 = 1e12;
+/// Floor of the normal-matrix diagonal the damping scales.
+pub const MIN_CURVATURE: f64 = 1e-12;
+/// Smallest pivot the step solver accepts.
+pub const MIN_PIVOT: f64 = 1e-300;
+/// A fit converges when an accepted step changes chi-square by less than
+/// this, relative.
+pub const CONVERGED_RELATIVE_CHANGE: f64 = 1e-10;
 pub const MIN_SIGMA_PX: f64 = 0.3;
 pub const MAX_CENTER_SHIFT_PX: f64 = 1.5;
 /// `2 sqrt(2 ln 2)`.
@@ -54,8 +71,16 @@ pub const PARAMETERS: &[(&str, f64)] = &[
     ("box_sigma_multiple", BOX_SIGMA_MULTIPLE),
     ("box_radius_min_px", BOX_RADIUS_MIN_PX as f64),
     ("box_radius_max_px", BOX_RADIUS_MAX_PX as f64),
+    ("max_hwhm_steps", MAX_HWHM_STEPS as f64),
     ("max_masked_fraction", MAX_MASKED_FRACTION),
     ("max_fit_iterations", MAX_FIT_ITERATIONS as f64),
+    ("initial_damping", INITIAL_DAMPING),
+    ("damping_step", DAMPING_STEP),
+    ("min_damping", MIN_DAMPING),
+    ("max_damping", MAX_DAMPING),
+    ("min_curvature", MIN_CURVATURE),
+    ("min_pivot", MIN_PIVOT),
+    ("converged_relative_change", CONVERGED_RELATIVE_CHANGE),
     ("min_sigma_px", MIN_SIGMA_PX),
     ("max_center_shift_px", MAX_CENTER_SHIFT_PX),
     ("fwhm_per_sigma", FWHM_PER_SIGMA),
