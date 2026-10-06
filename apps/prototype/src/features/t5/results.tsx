@@ -2,7 +2,7 @@
  * Results area of the View workspace (spec 070; J26 S1-S4, S7, S7a; J27 S1-S3).
  */
 import { Link, useNavigate, useParams } from "@tanstack/react-router"
-import { FileSearch, Inbox, Paperclip } from "lucide-react"
+import { FileImage, FileSearch, Inbox, Paperclip, X } from "lucide-react"
 import { useEffect, useId, useMemo, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList, PathText } from "@/components/app/data"
@@ -10,6 +10,7 @@ import { type Column, DataTable, SelectionBar } from "@/components/app/data-tabl
 import { ActionError, EmptyState, Notice, SaveState } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { StatusBadge, type StatusValue } from "@/components/app/status"
+import { Inspector, PanelSection, ValueList } from "@/components/app/studio"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -21,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { stableHash } from "@/domain/indexing"
 import type { DiskFile, ResultKind, ResultRecord, View } from "@/domain/types"
 import { formatBytes, formatCount, formatDateTime, plural } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import { unsettledOperationsForView } from "@/store/operations"
 import type { Inspection } from "@/store/slices/t5"
@@ -262,27 +264,30 @@ function ResultsArea({ view }: { view: View }) {
           </>
         }
       />
-      <PageBody>
-        {completeRefusal ? (
-          <Notice tone="refusal" title="Mark processing complete refused" actions={<Button size="sm" variant="outline" render={<Link to="/activity" />}>Open Activity</Button>}>
-            {completeRefusal}
-          </Notice>
-        ) : null}
-
-        {root ? (
-          <Notice tone={inventory?.availability === "offline" ? "offline" : "info"} title="Recorded output location">
-            <PathText path={root} />
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {inventory?.availability === "offline"
-                ? "Offline: discovered files cannot be read until the volume is connected."
-                : `${plural(candidates.filter((c) => c.discovered === "output-location").length, "product candidate")} · ${plural(
-                    candidates.filter((c) => c.processingState === "pending").length,
-                    "file",
-                  )} still being written · ${plural(inventory?.files.filter((f) => f.role !== "product").length ?? 0, "other file")}`}
-            </span>
-          </Notice>
-        ) : null}
-
+      {/* Studio layout (harness v2): message bars under the pane header, the candidate and accepted
+          tables in the scrolling pane, and the inspected Result as a print on its mount in the inspector. */}
+      {completeRefusal ? (
+        <Notice layout="strip" tone="refusal" title="Mark processing complete refused" actions={<Button size="sm" variant="outline" render={<Link to="/activity" />}>Open Activity</Button>}>
+          {completeRefusal}
+        </Notice>
+      ) : null}
+      {root ? (
+        <Notice layout="strip" tone={inventory?.availability === "offline" ? "offline" : "info"} title="Recorded output location">
+          <PathText path={root} className="inline text-foreground" />
+          <span className="tabular-nums">
+            {" · "}
+            {inventory?.availability === "offline"
+              ? "Offline: discovered files cannot be read until the volume is connected."
+              : `${plural(candidates.filter((c) => c.discovered === "output-location").length, "product candidate")} · ${plural(
+                  candidates.filter((c) => c.processingState === "pending").length,
+                  "file",
+                )} still being written · ${plural(inventory?.files.filter((f) => f.role !== "product").length ?? 0, "other file")}`}
+          </span>
+        </Notice>
+      ) : null}
+      <div className="flex min-h-0 flex-1 max-md:flex-col">
+        <div className="min-w-0 flex-1 overflow-y-auto">
+          <PageBody>
         <Section
           id="t5-candidates"
           title="Result candidates"
@@ -370,10 +375,6 @@ function ResultsArea({ view }: { view: View }) {
           )}
         </Section>
 
-        {activeRow ? (
-          <ResultDetail row={activeRow} inspection={inspections[activeRow.id]} verifying={rehash.verifying} onInspect={() => inspect(activeRow)} onClose={() => setActive(null)} />
-        ) : null}
-
         <Section
           id="t5-accepted"
           title="Accepted Results"
@@ -425,6 +426,13 @@ function ResultsArea({ view }: { view: View }) {
 
         <ResultsPrototypeControls view={view} root={root} products={rows.filter((r) => r.file && !r.file.growing)} onChanged={() => setRehashTrigger((n) => n + 1)} />
       </PageBody>
+        </div>
+        {activeRow ? (
+          <Inspector label="Result inspector" widthKey="results.inspector" initialWidth={320}>
+            <ResultDetail row={activeRow} inspection={inspections[activeRow.id]} verifying={rehash.verifying} onInspect={() => inspect(activeRow)} onClose={() => setActive(null)} />
+          </Inspector>
+        ) : null}
+      </div>
 
       <ConfirmDialog
         open={acceptOpen}
@@ -513,27 +521,40 @@ function ResultDetail({
   const state = productState(row, verifying)
   const drift = row.acceptance === "candidate" && inspection ? inspectionDrift(inspection, row.file) : null
   return (
-    <section aria-labelledby="t5-detail-title" className="space-y-3 rounded-lg border bg-card p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 space-y-1">
-          <h3 id="t5-detail-title" className="text-sm font-semibold">
-            Inspect {row.fileName}
-          </h3>
-          <PathText path={row.path} className="text-muted-foreground" />
-        </div>
-        <Button size="sm" variant="ghost" onClick={onClose}>
-          Close inspection
+    <section aria-labelledby="t5-detail-title" className="flex flex-col">
+      <div className="chrome flex items-center gap-1 border-b border-seam bg-panel-header py-1 pr-1 pl-3">
+        <h3 id="t5-detail-title" className="min-w-0 flex-1 truncate text-xs font-semibold" title={row.fileName}>
+          Inspect {row.fileName}
+        </h3>
+        <Button size="icon-sm" variant="ghost" aria-label="Close inspection" title="Close inspection" onClick={onClose}>
+          <X aria-hidden="true" />
         </Button>
       </div>
+      {/* B's artifact on its mount. PlateVault reads no product pixels, so the well shows the file itself, never a made-up image. */}
+      <div className="p-2">
+        <div className="rounded-md bg-mount p-1.5 shadow-[inset_0_0_0_1px_var(--mount-edge)]">
+          <div className={cn("flex aspect-[3/2] flex-col items-center justify-center gap-1.5 rounded-sm bg-canvas text-muted-foreground", row.availability !== "available" && "opacity-60")}>
+            <FileImage aria-hidden="true" className="size-7" />
+            <span className="font-mono text-2xs">{row.fileName.includes(".") ? row.fileName.slice(row.fileName.lastIndexOf(".") + 1).toUpperCase() : "FILE"}</span>
+          </div>
+          <div className="flex min-w-0 items-baseline gap-2 px-0.5 pt-1.5 text-2xs">
+            <span className="min-w-0 flex-1 truncate text-foreground">{kindLabel(row.kind, row.channel)}</span>
+            <span className="num shrink-0 text-muted-foreground">{row.file ? formatBytes(row.file.sizeBytes) : "Size unknown"}</span>
+          </div>
+        </div>
+        <PathText path={row.path} className="pt-1.5 text-2xs text-muted-foreground" />
+      </div>
       {row.acceptance === "accepted" && state === "drifted" ? (
-        <Notice tone="warning" title="Drifted: requires review">
+        <Notice layout="strip" tone="warning" title="Drifted: requires review" className="border-t">
           The bytes on disk no longer match the SHA-256 recorded at acceptance. The acceptance and lineage below describe the earlier bytes; this product is not offered for reuse until its accepted bytes are restored.
         </Notice>
       ) : null}
       {drift ? (
         <Notice
+          layout="strip"
           tone="warning"
           title="Changed since inspection"
+          className="border-t"
           actions={
             <Button size="sm" variant="outline" onClick={onInspect}>
               Inspect again
@@ -543,28 +564,45 @@ function ResultDetail({
           {drift.replace(/ Inspect it again\.$/, "")} Accept Result refuses it until you inspect it again.
         </Notice>
       ) : null}
-      <KeyValueList
-        columns={2}
-        items={[
-          { label: "Kind", value: kindLabel(row.kind, row.channel) },
-          { label: "Processing", value: <StatusBadge kind="processing" value={row.processingState} /> },
-          { label: "Availability", value: <StatusBadge kind="availability" value={row.availability} /> },
-          { label: "Size", value: row.file ? formatBytes(row.file.sizeBytes) : "Unknown" },
-          { label: "Modified", value: row.file ? formatDateTime(row.file.modifiedAt) : "Unknown" },
-          { label: "Found by", value: row.discovered === "attached" ? "Attached by you" : "Output location discovery" },
-          { label: "View association", value: <AssociationText row={row} /> },
-          { label: "Input-frame lineage", value: <StatusBadge kind="lineage" value={row.lineage} />, source: row.lineage === "unknown" ? "No input-frame record was read" : "Recorded by the tool" },
-          { label: "SHA-256 now", value: row.currentSha ?? "Unavailable", mono: true },
-          ...(row.acceptance === "candidate"
-            ? [
-                { label: "SHA-256 at inspection", value: inspection?.sha256 ?? "Not inspected", mono: true },
-                { label: "Inspected", value: inspection ? formatDateTime(inspection.at) : "Not yet: the file is still being written" },
-              ]
-            : [{ label: "SHA-256 at acceptance", value: row.acceptedSha ?? "Not accepted", mono: true }]),
-          { label: "Acceptance", value: row.acceptedAt ? `Accepted ${formatDateTime(row.acceptedAt)}` : "Candidate" },
-          { label: "Used by Views", value: dependents.length > 0 ? dependents.map((v) => v.name).join(", ") : "None" },
-        ]}
-      />
+      <PanelSection title="File" id="results.file" level={3}>
+        <ValueList
+          label="File"
+          items={[
+            { label: "Kind", value: kindLabel(row.kind, row.channel), source: row.kind ? undefined : "not known yet" },
+            { label: "Processing", value: <StatusBadge kind="processing" value={row.processingState} /> },
+            { label: "Availability", value: <StatusBadge kind="availability" value={row.availability} /> },
+            { label: "Size", value: row.file ? formatBytes(row.file.sizeBytes) : "Unknown", source: row.file ? "file system" : undefined },
+            { label: "Modified", value: row.file ? formatDateTime(row.file.modifiedAt) : "Unknown", source: row.file ? "file system" : undefined },
+            { label: "Found by", value: row.discovered === "attached" ? "Attached by you" : "Output location discovery" },
+          ]}
+        />
+      </PanelSection>
+      <PanelSection title="Lineage" id="results.lineage" level={3}>
+        <ValueList
+          label="Lineage"
+          items={[
+            { label: "View association", value: <AssociationText row={row} /> },
+            { label: "Input-frame lineage", value: <StatusBadge kind="lineage" value={row.lineage} />, source: row.lineage === "unknown" ? "No input-frame record was read" : "Recorded by the tool" },
+            { label: "Used by Views", value: dependents.length > 0 ? dependents.map((v) => v.name).join(", ") : "None" },
+          ]}
+        />
+      </PanelSection>
+      <PanelSection title="Identity and acceptance" id="results.identity" level={3}>
+        <ValueList
+          label="Identity and acceptance"
+          items={[
+            { label: "SHA-256 now", value: row.currentSha ?? "Unavailable", mono: true, source: row.currentSha ? "hashed now" : undefined },
+            ...(row.acceptance === "candidate"
+              ? [
+                  { label: "SHA-256 at inspection", value: inspection?.sha256 ?? "Not inspected", mono: true, source: inspection ? "recorded at inspection" : undefined },
+                  { label: "Inspected", value: inspection ? formatDateTime(inspection.at) : "Not yet: the file is still being written" },
+                ]
+              : [{ label: "SHA-256 at acceptance", value: row.acceptedSha ?? "Not accepted", mono: true, source: row.acceptedSha ? "recorded at acceptance" : undefined }]),
+            { label: "Acceptance", value: row.acceptedAt ? `Accepted ${formatDateTime(row.acceptedAt)}` : "Candidate" },
+          ]}
+          className="[&_dd]:[overflow-wrap:anywhere]"
+        />
+      </PanelSection>
     </section>
   )
 }

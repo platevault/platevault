@@ -154,6 +154,45 @@ export function computeWindows(target: Target, site: ObservingSite, criteria: Pl
   return windows
 }
 
+export interface NightSample {
+  ms: number
+  sunAlt: number
+  moonAlt: number
+  /** Null when the Target has no coordinates. */
+  targetAlt: number | null
+}
+
+export interface NightProfile {
+  night: string
+  startMs: number
+  endMs: number
+  samples: NightSample[]
+}
+
+/**
+ * Display samples for the night timeline (harness v2, D's planner): Sun, Moon
+ * and Target altitude every 10 minutes from local noon to noon, on the same
+ * grid and with the same low-precision positions as `computeWindows`. It
+ * draws the sky; it decides nothing about windows.
+ */
+export function nightProfile(target: Target, site: ObservingSite, night: string): NightProfile {
+  const startMs = Math.round((Date.parse(`${night}T12:00:00Z`) - (site.longitude / 15) * 3_600_000) / (SAMPLE_MIN * 60_000)) * SAMPLE_MIN * 60_000
+  const samples: NightSample[] = []
+  for (let i = 0; i <= (24 * 60) / SAMPLE_MIN; i += 1) {
+    const ms = startMs + i * SAMPLE_MIN * 60_000
+    const jd = julianDay(ms)
+    const sun = sunPosition(jd)
+    const moon = moonPosition(jd)
+    samples.push({
+      ms,
+      sunAlt: altitudeDeg(sun.ra, sun.dec, site.latitude, site.longitude, jd),
+      moonAlt: altitudeDeg(moon.ra, moon.dec, site.latitude, site.longitude, jd),
+      targetAlt: target.ra === null || target.dec === null ? null : altitudeDeg(target.ra, target.dec, site.latitude, site.longitude, jd),
+    })
+  }
+  return { night, startMs, endMs: startMs + 86_400_000, samples }
+}
+
 /** Short zone name at an instant, e.g. "CEST". */
 export function zoneAbbreviation(iso: string, timeZone: string): string {
   const part = new Intl.DateTimeFormat("en-GB", { timeZone, timeZoneName: "short" }).formatToParts(new Date(iso)).find((p) => p.type === "timeZoneName")

@@ -11,6 +11,7 @@ import { type Column, DataTable } from "@/components/app/data-table"
 import { ActionError, EmptyState, Notice, SaveState, UnknownValue } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { StatusBadge, type StatusValue } from "@/components/app/status"
+import { Inspector } from "@/components/app/studio"
 import { openPanel } from "@/app/ui-state"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -26,7 +27,8 @@ import { formatDateTime, formatDuration, formatNight, formatTime, plural } from 
 import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import { resetClock, setClockTo } from "@/store/simulation"
 import { disableNotifications, enableNotifications, type EnableOutcome, saveCalendarExport, savePlan, setPlanningSite } from "./lib/actions"
-import { calendarFile, computeWindows, criteriaSummary, defaultCriteria, downloadText, formatZonedDateTime, nightAt, PLAN_NIGHTS, reminderKey, zoneAbbreviation } from "./lib/planning"
+import { calendarFile, computeWindows, criteriaSummary, defaultCriteria, downloadText, formatZonedDateTime, type NightProfile, nightAt, nightProfile, PLAN_NIGHTS, reminderKey, zoneAbbreviation } from "./lib/planning"
+import { clockTime, darkInterval, NightLegend, NightTimeline } from "./night-timeline"
 import { PrototypeControls } from "./shared"
 
 const LEAD_TIMES = [
@@ -164,6 +166,10 @@ function TargetPlan({ target }: { target: Target }) {
           </div>
         }
       />
+      {/* Studio layout (harness v2): the nights and their windows fill the pane; the inputs that shape them
+          (site, criteria, Planned, reminders) sit in the inspector on the right. */}
+      <div className="flex min-h-0 flex-1 max-md:flex-col">
+        <div className="min-w-0 flex-1 overflow-y-auto">
       <PageBody>
         {lastExport ? (
           <Notice
@@ -178,100 +184,6 @@ function TargetPlan({ target }: { target: Target }) {
             {plural(lastExport.windows.length, "window")} at {catalog.sites[lastExport.siteId]?.name}, times in {lastExport.timeZone}. The file is a one-time snapshot: later criteria changes need a new export.
           </Notice>
         ) : null}
-
-        <Section id="t5-plan-site" title="Planning site" description="Only changes which windows you see. Project membership and session capture sites stay as they are.">
-          {sites.length === 0 ? (
-            <EmptyState
-              icon={MapPin}
-              title="No observing sites saved"
-              description="Windows need a site with coordinates and a time zone."
-              action={<Button render={<Link to="/settings/sites" search={{ return: returnPath }} />}>Add a site</Button>}
-            />
-          ) : (
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1.5">
-                <Label id={siteSelectId}>Planning site</Label>
-                <Select
-                  items={sites.map((s) => ({ value: s.id, label: s.name }))}
-                  value={planningSite?.id ?? null}
-                  onValueChange={(value) => {
-                    const result = setPlanningSite(value as string, target.id)
-                    setSiteError(result.ok ? null : result.message)
-                  }}
-                >
-                  <SelectTrigger aria-labelledby={siteSelectId} className="w-64">
-                    <SelectValue placeholder="Choose a planning site" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sites.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                        {s.id === settings.defaultSiteId ? " (default)" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {planningSite ? (
-                <span className="text-sm text-muted-foreground tabular-nums">
-                  {planningSite.latitude.toFixed(2)}°, {planningSite.longitude.toFixed(2)}° · {planningSite.timeZone}
-                </span>
-              ) : null}
-              <Button variant="link" size="sm" render={<Link to="/settings/sites" search={{ return: returnPath }} />}>
-                Manage sites
-              </Button>
-              {siteError ? <ActionError message={siteError} className="w-full" /> : null}
-            </div>
-          )}
-        </Section>
-
-        <Section id="t5-plan-criteria" title="Criteria" description="Every listed window meets all of these at each 10-minute sample it covers.">
-          <fieldset className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <legend className="sr-only">Window criteria</legend>
-            <NumberField id="min-alt" label="Minimum altitude (°)" value={textFor("minAltitudeDeg")} error={errors.minAltitudeDeg} onChange={(t) => setNumber("minAltitudeDeg", t)} />
-            <NumberField id="min-dur" label="Minimum duration (min)" value={textFor("minDurationMin")} error={errors.minDurationMin} onChange={(t) => setNumber("minDurationMin", t)} />
-            <fieldset className="space-y-1.5">
-              <legend className="text-sm font-medium">Darkness</legend>
-              <RadioGroup value={criteria.darkness} onValueChange={(v) => setCriteria((c) => ({ ...c, darkness: v as PlanCriteria["darkness"] }))} className="flex gap-4">
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="astronomical" id="dark-astro" />
-                  <Label htmlFor="dark-astro" className="font-normal">
-                    Astronomical
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="nautical" id="dark-naut" />
-                  <Label htmlFor="dark-naut" className="font-normal">
-                    Nautical
-                  </Label>
-                </div>
-              </RadioGroup>
-            </fieldset>
-            <NumberField
-              id="moon-illum"
-              label="Maximum Moon illumination (%)"
-              hint="Empty: no limit. Applies while the Moon is up."
-              value={textFor("maxMoonIlluminationPct")}
-              error={errors.maxMoonIlluminationPct}
-              onChange={(t) => setNumber("maxMoonIlluminationPct", t, true)}
-            />
-            <NumberField
-              id="moon-sep"
-              label="Minimum Moon separation (°)"
-              hint="Empty: no limit. Applies while the Moon is up."
-              value={textFor("minMoonSeparationDeg")}
-              error={errors.minMoonSeparationDeg}
-              onChange={(t) => setNumber("minMoonSeparationDeg", t, true)}
-            />
-            <div className="flex items-end">
-              <SaveState state={!valid ? "unsaved" : saveState} message={saveMessage} onRetry={() => {
-                const result = savePlan(target.id, { criteria }, criteria)
-                setSaveState(result.ok ? "saved" : "failed")
-                setSaveMessage(result.ok ? undefined : result.message)
-              }} />
-            </div>
-          </fieldset>
-        </Section>
 
         <Section
           id="t5-plan-windows"
@@ -288,7 +200,7 @@ function TargetPlan({ target }: { target: Target }) {
           ) : !planningSite ? (
             <p className="text-sm text-muted-foreground">No planning site chosen. PlateVault never picks one for you.</p>
           ) : (
-            <WindowTable windows={windows} site={planningSite} onReset={() => {
+            <WindowTable target={target} windows={windows} site={planningSite} onReset={() => {
               setDraftText({})
               setCriteria(defaultCriteria(planningSite))
             }} />
@@ -342,6 +254,104 @@ function TargetPlan({ target }: { target: Target }) {
           </div>
         </Section>
 
+      </PageBody>
+        </div>
+        <Inspector label="Plan settings" widthKey="plan.inspector" initialWidth={336}>
+          <div className="space-y-5 px-3 py-3">
+        <Section id="t5-plan-site" title="Planning site" description="Only changes which windows you see. Project membership and session capture sites stay as they are.">
+          {sites.length === 0 ? (
+            <EmptyState
+              icon={MapPin}
+              title="No observing sites saved"
+              description="Windows need a site with coordinates and a time zone."
+              action={<Button render={<Link to="/settings/sites" search={{ return: returnPath }} />}>Add a site</Button>}
+            />
+          ) : (
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1.5">
+                <Label id={siteSelectId}>Planning site</Label>
+                <Select
+                  items={sites.map((s) => ({ value: s.id, label: s.name }))}
+                  value={planningSite?.id ?? null}
+                  onValueChange={(value) => {
+                    const result = setPlanningSite(value as string, target.id)
+                    setSiteError(result.ok ? null : result.message)
+                  }}
+                >
+                  <SelectTrigger aria-labelledby={siteSelectId} className="w-64">
+                    <SelectValue placeholder="Choose a planning site" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sites.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                        {s.id === settings.defaultSiteId ? " (default)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {planningSite ? (
+                <span className="text-sm text-muted-foreground tabular-nums">
+                  {planningSite.latitude.toFixed(2)}°, {planningSite.longitude.toFixed(2)}° · {planningSite.timeZone}
+                </span>
+              ) : null}
+              <Button variant="link" size="sm" render={<Link to="/settings/sites" search={{ return: returnPath }} />}>
+                Manage sites
+              </Button>
+              {siteError ? <ActionError message={siteError} className="w-full" /> : null}
+            </div>
+          )}
+        </Section>
+
+        <Section id="t5-plan-criteria" title="Criteria" description="Every listed window meets all of these at each 10-minute sample it covers.">
+          <fieldset className="grid grid-cols-1 gap-3">
+            <legend className="sr-only">Window criteria</legend>
+            <NumberField id="min-alt" label="Minimum altitude (°)" value={textFor("minAltitudeDeg")} error={errors.minAltitudeDeg} onChange={(t) => setNumber("minAltitudeDeg", t)} />
+            <NumberField id="min-dur" label="Minimum duration (min)" value={textFor("minDurationMin")} error={errors.minDurationMin} onChange={(t) => setNumber("minDurationMin", t)} />
+            <fieldset className="space-y-1.5">
+              <legend className="text-sm font-medium">Darkness</legend>
+              <RadioGroup value={criteria.darkness} onValueChange={(v) => setCriteria((c) => ({ ...c, darkness: v as PlanCriteria["darkness"] }))} className="flex gap-4">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="astronomical" id="dark-astro" />
+                  <Label htmlFor="dark-astro" className="font-normal">
+                    Astronomical
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="nautical" id="dark-naut" />
+                  <Label htmlFor="dark-naut" className="font-normal">
+                    Nautical
+                  </Label>
+                </div>
+              </RadioGroup>
+            </fieldset>
+            <NumberField
+              id="moon-illum"
+              label="Maximum Moon illumination (%)"
+              hint="Empty: no limit. Applies while the Moon is up."
+              value={textFor("maxMoonIlluminationPct")}
+              error={errors.maxMoonIlluminationPct}
+              onChange={(t) => setNumber("maxMoonIlluminationPct", t, true)}
+            />
+            <NumberField
+              id="moon-sep"
+              label="Minimum Moon separation (°)"
+              hint="Empty: no limit. Applies while the Moon is up."
+              value={textFor("minMoonSeparationDeg")}
+              error={errors.minMoonSeparationDeg}
+              onChange={(t) => setNumber("minMoonSeparationDeg", t, true)}
+            />
+            <div className="flex items-end">
+              <SaveState state={!valid ? "unsaved" : saveState} message={saveMessage} onRetry={() => {
+                const result = savePlan(target.id, { criteria }, criteria)
+                setSaveState(result.ok ? "saved" : "failed")
+                setSaveMessage(result.ok ? undefined : result.message)
+              }} />
+            </div>
+          </fieldset>
+        </Section>
+
         <Section id="t5-plan-planned" title="Planned" description="Marking a Target Planned is an explicit opt-in. Reminders cover planned Targets only.">
           <div className="flex flex-wrap items-center gap-3">
             <Switch
@@ -358,7 +368,9 @@ function TargetPlan({ target }: { target: Target }) {
         </Section>
 
         <RemindersSection target={target} planned={Boolean(plan?.planned)} planningSite={planningSite} defaultSite={defaultSite} savedCriteria={savedCriteria} now={now} returnPath={returnPath} />
-      </PageBody>
+          </div>
+        </Inspector>
+      </div>
 
       {planningSite ? (
         <ExportDialog
@@ -411,9 +423,49 @@ function NumberField({ id, label, value, error, hint, onChange }: { id: string; 
   )
 }
 
-function WindowTable({ windows, site, onReset }: { windows: ObservingWindow[]; site: ObservingSite; onReset: () => void }) {
+/**
+ * D's planner in studio dress: the chosen night drawn large on its mount with
+ * every window that night, then one row per window with its night's sky in
+ * miniature. Choosing a row's night draws it above; times stay in text.
+ */
+function WindowTable({ target, windows, site, onReset }: { target: Target; windows: ObservingWindow[]; site: ObservingSite; onReset: () => void }) {
+  const nights = useMemo(() => [...new Set(windows.map((w) => nightAt(Date.parse(w.start), site)))], [windows, site])
+  const profiles = useMemo(() => new Map(nights.map((n) => [n, nightProfile(target, site, n)])), [nights, target, site])
+  const [chosen, setChosen] = useState<string | null>(null)
+  const night = chosen !== null && nights.includes(chosen) ? chosen : (nights[0] ?? null)
+  const shown = night ? profiles.get(night) : undefined
+  const nightWindows = windows.filter((w) => nightAt(Date.parse(w.start), site) === night)
+  const describe = (profile: NightProfile, list: ObservingWindow[]) => {
+    const dark = darkInterval(profile)
+    return `${formatNight(profile.night, true)} at ${site.name}: ${dark ? `astronomical dark ${clockTime(dark.startMs, site.timeZone)}–${clockTime(dark.endMs, site.timeZone)}` : "no astronomical dark"}; ${
+      list.length === 0 ? "no window" : `${list.length === 1 ? "window" : "windows"} ${list.map((w) => windowTimes(w, site)).join(", ")}`
+    }`
+  }
+  const dark = shown ? darkInterval(shown) : null
   const columns: Column<ObservingWindow>[] = [
-    { id: "night", header: "Night", rowHeader: true, sortValue: (w) => w.start, cell: (w) => formatNight(nightAt(Date.parse(w.start), site), true) },
+    {
+      id: "night",
+      header: "Night",
+      rowHeader: true,
+      sortValue: (w) => w.start,
+      cell: (w) => {
+        const n = nightAt(Date.parse(w.start), site)
+        return (
+          <Button variant="link" size="xs" className="px-0" aria-pressed={n === night} title="Draw this night above" onClick={() => setChosen(n)}>
+            {formatNight(n, true)}
+          </Button>
+        )
+      },
+    },
+    {
+      id: "sky",
+      header: "Sky, noon to noon",
+      className: "w-[32%] min-w-36",
+      cell: (w) => {
+        const profile = profiles.get(nightAt(Date.parse(w.start), site))
+        return profile ? <NightTimeline profile={profile} windows={[w]} highlightKey={w.key} ticks={false} height={18} timeZone={site.timeZone} label={describe(profile, [w])} /> : null
+      },
+    },
     { id: "time", header: `Time (${site.timeZone})`, cell: (w) => windowTimes(w, site) },
     { id: "duration", header: "Duration", align: "right", cell: (w) => windowDuration(w) },
     { id: "alt", header: "Max altitude", align: "right", cell: (w) => `${Math.round(w.maxAltitudeDeg)}°` },
@@ -421,25 +473,41 @@ function WindowTable({ windows, site, onReset }: { windows: ObservingWindow[]; s
     { id: "site", header: "Site", cell: () => site.name },
   ]
   return (
-    <DataTable
-      label={`Observing windows at ${site.name}, times in ${site.timeZone}`}
-      rows={windows}
-      columns={columns}
-      getRowId={(w) => w.key}
-      scroll="none"
-      empty={
-        <EmptyState
-          icon={CalendarDays}
-          title={`No window meets these criteria in the next ${PLAN_NIGHTS} nights`}
-          description="Lower the minimum altitude or duration, or relax the Moon limits."
-          action={
-            <Button variant="outline" onClick={onReset}>
-              Reset criteria
-            </Button>
-          }
-        />
-      }
-    />
+    <div className="space-y-2">
+      {shown && night ? (
+        <div className="space-y-1.5 rounded-md bg-mount p-2 shadow-[inset_0_0_0_1px_var(--mount-edge)]">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-xs">
+            <h3 className="font-medium">Night of {formatNight(night, true)}</h3>
+            <p className="num text-muted-foreground">
+              {dark ? `Astronomical dark ${clockTime(dark.startMs, site.timeZone)}–${clockTime(dark.endMs, site.timeZone)}` : "No astronomical dark"} · {nightWindows.length}{" "}
+              {nightWindows.length === 1 ? "window" : "windows"} · {site.name}, {site.timeZone}
+            </p>
+          </div>
+          <NightTimeline profile={shown} windows={nightWindows} highlightKey={nightWindows[0]?.key ?? null} timeZone={site.timeZone} height={64} label={describe(shown, nightWindows)} />
+          <NightLegend targetName={target.name} />
+        </div>
+      ) : null}
+      <DataTable
+        label={`Observing windows at ${site.name}, times in ${site.timeZone}`}
+        rows={windows}
+        columns={columns}
+        getRowId={(w) => w.key}
+        activeRowId={nightWindows[0]?.key ?? null}
+        scroll="none"
+        empty={
+          <EmptyState
+            icon={CalendarDays}
+            title={`No window meets these criteria in the next ${PLAN_NIGHTS} nights`}
+            description="Lower the minimum altitude or duration, or relax the Moon limits."
+            action={
+              <Button variant="outline" onClick={onReset}>
+                Reset criteria
+              </Button>
+            }
+          />
+        }
+      />
+    </div>
   )
 }
 

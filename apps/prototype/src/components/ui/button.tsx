@@ -27,7 +27,8 @@ const buttonVariants = cva(
         secondary: "bg-raised text-secondary-foreground hover:bg-hover aria-expanded:bg-hover",
         ghost: "text-foreground hover:bg-hover aria-expanded:bg-hover",
         destructive: "bg-raised text-destructive hover:bg-hover",
-        link: "text-primary underline-offset-4 hover:underline",
+        // Harness v2: links are text, not state, so they stay neutral and carry an underline instead of the accent.
+        link: "text-foreground underline decoration-muted-foreground/60 underline-offset-3 hover:decoration-foreground",
       },
       size: {
         default:
