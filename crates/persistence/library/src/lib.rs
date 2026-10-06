@@ -7054,6 +7054,9 @@ mod tests {
         let original = digest_of(&darks.join("Dark_001.fits"));
         catalog.register_location(&stable_registration(&test)).await.unwrap();
         catalog.register_location(&stable_registration(&darks)).await.unwrap();
+        // The deleted folder stays open so ext4/XFS cannot hand its inode to a folder
+        // made later (R1 below); that reuse is a documented residual not covered here.
+        let _held = std::fs::File::open(&test).unwrap();
         std::fs::remove_dir_all(&test).unwrap();
 
         // Darks moves into the candidate while the first search runs.

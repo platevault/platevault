@@ -996,6 +996,9 @@ async fn a_deleted_or_moved_root_never_blocks_an_unrelated_sibling() {
     let dark_root = register(&darks, "Darks").await.unwrap();
 
     // Test is deleted and Darks moves into an archive folder on the same volume.
+    // The deleted folder stays open so ext4/XFS cannot hand its inode to a folder
+    // made later; that reuse is a documented residual this test does not cover.
+    let _held = std::fs::File::open(&test).unwrap();
     std::fs::remove_dir_all(&test).unwrap();
     let archive = temp.path().join("Archive");
     let moved = archive.join("Darks");
