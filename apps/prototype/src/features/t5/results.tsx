@@ -41,6 +41,52 @@ import {
 } from "./lib/files"
 import { type ControlOutcome, finishWriting, overwriteKeepingStat, restoreKeepingStat, saveExternalImage, simulateApplicationOutput } from "./lib/prototype"
 import { FileChooser, focusHeading, PrototypeControls, shortSha } from "./shared"
+import { PlateMount } from "@/components/app/plate"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import type { Catalog, Disk } from "@/domain/types"
+import { currentFile } from "@/features/t3/model"
+import { PlateThumb } from "@/features/t3/plates"
+import { type StarField, starField } from "@/features/t3/raster"
+
+/**
+ * Plate for a product (HARNESS V1, Direction B). The prototype reads no
+ * product pixels, so the plate is an illustration of an integrated field
+ * drawn from the View's first readable light frame (more stars, no
+ * saturation or invalid samples) and says so in its caption.
+ */
+function productField(disk: Disk, catalog: Catalog, row: ResultRow): StarField | null {
+  const view = catalog.views[row.viewId]
+  for (const id of view?.revisions.at(-1)?.included ?? []) {
+    const asset = catalog.assets[id]
+    const truth = asset ? currentFile(disk, catalog, asset)?.pixelTruth : undefined
+    if (!asset || !truth) continue
+    const integrated = { ...truth, starCount: Math.round(truth.starCount * 1.6), saturatedStars: 0, invalidSamples: 0, trailed: false }
+    return starField(`${row.id}|integrated`, integrated, asset.observed.widthPx, asset.observed.heightPx, null)
+  }
+  return null
+}
+
+function ResultPlate({ row, verifying, inline = false }: { row: ResultRow; verifying: boolean; inline?: boolean }) {
+  const field = useStore((s) => productField(s.disk, s.catalog, row))
+  return (
+    <PlateMount
+      inline={inline}
+      size={inline ? "thumb" : "large"}
+      caption={inline ? row.fileName : kindLabel(row.kind, row.channel)}
+      status={<ProductStateBadge state={productState(row, verifying)} />}
+      dimmed={row.availability !== "available"}
+      sources={[
+        ...(inline ? [{ value: kindLabel(row.kind, row.channel), source: "kind" }] : []),
+        { value: row.file ? formatBytes(row.file.sizeBytes) : "Unknown", source: "size on disk" },
+        { value: row.acceptedAt ? formatDateTime(row.acceptedAt) : "Candidate", source: row.acceptedAt ? "accepted" : "acceptance" },
+        ...(inline ? [] : [{ value: shortSha(row.acceptedSha ?? row.currentSha), source: row.acceptedSha ? "SHA-256 at acceptance" : "SHA-256 now" }]),
+      ]}
+    >
+      {field ? <PlateThumb field={field} width={inline ? 176 : 320} /> : <span className="flex aspect-[3/2] items-center justify-center text-[0.6875rem] text-white/80">No preview</span>}
+      {inline ? null : <span className="absolute right-1 bottom-1 rounded-sm bg-black/70 px-1 text-[0.625rem] text-white">Illustration, not product pixels</span>}
+    </PlateMount>
+  )
+}
 
 const REUSABLE_KINDS: ResultKind[] = ["linear-integration", "channel-product", "mosaic-panel"]
 const REHASH_MS = 650
@@ -133,6 +179,8 @@ function ResultsArea({ view }: { view: View }) {
 
   const [selected, setSelected] = useState<string[]>([])
   const [active, setActive] = useState<string | null>(null)
+  // Table or Plates for accepted Results (B's gallery); view state only.
+  const [acceptedLayout, setAcceptedLayout] = useState<"table" | "plates">("table")
   const [acceptOpen, setAcceptOpen] = useState(false)
   const [acceptError, setAcceptError] = useState<string | null>(null)
   const [attachOpen, setAttachOpen] = useState(false)
@@ -379,28 +427,54 @@ function ResultsArea({ view }: { view: View }) {
           title="Accepted Results"
           description="Accepted products appear on this View, its Project and its Target, and stay in Keep during cleanup."
           actions={
-            <Button size="sm" variant="outline" disabled={!Object.values(catalog.results).some((r) => r.acceptance === "accepted")} onClick={() => {
-              setRehashTrigger((n) => n + 1)
-              setPickerOpen(true)
-            }}>
-              Create View from results
-            </Button>
+            <div className="flex items-center gap-2">
+              <ToggleGroup value={[acceptedLayout]} onValueChange={(v) => v[0] && setAcceptedLayout(v[0] as "table" | "plates")} variant="outline" size="sm" aria-label="Show accepted Results as">
+                <ToggleGroupItem value="table">Table</ToggleGroupItem>
+                <ToggleGroupItem value="plates">Plates</ToggleGroupItem>
+              </ToggleGroup>
+              <Button size="sm" variant="outline" disabled={!Object.values(catalog.results).some((r) => r.acceptance === "accepted")} onClick={() => {
+                setRehashTrigger((n) => n + 1)
+                setPickerOpen(true)
+              }}>
+                Create View from results
+              </Button>
+            </div>
           }
         >
           <p className="text-xs text-muted-foreground" aria-live="polite">
             {rehash.verifying ? "Verifying accepted products against their acceptance digests…" : rehash.verifiedAt ? `Rehashed against acceptance digests at ${formatDateTime(rehash.verifiedAt)}.` : ""}
           </p>
-          <DataTable
-            label="Accepted Results"
-            rows={accepted}
-            columns={acceptedColumns}
-            getRowId={(r) => r.id}
-            activeRowId={active}
-            scroll="none"
-            stickyFirstColumn
-            selection={{ selected: acceptedSelection, onChange: setAcceptedSelection, rowLabel: (r) => r.fileName }}
-            empty={<p className="p-4 text-sm text-muted-foreground">No accepted Results yet. Select candidates above and choose Accept Result.</p>}
-          />
+          {acceptedLayout === "plates" && accepted.length > 0 ? (
+            <ul aria-label="Accepted Results as plates" className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2.5">
+              {accepted.map((r) => (
+                <li key={r.id} className="min-w-0">
+                  <button type="button" aria-label={`Inspect ${r.fileName}`} aria-current={active === r.id ? "true" : undefined} onClick={() => inspect(r)} className="block w-full rounded-[4px] text-left outline-offset-2 aria-[current=true]:shadow-[0_0_0_3px_var(--primary)]">
+                    <ResultPlate row={r} verifying={rehash.verifying} inline />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <DataTable
+              label="Accepted Results"
+              rows={accepted}
+              columns={acceptedColumns}
+              getRowId={(r) => r.id}
+              activeRowId={active}
+              scroll="none"
+              stickyFirstColumn
+              selection={{ selected: acceptedSelection, onChange: setAcceptedSelection, rowLabel: (r) => r.fileName }}
+              rowMenu={{
+                label: (r) => `Actions for ${r.fileName}`,
+                items: (r) => [
+                  { label: "Inspect", onSelect: () => inspect(r) },
+                  { label: acceptedSelection.includes(r.id) ? "Remove from selection" : "Add to selection", onSelect: () => setAcceptedSelection(acceptedSelection.includes(r.id) ? acceptedSelection.filter((id) => id !== r.id) : [...acceptedSelection, r.id]) },
+                  { label: "Copy path", onSelect: () => void navigator.clipboard?.writeText(r.path), group: true },
+                ],
+              }}
+              empty={<p className="p-4 text-sm text-muted-foreground">No accepted Results yet. Select candidates above and choose Accept Result.</p>}
+            />
+          )}
         </Section>
 
         {productInputIds.length > 0 ? <ProductInputs ids={productInputIds} verifying={rehash.verifying} /> : null}
@@ -543,6 +617,8 @@ function ResultDetail({
           {drift.replace(/ Inspect it again\.$/, "")} Accept Result refuses it until you inspect it again.
         </Notice>
       ) : null}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+      <ResultPlate row={row} verifying={verifying} />
       <KeyValueList
         columns={2}
         items={[
@@ -565,6 +641,7 @@ function ResultDetail({
           { label: "Used by Views", value: dependents.length > 0 ? dependents.map((v) => v.name).join(", ") : "None" },
         ]}
       />
+      </div>
     </section>
   )
 }

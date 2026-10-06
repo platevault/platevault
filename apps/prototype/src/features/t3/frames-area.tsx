@@ -6,18 +6,21 @@
  * never exclude, reject or mark frames Usable (PIX-FR-08).
  */
 import { Link, useSearch } from "@tanstack/react-router"
-import { ImageOff, PanelRightClose, PanelRightOpen, Upload } from "lucide-react"
+import { ImageOff, LayoutGrid, PanelRightClose, PanelRightOpen, Rows3, Upload } from "lucide-react"
 import { type FocusEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { getPreferences } from "@/app/preferences"
+import { toggleInspector, useShellUi } from "@/app/ui-state"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { type Column, DataTable, SelectionBar, TableToolbar } from "@/components/app/data-table"
 import { EmptyState, Notice, UnknownValue } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
+import { InspectorSection, InspectorSplit } from "@/components/app/inspector"
 import { STATUS, StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { assetAvailability, measurementApplies, qualityApplicability, targetCoverage } from "@/domain/derive"
 import type { Asset, AssetId, Catalog, Disk, MeasurementImport, Metric, MetricKey, Operation, Session } from "@/domain/types"
 import { formatDuration, formatNight, plural } from "@/lib/format"
@@ -27,6 +30,7 @@ import { defaultFrameUi } from "@/store/slices/t3"
 import { rejectForProject, resolveImportRow, setFrameUi, setLibraryQuality } from "./actions"
 import { SelectField } from "./fields"
 import { FramePreview } from "./frame-preview"
+import { ContactSheet, frameField, type SheetItem } from "./plates"
 import { frameName, ImportDialog } from "./import-dialog"
 import { CSV_COLUMNS } from "./csv"
 import {
@@ -324,9 +328,11 @@ export function FramesArea() {
   const measurableExcluded = measurable.filter((id) => content.excluded.includes(id)).length
   const measureScope = measurableExcluded > 0 ? `Review covers ${measurable.length} readable frames: ${measurable.length - measurableExcluded} included, ${measurableExcluded} excluded.` : null
   const hintId = useId()
-  // The preview pane can be hidden so the frames table takes the full width (F2).
-  const [paneOpen, setPaneOpen] = useState(true)
+  // The inspector (preview and plot) can be hidden so the frames table takes the full width (F2); one shell preference, ⌥⌘0.
+  const paneOpen = useShellUi().inspectorOpen
   const paneId = useId()
+  // Table or Plates (B's contact sheet); view state only, like Finder's view buttons.
+  const [layout, setLayout] = useState<"table" | "plates">("table")
 
   // DataTable owns its sort, so the rendered row order is the order the user sees; J/K and Previous/Next follow it (J22 S5).
   const tableRef = useRef<HTMLDivElement>(null)
@@ -580,6 +586,38 @@ export function FramesArea() {
   const usableAfterMark = confirm === "usable" ? usableAfter(disk, catalog, targetId, checkedIncluded, "usable") : null
   const unusableAfterMark = confirm === "unusable" ? usableAfter(disk, catalog, targetId, checked, "unusable") : null
 
+  const noFrames = (
+    <EmptyState
+      icon={ImageOff}
+      title="No frames match"
+      description={excludedCount > 0 && !ui.showExcluded ? "Excluded frames are hidden; show them or clear the filters." : "Clear the filters to see every frame in this View."}
+      action={
+        <Button size="sm" variant="outline" onClick={() => setFrameUi(view.id, { search: "", sessionId: null, showExcluded: true })}>
+          Clear filters
+        </Button>
+      }
+      className="border-0"
+    />
+  )
+  const sheetItems: SheetItem[] =
+    layout === "plates"
+      ? ordered.map((r) => {
+          const availability = assetAvailability(disk, catalog, r.asset)
+          const fwhm = r.builtIn.fwhm
+          const membership = r.member === "excluded" ? "excluded" : r.member === "included" ? "included" : "unresolved"
+          return {
+            id: r.asset.id,
+            field: availability === "available" ? frameField(r.asset, currentFile(disk, catalog, r.asset)) : null,
+            label: `${r.asset.fileName}, ${r.session ? sessionLabel(r.session) : "no session"}, ${membership}${fwhm ? `, FWHM ${formatMetricFixed(fwhm)} built-in` : `, ${STATE_BADGE[r.state].label}`}`,
+            caption: r.asset.fileName.replace(/\.(fits|xisf)$/i, ""),
+            sources: fwhm ? [{ value: formatMetricFixed(fwhm), source: "FWHM · built-in" }] : [{ value: STATE_BADGE[r.state].label, source: "FWHM" }],
+            status: r.member === "excluded" ? <StatusBadge kind="quality" value="excluded" /> : undefined,
+            dimmed: r.member !== "included",
+            unavailable: availability === "available" ? undefined : STATUS.availability[availability].label,
+          }
+        })
+      : []
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
@@ -696,66 +734,111 @@ export function FramesArea() {
           <p className="text-xs text-muted-foreground tabular-nums">
             {plural(shown.length, "frame")} shown of {memberIds.length} · {sessions.map((s) => `${formatNight(s.night)} ${s.channel}: ${rows.filter((r) => r.asset.sessionId === s.id && r.member === "included").length} of ${s.assetIds.length} in the View`).join(" · ")}
           </p>
-          <Button size="sm" variant="outline" className="ml-auto" aria-expanded={paneOpen} aria-controls={paneOpen ? paneId : undefined} onClick={() => setPaneOpen((open) => !open)}>
-            {paneOpen ? <PanelRightClose aria-hidden="true" data-icon="inline-start" /> : <PanelRightOpen aria-hidden="true" data-icon="inline-start" />}
-            {paneOpen ? "Hide preview and plot" : "Show preview and plot"}
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <ToggleGroup value={[layout]} onValueChange={(v) => v[0] && setLayout(v[0] as "table" | "plates")} variant="outline" size="sm" aria-label="Show frames as">
+              <ToggleGroupItem value="table">
+                <Rows3 aria-hidden="true" data-icon="inline-start" />
+                Table
+              </ToggleGroupItem>
+              <ToggleGroupItem value="plates">
+                <LayoutGrid aria-hidden="true" data-icon="inline-start" />
+                Plates
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <Button size="sm" variant="outline" aria-expanded={paneOpen} aria-controls={paneOpen ? paneId : undefined} aria-keyshortcuts="Alt+Meta+0" onClick={toggleInspector}>
+              {paneOpen ? <PanelRightClose aria-hidden="true" data-icon="inline-start" /> : <PanelRightOpen aria-hidden="true" data-icon="inline-start" />}
+              {paneOpen ? "Hide preview and plot" : "Show preview and plot"}
+            </Button>
+          </div>
         </div>
 
-        <div className={paneOpen ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_min(22rem,40%)] xl:grid-cols-[minmax(0,1fr)_min(26rem,40%)]" : "grid gap-5"}>
-          <div ref={tableRef} className="@container/frames min-w-0 self-start">
-          <DataTable
-            label="Frames in this View"
-            rows={shown}
-            columns={columns}
-            getRowId={(r) => r.asset.id}
-            initialSort={{ columnId: "frame", direction: "asc" }}
-            activeRowId={active?.asset.id ?? null}
-            className="max-h-[40rem]"
-            stickyFirstColumn
-            selection={{ selected: checked, onChange: setCheckedIds, rowLabel: (r) => `${r.asset.fileName}, ${r.session ? sessionLabel(r.session) : "no session"}` }}
-            empty={
-              <EmptyState
-                icon={ImageOff}
-                title="No frames match"
-                description={excludedCount > 0 && !ui.showExcluded ? "Excluded frames are hidden; show them or clear the filters." : "Clear the filters to see every frame in this View."}
-                action={
-                  <Button size="sm" variant="outline" onClick={() => setFrameUi(view.id, { search: "", sessionId: null, showExcluded: true })}>
-                    Clear filters
-                  </Button>
-                }
-                className="border-0"
-              />
-            }
-          />
-          </div>
-          {paneOpen ? (
-          <div id={paneId} className="min-w-0 space-y-4 self-start">
-            {active ? (
-              <FramePreview
-                asset={active.asset}
-                file={activeFile}
-                record={catalog.measurements[active.asset.id]}
-                state={active.state}
-                applies={active.applies}
-                scaleArcsec={pixelScaleFor(catalog, active.session)}
-                position={{ index: Math.max(0, position), total: ordered.length }}
-                copies={active.asset.copies.map((c) => ({ location: catalog.locations[c.locationId]?.displayName ?? "Unknown location", path: c.path }))}
-                onPrevious={() => step(-1)}
-                onNext={() => step(1)}
-                exclude={{ label: excludeLabel, disabledReason: readOnlyReason, run: () => toggleExclusion(active) }}
-                unavailableReason={activeAvailability === "available" ? null : previewUnavailableReason(activeAvailability)}
-              />
-            ) : null}
-            {/* The plot sits with the preview it drives, so the frames table starts higher (density 7). */}
-            <div className="space-y-2">
-              <SelectField className="w-44" label="Plot metric" value={ui.metric} options={metricOptions} onChange={(value) => setFrameUi(view.id, { metric: value as MetricKey })} />
-              <p className="text-xs text-muted-foreground">Click a point to make it the current frame; the table and preview follow.</p>
-              <MeasurementPlot points={plotPoints} metric={ui.metric} activeId={active?.asset.id ?? null} onSelect={select} />
+        <InspectorSplit
+          id={paneId}
+          label="Frame inspector"
+          content={
+            <div ref={tableRef} className="@container/frames min-w-0">
+              {layout === "table" ? (
+                <DataTable
+                  label="Frames in this View"
+                  rows={shown}
+                  columns={columns}
+                  getRowId={(r) => r.asset.id}
+                  initialSort={{ columnId: "frame", direction: "asc" }}
+                  activeRowId={active?.asset.id ?? null}
+                  className="max-h-[40rem]"
+                  stickyFirstColumn
+                  selection={{ selected: checked, onChange: setCheckedIds, rowLabel: (r) => `${r.asset.fileName}, ${r.session ? sessionLabel(r.session) : "no session"}` }}
+                  rowMenu={{
+                    label: (r) => `Actions for ${r.asset.fileName}`,
+                    items: (r) => {
+                      const singleKey = getPreferences().singleKeyShortcuts
+                      const isChecked = checked.includes(r.asset.id)
+                      return [
+                        {
+                          label: "Show in preview",
+                          onSelect: () => {
+                            select(r.asset.id)
+                            if (!paneOpen) toggleInspector()
+                          },
+                        },
+                        {
+                          label: r.member === "excluded" ? "Restore to View" : "Exclude from View",
+                          shortcut: singleKey ? "X" : undefined,
+                          keys: singleKey ? "X" : undefined,
+                          disabled: !editable,
+                          onSelect: () => {
+                            select(r.asset.id)
+                            toggleExclusion(r)
+                          },
+                          group: true,
+                        },
+                        { label: isChecked ? "Remove from selection" : "Add to selection", onSelect: () => setCheckedIds(isChecked ? checked.filter((id) => id !== r.asset.id) : [...checked, r.asset.id]) },
+                        { label: "Copy file name", onSelect: () => void navigator.clipboard?.writeText(r.asset.fileName), group: true },
+                      ]
+                    },
+                  }}
+                  empty={noFrames}
+                />
+              ) : shown.length === 0 ? (
+                noFrames
+              ) : (
+                <ContactSheet items={sheetItems} activeId={active?.asset.id ?? null} onSelect={select} label="Frames in this View as plates" />
+              )}
             </div>
-          </div>
-          ) : null}
-        </div>
+          }
+          inspector={
+            <>
+              <InspectorSection title="Current frame">
+                {active ? (
+                  <FramePreview
+                    asset={active.asset}
+                    file={activeFile}
+                    record={catalog.measurements[active.asset.id]}
+                    state={active.state}
+                    applies={active.applies}
+                    scaleArcsec={pixelScaleFor(catalog, active.session)}
+                    position={{ index: Math.max(0, position), total: ordered.length }}
+                    copies={active.asset.copies.map((c) => ({ location: catalog.locations[c.locationId]?.displayName ?? "Unknown location", path: c.path }))}
+                    onPrevious={() => step(-1)}
+                    onNext={() => step(1)}
+                    exclude={{ label: excludeLabel, disabledReason: readOnlyReason, run: () => toggleExclusion(active) }}
+                    unavailableReason={activeAvailability === "available" ? null : previewUnavailableReason(activeAvailability)}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">No frame is current. Choose a frame in the table.</p>
+                )}
+              </InspectorSection>
+              {/* The plot sits with the preview it drives, so the frames table starts higher (density 7). */}
+              <InspectorSection title="Measurement plot">
+                <div className="space-y-2">
+                  <SelectField className="w-44" label="Plot metric" value={ui.metric} options={metricOptions} onChange={(value) => setFrameUi(view.id, { metric: value as MetricKey })} />
+                  <p className="text-xs text-muted-foreground">Click a point to make it the current frame; the table and preview follow.</p>
+                  <MeasurementPlot points={plotPoints} metric={ui.metric} activeId={active?.asset.id ?? null} onSelect={select} />
+                </div>
+              </InspectorSection>
+            </>
+          }
+        />
         {notMeasured > 0 && op?.status === "canceled" ? (
           <Notice tone="info" title="Cancel kept your selection and exclusions">
             Frames that were not reached read Not measured. Choose Review frames to reuse the values already computed and measure the rest.

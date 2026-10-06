@@ -61,6 +61,16 @@
   --color-warning: var(--warning);
   --color-info: var(--info);
   --color-row-alt: var(--row-alt);
+  --color-mount: var(--mount);
+  --color-mount-edge: var(--mount-edge);
+  --color-plate: var(--plate);
+  --color-band-day: var(--band-day);
+  --color-band-civil: var(--band-civil);
+  --color-band-nautical: var(--band-nautical);
+  --color-band-astro: var(--band-astro);
+  --color-band-moon: var(--band-moon);
+  --color-curve: var(--curve);
+  --color-window-mark: var(--window-mark);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -141,6 +151,19 @@
   --chart-4: #c8c8c8;
   --chart-5: #4a4a4a;
   --shadow-window: 0 0 0 0.5px rgb(0 0 0 / 0.18), 0 10px 30px rgb(0 0 0 / 0.22);
+  /* B's plates on mounts: a paper mat around an always-dark plate. Secondary label 5.1:1 on the mat. */
+  --mount: #e6e3dc;
+  --mount-edge: rgb(0 0 0 / 0.14);
+  --plate: #07080a;
+  /* D's night timeline: sky bands from the Sun's altitude, the Moon strip, the Target's altitude curve
+     (≥ 3:1 on every band) and observing windows outlined in white (windows only fall in dark bands). */
+  --band-day: #f1efe8;
+  --band-civil: #b9c6dc;
+  --band-nautical: #6d82a8;
+  --band-astro: #1f2a40;
+  --band-moon: #d9c26a;
+  --curve: #c25e00;
+  --window-mark: #ffffff;
   color-scheme: light;
 }
 
@@ -190,6 +213,16 @@
   --chart-4: #4a4a4a;
   --chart-5: #cfcfcf;
   --shadow-window: 0 0 0 0.5px rgb(0 0 0 / 0.6), 0 10px 30px rgb(0 0 0 / 0.5);
+  --mount: #151515;
+  --mount-edge: rgb(255 255 255 / 0.1);
+  --plate: #050607;
+  --band-day: #3d3d3d;
+  --band-civil: #36425c;
+  --band-nautical: #232d44;
+  --band-astro: #0c1019;
+  --band-moon: #8a7a36;
+  --curve: #ffa23a;
+  --window-mark: #ffffff;
   color-scheme: dark;
 }
 

@@ -13,7 +13,8 @@
  *   and the first column stay in view while a wide table scrolls sideways.
  */
 import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react"
-import { type KeyboardEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { type KeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { RowMenu, type RowMenuItem, type RowMenuRequest } from "@/components/app/row-menu"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -80,6 +81,10 @@ export interface DataTableProps<T> {
    * backgrounds do not reach the pinned cells.
    */
   stickyFirstColumn?: boolean
+  /** Context menu per row (right-click, ⇧F10, Menu key); every item repeats an action reachable elsewhere. */
+  rowMenu?: { label: (row: T) => string; items: (row: T) => RowMenuItem[] }
+  /** Called when a row is clicked or receives focus, so an inspector can follow the current row. */
+  onRowFocus?: (row: T) => void
 }
 
 export function DataTable<T>({
@@ -97,6 +102,8 @@ export function DataTable<T>({
   scroll = "frame",
   groups,
   stickyFirstColumn = false,
+  rowMenu,
+  onRowFocus,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState(initialSort ?? null)
   const frame = useRef<HTMLDivElement>(null)
@@ -162,7 +169,28 @@ export function DataTable<T>({
     selection.onChange(checked ? [...selection.selected, id] : selection.selected.filter((s) => s !== id))
   }
 
+  // Row context menu (HARNESS V1): right-click at the pointer; ⇧F10 or the Menu key under the focused row.
+  const [menu, setMenu] = useState<RowMenuRequest | null>(null)
+  const rowById = new Map(sorted.map((row) => [getRowId(row), row]))
+  function openRowMenu(rowElement: HTMLElement, at: { x: number; y: number } | null, returnFocus: HTMLElement | null) {
+    const row = rowById.get(rowElement.dataset.rowId ?? "")
+    if (!rowMenu || row === undefined) return false
+    const rect = rowElement.getBoundingClientRect()
+    const fallbackFocus = rowElement.querySelector<HTMLElement>("a[href], button:not([disabled]), [role=checkbox]")
+    setMenu({ label: rowMenu.label(row), items: rowMenu.items(row), x: at?.x ?? rect.left + 24, y: at?.y ?? rect.bottom, returnFocus: returnFocus ?? fallbackFocus, keyboard: at === null })
+    return true
+  }
+  function onContextMenu(event: ReactMouseEvent<HTMLTableSectionElement>) {
+    const rowElement = (event.target as HTMLElement).closest<HTMLElement>("tr[data-row-id]")
+    if (rowElement && openRowMenu(rowElement, { x: event.clientX, y: event.clientY }, document.activeElement instanceof HTMLElement && rowElement.contains(document.activeElement) ? document.activeElement : null)) event.preventDefault()
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLTableSectionElement>) {
+    if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
+      const rowElement = (event.target as HTMLElement).closest<HTMLElement>("tr[data-row-id]")
+      if (rowElement && openRowMenu(rowElement, null, event.target as HTMLElement)) event.preventDefault()
+      return
+    }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
     const target = event.target as HTMLElement
     if (target.closest("input, textarea, select, [role=listbox], [role=menu]") && target.tagName !== "BUTTON") return
@@ -291,7 +319,7 @@ export function DataTable<T>({
           </tbody>
         ) : (
           bodies.map((body, bodyIndex) => (
-            <tbody key={body.key ?? "rows"} onKeyDown={onKeyDown}>
+            <tbody key={body.key ?? "rows"} onKeyDown={onKeyDown} onContextMenu={rowMenu ? onContextMenu : undefined}>
               {body.key !== null && groups ? (
                 <tr className={cn("border-b bg-window", bodyIndex > 0 && "border-t")}>
                   <th scope="rowgroup" colSpan={columnCount} className="h-(--row-h) px-2.5 text-left text-xs font-semibold text-muted-foreground">
@@ -308,6 +336,9 @@ export function DataTable<T>({
                   <tr
                     key={id}
                     data-row
+                    data-row-id={id}
+                    onFocus={onRowFocus ? () => onRowFocus(row) : undefined}
+                    onClick={onRowFocus ? () => onRowFocus(row) : undefined}
                     aria-current={activeRowId === id ? "true" : undefined}
                     data-selected={isSelected || undefined}
                     className={cn(
@@ -356,6 +387,7 @@ export function DataTable<T>({
           ))
         )}
       </table>
+      {rowMenu ? <RowMenu request={menu} onClose={() => setMenu(null)} /> : null}
     </div>
   )
 }

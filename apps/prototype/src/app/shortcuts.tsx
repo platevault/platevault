@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { ALL_NAV_ITEMS } from "./navigation"
 import { getPreferences, setSingleKeyShortcuts, usePreferences } from "./preferences"
-import { closePanel, openPanel, toggleSidebar, useShellUi } from "./ui-state"
+import { closePanel, openPanel, toggleInspector, toggleSidebar, useShellUi } from "./ui-state"
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
 export const MOD_LABEL = isMac ? "⌘" : "Ctrl"
@@ -31,6 +31,21 @@ export function useGlobalShortcuts() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault()
         openPanel("palette")
+        return
+      }
+      // ⌥⌘0 shows or hides the inspector, as in Xcode (⌥⌘I is the browser's developer tools).
+      if ((event.metaKey || event.ctrlKey) && event.altKey && event.code === "Digit0") {
+        event.preventDefault()
+        toggleInspector()
+        return
+      }
+      // ⌘1–⌘5 select the source-list item with that number, as in Finder and Xcode (the browser keeps them for tabs).
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && /^[1-9]$/.test(event.key)) {
+        const item = ALL_NAV_ITEMS.find((i) => i.digit === event.key)
+        if (item) {
+          event.preventDefault()
+          router.history.push(item.to)
+        }
         return
       }
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return
@@ -84,6 +99,9 @@ export const SHORTCUTS: Array<{ keys: string[]; label: string }> = [
   { keys: ["/"], label: "Focus the page search or filter" },
   { keys: ["["], label: "Collapse or expand the sidebar" },
   ...ALL_NAV_ITEMS.map((item) => ({ keys: ["G", item.goKey === "," ? "," : item.goKey.toUpperCase()], label: `Go to ${item.label}` })),
+  ...ALL_NAV_ITEMS.filter((item) => item.digit).map((item) => ({ keys: [MOD_LABEL, item.digit!], label: `Open ${item.label} (desktop app)` })),
+  { keys: ["⌥", MOD_LABEL, "0"], label: "Show or hide the inspector" },
+  { keys: ["⇧", "F10"], label: "Open the context menu of the focused row" },
   { keys: ["↑", "↓"], label: "Move between table rows" },
   { keys: ["Space"], label: "Toggle the focused checkbox" },
   { keys: ["Esc"], label: "Close a dialog, menu or panel" },

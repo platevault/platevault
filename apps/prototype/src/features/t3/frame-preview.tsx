@@ -10,6 +10,7 @@ import { ChevronLeft, ChevronRight, CircleSlash, Sparkles } from "lucide-react"
 import { type KeyboardEvent, type PointerEvent, useEffect, useId, useRef, useState } from "react"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { UnknownValue } from "@/components/app/feedback"
+import { PlateMount } from "@/components/app/plate"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -340,6 +341,16 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
             </Toggle>
           </div>
 
+          <PlateMount
+            caption={header.object ?? "No OBJECT in the header"}
+            status={<span className="num text-muted-foreground">{zoomLabel}</span>}
+            sources={[
+              { value: header.filter ?? "None", source: "FILTER" },
+              { value: `${header.exposureS} s`, source: "EXPTIME" },
+              { value: formatDateTime(header.dateObs), source: "DATE-OBS" },
+              ...(header.ccdTempC === null ? [] : [{ value: `${header.ccdTempC} °C`, source: "CCD-TEMP" }]),
+            ]}
+          >
           <div ref={frameRef} className="w-full">
             {mode === "whole" ? (
               <div
@@ -353,7 +364,7 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
                 onPointerUp={() => {
                   drag.current = null
                 }}
-                className={cn("relative overflow-hidden rounded-lg border bg-black select-none", zoom !== "fit" && "cursor-grab active:cursor-grabbing")}
+                className={cn("relative overflow-hidden bg-plate select-none", zoom !== "fit" && "cursor-grab active:cursor-grabbing")}
                 style={{ height }}
               >
                 {width > 0 ? <Raster field={field} window={window} stretch={stretch} className="block" /> : null}
@@ -402,6 +413,7 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
               </div>
             )}
           </div>
+          </PlateMount>
           <p id={helpId} className="text-xs text-muted-foreground">
             Prototype: a synthetic preview drawn from this frame's fixture facts, not its file pixels. {zoom === "fit" ? "Choose 1:1 or 2:1 to pan by dragging or with the arrow keys." : "Drag or use the arrow keys to pan; Shift pans further."}{" "}
             {field.cfa ? `CFA ${field.cfa} mosaic plane as recorded; not debayered.` : "Mono linear data."}
