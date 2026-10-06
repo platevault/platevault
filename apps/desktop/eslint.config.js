@@ -70,8 +70,14 @@ export default tseslint.config(
     ignores: [
       '**/*.test.{ts,tsx}',
       '**/*.spec.{ts,tsx}',
+      // Component-workbench stories are a review surface, not shipped product
+      // UI: their labels describe the state being demonstrated to a reviewer
+      // and never reach an end user, so the catalog gate does not apply.
+      '**/*.stories.tsx',
+      'src/stories/**',
       '**/__fixtures__/**',
       'src/api/mocks.ts',
+      'src/api/mocks/**',
       'src/data/**',
       'src/dev/**',
     ],
@@ -185,6 +191,17 @@ export default tseslint.config(
     },
   },
 
+  // Component-workbench stories: same carve-out as tests. A story frames a
+  // component for review, so demo-only layout may be expressed inline rather
+  // than promoted into the shared stylesheet.
+  {
+    files: ['**/*.stories.tsx', 'src/stories/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+    },
+  },
+
   // Scope: only lint app source (not generated bindings, not archived src)
   {
     files: ['src/**/*.{ts,tsx}'],
@@ -203,6 +220,8 @@ export default tseslint.config(
       'playwright.config.ts',
       'vite.config.ts',
       'vitest.config.ts',
+      'vitest.storybook.config.ts',
+      '.storybook/**',
       'eslint.config.js',
       // Custom rule files are plain JS executed by ESLint, not app source —
       // they are not in any tsconfig include, so type-aware rules cannot run

@@ -209,6 +209,7 @@ export function Advanced({ save }: AdvancedProps) {
           info={m.settings_advanced_loglevel_info()}
         >
           <select
+            aria-label={m.settings_advanced_log_level()}
             className={`${selectBase} pv-adv-settings__log-select`}
             value={logLevel}
             onChange={(e) => {

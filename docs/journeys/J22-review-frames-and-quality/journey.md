@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [frame-review, view-review, targets, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 066-view-selection, 067-frame-review, 065-project-goals, 064-library-inventory, D02, D03, D08, D10, specs/063-clean-rebuild-contract/decisions.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, specs/065-project-goals/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-d-inspect-frames-and-quality]
+trace: [063-clean-rebuild-contract, 066-view-selection, 067-frame-review, 065-project-goals, 064-library-inventory, D02, D03, D08, D10, D19, specs/063-clean-rebuild-contract/decisions.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, specs/065-project-goals/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-d-inspect-frames-and-quality]
 ---
 
 ## Goal
@@ -15,10 +15,12 @@ trace: [063-clean-rebuild-contract, 066-view-selection, 067-frame-review, 065-pr
 While building a View, the user inspects frames and star measurements, excludes
 poor frames from this View only, and records library usability decisions only
 through explicit, scoped confirmations. Imported measurements keep their
-provenance. Done means the saved View reads Ha 111 / 9h 15m, OIII 97 / 8h 05m
-and 208 lights / 17h 20m, with six 30 Sep exclusions. Its last committed
-revision survives restart. Library quality changes only through the scoped
-confirmations in S11 and S13. Source files remain unchanged.
+provenance and never read as content-verified. Done means the saved View reads
+Ha 111 / 9h 15m, OIII 97 / 8h 05m and 208 lights / 17h 20m, with six 30 Sep
+exclusions. Its last committed revision survives restart. Library quality
+changes only through the scoped confirmations in S11 and S13; a frame whose
+bytes change in place stops counting as Usable until its reviewed bytes return.
+PlateVault writes no source file.
 
 ## Preconditions
 
@@ -26,6 +28,8 @@ confirmations in S11 and S13. Source files remain unchanged.
 - P2: Frame-review properties of the J19 fixture: six named 30 Sep OIII frames have visibly trailed stars; one of the other 42 frames contains a saturated star whose PSF fit fails, at a recorded pixel position; at least one frame has a well-exposed unsaturated star at a recorded position.
 - P3: A PixInsight SubframeSelector CSV export covering the five sessions with FWHM values, plus one row naming a file in no session, one filename present in two session subfolders, and one column with no units and no native equivalent.
 - P4: The J19/P5 manifest is available.
+- P5: For one named 18 Sep Ha frame, a backup of its original bytes and nanosecond mtime, and a replacement file of identical size with different pixel bytes, both kept outside PlateVault.
+- P6: For one named 26 Sep OIII frame that P3 names, a backup of its original bytes and nanosecond mtime, and a same-size variant with different pixel bytes, both kept outside PlateVault.
 
 ## Steps
 
@@ -124,10 +128,10 @@ confirmations in S11 and S13. Source files remain unchanged.
 
 ### S14 — Import measurements {#S14}
 
-- **Do:** Click **Import measurements**, choose the P3 CSV, review the mapping, and confirm it.
-- **Expect:** The mapping review lists matched rows, the unmatched row, and the ambiguous row, with units and source/method. After confirmation, imported values show as imported, with their units, next to native values.
-- **Expect (negative):** No native value is replaced. No frame is excluded, restored, or changes quality, and the View still reads 208.
-- **Trace:** flow D6 · PIX-FR-06, PIX-FR-07, PIX-FR-08 · PIX-AC-04 · D03
+- **Do:** Overwrite the P6 frame in place with its variant and restore its recorded mtime. Click **Import measurements**, choose the P3 CSV, review the mapping, and confirm it. Then restore the P6 frame's original bytes and recorded mtime.
+- **Expect:** The mapping review lists matched rows, the row with no matching frame, and the ambiguous row, with units and source/method. It also lists the P6 row for review, because the frame's bytes differ from the digest recorded when PlateVault measured it. After confirmation, imported values show as imported and content unverified, with their units, next to native values.
+- **Expect (negative):** No imported value attaches to the P6 frame, and no imported value reads verified. Every native value, exclusion and quality state stays as it was, and the View still reads 208.
+- **Trace:** flow D6, cross-flow "External changes" · PIX-FR-06, PIX-FR-07, PIX-FR-08 · PIX-AC-04, PIX-AC-11 · D03, D19
 
 ### S15 — Inspect unresolved import rows {#S15}
 
@@ -135,6 +139,20 @@ confirmations in S11 and S13. Source files remain unchanged.
 - **Expect:** The ambiguous row is attached to no frame until the user resolves it; the unmatched row is attached to none; the column reads unavailable.
 - **Expect (negative):** The column is not shown as built-in FWHM or HFR.
 - **Trace:** flow D6 failure branch · PIX-FR-07 · PIX-AC-05
+
+### S15a — Replace a reviewed frame in place {#S15a}
+
+- **Do:** Outside PlateVault, overwrite the P5 frame with its replacement and restore its recorded mtime. Open NGC 7000 and read its usable Ha integration. Index `Astro-T7 captures` again, then click **Review frames**.
+- **Expect:** Before the rescan, usable Ha still reads 9h 15m, labelled as last verified at S11. After the rescan completes, the frame reads ChangedContent with its previous Usable decision kept as history, and it is listed under the ChangedContent filter. NGC 7000 usable Ha integration reads 9h 10m, labelled as verified at this rescan, and Project `NGC 7000 HOO` reads Ha usable 9h 10m, still met. In Review frames its cached values never read valid, and its imported S14 values show as history. The frame is measured again from its current bytes, and the earlier cached values show as history for the earlier content.
+- **Expect (negative):** Opening NGC 7000 starts no rehash. The frame counts as neither Usable nor Unreviewed after the rescan. No quality decision is recorded, and the View still reads 208 lights / 17h 20m.
+- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01, PIX-FR-06, PRJ-FR-04 · LIB-AC-14, PIX-AC-10 · root FR-017 · D10, D19 · J19/G4
+
+### S15b — Restore the reviewed bytes {#S15b}
+
+- **Do:** Restore the P5 frame's original bytes and recorded mtime, index `Astro-T7 captures` again, and reopen **Review frames**.
+- **Expect:** The rehash matches the reviewed digest. The frame reads Usable, NGC 7000 usable Ha integration and the Project's Ha progress read 9h 15m, its earlier cached values read valid again, and its imported values read content unverified again.
+- **Expect (negative):** The restoration records no new quality decision. Source bytes equal P4 again.
+- **Trace:** flow D1 · LIB-FR-09, PIX-FR-01 · LIB-AC-14 · J19/G4
 
 ### S16 — Save, then restart with an unsaved change {#S16}
 
@@ -148,14 +166,17 @@ confirmations in S11 and S13. Source files remain unchanged.
 - SC1: The View reads exactly Ha 111 / 9h 15m, OIII 97 / 8h 05m, and 208 / 17h 20m after S10 and after S16.
 - SC2: Source bytes equal P4 for 100% of files at S5 and at the end.
 - SC3: Measured values are identical with stretch on and off (S5); the failed fit shows 0 width numbers (S7).
-- SC4: Library quality changes occur only at S11 (208 frames) and S13 (1 frame); the Project rejection changes 0 library totals.
-- SC5: S14 replaces 0 native values and lists both the unmatched and the ambiguous row.
+- SC4: Library quality decisions change only at S11 (208 frames) and S13 (1 frame); the Project rejection changes 0 library totals, and S15a and S15b change applicability only.
+- SC5: S14 replaces 0 native values and lists the row with no matching frame, the ambiguous row and the P6 row. It attaches 0 imported values to the P6 frame and shows 0 imported values as verified.
 - SC6: The Project stays open after the Ha item is met (S12).
+- SC7: With the replacement in place, the frame reads ChangedContent, usable Ha reads 9h 10m and its cached values read valid 0 times (S15a); after S15b usable Ha reads 9h 15m again.
 
 ## Known gaps
 
-- G1: Not validated — the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D02, D03, D08, and D10; no implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D02, D03, D08, D10, and D19; no implementation has been validated against them.
 - G2: Unresolved implementation qualification — numerical measurement methods, metric set, masks, saturation, background, aperture, and tolerances need fixture qualification in PIX planning (D03). The P2 fixture is mono; CFA inspection as the recorded mosaic plane (D03) is not exercised. Blocks readiness.
+- G3: Out of scope for this journey: no fixture holds NaN, infinity or masked samples, so PIX-AC-08's invalid-sample evidence is not exercised. Blocks readiness until covered by a step or a journey.
+- G4: Out of scope for this journey: S12 meets the Ha item by lowering the goal, not by Project-accepted progress reaching it (PRJ-AC-03). S13 rejects a library-Unreviewed frame, so the drop in Project-accepted progress for a rejected library-Usable frame (PRJ-AC-08) is not observed. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 

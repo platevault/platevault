@@ -113,6 +113,49 @@ import {
   type OnboardingSeed,
 } from './mocks/onboarding';
 
+import * as lib from './mocks/library';
+
+/**
+ * Session notes a reviewer typed during this run of the demonstration mode.
+ *
+ * Held in memory only: reopening the app starts from the sample library
+ * again, which is what keeps every walkthrough reproducible.
+ */
+const mockSessionNotes: Record<string, string> = {};
+
+/** Whether the sample project's external tool is currently running. */
+let mockToolRunning = false;
+
+/**
+ * Resolve a naming pattern against one frame's metadata.
+ *
+ * Shared by the preview and the resolve call so the path a reviewer sees
+ * before approving is produced by exactly the same substitution as the path
+ * that would be written.
+ */
+function resolvePatternParts(
+  parts: Array<{ kind: string; value: string }>,
+  metadata: Record<string, string | null | undefined> | undefined,
+): { path: string; missing: string[]; warnings: string[] } {
+  const missing: string[] = [];
+  const warnings: string[] = [];
+  const rendered = parts.map((part) => {
+    if (part.kind !== 'token') return part.value;
+    const field = PATH_PREVIEW_TOKEN_FIELDS[part.value];
+    const value = field ? metadata?.[field] : undefined;
+    if (value == null || value === '') {
+      missing.push(part.value);
+      return PATH_PREVIEW_TOKEN_FALLBACKS[part.value] ?? part.value;
+    }
+    return value;
+  });
+  const path = rendered.join('');
+  if (path.length > 180) {
+    warnings.push('This path is long enough to be rejected on some volumes.');
+  }
+  return { path, missing, warnings };
+}
+
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // ── `observing`-scope settings (spec 044 Track B + spec 047) — scope-aware ─────
@@ -335,6 +378,18 @@ let mockRoots: LibraryRoot[] = [
     lastScanned: '2026-05-18T20:00:00Z',
     active: true,
   },
+  {
+    // Registered months ago and not currently attached. Its records stay
+    // readable and its files do not: that is the state every recovery,
+    // planning and cleanup surface has to say out loud rather than hide.
+    id: lib.ROOT_OFFLINE,
+    path: lib.ROOT_OFFLINE_PATH,
+    category: 'raw',
+    online: false,
+    fileCount: 412,
+    lastScanned: '2025-10-04T11:20:00Z',
+    active: true,
+  },
 ];
 
 const mockEquipment: Equipment[] = [
@@ -498,7 +553,6 @@ let mockToolProfiles: ToolProfileSummary[] = [
 ];
 
 /**
-/**
  * Inbox items the mock has classified as LIGHT frames.
  *
  * Attribution is light-frame-only: `attribution::suggest_candidates` returns an
@@ -512,6 +566,83 @@ let mockToolProfiles: ToolProfileSummary[] = [
  * it — which is what makes the picker reachable in mock mode.
  */
 const mockLightInboxItemIds = new Set<string>();
+
+/**
+ * The state every mutable record starts from, captured once at load.
+ *
+ * The sample library is a fixed reference library: the same records, the same
+ * counts, the same open decisions on every visit. Reviewing it changes it —
+ * a confirmed item, an accepted master, an edited note — so the starting state
+ * is kept aside and restored whenever a reviewer moves to a different part of
+ * the workbench. Without that, the second story a reviewer opens would show
+ * the leftovers of the first.
+ */
+const SAMPLE_SEED = {
+  cleanupPolicy: structuredClone(mockCleanupPolicy),
+  framingSettings: structuredClone(mockFramingSettings),
+  ingestionSettings: structuredClone(mockIngestionSettings),
+  calibrationTolerances: structuredClone(mockCalibrationTolerances),
+  onboardingFlags: structuredClone(mockOnboardingFlags),
+  roots: structuredClone(mockRoots),
+  cameras: structuredClone(mockCameras),
+  telescopes: structuredClone(mockTelescopes),
+  opticalTrains: structuredClone(mockOpticalTrains),
+  filters: structuredClone(mockFilters),
+  toolProfiles: structuredClone(mockToolProfiles),
+};
+
+/** How a reviewer arrives at the sample library. */
+export interface SampleLibraryStart {
+  /**
+   * Whether the one-time orientation has already been seen. The sample library
+   * is a library that has been in use, so it has: a reviewer opening a working
+   * surface should get the surface, not the introduction to it. Pass `false` to
+   * arrive as a first-time user and watch the orientation run.
+   */
+  orientationSeen?: boolean;
+}
+
+/**
+ * Puts the sample library back to its published starting state.
+ *
+ * Everything a reviewer can change is restored: registered sources, equipment,
+ * naming and cleanup choices, the reviewed/ignored decisions on inbox items,
+ * the progress checklist, whether the external tool is running, and the
+ * observing-site selection. Durable choices held between visits are cleared
+ * too, so a review that begins here begins from the same place every time.
+ */
+export function resetSampleLibrary(start: SampleLibraryStart = {}): void {
+  mockToolRunning = false;
+  mockObservingValues = null;
+  mockCleanupPolicy = structuredClone(SAMPLE_SEED.cleanupPolicy);
+  mockFramingSettings = structuredClone(SAMPLE_SEED.framingSettings);
+  mockIngestionSettings = structuredClone(SAMPLE_SEED.ingestionSettings);
+  mockCalibrationTolerances = structuredClone(
+    SAMPLE_SEED.calibrationTolerances,
+  );
+  mockOnboardingFlags = {
+    ...structuredClone(SAMPLE_SEED.onboardingFlags),
+    orientationDone: start.orientationSeen !== false,
+  };
+  mockRoots = structuredClone(SAMPLE_SEED.roots);
+  mockCameras = structuredClone(SAMPLE_SEED.cameras);
+  mockTelescopes = structuredClone(SAMPLE_SEED.telescopes);
+  mockOpticalTrains = structuredClone(SAMPLE_SEED.opticalTrains);
+  mockFilters = structuredClone(SAMPLE_SEED.filters);
+  mockToolProfiles = structuredClone(SAMPLE_SEED.toolProfiles);
+  mockInboxOpenPlans = seedInboxOpenPlans();
+  mockLightInboxItemIds.clear();
+  onboardingHydrated = false;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(E2E_ONBOARDING_STORE_ID);
+      localStorage.removeItem(E2E_OBSERVING_SEED_STORE_ID);
+    }
+  } catch {
+    // A storage-less context has nothing held over to clear.
+  }
+  mockOnboardingItems = freshMockOnboardingItems();
+}
 
 /**
  * snake_case Tauri wire name for a camelCase generated-binding key.
@@ -2709,6 +2840,920 @@ const mockHandlers = {
       warnings: [],
     } satisfies PathPatternPreviewResponse;
   },
+
+  // ══ Demonstration library ═══════════════════════════════════════════════
+  //
+  // Everything below reads the fixed sample library in `mocks/library.ts`.
+  // These are the records behind the surfaces a reviewer walks: the library
+  // summary in the footer, per-frame inventory, plan progress and recovery,
+  // target identity, calibration decisions, project outputs, cleanup
+  // candidates, lifecycle, protection and the native pickers. Before they
+  // existed the surfaces rendered but their controls led nowhere.
+
+  status_summary: async () => {
+    // Lazily imported for the same reason every other fixture read here is:
+    // the sample library must not enter the boot chunk.
+    const [{ SESSIONS_DATA }, { MASTERS_DATA }, { TARGETS_DATA }] =
+      await Promise.all([
+        import('@/data/fixtures/sessions'),
+        import('@/data/fixtures/calibration'),
+        import('@/data/fixtures/targets'),
+      ]);
+    const { mockProjectSummaries } = await import('@/data/fixtures/projects');
+    // Library counts are derived from the very lists these surfaces render,
+    // so the footer can never disagree with what a reviewer just scrolled.
+    return {
+      // 3 folders + 1 master candidate, the same aggregate `inbox_stats`
+      // reports for the `inbox_list` fixture.
+      inboxCount: 4,
+      library: {
+        sessions: SESSIONS_DATA.length,
+        calibrationSets: MASTERS_DATA.length,
+        targets: TARGETS_DATA.length,
+        projects: mockProjectSummaries.length,
+      },
+      cleanupReclaimableBytes: lib.CLEANUP_CANDIDATES.filter(
+        (c) => c.protection !== 'protected',
+      ).reduce((sum, c) => sum + c.sizeBytes, 0),
+      volumes: [
+        {
+          path: '/astro',
+          label: 'Macintosh HD',
+          freeBytes: 412_316_860_416,
+          totalBytes: 1_999_672_540_160,
+          warning: false,
+        },
+        {
+          path: lib.ROOT_OFFLINE_PATH,
+          label: 'AstroArchive',
+          freeBytes: 0,
+          totalBytes: 0,
+          warning: true,
+        },
+      ],
+      roots: mockRoots.map((r) => ({
+        id: r.id,
+        path: r.path,
+        kind: r.category,
+        online: r.online,
+      })),
+    };
+  },
+
+  // ── Per-frame inventory ────────────────────────────────────────────────
+
+  inventory_frame_list: async (_args) => {
+    const req = (
+      _args as
+        | {
+            req?: {
+              scope?: { sessionId?: string | null; rootId?: string | null };
+              includeMissing?: boolean | null;
+            };
+          }
+        | undefined
+    )?.req;
+    const scope = req?.scope ?? {};
+    const all = lib.framesForScope(scope);
+    const frames =
+      req?.includeMissing === false
+        ? all.filter((f) => f.state !== 'missing')
+        : all;
+    const present = frames.filter((f) => f.state !== 'missing');
+    return {
+      frames,
+      presentCount: present.length,
+      presentSizeBytes: present.reduce((sum, f) => sum + f.sizeBytes, 0),
+    };
+  },
+
+  inventory_frame_relink: async (_args) => {
+    const req = (
+      _args as
+        | { req?: { frameId?: string; candidateRelativePath?: string } }
+        | undefined
+    )?.req;
+    const expected = lib.RELINK_CANDIDATES[req?.frameId ?? ''];
+    // A relink only succeeds against the file the library actually recorded;
+    // anything else has to fail so the mismatch is visible.
+    if (!expected || expected !== req?.candidateRelativePath) {
+      return { relinked: false, matchedHash: '' };
+    }
+    return { relinked: true, matchedHash: `sha256:${req.frameId}` };
+  },
+
+  inventory_reconcile_run: async (_args) => {
+    const rootId =
+      (_args as { req?: { rootId?: string } } | undefined)?.req?.rootId ?? '';
+    const frames = lib.framesForScope({ rootId });
+    const missing = frames.filter((f) => f.state === 'missing');
+    return {
+      scanned: frames.length,
+      present: frames.length - missing.length,
+      newlyMissing: missing.length,
+      recovered: 0,
+      sizeBackfilled: 0,
+      progressPct: 100,
+    };
+  },
+
+  inventory_root_config_get: async (_args) => {
+    const rootId =
+      (_args as { req?: { rootId?: string } } | undefined)?.req?.rootId ?? '';
+    return lib.ROOT_CONFIGS[rootId] ?? lib.ROOT_CONFIGS[lib.ROOT_RAW]!;
+  },
+
+  inventory_root_config_set: async (_args) => {
+    const req = (
+      _args as
+        | {
+            req?: {
+              rootId?: string;
+              reconcileMode?: 'flag_missing' | 'auto_reconcile' | null;
+              detection?: {
+                live: boolean | null;
+                scheduled: boolean | null;
+                onOpen: boolean | null;
+                followSymlinks: boolean | null;
+              } | null;
+            };
+          }
+        | undefined
+    )?.req;
+    const rootId = req?.rootId ?? lib.ROOT_RAW;
+    const current = lib.ROOT_CONFIGS[rootId] ?? lib.ROOT_CONFIGS[lib.ROOT_RAW]!;
+    const next = {
+      reconcileMode: req?.reconcileMode ?? current.reconcileMode,
+      detection: {
+        live: req?.detection?.live ?? current.detection.live,
+        scheduled: req?.detection?.scheduled ?? current.detection.scheduled,
+        onOpen: req?.detection?.onOpen ?? current.detection.onOpen,
+        followSymlinks:
+          req?.detection?.followSymlinks ?? current.detection.followSymlinks,
+      },
+    };
+    // Kept in memory so the panel re-reads what the reviewer just chose.
+    lib.ROOT_CONFIGS[rootId] = next;
+    return next;
+  },
+
+  inventory_session_notes_update: async (_args) => {
+    const req = (
+      _args as { req?: { sessionId?: string; notes?: string } } | undefined
+    )?.req;
+    mockSessionNotes[req?.sessionId ?? ''] = req?.notes ?? '';
+    return { notes: req?.notes ?? '' };
+  },
+
+  // ── Inbox scan and target suggestions ──────────────────────────────────
+
+  inbox_scan: async (_args) => {
+    const rootId =
+      (_args as { rootId?: string | null } | undefined)?.rootId ?? lib.ROOT_RAW;
+    return {
+      rootId,
+      entries: lib.INBOX_SCAN_ENTRIES,
+      totalCount: lib.INBOX_SCAN_ENTRIES.length,
+      totalSizeBytes: lib.INBOX_SCAN_ENTRIES.reduce(
+        (sum, e) => sum + e.sizeBytes,
+        0,
+      ),
+    };
+  },
+
+  inbox_target_recommendations: async () => ({
+    candidates: lib.INBOX_TARGET_CANDIDATES,
+    pointing: { raDeg: 324.1, decDeg: 57.5 },
+    objectHint: 'IC1396_mosaic_panel2',
+  }),
+
+  // ── Plan application, interruption and recovery ────────────────────────
+
+  plans_apply_direct: async (_args) => {
+    const planId =
+      (_args as { planId?: string } | undefined)?.planId ?? 'plan-001';
+    return { planId, runId: `run-${planId}-a`, newState: 'applying' };
+  },
+
+  plans_apply_status: async (_args) => {
+    const planId =
+      (_args as { planId?: string } | undefined)?.planId ?? 'plan-001';
+    return lib.PLAN_APPLY_STATUS[planId] ?? lib.defaultPlanApplyStatus(planId);
+  },
+
+  plans_cancel: async (_args) => {
+    const planId =
+      (_args as { planId?: string } | undefined)?.planId ?? 'plan-001';
+    const status =
+      lib.PLAN_APPLY_STATUS[planId] ?? lib.defaultPlanApplyStatus(planId);
+    return {
+      planId,
+      cancelledAt: lib.SAMPLE_NOW,
+      itemsApplied: status.itemsApplied,
+      itemsCancelled: status.itemsPending,
+    };
+  },
+
+  plans_item_retry: async (_args) => ({
+    itemId: (_args as { itemId?: string } | undefined)?.itemId ?? '',
+    newState: 'pending',
+  }),
+
+  plans_item_skip: async (_args) => ({
+    itemId: (_args as { itemId?: string } | undefined)?.itemId ?? '',
+    newState: 'skipped',
+  }),
+
+  plans_resume: async (_args) => {
+    const a = _args as { planId?: string; runId?: string } | undefined;
+    return {
+      planId: a?.planId ?? 'plan-006',
+      runId: a?.runId ?? 'run-006-a',
+      resumedAt: lib.SAMPLE_NOW,
+    };
+  },
+
+  plans_retry: async (_args) => {
+    const parentPlanId =
+      (_args as { parentPlanId?: string } | undefined)?.parentPlanId ??
+      'plan-006';
+    const status =
+      lib.PLAN_APPLY_STATUS[parentPlanId] ??
+      lib.defaultPlanApplyStatus(parentPlanId);
+    // Retrying never mutates the original: it stages a fresh plan for the
+    // items that did not land.
+    return {
+      newPlanId: `${parentPlanId}-retry`,
+      parentPlanId,
+      itemsTotal: status.itemsFailed + status.itemsPending,
+    };
+  },
+
+  // ── Target identity ────────────────────────────────────────────────────
+
+  target_sessions_list: async (_args) => {
+    const targetId =
+      (_args as { req?: { targetId?: string } } | undefined)?.req?.targetId ??
+      '';
+    return lib.TARGET_SESSIONS[targetId] ?? [];
+  },
+
+  target_projects_list: async (_args) => {
+    const targetId =
+      (_args as { req?: { targetId?: string } } | undefined)?.req?.targetId ??
+      '';
+    return lib.TARGET_PROJECTS[targetId] ?? [];
+  },
+
+  target_note_get: async (_args) => {
+    const targetId =
+      (_args as { req?: { targetId?: string } } | undefined)?.req?.targetId ??
+      '';
+    return { notes: lib.TARGET_NOTES[targetId] ?? '' };
+  },
+
+  target_note_update: async (_args) => {
+    const req = (
+      _args as { req?: { targetId?: string; notes?: string } } | undefined
+    )?.req;
+    lib.TARGET_NOTES[req?.targetId ?? ''] = req?.notes ?? '';
+    return { notes: req?.notes ?? '' };
+  },
+
+  target_alias_add: async (_args) => {
+    const req = (
+      _args as { req?: { targetId?: string; alias?: string } } | undefined
+    )?.req;
+    const targetId = req?.targetId ?? '';
+    const alias = {
+      id: `alias-${targetId.slice(-4)}-${(req?.alias ?? '').replace(/\W+/g, '-').toLowerCase()}`,
+      alias: req?.alias ?? '',
+      kind: 'user' as const,
+    };
+    lib.TARGET_ALIASES[targetId] = [
+      ...(lib.TARGET_ALIASES[targetId] ?? []),
+      alias,
+    ];
+    return { alias };
+  },
+
+  target_alias_remove: async (_args) => {
+    const req = (
+      _args as { req?: { targetId?: string; aliasId?: string } } | undefined
+    )?.req;
+    const targetId = req?.targetId ?? '';
+    const before = lib.TARGET_ALIASES[targetId] ?? [];
+    const after = before.filter((a) => a.id !== req?.aliasId);
+    lib.TARGET_ALIASES[targetId] = after;
+    return { removed: after.length < before.length };
+  },
+
+  target_astro_format_batch: async (_args) => {
+    const targets =
+      (_args as { req?: { targets?: Array<{ id: string }> } } | undefined)?.req
+        ?.targets ?? [];
+    return {
+      formatted: targets.map((t) => ({
+        id: t.id,
+        raSexagesimal: lib.TARGET_COORDS[t.id]?.raSexagesimal ?? '—',
+        decSexagesimal: lib.TARGET_COORDS[t.id]?.decSexagesimal ?? '—',
+      })),
+    };
+  },
+
+  target_cache_clear: async () => ({
+    rewarmedCount: Object.keys(lib.TARGET_COORDS).length,
+  }),
+
+  target_adopt: async (_args) => ({
+    targetId:
+      (_args as { req?: { targetId?: string } } | undefined)?.req?.targetId ??
+      '',
+    adopted: true,
+  }),
+
+  target_resolution_settings: async () => ({
+    contractVersion: '1.0.0',
+    requestId: 'resolver-get',
+    settings: { ...lib.RESOLVER_SETTINGS },
+  }),
+
+  target_resolution_settings_update: async (_args) => {
+    const settings = (
+      _args as
+        | {
+            req?: {
+              settings?: {
+                onlineEnabled: boolean;
+                simbadEndpoint: string;
+                debounceMs: number;
+                requestTimeoutSecs: number;
+              };
+            };
+          }
+        | undefined
+    )?.req?.settings;
+    if (settings) Object.assign(lib.RESOLVER_SETTINGS, settings);
+    return {
+      contractVersion: '1.0.0',
+      requestId: 'resolver-update',
+      settings: { ...lib.RESOLVER_SETTINGS },
+    };
+  },
+
+  target_cone_search_suggest: async () => lib.CONE_SEARCH,
+
+  target_cone_search_confirm: async () => ({
+    canonicalTargetId: lib.TARGET_IC1396,
+    created: false,
+    linked: true,
+  }),
+
+  target_resolve_explicit: async () => ({
+    // Online lookup is switched off in the sample library, so an unfamiliar
+    // designation stays honestly unresolved and retryable rather than being
+    // given fabricated coordinates.
+    contractVersion: '3.0.0',
+    requestId: 'resolve-explicit',
+    status: 'unresolved' as const,
+    target: null,
+    unresolvedReason: 'offline',
+    error: null,
+  }),
+
+  // ── Calibration decisions ──────────────────────────────────────────────
+
+  calibration_match_assign: async (_args) => {
+    const req = (
+      _args as
+        | {
+            req?: {
+              requestId?: string;
+              sessionId?: string;
+              masterId?: string;
+              override?: boolean;
+            };
+          }
+        | undefined
+    )?.req;
+    return {
+      status: 'success',
+      contractVersion: '1.0.0',
+      requestId: req?.requestId ?? 'assign',
+      assigned: {
+        assignmentId: `assign-${req?.sessionId ?? ''}-${req?.masterId ?? ''}`,
+        sessionId: req?.sessionId ?? '',
+        masterId: req?.masterId ?? '',
+        calibrationType: 'dark' as const,
+        wasOverride: req?.override === true,
+        // An override records exactly which facts did not agree, so the
+        // decision stays explainable later.
+        mismatchedDimensions:
+          req?.override === true ? ['sensor temperature', 'gain'] : null,
+        assignedAt: lib.SAMPLE_NOW,
+      },
+      confidence: req?.override === true ? 0.41 : 0.93,
+      error: null,
+    };
+  },
+
+  calibration_match_unassign: async (_args) => ({
+    status: 'success',
+    contractVersion: '1.0.0',
+    requestId:
+      (_args as { req?: { requestId?: string } } | undefined)?.req?.requestId ??
+      'unassign',
+    error: null,
+  }),
+
+  calibration_masters_archive_plan_generate: async (_args) => {
+    const a = _args as
+      | { masterId?: string; confirmInUse?: boolean | null }
+      | undefined;
+    // A master a project still depends on cannot be archived silently.
+    if (a?.confirmInUse !== true) {
+      return {
+        planId: '',
+        itemCount: 0,
+        protectedItemCount: 1,
+        emptyReason: 'master is still used by 1 project',
+      };
+    }
+    return {
+      planId: `plan-archive-${a?.masterId ?? 'master'}`,
+      itemCount: 1,
+      protectedItemCount: 0,
+      emptyReason: null,
+    };
+  },
+
+  calibration_masters_archive_plan_generate_restore: async () => ({
+    planId: 'plan-restore-master',
+    itemCount: 1,
+    protectedItemCount: 0,
+  }),
+
+  archive_plan_generate_restore: async () => ({
+    planId: 'plan-restore-project',
+    itemCount: 34,
+    protectedItemCount: 2,
+  }),
+
+  // ── Project outputs ───────────────────────────────────────────────────
+
+  artifact_list: async (_args) => {
+    const projectId =
+      (_args as { request?: { projectId?: string } } | undefined)?.request
+        ?.projectId ?? '';
+    return { artifacts: lib.ARTIFACTS[projectId] ?? [] };
+  },
+
+  artifact_classify: async (_args) => {
+    const req = (
+      _args as
+        | { request?: { artifactId?: string; kind?: string | null } }
+        | undefined
+    )?.request;
+    return {
+      artifactId: req?.artifactId ?? '',
+      classification: req?.kind ?? 'final',
+      // A reviewer's own classification is certain by definition.
+      confidence: 1,
+      classifiedAt: lib.SAMPLE_NOW,
+    };
+  },
+
+  artifact_mark_resolved: async () => null,
+
+  // ── Cleanup candidates ────────────────────────────────────────────────
+
+  cleanup_raw_frames_scan: async (_args) => {
+    const req = (
+      _args as
+        | {
+            request?: {
+              scope?: { sessionId?: string | null; rootId?: string | null };
+              kinds?: string[] | null;
+            };
+          }
+        | undefined
+    )?.request;
+    const sessionId = req?.scope?.sessionId ?? null;
+    const candidates = sessionId
+      ? lib.CLEANUP_CANDIDATES.filter((c) => c.sessionId === sessionId)
+      : lib.CLEANUP_CANDIDATES;
+    return {
+      candidates,
+      // Locked rows stay in the list and out of the total: showing them
+      // greyed proves they are safe, counting them would be a lie.
+      totalReclaimableBytes: candidates
+        .filter((c) => c.protection !== 'protected')
+        .reduce((sum, c) => sum + c.sizeBytes, 0),
+    };
+  },
+
+  cleanup_raw_frames_generate: async (_args) => {
+    const ids =
+      (_args as { request?: { selectedFrameIds?: string[] } } | undefined)
+        ?.request?.selectedFrameIds ?? [];
+    const locked = new Set(
+      lib.CLEANUP_CANDIDATES.filter((c) => c.protection === 'protected').map(
+        (c) => c.frameId,
+      ),
+    );
+    const eligible = ids.filter((id) => !locked.has(id));
+    return {
+      planId: 'plan-cleanup-raw',
+      itemCount: eligible.length,
+      protectedItemCount: ids.length - eligible.length,
+    };
+  },
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────
+
+  lifecycle_ledger_list: async (_args) => {
+    const f = (
+      _args as
+        | { filter?: { entityTypes?: string[]; states?: string[] } }
+        | undefined
+    )?.filter;
+    return lib.LEDGER_ROWS.filter(
+      (r) =>
+        (!f?.entityTypes?.length || f.entityTypes.includes(r.entityType)) &&
+        (!f?.states?.length || f.states.includes(r.currentState)),
+    );
+  },
+
+  lifecycle_transition_preview: async () => ({
+    status: 'success' as const,
+    contractVersion: '1.0.0',
+    requestId: 'transition-preview',
+    appliedAt: null,
+    priorState: 'ready',
+    newState: 'prepared',
+    auditId: null,
+    // Preparing a project writes to disk, so the transition is staged as a
+    // reviewable plan rather than applied on the spot.
+    planId: 'plan-002',
+    error: null,
+  }),
+
+  manifest_get: async (_args) => {
+    const manifestId =
+      (_args as { request?: { manifestId?: string } } | undefined)?.request
+        ?.manifestId ?? 'manifest-7000-003';
+    return {
+      manifest: {
+        id: manifestId,
+        projectId: lib.PROJECT_NGC7000_HOO,
+        reason: 'lifecycle_transition' as const,
+        timestamp: '2026-05-18T22:14:00Z',
+        path: '/astro/projects/NGC7000_HOO/.alm/manifests/003.json',
+        version: 3,
+        body: {
+          lifecycleState: 'processing',
+          sourceMap: null,
+          calibration: null,
+          workflowProfile: 'pixinsight',
+          generatedViews: [],
+          notes: 'Prepared from 3 confirmed sessions and 2 shared masters.',
+        },
+      },
+    };
+  },
+
+  // ── Native pickers and reveal ─────────────────────────────────────────
+
+  native_directory_pick: async (_args) => {
+    const defaultPath =
+      (_args as { request?: { defaultPath?: string | null } } | undefined)
+        ?.request?.defaultPath ?? null;
+    // The demonstration mode has no operating-system dialog, so it answers
+    // with a folder that really exists in the sample library.
+    return { path: defaultPath ?? '/astro/raw', cancelled: false };
+  },
+
+  native_file_pick: async () => ({
+    path: '/Applications/PixInsight/PixInsight.app',
+    selectedFilter: 'Applications',
+    cancelled: false,
+  }),
+
+  native_reveal: async () => ({ revealed: true, selection: 'target' as const }),
+
+  // ── Naming patterns ───────────────────────────────────────────────────
+
+  pattern_validate: async (_args) => {
+    const parts =
+      (
+        _args as
+          | { request?: { pattern?: Array<{ kind: string; value: string }> } }
+          | undefined
+      )?.request?.pattern ?? [];
+    if (parts.length === 0) {
+      return {
+        valid: false,
+        warnings: [],
+        errorCode: 'pattern.empty',
+        errorMessage: 'Add at least one field before saving this pattern.',
+        errorToken: null,
+      };
+    }
+    const unknown = parts.find(
+      (p) => p.kind === 'token' && !PATH_PREVIEW_TOKEN_FIELDS[p.value],
+    );
+    if (unknown) {
+      return {
+        valid: false,
+        warnings: [],
+        errorCode: 'token.unknown',
+        errorMessage: `This library has no field called “${unknown.value}”.`,
+        errorToken: unknown.value,
+      };
+    }
+    return {
+      valid: true,
+      warnings: [],
+      errorCode: null,
+      errorMessage: null,
+      errorToken: null,
+    };
+  },
+
+  pattern_preview: async (_args) => {
+    const req = (
+      _args as
+        | {
+            request?: {
+              pattern?: Array<{ kind: string; value: string }>;
+              sampleMetadata?: Record<string, string | null>;
+            };
+          }
+        | undefined
+    )?.request;
+    const r = resolvePatternParts(req?.pattern ?? [], req?.sampleMetadata);
+    return {
+      resolvedPath: r.path,
+      missingTokens: r.missing,
+      warnings: r.warnings,
+    };
+  },
+
+  pattern_resolve: async (_args) => {
+    const req = (
+      _args as
+        | {
+            request?: {
+              pattern?: Array<{ kind: string; value: string }>;
+              metadata?: Record<string, string | null>;
+            };
+          }
+        | undefined
+    )?.request;
+    const r = resolvePatternParts(req?.pattern ?? [], req?.metadata);
+    return {
+      relativePath: r.path,
+      missingTokens: r.missing,
+      warnings: r.warnings,
+    };
+  },
+
+  // ── Mosaic panels ─────────────────────────────────────────────────────
+
+  projects_framing_list: async (_args) => {
+    const projectId =
+      (_args as { req?: { projectId?: string } } | undefined)?.req?.projectId ??
+      '';
+    return { framings: lib.FRAMINGS[projectId] ?? [] };
+  },
+
+  projects_framing_merge: async (_args) => {
+    const projectId =
+      (_args as { req?: { projectId?: string } } | undefined)?.req?.projectId ??
+      lib.PROJECT_NGC7000_HOO;
+    const panels = lib.FRAMINGS[projectId] ?? [];
+    const [first, ...rest] = panels;
+    if (!first) {
+      return mockContractError(
+        'framing.not_found',
+        'this project has no panels to merge',
+      );
+    }
+    const merged = {
+      ...first,
+      sessionIds: panels.flatMap((p) => p.sessionIds),
+      clustering: 'user_adjusted' as const,
+    };
+    lib.FRAMINGS[projectId] = [merged];
+    return {
+      projectId,
+      framing: merged,
+      removedFramingIds: rest.map((p) => p.id),
+      auditId: 'audit-framing-merge',
+    };
+  },
+
+  projects_framing_split: async (_args) => {
+    const projectId =
+      (_args as { req?: { projectId?: string } } | undefined)?.req?.projectId ??
+      lib.PROJECT_NGC7000_HOO;
+    const source = (lib.FRAMINGS[projectId] ?? [])[0];
+    if (!source) {
+      return mockContractError(
+        'framing.not_found',
+        'this project has no panel to split',
+      );
+    }
+    const [keep, ...moved] = source.sessionIds;
+    const sourceFraming = {
+      ...source,
+      sessionIds: keep ? [keep] : [],
+      clustering: 'user_adjusted' as const,
+    };
+    const newFraming = {
+      ...source,
+      id: `${source.id}-split`,
+      sessionIds: moved,
+      clustering: 'user_adjusted' as const,
+    };
+    lib.FRAMINGS[projectId] = [sourceFraming, newFraming];
+    return {
+      projectId,
+      sourceFraming,
+      newFraming,
+      auditId: 'audit-framing-split',
+    };
+  },
+
+  projects_framing_reassign: async (_args) => {
+    const projectId =
+      (_args as { req?: { projectId?: string } } | undefined)?.req?.projectId ??
+      lib.PROJECT_NGC7000_HOO;
+    const panels = lib.FRAMINGS[projectId] ?? [];
+    const targetFraming = panels[0];
+    if (!targetFraming) {
+      return mockContractError(
+        'framing.not_found',
+        'this project has no panel to reassign to',
+      );
+    }
+    return {
+      projectId,
+      targetFraming,
+      affectedFramingIds: panels.slice(1).map((p) => p.id),
+      auditId: 'audit-framing-reassign',
+    };
+  },
+
+  // ── Provenance, settings scope and protection ─────────────────────────
+
+  provenance_read: async (_args) => {
+    const req = (
+      _args as
+        | { request?: { requestId?: string; assetId?: string } }
+        | undefined
+    )?.request;
+    return {
+      status: 'success' as const,
+      contractVersion: '1.0.0',
+      requestId: req?.requestId ?? 'provenance-read',
+      assetId: req?.assetId ?? lib.SESSION_NGC7000_HA,
+      assetType: 'acquisition_session' as const,
+      provenance: lib.PROVENANCE_FIELDS,
+      error: null,
+    };
+  },
+
+  settings_overridable_keys: async () => lib.OVERRIDABLE_SETTING_KEYS,
+
+  settings_restore_defaults: async (_args) => {
+    const keys =
+      (_args as { request?: { keys?: string[] } } | undefined)?.request?.keys ??
+      [];
+    const restored = keys.filter((k) =>
+      lib.OVERRIDABLE_SETTING_KEYS.includes(k),
+    );
+    return {
+      status: restored.length > 0 ? ('success' as const) : ('noop' as const),
+      restored,
+      alreadyAtDefault: keys.filter((k) => !restored.includes(k)),
+    };
+  },
+
+  settings_source_override_set: async (_args) => {
+    const req = (
+      _args as { request?: { sourceId?: string; key?: string } } | undefined
+    )?.request;
+    return { sourceId: req?.sourceId ?? '', key: req?.key ?? '' };
+  },
+
+  source_protection_get: async (_args) => {
+    const sourceId =
+      (_args as { sourceId?: string | null } | undefined)?.sourceId ?? null;
+    return {
+      sourceId,
+      level: 'protected' as const,
+      blockPermanentDelete: true,
+      categories: lib.PROTECTED_CATEGORIES,
+      inheritsDefault: sourceId === null,
+    };
+  },
+
+  source_protection_set: async (_args) => {
+    const req = (
+      _args as
+        | {
+            request?: {
+              sourceId?: string;
+              level?: 'protected' | 'unprotected';
+              blockPermanentDelete?: boolean | null;
+              categories?: string[] | null;
+            };
+          }
+        | undefined
+    )?.request;
+    return {
+      sourceId: req?.sourceId ?? '',
+      priorLevel: 'protected' as const,
+      newLevel: req?.level ?? 'protected',
+      priorBlockPermanentDelete: true,
+      newBlockPermanentDelete: req?.blockPermanentDelete ?? true,
+      priorCategories: lib.PROTECTED_CATEGORIES,
+      newCategories: req?.categories ?? lib.PROTECTED_CATEGORIES,
+      auditId: 'audit-protection-change',
+    };
+  },
+
+  sources_set_organization_state: async (_args) => {
+    const a = _args as
+      | { sourceId?: string; organizationState?: 'organized' | 'unorganized' }
+      | undefined;
+    return {
+      sourceId: a?.sourceId ?? '',
+      organizationState: a?.organizationState ?? 'unorganized',
+    };
+  },
+
+  // ── Source views and tool launch ──────────────────────────────────────
+
+  sourceview_destination_get: async () => ({
+    destination: '/astro/projects/NGC7000_HOO/sources',
+  }),
+
+  sourceview_destination_set: async () => ({ ok: true }),
+
+  sourceview_generate: async (_args) => {
+    const req = (_args as { req?: { copyOptIn?: boolean } } | undefined)?.req;
+    return {
+      planId: 'plan-003',
+      // The warning is the honest part: linking is not available on every
+      // volume, and the reviewer should see the fallback before approving.
+      warnings: [
+        {
+          code: 'long_path' as const,
+          message:
+            'Two destination paths exceed the safe length for this volume.',
+          items: [
+            'sources/lights/NGC7000/Ha/NGC7000_Ha_300s_0001.fits',
+            'sources/lights/NGC7000/OIII/NGC7000_OIII_300s_0001.fits',
+          ],
+        },
+      ],
+      usedCopyFallback: req?.copyOptIn === true,
+    };
+  },
+
+  tools_launch: async (_args) => {
+    const req = (
+      _args as
+        | { request?: { projectId?: string; toolId?: string; force?: boolean } }
+        | undefined
+    )?.request;
+    // A tool already running is reported rather than started twice.
+    if (mockToolRunning && req?.force !== true) {
+      return {
+        status: 'prior_instance_alive' as const,
+        launchId: 'launch-7000-01',
+        pid: 4821,
+        launchedAt: '2026-05-18T19:58:00Z',
+        workingDir: '/astro/projects/NGC7000_HOO',
+        auditId: null,
+        error: null,
+        priorInstanceAlive: true,
+      };
+    }
+    mockToolRunning = true;
+    return {
+      status: 'success' as const,
+      launchId: 'launch-7000-02',
+      pid: 4822,
+      launchedAt: lib.SAMPLE_NOW,
+      workingDir: '/astro/projects/NGC7000_HOO',
+      auditId: 'audit-tool-launch',
+      error: null,
+      priorInstanceAlive: false,
+    };
+  },
 } satisfies MockRegistry;
 
 /**
@@ -2721,8 +3766,10 @@ export async function mockInvoke(
   cmd: string,
   args?: Record<string, unknown>,
 ): Promise<unknown> {
-  // Simulate realistic network/IPC latency
-  await delay(50 + Math.random() * 100);
+  // A fixed short pause, not a random one: surfaces still show their loading
+  // state, and two reviewers walking the same steps see the same ordering
+  // instead of a race that only sometimes reproduces.
+  await delay(60);
 
   const handler = mockHandlers[cmd as keyof typeof mockHandlers];
   if (!handler) {

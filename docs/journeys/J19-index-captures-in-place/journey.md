@@ -25,7 +25,7 @@ pre-run manifest.
 ## Preconditions
 
 - P1: A clean development build of the rebuilt PlateVault (D17) with no catalog and no network connection; first launch shows onboarding.
-- P2: Volume `Astro-T7` holds `Captures/` with one subfolder per session, all mono 300 s lights from the RedCat 51 / ASI2600MM train at one gain, offset, temperature, and 1x1 binning, captured at the Backyard coordinates, plus one plain-text note file (an unsupported item). The 30 Sep session also carries the frame-review properties of J22/P2.
+- P2: Volume `Astro-T7` holds `Captures/` with one subfolder per session. The five dated sessions use mono 300 s lights from the RedCat 51 / ASI2600MM train at one gain, offset, temperature and 1x1 binning, captured at the Backyard coordinates. The separate `other camera` session uses the second camera and optical train named below. A plain-text note is an unsupported item. The 30 Sep session also carries the frame-review properties of J22/P2.
 
   | Session | Channel | Lights | OBJECT | Pointing | Orientation | Optics keywords |
   | --- | --- | --- | --- | --- | --- | --- |
@@ -163,6 +163,8 @@ pre-run manifest.
 - G3: Unresolved implementation qualification — no fault-injection mechanism exists yet for the S11 catalog-write failure (P6). Blocks readiness.
 - G4: Unresolved implementation qualification — the flow names no control for re-indexing an already registered location; S12 and S13 assume one. Blocks readiness.
 - G5: Unresolved implementation qualification — S6 needs indexing to run long enough to observe; fixture sizing or a slow volume is unspecified. Blocks readiness.
+- G6: Out of scope for this journey: the P2 fixture has no single night holding both Ha and OIII 300 s lights, so the same-night channel split of LIB-AC-03 is not exercised. Blocks readiness until covered by a step or a journey.
+- G7: Out of scope for this journey: the release-build exclusion of the development MCP bridge (LIB-AC-13, D17) is a build check that no running-product step observes. Release-build verification evidence is required. Blocks readiness until it exists.
 
 ## Delta log
 

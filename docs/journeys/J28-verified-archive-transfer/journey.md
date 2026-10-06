@@ -5,9 +5,9 @@ version: 1
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
-surfaces: [archive, storage, view-review, preparation]
+surfaces: [archive, storage, view-review, preparation, locations]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 071-storage-custody, D06, D09, D11, specs/063-clean-rebuild-contract/decisions.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 071-storage-custody, D02, D06, D09, D11, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer]
 ---
 
 ## Goal
@@ -17,9 +17,11 @@ transfer that also rebuilds the View's references, and can trust that no source
 is retired before its destination copy and every affected reference are
 verified. Done means: the five sessions live on `Archive` with verified hashes;
 every source retired was retired only after destination and reference
-verification; an interrupted or failing item keeps its source and its recorded
-phase; and the View's membership and exclusions are unchanged, with archived
-inputs reading Offline when `Archive` is unplugged.
+verification, while it still matched its copied snapshot; an interrupted,
+failing or drifted item keeps its source and its recorded phase; and the View's
+membership and exclusions are unchanged, with archived inputs reading Offline
+when `Archive` is unplugged. When the archive location is later retired, its
+copies read Retired, leave totals, change no file and stay named in the View.
 
 ## Preconditions
 
@@ -27,6 +29,7 @@ inputs reading Offline when `Archive` is unplugged.
 - P2: A disposable writable volume `Archive` with free space for the five sessions, and a second disposable volume that can be mounted under the same name `Archive`.
 - P3: The J19/P5 manifest and a SHA-256 list of the five sessions' files are recorded. `Cold-1` stays offline.
 - P4: Write permission is removed from the View folder that holds the prepared entries of one named 24 Sep frame, so that its reference cannot be rebuilt (fault fixture for S8; G3).
+- P5: For one named 26 Sep frame, a backup of its original bytes and nanosecond mtime and a replacement file of identical size with different bytes, kept outside PlateVault. A fault control pauses that item after destination verification and before source retirement (G5).
 
 ## Steps
 
@@ -76,10 +79,17 @@ inputs reading Offline when `Archive` is unplugged.
 - **Expect (negative):** A partially written destination file is not treated as verified because its name exists.
 - **Trace:** flow J recovery branch · STO-FR-08 · D06, D09
 
+### S7a — Change a source before retirement {#S7a}
+
+- **Do:** When the P5 pause reports the named 26 Sep frame destination-verified and awaiting retirement, overwrite its source with the P5 replacement, restore its recorded mtime, and release the pause.
+- **Expect:** That item reads blocked with source drift named. Its source path keeps the replacement bytes, `Archive/NGC7000` keeps the verified snapshot, and both are listed for review. Other items keep their recorded phases.
+- **Expect (negative):** Neither version is retired, overwritten or chosen automatically.
+- **Trace:** flow J recovery branch · STO-FR-07 · STO-AC-14 · D06
+
 ### S8 — Inspect a failed reference rebuild {#S8}
 
 - **Do:** When the transfer settles, open the per-item outcomes and the 24 Sep frame of P4.
-- **Expect:** Each affected reference reports completed, blocked, or uncertain. The P4 frame's reference reads blocked and its source is retained; every other item reads source retired only after its destination and references verified. The View reads 208 lights / 17h 20m with the same six exclusions and still reads Complete.
+- **Expect:** Each affected reference reports completed, blocked, or uncertain. The P4 frame's reference reads blocked and its source is retained; the S7a item still reads blocked by drift; every other item reads source retired only after its destination and references verified. The View reads 208 lights / 17h 20m with the same six exclusions and still reads Complete.
 - **Expect (negative):** The blocked item's source is not retired. The identity-preserving reference repair does not reopen the View or create a membership or preparation revision, and no hardlink is converted without the S4 choice.
 - **Trace:** flow J open sequencing detail · STO-FR-07 · root SC-007 · D06, D09
 
@@ -89,12 +99,47 @@ inputs reading Offline when `Archive` is unplugged.
 - **Expect:** Its reference rebuilds and verifies; only then its source is retired.
 - **Trace:** flow J · STO-FR-07 · D06
 
+### S9a — Resolve the drifted item {#S9a}
+
+- **Do:** Restore the P5 frame's original bytes and recorded mtime, review the item's current evidence, and click **Retry** for it.
+- **Expect:** The current source matches its snapshot again, the destination and its references re-verify, and only then is the source retired.
+- **Expect (negative):** The archived copy still matches P3, and no other item changes phase.
+- **Trace:** flow J · STO-FR-07 · STO-AC-14 · D06
+
 ### S10 — Unplug the archive later {#S10}
 
 - **Do:** Unplug `Archive`. Open NGC 7000, then `NGC7000 HOO - Siril`, and click **Open in Siril**.
 - **Expect:** Captured and usable totals and View membership are unchanged, and the archived inputs read Offline. Opening is refused because inputs are unavailable, with the options to reconnect the archive or review another verified location.
 - **Expect (negative):** Unavailable inputs are not omitted from the handoff.
 - **Trace:** flow J · STO-FR-08 · STO-AC-05
+
+### S11 — Review retiring the lost archive {#S11}
+
+- **Do:** With `Archive` still unplugged, open Locations, choose the Offline location that holds `Archive/NGC7000`, and click **Retire location**.
+- **Expect:** The review names the location, its root and Offline state, the five sessions and their 214 copies, View `NGC7000 HOO - Siril`, Project `NGC 7000 HOO` and any Result that references them. It states that retiring deletes, moves or modifies no file.
+- **Expect (negative):** Nothing is retired before confirmation.
+- **Trace:** flow A4, cross-flow "Location offline" · LIB-FR-15 · LIB-AC-16 · D11
+
+### S11a — Confirm after the archive returns {#S11a}
+
+- **Do:** Leave the S11 review open, plug `Archive` back in until its location reads Online, then confirm **Retire location**.
+- **Expect:** Retirement is refused because the location's availability changed since the review, and a new review is required. Unplug `Archive` again and click **Retire location** to open a fresh review that reads Offline.
+- **Expect (negative):** Nothing is retired and no copy reads Retired or Missing. PlateVault reads no archived file bytes for the refusal and changes no file.
+- **Trace:** flow A4 · LIB-FR-15 · LIB-AC-16 · D11, D19
+
+### S12 — Retire the location {#S12}
+
+- **Do:** Confirm the fresh **Retire location** review. Open Sessions, NGC 7000 and `NGC7000 HOO - Siril`, and click **Open in Siril**.
+- **Expect:** The location reads Retired, and its 214 copies read Retired. NGC 7000 captured integration falls by exactly 17h 50m, and its usable integration reads 0h 00m. The View still lists its 208 members and six exclusions and reads Complete; each member is named unresolved and Retired. Opening is refused and names the retired inputs.
+- **Expect (negative):** No copy reads Missing. The View's membership, exclusions and prepared revision are unchanged, and no retired copy is offered as an input.
+- **Trace:** flow A4 · LIB-FR-15, VSEL-FR-09 · LIB-AC-16 · D02, D11
+
+### S13 — Register the archive folder again {#S13}
+
+- **Do:** Plug `Archive` back in. In Locations, try to reselect the retired location. Then add `Archive/NGC7000` as a Captures location and index it.
+- **Expect:** Reselect is not offered for the retired location. The new location registers without an overlap conflict, and the 214 archived lights appear as its Unreviewed assets in new sessions beside the retired copies. 18, 28 and 30 Sep read Target NGC 7000 suggested from their own agreeing OBJECT and pointing evidence. 24 Sep reads an unresolved Target and 26 Sep a conflicting one, both **Needs review**, as in J19/S9. NGC 7000 captured integration rises by exactly 13h 15m.
+- **Expect (negative):** No retired copy is counted again. No retired quality decision, Target or equipment confirmation, or correction transfers, so usable integration still reads 0h 00m and 24 Sep and 26 Sep count toward no NGC 7000 total until confirmed again. `NGC7000 HOO - Siril` still names its members unresolved and Retired. The archived files match P3.
+- **Trace:** flow A4 · LIB-FR-05, LIB-FR-15 · LIB-AC-16 · D01, D11
 
 ## Success criteria
 
@@ -104,6 +149,9 @@ inputs reading Offline when `Archive` is unplugged.
 - SC4: 0 implicit reference-mode conversions occur (S4, S8).
 - SC5: The impostor volume blocks approval (S2).
 - SC6: With `Archive` unplugged, Open is refused and 0 inputs are omitted (S10).
+- SC7: The drifted source is retired 0 times while it differs from its snapshot (S7a, S8); it retires only after re-verification (S9a).
+- SC8: Retiring changes 0 files and 0 copies read Missing (S12). After S13 captured integration rises by exactly 13h 15m, so no capture is counted twice and no retired association transfers.
+- SC9: Confirming a review whose availability has since changed retires 0 locations (S11a).
 
 ## Known gaps
 
@@ -111,6 +159,8 @@ inputs reading Offline when `Archive` is unplugged.
 - G2: Unresolved implementation qualification — no fault fixture yet produces a destination hash mismatch; the hash-failure branch is not exercised. Blocks readiness.
 - G3: Unresolved implementation qualification — the prepared View layout that P4 depends on is unspecified, and the method of source retirement after verification is not named by the flow. Blocks readiness.
 - G4: Out of scope for this journey — Direct-source configuration paths affected by a move are not exercised because no journey prepares a Direct-source View. Blocks readiness until covered by a step or a journey.
+- G5: Unresolved implementation qualification: no fault control yet pauses an item after destination verification and before retirement (P5). S7a depends on it, and no source-retirement acceptance is complete until S7a passes. Blocks readiness.
+- G6: Out of scope for this journey: the Storage surface's separate display of location availability, View footprints, duplicate candidates and transfer phases (STO-AC-12, D16) is not exercised. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 

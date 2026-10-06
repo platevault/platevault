@@ -6,7 +6,7 @@
 
 **Created**: 2026-10-03
 
-**Status**: Draft; product defaults recorded in D01 through D18 under the user-authorized specification-gate waiver. Requirements analysis, implementation and verification remain pending.
+**Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 
@@ -31,6 +31,8 @@ Native measurement and full-resolution linear preview during View review, star/P
 - **PIX-AC-07**: Given a frame selected from a row, plot or preview, when the selection changes, then all three identify the same frame and disclosure names header evidence, metric source, units, method and input identity.
 - **PIX-AC-08**: Given samples containing NaN, infinity, saturated values and a mask, when preview and measurement run, then invalid/masked evidence remains inspectable, no invalid sample is silently replaced with a plausible measurement, and values retain the qualified input/channel basis.
 - **PIX-AC-09**: Given a raw CFA fixture with recorded pattern and channel evidence, when preview and linear measurement run, then the recorded mosaic plane is inspectable, the channel basis is named, no debayering or RGB-derived metric occurs, and source hashes remain unchanged.
+- **PIX-AC-10**: Given a frame with cached and imported measurements replaced in place with its size and mtime preserved, when Review frames opens, then its cached values never read valid. Its imported values read as history, the frame is measured again from its current bytes, and the earlier cached values remain only as history for the earlier content.
+- **PIX-AC-11**: Given a CSV naming a measured frame that was replaced in place before import, with its size and mtime preserved, when the mapping is reviewed, then that row is listed for review against the frame's recorded digest. After confirmation no imported value attaches to it. Every attached imported value reads content unverified.
 
 ### Edge Cases
 
@@ -40,12 +42,12 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 
 ### Functional Requirements
 
-- **PIX-FR-01**: Review frames shows valid cached measurements at once and pending, failed, or unavailable states elsewhere. Missing built-in measurements are computed with selected work first. Progress is visible and frames can be inspected meanwhile. Cancel stops further measurement and keeps the draft. Filtering or browsing never starts built-in measurement.
+- **PIX-FR-01**: Review frames shows cached measurements at once and pending, failed, or unavailable states elsewhere. Each cached measurement records the SHA-256 of the bytes it measured. It reads verifying until the frame's current bytes rehash to that digest, then valid; a mismatch keeps it as history and re-measures the current bytes. Missing built-in measurements are computed with selected work first. Progress is visible and frames can be inspected meanwhile. Cancel stops further measurement and keeps the draft. Filtering or browsing never starts built-in measurement.
 - **PIX-FR-02**: Selecting a frame in the row, plot, or preview highlights it in all three. Header metadata and measurement source and units are shown on disclosure.
 - **PIX-FR-03**: Full-resolution zoom and pan, fixed centre/corner comparison, and next/previous frame. Display stretch affects the preview only; source pixels are never altered.
 - **PIX-FR-04**: Measurements use linear image data, never a stretched thumbnail.
 - **PIX-FR-05**: A Stars overlay with per-star details: location, state, PSF model where fitted, shape and width values, saturation and fit warnings, and observed/fitted/residual cutouts when available. A failed fit is labelled failed, with no plausible FWHM. HFR and FWHM keep distinct labels.
-- **PIX-FR-06**: Every value carries input identity and basis, method/version, units, and source (built-in or imported). Imported values never silently replace built-in ones.
+- **PIX-FR-06**: Every value carries input identity and basis, method/version, units, and source (built-in or imported). Imported values never silently replace built-in ones. A built-in value's basis is the SHA-256 of the frame bytes it measured. An imported value is matched by file name only, so it reads content unverified unless its export supplies a content identity PlateVault can check (D19). Confirming the mapping records the frame's current identity and SHA-256 only as the import observation: once the frame differs from it, the value reads as history. When the frame's current bytes differ from its latest recorded basis, such as a cached measurement or quality decision, its row is listed for review and not attached.
 - **PIX-FR-07**: Import measurements from a supported export (PixInsight SubframeSelector CSV). The review lists matched, unmatched, and ambiguous rows with units and method, and the mapping needs confirmation. Missing units or ambiguous identity require review. Unsupported columns stay unavailable rather than being relabelled. Rejection decisions are never imported.
 - **PIX-FR-08**: Measurements never auto-exclude, auto-reject, or mark frames Usable.
 - **PIX-FR-09**: Invalid samples and mask evidence remain visible and are never silently replaced. Raw/CFA interpretation and metric-specific masking follow root decision D03 and the fixture-qualified metric definitions; no debayering is introduced.
@@ -74,9 +76,10 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 
 - [Product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the confirmed interactions and illustrative worked example.
 - This feature is independently specified; dependencies on other feature contracts are resolved in planning.
-- Conservative product defaults and human specification-gate waivers are authorized for this run. The root decision register applies; tests, requirements analysis, independent review and delivery checks remain mandatory.
+- Conservative defaults and all human-approval gate waivers follow the root autonomous objective and decision register. Tests, requirements analysis, independent review and delivery evidence remain mandatory.
 - “Built-in” measurement means provided by PlateVault, not a prescribed implementation tier.
 
 ## Decisions before feature approval
 
 - Root decision D03 fixes read-only raw/CFA handling and the initial SubframeSelector CSV format. Metric set, units, masks, saturation, background, aperture and method-specific tolerances require explicit definitions and fixture qualification during PIX planning. No debayering is authorized.
+- Root decision D19 binds cached measurements to the bytes they describe. Imported values stay content unverified and become history when the frame differs from its import observation.

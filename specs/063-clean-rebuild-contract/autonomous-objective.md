@@ -20,13 +20,19 @@ Implement the full PlateVault rebuild backend against specs 064 through 072. Sel
 ## Boundaries
 
 - Work one implementation spec at a time. Fan out independent major tasks within it using task agents and linked worktrees.
-- Conservative product defaults and human specification-gate waivers are authorized for this run.
+- Conservative product defaults are authorized. On 2026-10-04 the user authorized resolving all repository human-approval gates and proceeding fully autonomously without human signoff. Automated correctness/safety checks and required evidence remain mandatory.
 - Reviewed PlateVault PRs may merge. Reviewed changes in skymath, simbad-resolver, target-match, fits-header and xisf-header may merge and release.
 - All existing application databases may be reset because there is no real catalog. Generate FITS/XISF fixtures or use public samples.
 - Preserve real image libraries, credentials and unrelated work.
 - Frontend work must use impeccable, improve-ui, ui-microcopy, ui-review, ui-skills-root, modern-web-guidance, web-design-guidelines, web-quality-audit and ss-a11y. Use shadcn-ui only if shadcn is selected.
 - Native isolation stays disabled. Repository work uses linked worktrees.
 - Production MCP, if separately implemented, requires authenticated safe enablement/password/interface/port configuration. Never expose unauthenticated development control in production.
+
+### Human authorization record
+
+Direct user instruction, 2026-10-04: "you are allowed to unblock all human gates. work fully autonomously. no signoff or gating is required."
+
+Native human gate records cite this decision. It removes human approval waits; automated evidence, technical safety constraints and the full success criteria remain required.
 
 ## Stop conditions
 

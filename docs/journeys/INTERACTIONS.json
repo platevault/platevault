@@ -29,11 +29,11 @@
     },
     {
       "flowStep": "A4",
-      "journeyStep": "J19/S5, J19/S6, J19/S7, J19/S8, J19/S15",
-      "spec": "064-library-inventory LIB-FR-03, LIB-FR-07",
-      "action": "Browse while indexing runs, recover a denied location with Retry, and take a location offline.",
-      "expect": "Totals are provisional and name their locations. The denied row offers Choose folder again and Retry. The offline location keeps its last-observed metadata.",
-      "negative": "No total implies unscanned data. Offline or denied files are not reported Missing or empty."
+      "journeyStep": "J19/S5, J19/S6, J19/S7, J19/S8, J19/S15, J28/S11, J28/S11a, J28/S12, J28/S13",
+      "spec": "064-library-inventory LIB-FR-03, LIB-FR-07, LIB-FR-15, LIB-AC-16; 066-view-selection VSEL-FR-09; D02, D11, D19",
+      "action": "Browse while indexing runs, recover a denied location with Retry, and take a location offline. Later review retiring a lost location, meet a refusal after its availability changes, retire it from a fresh review, then register its folder again.",
+      "expect": "Totals are provisional and name their locations. The denied row offers Choose folder again and Retry. The offline location keeps its last-observed metadata. Retirement review names the location and its referencing sessions, Views, Projects and Results; confirmation after an availability change is refused until a new review. Retired copies read Retired, leave totals and stay named unresolved in fixed Views. The folder registers again as a new location.",
+      "negative": "No total implies unscanned data. Offline, denied or retired files are not reported Missing or empty. Retirement reads and changes no file, reselect is refused afterwards, no capture is counted twice, and no retired decision, association or correction transfers to the re-registered copies."
     },
     {
       "flowStep": "B1",
@@ -117,11 +117,11 @@
     },
     {
       "flowStep": "D1",
-      "journeyStep": "J22/S1, J22/S3, J22/S4",
-      "spec": "067-frame-review PIX-FR-01, PIX-AC-01",
-      "action": "Open Review frames, cancel measurement, and reopen.",
-      "expect": "Pending frames and progress show. After Cancel, unfinished frames read Not measured. Cached values reappear and missing ones resume.",
-      "negative": "Cancel discards no selection or exclusion."
+      "journeyStep": "J22/S1, J22/S3, J22/S4, J22/S15a, J22/S15b",
+      "spec": "067-frame-review PIX-FR-01, PIX-FR-06, PIX-AC-01, PIX-AC-10; 064-library-inventory LIB-FR-09, LIB-AC-14; 065-project-goals PRJ-FR-04; D19",
+      "action": "Open Review frames, cancel measurement, and reopen. Replace a reviewed frame's bytes in place, rescan and reopen, then restore the reviewed bytes.",
+      "expect": "Pending frames and progress show. After Cancel, unfinished frames read Not measured. Cached values reappear and missing ones resume. The replaced frame reads ChangedContent outside usable totals and Project progress and is measured again; restored bytes make it Usable again.",
+      "negative": "Cancel discards no selection or exclusion. Cached values for other bytes never read valid, imported values never read verified, and no quality decision is recorded."
     },
     {
       "flowStep": "D2",
@@ -158,10 +158,10 @@
     {
       "flowStep": "D6",
       "journeyStep": "J22/S14, J22/S15",
-      "spec": "067-frame-review PIX-FR-07, PIX-FR-08, PIX-AC-04, PIX-AC-05; D03",
-      "action": "Import a SubframeSelector CSV, confirm the mapping, and inspect the unresolved rows.",
-      "expect": "Matched, unmatched, and ambiguous rows are listed. Imported values show with provenance next to native values.",
-      "negative": "No native value is replaced and no exclusion or quality change is imported. A column without units is not relabeled as FWHM or HFR."
+      "spec": "067-frame-review PIX-FR-06, PIX-FR-07, PIX-FR-08, PIX-AC-04, PIX-AC-05, PIX-AC-11; D03, D19",
+      "action": "Import a SubframeSelector CSV after one measured frame changes in place, confirm the mapping, and inspect the unresolved rows.",
+      "expect": "Matched, unmatched, and ambiguous rows are listed, and the changed frame's row is listed for review against its recorded digest. Imported values show with provenance next to native values and read content unverified.",
+      "negative": "No native value is replaced, no imported value attaches to the changed frame or reads verified, and no exclusion or quality change is imported. A column without units is not relabeled as FWHM or HFR."
     },
     {
       "flowStep": "E1",
@@ -174,10 +174,10 @@
     {
       "flowStep": "E2",
       "journeyStep": "J23/S5, J23/S6, J23/S7",
-      "spec": "068-calibration-inputs CAL-FR-05, CAL-AC-02, CAL-AC-03; D13",
-      "action": "Find the unresolved 24 Sep flat, record a scoped exception with a reason, and check another View.",
-      "expect": "The exception keeps the unknown criterion and the reason, and another View shows no exception.",
-      "negative": "The flat set's evidence is unchanged and the exception does not make it universally compatible."
+      "spec": "068-calibration-inputs CAL-FR-03, CAL-FR-05, CAL-FR-08, CAL-AC-02, CAL-AC-03, CAL-AC-06; D13",
+      "action": "For 24 Sep, compare the compatible 30 Sep flat suggestion with the 26 Sep set, choose the 26 Sep set, see it unresolved, record a scoped exception with a reason, and check another View.",
+      "expect": "The 26 Sep set shows its unknown optical-train criterion and reads unresolved until the exception, which keeps the unknown criterion and the reason. Another View shows no exception and still suggests the 30 Sep set.",
+      "negative": "The flat set's evidence is unchanged, the exception does not make it universally compatible, and the 30 Sep suggestion is never accepted or substituted silently."
     },
     {
       "flowStep": "E3",
@@ -229,27 +229,27 @@
     },
     {
       "flowStep": "F5",
-      "journeyStep": "J24/S9, J24/S15, J24/S16",
-      "spec": "069-application-handoff PREP-FR-09, PREP-AC-05; D09",
-      "action": "Prepare, prepare with three blocked inputs while trying Mark complete, and Retry.",
-      "expect": "Prepared appears only when the entries match the membership. Partial reads 53/3. Retry completes the journaled entries to 56.",
-      "negative": "An acknowledgment is not success and no verified Open is offered on Partial. Complete is refused while preparation runs. Sources are untouched."
+      "journeyStep": "J24/S9, J24/S15, J24/S15a, J24/S16",
+      "spec": "069-application-handoff PREP-FR-09, PREP-AC-05, PREP-AC-14; D09",
+      "action": "Prepare, prepare with three blocked inputs while trying Mark complete, Retry while one source changes after its snapshot, then restore it and Retry.",
+      "expect": "Prepared appears only when the entries match the membership and their source snapshots. Partial reads 53/3, then 55/1 with drift named. Retry completes the journaled entries to 56.",
+      "negative": "An acknowledgment is not success and no verified Open is offered on Partial. Complete is refused for this View while its preparation runs, and the unrelated View is not blocked. A drifted item never reads Prepared. Sources are untouched."
     },
     {
       "flowStep": "F6",
-      "journeyStep": "J24/S10, J24/S11",
-      "spec": "069-application-handoff PREP-FR-10",
-      "action": "Open with a missing executable, then open Siril and quit it.",
-      "expect": "Choose application and Reveal View are offered, and the launch is recorded separately from processing.",
-      "negative": "The View stays Prepared, and quitting Siril does not mark it Complete."
+      "journeyStep": "J24/S10, J24/S10a, J24/S11",
+      "spec": "069-application-handoff PREP-FR-10, PREP-AC-15; D19",
+      "action": "Open with a missing executable, open after a linked input changed in place, then restore it, open Siril and quit it.",
+      "expect": "Choose application and Reveal View are offered. A changed entry refuses the launch and is named. Open re-verifies every entry before launching, and the launch is recorded separately from processing.",
+      "negative": "The View stays Prepared, Siril never launches on changed bytes, and quitting Siril does not mark it Complete."
     },
     {
       "flowStep": "G",
-      "journeyStep": "J25/S1–S6",
-      "spec": "066-view-selection VSEL-FR-12, VSEL-AC-06; 069-application-handoff PREP-FR-11; D02, D08, D09",
-      "action": "Index new arrivals, make a member unreadable, Refresh selection, keep the View unchanged, then accept one addition, decline one, and save.",
-      "expect": "Additions show with reasons, manual inclusions and exclusions stay recorded, and the unreadable member reads Unavailable. The accepted change becomes a proposed revision that needs review.",
-      "negative": "Membership never changes without approval. The prepared revision and the inputs Siril reads stay identical."
+      "journeyStep": "J25/S1–S7",
+      "spec": "066-view-selection VSEL-FR-08, VSEL-FR-12, VSEL-FR-13, VSEL-FR-14, VSEL-AC-06, VSEL-AC-12, VSEL-AC-15; 064-library-inventory LIB-FR-08, LIB-AC-15; 069-application-handoff PREP-FR-11; D02, D08, D09, D16, D19",
+      "action": "Index new arrivals, one session also copied to a second Captures location, make a member unreadable, Refresh selection, keep the View unchanged, then accept one addition, decline one, and save. Finally change one copy of a copied frame and rescan.",
+      "expect": "The copied session's frames count once and name both copies. Additions show with reasons, manual inclusions stay pinned across the repeated refresh and exclusions stay recorded, and the unreadable member reads Unavailable. Refresh proposes the changes; Save View commits the accepted change as a new reviewed membership revision that survives restart and needs its own Review preparation. A changed copy reads as conflicting copies.",
+      "negative": "Membership never changes without approval, and no copied frame enters it twice. The prepared revision and the inputs Siril reads stay identical. A conflicting copy is not counted twice or substituted."
     },
     {
       "flowStep": "H1",
@@ -269,35 +269,35 @@
     },
     {
       "flowStep": "H3",
-      "journeyStep": "J26/S3",
-      "spec": "070-results-reuse RES-FR-04, RES-AC-03",
-      "action": "Inspect and accept three products.",
-      "expect": "They appear on the View, Project, and Target and read Keep.",
-      "negative": "Acceptance upgrades no lineage and claims no use of all frames."
+      "journeyStep": "J26/S3, J26/S3a",
+      "spec": "070-results-reuse RES-FR-04, RES-AC-03, RES-AC-10; D19",
+      "action": "Inspect three products, change one before accepting, then inspect it again and accept it.",
+      "expect": "They appear on the View, Project, and Target and read Keep, each with the SHA-256 recorded at acceptance. A product changed since inspection is refused until inspected again.",
+      "negative": "Acceptance upgrades no lineage, claims no use of all frames, and never records bytes that were not inspected."
     },
     {
       "flowStep": "H3a",
-      "journeyStep": "J26/S4, J26/S5, J26/S6, J26/S7",
-      "spec": "070-results-reuse RES-FR-05, RES-AC-04, RES-AC-05; D04",
-      "action": "Create View from results, choose a product-capable profile, prepare and open the View, then change a product's bytes.",
-      "expect": "Two product inputs with their originating View. Unsupported product kinds are refused by name. Drift is flagged for review.",
-      "negative": "No raw integration is added and nothing is converted, combined, or replaced silently."
+      "journeyStep": "J26/S4, J26/S5, J26/S6, J26/S7, J26/S7a",
+      "spec": "070-results-reuse RES-FR-04, RES-FR-05, RES-AC-04, RES-AC-05, RES-AC-09; D04",
+      "action": "Create View from results, choose a product-capable profile, prepare and open the View, then replace a product's bytes with its size and mtime preserved and restore them.",
+      "expect": "Two product inputs with their originating View. Unsupported product kinds are refused by name. The rehash flags the replaced product as drifted for review; restored bytes make it available again.",
+      "negative": "No raw integration is added and nothing is converted, combined, or replaced silently. Equal stats never stand in for content, and a drifted product is not offered for reuse or re-accepted."
     },
     {
       "flowStep": "H4",
-      "journeyStep": "J26/S8, J26/S9",
-      "spec": "068-calibration-inputs CAL-FR-06, CAL-FR-07, CAL-AC-04, CAL-AC-05; D05, D13",
-      "action": "See the detected master and adopt it into a durable calibration destination.",
-      "expect": "The master is registered with provenance only after a verified copy, then appears as a suggestion awaiting acceptance.",
-      "negative": "It is never preselected before adoption, and its generated source is not removed."
+      "journeyStep": "J26/S8, J26/S8a, J26/S8b, J26/S8c, J26/S9, J26/S9a, J26/S9b",
+      "spec": "068-calibration-inputs CAL-FR-06, CAL-FR-07, CAL-FR-08, CAL-AC-04, CAL-AC-05, CAL-AC-07, CAL-AC-08, CAL-AC-09, CAL-AC-10; D05, D13, D19",
+      "action": "See the detected master, meet an occupied destination path, change the master after review and again before registration, adopt it into a durable calibration destination, then change and restore the adopted copy.",
+      "expect": "The occupied path is refused, and both source changes block adoption with drift named. The master is registered with provenance only after its copy and source match the reviewed digest, then appears as a suggestion awaiting acceptance. A changed adopted copy reads drifted until its bytes return.",
+      "negative": "It is never preselected before adoption, the occupying file is unchanged, no copy of changed or unreviewed bytes is registered, its generated source is not removed, and a drifted master is never suggested or accepted."
     },
     {
       "flowStep": "I1",
       "journeyStep": "J27/S1, J27/S2, J27/S3, J24/S15",
-      "spec": "070-results-reuse RES-FR-06, RES-AC-06; D09",
+      "spec": "070-results-reuse RES-FR-06, RES-FR-07, RES-AC-06, RES-AC-07; D09",
       "action": "Mark Complete on a View without a Result and on the main View, then try edits on the Complete View.",
       "expect": "Complete is recorded and Clean up View is offered separately. Membership edits need an explicit Reopen; notes can be edited.",
-      "negative": "Completion removes nothing and claims no external success. Complete is refused while a PlateVault operation is running. Complete is refused only while a running PlateVault mutation affects this View; notes, Result acceptance, reviewed cleanup and archive/filing repair do not reopen it."
+      "negative": "Completion removes nothing and claims no external success. Complete is refused only while a running PlateVault mutation affects this View; notes, Result acceptance, reviewed cleanup and archive/filing repair do not reopen it."
     },
     {
       "flowStep": "I2",
@@ -317,43 +317,43 @@
     },
     {
       "flowStep": "I4",
-      "journeyStep": "J27/S7",
-      "spec": "071-storage-custody STO-FR-04, STO-AC-04",
-      "action": "Review cleanup.",
-      "expect": "The exact entries show with Send to OS Trash, movable and blocked counts per location, and a last-copy hardlink blocked.",
-      "negative": "Nothing with stale identity, missing proof, an unavailable source, or ambiguous ownership is approved."
+      "journeyStep": "J27/S7, J27/S11, J27/S11a",
+      "spec": "071-storage-custody STO-FR-04, STO-AC-04, STO-AC-08, STO-AC-15; D19",
+      "action": "Review cleanup, then remove a symlink View's prepared links and a verified duplicate whose kept copy changes after review, and remove the duplicate again after a fresh review.",
+      "expect": "The exact entries show with Send to OS Trash, movable and blocked counts per location, and a last-copy hardlink blocked. Duplicate removal names the verified copy kept and waits until that copy matches its review again.",
+      "negative": "Nothing with stale identity, drift, missing proof, an unavailable source, or ambiguous ownership is approved. No symlink target or target directory is followed."
     },
     {
       "flowStep": "I5",
       "journeyStep": "J27/S8, J27/S9, J27/S10",
-      "spec": "071-storage-custody STO-FR-05, STO-AC-03",
-      "action": "Send to Trash, put one file back, and try a location without Trash.",
-      "expect": "Per-item outcomes and a partial summary show. The removed entries are in the OS Trash. The unsupported location offers Keep files and Reveal location.",
-      "negative": "Link targets are not followed, protected files are unchanged, and no permanent-delete fallback exists."
+      "spec": "071-storage-custody STO-FR-04, STO-FR-05, STO-AC-03, STO-AC-15; D19",
+      "action": "Send to Trash after one selected intermediate changes, put one file back, and try a location without Trash.",
+      "expect": "Per-item outcomes and a partial summary show, naming the changed intermediate as blocked. The removed entries are in the OS Trash. The unsupported location offers Keep files and Reveal location.",
+      "negative": "Link targets are not followed, protected files and changed entries are unchanged, and no permanent-delete fallback exists."
     },
     {
       "flowStep": "J",
-      "journeyStep": "J28/S1–S10",
-      "spec": "071-storage-custody STO-FR-06, STO-FR-07, STO-FR-08, STO-AC-05; D06, D09, D11; D09",
-      "action": "Plan an archive, meet an impostor volume, choose the reference mode, approve, interrupt, retry, repair a blocked reference, and unplug the archive later.",
-      "expect": "Per-item journaled phases. Sources are retired only after destination and reference verification. Fixed membership; archived inputs read Offline.",
-      "negative": "No source is retired on failure or uncertainty. Hardlinks are not converted implicitly. Retry does not infer from filenames, and Open never omits unavailable inputs."
+      "journeyStep": "J28/S1–S10, J28/S7a, J28/S9a",
+      "spec": "071-storage-custody STO-FR-06, STO-FR-07, STO-FR-08, STO-AC-05, STO-AC-14; D06, D09, D11; D09",
+      "action": "Plan an archive, meet an impostor volume, choose the reference mode, approve, interrupt, retry, change one source before retirement, repair a blocked reference, resolve the drift, and unplug the archive later.",
+      "expect": "Per-item journaled phases. Sources are retired only after destination and reference verification while they still match their snapshots. Fixed membership; archived inputs read Offline.",
+      "negative": "No source is retired on failure, uncertainty or drift, and drift retains both versions. Hardlinks are not converted implicitly. Retry does not infer from filenames, and Open never omits unavailable inputs."
     },
     {
       "flowStep": "K",
-      "journeyStep": "J29/S1–S10",
-      "spec": "072-observing-plans PLAN-FR-01–PLAN-FR-05, PLAN-AC-01–PLAN-AC-05; D07, D18",
-      "action": "Plan windows, switch site, try reminders without a default site, set the default and lead time, deny then grant permission, restart, and export and re-check the .ics.",
-      "expect": "Windows name their site and time zone. Reminders only after opt-in, naming Backyard. Visible denial with Settings and Retry. No duplicate reminders. The .ics holds exactly the selected windows.",
-      "negative": "No weather or readiness claims, no reminder for the second site, no indexing, no provider account, and the saved .ics never changes."
+      "journeyStep": "J29/S1–S10, J29/S7a",
+      "spec": "072-observing-plans PLAN-FR-01–PLAN-FR-07, PLAN-AC-01–PLAN-AC-05, PLAN-AC-07; D07, D18",
+      "action": "Plan windows, switch site, try reminders without a default site, set the default and lead time, deny then grant permission, receive one reminder, restart inside its lead time, and export and re-check the .ics.",
+      "expect": "Windows name their site and time zone. Reminders only after opt-in, naming Backyard. Visible denial with Settings and Retry. The delivered reminder stays recorded as delivered after restart. The .ics holds exactly the selected windows.",
+      "negative": "No weather or readiness claims, no reminder for the second site, no repeat delivery of a delivered identity, no indexing, no provider account, and the saved .ics never changes."
     },
     {
       "flowStep": "L",
-      "journeyStep": "J30/S1–S6",
-      "spec": "071-storage-custody STO-FR-09, STO-AC-06; D06, D14; D09",
-      "action": "Propose filing, meet a collision, revise the plan, approve, verify, and interrupt a cross-volume filing.",
-      "expect": "Every relative path is previewed with its original basename. Only the displayed operations run. Hashes verify, and references report outcomes.",
-      "negative": "Nothing is overwritten, merged, or patched. A source is kept after failed verification, and membership is unchanged."
+      "journeyStep": "J30/S1–S6, J30/S4a, J30/S4b",
+      "spec": "071-storage-custody STO-FR-09, STO-AC-06, STO-AC-15, STO-AC-16; D06, D14, D19; D09",
+      "action": "Propose filing, meet a collision, revise the plan, approve after one source changes and one reference update fails, file the restored frame, retry the reference-blocked item, verify, and interrupt a cross-volume filing.",
+      "expect": "Every relative path is previewed with its original basename. Only the displayed operations run, and a source changed since review is blocked until it matches again. A same-volume item whose reference fails keeps its source path until its destination and references verify. Hashes verify, and references report outcomes.",
+      "negative": "Nothing is overwritten, merged, or patched. No source path is removed before its destination and references verify, a source is kept after failed verification, and membership is unchanged."
     }
   ]
 }

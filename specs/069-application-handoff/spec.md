@@ -6,7 +6,7 @@
 
 **Created**: 2026-10-03
 
-**Status**: Draft; product defaults recorded in D01 through D18 under the user-authorized specification-gate waiver. Requirements analysis, implementation and verification remain pending.
+**Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
 
 **Input**: Clean rebuild with selective reuse of verified code and the agreed PlateVault product flow.
 
@@ -26,15 +26,17 @@ Turn a reviewed membership into a verified Linked, Direct-source, Copy, or Clone
 - **PREP-AC-02**: Given the suggested View folder already exists with unrelated content, then preparation asks for another name or location and the existing folder is unchanged.
 - **PREP-AC-03**: Given a qualified read-only profile and linking unsupported at the destination, when alternatives are reviewed, then only supported Clone, Copy or exact Direct-source modes are offered with footprints. Nothing is applied until the user chooses; no silent copy occurs.
 - **PREP-AC-04**: Given a qualified read-only profile consumes a whole folder containing six excluded frames, when Direct-source handoff is reviewed, then the folder handoff is refused and supported isolated alternatives are offered.
-- **PREP-AC-05**: Given three inputs become unreadable during Prepare, then the outcome is Partial, listing 205 prepared and 3 blocked; verified Open is not offered; the sources are untouched.
+- **PREP-AC-05**: Given the reviewed 56-light `28 Sep Ha copy check` View and three inputs become unreadable during Prepare, then the outcome is Partial, listing 53 prepared and 3 blocked; verified Open is not offered; the sources are untouched.
 - **PREP-AC-06**: Given a catalog filter correction that differs from the header, when isolated patched Copy or supported Clone is chosen, then only the isolated entries carry the patched value and original hashes remain identical. Linked symlinks/hardlinks and Direct-source originals are never patched; review names the effective source value. A Direct-source View changes mode only after approval.
 - **PREP-AC-07**: Given an unsupported profile configuration, when review opens, then the unsupported capability is named; generic Open in does not claim verified-profile support.
 - **PREP-AC-08**: Given a requested symlink cannot be created but hardlinks are eligible, when alternatives are reviewed, then hardlink use requires explicit approval and verifies volume, permissions and filesystem. A failed eligibility check leaves the item blocked rather than copying silently.
 - **PREP-AC-09**: Given the last selected parent is unavailable, when a View location is reviewed, then another parent must be chosen explicitly and no different drive is substituted.
 - **PREP-AC-10**: Given a verified preparation and a missing or failing executable, when Open is attempted, then Choose application or Reveal View is offered and all decisions persist. Closing an external application never marks Complete or claims processing success.
 - **PREP-AC-11**: Given a profile has unknown or write-prone input behavior, when Linked or Direct-source mode is reviewed, then the input-write risk is named, those modes are refused, and isolated Copy or supported Clone is offered without changing mode automatically.
-- **PREP-AC-12**: Given accepted membership refresh while an external app uses an existing preparation, when reprepare is reviewed, then a new revision is proposed and old prepared entries remain unchanged unless their separate STO cleanup is approved.
+- **PREP-AC-12**: Given an accepted refresh saved as a new reviewed membership revision while an external app uses an existing preparation, when reprepare is reviewed, then a new preparation revision is proposed. Old prepared entries remain unchanged unless their separate STO cleanup is approved.
 - **PREP-AC-13**: Given a draft selection with default inclusions, explicit exclusions and unresolved sources, when Review preparation opens, then exact identities and membership need confirmation; unresolved sources remain blocked and quality decisions are not changed.
+- **PREP-AC-14**: Given a confirmed Copy preparation, when one source's bytes change after its snapshot is hashed and before terminal success, with size and mtime preserved, then that item is blocked with source drift named. The outcome is Partial, no verified Open is offered and PlateVault does not write to the changed source. After the reviewed bytes are restored, Retry prepares the item only when its source matches a fresh snapshot and its copy re-reads to match.
+- **PREP-AC-15**: Given a Prepared Linked View whose hardlinked input is overwritten in place with its size and mtime preserved, when Open is clicked, then the application is not launched. The changed entry is named against its preparation snapshot. After the snapshot bytes return, Open re-verifies every entry and launches.
 
 ### Edge Cases
 
@@ -52,9 +54,9 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PREP-FR-06**: View location: suggest a unique subfolder under the last chosen parent; on first use there is no assumed root. An existing directory is never reused or cleared. An unavailable parent prompts a new choice and is never silently replaced by another drive.
 - **PREP-FR-07**: The output location defaults to View/output/. An override parent gets a View-specific subfolder. The location is recorded for discovery and cleanup.
 - **PREP-FR-08**: Review preparation shows the immutable selection, profile, source references, calibration choices, exceptions, excluded count, paths, mode, operation count, footprint, and free space. Saved criteria are shown apart from browsing filters and confirmed. Source presence, collisions, and permissions are checked. Any subset that cannot use the mode is listed with paths and footprint, and per-item mode changes need approval. Unknown or omitted inputs never count as prepared.
-- **PREP-FR-09**: Prepare View shows Running and progress, cancel or pause where safe, and per-item failures. It ends in exactly one of Prepared, Partial, Failed, Canceled, or Paused. Success requires the prepared entries to match the recorded selection. Partial lists succeeded and blocked items. Sources are untouched.
-- **PREP-FR-10**: After verified success, the user gets Open in the chosen app, Reveal View, and preparation details. Launching is not processing completion, and closing the application never marks the View Complete. A missing executable offers Choose application or Reveal View. A launch failure keeps the View and its decisions.
-- **PREP-FR-11**: A revised selection needs a new review. A previous preparation can be kept for comparison. Removing replaced entries follows STO cleanup rules.
+- **PREP-FR-09**: Prepare View shows Running and progress, cancel or pause where safe, and per-item failures. It ends in exactly one of Prepared, Partial, Failed, Canceled, or Paused. Success requires the prepared entries to match the recorded selection and each source's SHA-256 snapshot taken during Prepare. Copy and Clone destinations are durably written and re-read against that snapshot; an isolated patched entry may differ only by its reviewed header change. Linked and Direct-source entries must resolve to the snapshotted source identity. Immediately before terminal success, each source's current identity and digest must still match its snapshot. Drift, a destination mismatch or an unreadable source blocks the item. So does an observation fingerprint differing from the confirmed membership, or a snapshot differing from any D19 basis recorded for the input, such as its quality decision, logical-capture proof, acceptance, adoption or assignment digest. A blocked item never counts as prepared. Partial lists succeeded and blocked items. Sources are untouched.
+- **PREP-FR-10**: After verified success, the user gets Open in the chosen app, Reveal View, and preparation details. Immediately before each launch, Open re-verifies under D19 the bytes the application will read: Copy, Clone and hardlink entries, symlink targets and Direct-source paths, each against its preparation snapshot. Drift refuses the launch and names the changed items, and the View reads unverified until those bytes return or a reviewed repreparation replaces them. Launching is not processing completion, and closing the application never marks the View Complete. A missing executable offers Choose application or Reveal View. A launch failure keeps the View and its decisions.
+- **PREP-FR-11**: A revised selection needs a new review. Each new preparation revision is materialized in a new reviewed View folder and never replaces, reuses or clears an existing preparation in place (D09). A previous preparation can be kept for comparison. Removing replaced entries follows STO cleanup rules.
 
 ### Owned interaction steps
 
@@ -86,8 +88,9 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 
 - [Product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the confirmed interactions and illustrative worked example.
 - This feature is independently specified; dependencies on other feature contracts are resolved in planning.
-- Conservative product defaults and human specification-gate waivers are authorized for this run. The root decision register applies; tests, requirements analysis, independent review and delivery checks remain mandatory.
+- Conservative defaults and all human-approval gate waivers follow the root autonomous objective and decision register. Tests, requirements analysis, independent review and delivery evidence remain mandatory.
 
 ## Decisions before feature approval
 
 - Root decisions D02, D04, D09, D13 and D15 govern exact inclusion confirmation, profile qualification, input-write refusal, reviewed calibration/preparation revisions and isolated header corrections. No unsupported tool capability is claimed without evidence.
+- Root decision D19 binds Prepare and Open to re-verified source and entry content.

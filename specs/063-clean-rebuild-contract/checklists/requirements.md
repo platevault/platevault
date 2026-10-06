@@ -16,11 +16,11 @@ Feature: [Specification](../spec.md)
 - [x] Open choices have named consuming feature owners.
 - [x] Existing uncommitted work and the archived reference remain outside destructive actions.
 - [x] Independent cross-feature requirements review passed after M1 through M13, R1 through R9 and C1 corrections; implementation readiness is not certified.
-- [x] Conservative product defaults are encoded in D01 through D18 under the user-authorized autonomous run.
+- [x] Conservative product defaults are encoded in D01 through D19 under the user-authorized autonomous run.
 
 ## Feature readiness
 
-- [x] The user-authorized human specification-approval waiver is recorded in the objective and decision register; native gates require corresponding resolution records.
-- [ ] Planning and analysis gates are satisfied before product implementation.
+- [x] The user's all-human-gate waiver is quoted in the autonomous objective and decision register; native gates cite the resolution decision.
+- [ ] Planning and analysis artifacts are verified before product implementation.
 
 The root is a shared contract. PV-LIB owns the usable navigation and catalog trust rules. Product implementation still requires each feature's research, plan, contracts, tasks and analysis; the human approval waiver does not certify those artifacts.

@@ -1,0 +1,75 @@
+{
+  "profile": "relaxed",
+  "documents": 14,
+  "score": 95.9,
+  "errors": 0,
+  "warnings": 7,
+  "unchecked": [],
+  "passed": false,
+  "triage": [
+    {
+      "path": "delivery-review.md",
+      "line": 128,
+      "rule": "prose-inflation.slop-lexicon",
+      "matched_text": "comprehensive",
+      "sentence": "- Test-suite searches found intentionally ignored real-UI tests and one explicitly skipped mock lifecycle scenario. The real-UI runner opts ignored journeys back in; the sampled journey has substantive assertions. This review does not claim comprehensive test quality from one sample.",
+      "verdict": "false-positive",
+      "reason": "The sentence denies exhaustive coverage; removing the qualifier changes the stated limitation."
+    },
+    {
+      "path": "product-review.md",
+      "line": 155,
+      "rule": "prose-inflation.slop-lexicon",
+      "matched_text": "comprehensive",
+      "sentence": "- No comprehensive filesystem-security, numerical-astronomy, matching-algorithm, schema-migration, packaging or performance audit was attempted.",
+      "verdict": "false-positive",
+      "reason": "The sentence denies exhaustive coverage; removing the qualifier changes the stated limitation."
+    },
+    {
+      "path": "delivery-challenge.md",
+      "line": 3,
+      "rule": "prose-inflation.business-jargon",
+      "matched_text": "holistic",
+      "sentence": "Model exposed by the harness: openai-codex/gpt-6-astra. A separate @max role indicator is unavailable. This is a source-only holistic snapshot review, not a patch-introduction review. No files were written and no validation, tests, builds, installations, workflow execution, database operations or publication were performed. An empty git diff established no local patch; findings were nevertheless assessed against existing source as requested.",
+      "verdict": "retained-archival-wording",
+      "reason": "The term describes the user-requested cross-domain snapshot review, distinguishing it from the reviewer schema default of a patch-only review. Original independent reviewer wording retained; no promotional claim."
+    },
+    {
+      "path": "design-challenge.md",
+      "line": 3,
+      "rule": "prose-inflation.business-jargon",
+      "matched_text": "holistic",
+      "sentence": "Model exposed: openai-codex/gpt-6-astra. Requested role: @max; an independent role selector is not exposed. This is a holistic snapshot review, not a patch-introduction assessment. All citations below are relative to the permitted worktree. No files were written; no application, tests, builds, linters, formatters or validation ran. A read-only git diff --stat returned no changes. Rendered appearance, actual focus fallback, assistive-technology output and clipping remain unverified.",
+      "verdict": "retained-archival-wording",
+      "reason": "The term describes the user-requested cross-domain snapshot review, distinguishing it from the reviewer schema default of a patch-only review. Original independent reviewer wording retained; no promotional claim."
+    },
+    {
+      "path": "logic-challenge.md",
+      "line": 7,
+      "rule": "prose-inflation.business-jargon",
+      "matched_text": "holistic",
+      "sentence": "All eight numbered findings survive independent source inspection, with qualifications to COR-04, COR-05, and COR-07 below. This is a holistic snapshot assessment, not a claim that these defects were introduced by a particular patch. No source, report, database, or other file was written. No builds, tests, formatters, linters, installs, runtime validation, or server processes were run. All proposed reproductions remain unexecuted. There are no visual claims.",
+      "verdict": "retained-archival-wording",
+      "reason": "The term describes the user-requested cross-domain snapshot review, distinguishing it from the reviewer schema default of a patch-only review. Original independent reviewer wording retained; no promotional claim."
+    },
+    {
+      "path": "performance-challenge.md",
+      "line": 5,
+      "rule": "prose-inflation.business-jargon",
+      "matched_text": "holistic",
+      "sentence": "This is a holistic snapshot review, not a patch-introduction assessment. All citations below are relative to the permitted worktree. Seven findings are accepted at their reported severity; one is downgraded to a source-established risk requiring production-layout confirmation. No finding is rejected. The snapshot contains substantive resource and inventory-query defects, hence the overall incorrect verdict.",
+      "verdict": "retained-archival-wording",
+      "reason": "The term describes the user-requested cross-domain snapshot review, distinguishing it from the reviewer schema default of a patch-only review. Original independent reviewer wording retained; no promotional claim."
+    },
+    {
+      "path": "process-challenge.md",
+      "line": 5,
+      "rule": "prose-inflation.business-jargon",
+      "matched_text": "holistic",
+      "sentence": "This is a holistic snapshot adjudication, not a claim that these defects were introduced in a particular patch. All citations below are relative to the permitted worktree. Seven original findings were challenged; none is omitted. Source-only inspection confirms four as stated, downgrades three, and rejects none in full. No files were written and no tests, builds, linters, workflow runners, database operations, or runtime validation were executed.",
+      "verdict": "retained-archival-wording",
+      "reason": "The term describes the user-requested cross-domain snapshot review, distinguishing it from the reviewer schema default of a patch-only review. Original independent reviewer wording retained; no promotional claim."
+    }
+  ],
+  "note": "Archival evidence is retained rather than rewritten as a second consolidated report. Main report has a separate normal-profile editorial check."
+}

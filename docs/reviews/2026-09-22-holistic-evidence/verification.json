@@ -1,0 +1,34 @@
+{
+  "snapshot": "8198209b5be118e785e4ea85cea3f26e0ea43c1c",
+  "date": "2026-09-22",
+  "tracked_file_count": 3162,
+  "routing": {
+    "mechanism": "Separate supervised OMP dispatcher; child task cards were not visible in the parent conversation",
+    "command": "omp --model @max --config .review-runtime/config.yml --no-extensions --no-title --no-session --mode text -p <dispatch brief>",
+    "role_mapping": "max=openai-codex/gpt-6-astra:auto",
+    "agent_overrides": {"scout": "@max", "reviewer": "@max", "task": "@max"},
+    "effort_override": false,
+    "global_configuration_changed": false,
+    "reviewers": ["LogicReview", "SecurityReview", "PerformanceReview", "ProductReview", "DesignReview", "DeliveryReview", "ProcessReview"],
+    "challengers": ["LogicChallenge", "SecurityChallenge", "PerformanceChallenge", "ProductChallenge", "DesignChallenge", "DeliveryChallenge", "ProcessChallenge"],
+    "dispatcher_evidence": "Reports modelRole=max in both task dispatch responses for every child; child reports expose openai-codex/gpt-6-astra",
+    "exit_code": 0,
+    "qualification": "Initial six default scouts were cancelled after role clarification. Direct agent=@max dispatch failed preflight. Only the completed isolated @max wave is used in this report. Provider-side execution beyond harness identity was not independently audited."
+  },
+  "checks": [
+    {"name": "Committed worktree provisioning", "status": "pass", "command": "git cat-file -e HEAD:.config/wt.toml && git cat-file -e HEAD:.worktreeinclude", "exit": 0},
+    {"name": "Worktree dependency copy", "status": "completed-not-completeness-proof", "command": "wt -y step copy-ignored", "output": "Copied 0 files; post-start hook had also run. Provisioned node_modules exists but is incomplete for this snapshot."},
+    {"name": "Tooling regression tests", "status": "pass", "command": "node --test scripts/check-eslint-baseline.test.mjs scripts/check-orphan-ve-modules.test.mjs", "exit": 0, "test_files_passed": 2, "failures": 0, "duration_seconds": 28.21},
+    {"name": "Recovery permission-denied component reproduction", "status": "defect-reproduced", "exit": 0, "command": "rustc --edition 2021 --crate-name review_reconcile .review-runtime/reconcile-probe.rs -o .review-runtime/reconcile-probe && .review-runtime/reconcile-probe .review-runtime/reconcile-fixture", "output": "metadata=PermissionDenied; production_classify=Completed; source_bytes_unchanged=true", "scope": "Includes unchanged crates/fs/executor/src/reconcile.rs. Disposable harness aliases camino::Utf8Path to std::path::Path to avoid uncached workspace dependencies. Actual classifier body executes against an inaccessible disposable directory. Does not exercise app startup, SQL recovery, or Windows."},
+    {"name": "Journey provenance validation", "status": "defect-reproduced", "command": "python .review-runtime/journey-probe.py", "harness_exit": 0, "scope": "Invokes actual docs/journeys/journeys.py cmd_lint on temporary fixture directories, then deletes only those fixtures", "cases": [
+      {"case": "missing-provenance", "validator_exit": 0, "output": "lint: 1 journeys, 0 errors"},
+      {"case": "aggregate-pass-with-S1-fail", "validator_exit": 0, "output": "lint: 1 journeys, 0 errors"},
+      {"case": "retained-v1-run-after-v2-step-retirement", "validator_exit": 1, "output": "delta Δ2 references unknown step S2; historical run unknown step id S2; 2 errors"}
+    ]},
+    {"name": "Rust session tests", "status": "blocked", "command": "cargo test --locked --offline -p sessions", "exit": 101, "reason": "Cached crates.io index cannot resolve locked skymath 0.7.2. No Rust tests executed."},
+    {"name": "Storybook launch", "status": "blocked", "command": "pnpm --dir apps/desktop storybook", "exit": 1, "reason": "pnpm attempted automatic dependency repair and aborted modules removal without a TTY (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY). No purge approved; no ready surface."},
+    {"name": "Direct Vite launch", "status": "blocked", "command": "apps/desktop/node_modules/.bin/vite --host 127.0.0.1 --port 5183 (cwd apps/desktop)", "exit": 1, "reason": "ERR_MODULE_NOT_FOUND: @vanilla-extract/vite-plugin while loading vite.config.ts. No rendered UI evidence."},
+    {"name": "Beads sync", "status": "blocked", "command": "BEADS_DOLT_SERVER_USER=beads bd dolt pull", "exit": 1, "reason": "Server 127.0.0.1:3308 unreachable; shared-server setting conflicts with embedded metadata. Client version 1.3.0. No storage configuration change or server startup."}
+  ],
+  "limits": ["No application code changes", "No full-suite pass", "No live UI or WCAG certification", "No release publication or external issue mutation", "No live branch-protection verification", "No comprehensive dependency advisory scan", "No personal application data used"]
+}

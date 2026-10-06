@@ -2,7 +2,7 @@
 
 ## Decision
 
-Use a new `platevault_core` Rust crate with a clean SQLite catalog. Reuse verified header extraction and no-follow primitives; do not import the old database or orchestration. The desktop shell adopts this backend through explicit Tauri commands. The old implementation remains a recoverable Git baseline during the staged cutover and is removed from the active application after the rebuilt backend contracts are complete.
+Use `platevault_core` for application logic, `platevault_model` for canonical records and `persistence_library` for the clean SQLite catalog. SQL remains under `crates/persistence`. Reuse verified header extraction and no-follow primitives; do not import the old database or orchestration. The desktop shell adopts the backend through explicit Tauri commands. The old implementation remains a recoverable Git baseline during cutover and is removed from the active application after the rebuilt contracts are complete.
 
 ## Source evidence
 
@@ -19,7 +19,7 @@ Read-only `LibraryRebuildScout` mapped baseline `94a3dc958c13e297baf501aa2721efa
 
 CaptureKey uses canonical typed frame type, header-derived night/date basis, camera, optical-train evidence, filter, exposure, gain, offset, binning, dimensions, readout and cooler setpoint. Measured temperature, pointing and mechanical-rotation jitter remain per-frame evidence rather than exact identity fields. Decimal-equivalent values share canonical encoding. Night uses DATE-LOC/noon or header longitude with a labelled mean-solar noon boundary; otherwise a provisional UTC date is shown. No clock, app settings, OBJECT or Target fallback enters identity. Reviewed key changes produce grouping lineage.
 
-Inventory is progressive and read-only. Registration records volume and root-file identity and rejects overlapping locations; scans revalidate that identity before absence reconciliation. Asset identity uses volume/file identity plus lossless path records. Source drift invalidates decision applicability. Full-image hashes are lazy for explicit identity/custody work and stored against their observed fingerprint. Offline remap without valid prior digest refuses rather than guesses. Partial, unreadable and skipped-link scopes never imply Missing.
+Inventory is progressive and read-only. Registration records volume/root identity and rejects overlap; scans revalidate identity before absence reconciliation. New Unreviewed inputs use metadata-only indexing. Explicit quality review hashes content; rescans/reuse rehash previously decided readable inputs even with unchanged stats. Inaccessible inputs retain last-observed digest/quality with unavailable scope. Digest mismatches invalidate applicability. Remap/custody hashing is lazy; offline remap without valid prior digest refuses. Partial, unreadable and skipped-link scopes never imply Missing.
 
 One serialized SQLite writer owns short scan-batch transactions and synchronous user decisions. WAL, foreign keys and FULL synchronous apply to the writer connection; macOS uses fullfsync/checkpoint_fullfsync. Correction, current-evidence regroup and lineage commit together. Per-record decision revisions are independent of scan sequences. Failed transactions report errors, never saved success.
 

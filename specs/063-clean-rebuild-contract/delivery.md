@@ -6,7 +6,7 @@ Scope: all PRs produced by this rebuild
 
 ## One active specification
 
-Only one feature specification enters product implementation at a time. Draft specifications and their unresolved decisions may be prepared ahead of it. A feature starts implementation only after its own unwaived clarification and analysis approval gates are satisfied.
+Only one feature specification enters product implementation at a time. Draft specifications and unresolved decisions may be prepared ahead of it. Clarification and analysis artifacts must be complete before implementation; the user's 2026-10-04 authorization resolves every human-approval gate without signoff.
 
 The lead selects the next eligible feature from actual artifact dependencies. The first user-visible path is library indexing, session inspection, standalone View selection, and exact external-tool handoff. No empty application shell is an independently accepted milestone.
 
@@ -46,7 +46,7 @@ The PR body or governing delivery record identifies:
 
 Actionable findings are fixed by one owner, verified, and reassessed on the new head. Pre-existing unrelated issues do not expand the change; they receive separate tracking. No test, verification asset, or threshold is weakened to clear a gate.
 
-Only an explicit human exception can waive a missing assessment or coverage requirement. An exception must name the PR head, omitted check, and risk. Ordinary continuation instructions are not exceptions.
+The all-human-gate waiver removes signoff waits only. Required automated assessments and coverage remain mandatory; a separate explicit user exception must name the PR head, omitted check and risk to waive one.
 
 ## Journey acceptance
 
@@ -61,7 +61,7 @@ A feature is accepted only with its specified end-to-end behavior, updated inter
 - Old application source, real image files, credentials, and unrelated work remain recoverable. The user authorized resetting all existing application databases because no real catalog exists; this does not authorize deleting source images.
 - No silent source mutation, membership omission, copy fallback, or permanent-delete fallback.
 - Rust scientific execution and frontend presentation do not alter metric definitions or custody requirements.
-- Human specification-approval gates are waived for this autonomous run, with conservative defaults recorded in the decision register. Review findings and the waived questions remain recorded; verification and delivery gates are not waived.
+- All repository human-approval gates, including verification signoff, are waived under the user's recorded 2026-10-04 instruction in the autonomous objective. Conservative defaults and review findings remain recorded. Automated analysis, tests, independent review, Sniff, delivery evidence and original-file protection remain required.
 - Landing and cleanup require the repository's exact-head delivery receipt workflow.
 - Development Tauri MCP is mandatory and must control the actual application for verification. Production MCP shipping is an optional future feature; release builds never inherit unauthenticated development exposure.
 - Each issue gets at most five failed fix attempts, then a reproducible deferred backlog entry. Continue independent work with no global time limit; deferred requirements are never claimed implemented.

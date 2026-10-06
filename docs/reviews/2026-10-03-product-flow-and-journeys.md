@@ -11,7 +11,7 @@ This document specifies the proposed application. It does not describe shipped b
 
 Each journey names what the user sees, enters, clicks, and observes. Trust conditions name what must remain unchanged. Open decisions remain listed at the end; they are not accepted ambiguities.
 
-The [engineering review](2026-10-02-engineering-review.md) describes the audited application. The [earlier concept](2026-10-02-carte-blanche-product-redesign.md) records exploration; this flow supersedes its conflicting workflow recommendations. Existing [product journeys](../journeys/INDEX.md) remain unchanged because they document the existing product.
+The audited application is preserved at baseline commit `94a3dc958c13e297baf501aa2721efa2c2628622`. Earlier engineering reviews and concept exploration remain in the retained `review/application-local-20261002` branch/worktree and are not published artifacts of this contract. This flow supersedes their conflicting workflow recommendations. Baseline [product journeys](../journeys/INDEX.md) and their run history remain recoverable; J19 through J30 describe the rebuild.
 
 ## Product vocabulary
 
@@ -271,7 +271,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Observe:** library quality state changes for those frames. Target usable coverage updates without confusing it with View membership.
 
-**Alternative:** choose **Reject for Project** for a Project-owned View, or **Mark unusable in library** for the broader library decision. Each confirmation names the affected scope. Project-progress and existing-View propagation rules remain open.
+**Alternative:** choose **Reject for Project** for a Project-owned View, or **Mark unusable in library** for the broader library decision. Each confirmation names the scope. D10 separates Project progress from library quality and preserves existing fixed View membership; those boundaries still need runtime verification.
 
 **Trust:** preparing the View alone does not mark every included frame usable. Excluded frames stay View-specific unless the user chooses a broader decision.
 
@@ -281,7 +281,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **See:** matched files, rows with no corresponding file, ambiguous rows, units, and source/method information. Confirm the import mapping.
 
-**Observe:** external measurements appear with their provenance. They do not silently replace native values or import frame-rejection decisions.
+**Observe:** external measurements appear with their provenance and read content unverified, because a file-name match does not prove which bytes they describe. They do not silently replace native values or import frame-rejection decisions. A row whose frame changed since PlateVault last recorded its digest needs review and is not attached.
 
 **Failure branch:** missing units or ambiguous file identity requires review. Unsupported measurement columns remain unavailable rather than being relabeled as equivalent metrics.
 
@@ -299,7 +299,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 ### E2. Resolve exceptions
 
-**See:** the 24 Sep OIII session lacks confirmed flat compatibility. Its candidate 26 Sep flat set has unknown optical-train state.
+**See:** the 24 Sep OIII session has a compatible 30 Sep OIII flat suggestion. The alternative 26 Sep flat set has unknown optical-train state, so choosing it leaves the flat unresolved.
 
 **Do:** choose another candidate, exclude the affected session, defer preparation, or record an explicit scoped exception with a reason.
 
@@ -373,7 +373,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Observe:** source presence, destination collisions, and applicable permissions are checked. If linking is unavailable, PlateVault offers supported clone/copy/direct-source alternatives with their consequences before applying anything.
 
-**See:** any subset that cannot use the chosen mode, with item paths and footprint. Per-item mode changes need approval; mixed-mode support remains an explicit preparation contract.
+**See:** any subset that cannot use the chosen mode, with item paths and footprint. One preparation may mix modes per item (D04); each per-item mode change needs approval.
 
 **Trust:** a low-footprint linked plan does not silently become a full copy. Unknown or omitted inputs are not counted as prepared.
 
@@ -387,7 +387,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Trust:** a start acknowledgment is not success. No processing application is opened with a falsely verified incomplete selection.
 
-**Failure branch:** inspect succeeded and blocked entries, then choose **Review preparation again** or keep the partial View unchanged. Retry/resume behavior for those entries needs the lifecycle contract below. Sources remain untouched; removing prepared entries follows Journey I, including retained-copy proof and Trash.
+**Failure branch:** inspect succeeded and blocked entries, then choose **Review preparation again** or keep the partial View unchanged. D09 requires reviewed repreparation and retry from recorded item state, not filename inference; a new preparation revision uses a new reviewed View folder. Sources remain untouched; removing prepared entries follows Journey I, including retained-copy proof and Trash.
 
 ### F6. Open the application
 
@@ -411,9 +411,9 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Do:** accept selected changes, decline others, or keep the existing View unchanged. Revisit image and calibration review for changed inputs.
 
-**Observe:** preparing the revised selection requires a new review. Keep the previous preparation when a comparison is wanted. New arrivals do not silently change an already prepared View.
+**Observe:** **Save View** commits the accepted changes as a new reviewed membership revision that survives restart. Preparing the revised selection requires a new review. Keep the previous preparation when a comparison is wanted. New arrivals do not silently change an already prepared View.
 
-**Trust:** no changed membership or preparation revision takes effect without approval. Whether repeated refresh keeps manual inclusions pinned, and whether revisions use new folders or reviewed replacement, need explicit lifecycle rules.
+**Trust:** no changed membership or preparation revision takes effect without approval. Manual inclusions stay pinned across every refresh until the user removes them, and a new preparation revision uses a new reviewed folder, never replacing one in place (D09).
 
 **Trust:** replacing a preparation does not bypass cleanup. Entries being removed need the same reviewed scope, retained-original evidence, and Trash handling as Journey I.
 
@@ -457,7 +457,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Do:** choose a profile capable of handing those products to the external application. Review paths and membership. Prepare the View. Open the external application as in Journey F.
 
-**Trust:** PlateVault does not combine channels or stitch panels itself. Raw-frame calibration controls do not imply recalibration of processed products. Mixed raw/product inputs need profile support; otherwise prepare separate Views. Reference drift requires review rather than silently replacing an accepted product.
+**Trust:** PlateVault does not combine channels or stitch panels itself. Raw-frame calibration controls do not imply recalibration of processed products. Mixed raw/product inputs need profile support; otherwise prepare separate Views. Each accepted product is rehashed against its acceptance digest before reuse; reference drift requires review rather than silently replacing an accepted product.
 
 ### H4. Adopt generated calibration masters
 
@@ -465,7 +465,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Do:** inspect type, camera/settings, channel, source evidence, and origin. Confirm adoption explicitly.
 
-**Observe:** the master becomes a reusable calibration candidate with its actual provenance. Detection alone does not authorize automatic future reuse.
+**Observe:** the master becomes a reusable calibration candidate with its actual provenance only after its copy and its source still match the digest recorded at review. Detection alone does not authorize automatic future reuse.
 
 ## Journey I: completion and selectable cleanup
 
@@ -550,7 +550,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Recovery branch:** after interruption, the user sees destination-verified, source-retained, reference-updated, and pending work. Retry resumes recorded work without guessing from filename presence alone.
 
-**Open sequencing detail:** failure during reference rebuilding must not silently strand a View. The precise rollback versus pause/source-retention policy needs an implementation contract before this journey becomes executable.
+**Sequencing, D06:** a reference-update failure blocks retirement of that item's source. Retain its verified destination and recorded phase for resumable retry. Completed items may retire only when, immediately before retirement, the source still matches its copied snapshot, the destination re-verifies and affected references pass; source drift retains both versions for review. The implementation must qualify each phase.
 
 ## Journey K: observing plans and reminders
 
@@ -582,7 +582,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Do:** click **Review filing**. Approve only the displayed file operations and reference changes. A colliding destination requires another path or a revised plan.
 
-**Observe:** indexing alone has moved nothing. Filing reports item progress and final outcomes. Cross-volume moves use verified transfer; failed verification preserves the source. Changed references follow the reviewed rules in Journey J.
+**Observe:** indexing alone has moved nothing. Filing reports item progress and final outcomes. Every item, same-volume or cross-volume, keeps its source path until its destination and affected references verify; a failed check preserves the source. Cross-volume moves use verified transfer. Changed references follow the reviewed rules in Journey J.
 
 **Trust:** filing never overwrites unrelated files, merges metadata-homogeneous sessions, or changes View membership. Keep index-in-place when no physical organization is needed.
 
@@ -592,7 +592,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 | Situation | Required observation and recovery |
 |---|---|
 | Unsaved catalog write fails | The edited value remains visibly unsaved/error; Retry is available; never show Saved |
-| Location offline | Retain last-observed metadata; reconnect or choose another verified location |
+| Location offline | Retain last-observed metadata; reconnect or choose another verified location. A location that cannot return is retired only after a review that changes no file; its copies read Retired and stay named in fixed Views |
 | Partial scan | Name incomplete scope; do not infer missing files under unreadable paths |
 | Missing OBJECT | Geometry matching and manual selection remain available |
 | Missing geometry | Show Unknown; allow manual session selection without invented distance/overlap |
@@ -637,19 +637,20 @@ Baseline status records source traces. Full runtime verification remains incompl
 - Direct Google Calendar/Outlook event sync and unresolved live-subscription hosting.
 - Multiple active notification sites; initial reminders use the default site only.
 
-## Open decisions and readiness
+## Recorded decisions and implementation readiness
 
-These proposed journeys specify user actions and refusal behavior. They have not been validated against a running implementation.
+These proposed journeys remain unvalidated. D01 through D19 record settled conservative choices. The list below identifies their remaining implementation evidence.
 
-1. **Geometry and standalone defaults (product decision):** set overlap/coverage/radius defaults and unknown-orientation handling. Define equipment/framing preselection for Views without a Project or Target context.
-2. **Unreviewed membership (settled by D02):** available Unreviewed/Usable frames enter the draft, library-Unusable frames start visibly excluded, and unavailable members remain unresolved. Bulk Usable is explicit; worked totals have confirmed membership. Implementation and runtime evidence remain required.
-3. **Raw/CFA measurement support (engineering contract):** define channel/sample/model semantics and imported-metric identity matching before treating results as comparable.
-4. **Profile and input-mode support (engineering contract):** verify each application's exact membership handoff and result-input capabilities. Define whether a View supports mixed per-item modes; every affected item and mode change must be reviewed.
-5. **Generated master storage (product decision):** choose copy, transfer, or in-place registration when adopting a master. Adoption must not leave reusable data disposable with a processing folder.
-6. **Archive failure sequencing (engineering contract):** define rollback versus pause/source-retention when reference updates fail. Preserve verified data and fixed membership; cross-volume mode conversion needs approval.
-7. **Reminders (product defaults and engineering contract):** set window horizon, Moon conditions, lead time, and repeat suppression. Specify sleep/app-closed behavior and permission-denial recovery.
-8. **Draft ownership (engineering contract):** define autosave or explicit Save draft, restart recovery, and concurrent edits for the review workspace.
-9. **View lifecycle (product decision and engineering contract):** define manual-inclusion pins, revision folders, partial-preparation retry/resume, completion blockers, reopening, and editing after Complete. Existing entries are removed only under the cleanup rules.
-10. **Quality scope (product decision):** define Project rejection's effect on progress, frame-state precedence, and aggregate filter thresholds. A changed quality decision must not silently alter fixed View membership.
+1. **Geometry, D01/D12:** qualify footprint/equipment evidence and the visible configured overlap criterion. Unknown geometry remains manual, never zero distance.
+2. **Membership, D02:** available Unreviewed/Usable frames enter the draft; library-Unusable starts visibly excluded; unavailable members stay unresolved. Verify exact preparation confirmation and explicit bulk quality scope.
+3. **Raw/CFA, D03:** qualify read-only mosaic/channel and numerical metric/import semantics; no debayering.
+4. **Profiles, D04:** verify exact input/layout/product capabilities and safe mode eligibility for each required application. Unknown/write-prone inputs refuse Linked/Direct-source use; every alternative needs review. One preparation may mix input modes per item, and each per-item change needs approval.
+5. **Master adoption, D05:** verify a durable chosen library copy and its hashes before reuse; preserve generated source until reviewed cleanup.
+6. **Archive, D06:** verify per-item retained phases, affected-item retirement blocking and resumable retries. A final source snapshot match, destination verification and reference verification precede each source retirement; no reopened rollback-versus-retention choice.
+7. **Reminders, D07:** qualify explicit site/criteria/lead-time controls, repeat suppression, permission recovery and actual scheduler capability. No app-closed claim without tested delivery.
+8. **Drafts, D08:** verify explicit Save, committed restart recovery and stale-edit refusal; failed writes remain unsaved.
+9. **View lifecycle, D09:** qualify immutable preparation revisions, safe retry and explicit reopening. Identity-preserving cleanup/reference repair does not reopen Complete or alter membership. Manual inclusions stay pinned across refresh until explicitly removed, and each new preparation revision uses a new reviewed View folder rather than replacing one in place.
+10. **Quality/progress, D10/D15:** verify fingerprint-and-digest-bound library decisions, independent Project rejection/progress and fixed View membership; source corrections stay catalog-only.
+11. **Content-bound consumption, D19:** verify that every assignment, Open, preparation, reuse, cleanup, archive, filing and source retirement re-verifies its recorded identity and SHA-256 immediately before the effect. Decision- or proof-bound counts use each item's last completed verification and show its time; showing a total starts no rehash. Drift blocks the item by name or leaves applicable totals, and never resolves automatically. Metadata-only captured totals and labelled last-observed counts stay visible. Catalog-only Retire location reads no bytes and checks its review, revision and availability instead.
 
 Readiness check: user actions and expected outcomes are stated; negative assertions guard file changes and quality-scope changes. Existing product code and source verification do not establish that these redesigned flows run. Formal journey conversion and independent running-product validation follow implementation and intent approval.

@@ -1,0 +1,15 @@
+# Gitignored paths a fresh worktree needs, copied by `wt step copy-ignored`.
+# Without this file the step is a no-op: it is gated by `--require-include`.
+#
+# On APFS these are reflink clones, so 601 MB of pnpm dependencies costs almost
+# nothing to provision. Without them a focused test or typecheck fails with a
+# missing-module error that reads as broken code rather than an unprovisioned
+# checkout.
+#
+# `target/` is deliberately absent. The user-level `cargo-target` hook points
+# CARGO_TARGET_DIR at a shared directory keyed to the primary checkout, and the
+# global copy-ignored exclusion drops it, so a 4 GB Rust build tree is neither
+# copied nor rebuilt per worktree.
+node_modules/
+apps/desktop/node_modules/
+packages/contracts/node_modules/

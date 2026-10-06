@@ -1,0 +1,14 @@
+# Worktrunk project configuration. Committed, so it travels with the repository.
+# Merged after built-in defaults and before user config; see https://worktrunk.dev/config/
+
+[step.copy-ignored]
+# Generated output a worktree must not inherit. Each is regenerable, and a stale
+# copy is worse than an absent one: `dist/` and the Vite cache shadow a build
+# under test, and the scaffold extension trees are rebuilt from their sources.
+exclude = [
+  "dist/",
+  "node_modules/.vite/",
+  ".design-sync/node_modules/",
+  ".specify/extensions/memory-md/node_modules/",
+  ".specify/extensions/memory-md/dist/",
+]
