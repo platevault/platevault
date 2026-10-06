@@ -6,27 +6,30 @@
  * never exclude, reject or mark frames Usable (PIX-FR-08).
  */
 import { Link, useSearch } from "@tanstack/react-router"
-import { ImageOff, PanelRightClose, PanelRightOpen, Upload } from "lucide-react"
+import { CircleSlash, ImageOff, PanelRightClose, PanelRightOpen, Search, Upload } from "lucide-react"
 import { type FocusEvent, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { getPreferences } from "@/app/preferences"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { type Column, DataTable, SelectionBar, TableToolbar } from "@/components/app/data-table"
+import { type Column, DataTable, SelectionBar } from "@/components/app/data-table"
 import { EmptyState, Notice, UnknownValue } from "@/components/app/feedback"
-import { PageBody, PageHeader, Section } from "@/components/app/page"
+import { PageBody, PageHeader, useDocumentTitle } from "@/components/app/page"
 import { STATUS, StatusBadge } from "@/components/app/status"
+import { Filmstrip, Inspector, PanelSection, PaneToolbar } from "@/components/app/studio"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { assetAvailability, measurementApplies, qualityApplicability, targetCoverage } from "@/domain/derive"
 import type { Asset, AssetId, Catalog, Disk, MeasurementImport, Metric, MetricKey, Operation, Session } from "@/domain/types"
 import { formatDuration, formatNight, plural } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { cancelOperation, isSettled } from "@/store/operations"
 import { defaultFrameUi } from "@/store/slices/t3"
 import { rejectForProject, resolveImportRow, setFrameUi, setLibraryQuality } from "./actions"
 import { SelectField } from "./fields"
-import { FramePreview } from "./frame-preview"
+import { FramePreview, FrameThumb } from "./frame-preview"
 import { frameName, ImportDialog } from "./import-dialog"
 import { CSV_COLUMNS } from "./csv"
 import {
@@ -160,7 +163,7 @@ function MeasureBar({ op, notMeasured, scope, onReview, disabledReason }: { op: 
   if (op && !isSettled(op.status)) {
     const pct = op.progress.total > 0 ? (op.progress.done / op.progress.total) * 100 : 0
     return (
-      <div ref={barRef} tabIndex={-1} {...focusHandlers} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-card px-3 py-2 outline-none">
+      <div ref={barRef} tabIndex={-1} {...focusHandlers} className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-seam bg-panel-header px-3 py-1 text-xs outline-none">
         <Progress value={pct} aria-label="Measurement progress" getAriaValueText={() => `${op.progress.done} of ${op.progress.total} frames`} className="min-w-48 flex-1 gap-1">
           <span className="text-sm tabular-nums" aria-hidden="true">
             {op.status === "running" ? ((op.payload as unknown as MeasurePayload).verify.length > 0 ? "Verifying cached values" : "Measuring frames") : op.status === "interrupted" ? "Measurement interrupted by a restart" : "Measurement paused"}: {op.progress.done} of {op.progress.total} frames · current frame first
@@ -183,7 +186,7 @@ function MeasureBar({ op, notMeasured, scope, onReview, disabledReason }: { op: 
   const unfinished = unfinishedCount(op)
   if (!op && notMeasured === 0) return null
   return (
-    <div ref={barRef} tabIndex={-1} {...focusHandlers} className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2 text-sm outline-none">
+    <div ref={barRef} tabIndex={-1} {...focusHandlers} className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-seam bg-panel-header px-3 py-1 text-xs outline-none">
       <p className="min-w-0 flex-1 text-pretty">
         {op ? (
           <>
@@ -324,6 +327,8 @@ export function FramesArea() {
   const measurableExcluded = measurable.filter((id) => content.excluded.includes(id)).length
   const measureScope = measurableExcluded > 0 ? `Review covers ${measurable.length} readable frames: ${measurable.length - measurableExcluded} included, ${measurableExcluded} excluded.` : null
   const hintId = useId()
+  // The pane toolbar replaces the Frames pane header; the window title still names the area.
+  useDocumentTitle("Frames", 2)
   // The preview pane can be hidden so the frames table takes the full width (F2).
   const [paneOpen, setPaneOpen] = useState(true)
   const paneId = useId()
@@ -582,128 +587,145 @@ export function FramesArea() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        level={2}
-        title="Frames"
-        description="Measurements never exclude, reject or mark frames Usable. Excluding a frame changes this View only."
+      {/* Library-loupe layout (harness v2): one toolbar strip, the frames table beside the loupe inspector
+          (the frame as a plate on its mount, values with their source, histogram, trend), and a filmstrip
+          of the shown frames along the bottom. Measurements never exclude, reject or mark frames Usable. */}
+      <PaneToolbar label="Frames" className="gap-x-2.5 bg-panel-header">
+        <h2 className="panel-title mr-1 text-foreground/85" title="Measurements never exclude, reject or mark frames Usable. Excluding a frame changes this View only.">
+          Frames
+        </h2>
+        <div className="relative w-44 min-w-0">
+          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            data-page-search
+            type="search"
+            aria-label="Filter frames by file name"
+            placeholder="File name contains…"
+            value={ui.search}
+            onChange={(event) => setFrameUi(view.id, { search: event.target.value })}
+            className="h-6 min-h-6 pl-7 text-xs"
+          />
+        </div>
+        <SelectField
+          className="flex items-center gap-1.5"
+          triggerClassName="w-40 text-xs"
+          label="Session"
+          value={ui.sessionId ?? "all"}
+          onChange={(value) => setFrameUi(view.id, { sessionId: value === "all" ? null : value })}
+          options={[{ value: "all", label: "All sessions" }, ...sessions.map((s) => ({ value: s.id, label: sessionLabel(s) }))]}
+        />
+        <div className="flex items-center gap-1.5">
+          <Switch id={`${view.id}-show-excluded`} checked={ui.showExcluded} onCheckedChange={(on) => setFrameUi(view.id, { showExcluded: on })} />
+          <Label htmlFor={`${view.id}-show-excluded`} className="text-xs">
+            Show excluded ({excludedCount})
+          </Label>
+        </div>
+        <div className="flex-1" />
+        <Button size="sm" variant="outline" title="Import measurements" onClick={() => setImportOpen(true)}>
+          <Upload aria-hidden="true" data-icon="inline-start" />
+          <span className="max-xl:sr-only">Import measurements</span>
+        </Button>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label={paneOpen ? "Hide preview and plot" : "Show preview and plot"}
+          title={paneOpen ? "Hide preview and plot" : "Show preview and plot"}
+          aria-expanded={paneOpen}
+          aria-controls={paneOpen ? paneId : undefined}
+          onClick={() => setPaneOpen((open) => !open)}
+        >
+          {paneOpen ? <PanelRightClose aria-hidden="true" /> : <PanelRightOpen aria-hidden="true" />}
+        </Button>
+      </PaneToolbar>
+      <p className="sr-only" aria-live="polite">
+        {announcement}
+      </p>
+      {readOnlyReason && !view.completedAt ? <p className="border-b border-seam bg-panel px-3 py-1 text-xs text-muted-foreground">{readOnlyReason}</p> : null}
+      <MeasureBar op={op} notMeasured={notMeasured} scope={measureScope} disabledReason={view.completedAt ? "Complete Views are not measured; Reopen first." : null} onReview={() => startMeasurement(view.id, measurable)} />
+      {notMeasured > 0 && op?.status === "canceled" ? (
+        <Notice layout="strip" tone="info" title="Cancel kept your selection and exclusions">
+          Frames that were not reached read Not measured. Choose Review frames to reuse the values already computed and measure the rest.
+        </Notice>
+      ) : null}
+      {imports.length > 0 ? (
+        <PanelSection title="Imported measurements" id="frames.imports" level={3} summary={plural(imports.length, "import")} className="shrink-0 bg-panel">
+          <p className="pb-1.5 text-xs text-muted-foreground">Imported values sit next to built-in values with their source, method and units. Rows that match no single frame attach to nothing.</p>
+          <ul className="max-h-56 divide-y divide-seam overflow-y-auto rounded-sm border border-seam bg-background">
+            {imports.map((record) => (
+              <ImportReview key={record.id} record={record} catalog={catalog} />
+            ))}
+          </ul>
+        </PanelSection>
+      ) : null}
+
+      <SelectionBar
+        className="shrink-0 rounded-none border-0 border-b border-seam bg-selected/50 px-3 text-xs"
+        count={checked.length}
+        hiddenByFilters={hiddenChecked}
+        noun="frame"
+        onShowSelected={() => setFrameUi(view.id, { showExcluded: true, sessionId: null, search: "" })}
+        onClear={() => {
+          setCheckedIds([])
+          // The bar unmounts with the selection: keep focus in the table (WCAG 2.4.3).
+          requestAnimationFrame(() => tableRef.current?.querySelector<HTMLElement>("thead [role=checkbox]")?.focus())
+        }}
         actions={
-          <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
-            <Upload aria-hidden="true" data-icon="inline-start" />
-            Import measurements
-          </Button>
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!editable || checkedIncluded.length === 0}
+              focusableWhenDisabled
+              aria-describedby={!editable || checkedIncluded.length === 0 ? hintId : undefined}
+              className={ARIA_DISABLED}
+              onClick={() => {
+                const result = edit(`Exclude ${plural(checkedIncluded.length, "frame")} from View`, (current) => excludeFrames(current, checkedIncluded))
+                if (result.ok) setAnnouncement(`Excluded ${plural(checkedIncluded.length, "frame")} from this View. Files and library quality unchanged.`)
+              }}
+            >
+              Exclude from View{checkedIncluded.length > 0 ? ` (${checkedIncluded.length})` : ""}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!editable || checkedExcluded.length === 0}
+              focusableWhenDisabled
+              aria-describedby={!editable || checkedExcluded.length === 0 ? hintId : undefined}
+              className={ARIA_DISABLED}
+              onClick={() => {
+                const result = edit(`Restore ${plural(checkedExcluded.length, "frame")} to View`, (current, state) => restoreFrames(state.disk, state.catalog, current, checkedExcluded))
+                if (result.ok) setAnnouncement(`Restored ${plural(checkedExcluded.length, "frame")} to this View.`)
+              }}
+            >
+              Restore to View{checkedExcluded.length > 0 ? ` (${checkedExcluded.length})` : ""}
+            </Button>
+            <Button size="sm" variant="outline" disabled={!editable || checkedIncluded.length === 0} focusableWhenDisabled aria-describedby={!editable || checkedIncluded.length === 0 ? hintId : undefined} className={ARIA_DISABLED} onClick={() => setConfirm("usable")}>
+              Mark included frames usable
+            </Button>
+            <Button size="sm" variant="outline" disabled={!editable} focusableWhenDisabled aria-describedby={!editable ? hintId : undefined} className={ARIA_DISABLED} onClick={() => setConfirm("unusable")}>
+              Mark unusable in library
+            </Button>
+            {project ? (
+              <Button size="sm" variant="outline" disabled={!editable} focusableWhenDisabled aria-describedby={!editable ? hintId : undefined} className={ARIA_DISABLED} onClick={() => setConfirm("reject")}>
+                Reject for Project
+              </Button>
+            ) : null}
+            {!editable || checkedIncluded.length === 0 || checkedExcluded.length === 0 ? (
+              <p id={hintId} className="w-full text-xs text-muted-foreground">
+                {!editable
+                  ? readOnlyReason
+                  : checkedIncluded.length === 0
+                    ? "Exclude from View and Mark included frames usable need an included frame in the selection."
+                    : "Restore to View needs an excluded frame in the selection."}
+              </p>
+            ) : null}
+          </>
         }
       />
-      <PageBody className="space-y-4">
-        <p className="sr-only" aria-live="polite">
-          {announcement}
-        </p>
-        {readOnlyReason ? <p className="text-sm text-muted-foreground">{readOnlyReason}</p> : null}
-        <MeasureBar op={op} notMeasured={notMeasured} scope={measureScope} disabledReason={view.completedAt ? "Complete Views are not measured; Reopen first." : null} onReview={() => startMeasurement(view.id, measurable)} />
+      {errorNode}
 
-        {imports.length > 0 ? (
-          <Section title="Imported measurements" level={3} description="Imported values sit next to built-in values with their source, method and units. Rows that match no single frame attach to nothing.">
-            <ul className="divide-y rounded-lg border">
-              {imports.map((record) => (
-                <ImportReview key={record.id} record={record} catalog={catalog} />
-              ))}
-            </ul>
-          </Section>
-        ) : null}
-
-        <SelectionBar
-          count={checked.length}
-          hiddenByFilters={hiddenChecked}
-          noun="frame"
-          onShowSelected={() => setFrameUi(view.id, { showExcluded: true, sessionId: null, search: "" })}
-          onClear={() => {
-            setCheckedIds([])
-            // The bar unmounts with the selection: keep focus in the table (WCAG 2.4.3).
-            requestAnimationFrame(() => tableRef.current?.querySelector<HTMLElement>("thead [role=checkbox]")?.focus())
-          }}
-          actions={
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!editable || checkedIncluded.length === 0}
-                focusableWhenDisabled
-                aria-describedby={!editable || checkedIncluded.length === 0 ? hintId : undefined}
-                className={ARIA_DISABLED}
-                onClick={() => {
-                  const result = edit(`Exclude ${plural(checkedIncluded.length, "frame")} from View`, (current) => excludeFrames(current, checkedIncluded))
-                  if (result.ok) setAnnouncement(`Excluded ${plural(checkedIncluded.length, "frame")} from this View. Files and library quality unchanged.`)
-                }}
-              >
-                Exclude from View{checkedIncluded.length > 0 ? ` (${checkedIncluded.length})` : ""}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!editable || checkedExcluded.length === 0}
-                focusableWhenDisabled
-                aria-describedby={!editable || checkedExcluded.length === 0 ? hintId : undefined}
-                className={ARIA_DISABLED}
-                onClick={() => {
-                  const result = edit(`Restore ${plural(checkedExcluded.length, "frame")} to View`, (current, state) => restoreFrames(state.disk, state.catalog, current, checkedExcluded))
-                  if (result.ok) setAnnouncement(`Restored ${plural(checkedExcluded.length, "frame")} to this View.`)
-                }}
-              >
-                Restore to View{checkedExcluded.length > 0 ? ` (${checkedExcluded.length})` : ""}
-              </Button>
-              <Button size="sm" variant="outline" disabled={!editable || checkedIncluded.length === 0} focusableWhenDisabled aria-describedby={!editable || checkedIncluded.length === 0 ? hintId : undefined} className={ARIA_DISABLED} onClick={() => setConfirm("usable")}>
-                Mark included frames usable
-              </Button>
-              <Button size="sm" variant="outline" disabled={!editable} focusableWhenDisabled aria-describedby={!editable ? hintId : undefined} className={ARIA_DISABLED} onClick={() => setConfirm("unusable")}>
-                Mark unusable in library
-              </Button>
-              {project ? (
-                <Button size="sm" variant="outline" disabled={!editable} focusableWhenDisabled aria-describedby={!editable ? hintId : undefined} className={ARIA_DISABLED} onClick={() => setConfirm("reject")}>
-                  Reject for Project
-                </Button>
-              ) : null}
-              {!editable || checkedIncluded.length === 0 || checkedExcluded.length === 0 ? (
-                <p id={hintId} className="w-full text-xs text-muted-foreground">
-                  {!editable
-                    ? readOnlyReason
-                    : checkedIncluded.length === 0
-                      ? "Exclude from View and Mark included frames usable need an included frame in the selection."
-                      : "Restore to View needs an excluded frame in the selection."}
-                </p>
-              ) : null}
-            </>
-          }
-        />
-        {errorNode}
-        <TableToolbar
-          search={{ label: "Filter frames by file name", placeholder: "File name contains…", value: ui.search, onChange: (search) => setFrameUi(view.id, { search }) }}
-          filters={
-            <>
-              <SelectField
-                className="w-44"
-                label="Session"
-                value={ui.sessionId ?? "all"}
-                onChange={(value) => setFrameUi(view.id, { sessionId: value === "all" ? null : value })}
-                options={[{ value: "all", label: "All sessions" }, ...sessions.map((s) => ({ value: s.id, label: sessionLabel(s) }))]}
-              />
-              <div className="ml-1 flex items-center gap-2 self-end pb-1.5">
-                <Switch id={`${view.id}-show-excluded`} checked={ui.showExcluded} onCheckedChange={(on) => setFrameUi(view.id, { showExcluded: on })} />
-                <Label htmlFor={`${view.id}-show-excluded`}>Show excluded ({excludedCount})</Label>
-              </div>
-            </>
-          }
-        />
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground tabular-nums">
-            {plural(shown.length, "frame")} shown of {memberIds.length} · {sessions.map((s) => `${formatNight(s.night)} ${s.channel}: ${rows.filter((r) => r.asset.sessionId === s.id && r.member === "included").length} of ${s.assetIds.length} in the View`).join(" · ")}
-          </p>
-          <Button size="sm" variant="outline" className="ml-auto" aria-expanded={paneOpen} aria-controls={paneOpen ? paneId : undefined} onClick={() => setPaneOpen((open) => !open)}>
-            {paneOpen ? <PanelRightClose aria-hidden="true" data-icon="inline-start" /> : <PanelRightOpen aria-hidden="true" data-icon="inline-start" />}
-            {paneOpen ? "Hide preview and plot" : "Show preview and plot"}
-          </Button>
-        </div>
-
-        <div className={paneOpen ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_min(22rem,40%)] xl:grid-cols-[minmax(0,1fr)_min(26rem,40%)]" : "grid gap-5"}>
-          <div ref={tableRef} className="@container/frames min-w-0 self-start">
+      <div className="flex min-h-0 flex-1 max-md:flex-col">
+        <div ref={tableRef} className="@container/frames flex min-h-0 min-w-0 flex-1 flex-col bg-background">
           <DataTable
             label="Frames in this View"
             rows={shown}
@@ -711,7 +733,7 @@ export function FramesArea() {
             getRowId={(r) => r.asset.id}
             initialSort={{ columnId: "frame", direction: "asc" }}
             activeRowId={active?.asset.id ?? null}
-            className="max-h-[40rem]"
+            className="min-h-0 flex-1 rounded-none border-0"
             stickyFirstColumn
             selection={{ selected: checked, onChange: setCheckedIds, rowLabel: (r) => `${r.asset.fileName}, ${r.session ? sessionLabel(r.session) : "no session"}` }}
             empty={
@@ -728,40 +750,75 @@ export function FramesArea() {
               />
             }
           />
-          </div>
-          {paneOpen ? (
-          <div id={paneId} className="min-w-0 space-y-4 self-start">
-            {active ? (
-              <FramePreview
-                asset={active.asset}
-                file={activeFile}
-                record={catalog.measurements[active.asset.id]}
-                state={active.state}
-                applies={active.applies}
-                scaleArcsec={pixelScaleFor(catalog, active.session)}
-                position={{ index: Math.max(0, position), total: ordered.length }}
-                copies={active.asset.copies.map((c) => ({ location: catalog.locations[c.locationId]?.displayName ?? "Unknown location", path: c.path }))}
-                onPrevious={() => step(-1)}
-                onNext={() => step(1)}
-                exclude={{ label: excludeLabel, disabledReason: readOnlyReason, run: () => toggleExclusion(active) }}
-                unavailableReason={activeAvailability === "available" ? null : previewUnavailableReason(activeAvailability)}
-              />
-            ) : null}
-            {/* The plot sits with the preview it drives, so the frames table starts higher (density 7). */}
-            <div className="space-y-2">
-              <SelectField className="w-44" label="Plot metric" value={ui.metric} options={metricOptions} onChange={(value) => setFrameUi(view.id, { metric: value as MetricKey })} />
-              <p className="text-xs text-muted-foreground">Click a point to make it the current frame; the table and preview follow.</p>
-              <MeasurementPlot points={plotPoints} metric={ui.metric} activeId={active?.asset.id ?? null} onSelect={select} />
-            </div>
-          </div>
-          ) : null}
         </div>
-        {notMeasured > 0 && op?.status === "canceled" ? (
-          <Notice tone="info" title="Cancel kept your selection and exclusions">
-            Frames that were not reached read Not measured. Choose Review frames to reuse the values already computed and measure the rest.
-          </Notice>
+        {paneOpen ? (
+          <Inspector label="Frame inspector" widthKey="frames.loupe" initialWidth={384}>
+            <div id={paneId} className="flex flex-col">
+              {active ? (
+                <FramePreview
+                  asset={active.asset}
+                  file={activeFile}
+                  record={catalog.measurements[active.asset.id]}
+                  state={active.state}
+                  applies={active.applies}
+                  scaleArcsec={pixelScaleFor(catalog, active.session)}
+                  position={{ index: Math.max(0, position), total: ordered.length }}
+                  copies={active.asset.copies.map((c) => ({ location: catalog.locations[c.locationId]?.displayName ?? "Unknown location", path: c.path }))}
+                  onPrevious={() => step(-1)}
+                  onNext={() => step(1)}
+                  exclude={{ label: excludeLabel, disabledReason: readOnlyReason, run: () => toggleExclusion(active) }}
+                  unavailableReason={activeAvailability === "available" ? null : previewUnavailableReason(activeAvailability)}
+                />
+              ) : null}
+              {/* The trend sits with the loupe it drives: a point makes that frame current, the table and loupe follow. */}
+              <PanelSection title="Trend" id="frames.trend" level={3} summary={METRIC_LABEL[ui.metric]}>
+                <div className="space-y-2">
+                  <SelectField className="flex items-center gap-1.5" triggerClassName="w-36 text-xs" label="Plot metric" value={ui.metric} options={metricOptions} onChange={(value) => setFrameUi(view.id, { metric: value as MetricKey })} />
+                  <p className="text-2xs text-muted-foreground">Click a point to make it the current frame; the table and preview follow.</p>
+                  <MeasurementPlot points={plotPoints} metric={ui.metric} activeId={active?.asset.id ?? null} onSelect={select} />
+                </div>
+              </PanelSection>
+            </div>
+          </Inspector>
         ) : null}
-      </PageBody>
+      </div>
+
+      {/* Bottom filmstrip (Lightroom): the shown frames in table order, one tab stop, ←/→ walk and select. */}
+      <div className="chrome flex shrink-0 items-baseline gap-3 border-t border-seam bg-panel-header px-3 py-0.5 text-2xs text-muted-foreground max-md:hidden">
+        <span className="num shrink-0 text-foreground/85">
+          {plural(shown.length, "frame")} shown of {memberIds.length}
+        </span>
+        <span className="num min-w-0 truncate" title={sessions.map((s) => `${formatNight(s.night)} ${s.channel}`).join(" · ")}>
+          {sessions.map((s) => `${formatNight(s.night)} ${s.channel}: ${rows.filter((r) => r.asset.sessionId === s.id && r.member === "included").length} of ${s.assetIds.length} in the View`).join(" · ")}
+        </span>
+      </div>
+      <Filmstrip label="Filmstrip: frames shown" className="h-[4.25rem] max-md:hidden">
+        {ordered.map((row) => {
+          const current = row.asset.id === active?.asset.id
+          return (
+            <button
+              key={row.asset.id}
+              type="button"
+              data-filmstrip-item=""
+              tabIndex={current || (!active && row === ordered[0]) ? 0 : -1}
+              aria-current={current ? "true" : undefined}
+              aria-label={`${row.asset.fileName}, ${row.member === "excluded" ? "excluded from this View" : "in this View"}`}
+              onClick={() => select(row.asset.id)}
+              onFocus={() => {
+                if (!current) select(row.asset.id)
+              }}
+              className={cn(
+                "relative h-full w-[4.5rem] shrink-0 overflow-hidden rounded-sm bg-mount p-0.5 shadow-[inset_0_0_0_1px_var(--mount-edge)] outline-none",
+                "aria-[current=true]:shadow-[inset_0_0_0_2px_var(--primary)] focus-visible:ring-2 focus-visible:ring-ring",
+                row.member === "excluded" && "[&_canvas]:opacity-40 [&_canvas]:grayscale",
+              )}
+            >
+              <FrameThumb asset={row.asset} file={currentFile(disk, catalog, row.asset)} />
+              {row.member === "excluded" ? <CircleSlash aria-hidden="true" className="absolute top-1 right-1 size-3 text-foreground" /> : null}
+            </button>
+          )
+        })}
+      </Filmstrip>
 
       <ImportDialog viewId={view.id} viewAssetIds={new Set(memberIds)} open={importOpen} onOpenChange={setImportOpen} />
       <ConfirmDialog

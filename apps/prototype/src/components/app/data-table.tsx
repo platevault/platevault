@@ -411,6 +411,7 @@ export function SelectionBar({
   onClear,
   clearDisabledReason,
   actions,
+  className,
 }: {
   count: number
   hiddenByFilters?: number
@@ -421,6 +422,8 @@ export function SelectionBar({
   /** When set, Clear selection stays focusable but disabled, with this reason beside it. */
   clearDisabledReason?: string
   actions?: ReactNode
+  /** Studio strips pass a full-width bar style instead of the rounded box. */
+  className?: string
 }) {
   const clearReasonId = useId()
   const live = (
@@ -436,7 +439,7 @@ export function SelectionBar({
   // Out of the layout flow, so an empty bar adds no gap between its siblings.
   if (count === 0) return <div className="sr-only">{live}</div>
   return (
-    <div role="region" aria-label="Selection" className="chrome flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-primary/50 bg-selected/40 px-2.5 py-1 text-sm">
+    <div role="region" aria-label="Selection" className={cn("chrome flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-primary/50 bg-selected/40 px-2.5 py-1 text-sm", className)}>
       {live}
       {onShowSelected ? (
         <Button size="sm" variant="ghost" onClick={onShowSelected}>

@@ -81,11 +81,11 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
 
 export type NoticeTone = "info" | "offline" | "warning" | "refusal"
 
-const NOTICE: Record<NoticeTone, { icon: LucideIcon; className: string; role: "status" | "alert" }> = {
-  info: { icon: Info, className: "border-border", role: "status" },
-  offline: { icon: Unplug, className: "border-warning/40 [&>svg]:text-warning", role: "status" },
-  warning: { icon: TriangleAlert, className: "border-warning/40 [&>svg]:text-warning", role: "status" },
-  refusal: { icon: OctagonX, className: "border-destructive/50 [&>svg]:text-destructive", role: "alert" },
+const NOTICE: Record<NoticeTone, { icon: LucideIcon; className: string; glyph: string; role: "status" | "alert" }> = {
+  info: { icon: Info, className: "border-border", glyph: "text-muted-foreground", role: "status" },
+  offline: { icon: Unplug, className: "border-warning/40 [&>svg]:text-warning", glyph: "text-warning", role: "status" },
+  warning: { icon: TriangleAlert, className: "border-warning/40 [&>svg]:text-warning", glyph: "text-warning", role: "status" },
+  refusal: { icon: OctagonX, className: "border-destructive/50 [&>svg]:text-destructive", glyph: "text-destructive", role: "alert" },
 }
 
 export interface NoticeProps {
@@ -95,15 +95,32 @@ export interface NoticeProps {
   /** Recovery or alternative actions, e.g. Reconnect, Choose another location. */
   actions?: ReactNode
   className?: string
+  /**
+   * `strip`: a full-width message bar under a pane header (harness v2), no box:
+   * the title leads the sentence and the actions sit at the right of the bar.
+   */
+  layout?: "box" | "strip"
 }
 
 /**
  * Inline callout for offline, uncertain, partial and refused states. A
  * refusal names what was refused, why, and the supported alternatives.
  */
-export function Notice({ tone, title, children, actions, className }: NoticeProps) {
+export function Notice({ tone, title, children, actions, className, layout = "box" }: NoticeProps) {
   const meta = NOTICE[tone]
   const Icon = meta.icon
+  if (layout === "strip") {
+    return (
+      <div role={meta.role} className={cn("flex shrink-0 items-start gap-2 border-b border-seam bg-panel-header px-3 py-1.5 text-xs", className)}>
+        <Icon aria-hidden="true" className={cn("mt-px size-3.5 shrink-0", meta.glyph)} />
+        <p className="min-w-0 flex-1 text-pretty">
+          <span className="font-medium text-foreground">{title}</span>
+          {children ? <span className="text-muted-foreground"> · {children}</span> : null}
+        </p>
+        {actions ? <div className="chrome -my-0.5 flex shrink-0 flex-wrap items-center gap-1.5">{actions}</div> : null}
+      </div>
+    )
+  }
   return (
     <Alert role={meta.role} className={cn("px-3 py-2.5", meta.className, className)}>
       <Icon aria-hidden="true" />

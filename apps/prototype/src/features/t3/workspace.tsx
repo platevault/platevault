@@ -5,7 +5,7 @@
  * h1; areas render level-2 headers. Hosts T4 and T5 areas through <Outlet />.
  */
 import { Link, Outlet, useNavigate, useParams } from "@tanstack/react-router"
-import { ArrowRight, Check, CircleDashed, FolderSearch, RefreshCw, Save, TriangleAlert } from "lucide-react"
+import { ArrowRight, Check, CircleDashed, FolderSearch, PencilLine, RefreshCw, Save, TriangleAlert } from "lucide-react"
 import { createContext, type ReactNode, useContext, useId, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { ActionError, EmptyState, Notice, SaveState } from "@/components/app/feedback"
@@ -99,9 +99,9 @@ function SummaryStrip({ summary, content }: { summary: ViewSummary; content: Mem
   }
   if (content.productInputs.length > 0) items.push({ label: "Result inputs", value: content.productInputs.length })
   return (
-    <div className="chrome border-b border-seam bg-panel px-3 py-1.5">
+    <div className="chrome border-b border-seam bg-panel px-3 py-1">
       <h2 className="sr-only">Selection summary</h2>
-      <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 text-xs tabular-nums">
+      <dl className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs tabular-nums">
         {items.map((item) => (
           <div key={item.label} className={cn("flex items-baseline gap-1.5", item.tone === "warning" && "text-warning")}>
             <dt className={cn("text-xs", item.tone === "warning" ? "" : "text-muted-foreground")}>{item.label}</dt>
@@ -123,8 +123,9 @@ const GATE_WORD: Record<Gate, string> = { met: "ready", attention: "needs attent
  * your app" gap between Prepare and Results, and exactly one Next action
  * derived from the selection summary. Readiness is only shown where the
  * summary proves it; stages owned by other areas read "not checked here".
+ * A Complete View has one step left, Clean up View (J27), so that is its Next.
  */
-function PipelineRail({ viewId, summary }: { viewId: string; summary: ViewSummary }) {
+function PipelineRail({ viewId, summary, complete }: { viewId: string; summary: ViewSummary; complete: boolean }) {
   const gates: Record<(typeof AREAS)[number]["label"], { gate: Gate; note: string }> = {
     Sessions: summary.included.frames > 0 ? { gate: "met", note: plural(summary.included.frames, "light") } : { gate: "attention", note: "no lights" },
     Frames:
@@ -136,8 +137,9 @@ function PipelineRail({ viewId, summary }: { viewId: string; summary: ViewSummar
     Results: { gate: "open", note: "products" },
     Cleanup: { gate: "open", note: "records" },
   }
-  const next =
-    summary.included.frames === 0
+  const next = complete
+    ? { to: "/views/$viewId/cleanup" as const, label: "Clean up View" }
+    : summary.included.frames === 0
       ? { to: "/views/$viewId/sessions" as const, label: "Select sessions" }
       : summary.unresolved + summary.unreviewed > 0
         ? { to: "/views/$viewId/frames" as const, label: "Review frames" }
@@ -420,8 +422,8 @@ export function ViewWorkspacePage() {
       <div className="flex min-h-0 flex-1 flex-col">
         <PageHeader
           title={view.name}
-          // The title column keeps at least 20rem: when the actions (Reopen View on a Complete View) do not fit beside it, they wrap under the title instead of squeezing it.
-          className="[&>:first-child]:basis-80"
+          // One strip at 1024: the title column keeps 14rem and truncates its meta line; the actions stay on the row.
+          className="flex-nowrap max-md:flex-wrap [&>:first-child]:basis-56"
           eyebrow={
             <span className="flex flex-wrap items-center gap-1">
               <Link to="/views" className="hover:text-foreground hover:underline">
@@ -439,20 +441,22 @@ export function ViewWorkspacePage() {
           }
           meta={status !== "saved" ? <StatusBadge kind="view" value={status} /> : null}
           description={
-            <span className="tabular-nums">
+            <span className="block truncate tabular-nums">
               {base ? `Revision ${base.revision} saved ${formatDateTime(base.savedAt)}` : "Not saved yet"}
               {" · "}Profile {profile ? profile.name : "Not chosen"}
               {" · "}Target {target ? target.name : "None"}
             </span>
           }
           actions={
-            <div className="flex flex-wrap items-start gap-2">
-              <Button variant="outline" size="sm" onClick={() => setDetailsOpen(true)}>
-                Edit details
+            <div className="flex items-center gap-1.5 max-md:flex-wrap">
+              {/* Below 1280 px the two routine actions keep their names for assistive tech and the tooltip, and show only their glyphs. */}
+              <Button variant="outline" size="sm" title="Edit details" onClick={() => setDetailsOpen(true)}>
+                <PencilLine aria-hidden="true" data-icon="inline-start" className="xl:hidden" />
+                <span className="max-xl:sr-only">Edit details</span>
               </Button>
-              <Button variant="outline" size="sm" render={<Link to="/views/$viewId/refresh" params={{ viewId }} />}>
+              <Button variant="outline" size="sm" title="Refresh selection" render={<Link to="/views/$viewId/refresh" params={{ viewId }} />}>
                 <RefreshCw aria-hidden="true" data-icon="inline-start" />
-                Refresh selection
+                <span className="max-xl:sr-only">Refresh selection</span>
               </Button>
               {hasDraft && !recovered ? (
                 <Button variant="outline" size="sm" onClick={() => setDiscardOpen(true)}>
@@ -464,28 +468,25 @@ export function ViewWorkspacePage() {
                   Reopen View…
                 </Button>
               ) : null}
-              <div className="flex flex-col items-end gap-1">
-                {/* Directly under Save View: the state, and for a stale refusal the review it needs (D08); Save View itself retries a failed write.
-                    Stacked rather than in the row, so the header row keeps its width for the View name. */}
-                <div className="flex flex-col-reverse items-end gap-1">
-                  <SaveState state={saveState} onReview={reviewCurrent} />
-                  <Button
-                    id={`${viewId}-save`}
-                    size="sm"
-                    onClick={save}
-                    disabled={saveBlocked !== null}
-                    focusableWhenDisabled
-                    aria-describedby={saveError ? `${viewId}-save-error` : saveBlocked ? `${viewId}-save-reason` : undefined}
-                    className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
-                  >
-                    <Save aria-hidden="true" data-icon="inline-start" />
-                    Save View
-                  </Button>
-                </div>
-                {saveError ? (
-                  <ActionError id={`${viewId}-save-error`} message={saveError} className="max-w-sm justify-end text-right text-xs" />
-                ) : saveBlocked ? (
-                  <span id={`${viewId}-save-reason`} className="max-w-sm text-right text-xs text-muted-foreground">
+              {/* The save cluster is one row: state, then Save View. The reason a save is blocked is the button's
+                  description; the Complete, recovered and stale bars under the header say the same thing visibly. */}
+              <div className="ml-1 flex items-center gap-1.5 border-l border-seam pl-2.5">
+                <SaveState state={saveState} onReview={reviewCurrent} />
+                <Button
+                  id={`${viewId}-save`}
+                  size="sm"
+                  onClick={save}
+                  disabled={saveBlocked !== null}
+                  focusableWhenDisabled
+                  title={saveBlocked ?? undefined}
+                  aria-describedby={saveError ? `${viewId}-save-error` : saveBlocked ? `${viewId}-save-reason` : undefined}
+                  className="aria-disabled:pointer-events-none aria-disabled:opacity-50"
+                >
+                  <Save aria-hidden="true" data-icon="inline-start" />
+                  Save View
+                </Button>
+                {saveBlocked && !saveError ? (
+                  <span id={`${viewId}-save-reason`} className="sr-only">
                     {saveBlocked}
                   </span>
                 ) : null}
@@ -493,16 +494,18 @@ export function ViewWorkspacePage() {
             </div>
           }
         />
+        {saveError ? <ActionError id={`${viewId}-save-error`} message={saveError} className="border-b border-seam bg-panel-header px-3 py-1.5 text-xs" /> : null}
         <SummaryStrip summary={summary} content={content} />
-        <PipelineRail viewId={viewId} summary={summary} />
-        <div className="space-y-3 px-6 pt-4 empty:hidden">
+        <PipelineRail viewId={viewId} summary={summary} complete={view.completedAt !== null} />
+        <div className="flex shrink-0 flex-col empty:hidden">
           {saveFeedback?.state === "reviewed" ? (
-            <Notice tone="info" title="Reviewed: the View changed elsewhere">
+            <Notice layout="strip" tone="info" title="Reviewed: the View changed elsewhere">
               {saveFeedback.note}
             </Notice>
           ) : null}
           {recovered ? (
             <Notice
+              layout="strip"
               tone="warning"
               title="Recovered unsaved changes"
               actions={
@@ -530,13 +533,14 @@ export function ViewWorkspacePage() {
             </Notice>
           ) : null}
           {view.completedAt ? (
-            <Notice tone="info" title={`Complete since ${formatDateTime(view.completedAt)}`}>
+            <Notice layout="strip" tone="info" title={`Complete since ${formatDateTime(view.completedAt)}`}>
               Membership, calibration decisions and new preparations are read-only while the View is Complete. Reopen View in the header clears Complete;
               Results, cleanup records and preparations stay as they are.
             </Notice>
           ) : null}
           {sincePrepared && sincePrepared.added > 0 && !view.completedAt ? (
             <Notice
+              layout="strip"
               tone="warning"
               title={`${plural(sincePrepared.added, "frame")} added since prepared revision ${sincePrepared.preparedRevision} need review`}
               actions={
