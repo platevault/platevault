@@ -207,6 +207,93 @@ fn xisf_formats_storages_byte_orders_and_codecs_decode_to_the_uncompressed_sampl
     }
 }
 
+#[test]
+fn xisf_subblocks_decode_to_the_uncompressed_samples() {
+    let mut values = Vec::new();
+    for seed in 0..3 {
+        values.extend(frame(20, 10, seed, 120.0, 4.0).render());
+    }
+    for format in [SampleFormat::U8, SampleFormat::U16, SampleFormat::F32] {
+        let stored = quantize(&values, format, Scaling::IDENTITY);
+        let baseline = decode_bytes(
+            Container::Xisf,
+            &write_xisf(&XisfImage::new(20, 10, 3, &stored)).unwrap(),
+        )
+        .unwrap();
+        for storage in [PixelStorage::Planar, PixelStorage::Normal] {
+            for codec in [Codec::Zlib, Codec::Lz4, Codec::Lz4Hc] {
+                for shuffle in [false, true] {
+                    // 7 splits samples across subblocks; both leave a short last one.
+                    for subblock_size in [7, 256] {
+                        let image = XisfImage {
+                            storage,
+                            codec: Some(codec),
+                            shuffle,
+                            subblock_size: Some(subblock_size),
+                            ..XisfImage::new(20, 10, 3, &stored)
+                        };
+                        let label =
+                            format!("{format:?} {storage:?} {codec:?} {shuffle} {subblock_size}");
+                        let decoded = decode_bytes(Container::Xisf, &write_xisf(&image).unwrap())
+                            .unwrap_or_else(|error| panic!("{label}: {error}"));
+                        assert_eq!(decoded.planes, baseline.planes, "{label}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Recorded uncompressed and subblock sizes are checked against the geometry
+/// before any buffer of their size is allocated.
+#[test]
+fn xisf_sizes_that_disagree_with_the_geometry_are_malformed_before_inflating() {
+    let plain = [1_u8, 0, 2, 0, 3, 0, 4, 0];
+    let whole = lz4_flex::block::compress(&plain);
+    let (head, tail) =
+        (lz4_flex::block::compress(&plain[..4]), lz4_flex::block::compress(&plain[4..]));
+    let parts = [head.as_slice(), tail.as_slice()].concat();
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    std::io::Write::write_all(&mut encoder, &plain).unwrap();
+    let zlib = encoder.finish().unwrap();
+    let xisf = |attributes: &str, data: &[u8]| {
+        raw_xisf(
+            &format!(
+                "<Image geometry=\"2:2:1\" sampleFormat=\"UInt16\" location=\"attachment:4096:{}\" {attributes}/>",
+                data.len()
+            ),
+            data,
+        )
+    };
+    let (h, t) = (head.len(), tail.len());
+    let consistent = decode_bytes(
+        Container::Xisf,
+        &xisf(&format!("compression=\"lz4:8\" subblocks=\"{h},4:{t},4\""), &parts),
+    )
+    .unwrap();
+    assert_eq!(consistent.planes[0].samples, StoredSamples::U16(vec![1, 2, 3, 4]));
+
+    let huge = u64::MAX;
+    for (attributes, data) in [
+        (format!("compression=\"lz4:{huge}\""), &whole),
+        (format!("compression=\"lz4hc:{huge}\""), &whole),
+        (format!("compression=\"zlib:{huge}\""), &zlib),
+        ("compression=\"lz4:16\"".to_owned(), &whole),
+        (format!("compression=\"lz4:{huge}\" subblocks=\"{h},4:{t},4\""), &parts),
+        (format!("compression=\"lz4:8\" subblocks=\"{h},4:{t},{huge}\""), &parts),
+        (format!("compression=\"zlib:8\" subblocks=\"{h},{huge}:{t},9\""), &parts),
+        (format!("compression=\"lz4:8\" subblocks=\"{h},4:{t},5\""), &parts),
+        (format!("compression=\"lz4:8\" subblocks=\"{h},4:{huge},4\""), &parts),
+        (format!("compression=\"lz4:8\" subblocks=\"{h},4:{},4\"", t + 1), &parts),
+        (String::new(), &plain.repeat(2)),
+    ] {
+        let result =
+            std::panic::catch_unwind(|| decode_bytes(Container::Xisf, &xisf(&attributes, data)))
+                .unwrap_or_else(|_| panic!("{attributes:?} panicked instead of being Malformed"));
+        malformed(result);
+    }
+}
+
 fn cfa_frame() -> Vec<f64> {
     SyntheticFrame {
         cfa: Some(CfaModulation { gains: [1.0, 0.6, 0.6, 0.3] }),

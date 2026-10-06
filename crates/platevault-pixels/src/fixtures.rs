@@ -407,6 +407,9 @@ pub struct XisfImage<'a> {
     pub byte_order: ByteOrder,
     pub codec: Option<Codec>,
     pub shuffle: bool,
+    /// Uncompressed bytes per compressed subblock; `None` compresses the
+    /// block whole.
+    pub subblock_size: Option<usize>,
     pub color_space: Option<&'a str>,
     pub bounds: Option<(f64, f64)>,
     pub cfa_pattern: Option<&'a str>,
@@ -427,6 +430,7 @@ impl<'a> XisfImage<'a> {
             byte_order: ByteOrder::Little,
             codec: None,
             shuffle: false,
+            subblock_size: None,
             color_space: None,
             bounds: None,
             cfa_pattern: None,
@@ -495,18 +499,35 @@ pub fn write_xisf(image: &XisfImage<'_>) -> Result<Vec<u8>, PixelError> {
             .collect(),
     };
     let raw = sample_bytes(image.samples, &order, image.byte_order);
-    let (block, compression) = match image.codec {
-        None => (raw, None),
+    let (block, compression, subblocks) = match image.codec {
+        None => (raw, None, None),
         Some(codec) => {
             let input = if image.shuffle { shuffle(&raw, format.bytes()) } else { raw.clone() };
-            let compressed = match codec {
-                Codec::Zlib => {
-                    let mut encoder =
-                        flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
-                    encoder.write_all(&input)?;
-                    encoder.finish()?
+            let compress = |part: &[u8]| -> Result<Vec<u8>, PixelError> {
+                Ok(match codec {
+                    Codec::Zlib => {
+                        let mut encoder = flate2::write::ZlibEncoder::new(
+                            Vec::new(),
+                            flate2::Compression::default(),
+                        );
+                        encoder.write_all(part)?;
+                        encoder.finish()?
+                    }
+                    Codec::Lz4 | Codec::Lz4Hc => lz4_flex::block::compress(part),
+                })
+            };
+            let (compressed, subblocks) = match image.subblock_size {
+                None => (compress(&input)?, None),
+                Some(size) => {
+                    let mut compressed = Vec::new();
+                    let mut sizes = Vec::new();
+                    for part in input.chunks(size.max(1)) {
+                        let packed = compress(part)?;
+                        sizes.push(format!("{},{}", packed.len(), part.len()));
+                        compressed.extend(packed);
+                    }
+                    (compressed, Some(sizes.join(":")))
                 }
-                Codec::Lz4 | Codec::Lz4Hc => lz4_flex::block::compress(&input),
             };
             let name = match codec {
                 Codec::Zlib => "zlib",
@@ -518,7 +539,7 @@ pub fn write_xisf(image: &XisfImage<'_>) -> Result<Vec<u8>, PixelError> {
             } else {
                 format!("{name}:{}", raw.len())
             };
-            (compressed, Some(attribute))
+            (compressed, Some(attribute), subblocks)
         }
     };
     let color_space = image.color_space.unwrap_or(if image.channels == 1 { "Gray" } else { "RGB" });
@@ -556,6 +577,9 @@ pub fn write_xisf(image: &XisfImage<'_>) -> Result<Vec<u8>, PixelError> {
         }
         if let Some(compression) = &compression {
             let _ = write!(attributes, " compression=\"{compression}\"");
+        }
+        if let Some(subblocks) = &subblocks {
+            let _ = write!(attributes, " subblocks=\"{subblocks}\"");
         }
         if let Some((low, high)) = image.bounds {
             let _ = write!(attributes, " bounds=\"{low:?}:{high:?}\"");

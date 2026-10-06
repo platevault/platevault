@@ -4,7 +4,7 @@
 //! XISF monolithic-image decoding.
 
 use std::collections::BTreeMap;
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 use std::sync::atomic::AtomicBool;
 
 use quick_xml::events::{BytesStart, Event};
@@ -170,29 +170,66 @@ fn subblocks(attribute: &str) -> Result<Vec<(usize, usize)>, PixelError> {
         .collect()
 }
 
-fn inflate(codec: Codec, data: &[u8], expected: usize) -> Result<Vec<u8>, PixelError> {
-    let output = match codec {
-        Codec::Zlib => {
-            let mut output = Vec::new();
-            output
-                .try_reserve_exact(expected)
-                .map_err(|_| malformed("XISF block does not fit in memory"))?;
-            flate2::read::ZlibDecoder::new(data)
-                .take(expected as u64 + 1)
-                .read_to_end(&mut output)
-                .map_err(|error| malformed(format!("XISF zlib block: {error}")))?;
-            output
-        }
-        Codec::Lz4 | Codec::Lz4Hc => lz4_flex::block::decompress(data, expected)
-            .map_err(|error| malformed(format!("XISF lz4 block: {error}")))?,
+/// Refuses subblocks that reach past the attachment or do not inflate to
+/// exactly `expected` bytes, before any of them is inflated.
+fn check_subblocks(
+    parts: &[(usize, usize)],
+    attachment: usize,
+    expected: usize,
+) -> Result<(), PixelError> {
+    let total = |size: fn(&(usize, usize)) -> usize| {
+        parts.iter().try_fold(0_usize, |sum, part| sum.checked_add(size(part)))
     };
-    if output.len() != expected {
+    if total(|part| part.0).is_none_or(|compressed| compressed > attachment) {
+        return Err(malformed("XISF subblocks reach past the attachment"));
+    }
+    if total(|part| part.1) != Some(expected) {
         return Err(malformed(format!(
-            "XISF block inflated to {} bytes, {expected} recorded",
-            output.len()
+            "XISF subblocks do not inflate to the {expected} bytes the geometry needs"
         )));
     }
-    Ok(output)
+    Ok(())
+}
+
+/// A zeroed buffer of `len` bytes, or `Malformed` when it cannot be allocated.
+fn zeroed(len: usize) -> Result<Vec<u8>, PixelError> {
+    let mut buffer = Vec::new();
+    buffer.try_reserve_exact(len).map_err(|_| malformed("XISF block does not fit in memory"))?;
+    buffer.resize(len, 0);
+    Ok(buffer)
+}
+
+/// Inflates `data` into all of `out`, refusing a block that inflates to any
+/// other length.
+fn inflate_into(codec: Codec, data: &[u8], out: &mut [u8]) -> Result<(), PixelError> {
+    let len = out.len();
+    let filled = match codec {
+        Codec::Zlib => {
+            let zlib = |error: std::io::Error| malformed(format!("XISF zlib block: {error}"));
+            let mut decoder = flate2::read::ZlibDecoder::new(data);
+            let mut filled = 0;
+            while filled < len {
+                match decoder.read(&mut out[filled..]) {
+                    Ok(0) => break,
+                    Ok(read) => filled += read,
+                    Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                    Err(error) => return Err(zlib(error)),
+                }
+            }
+            if filled == len && decoder.read(&mut [0]).map_err(zlib)? > 0 {
+                return Err(malformed(format!(
+                    "XISF block inflates past the {len} bytes recorded"
+                )));
+            }
+            filled
+        }
+        Codec::Lz4 | Codec::Lz4Hc => lz4_flex::block::decompress_into(data, out)
+            .map_err(|error| malformed(format!("XISF lz4 block: {error}")))?,
+    };
+    if filled != len {
+        return Err(malformed(format!("XISF block inflated to {filled} bytes, {len} recorded")));
+    }
+    Ok(())
 }
 
 /// Inverts XISF byte shuffling.
@@ -299,54 +336,58 @@ pub(super) fn decode(
     let recorded_bounds = attribute("bounds").map(bounds).transpose()?;
     let subblocks = attribute("subblocks").map(subblocks).transpose()?;
 
+    let expected =
+        data_len(u64::from(width), u64::from(height), u64::from(channels), format, "XISF")?;
+    let size = usize::try_from(size).map_err(|_| malformed("XISF attachment size"))?;
+    match (&compression, &subblocks) {
+        (None, _) if size != expected => {
+            return Err(malformed(format!(
+                "XISF attachment holds {size} bytes, geometry needs {expected}"
+            )));
+        }
+        (Some(compression), _) if compression.uncompressed_size != expected as u64 => {
+            return Err(malformed(format!(
+                "XISF compression records {} uncompressed bytes, geometry needs {expected}",
+                compression.uncompressed_size
+            )));
+        }
+        (Some(_), Some(parts)) => check_subblocks(parts, size, expected)?,
+        _ => {}
+    }
+
     let consumed = 16 + xml_len as u64;
     if position < consumed {
         return Err(malformed("XISF attachment overlaps the header"));
     }
     skip(reader, position - consumed, canceled, "XISF file before the attachment")?;
-    let size = usize::try_from(size).map_err(|_| malformed("XISF attachment size"))?;
     let block = read_exact(reader, size, canceled, "XISF attachment")?;
     check(canceled)?;
-    let expected =
-        data_len(u64::from(width), u64::from(height), u64::from(channels), format, "XISF")?;
     let raw = match compression {
         None => block,
         Some(compression) => {
-            let uncompressed = usize::try_from(compression.uncompressed_size)
-                .map_err(|_| malformed("XISF uncompressed size"))?;
-            let inflated = match &subblocks {
-                None => inflate(compression.codec, &block, uncompressed)?,
+            let mut inflated = zeroed(expected)?;
+            match &subblocks {
+                None => inflate_into(compression.codec, &block, &mut inflated)?,
                 Some(parts) => {
-                    let mut inflated = Vec::with_capacity(uncompressed);
-                    let mut offset = 0;
+                    let (mut read, mut written) = (0, 0);
                     for &(compressed, plain) in parts {
                         check(canceled)?;
-                        let part = block
-                            .get(offset..offset + compressed)
-                            .ok_or_else(|| malformed("XISF subblock beyond the attachment"))?;
-                        inflated.extend(inflate(compression.codec, part, plain)?);
-                        offset += compressed;
+                        inflate_into(
+                            compression.codec,
+                            &block[read..read + compressed],
+                            &mut inflated[written..written + plain],
+                        )?;
+                        read += compressed;
+                        written += plain;
                     }
-                    if inflated.len() != uncompressed {
-                        return Err(malformed(
-                            "XISF subblocks do not sum to the uncompressed size",
-                        ));
-                    }
-                    inflated
                 }
-            };
+            }
             match compression.shuffle_item_size {
                 Some(item_size) => unshuffle(&inflated, item_size as usize),
                 None => inflated,
             }
         }
     };
-    if raw.len() != expected {
-        return Err(malformed(format!(
-            "XISF image data holds {} bytes, geometry needs {expected}",
-            raw.len()
-        )));
-    }
     check(canceled)?;
     let planar = match storage {
         PixelStorage::Normal if channels > 1 => {
