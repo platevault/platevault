@@ -23,7 +23,8 @@ use platevault_pixels::display::{self, PlaneStatistics, Region};
 use platevault_pixels::measure::{self, FrameMeasurement, Measurement, StarMetrics};
 use platevault_pixels::PixelError;
 use sha2::{Digest, Sha256};
-use tokio::sync::{broadcast, Mutex, Semaphore};
+use tokio::runtime::Handle;
+use tokio::sync::{broadcast, Mutex, OwnedSemaphorePermit, Semaphore};
 use uuid::Uuid;
 
 use crate::library::{blocking, InventoryProbe};
@@ -40,7 +41,8 @@ use crate::{
     StarRecord, StarState, StarWarning, StoredNumber, Stretch, StretchKind, TileRequest, Units,
 };
 
-/// Decoded-sample budget shared by the measurement workers, in MiB (R14).
+/// Memory budget of the frames the measurement workers decode and measure at
+/// once, in MiB, charged per frame from its header (R14).
 const DECODE_BUDGET_MIB: u32 = 1024;
 /// Memory cap of decoded frames kept for preview (R15).
 const PREVIEW_CACHE_BYTES: usize = 768 << 20;
@@ -72,7 +74,7 @@ struct Shared {
     abort: AtomicBool,
     shutdown: AtomicBool,
     progress: broadcast::Sender<MeasurementProgress>,
-    budget: Semaphore,
+    budget: Arc<Semaphore>,
     workers: usize,
 }
 
@@ -93,16 +95,11 @@ struct ActiveRun {
 struct Queued {
     asset: Uuid,
     container: Option<px::Container>,
-    size_bytes: u64,
 }
 
 impl Queued {
     fn of(basis: &FrameRecordBasis) -> Self {
-        Self {
-            asset: basis.asset.id,
-            container: container_of(basis.asset.format),
-            size_bytes: basis.asset.fingerprint.size_bytes,
-        }
+        Self { asset: basis.asset.id, container: container_of(basis.asset.format) }
     }
 }
 
@@ -127,7 +124,7 @@ impl FrameReview {
                 abort: AtomicBool::new(false),
                 shutdown: AtomicBool::new(false),
                 progress,
-                budget: Semaphore::new(DECODE_BUDGET_MIB as usize),
+                budget: Arc::new(Semaphore::new(DECODE_BUDGET_MIB as usize)),
                 workers,
             }),
             previews: StdMutex::new(PreviewCache::default()),
@@ -737,12 +734,7 @@ impl Shared {
         queued: Queued,
         sequence: u64,
     ) -> Result<(), LibraryError> {
-        let permits = u32::try_from(queued.size_bytes.div_ceil(1 << 20))
-            .unwrap_or(DECODE_BUDGET_MIB)
-            .clamp(1, DECODE_BUDGET_MIB);
-        let budget = self.budget.acquire_many(permits).await.map_err(|_| LibraryError::Canceled)?;
         let measured = self.measure(queued).await;
-        drop(budget);
         if self.stopping() {
             return Ok(());
         }
@@ -775,13 +767,16 @@ impl Shared {
         Ok(())
     }
 
-    /// Decode through a contained read and measure. An unsupported or
-    /// malformed encoding is the method's failed outcome for these bytes.
+    /// Decode through a contained read and measure, holding the frame's
+    /// share of the decode budget from its header to the end of the
+    /// measurement. An unsupported or malformed encoding is the method's
+    /// failed outcome for these bytes.
     async fn measure(
         self: &Arc<Self>,
         queued: Queued,
     ) -> Result<(InputBasis, MeasurementOutcome), LibraryError> {
         let shared = Arc::clone(self);
+        let runtime = Handle::current();
         let read = self
             .catalog
             .open_contained(queued.asset, InventoryProbe, move |reader| {
@@ -790,8 +785,9 @@ impl Shared {
                         "an image format other than FITS or XISF".into(),
                     )));
                 };
-                match px::decode::decode(container, reader, &shared.abort) {
-                    Ok(image) => Ok(Ok(image)),
+                let admit = |footprint| admit(&shared.budget, &runtime, footprint);
+                match px::decode::decode_admitted(container, reader, &shared.abort, admit) {
+                    Ok(admitted) => Ok(Ok(admitted)),
                     Err(error @ (PixelError::Unsupported(_) | PixelError::Malformed(_))) => {
                         Ok(Err(error))
                     }
@@ -800,8 +796,8 @@ impl Shared {
             })
             .await?;
         let container = format_of(queued.container);
-        let image = match read.value {
-            Ok(image) => image,
+        let (image, budget) = match read.value {
+            Ok(admitted) => admitted,
             Err(error) => {
                 let basis = InputBasis { fingerprint: read.fingerprint, container, decoded: None };
                 return Ok((basis, failed_outcome(&error)));
@@ -810,8 +806,13 @@ impl Shared {
         let decoded = decoded_basis(&image)?;
         let basis = InputBasis { fingerprint: read.fingerprint, container, decoded: Some(decoded) };
         let shared = Arc::clone(self);
-        let measurement =
-            blocking(move || measure::measure(&image, &shared.abort).map_err(pixel_error)).await?;
+        let measurement = blocking(move || {
+            let measurement = measure::measure(&image, &shared.abort).map_err(pixel_error);
+            drop(image);
+            drop(budget);
+            measurement
+        })
+        .await?;
         Ok((basis, outcome(measurement, &self.method)))
     }
 
@@ -834,6 +835,23 @@ async fn worker(shared: Arc<Shared>, run: Uuid) {
             shared.fail(run).await;
         }
     }
+}
+
+/// Wait on the decoding thread for the frame's share of the decode budget:
+/// its decode and measurement peak in MiB, rounded up. A frame above the
+/// whole budget takes all of it and is measured alone.
+fn admit(
+    budget: &Arc<Semaphore>,
+    runtime: &Handle,
+    footprint: px::decode::Footprint,
+) -> Result<OwnedSemaphorePermit, PixelError> {
+    let permits = u32::try_from(footprint.peak_bytes().div_ceil(1 << 20))
+        .unwrap_or(DECODE_BUDGET_MIB)
+        .clamp(1, DECODE_BUDGET_MIB);
+    // The budget is never closed; a closed one would leave nothing to wait for.
+    runtime
+        .block_on(Arc::clone(budget).acquire_many_owned(permits))
+        .map_err(|_| PixelError::Canceled)
 }
 
 fn move_to_head(pending: &mut VecDeque<Queued>, assets: &[Uuid]) {

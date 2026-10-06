@@ -10,7 +10,7 @@ use std::sync::atomic::AtomicBool;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::XmlVersion;
 
-use super::{check, data_len, read_exact, samples_from_bytes, skip, type_maximum};
+use super::{check, data_len, read_exact, samples_from_bytes, skip, type_maximum, Footprint};
 use crate::{
     ByteOrder, CfaEvidence, CfaSource, Codec, Compression, Container, DecodedImage, PixelError,
     PixelStorage, Plane, PlaneKind, SampleFormat, Saturation, SaturationSource, Scaling,
@@ -273,10 +273,11 @@ fn bounds(attribute: &str) -> Result<(f64, f64), PixelError> {
 }
 
 #[allow(clippy::too_many_lines)]
-pub(super) fn decode(
+pub(super) fn decode<G>(
     reader: &mut dyn Read,
     canceled: &AtomicBool,
-) -> Result<DecodedImage, PixelError> {
+    admit: impl FnOnce(Footprint) -> Result<G, PixelError>,
+) -> Result<(DecodedImage, G), PixelError> {
     let preamble = read_exact(reader, 16, canceled, "XISF preamble")?;
     if &preamble[..8] != SIGNATURE {
         return Err(malformed("XISF signature"));
@@ -354,6 +355,13 @@ pub(super) fn decode(
         (Some(_), Some(parts)) => check_subblocks(parts, size, expected)?,
         _ => {}
     }
+    // The header as read twice, then the attachment with its inflated copy,
+    // or two copies of the data: inflated and unshuffled, interleaved and
+    // planar, or planar and the samples.
+    let decode_bytes = (16 + 2 * xml_len as u64)
+        .saturating_add(expected as u64)
+        .saturating_add(size.max(expected) as u64);
+    let admitted = admit(Footprint::new(width, height, channels, expected, decode_bytes))?;
 
     let consumed = 16 + xml_len as u64;
     if position < consumed {
@@ -382,6 +390,7 @@ pub(super) fn decode(
                     }
                 }
             }
+            drop(block);
             match compression.shuffle_item_size {
                 Some(item_size) => unshuffle(&inflated, item_size as usize),
                 None => inflated,
@@ -391,7 +400,9 @@ pub(super) fn decode(
     check(canceled)?;
     let planar = match storage {
         PixelStorage::Normal if channels > 1 => {
-            deinterleave(&raw, channels as usize, format.bytes())
+            let planar = deinterleave(&raw, channels as usize, format.bytes());
+            drop(raw);
+            planar
         }
         _ => raw,
     };
@@ -442,7 +453,7 @@ pub(super) fn decode(
             }
         })
         .collect();
-    Ok(DecodedImage {
+    let decoded = DecodedImage {
         container: Container::Xisf,
         planes,
         evidence: StructureEvidence {
@@ -454,5 +465,6 @@ pub(super) fn decode(
             color_space: Some(color_space),
             bounds: recorded_bounds,
         },
-    })
+    };
+    Ok((decoded, admitted))
 }

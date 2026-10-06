@@ -14,8 +14,8 @@ use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{
-    ByteOrder, Container, DecodedImage, PixelError, SampleFormat, Saturation, SaturationSource,
-    Scaling, StoredSamples,
+    measure, ByteOrder, Container, DecodedImage, PixelError, SampleFormat, Saturation,
+    SaturationSource, Scaling, StoredSamples,
 };
 
 mod fits;
@@ -23,6 +23,42 @@ mod xisf;
 
 /// Read granularity between cancel checks.
 const CHUNK: usize = 4 << 20;
+
+/// The memory one image holds while it is decoded and measured, known from
+/// its header before any sample is read (R14). Parsed header structures and
+/// per-star working sets are not counted.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Footprint {
+    /// Every plane's stored samples once decoded.
+    pub decoded_bytes: u64,
+    /// The most the decode holds at once: the header as read, the data as
+    /// read and any inflated, unshuffled or deinterleaved copy of it, and
+    /// the samples.
+    pub decode_bytes: u64,
+    /// The f64 copy of one plane's samples that measuring makes.
+    pub scratch_bytes: u64,
+}
+
+impl Footprint {
+    fn new(width: u32, height: u32, channels: u32, decoded: usize, decode_bytes: u64) -> Self {
+        Self {
+            decoded_bytes: decoded as u64,
+            decode_bytes,
+            scratch_bytes: measure::scratch_bytes(width, height, channels),
+        }
+    }
+
+    /// The most bytes decoding and then measuring the image hold at once.
+    #[must_use]
+    pub const fn peak_bytes(self) -> u64 {
+        let measuring = self.decoded_bytes.saturating_add(self.scratch_bytes);
+        if self.decode_bytes > measuring {
+            self.decode_bytes
+        } else {
+            measuring
+        }
+    }
+}
 
 /// Decodes every plane of the single image in `reader`. Reads only what the
 /// image needs; the caller hashes any remainder.
@@ -37,10 +73,27 @@ pub fn decode(
     reader: &mut dyn Read,
     canceled: &AtomicBool,
 ) -> Result<DecodedImage, PixelError> {
+    decode_admitted(container, reader, canceled, |_| Ok(())).map(|(image, ())| image)
+}
+
+/// Decodes like [`decode`], calling `admit` once with the image's
+/// [`Footprint`] after its header is read and checked and before any sample
+/// is read. The decode stops with the error `admit` returns, and yields the
+/// value it returns with the image.
+///
+/// # Errors
+///
+/// As [`decode`], and any error `admit` returns.
+pub fn decode_admitted<G>(
+    container: Container,
+    reader: &mut dyn Read,
+    canceled: &AtomicBool,
+    admit: impl FnOnce(Footprint) -> Result<G, PixelError>,
+) -> Result<(DecodedImage, G), PixelError> {
     check(canceled)?;
     match container {
-        Container::Fits => fits::decode(reader, canceled),
-        Container::Xisf => xisf::decode(reader, canceled),
+        Container::Fits => fits::decode(reader, canceled, admit),
+        Container::Xisf => xisf::decode(reader, canceled, admit),
     }
 }
 

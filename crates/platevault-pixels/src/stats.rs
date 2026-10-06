@@ -46,14 +46,15 @@ pub struct Background {
     pub noise: f64,
 }
 
-/// Every valid sample value (masked and saturated samples excluded).
+/// Every valid sample value (masked and saturated samples excluded), in a
+/// buffer of exactly one f64 per sample, as `measure::scratch_bytes` counts.
 pub fn valid_values(plane: &Plane) -> Vec<f64> {
-    (0..plane.len())
-        .filter_map(|index| match plane.value_at(index) {
-            (value, Category::Valid) => Some(value),
-            _ => None,
-        })
-        .collect()
+    let mut values = Vec::with_capacity(plane.len());
+    values.extend((0..plane.len()).filter_map(|index| match plane.value_at(index) {
+        (value, Category::Valid) => Some(value),
+        _ => None,
+    }));
+    values
 }
 
 /// Iterative 3-sigma clipping until the set is stable or after 10 passes,

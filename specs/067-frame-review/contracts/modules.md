@@ -26,12 +26,15 @@ pub struct DecodedImage { pub container: Container, pub planes: Vec<Plane>, pub 
 pub enum PixelError { Unsupported(String), Malformed(String), Io(std::io::Error), Canceled }
 
 // decode/: decode owner
+pub struct Footprint { pub decoded_bytes: u64, pub decode_bytes: u64, pub scratch_bytes: u64 } // peak_bytes()
 pub fn decode(container: Container, reader: &mut dyn Read, canceled: &AtomicBool) -> Result<DecodedImage, PixelError>;
+pub fn decode_admitted<G>(container: Container, reader: &mut dyn Read, canceled: &AtomicBool, admit: impl FnOnce(Footprint) -> Result<G, PixelError>) -> Result<(DecodedImage, G), PixelError>;
 
 // measure.rs, stats.rs, stars.rs, psf.rs, hfr.rs: measurement owner
 pub const METHOD: Method = Method { name: "platevault.stars", version: 1 };
 pub fn measure(image: &DecodedImage, canceled: &AtomicBool) -> Result<Measurement, PixelError>;
 pub fn cutouts(plane: &Plane, star: &Star) -> Cutouts;
+pub const fn scratch_bytes(width: u32, height: u32, planes: u32) -> u64;
 
 // display.rs: display owner
 pub fn statistics(plane: &Plane) -> PlaneStatistics;
@@ -111,7 +114,7 @@ impl FrameReview {
 }
 ```
 
-`frame_states` combines `Catalog::frame_records`, the in-memory queue and `Catalog::imported_values`. It starts no work and reads no source. The run queue, the cancel flag, the priority order, the worker tasks and the 1 GiB decode budget follow R14. Each worker calls `open_contained` with `InventoryProbe`, then `decode` and `measure`. It records the result, a failed outcome or an issue, and publishes a snapshot. The preview cache follows R15 and decodes through the same contained read. `review_import` reads the chosen CSV read-only, then calls `parse`, `import_candidates` and `match_rows`. It hashes, through `open_contained`, only attached assets without a recorded digest, then stores the review.
+`frame_states` combines `Catalog::frame_records`, the in-memory queue and `Catalog::imported_values`. It starts no work and reads no source. The run queue, the cancel flag, the priority order, the worker tasks and the 1 GiB decode budget follow R14. Each worker calls `open_contained` with `InventoryProbe`, then `decode_admitted`, which waits for the frame's `Footprint::peak_bytes` share of the budget before reading any sample, and `measure`, holding that share until the measurement ends. It records the result, a failed outcome or an issue, and publishes a snapshot. The preview cache follows R15 and decodes through the same contained read with `decode`, outside the budget. `review_import` reads the chosen CSV read-only, then calls `parse`, `import_candidates` and `match_rows`. It hashes, through `open_contained`, only attached assets without a recorded digest, then stores the review.
 
 `apps/desktop/src-tauri/src/commands/frame_review.rs` holds the sixteen `pix_*` handlers with the library `Reply`, `fail` and `report` conventions. `commands/mod.rs` declares the module. `library_shell.rs` adds the handlers to its `generate_handler!` list and spawns a bridge that forwards `pix_measurement_progress` like `ProgressBridge`.
 

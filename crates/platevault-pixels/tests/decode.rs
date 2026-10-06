@@ -11,10 +11,11 @@
     clippy::needless_pass_by_value
 )]
 
+use std::cell::Cell;
 use std::io::{Cursor, Read};
 use std::sync::atomic::AtomicBool;
 
-use platevault_pixels::decode::decode;
+use platevault_pixels::decode::{decode, decode_admitted, Footprint};
 use platevault_pixels::fixtures::{
     quantize, set_integer, write_fits, write_xisf, CfaModulation, FitsImage, SyntheticFrame,
     SyntheticStar, XisfImage,
@@ -292,6 +293,139 @@ fn xisf_sizes_that_disagree_with_the_geometry_are_malformed_before_inflating() {
                 .unwrap_or_else(|_| panic!("{attributes:?} panicked instead of being Malformed"));
         malformed(result);
     }
+}
+
+/// Counts the bytes read through it.
+struct Counted<'a> {
+    bytes: Cursor<&'a [u8]>,
+    read: &'a Cell<usize>,
+}
+
+impl Read for Counted<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.bytes.read(buffer)?;
+        self.read.set(self.read.get() + read);
+        Ok(read)
+    }
+}
+
+/// Decodes `bytes`, recording each admitted footprint with the bytes read
+/// before it was admitted.
+fn admitted(
+    container: Container,
+    bytes: &[u8],
+    refuse: bool,
+) -> (Result<DecodedImage, PixelError>, Vec<(Footprint, usize)>, usize) {
+    let read = Cell::new(0);
+    let mut admissions = Vec::new();
+    let mut reader = Counted { bytes: Cursor::new(bytes), read: &read };
+    let result = decode_admitted(container, &mut reader, &AtomicBool::new(false), |footprint| {
+        admissions.push((footprint, read.get()));
+        if refuse {
+            Err(PixelError::Canceled)
+        } else {
+            Ok(())
+        }
+    });
+    (result.map(|(image, ())| image), admissions, read.get())
+}
+
+fn stored_bytes(image: &DecodedImage) -> u64 {
+    let format = image.evidence.sample_format;
+    image.planes.iter().map(|plane| (plane.samples.len() * format.bytes()) as u64).sum()
+}
+
+/// The position of the XISF attachment the fixture writer recorded.
+fn attachment(bytes: &[u8]) -> (usize, usize) {
+    let text = String::from_utf8_lossy(&bytes[..4096]);
+    let location = text.split("location=\"attachment:").nth(1).unwrap();
+    let mut parts = location.split(['"', ':']);
+    (parts.next().unwrap().parse().unwrap(), parts.next().unwrap().parse().unwrap())
+}
+
+/// R14: the decode budget is charged from the header, before any sample is
+/// read, by the bytes decoding and measuring hold: every coexisting copy of
+/// the data and the measurement's f64 scratch, never the file size.
+#[test]
+fn the_footprint_is_admitted_once_from_the_header_before_any_sample_is_read() {
+    let (width, height) = (64_u32, 48_u32);
+    let samples = u64::from(width * height);
+    let values = frame(width, height, 3, 1000.0, 10.0).render();
+    let mono = quantize(&values, SampleFormat::U16, Scaling::IDENTITY);
+    let offset = Scaling { zero: 32768.0, scale: 1.0 };
+    let fits_bytes = fits(&quantize(&values, SampleFormat::I16, offset), width, height, 1, offset);
+    let data_unit = (samples as usize * 2).div_ceil(2880) * 2880;
+    let xisf_bytes = write_xisf(&XisfImage {
+        codec: Some(Codec::Lz4),
+        shuffle: true,
+        subblock_size: Some(1000),
+        ..XisfImage::new(width, height, 1, &mono)
+    })
+    .unwrap();
+    let mut rgb = Vec::new();
+    for seed in 0..3 {
+        rgb.extend(frame(width, height, seed, 0.2, 0.01).render());
+    }
+    let rgb = quantize(&rgb, SampleFormat::F32, Scaling::IDENTITY);
+    let rgb_bytes = write_xisf(&XisfImage {
+        storage: PixelStorage::Normal,
+        codec: Some(Codec::Zlib),
+        ..XisfImage::new(width, height, 3, &rgb)
+    })
+    .unwrap();
+
+    let cases = [
+        ("FITS", Container::Fits, &fits_bytes, fits_bytes.len() - data_unit, 0),
+        (
+            "XISF lz4",
+            Container::Xisf,
+            &xisf_bytes,
+            attachment(&xisf_bytes).0,
+            attachment(&xisf_bytes).1,
+        ),
+        (
+            "XISF zlib RGB",
+            Container::Xisf,
+            &rgb_bytes,
+            attachment(&rgb_bytes).0,
+            attachment(&rgb_bytes).1,
+        ),
+    ];
+    for (label, container, bytes, data_start, compressed) in cases {
+        let (image, admissions, _) = admitted(container, bytes, false);
+        let image = image.unwrap_or_else(|error| panic!("{label}: {error}"));
+        let [(footprint, read_before)] = admissions[..] else {
+            panic!("{label}: admitted {} times", admissions.len());
+        };
+        assert!(read_before <= data_start, "{label}: {read_before} bytes read before admission");
+        let decoded = stored_bytes(&image);
+        assert_eq!(footprint.decoded_bytes, decoded, "{label}");
+        // The attachment coexists with its inflated copy, and one copy of
+        // the data with the samples converted from it.
+        assert!(
+            footprint.decode_bytes >= (2 * decoded).max(decoded + compressed as u64),
+            "{label}: {footprint:?}"
+        );
+        // Measuring copies one plane to f64; several planes are refused first.
+        let scratch = if image.planes.len() == 1 { 8 * samples } else { 0 };
+        assert_eq!(footprint.scratch_bytes, scratch, "{label}");
+        assert!(footprint.peak_bytes() >= footprint.decode_bytes.max(decoded + scratch), "{label}");
+        assert!(footprint.peak_bytes() > bytes.len() as u64, "{label}: {footprint:?}");
+
+        let (refused, admissions, read) = admitted(container, bytes, true);
+        assert!(matches!(refused, Err(PixelError::Canceled)), "{label}: {refused:?}");
+        assert_eq!(admissions.len(), 1, "{label}");
+        assert_eq!(read, admissions[0].1, "{label}: refused admission read on");
+    }
+
+    let geometry = "geometry=\"2:2:1\" sampleFormat=\"UInt16\"";
+    let inconsistent = raw_xisf(
+        &format!("<Image {geometry} location=\"attachment:4096:8\" compression=\"lz4:16\"/>"),
+        &[0; 8],
+    );
+    let (result, admissions, _) = admitted(Container::Xisf, &inconsistent, false);
+    malformed(result);
+    assert!(admissions.is_empty(), "an inconsistent header was admitted");
 }
 
 fn cfa_frame() -> Vec<f64> {

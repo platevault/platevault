@@ -99,6 +99,18 @@ pub(crate) fn check_canceled(canceled: &AtomicBool) -> Result<(), PixelError> {
     }
 }
 
+/// Bytes of the f64 copy of one plane's samples that measuring an image of
+/// this geometry makes; an image of several planes is refused before any
+/// copy.
+#[must_use]
+pub const fn scratch_bytes(width: u32, height: u32, planes: u32) -> u64 {
+    if planes == 1 {
+        width as u64 * height as u64 * size_of::<f64>() as u64
+    } else {
+        0
+    }
+}
+
 /// Units of plane values.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PlaneUnits {

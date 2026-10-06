@@ -8,7 +8,7 @@ use std::sync::atomic::AtomicBool;
 
 use fits_header::Header;
 
-use super::{check, data_len, read_exact, samples_from_bytes, type_maximum};
+use super::{check, data_len, read_exact, samples_from_bytes, type_maximum, Footprint};
 use crate::{
     ByteOrder, CfaEvidence, CfaSource, Container, DecodedImage, PixelError, Plane, PlaneKind,
     SampleFormat, Saturation, SaturationSource, Scaling, StructureEvidence,
@@ -23,8 +23,12 @@ fn malformed(what: impl Into<String>) -> PixelError {
     PixelError::Malformed(what.into())
 }
 
-/// Reads header blocks up to the one holding END and parses the cards.
-fn read_header(reader: &mut dyn Read, canceled: &AtomicBool) -> Result<Header, PixelError> {
+/// Reads header blocks up to the one holding END and parses the cards; with
+/// the header's length in bytes.
+fn read_header(
+    reader: &mut dyn Read,
+    canceled: &AtomicBool,
+) -> Result<(Header, usize), PixelError> {
     let mut bytes = Vec::new();
     for _ in 0..MAX_HEADER_BLOCKS {
         check(canceled)?;
@@ -34,8 +38,9 @@ fn read_header(reader: &mut dyn Read, canceled: &AtomicBool) -> Result<Header, P
             .any(|card| card.starts_with(b"END") && card[3..8].iter().all(|byte| *byte == b' '));
         bytes.extend_from_slice(&block);
         if end {
-            return Header::parse(&bytes)
-                .map_err(|error| malformed(format!("FITS header: {error}")));
+            let header = Header::parse(&bytes)
+                .map_err(|error| malformed(format!("FITS header: {error}")))?;
+            return Ok((header, bytes.len()));
         }
     }
     Err(malformed("FITS header without END"))
@@ -72,7 +77,7 @@ fn evidence_integer(header: &Header, key: &str) -> Option<i64> {
 /// Names the feature of a primary HDU without an image.
 fn extension_feature(reader: &mut dyn Read, canceled: &AtomicBool) -> PixelError {
     match read_header(reader, canceled) {
-        Ok(extension) => {
+        Ok((extension, _)) => {
             if extension.get::<bool>("ZIMAGE").ok().flatten() == Some(true) {
                 PixelError::Unsupported("FITS tile compression (ZIMAGE binary table)".into())
             } else if text(&extension, "XTENSION").as_deref().map(str::trim) == Some("IMAGE") {
@@ -95,11 +100,12 @@ fn axis(header: &Header, key: &str) -> Result<u32, PixelError> {
     u32::try_from(value).map_err(|_| malformed(format!("FITS {key} = {value} out of range")))
 }
 
-pub(super) fn decode(
+pub(super) fn decode<G>(
     reader: &mut dyn Read,
     canceled: &AtomicBool,
-) -> Result<DecodedImage, PixelError> {
-    let header = read_header(reader, canceled)?;
+    admit: impl FnOnce(Footprint) -> Result<G, PixelError>,
+) -> Result<(DecodedImage, G), PixelError> {
+    let (header, header_len) = read_header(reader, canceled)?;
     match header.get::<bool>("SIMPLE") {
         Ok(Some(true)) => {}
         _ => return Err(malformed("FITS SIMPLE card is not T")),
@@ -141,6 +147,10 @@ pub(super) fn decode(
         _ => type_maximum(format, scaling),
     };
     let len = data_len(u64::from(width), u64::from(height), u64::from(channels), format, "FITS")?;
+    // The parsed header, the data unit as read and the samples converted
+    // from it coexist.
+    let decode_bytes = (len as u64).saturating_mul(2).saturating_add(header_len as u64);
+    let admitted = admit(Footprint::new(width, height, channels, len, decode_bytes))?;
     let bytes = read_exact(reader, len, canceled, "FITS data unit")?;
     check(canceled)?;
     let plane_bytes = len / channels as usize;
@@ -178,7 +188,7 @@ pub(super) fn decode(
     if naxis == 3 {
         geometry.push(u64::from(channels));
     }
-    Ok(DecodedImage {
+    let image = DecodedImage {
         container: Container::Fits,
         planes,
         evidence: StructureEvidence {
@@ -190,5 +200,6 @@ pub(super) fn decode(
             color_space: None,
             bounds: None,
         },
-    })
+    };
+    Ok((image, admitted))
 }
