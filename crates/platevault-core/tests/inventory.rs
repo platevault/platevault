@@ -479,11 +479,11 @@ fn denied_and_linked_subtrees_stay_uncertain_while_siblings_reconcile() {
 
     std::fs::set_permissions(root.join("denied"), std::fs::Permissions::from_mode(0o000)).unwrap();
     let _restore = Restore(root.join("denied"));
-    if std::fs::read_dir(root.join("denied")).is_ok() {
-        eprintln!(
-            "permission denial is not enforceable for this user; denied-scope case not exercised"
-        );
-        return;
+    // Root (as in container CI) reads a mode-000 folder; the link cases below
+    // still run there, only the denial assertions need enforcement.
+    let denial_enforced = std::fs::read_dir(root.join("denied")).is_err();
+    if !denial_enforced {
+        eprintln!("permission denial is not enforceable for this user; denial not asserted");
     }
 
     let (observation, _) = run(&location, &ScanOptions::default());
@@ -491,11 +491,15 @@ fn denied_and_linked_subtrees_stay_uncertain_while_siblings_reconcile() {
 
     assert_eq!(observation.state, ScanState::Partial);
     let paths: Vec<_> = observation.files.iter().map(|file| file.relative_path.clone()).collect();
-    assert_eq!(paths, vec![rel("ok/light.fits")]);
-    assert_eq!(issue_at(&observation, "denied").availability, Availability::Unreadable);
+    if denial_enforced {
+        assert_eq!(paths, vec![rel("ok/light.fits")]);
+        assert_eq!(issue_at(&observation, "denied").availability, Availability::Unreadable);
+        assert!(!inventory::absence_provable(&observation, &rel("denied/light.fits")));
+    } else {
+        assert_eq!(paths, vec![rel("denied/light.fits"), rel("ok/light.fits")]);
+    }
     assert!(issue_at(&observation, "linked-dir").reason.contains("not followed"));
     assert!(issue_at(&observation, "ok/linked.fits").reason.contains("not followed"));
-    assert!(!inventory::absence_provable(&observation, &rel("denied/light.fits")));
     assert!(!inventory::absence_provable(&observation, &rel("linked-dir/elsewhere.fits")));
     assert!(!inventory::absence_provable(&observation, &rel("ok/linked.fits")));
     assert!(inventory::absence_provable(&observation, &rel("ok/renamed.fits")));
