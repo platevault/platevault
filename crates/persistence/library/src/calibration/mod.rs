@@ -10,6 +10,7 @@
 
 mod adoption;
 mod contained_write;
+mod custody;
 mod decisions;
 mod inventory;
 

@@ -24,9 +24,9 @@ use uuid::Uuid;
 use super::contained_write::{self, Folder, InstallFailure, Temporary};
 use super::{inventory, load_master};
 use crate::{
-    blocking, check_expected_assets, conflict, current_digest, from_json, from_text, load_location,
-    now, parse_uuid, path_from_key, path_key, require_active, require_revision, revision, scoped,
-    to_json, to_text, Catalog, Result, SourceProbe, SourceRoot, MAX_PAGE,
+    blocking, check_expected_assets, conflict, current_digest, db_revision, from_json, from_text,
+    load_location, now, parse_uuid, path_from_key, path_key, require_active, require_revision,
+    revision, scoped, to_json, to_text, Catalog, Result, SourceProbe, SourceRoot, MAX_PAGE,
 };
 
 impl Catalog {
@@ -808,11 +808,6 @@ pub async fn recover_adoptions(conn: &mut SqliteConnection) -> Result<()> {
     .execute(&mut *conn)
     .await?;
     Ok(())
-}
-
-fn db_revision(value: Revision) -> Result<i64> {
-    i64::try_from(value)
-        .map_err(|_| LibraryError::PersistenceFailure(format!("revision {value} out of range")))
 }
 
 async fn load_review(conn: &mut SqliteConnection, id: Uuid) -> Result<AdoptionReview> {
