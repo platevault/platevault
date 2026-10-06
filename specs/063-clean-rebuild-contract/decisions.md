@@ -5,15 +5,27 @@ Authority: the user approved conservative product defaults and, on 2026-10-04, a
 
 The [accepted Rust computation boundary](../../docs/adr/0003-use-rust-scientific-execution-and-a-clean-local-catalog-for-the-platevault-rebuild.md), generated from decision `astro-plan-trutg`, governs specs 063 through 072 and supersedes historical ADR-0001. The retained frontend-astronomy decision records the earlier spec-044 boundary.
 
+## Workflow redesign 2026-10-06
+
+On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W43, copied verbatim into the [workflow decisions log](workflow-decisions.md). Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
+
+Stage model:
+
+1. A Project is the required container (D-W1). It holds subjects, rigs (optical trains) and goals (D-W9, D-W29, D-W37).
+2. Each processing run (View) belongs to exactly one Project and has one subject and one rig (D-W3, D-W8, D-W37). A run moves through Select, Review, Calibrate, Prepare, Results, Done and Clean up (D-W3, D-W26). A mosaic subject creates a run group with one run per panel (D-W38).
+3. The user marks the Project Done, then uses its Done / Archive sheet for Archive and for moving rejected frames to the OS Trash (D-W26, D-W43).
+
+Candidates are derived from each session's confirmed Target and rig; members come only from run membership (D-W33, D-W34, D-W37). Goal progress shows "in project" and "captured" (D-W36). Delivery order: contract amendment, then backend deltas, then the final UI (D-W28).
+
 ## Decision register
 
 ### D01
 
 Owners: LIB, PRJ, VSEL.
 
-- Geometric preselection requires confirmed framing, equipment, pointing, orientation and footprint overlap.
+- Geometric preselection requires confirmed framing, equipment, pointing, orientation and footprint overlap. Superseded by D-W33 and D-W37: a candidate is a session whose confirmed Target is a Project subject and whose rig is a Project rig. Geometry does not decide candidacy; it orders suggestions and assigns mosaic panels (D-W38).
 - Unknown evidence is listed for manual selection, never treated as zero distance.
-- Standalone session selection remains explicit; an OBJECT label does not assign a Target or supply coordinates.
+- Standalone session selection remains explicit; an OBJECT label does not assign a Target or supply coordinates. Superseded in part by D-W1 and D-W8: there is no standalone selection, because every run belongs to a Project. An OBJECT label still assigns no Target and supplies no coordinates, so a session without a confirmed Target is never a candidate.
 - Angular separation may order suggestions but never decides eligibility alone.
 
 ### D02
@@ -105,12 +117,12 @@ Owners: VSEL, PREP, RES, STO.
 
 Owners: LIB, PRJ, VSEL.
 
-- Library quality and Project rejection are separate records.
+- Library quality and Project rejection are separate records. Library quality (P/X/U) is global; "Reject for this Project only" is a secondary, Project-scoped action (D-W42).
 - Project rejection never changes library usable totals; library quality never changes fixed View membership.
-- Explicitly linked sessions show captured, library-usable and Project-accepted totals separately.
-- Project-accepted totals count only library-Usable frames not rejected for that Project, and are the fixed basis for marking integration/frame-count goals met.
-- Exposure/equipment/calibration checks show evidence or unknown.
-- Reaching a goal does not close the Project.
+- Explicitly linked sessions show captured, library-usable and Project-accepted totals separately. Superseded by D-W34 and D-W36: a Project has no linked sessions. Each goal shows two labelled numbers, "in project" (frames of sessions in the Project's runs, excluding Project-rejected frames) and "captured" (all candidate sessions).
+- Project-accepted totals count only library-Usable frames not rejected for that Project, and are the fixed basis for marking integration/frame-count goals met. Superseded by D-W36 and D-W42: "in project" is the only basis for goal met and for Home's Next action. A quality-bar goal can restrict counting to Usable frames (D-W29).
+- Exposure/equipment/calibration checks show evidence or unknown. Superseded by D-W29: the exposure-preference and equipment goals are dropped. Missing calibration and exposure mismatch are automatic warnings, not goals, and the mixed-equipment warning is gone because each run uses one rig (D-W37).
+- Reaching a goal does not close the Project. Only the user marks a Project Done (D-W26).
 
 ### D11
 
@@ -125,9 +137,9 @@ Owners: LIB.
 
 Owners: PRJ, VSEL.
 
-- A Project may contain explicit target coordinates and user-defined panel footprints.
-- Session linkage is an explicit association, not a by-product of proximity or a shared name.
-- Automatic panel coverage needs the same qualified geometry as D01.
+- A Project may contain explicit target coordinates and user-defined panel footprints. Amended by D-W9 and D-W38: a Project holds several subjects (Targets or mosaics) at any separation, and a mosaic subject defines its panels by centre and rotation.
+- Session linkage is an explicit association, not a by-product of proximity or a shared name. Superseded by D-W33 and D-W34: nothing is assigned at the Project level. Candidates are derived from confirmed Target and rig, and sessions are explicitly assigned only to runs, as each run's revisioned membership.
+- Automatic panel coverage needs the same qualified geometry as D01. Superseded by D-W38: each session is assigned to a panel by its pointing, checked against the panel centre; ambiguous or off-panel sessions are flagged for the user.
 
 ### D13
 
@@ -136,12 +148,14 @@ Owners: CAL, PREP.
 - Calibration matching compares camera, dimensions, binning, gain/offset and recorded image type; dark exposure and flat channel/optical-train evidence are required where relevant.
 - Missing or conflicting evidence is unknown/incompatible, never silently compatible.
 - Automatic temperature tolerance is not guessed; any tolerance must be shown and fixture-qualified.
-- Suggestions require explicit acceptance before handoff.
+- Suggestions require explicit acceptance before handoff. Superseded by D-W5: calibration is automatic by default. Fully compatible matches are assigned automatically, recorded with identity and SHA-256 and re-verified at Prepare; only unknown or incompatible criteria need an explicit choice. The step shows a readiness line, with the full requirement table behind "Review matches".
 - Scoped exceptions require reasons and never rewrite evidence.
 
 ### D14
 
 Owners: STO.
+
+Superseded by D-W11: "File into library" is dropped, and with it reviewed filing. Import (Copy or Move) and Archive remain, and both use the naming templates of D-W20. The collision rule (block, never overwrite) and the rule that no renaming patches headers carry over to them; the filing entries below are kept for traceability.
 
 - Reviewed filing uses a user-chosen destination and previews every relative path.
 - Default naming retains original basenames; collisions block, never overwrite.

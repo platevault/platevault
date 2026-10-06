@@ -8,17 +8,17 @@
 
 **Input**: Rebuild PlateVault cleanly, preserve the old code as a recoverable reference, and reuse code where it satisfies the agreed product contract.
 
-The [product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the interaction details and worked example. This specification defines shared behavior and feature ownership. It does not authorize product implementation or claim that the redesigned flows run.
+The [product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the interaction details and worked example. The [workflow redesign](decisions.md#workflow-redesign-2026-10-06) of 2026-10-06 (decisions D-W1 through D-W43) amends it: every processing run (View) belongs to a Project, and Home is a dashboard rather than the Targets list. Where the product flow and a D-W decision disagree, the decision governs. This specification defines shared behavior and feature ownership. It does not authorize product implementation or claim that the redesigned flows run.
 
 ## User Scenarios & Testing
 
 ### User Story 1 - Inspect captures without reorganizing files (Priority: P1)
 
-The user registers capture folders and inspects their sessions while indexing proceeds. A Project and a processing application are optional.
+The user registers capture folders and inspects their sessions while indexing proceeds. A Project and a processing application are optional for inspection, Import and planning; only a processing run needs a Project (D-W1).
 
 **Why this priority**: Library inspection is the first useful workflow and requires no file mutation.
 
-**Independent Test**: Register a capture folder, index its headers, and inspect sessions without creating a Project or a View.
+**Independent Test**: Register a capture folder, index its headers, and inspect sessions without creating a Project or a processing run (View).
 
 **Acceptance Scenarios**:
 
@@ -27,21 +27,23 @@ The user registers capture folders and inspects their sessions while indexing pr
 3. **Given** a registered folder, **When** indexing and catalog corrections complete, **Then** source paths and bytes remain unchanged.
 4. **Given** an unreadable descendant or an offline location, **When** indexing runs, **Then** its unobserved files retain last-observed information and show uncertainty rather than Missing.
 
-### User Story 2 - Review a standalone input selection (Priority: P1)
+### User Story 2 - Review a processing run's input selection (Priority: P1)
 
-The user selects sessions and frames, saves a View, and prepares exact inputs for an external application. Selection and quality decisions have separate scopes.
+The user creates a Project with a subject and a rig, starts a processing run in it, selects sessions from the run's candidates, saves the run, and prepares exact inputs for an external application. Selection and quality decisions have separate scopes (D-W1, D-W3, D-W37).
 
-**Why this priority**: An exact handoff makes library inspection useful without imposing Project administration.
+**Why this priority**: An exact handoff makes library inspection useful. The Project is a light container: a name, its subjects and its rigs are enough to start a run.
 
-**Independent Test**: Create a standalone View from selected sessions, review its membership, prepare supported inputs, and open the application after verification.
+**Independent Test**: Create a Project with one subject and one rig, start a run, review its membership, prepare supported inputs, and open the application after verification.
 
 **Acceptance Scenarios**:
 
 1. **Given** selected sessions, **When** filters, sort order, or paging change, **Then** the selected identities remain fixed and hidden selected rows are counted.
-2. **Given** six excluded frames, **When** the View is saved, **Then** those files remain on disk and other Views and library quality decisions remain unchanged.
-3. **Given** a Direct-source View, **When** a tool would consume excluded files through a whole-folder handoff, **Then** that handoff is refused and supported alternatives are shown.
+2. **Given** six excluded frames, **When** the run is saved, **Then** those files remain on disk and other runs and library quality decisions remain unchanged. (D-W3)
+3. **Given** a Direct-source run, **When** a tool would consume excluded files through a whole-folder handoff, **Then** that handoff is refused and supported alternatives are shown. (D-W3)
 4. **Given** selected inputs become unreadable during preparation, **When** the operation settles, **Then** blocked inputs are named and verified Open is unavailable.
 5. **Given** a destination collision, **When** preparation is reviewed, **Then** unrelated existing entries remain unchanged and require another path or a revised plan.
+6. **Given** no Project exists, **When** the user tries to start a processing run, **Then** the product asks for a Project (new or existing), one of its subjects and one of its rigs before the run exists; no standalone run is created. (D-W1, D-W8, D-W9, D-W37)
+7. **Given** a Project with rigs A and B, **When** a run on rig A opens its session picker, **Then** only candidate sessions of the run's subject captured with rig A are offered. (D-W33, D-W37)
 
 ### User Story 3 - Review measurements without changing capture data (Priority: P2)
 
@@ -60,24 +62,26 @@ The user inspects pixels and measurements while retaining the original scientifi
 
 ### User Story 4 - Finish processing and recover storage safely (Priority: P2)
 
-The user accepts reusable products, marks a processing attempt Complete, and chooses cleanup or archive independently.
+The user accepts reusable products, marks a run Complete, and chooses its Clean up independently. Later the user marks the Project Done and decides on Archive and on trashing rejected frames in the Project's Done / Archive sheet (D-W26, D-W43).
 
 **Why this priority**: Completion must not hide unaccepted outputs or authorize file removal.
 
-**Independent Test**: Complete a View with no Result, review its cleanup, and interrupt an archive transfer using disposable fixtures.
+**Independent Test**: Complete a run with no Result, review its Clean up, interrupt an archive transfer, and review the Project's trash offer using disposable fixtures.
 
 **Acceptance Scenarios**:
 
-1. **Given** no accepted Result, **When** the user marks processing complete, **Then** the View becomes Complete and no cleanup starts.
+1. **Given** no accepted Result, **When** the user marks the run Complete, **Then** the run becomes Complete and no Clean up starts. (D-W26)
 2. **Given** accepted products and unknown files, **When** cleanup opens, **Then** protected products remain in Keep and unknown files remain unselected.
 3. **Given** a location without safe OS Trash support, **When** approved cleanup runs, **Then** affected files are retained and no permanent-delete fallback executes.
 4. **Given** an archive verification or reference-repair failure, **When** transfer settles, **Then** sources are retained and completed, pending, and uncertain phases remain visible.
+5. **Given** a Project the user marks Done, **When** its Done / Archive sheet opens, **Then** it offers Archive, which keeps every session that another open Project still uses, and "Move N rejected frames to Trash (size)". Nothing moves until the user approves. (D-W26, D-W43)
+6. **Given** the trash offer, **When** its frames are listed, **Then** it covers only the Project's candidate frames that are library-Unusable, excludes every Project-only reject, and lists each refused frame with its reason. (D-W42, D-W43)
 
 ### User Story 5 - Plan observing independently of processing (Priority: P2)
 
 The user chooses a planning site, reviews observing windows, and explicitly opts into reminders or exports a calendar snapshot.
 
-**Why this priority**: Planning supports capture goals without changing library membership or starting processing.
+**Why this priority**: Planning supports capture goals without changing library membership or starting processing. The Planner works on Targets and needs no Project (D-W16).
 
 **Independent Test**: Switch planning sites, enable default-site reminders explicitly, and export selected windows.
 
@@ -86,17 +90,35 @@ The user chooses a planning site, reviews observing windows, and explicitly opts
 1. **Given** sessions from multiple capture sites, **When** the planning site changes, **Then** session sites and Project membership remain unchanged.
 2. **Given** reminders disabled, **When** the user browses plans, **Then** no reminders or indexing jobs start.
 3. **Given** selected observing windows, **When** calendar export is confirmed, **Then** the snapshot contains exactly those windows with the displayed site and time-zone basis.
+4. **Given** a Project page, **When** it opens, **Then** it shows planning for its own subjects with "Open in Planner", and the Planner itself lists Targets regardless of Projects. (D-W16)
+
+### User Story 6 - Work Projects from the Home dashboard (Priority: P1)
+
+The user opens Home, sees every Project with its goal progress, stage and one Next action, and acts on new sessions that need a Target, belong to no Project, are unreviewed or are ready to add to a run (D-W7, D-W39).
+
+**Why this priority**: Home is the control panel for capture and processing. It must show what to do next without hiding the library.
+
+**Independent Test**: Index sessions for two Projects plus one session with no confirmed Target, then read Home's sections, top line and Next actions.
+
+**Acceptance Scenarios**:
+
+1. **Given** indexed sessions, **When** Home opens, **Then** it shows the six Home sections of FR-020 in order. (D-W39)
+2. **Given** three sessions with no confirmed Target and two with a confirmed Target that no Project lists, **When** Home opens, **Then** the top line reads "3 sessions need a Target · 2 not in any Project". (D-W35)
+3. **Given** a Project with new unreviewed candidate frames and a blocked run, **When** Home computes its Next action, **Then** it shows "Review N new frames", which opens frame review filtered to Unreviewed. (D-W27, D-W35)
+4. **Given** a goal of Ha 10h with 6h10 in the Project's runs and 9h15 across all candidates, **When** progress shows, **Then** it reads "Ha 6h10 in project · 9h15 captured · goal 10h", and the goal is unmet. (D-W36)
 
 ### Edge Cases
 
-- Missing OBJECT never substitutes for missing coordinates or controls capture identity.
-- Unknown geometry does not become zero distance or automatic inclusion.
+- Missing OBJECT never substitutes for missing coordinates or controls capture identity. A session without a confirmed Target is never a candidate; Home lists it under "need a Target". (D-W33, D-W35)
+- Unknown geometry does not become zero distance or automatic inclusion. Geometry never decides candidacy; it orders candidates and assigns mosaic panels. (D-W33, D-W38)
+- A session captured with a rig the Project does not list is not a candidate, even when its confirmed Target is a subject. (D-W37)
+- A Trashed frame disappears from candidates, run pickers, frame review, goals, totals and Home; only the Sessions "Trashed" filter shows it. (D-W43)
 - Failed catalog writes remain visibly unsaved with Retry.
 - Start acknowledgments do not imply durable operation success.
 - Refresh never removes an offline member as though it were absent.
 - Source corrections never patch originals or write through prepared links.
 - Cleanup never follows link targets or removes the last retained copy without proof.
-- External application exit does not imply processing success or View completion.
+- External application exit does not imply processing success or run completion. (D-W3)
 
 ## Requirements
 
@@ -104,21 +126,35 @@ The user chooses a planning site, reviews observing windows, and explicitly opts
 
 - **FR-001**: The product MUST allow indexing in place without a Project, a processing profile, or compulsory file organization.
 - **FR-002**: Sessions MUST group homogeneous capture evidence. OBJECT is a label or filter; Target enrichment MUST NOT change capture identity.
-- **FR-003**: A View MUST retain reviewed input identities independently of browsing filters and an optional Project. Refresh MUST present changes for approval.
+- **FR-003**: A processing run (View) MUST belong to exactly one Project and use exactly one of its subjects and one of its rigs. A run MUST retain reviewed input identities independently of browsing filters. Refresh MUST present changes for approval. Reuse across Projects MUST go through Results as inputs, never through sharing a run. (D-W1, D-W8, D-W9, D-W37)
 - **FR-004**: Preparation MUST account for every selected input. Unsupported modes, missing inputs, and collisions MUST have explicit outcomes without silent omission or fallback.
 - **FR-005**: Direct-source handoff MUST pass exact reviewed membership without staging. Profiles that can write into inputs, or whose input-write behavior is unknown, MUST refuse Linked and Direct-source handoff and offer isolated Copy or supported Clone instead.
-- **FR-006**: Catalog quality decisions, View exclusions, and Project rejection MUST have explicit scopes. Measurements MUST NOT make those decisions automatically.
+- **FR-006**: Library quality (P/X/U, global), run exclusions, and "Reject for this Project only" MUST have explicit scopes. A Project-only reject MUST NOT change library quality, other Projects or run membership. Measurements MUST NOT make those decisions automatically. (D-W42)
 - **FR-007**: Pixel review MUST retain scientific input semantics and invalid-sample evidence. Measurement MUST use linear samples independently of display stretch.
 - **FR-008**: Measurements MUST identify method, units, source, and input basis. Failed fits MUST remain failures; imported values MUST NOT silently replace built-in values.
-- **FR-009**: Observed artifacts, accepted Results, reusable masters, and Complete MUST remain separate states. Complete MUST require neither a Result nor cleanup.
-- **FR-010**: Cleanup MUST operate on approved View-scoped entries through OS Trash. Unsafe or unavailable Trash MUST retain affected files without permanent deletion.
-- **FR-011**: Archive and reviewed filing MUST verify destinations and affected references before source retirement. Interruption MUST preserve recoverable phases and fixed membership.
+- **FR-009**: Observed artifacts, accepted Results, reusable masters, and a run's Complete MUST remain separate states. Complete MUST require neither a Result nor Clean up. (D-W26)
+- **FR-010**: A run's Clean up MUST operate on approved run-scoped entries (prepared links, clones and copies) through OS Trash. Unsafe or unavailable Trash MUST retain affected files without permanent deletion. Trashing rejected capture frames MUST NOT be part of a run's Clean up; only the Project's Done / Archive sheet offers it. (D-W26, D-W43)
+- **FR-011**: Archive MUST verify destinations and affected references before source retirement. Interruption MUST preserve recoverable phases and fixed membership. Project Archive MUST keep every session that another open Project still uses. Reviewed filing is withdrawn with "File into library". (D-W11, D-W26)
 - **FR-012**: Failed writes and incomplete operations MUST remain visible. Unknown, unreadable, and offline evidence MUST NOT be represented as absence or success.
-- **FR-013**: Projects MUST remain optional goals with independent capture checklists. Meeting a checklist MUST NOT complete a Project automatically.
+- **FR-013**: Every processing run MUST belong to a Project; a Project holds one or more subjects (Targets or mosaics, at any separation), the rigs taking part, and goals per subject and channel. Meeting goals MUST NOT mark a Project Done; only the user does. Library inspection, Import and the Planner MUST NOT require a Project. (D-W1, D-W9, D-W16, D-W26)
 - **FR-014**: Planning-site selection, capture sites, and Project membership MUST remain independent. Reminders MUST require opt-in and name the default site.
 - **FR-015**: Core library use MUST remain local-first without an account. External applications own calibration, registration, integration, and final image production.
 - **FR-016**: The old application and existing uncommitted work MUST remain recoverable during rebuilding. Source-code reuse MUST NOT imply importing old catalog decisions.
-- **FR-017**: Assigning, opening, preparing, reusing, cleaning, archiving or filing a recorded file, or retiring it as a source after archive or filing, MUST re-verify its recorded identity and SHA-256 immediately before the effect. A mismatch MUST name the drift and block that item. Counting a file toward a decision- or proof-bound total MUST use its last completed verification, from review, inspection, acceptance, readable rescan or reuse, and MUST label that verification time. Counts MUST exclude an item whose latest verification found drift or is pending, and showing a total MUST NOT start a rehash. Metadata-only captured totals of Unreviewed captures, and labelled last-observed counts of offline or unreadable inputs of locations that are not retired, MUST stay visible as D19 scopes them. Catalog-only Retire location reads no file bytes and is exempt from rehashing; it MUST still commit only against its review, expected revision and unchanged availability (D19).
+- **FR-017**: Assigning, opening, preparing, reusing, cleaning, archiving or trashing a recorded file, or retiring it as a source after archive, MUST re-verify its recorded identity and SHA-256 immediately before the effect. A mismatch MUST name the drift and block that item. Counting a file toward a decision- or proof-bound total MUST use its last completed verification, from review, inspection, acceptance, readable rescan or reuse, and MUST label that verification time. Counts MUST exclude an item whose latest verification found drift or is pending, and showing a total MUST NOT start a rehash. Metadata-only captured totals of Unreviewed captures, and labelled last-observed counts of offline or unreadable inputs of locations that are not retired, MUST stay visible as D19 scopes them. Catalog-only Retire location reads no file bytes and is exempt from rehashing; it MUST still commit only against its review, expected revision and unchanged availability (D19). (D-W11, D-W43)
+- **FR-018**: A Project's candidates MUST be derived, never assigned: every session whose confirmed Target is one of the Project's subjects and whose rig is one of the Project's rigs. A run's session picker MUST offer only candidates of the run's subject on the run's rig. (D-W33, D-W37)
+- **FR-019**: Sessions MUST be assigned only to runs, as each run's revisioned membership. A Project's members MUST be inherited from its runs. Goal progress MUST show "in project" (frames in the latest saved memberships of the Project's runs, excluding Project-only rejects) and "captured" (all candidate frames). Goal met and Home's Next action MUST use "in project" only. (D-W34, D-W36, D-W42)
+- **FR-020**: Home MUST be a dashboard with these six sections, in order:
+  1. Actions: Import, New Project, Plan tonight.
+  2. Projects, each with goals, stage and one Next action.
+  3. New sessions needing work.
+  4. Tonight.
+  5. Target status.
+  6. Running work.
+
+  Its top line MUST read "N sessions need a Target · M not in any Project". PV-PRJ owns the section contents and the Next rule. (D-W7, D-W27, D-W35, D-W39)
+- **FR-021**: Moving rejected frames to the OS Trash MUST be offered only from a Done Project's Done / Archive sheet. It MUST cover only that Project's library-Unusable candidate frames, MUST exclude Project-only rejects, MUST list refused frames with their reason, and MUST NOT permanently delete. A Trashed record MUST stay for traceability and appear only under the Sessions "Trashed" filter. (D-W43)
+- **FR-022**: Each run MUST move through the stages Select, Review, Calibrate, Prepare, Results, Done and Clean up. The Project page MUST show a stage rail with each run's stage, and the Project itself MUST end with Done, then Archive. (D-W3, D-W7, D-W26)
+- **FR-023**: The interface MUST call a View a "processing run". It MUST label goal progress "in project" and "captured", and MUST NOT say "not in a run". (D-W3, D-W36)
 
 ### Feature ownership
 
@@ -126,31 +162,50 @@ The stable feature keys identify contract owners. They are not a chronological i
 
 | Feature key | Owned behavior | Primary journey steps |
 | --- | --- | --- |
-| PV-LIB | Locations, indexing, homogeneous sessions, Target/equipment evidence, coverage | A1, A2, A3, A4, B1 |
-| PV-PRJ | Optional Projects and capture checklists | B2 |
-| PV-VSEL | Selection workspace, geometry, scoped quality, saved membership, refresh | B4, C1, C2, C3, C4, C5, C6, D4, D5, G |
-| PV-PIX | Pixel review, measurements, star details, metric imports | D1, D2, D3, D6 |
-| PV-CAL | Calibration suggestions, explanations, exceptions, master adoption | E1, E2, H4 |
+| PV-LIB | Locations, Import, indexing, homogeneous sessions (including the "Trashed" filter), Target/equipment and rig evidence, coverage | A1, A2, A3, A4, B1 |
+| PV-PRJ | Projects (required for runs): subjects, rigs, derived candidates, inherited members, goals and goal templates, Project-only reject, Home dashboard, Project page and stage rail, Project Done / Archive sheet and its trash offer | B2, Home, Project page, Done / Archive sheet |
+| PV-VSEL | Run creation inside a Project, session picker over candidates, mosaic run groups and panel assignment, run exclusions, saved membership, refresh | B4, C1, C2, C3, C4, C5, C6, D4, D5, G |
+| PV-PIX | Frame review, measurements, star details, metric imports | D1, D2, D3, D6 |
+| PV-CAL | Automatic calibration matching, explanations, exceptions, master adoption | E1, E2, H4 |
 | PV-PREP | Profiles, modes, paths, preparation, verified external handoff | E3, E4, F1, F2, F3, F4, F5, F6 |
-| PV-RES | Result discovery, acceptance, provenance, reuse, Complete | H1, H2, H3, H3a, I1 |
-| PV-STO | Selectable cleanup, retained-original proof, verified archive, filing | I2, I3, I4, I5, J, L |
-| PV-PLAN | Sites, windows, reminders, calendar export | B3, K |
+| PV-RES | Result discovery, acceptance, provenance, reuse, run Complete | H1, H2, H3, H3a, I1 |
+| PV-STO | Run Clean up, retained-original proof, verified archive, OS Trash custody for Import Move and trashed frames | I2, I3, I4, I5, J, L |
+| PV-PLAN | Planner on Targets, sites, windows, Tonight data, reminders, calendar export | B3, K |
+
+The journey step IDs come from the product flow. Home, the Project page and the Done / Archive sheet are surfaces added by the 2026-10-06 redesign; they have no product-flow step ID yet. (D-W7, D-W39)
+
+### Cross-spec flow
+
+The stage model of the 2026-10-06 redesign runs across the feature specs (D-W1, D-W3, D-W26):
+
+1. Library: Import or Add existing library folder, then index; sessions appear in Sessions and on Targets (PV-LIB). The Planner works on Targets without a Project (PV-PLAN, D-W16).
+2. Project: the user creates a Project with subjects, rigs and goals, optionally from a goal template. Candidates follow from confirmed Target and rig; Home and the Project page show progress and Next (PV-PRJ, D-W30, D-W33, D-W39).
+3. Each processing run, inside one Project with one subject and one rig, moves through these stages:
+   1. Select: session picker over candidates and saved membership (PV-VSEL). A mosaic subject creates a run group with one run per panel (D-W38).
+   2. Review: frame review with library quality or Project-only reject (PV-PIX, PV-PRJ, D-W42).
+   3. Calibrate: automatic matching with a readiness line (PV-CAL, D-W5).
+   4. Prepare: verified handoff (PV-PREP).
+   5. Results: discovered from the output folder and accepted (PV-RES, D-W4).
+   6. Done: the user marks the run Complete (PV-RES).
+   7. Clean up: run-scoped removal of prepared links, clones and copies (PV-STO).
+4. Project Done / Archive: the user marks the Project Done. The sheet offers Archive and moving rejected frames to the OS Trash. PV-PRJ owns the offer, eligibility and refusals; PV-STO executes the custody steps (D-W26, D-W43).
 
 ### Key Entities
 
 - **Library**: Indexed files, locations, evidence, quality decisions, and relationships.
-- **Session**: A metadata-homogeneous acquisition group; night grouping changes display only.
-- **Target**: A sky subject or region with coverage, plans, Projects, and Results.
-- **Project**: An optional goal spanning Targets, panels, equipment, and capture sites.
-- **View**: Named reviewed input membership with optional Project and preparation revisions.
+- **Session**: A metadata-homogeneous acquisition group with one rig; night grouping changes display only.
+- **Target**: A sky subject or region with coverage, plans, Projects, and Results. Several objects in one field are one Target, with the others listed as aliases or "also in field". (D-W9)
+- **Rig**: An optical train. A Project lists the rigs taking part; each run uses one. (D-W37)
+- **Project**: The required container for processing runs. It holds one or more subjects (Targets or mosaics), its rigs, goals per subject and channel, Project-only rejects, and an open or Done state. Its candidates are derived and its members are inherited from its runs. (D-W1, D-W9, D-W33, D-W34)
+- **Processing run (View)**: Named reviewed input membership with one Project, one subject, one rig, a stage, and preparation revisions. Runs of one mosaic subject form a run group, one run per panel. (D-W3, D-W8, D-W38)
 - **Result**: A manually accepted final or reusable product with actual lineage.
-- **Operation**: Reviewed intent and per-item outcomes for preparation, cleanup, archive, or filing.
+- **Operation**: Reviewed intent and per-item outcomes for preparation, Clean up, archive, Import, or trashing. (D-W11, D-W43)
 
 ## Success Criteria
 
 ### Measurable Outcomes
 
-- **SC-001**: Each of the 44 interaction steps (40 numbered steps plus G, J, K, and L) has exactly one primary feature owner. Journeys B, D, E, H, and I span owning features.
+- **SC-001**: Each of the 44 interaction steps (40 numbered steps plus G, J, K, and L) has exactly one primary feature owner, and so does each redesign surface (Home, Project page, Done / Archive sheet). Journeys B, D, E, H, and I span owning features. (D-W39)
 - **SC-002**: Indexing and review fixtures leave 100% of original paths and file bytes unchanged.
 - **SC-003**: Every requested handoff input is verified or explicitly blocked; zero selected inputs disappear silently.
 - **SC-004**: Given confirmed membership of the worked five-session selection, its 208 lights and 17h20m integration remain fixed across sorting, filtering, explicit saving, and restart.
@@ -158,11 +213,14 @@ The stable feature keys identify contract owners. They are not a chronological i
 - **SC-006**: Complete without a Result removes zero files. An unsupported-Trash fixture removes zero files even after approved cleanup.
 - **SC-007**: Archive failure fixtures retain source data until destination and reference verification succeed.
 - **SC-008**: Every displayed measurement has method, units, and source, or an explicit unavailable state.
+- **SC-009**: In the worked fixture, zero runs exist outside a Project and zero runs contain sessions from more than one rig. (D-W1, D-W37)
+- **SC-010**: In a Done / Archive trash fixture, zero Project-only rejects and zero refused frames reach the OS Trash, and zero files are permanently deleted. (D-W43)
+- **SC-011**: Across Home fixtures covering each Next rule, Home shows the first applicable action every time, and no goal reads met while its "in project" value is below the goal. (D-W35, D-W36)
 
 ## Assumptions
 
 - The linked product flow is the functional interview record. Existing implementation labels are evidence about the old application only.
-- PV-LIB owns the usable local-first Targets/Sessions/Activity navigation, catalog failed-write and external-drift rules. PV-PREP owns external-launch lifecycle separation; PV-STO owns no-follow cleanup and reviewed collisions. Baseline preservation is verified against source commit `94a3dc958c13e297baf501aa2721efa2c2628622` and the separately retained dirty review worktree, not through a user-interface assertion.
+- PV-LIB owns the usable local-first Targets/Sessions/Activity navigation, catalog failed-write and external-drift rules. PV-PRJ owns Home. PV-PREP owns external-launch lifecycle separation; PV-STO owns no-follow cleanup and reviewed collisions. Baseline preservation is verified against source commit `94a3dc958c13e297baf501aa2721efa2c2628622` and the separately retained dirty review worktree, not through a user-interface assertion. (D-W39)
 - Existing preparation-mode and platform scope remains intact. A delivery slice does not redefine release scope.
 - Pixel review and scientific measurement are read-only; the product does not produce calibrated, registered, integrated, or stretched output images.
 - Optional future capabilities listed in the product flow remain deferred.
@@ -173,7 +231,7 @@ The user authorized conservative product defaults and, on 2026-10-04, waived eve
 
 | Decision area | Consuming owners |
 | --- | --- |
-| Geometry and standalone preselection defaults | PV-VSEL, PV-PRJ |
+| Candidate rule and geometry use (D01 as amended by D-W33, D-W37, D-W38) | PV-VSEL, PV-PRJ |
 | Untouched-frame inclusion default | PV-VSEL |
 | Raw/CFA and imported measurement semantics | PV-PIX |
 | Exact profile and per-item input-mode support | PV-PREP, PV-RES |
@@ -181,9 +239,10 @@ The user authorized conservative product defaults and, on 2026-10-04, waived eve
 | Archive failure sequencing | PV-STO |
 | Reminder defaults and app-closed behavior | PV-PLAN |
 | Draft persistence and concurrent edits | PV-VSEL |
-| View revisions, retries, reopening, and completion blockers | PV-VSEL, PV-PREP, PV-RES, PV-STO |
-| Quality precedence and Project progress | PV-LIB, PV-PRJ, PV-VSEL |
+| Run revisions, retries, reopening, and completion blockers | PV-VSEL, PV-PREP, PV-RES, PV-STO |
+| Quality precedence and Project progress (D10 as amended by D-W36, D-W42) | PV-LIB, PV-PRJ, PV-VSEL |
 | Content-bound consumption of recorded files | All feature owners |
+| Workflow redesign 2026-10-06 (D-W1 through D-W43) | All feature owners |
 
 The existing constitution prohibits debayering. A raw/CFA review specification must define supported read-only channel handling or seek an explicit constitutional amendment before adding debayered preview behavior.
 
