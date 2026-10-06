@@ -27,6 +27,7 @@ import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import { resetClock, setClockTo } from "@/store/simulation"
 import { disableNotifications, enableNotifications, type EnableOutcome, saveCalendarExport, savePlan, setPlanningSite } from "./lib/actions"
 import { calendarFile, computeWindows, criteriaSummary, defaultCriteria, downloadText, formatZonedDateTime, nightAt, PLAN_NIGHTS, reminderKey, zoneAbbreviation } from "./lib/planning"
+import { NightPlanner, TonightStrip } from "./night-planner"
 import { PrototypeControls } from "./shared"
 
 const LEAD_TIMES = [
@@ -288,10 +289,13 @@ function TargetPlan({ target }: { target: Target }) {
           ) : !planningSite ? (
             <p className="text-sm text-muted-foreground">No planning site chosen. PlateVault never picks one for you.</p>
           ) : (
-            <WindowTable windows={windows} site={planningSite} onReset={() => {
-              setDraftText({})
-              setCriteria(defaultCriteria(planningSite))
-            }} />
+            <>
+              <NightPlanner target={target} site={planningSite} criteria={valid ? criteria : savedCriteria} windows={windows} nowMs={now} />
+              <WindowTable windows={windows} site={planningSite} onReset={() => {
+                setDraftText({})
+                setCriteria(defaultCriteria(planningSite))
+              }} />
+            </>
           )}
           <p className="text-xs text-pretty text-muted-foreground">
             Prototype calculation: astronomical suitability only. A window does not promise clear weather, telescope availability or processing readiness.
@@ -761,6 +765,19 @@ export function PlansPage() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader title="Plans" description="Planned Targets, reminder status and calendar exports. Suitability is astronomical only." />
       <PageBody>
+        {(() => {
+          const tonightSite = settings.planningSiteId ? catalog.sites[settings.planningSiteId] : nextSite
+          const tonightRows = rows.flatMap((r) => (r.target && r.target.ra !== null && r.target.dec !== null ? [{ target: r.target, criteria: r.plan.criteria }] : []))
+          return (
+            <Section id="t5-plans-tonight" title="Tonight" description={tonightSite ? `Planned Targets at ${tonightSite.name}: full darkness as the dark bar, windows in white. Choose a Target to plan it.` : "Choose a planning site on a Target's Plan to see tonight's windows."}>
+              {tonightSite && tonightRows.length > 0 ? (
+                <TonightStrip rows={tonightRows} site={tonightSite} nowMs={now} />
+              ) : (
+                <p className="text-sm text-muted-foreground">{tonightRows.length === 0 ? "No planned Target with coordinates yet. Mark a Target Planned on its Plan." : "No planning or default site chosen."}</p>
+              )}
+            </Section>
+          )
+        })()}
         <Section id="t5-plans-reminders" title="Reminders" description="Notifications start off. They use the default site and need explicit criteria and a lead time.">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge kind="reminders" value={status} />
