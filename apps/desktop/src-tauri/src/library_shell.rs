@@ -45,7 +45,9 @@ use crate::commands::library as ipc;
 
 /// Catalog directory override, used verbatim.
 pub const DATA_DIR_ENV: &str = "PV_LIBRARY_DATA_DIR";
-/// Catalog directory under the platform app-data directory by default.
+/// Catalog directory under the platform app-data directory by default. That
+/// directory follows the config identifier, and `library-dev` has its own, so
+/// a `dev-tools` build never opens the shipped library shell's catalog.
 pub const DATA_SUBDIR: &str = "library-rebuild";
 /// Catalog database file inside the data directory.
 pub const CATALOG_FILE: &str = "catalog.sqlite";

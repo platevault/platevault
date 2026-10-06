@@ -213,6 +213,12 @@ tauri-dev-mcp bind="127.0.0.1":
 # identifier, and `cargo run` starts the shell unbundled. The bundle wraps the
 # `dev-tools` debug binary in an Info.plist carrying the identifier and product
 # name from `library-dev/tauri.conf.json`, signed ad hoc, and prints its path.
+# That identifier differs from the shipped apps' because macOS keys notification
+# permission, Notification Settings and LaunchServices by bundle identifier: a
+# shared one would start qualification from the installed app's answer and
+# record a test denial against it. Tauri also derives the default app-data
+# directory from it, so without PV_LIBRARY_DATA_DIR the dev shell keeps its
+# catalog apart from the shipped library shell's.
 # Run `<app>/Contents/MacOS/platevault-library` directly so PV_LIBRARY_DATA_DIR
 # reaches it; `open` drops the environment.
 library-dev-bundle:
@@ -225,6 +231,12 @@ library-dev-bundle:
     conf=apps/desktop/src-tauri/library-dev/tauri.conf.json
     identifier=$(plutil -extract identifier raw -o - "$conf")
     name=$(plutil -extract productName raw -o - "$conf")
+    for shipped in apps/desktop/src-tauri/tauri.conf.json apps/desktop/src-tauri/library/tauri.conf.json; do
+        if [ "$identifier" = "$(plutil -extract identifier raw -o - "$shipped")" ]; then
+            echo "library-dev-bundle: $conf reuses the identifier $identifier of $shipped" >&2
+            exit 1
+        fi
+    done
     cargo build -p desktop_shell --features dev-tools --bin platevault-library
     target=$(cargo metadata --format-version 1 --no-deps | plutil -extract target_directory raw -o - -)
     version=$(cargo pkgid -p desktop_shell)
