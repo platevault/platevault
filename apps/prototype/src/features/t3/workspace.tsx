@@ -5,7 +5,7 @@
  * h1; areas render level-2 headers. Hosts T4 and T5 areas through <Outlet />.
  */
 import { Link, Outlet, useNavigate, useParams } from "@tanstack/react-router"
-import { FolderSearch, RefreshCw, Save } from "lucide-react"
+import { ArrowRight, Check, CircleDashed, FolderSearch, RefreshCw, Save, TriangleAlert } from "lucide-react"
 import { createContext, type ReactNode, useContext, useId, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { ActionError, EmptyState, Notice, SaveState } from "@/components/app/feedback"
@@ -99,9 +99,9 @@ function SummaryStrip({ summary, content }: { summary: ViewSummary; content: Mem
   }
   if (content.productInputs.length > 0) items.push({ label: "Result inputs", value: content.productInputs.length })
   return (
-    <div className="border-b px-6 py-2">
+    <div className="chrome border-b border-seam bg-panel px-3 py-1.5">
       <h2 className="sr-only">Selection summary</h2>
-      <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm tabular-nums">
+      <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 text-xs tabular-nums">
         {items.map((item) => (
           <div key={item.label} className={cn("flex items-baseline gap-1.5", item.tone === "warning" && "text-warning")}>
             <dt className={cn("text-xs", item.tone === "warning" ? "" : "text-muted-foreground")}>{item.label}</dt>
@@ -113,26 +113,84 @@ function SummaryStrip({ summary, content }: { summary: ViewSummary; content: Mem
   )
 }
 
-function AreaNav({ viewId }: { viewId: string }) {
+type Gate = "met" | "attention" | "open"
+const GATE_ICON: Record<Gate, typeof Check> = { met: Check, attention: TriangleAlert, open: CircleDashed }
+const GATE_WORD: Record<Gate, string> = { met: "ready", attention: "needs attention", open: "not checked here" }
+
+/**
+ * C's pipeline in studio dress (HARNESS-V2.md §Pipeline): the View areas as
+ * numbered stages with a readiness glyph and word, the dashed "you process in
+ * your app" gap between Prepare and Results, and exactly one Next action
+ * derived from the selection summary. Readiness is only shown where the
+ * summary proves it; stages owned by other areas read "not checked here".
+ */
+function PipelineRail({ viewId, summary }: { viewId: string; summary: ViewSummary }) {
+  const gates: Record<(typeof AREAS)[number]["label"], { gate: Gate; note: string }> = {
+    Sessions: summary.included.frames > 0 ? { gate: "met", note: plural(summary.included.frames, "light") } : { gate: "attention", note: "no lights" },
+    Frames:
+      summary.unresolved + summary.unreviewed === 0
+        ? { gate: "met", note: "reviewed" }
+        : { gate: "attention", note: `${summary.unreviewed} unreviewed${summary.unresolved ? ` · ${summary.unresolved} unresolved` : ""}` },
+    Calibration: { gate: "open", note: "matches" },
+    Prepare: { gate: "open", note: "inputs" },
+    Results: { gate: "open", note: "products" },
+    Cleanup: { gate: "open", note: "records" },
+  }
+  const next =
+    summary.included.frames === 0
+      ? { to: "/views/$viewId/sessions" as const, label: "Select sessions" }
+      : summary.unresolved + summary.unreviewed > 0
+        ? { to: "/views/$viewId/frames" as const, label: "Review frames" }
+        : { to: "/views/$viewId/prepare" as const, label: "Prepare View" }
   return (
-    <nav aria-label="View areas" className="border-b px-4">
-      <ul className="-mb-px flex flex-wrap gap-1">
-        {AREAS.map((area) => (
-          <li key={area.to}>
-            <Link
-              to={area.to}
-              params={{ viewId }}
-              className={cn(
-                "inline-flex h-9 items-center border-b-2 border-transparent px-2.5 text-sm text-muted-foreground hover:text-foreground",
-                "data-[status=active]:border-primary data-[status=active]:font-medium data-[status=active]:text-foreground",
-              )}
-            >
-              {area.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </nav>
+    <div className="chrome flex min-w-0 items-center gap-2 border-b border-seam bg-toolbar px-2">
+      <nav aria-label="View areas" className="min-w-0 flex-1 overflow-x-auto">
+        <ol className="flex items-center">
+          {AREAS.map((area, index) => {
+            const { gate, note } = gates[area.label]
+            const Icon = GATE_ICON[gate]
+            return (
+              <li key={area.to} className="flex items-center">
+                {area.label === "Results" ? (
+                  <span className="mx-1 flex items-center gap-1 text-2xs whitespace-nowrap text-muted-foreground" aria-label="Processing happens in your application">
+                    <span aria-hidden="true" className="w-4 border-t border-dashed border-muted-foreground" />
+                    in your app
+                    <span aria-hidden="true" className="w-4 border-t border-dashed border-muted-foreground" />
+                  </span>
+                ) : index > 0 ? (
+                  <span aria-hidden="true" className="w-3 border-t border-border" />
+                ) : null}
+                <Link
+                  to={area.to}
+                  params={{ viewId }}
+                  data-inset-focus=""
+                  className={cn(
+                    "group flex h-10 items-center gap-1.5 border-b-2 border-transparent px-2 text-sm whitespace-nowrap text-muted-foreground hover:text-foreground",
+                    "data-[status=active]:border-primary data-[status=active]:text-foreground",
+                  )}
+                >
+                  <span className="num flex size-4 items-center justify-center rounded-sm bg-raised text-2xs text-foreground group-data-[status=active]:bg-primary group-data-[status=active]:text-primary-foreground">
+                    {index + 1}
+                  </span>
+                  <span className="flex flex-col leading-tight">
+                    <span className="font-medium">{area.label}</span>
+                    <span className={cn("flex items-center gap-0.5 text-2xs", gate === "met" && "text-success", gate === "attention" && "text-warning")}>
+                      <Icon aria-hidden="true" className="size-2.5" />
+                      {note}
+                      <span className="sr-only">, {GATE_WORD[gate]}</span>
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            )
+          })}
+        </ol>
+      </nav>
+      <Button variant="accent" size="sm" render={<Link to={next.to} params={{ viewId }} />} className="shrink-0">
+        Next: {next.label}
+        <ArrowRight data-icon="inline-end" aria-hidden="true" />
+      </Button>
+    </div>
   )
 }
 
@@ -436,7 +494,7 @@ export function ViewWorkspacePage() {
           }
         />
         <SummaryStrip summary={summary} content={content} />
-        <AreaNav viewId={viewId} />
+        <PipelineRail viewId={viewId} summary={summary} />
         <div className="space-y-3 px-6 pt-4 empty:hidden">
           {saveFeedback?.state === "reviewed" ? (
             <Notice tone="info" title="Reviewed: the View changed elsewhere">
