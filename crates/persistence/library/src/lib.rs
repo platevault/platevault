@@ -85,6 +85,13 @@ macro_rules! asset_sql {
 mod calibration;
 mod projects;
 mod views;
+/// The shared file-backed fixture of the integration tests, for unit tests
+/// that need a `#[cfg(test)]` hook; it names this crate by its package name.
+#[cfg(test)]
+extern crate self as persistence_library;
+#[cfg(all(test, unix))]
+#[path = "../tests/support/mod.rs"]
+mod test_support;
 
 pub use calibration::{
     CalibrationInputDetail, CalibrationInputSummary, InputCopy, InputGroup, InputMember, InputQuery,

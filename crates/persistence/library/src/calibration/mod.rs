@@ -10,6 +10,7 @@
 
 mod adoption;
 mod contained_write;
+mod decisions;
 mod inventory;
 
 use std::collections::{BTreeMap, BTreeSet};
