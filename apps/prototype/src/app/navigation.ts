@@ -42,8 +42,6 @@ export interface NavGroup {
 
 export const HOME_ITEM: NavItem = { to: "/overview", label: "Overview", icon: LayoutGrid, goKey: "h", digit: "1" }
 
-export const PROJECTS_ITEM: NavItem = { to: "/projects", label: "Projects", icon: Goal, goKey: "p" }
-
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Library",
@@ -57,7 +55,8 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Work",
     items: [
       { to: "/views", label: "Views", icon: ListChecks, goKey: "v", digit: "4" },
-      { to: "/plans", label: "Plan", icon: CalendarClock, goKey: "l", digit: "5", area: ["/projects"] },
+      { to: "/projects", label: "Projects", icon: Goal, goKey: "p" },
+      { to: "/plans", label: "Plan", icon: CalendarClock, goKey: "l", digit: "5" },
       { to: "/storage", label: "Storage", icon: HardDrive, goKey: "o" },
     ],
   },
@@ -68,7 +67,7 @@ export const UTILITY_ITEMS: NavItem[] = [
   { to: "/settings", label: "Settings", icon: Settings, goKey: "," },
 ]
 
-export const ALL_NAV_ITEMS: NavItem[] = [HOME_ITEM, ...NAV_GROUPS.flatMap((g) => g.items), PROJECTS_ITEM, ...UTILITY_ITEMS]
+export const ALL_NAV_ITEMS: NavItem[] = [HOME_ITEM, ...NAV_GROUPS.flatMap((g) => g.items), ...UTILITY_ITEMS]
 
 /** Static destinations listed in the command palette, beyond the sidebar. */
 export const STATIC_DESTINATIONS: Array<{ to: string; label: string; keywords: string }> = [
