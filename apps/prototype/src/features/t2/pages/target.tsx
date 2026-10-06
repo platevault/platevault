@@ -27,31 +27,35 @@ import { acceptEnrichment, type EnrichmentProposal, LOOKUP_DELAY_MS, type Lookup
 import { acceptedResultsForViews, sessionRow, type SessionRow, sumBreakdowns, viewsForTarget } from "../model"
 import { AssociationBadge, DENSITY_CELL, LibraryStatus, QualityCounts, ScopeCell } from "../parts"
 import { TargetRecordDialog } from "../target-record-dialog"
+import { TargetsLayout } from "../target-finder"
 
 export function TargetPage() {
   const { targetId = "" } = useParams({ strict: false }) as { targetId?: string }
   const exists = useStore((s) => Boolean(s.catalog.targets[targetId]))
-  if (!exists) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        <PageHeader title="Target not found" />
-        <PageBody>
-          <EmptyState
-            icon={Crosshair}
-            titleAs="h2"
-            title="This Target does not exist"
-            description="It may come from an older prototype build or a reset. The library is unchanged."
-            action={
-              <Button size="sm" render={<Link to="/targets" />}>
-                Go to Targets
-              </Button>
-            }
-          />
-        </PageBody>
-      </div>
-    )
-  }
-  return <TargetDetail key={targetId} targetId={targetId} />
+  return (
+    <TargetsLayout activeId={exists ? targetId : null}>
+      {exists ? (
+        <TargetDetail key={targetId} targetId={targetId} />
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <PageHeader title="Target not found" />
+          <PageBody>
+            <EmptyState
+              icon={Crosshair}
+              titleAs="h2"
+              title="This Target does not exist"
+              description="It may come from an older prototype build or a reset. The library is unchanged."
+              action={
+                <Button size="sm" render={<Link to="/targets" />}>
+                  Go to Targets
+                </Button>
+              }
+            />
+          </PageBody>
+        </div>
+      )}
+    </TargetsLayout>
+  )
 }
 
 const COORDINATE_SOURCE = {
