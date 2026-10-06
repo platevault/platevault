@@ -6,7 +6,7 @@
 
 **Created**: 2026-10-03
 
-**Amended**: 2026-10-06, to the settled workflow decisions D-W1 to D-W70.
+**Amended**: 2026-10-06, to the settled workflow decisions D-W1 to D-W71.
 
 **Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
 
@@ -16,7 +16,7 @@
 
 ### User Story 1 - Application preparation: profiles, input modes, locations, prepare and open (Priority: P1)
 
-This feature owns the Prepare step of a processing run (View), which always belongs to a Project. It turns a run's reviewed membership into a verified Linked, Direct-source, Copy, or Clone handoff for a maintained profile or a generic Open in..., with the run's Results folder beside its prepared folder. A mosaic run group prepares every panel run under one group folder. After the run is Complete, Clean up removes only what preparation created. The app never runs processing.
+This feature owns the Prepare step of a processing run (View), which always belongs to a Project. It turns a run's reviewed membership into a verified Linked, Direct-source, Copy, or Clone handoff for a maintained profile or a generic Open in..., with the run's Results folder beside its prepared folder. A mosaic run group prepares every panel run under one group folder. After the run is Complete or Abandoned, Clean up removes only what preparation created. The app never runs processing.
 
 **Why this priority**: This feature owns the workflow steps listed below without imposing unrelated product features.
 
@@ -50,7 +50,7 @@ This feature owns the Prepare step of a processing run (View), which always belo
 
 The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody, uncertainty, exact membership, failed writes, and independent lifecycle decisions. Each acceptance scenario tests observable outcomes; no mock acknowledgment counts as terminal success.
 
-- A run that is not Complete offers no Clean up; replaced preparation entries before Complete follow STO-FR-10. (D-W26)
+- A run that is neither Complete nor Abandoned offers no Clean up; replaced preparation entries before then follow STO-FR-10. (D-W26, D-W71)
 
 ## Requirements
 
@@ -69,7 +69,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PREP-FR-11**: A revised selection needs a new review. Each new preparation revision is materialized in a new reviewed run folder, `<Run> (rev 2)/` and so on beside the earlier ones, and never replaces, reuses or clears an existing preparation in place (D09). A previous preparation can be kept for comparison. Removing replaced entries follows STO cleanup rules. (D-W3, D-W51, D-W67)
 - **PREP-FR-12**: Prepare all on a run group opens one review covering every panel run and prepares each one under `<output>/<Project>/<Mosaic>/Panel N/`, so an application such as WBPP can load the group folder. The group's shared profile, input mode and calibration policy apply to every panel run, and per-item mode exceptions still follow D04. Calibration choices are shown and matched per panel run, and the review names each panel run whose calibration needs review (CAL-FR-11). Each panel run ends in its own outcome under PREP-FR-09, and the group lists each panel's outcome. The group reads Prepared when every panel run is Prepared, Failed when every panel run Failed, Canceled or Paused when the user cancels or pauses Prepare all, and Partial otherwise. One panel's blocked items never block another panel's items. (D-W38, D-W41, D-W51, D-W55)
 - **PREP-FR-13**: Open on a run group's folder appears only when every panel run is verified, and it re-verifies every panel's entries under PREP-FR-10 before launch. Open on a single verified panel run stays available. Each group preparation revision gets a new group folder, `<Mosaic> (rev 2)/` and so on, with a `Panel N/` folder inside it for every panel run. When the user reprepares a panel run whose Panel N folder already exists, review proposes that new group folder. The previous group folder stays until the user approves its STO cleanup. The user assembles the mosaic in the application, and the assembled image comes back as a group Result (RES). A run group never has a whole-mosaic run. (D-W38, D-W51, D-W67)
-- **PREP-FR-14**: Once a run is Complete (RES), Clean up lists only the entries its preparation revisions created: prepared links, clones and copies. Original sources, Direct-source paths, library frames and Results are never listed. Clean up never moves rejected frames to Trash; that belongs to the Project's Done / Archive sheet. Removal follows STO custody rules, including retained-original proof and OS Trash handling. (D-W26, D-W43)
+- **PREP-FR-14**: Once a run is Complete or Abandoned (RES), Clean up lists only the entries its preparation revisions created: prepared links, clones and copies. Original sources, Direct-source paths, library frames and Results are never listed. Clean up never moves rejected frames to Trash; that belongs to the Project's Done / Archive sheet. Removal follows STO custody rules, including retained-original proof and OS Trash handling. (D-W26, D-W43, D-W71)
 
 ### Owned interaction steps
 
@@ -116,4 +116,4 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 
 - Root decisions D02, D04, D09, D13 and D15 govern exact inclusion confirmation, profile qualification, input-write refusal, reviewed calibration/preparation revisions and isolated header corrections. No unsupported tool capability is claimed without evidence.
 - Root decision D19 binds Prepare and Open to re-verified source and entry content.
-- Workflow decisions D-W1, D-W3, D-W5, D-W9, D-W26, D-W38, D-W41, D-W43, D-W51, D-W55 and D-W67 (settled 2026-10-06) place preparation inside a Project's run and add run group preparation under one group folder. They set the `<output>/<Project>/<Run>/` layout with a new folder per prepared revision and one shared sibling Results folder, and limit a run's Clean up to its prepared entries.
+- Workflow decisions D-W1, D-W3, D-W5, D-W9, D-W26, D-W38, D-W41, D-W43, D-W51, D-W55, D-W67 and D-W71 (settled 2026-10-06) place preparation inside a Project's run and add run group preparation under one group folder. They set the `<output>/<Project>/<Run>/` layout with a new folder per prepared revision and one shared sibling Results folder. They limit Clean up of a Complete or Abandoned run to its prepared entries.

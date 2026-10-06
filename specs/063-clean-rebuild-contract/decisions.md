@@ -7,12 +7,12 @@ The [accepted Rust computation boundary](../../docs/adr/0003-use-rust-scientific
 
 ## Workflow redesign 2026-10-06
 
-On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W63, copied verbatim into the [workflow decisions log](workflow-decisions.md); round 6 added D-W44 through D-W63. Round 7 added D-W64 through D-W70, applied by default after the user said "continue please"; any of them can be reverted before the contract PR lands. Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
+On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W63, copied verbatim into the [workflow decisions log](workflow-decisions.md); round 6 added D-W44 through D-W63. Round 7 added D-W64 through D-W70, applied by default after the user said "continue please"; any of them can be reverted before the contract PR lands. D-W71 is a lead consistency default that follows from D-W64 and D-W65 and is likewise revertible. Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
 
 Stage model:
 
 1. A Project is the required container (D-W1). It holds subjects, rigs (optical trains) and goals (D-W9, D-W29, D-W37).
-2. Each processing run (View) belongs to exactly one Project and has one subject and one rig (D-W3, D-W8, D-W37). A run moves through Select, Review, Calibrate, Prepare, Results, Done and Clean up (D-W3, D-W26), or is marked Abandoned, which keeps it read-only until Reopen (D-W64). A mosaic subject creates a run group with one run per panel (D-W38).
+2. Each processing run (View) belongs to exactly one Project and has one subject and one rig (D-W3, D-W8, D-W37). A run moves through Select, Review, Calibrate, Prepare, Results, Done and Clean up (D-W3, D-W26), or is marked Abandoned. An Abandoned run passes every gate a Complete run passes and stays read-only until Reopen returns it to its earlier stage (D-W64, D-W71). A mosaic subject creates a run group with one run per panel (D-W38).
 3. The user marks the Project Done, then uses its Done / Archive sheet for Archive and for moving rejected frames and processing intermediates to the OS Trash (D-W26, D-W43, D-W70). A Done Project can be Reopened, even after Archive (D-W46, D-W69).
 
 Candidates are derived from each session's confirmed Target and rig; members come only from run membership (D-W33, D-W34, D-W37). Goal progress shows "in project" and "captured", and "in project" never exceeds "captured" (D-W36, D-W66). Delivery order: contract amendment, then backend deltas, then the final UI (D-W28).
@@ -111,8 +111,8 @@ Owners: VSEL, PREP, RES, STO.
 - Manual inclusions stay pinned across every refresh. Refresh lists them with reason manual inclusion and never proposes removing them for falling outside the saved criteria; only an explicit user removal ends one.
 - Retry resumes recorded items, never filename-based inference.
 - Replaced prepared entries use reviewed STO cleanup even before Complete.
-- Mark Complete is blocked while an app-owned preparation or storage mutation affecting this run is Running. A Result is not required; Complete never implies an external job stopped or succeeded. Unrelated run operations do not block it.
-- Creating a new membership or preparation revision of a Complete run requires explicit Reopen. Reviewed cleanup, identity-preserving archive reference repair, verified remap, annotations and Result acceptance remain available without reopening or changing membership. Amended by D-W64: an Abandoned run is likewise read-only until Reopen.
+- Mark Complete is blocked while an app-owned preparation or storage mutation affecting this run is Running. A Result is not required; Complete never implies an external job stopped or succeeded. Unrelated run operations do not block it. Amended by D-W71: Mark Abandoned is blocked the same way.
+- Creating a new membership or preparation revision of a Complete run requires explicit Reopen. Reviewed cleanup, identity-preserving archive reference repair, verified remap, annotations and Result acceptance remain available without reopening or changing membership. Amended by D-W64 and D-W71: an Abandoned run is likewise read-only and gets the same actions until Reopen returns it to the stage it was in.
 
 ### D10
 

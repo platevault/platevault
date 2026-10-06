@@ -73,5 +73,6 @@
 - D-W68: Results in <Mosaic> Results/ are assigned to a panel by a Panel N/ subfolder or by evidence from the processing tool (header or file name). Otherwise the user places them.
 - D-W69: A Project can be Reopened after Archive. Archived sessions show as Archived until the user restores them; reopening moves no files.
 - D-W70: The Project Done / Archive sheet also offers "Move N processing intermediates to Trash (size)". Final Results and adopted masters are kept, and the D-W43 trash rules apply.
+- D-W71 (lead consistency default, follows from D-W64/D-W65; revertible): Abandoned behaves like Complete for every gate. Mark Abandoned is blocked while an operation is Running. An Abandoned run gets Clean up. Reopen returns the run to the stage it was in. Its accepted Results stay reusable as inputs, and its members still count as "captured". The trash refusal reads "a prepared revision of a run that is neither Complete nor Abandoned". A subject, like a rig, cannot be removed while a run that is not Abandoned uses it.
 
 Sources: the legacy facts are in legacy-frontend-facts.md.
