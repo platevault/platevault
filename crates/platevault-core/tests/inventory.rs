@@ -16,6 +16,21 @@ use platevault_core::*;
 use platevault_core::{grouping, inventory};
 use uuid::Uuid;
 
+/// Test oracle for the catalog's absence rule: an unobserved path may be
+/// reconciled as absent only for a completed or partial observation, inside a
+/// complete scope and inside no incomplete scope.
+fn absence_provable(observation: &ScanObservation, relative_path: &NativePath) -> bool {
+    if !matches!(observation.state, ScanState::Completed | ScanState::Partial) {
+        return false;
+    }
+    let Ok(path) = relative_path.relative_path() else {
+        return false;
+    };
+    let covers = |scope: &NativePath| scope.relative_path().map(|scope| path.starts_with(scope));
+    observation.complete_scopes.iter().any(|scope| covers(scope).unwrap_or(false))
+        && !observation.incomplete_scopes.iter().any(|scope| covers(scope).unwrap_or(true))
+}
+
 const LIGHT: [(&str, &str); 12] = [
     ("IMAGETYP", "'LIGHT'"),
     ("FILTER", "'Ha'"),
@@ -406,8 +421,8 @@ fn assert_malformed_file_is_uncertain(observation: &ScanObservation) {
     assert_eq!(progress.metadata_read, observation.files.len() as u64);
     assert_eq!(observation.state, ScanState::Partial);
     assert_eq!(observation.complete_scopes, vec![rel("")]);
-    assert!(inventory::absence_provable(observation, &rel("night1/deleted.fits")));
-    assert!(!inventory::absence_provable(observation, &rel("broken.fits")));
+    assert!(absence_provable(observation, &rel("night1/deleted.fits")));
+    assert!(!absence_provable(observation, &rel("broken.fits")));
 }
 
 #[test]
@@ -494,15 +509,15 @@ fn denied_and_linked_subtrees_stay_uncertain_while_siblings_reconcile() {
     if denial_enforced {
         assert_eq!(paths, vec![rel("ok/light.fits")]);
         assert_eq!(issue_at(&observation, "denied").availability, Availability::Unreadable);
-        assert!(!inventory::absence_provable(&observation, &rel("denied/light.fits")));
+        assert!(!absence_provable(&observation, &rel("denied/light.fits")));
     } else {
         assert_eq!(paths, vec![rel("denied/light.fits"), rel("ok/light.fits")]);
     }
     assert!(issue_at(&observation, "linked-dir").reason.contains("not followed"));
     assert!(issue_at(&observation, "ok/linked.fits").reason.contains("not followed"));
-    assert!(!inventory::absence_provable(&observation, &rel("linked-dir/elsewhere.fits")));
-    assert!(!inventory::absence_provable(&observation, &rel("ok/linked.fits")));
-    assert!(inventory::absence_provable(&observation, &rel("ok/renamed.fits")));
+    assert!(!absence_provable(&observation, &rel("linked-dir/elsewhere.fits")));
+    assert!(!absence_provable(&observation, &rel("ok/linked.fits")));
+    assert!(absence_provable(&observation, &rel("ok/renamed.fits")));
     assert_eq!(snapshot(outside.path()), outside_before);
 }
 
@@ -549,8 +564,8 @@ fn folder_swapped_for_a_link_after_listing_never_indexes_outside_files() {
         .all(|file| file.metadata.object.as_deref() != Some("OUTSIDE")));
     assert_eq!(observation.state, ScanState::Partial);
     assert!(observation.incomplete_scopes.contains(&rel("sub")), "{observation:?}");
-    assert!(!inventory::absence_provable(&observation, &rel("sub/b.fits")));
-    assert!(!inventory::absence_provable(&observation, &rel("sub/c.fits")));
+    assert!(!absence_provable(&observation, &rel("sub/b.fits")));
+    assert!(!absence_provable(&observation, &rel("sub/c.fits")));
     assert_eq!(snapshot(&outside), outside_before);
 }
 
@@ -580,8 +595,8 @@ fn cancel_and_callback_failure_never_produce_complete_scopes() {
     assert_eq!(observation.state, ScanState::Canceled);
     assert!(observation.complete_scopes.is_empty());
     assert_eq!(observation.files.len(), 1);
-    assert!(!inventory::absence_provable(&observation, &rel("light_3.fits")));
-    assert!(!inventory::absence_provable(&observation, &rel("never-existed.fits")));
+    assert!(!absence_provable(&observation, &rel("light_3.fits")));
+    assert!(!absence_provable(&observation, &rel("never-existed.fits")));
 
     let mut calls = 0;
     let failed = inventory::scan(
@@ -669,7 +684,7 @@ fn root_replaced_mid_scan_fails_without_absence_and_discards_pending_batch() {
     assert_eq!(observation.state, ScanState::Failed);
     assert!(observation.complete_scopes.is_empty());
     assert_eq!(issue_at(&observation, "").availability, Availability::IdentityConflict);
-    assert!(!inventory::absence_provable(&observation, &rel("b/light_1.fits")));
+    assert!(!absence_provable(&observation, &rel("b/light_1.fits")));
 }
 
 #[test]
@@ -691,8 +706,8 @@ fn retry_scope_is_bounded_and_refuses_escape_or_links() {
         observation.files.iter().map(|file| file.relative_path.clone()).collect::<Vec<_>>(),
         vec![rel("night1/light.fits")]
     );
-    assert!(inventory::absence_provable(&observation, &rel("night1/other.fits")));
-    assert!(!inventory::absence_provable(&observation, &rel("night2/light.fits")));
+    assert!(absence_provable(&observation, &rel("night1/other.fits")));
+    assert!(!absence_provable(&observation, &rel("night2/light.fits")));
 
     let escape =
         run(&location, &ScanOptions { batch_size: 8, relative_scope: Some(rel("../night1")) }).0;
@@ -784,8 +799,8 @@ fn nested_foreign_volume_is_a_boundary_scope() {
     assert_eq!(observation.state, ScanState::Partial);
     assert_eq!(issue_at(&observation, "nested").availability, Availability::IdentityConflict);
     assert!(observation.files.iter().all(|file| file.relative_path != rel("nested/foreign.fits")));
-    assert!(!inventory::absence_provable(&observation, &rel("nested/foreign.fits")));
-    assert!(inventory::absence_provable(&observation, &rel("gone.fits")));
+    assert!(!absence_provable(&observation, &rel("nested/foreign.fits")));
+    assert!(absence_provable(&observation, &rel("gone.fits")));
 }
 
 /// FAT and exFAT folder IDs follow directory-entry positions, so a replaced

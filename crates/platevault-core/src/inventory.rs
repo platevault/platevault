@@ -16,7 +16,8 @@
 //! root. A complete scope covers its whole subtree, minus every incomplete
 //! scope. Each per-entry failure, unreadable directory, skipped link, nested
 //! foreign volume and unverified file is an incomplete scope and an issue, so
-//! an unobserved path counts as absent only through [`absence_provable`].
+//! an unobserved path counts as absent only inside a complete scope and
+//! outside every incomplete scope, which is the rule the catalog applies.
 //! Canceled and failed observations carry no complete scope.
 //!
 //! # Identity
@@ -105,24 +106,6 @@ pub fn probe_fingerprint(path: &Path) -> Result<ObservationFingerprint, LibraryE
         )
     })?;
     Ok(fingerprint(file_id, &meta, &volume, modified_ns))
-}
-
-/// Whether an unobserved relative path may be reconciled as absent.
-///
-/// True only for a completed or partial observation, when the path lies
-/// inside a complete scope and inside no incomplete scope. The caller still
-/// checks that the path was not observed and revalidates the root identity.
-#[must_use]
-pub fn absence_provable(observation: &ScanObservation, relative_path: &NativePath) -> bool {
-    if !matches!(observation.state, ScanState::Completed | ScanState::Partial) {
-        return false;
-    }
-    let Ok(path) = relative_path.relative_path() else {
-        return false;
-    };
-    let covers = |scope: &NativePath| scope.relative_path().map(|scope| path.starts_with(scope));
-    observation.complete_scopes.iter().any(|scope| covers(scope).unwrap_or(false))
-        && !observation.incomplete_scopes.iter().any(|scope| covers(scope).unwrap_or(true))
 }
 
 /// Walk a registered location and report its observations progressively.
