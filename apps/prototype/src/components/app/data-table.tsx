@@ -204,7 +204,7 @@ export function DataTable<T>({
         // The frame is the scroll container in both axes so the header row
         // stays pinned while long tables scroll inside it. Scroll padding the
         // height of that header keeps a focused row out from under it (WCAG 2.4.11).
-        "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-lg border",
+        "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-md border bg-background",
         stickyFirstColumn && "scroll-pl-(--pinned-w) bg-card",
         scroll === "frame" && "max-h-[calc(100dvh-14rem)]",
         className,
@@ -213,10 +213,10 @@ export function DataTable<T>({
     >
       <table className="w-full text-sm">
         <caption className="sr-only">{loading ? `Loading ${label}` : label}</caption>
-        <thead className="sticky top-0 z-10 bg-card text-xs text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
+        <thead className="sticky top-0 z-10 bg-card text-xs text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]" data-chrome>
           <tr>
             {selection ? (
-              <th scope="col" className={cn("h-(--row-h) w-10 px-3", pinned("first", true))}>
+              <th scope="col" className={cn("h-(--row-h) w-9 px-2.5", pinned("first", true))}>
                 <Checkbox
                   aria-label={`Select all ${selectable.length} shown`}
                   checked={allShownSelected}
@@ -236,7 +236,7 @@ export function DataTable<T>({
                   scope="col"
                   aria-sort={ariaSort}
                   className={cn(
-                    "h-(--row-h) px-3 font-medium whitespace-nowrap",
+                    "h-(--row-h) px-2.5 font-medium whitespace-nowrap",
                     column.align === "right" ? "text-right" : "text-left",
                     column.className,
                     columnIndex === 0 && pinned(columnPin, true),
@@ -245,7 +245,7 @@ export function DataTable<T>({
                   {column.sortValue ? (
                     <button
                       type="button"
-                      className={cn("inline-flex h-6 items-center gap-1 rounded-sm hover:text-foreground", active && "text-foreground")}
+                      className={cn("inline-flex h-5 items-center gap-1 rounded-sm hover:text-foreground", active && "text-foreground")}
                       onClick={() =>
                         setSort((current) =>
                           current?.columnId === column.id
@@ -293,8 +293,8 @@ export function DataTable<T>({
           bodies.map((body, bodyIndex) => (
             <tbody key={body.key ?? "rows"} onKeyDown={onKeyDown}>
               {body.key !== null && groups ? (
-                <tr className={cn("border-b bg-muted/40", bodyIndex > 0 && "border-t")}>
-                  <th scope="rowgroup" colSpan={columnCount} className="h-(--row-h) px-3 text-left text-xs font-semibold">
+                <tr className={cn("border-b bg-card", bodyIndex > 0 && "border-t")}>
+                  <th scope="rowgroup" colSpan={columnCount} className="h-(--row-h) px-2.5 text-left text-xs font-semibold text-muted-foreground">
                     {/* The label stays in view while the table scrolls sideways. */}
                     <span className={cn(stickyFirstColumn && "sticky left-3")}>{groups.label(body.key, body.rows)}</span>
                   </th>
@@ -311,18 +311,20 @@ export function DataTable<T>({
                     aria-current={activeRowId === id ? "true" : undefined}
                     data-selected={isSelected || undefined}
                     className={cn(
-                      "group/row h-(--row-h) border-b last:border-0 hover:bg-muted/60",
-                      "data-selected:bg-primary/10 data-selected:hover:bg-primary/16",
-                      "aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
+                      // Zebra rows (native table), a hover tint, the checked set (checkbox + faint tint) and
+                      // the cursor (accent-tinted fill + a 2 px bar) stay three separate signals.
+                      "group/row h-(--row-h) border-b border-border/60 last:border-0 even:bg-foreground/[0.025] hover:bg-accent/70",
+                      "data-selected:bg-primary/8 data-selected:hover:bg-primary/14",
+                      "aria-[current=true]:bg-selection aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
                       // The same tints as a variable, for pinned cells that paint over the row.
-                      "[--row-bg:transparent] hover:[--row-bg:color-mix(in_oklab,var(--muted)_60%,transparent)]",
-                      "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_10%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_16%,transparent)]",
-                      "aria-[current=true]:[--row-bg:var(--accent)]",
+                      "[--row-bg:transparent] hover:[--row-bg:color-mix(in_oklab,var(--accent)_70%,transparent)]",
+                      "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_8%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_14%,transparent)]",
+                      "aria-[current=true]:[--row-bg:var(--selection)]",
                       rowClassName?.(row),
                     )}
                   >
                     {selection ? (
-                      <td className={cn("w-10 px-3", pinned("first"))}>
+                      <td className={cn("w-9 px-2.5", pinned("first"))}>
                         <Checkbox
                           aria-label={`Select ${selection.rowLabel(row)}`}
                           checked={isSelected}
@@ -338,7 +340,7 @@ export function DataTable<T>({
                           key={column.id}
                           scope={column.rowHeader ? "row" : undefined}
                           className={cn(
-                            "px-3 py-1 font-normal tabular-nums",
+                            "px-2.5 py-0.5 font-normal tabular-nums",
                             column.truncate ? "max-w-72 truncate" : "whitespace-nowrap",
                             column.align === "right" ? "text-right" : "text-left",
                             column.className,
@@ -375,10 +377,10 @@ export function TableToolbar({
   actions?: ReactNode
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1.5" data-chrome>
       {search ? (
-        <div className="relative w-64 min-w-0">
-          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative w-56 min-w-0">
+          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             data-page-search
             type="search"
@@ -386,7 +388,7 @@ export function TableToolbar({
             placeholder={search.placeholder}
             value={search.value}
             onChange={(event) => search.onChange(event.target.value)}
-            className="pl-8"
+            className="pl-7"
           />
         </div>
       ) : null}
@@ -436,7 +438,7 @@ export function SelectionBar({
   // Out of the layout flow, so an empty bar adds no gap between its siblings.
   if (count === 0) return <div className="sr-only">{live}</div>
   return (
-    <div role="region" aria-label="Selection" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/8 px-3 py-1.5 text-sm">
+    <div role="region" aria-label="Selection" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-primary/40 bg-primary/8 px-2.5 py-1 text-sm">
       {live}
       {onShowSelected ? (
         <Button size="sm" variant="ghost" onClick={onShowSelected}>

@@ -34,7 +34,7 @@ export interface PageHeaderProps {
   title: string
   /** One sentence: what this surface is for. */
   description?: ReactNode
-  /** Small context line above the title, e.g. the parent Target or Project. */
+  /** Path to the parent (Views › Project …): shown inline before the title, Finder path-bar style. */
   eyebrow?: ReactNode
   /** Status badges shown beside the title. */
   meta?: ReactNode
@@ -48,20 +48,30 @@ export interface PageHeaderProps {
   level?: 1 | 2
 }
 
+/**
+ * Pane header (Harness V3): one compact row, parent path inline before the
+ * title, actions on the trailing edge, the one-sentence purpose in small
+ * secondary text under it. No hero block, no eyebrow stacked above.
+ */
 export function PageHeader({ title, description, eyebrow, meta, actions, className, level = 1 }: PageHeaderProps) {
   useDocumentTitle(title, level)
   const Heading = level === 1 ? "h1" : "h2"
   return (
-    <header className={cn("flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b px-6 py-4", className)}>
-      <div className="min-w-0 flex-[1_1_16rem] space-y-1">
-        {eyebrow ? <div className="text-xs text-muted-foreground">{eyebrow}</div> : null}
-        <div className="flex flex-wrap items-center gap-2">
+    <header className={cn("flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b px-4 py-2", className)}>
+      <div className="min-w-0 flex-[1_1_16rem] space-y-0.5">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          {eyebrow ? (
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground" data-chrome>
+              {eyebrow}
+              <span aria-hidden="true">›</span>
+            </div>
+          ) : null}
           <Heading className={cn("font-semibold text-balance", level === 1 ? "text-lg" : "text-base")}>{title}</Heading>
           {meta}
         </div>
-        {description ? <p className="max-w-prose text-sm text-pretty text-muted-foreground">{description}</p> : null}
+        {description ? <p className="max-w-[90ch] text-xs text-pretty text-muted-foreground">{description}</p> : null}
       </div>
-      {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5" data-chrome>{actions}</div> : null}
     </header>
   )
 }
@@ -80,14 +90,14 @@ export interface SectionProps {
 export function Section({ title, description, actions, children, className, level = 2, id }: SectionProps) {
   const Heading = level === 2 ? "h2" : "h3"
   return (
-    <section aria-labelledby={id ? `${id}-title` : undefined} className={cn("space-y-3", className)}>
+    <section aria-labelledby={id ? `${id}-title` : undefined} className={cn("space-y-2", className)}>
       <div className="flex flex-wrap items-end justify-between gap-2">
         {/* Like PageHeader: the heading block takes the free space and wraps its description, so actions stay beside it. */}
         <div className="min-w-0 flex-1 space-y-0.5">
-          <Heading id={id ? `${id}-title` : undefined} className={cn("font-semibold", level === 2 ? "text-base" : "text-sm")}>
+          <Heading id={id ? `${id}-title` : undefined} className="text-sm font-semibold">
             {title}
           </Heading>
-          {description ? <p className="text-sm text-pretty text-muted-foreground">{description}</p> : null}
+          {description ? <p className="text-xs text-pretty text-muted-foreground">{description}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2 self-start">{actions}</div> : null}
       </div>
@@ -98,7 +108,7 @@ export function Section({ title, description, actions, children, className, leve
 
 /** Scrollable page body with the standard padding and vertical rhythm. */
 export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("space-y-6 px-6 py-5", className)}>{children}</div>
+  return <div className={cn("space-y-5 px-4 py-3", className)}>{children}</div>
 }
 
 export interface ListDetailProps {
@@ -146,7 +156,7 @@ export function StepIndicator({ steps, current, completed = [], label }: { steps
           <li key={step.id} aria-current={isCurrent ? "step" : undefined} className="flex items-center gap-2">
             <span
               className={cn(
-                "flex size-6 items-center justify-center rounded-full border text-xs tabular-nums",
+                "flex size-5 items-center justify-center rounded-full border text-xs tabular-nums",
                 isCurrent && "border-primary bg-primary text-primary-foreground",
                 isDone && !isCurrent && "border-success text-success",
                 !isCurrent && !isDone && "text-muted-foreground",

@@ -3,9 +3,11 @@
 @import "shadcn/tailwind.css";
 
 /*
- * PlateVault prototype tokens. Decisions are recorded in
- * design/HIGH-LEVEL-DESIGN.md §7. Neutral base, one accent (sky blue),
- * semantic status roles, Tailwind default type and spacing scales.
+ * PlateVault prototype tokens: Harness V3 "Workspace with panes"
+ * (design/HARNESS-V3.md). A desktop window, not a page: system font at
+ * native sizes (13 px body), 26 px controls, 5 px radii, hairline
+ * separators, chrome that does not select. Neutral base, one accent (sky
+ * blue), semantic status roles tuned for 4.5:1 on every row surface.
  * Dark is the default theme; `html.dark` selects it (see index.html).
  */
 
@@ -47,6 +49,12 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-toolbar: var(--toolbar);
+  --color-statusbar: var(--statusbar);
+  --color-pane: var(--pane);
+  --color-selection: var(--selection);
+  --color-plate: var(--plate);
+  --color-mount: var(--mount);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -54,10 +62,32 @@
   --radius-2xl: calc(var(--radius) * 1.8);
 }
 
+/*
+ * Native type scale (macOS: 11 small, 13 body, 15 title). Every inherited
+ * `text-*` utility lands on it, so screens not restyled by hand still read
+ * at desktop density.
+ */
+@theme {
+  --text-xs: 0.6875rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.125rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.25rem;
+  --text-lg: 0.9375rem;
+  --text-lg--line-height: 1.375rem;
+  --text-xl: 1.0625rem;
+  --text-xl--line-height: 1.5rem;
+  --text-2xl: 1.25rem;
+  --text-2xl--line-height: 1.75rem;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 :root {
-  --radius: 0.375rem;
+  --radius: 0.3125rem;
   /* Density: table and list row height. Set by html[data-density]. */
-  --row-h: 2rem;
+  --row-h: 1.625rem;
 
   --background: oklch(0.99 0 0);
   --foreground: oklch(0.18 0 0);
@@ -84,14 +114,23 @@
   /* Control boundaries meet 3:1 against the canvas (WCAG 1.4.11). */
   --input: oklch(0.62 0 0);
   --ring: oklch(0.5 0.13 242);
-  --sidebar: oklch(0.975 0 0);
+  --sidebar: oklch(0.955 0 0);
   --sidebar-foreground: oklch(0.2 0 0);
   --sidebar-primary: oklch(0.5 0.13 242);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.93 0 0);
+  --sidebar-accent: oklch(0.905 0 0);
   --sidebar-accent-foreground: oklch(0.18 0 0);
-  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-border: oklch(0.88 0 0);
   --sidebar-ring: oklch(0.5 0.13 242);
+  /* Window chrome: unified title bar + toolbar, status bar, inspector pane. */
+  --toolbar: oklch(0.965 0 0);
+  --statusbar: oklch(0.955 0 0);
+  --pane: oklch(0.975 0 0);
+  /* The cursor row: accent-tinted, never the checked set (that is the checkbox). */
+  --selection: color-mix(in oklch, var(--primary) 14%, var(--background));
+  /* Plates are photographs: always dark, on a light mount. */
+  --plate: oklch(0.13 0 0);
+  --mount: oklch(0.94 0 0);
   --chart-1: oklch(0.5 0.13 242);
   --chart-2: oklch(0.72 0.08 242);
   --chart-3: oklch(0.6 0 0);
@@ -101,11 +140,11 @@
 }
 
 .dark {
-  --background: oklch(0.155 0 0);
+  --background: oklch(0.17 0 0);
   --foreground: oklch(0.93 0 0);
-  --card: oklch(0.195 0 0);
+  --card: oklch(0.2 0 0);
   --card-foreground: oklch(0.93 0 0);
-  --popover: oklch(0.205 0 0);
+  --popover: oklch(0.215 0 0);
   --popover-foreground: oklch(0.93 0 0);
   --primary: oklch(0.74 0.11 238);
   --primary-foreground: oklch(0.17 0.02 240);
@@ -124,14 +163,20 @@
   --border: oklch(1 0 0 / 11%);
   --input: oklch(0.53 0 0);
   --ring: oklch(0.74 0.11 238);
-  --sidebar: oklch(0.17 0 0);
+  --sidebar: oklch(0.195 0 0);
   --sidebar-foreground: oklch(0.9 0 0);
   --sidebar-primary: oklch(0.74 0.11 238);
   --sidebar-primary-foreground: oklch(0.17 0.02 240);
-  --sidebar-accent: oklch(0.25 0 0);
+  --sidebar-accent: oklch(0.27 0 0);
   --sidebar-accent-foreground: oklch(0.95 0 0);
   --sidebar-border: oklch(1 0 0 / 9%);
   --sidebar-ring: oklch(0.74 0.11 238);
+  --toolbar: oklch(0.215 0 0);
+  --statusbar: oklch(0.195 0 0);
+  --pane: oklch(0.185 0 0);
+  --selection: color-mix(in oklch, var(--primary) 16%, var(--background));
+  --plate: oklch(0.1 0 0);
+  --mount: oklch(0.255 0 0);
   --chart-1: oklch(0.74 0.11 238);
   --chart-2: oklch(0.5 0.08 238);
   --chart-3: oklch(0.55 0 0);
@@ -141,11 +186,11 @@
 }
 
 html[data-density="compact"] {
-  --row-h: 1.75rem;
+  --row-h: 1.5rem;
 }
 
 html[data-density="spacious"] {
-  --row-h: 2.5rem;
+  --row-h: 2rem;
 }
 
 @layer base {
@@ -159,8 +204,47 @@ html[data-density="spacious"] {
     accent-color: var(--primary);
   }
 
+  /* The shell frame is the window (h-dvh, panes scroll); the document itself never needs to. */
   body {
     @apply bg-background text-sm text-foreground antialiased;
+    font-variant-numeric: tabular-nums;
+    scrollbar-color: color-mix(in oklch, var(--foreground) 28%, transparent) transparent;
+    scrollbar-width: thin;
+  }
+
+  /*
+   * Chrome does not select and keeps the arrow cursor (macOS). Content text
+   * (values, paths, hashes) stays selectable so it can be copied.
+   */
+  button,
+  [role="tab"],
+  [role="menuitem"],
+  [role="menuitemradio"],
+  [role="menuitemcheckbox"],
+  [role="option"],
+  [role="separator"],
+  label,
+  th,
+  [data-chrome] {
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
+  }
+
+  [data-chrome] a {
+    cursor: default;
+  }
+
+  /* Fields inside chrome stay editable and selectable (WebKit honours an ancestor's `none`). */
+  [data-chrome] :is(input, textarea, [contenteditable="true"]) {
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+  }
+
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 38%, transparent);
+    color: var(--foreground);
   }
 
   h1,
@@ -194,6 +278,11 @@ html[data-density="spacious"] {
 :focus-visible:not([tabindex="-1"]) {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+/* Inside dense chrome (source list, tab strip, toolbar), the ring sits inside the item. */
+:is([data-chrome] a, [data-chrome] button):focus-visible {
+  outline-offset: -2px;
 }
 
 :is([role="option"], [role^="menuitem"], [role="tab"], td, th) :focus-visible,
