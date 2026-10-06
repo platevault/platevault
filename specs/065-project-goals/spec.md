@@ -6,7 +6,7 @@
 
 **Created**: 2026-10-03
 
-**Amended**: 2026-10-06, to the [workflow redesign](../063-clean-rebuild-contract/decisions.md#workflow-redesign-2026-10-06) decisions D-W1 through D-W43.
+**Amended**: 2026-10-06, to the [workflow redesign](../063-clean-rebuild-contract/decisions.md#workflow-redesign-2026-10-06) decisions D-W1 through D-W63.
 
 **Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
 
@@ -37,13 +37,16 @@ A Project is the required container for processing runs (Views). It names its su
 - **PRJ-AC-11**: Given a run in Project P, when the user works in Project Q, then the run cannot be moved or shared into Q; Q can take P's accepted Results as inputs to a new run. A session can still be a candidate and member of both Projects through runs of each. (D-W8)
 - **PRJ-AC-12**: Given a Project with subjects NGC 7000 and M 81 far apart, and M 82 recorded as "also in field" of the M 81 Target, then each subject has its own goals per channel, each run has exactly one subject, and sessions confirmed as M 81 count under the M 81 subject. (D-W9)
 - **PRJ-AC-13**: Given a mosaic subject with two panels, then each panel has its own integration goals and counts the sessions assigned to it by pointing. A session flagged ambiguous or off-panel counts toward no panel until the user assigns it. (D-W29, D-W38)
-- **PRJ-AC-14**: Given the built-in HOO template, when the user applies it to a Project, then its channels and values are copied into the Project; a later edit of the template changes no Project, and the Project's copied goals stay editable. The template list is the same whatever rig the Project uses. (D-W30)
-- **PRJ-AC-15**: Given an open Project, when the user marks it Done, then its Done / Archive sheet opens with Archive and "Move N rejected frames to Trash (size)". No file moves until the user approves an action, and Archive keeps every session that another open Project still uses. Reaching every goal never marks a Project Done. (D-W26, D-W43)
+- **PRJ-AC-14**: Given the built-in HOO template, when the user applies it to a Project, then Ha 10h and OIII 10h are copied into the Project as goals. A later edit of the template changes no Project, and the Project's copied goals stay editable. The template list is the same whatever rig the Project uses. (D-W30, D-W47)
+- **PRJ-AC-15**: Given an open Project whose runs are all Complete, when the user marks it Done, then its Done / Archive sheet opens with Archive and "Move N rejected frames to Trash (size)". No file moves until the user approves an action, and Archive keeps every session that is a member of a run in another Project not marked Done. Reaching every goal never marks a Project Done. (D-W26, D-W43, D-W46)
 - **PRJ-AC-16**: Given a Done Project whose candidates include library-Unusable frames, Project-only rejects, a library-Unusable frame in a prepared revision of a run that is not Complete in another Project, and a library-Unusable frame that is a recorded input of a Result, when the sheet lists the trash offer, then N counts only the remaining library-Unusable frames, Project-only rejects are absent, and the other two are listed as refused with their reasons. (D-W42, D-W43)
 - **PRJ-AC-17**: Given approved trashing, when it completes, then the files are in the OS Trash and nothing is permanently deleted. The Trashed records are hidden from candidates, run pickers, goals, totals, the Project page and Home. Put back from the OS Trash followed by a rescan restores each record as Unusable. (D-W43)
 - **PRJ-AC-18**: Given indexed sessions and two Projects, when Home opens, then it shows the six sections of PRJ-FR-17 in order. The new-sessions section has four groups, "Needs a Target", "Not in a Project", "Unreviewed" and "Ready to add to a run", and each row has a one-click action. (D-W7, D-W39)
 - **PRJ-AC-19**: Given one Project in each Next state, when Home computes Next, then each Project shows the first rule of PRJ-FR-18 that applies. A Project whose candidates have Unreviewed frames shows "Review N new frames", which opens frame review filtered to Unreviewed. (D-W27, D-W35)
 - **PRJ-AC-20**: Given three sessions with no confirmed Target and two sessions that are no Project's candidate, when Home opens, then the top line reads "3 sessions need a Target · 2 not in any Project", and each "not in a Project" row offers Create Project and Add to Project. (D-W35, D-W39)
+- **PRJ-AC-21**: Given a Project with one Complete run and one run at Prepare, when the user chooses Mark Done, then PlateVault names the run at Prepare. It asks the user to complete or abandon that run, and the Project stays open until no run is left open. After the Project is Done, Reopen returns it to open with its runs, goals and members unchanged. (D-W46)
+- **PRJ-AC-22**: Given one open and one Done Project, when Home opens, then only the open Project is listed until the user turns on "Show done". (D-W48)
+- **PRJ-AC-23**: Given an open Project with no Unreviewed candidate frames and a run whose calibration needs review. When Home computes Next, then that run is the blocked run of PRJ-FR-18 rule 2, opened at Calibrate. (D-W48)
 
 ### Edge Cases
 
@@ -52,10 +55,11 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - A session whose OBJECT header names a subject but whose Target is not confirmed is not a candidate. Home lists it under "needs a Target". (D-W33, D-W35)
 - A session with a confirmed subject Target on a rig the Project does not list is not a candidate. Adding that rig to the Project makes it one without changing any run. (D-W37)
 - Removing a subject or a rig that an existing run uses is refused with the run named, because every run uses one of the Project's subjects and rigs. (D-W9, D-W37)
+- A run member that stops being a candidate, for example after its Target is re-confirmed or its rig association changes, stays in its run and still counts "in project". The run's Refresh flags it "no longer matches subject" and offers to remove it (VSEL). (D-W45)
 - Geometry never decides candidacy. It orders candidates and assigns mosaic panels; unknown geometry is listed for manual panel assignment, never read as zero distance. (D-W33, D-W38)
 - A content-identical frame in two runs of one Project counts once in project.
 - A drifted frame leaves "in project" until its reviewed bytes return or it is reconfirmed. Offline or unreadable frames keep their labelled last-observed contribution (root D19).
-- A Trashed frame counts in neither "in project" nor "captured" for any Project. (D-W43)
+- A Trashed frame counts in neither "in project" nor "captured" for any Project. A frame trashed after its run was Complete still shows, marked "Trashed", in that run's fixed membership. (D-W43, D-W52)
 - A Project-only reject never enters the trash offer, even when the Project is Done. (D-W42, D-W43)
 - The interface never says "not in a run". (D-W36)
 
@@ -66,7 +70,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PRJ-FR-01**: New Project takes a name, optional notes, one or more subjects, and one or more rigs. A subject is a Target or a mosaic, with no limit on how far apart subjects are; a mosaic defines its panels by centre and rotation. Opening New Project from a Target prefills that Target. A Project is required for every processing run, and never required for library inspection, Import or the Planner. (D-W1, D-W9, D-W16, D-W37, D-W38)
 - **PRJ-FR-02**: A Project lists every rig taking part. Each run uses exactly one of them, so no run mixes equipment. Adding or removing a rig changes candidates only, never an existing run's membership. The Targets rig selector can choose "this Project's rigs". (D-W37)
 - **PRJ-FR-03**: Goals are set per subject and channel, and per panel for a mosaic subject. Goal kinds are integration per channel, frame count per channel, and a quality bar that names one criterion, for example a median FWHM limit or Usable frames only. A member without the measurement the quality bar needs reads unknown and does not count toward that goal. Exposure preference, equipment goals, spread over nights and Moon limits are not goal kinds. (D-W9, D-W29)
-- **PRJ-FR-04**: Every integration and frame-count goal shows two labelled numbers. "in project" counts the frames in the latest saved memberships of the Project's runs, each content-identical frame once, excluding Project-only rejects, Trashed frames and frames the goal's quality bar excludes. "captured" counts the frames of all candidate sessions, excluding Trashed frames. Goal met and Home's Next action use "in project" only. An unmet goal never blocks starting a run, and met goals never mark the Project Done. (D-W36, D-W42, D-W43)
+- **PRJ-FR-04**: Every integration and frame-count goal shows two labelled numbers. "in project" counts the frames in the latest saved memberships of the Project's runs, each content-identical frame once. It leaves out each run's exclusions, frames rejected for this Project, Trashed frames and frames the goal's quality bar does not admit. A member stays in "in project" after it stops being a candidate. "captured" counts the frames of all candidate sessions, Trashed frames aside. Goal met and Home's Next action use "in project" only. An unmet goal never blocks starting a run, and met goals never mark the Project Done. (D-W36, D-W42, D-W43, D-W44, D-W45)
 - **PRJ-FR-05**: Creating or editing a Project writes only catalog Project records (subjects, rigs, goals, notes): no file changes, no run creation, no quality-state changes. (D-W3)
 - **PRJ-FR-06**: A Project has no single capture site; its sessions keep their own capture sites.
 - **PRJ-FR-07**: The Project page shows subjects, rigs, goals with progress and warnings, candidates, runs (mosaic run groups together) on a stage rail, members, accepted Results, and planning for its own subjects with "Open in Planner". (D-W7, D-W16, D-W38)
@@ -74,25 +78,32 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 - **PRJ-FR-09**: A Project's candidates are every session whose confirmed Target is one of its subjects and whose rig is one of its rigs. An OBJECT label alone confirms no Target. Trashed sessions and frames are never candidates. The Project hands a run's session picker the candidates of the run's subject on the run's rig. (D-W33, D-W37, D-W43)
 - **PRJ-FR-10**: "Start a processing run" asks for one subject and one rig of the Project and creates the run inside it. A run belongs to exactly one Project and cannot move to another; reuse across Projects goes through Results as inputs. A session may be a candidate or member of several Projects. (D-W1, D-W8, D-W9)
 - **PRJ-FR-11**: Missing calibration and exposure mismatch are automatic warnings per subject and channel, computed from calibration-matching evidence (PV-CAL). They are not goals and never block a run. The product shows no mixed-equipment warning. (D-W29)
-- **PRJ-FR-12**: Settings > Goal templates lists the built-in templates HOO, SHO, LRGB, OSC broadband and OSC dual-band, plus user templates the user can create, edit and delete. Each template defines its channels and goal values. Applying a template to a Project copies its values into the Project, where they stand alone and stay editable. Templates are never filtered by rig. (D-W30)
-- **PRJ-FR-13**: "Reject for this Project only" is a secondary action in frame review that writes a Project-scoped reject. It excludes the frame from this Project's "in project" only. It never changes library quality (P/X/U), "captured", other Projects, run membership, or trash eligibility. (D-W42)
-- **PRJ-FR-14**: Only the user marks a Project Done. Done opens the Project's Done / Archive sheet, which offers Archive and the trash offer. Archive keeps every session that another open Project still uses; PV-STO executes it under the root archive rules. (D-W26)
+- **PRJ-FR-12**: Settings > Goal templates lists the built-in templates plus user templates the user can create, edit and delete. Each template defines its channels and goal values. The built-in templates and their values are:
+  - HOO: Ha 10h and OIII 10h.
+  - SHO: Ha, OIII and SII 10h each.
+  - LRGB: L 6h, and R, G and B 2h each.
+  - OSC broadband: 10h.
+  - OSC dual-band: 15h.
+
+  Applying a template to a Project copies its values into the Project, where they stand alone and stay editable. Templates are never filtered by rig. (D-W30, D-W47)
+- **PRJ-FR-13**: "Reject for this Project only" is a secondary action in frame review (PIX-FR-14) that writes a Project-scoped reject. It excludes the frame from this Project's "in project" only. It never changes library quality (P/X/U), "captured", other Projects, saved run membership, or trash eligibility; in an open run's Review step it removes the frame from that run's draft under D-W54 (VSEL-FR-15). (D-W42, D-W54)
+- **PRJ-FR-14**: Only the user marks a Project Done. Mark Done first names each run that is not Complete and asks the user to complete or abandon it. Done opens the Project's Done / Archive sheet (STO-FR-13, STO-FR-14), which offers Archive and the trash offer. Archive keeps every session that is a member of a run in another Project not marked Done; being another Project's candidate does not count. PV-STO executes it under the root archive rules. A Done Project can be Reopened. (D-W26, D-W46)
 - **PRJ-FR-15**: The Done / Archive sheet is the only place that offers trashing capture frames. It offers "Move N rejected frames to Trash (size)", covering the Project's candidate frames that are library-Unusable, never Project-only rejects. It lists each refused frame with its reason: used in a prepared revision of a run that is not Complete (any Project), or a recorded input of a Result. Approved frames go to the OS Trash only under the PV-STO custody rules, with no permanent delete. (D-W43)
-- **PRJ-FR-16**: A Trashed record stays in the catalog for traceability. It is hidden from candidates, members, run pickers, goals, totals, the Project page and Home; only the Sessions "Trashed" filter (PV-LIB) shows it. Put back from the OS Trash followed by a rescan restores the record as Unusable. (D-W43)
+- **PRJ-FR-16**: A Trashed record stays in the catalog for traceability. It is hidden from candidates, members, run pickers, goals, totals, the Project page and Home. Only the Sessions "Trashed" filter (PV-LIB) shows it, and so does the fixed membership of a run that was Complete when the frame was trashed, marked "Trashed". Put back from the OS Trash followed by a rescan restores the record as Unusable. (D-W43, D-W52)
 - **PRJ-FR-17**: Home is a dashboard with six sections, in this order:
   1. Actions: Import, New Project, Plan tonight.
-  2. Projects, each with goals ("in project" / "captured"), stage and one Next action.
+  2. Projects, each with goals ("in project" / "captured"), stage and one Next action. Done Projects stay hidden behind a "Show done" filter.
   3. New sessions needing work, grouped as needs a Target, not in a Project, unreviewed, and ready to add to a run, each with a one-click action.
-  4. Tonight: best windows for subjects and favourites, the Moon, and the darkness window (PV-PLAN data).
+  4. Tonight: best windows for subjects and favourites, the Moon, and the darkness window (PV-PLAN, PLAN-FR-11).
   5. Target status: unmet goals and what each channel still needs in project.
-  6. Running work. (D-W7, D-W39)
+  6. Running work. (D-W7, D-W39, D-W48)
 - **PRJ-FR-18**: A Project's Next action is the first rule that applies:
-  1. Its candidates have Unreviewed frames: "Review N new frames", which opens frame review filtered to Unreviewed.
-  2. One of its runs is blocked: that run, opened at its blocked stage.
-  3. A goal is unmet in project and tonight has an observing window for that subject: "Plan tonight".
-  4. Otherwise: "Start a processing run". (D-W27, D-W35)
-- **PRJ-FR-19**: Home's top line reads "N sessions need a Target · M not in any Project". A session needs a Target when it has no confirmed Target. A session is not in any Project when it has a confirmed Target but is no Project's candidate; its row offers Create Project, or Add to Project, which adds its Target as a subject and its rig to the Project's rigs when missing, after the user confirms both. A session is ready to add to a run when it is a candidate of a Project but a member of none of that Project's runs. (D-W35, D-W37, D-W39)
-- **PRJ-FR-20**: The Project page stage rail shows each run's stage: Select, Review, Calibrate, Prepare, Results, Done or Clean up. A Project is open until the user marks it Done; Archive follows Done. (D-W3, D-W7, D-W26)
+  1. Its candidates have Unreviewed frames: "Review N new frames", which opens frame review filtered to Unreviewed (PIX-FR-18).
+  2. One of its runs is blocked: that run, opened at its blocked stage. A run is blocked when it waits on the user with unresolved inputs, calibration needing review, or a failed preparation.
+  3. A goal is unmet in project and tonight has an observing window for that subject (PLAN-FR-11): "Plan tonight".
+  4. Otherwise: "Start a processing run". (D-W27, D-W35, D-W48)
+- **PRJ-FR-19**: Home's top line reads "N sessions need a Target · M not in any Project". A session needs a Target when it has no confirmed Target. A session is not in any Project when it has a confirmed Target but is no Project's candidate. Its row offers Create Project, or Add to Project, which adds its Target as a subject and, when the Project lacks it, its rig. A visible note names the added rig before saving (LIB-FR-17). A session is ready to add to a run when it is a candidate of a Project but a member of none of that Project's runs. (D-W35, D-W37, D-W39, D-W59)
+- **PRJ-FR-20**: The Project page stage rail shows each run's stage: Select, Review, Calibrate, Prepare, Results, Done or Clean up. A Project is open until the user marks it Done; Archive follows Done, and Reopen returns a Done Project to open. (D-W3, D-W7, D-W26, D-W46)
 - **PRJ-FR-21**: The interface calls a View a "processing run" and labels goal progress "in project" and "captured". It never says "not in a run". (D-W3, D-W36)
 
 ### Owned interaction steps
@@ -114,7 +125,7 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - **Candidate**: A derived session: confirmed Target is a subject and rig is a Project rig. (D-W33, D-W37)
 - **Member**: A session in at least one saved membership revision of the Project's runs. (D-W34)
 - **Project-only reject**: A Project-scoped reject that affects only that Project's "in project". (D-W42)
-- **Project state**: Open, Done, or Archived. (D-W26)
+- **Project state**: Open or Done, with Archive after Done; Reopen returns a Done Project to open. (D-W26, D-W46)
 
 ## Success Criteria
 
@@ -135,6 +146,6 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 
 ## Decisions before feature approval
 
-- Root decision D10, as amended by D-W36 and D-W42, defines the two progress labels and the two quality scopes. Root decisions D01 and D12, as amended by D-W33, D-W34, D-W37 and D-W38, define candidates, members and mosaic panel assignment.
+- Root decision D10, as amended by D-W36, D-W42 and D-W44, defines the two progress labels and the two quality scopes. Root decisions D01 and D12, as amended by D-W33, D-W34, D-W37 and D-W38, define candidates, members and mosaic panel assignment.
 - Root decision D19 removes a drifted frame from Project progress until its reviewed bytes return or it is reconfirmed. Offline or unreadable frames keep their labelled last-observed contribution.
-- The workflow decisions D-W1, D-W3, D-W7, D-W8, D-W9, D-W16, D-W26, D-W27, D-W29, D-W30, D-W33 to D-W37, D-W39, D-W42 and D-W43 are encoded above.
+- The workflow decisions D-W1, D-W3, D-W7, D-W8, D-W9, D-W16, D-W26, D-W27, D-W29, D-W30, D-W33 to D-W37, D-W39, D-W42 to D-W48, D-W52, D-W54 and D-W59 are encoded above.

@@ -6,7 +6,7 @@
 
 **Created**: 2026-10-03
 
-**Amended**: 2026-10-06, to the workflow decisions D-W1 to D-W43 settled by the user that day. Tags such as (D-W16) name the decision a requirement follows.
+**Amended**: 2026-10-06, to the workflow decisions D-W1 to D-W63 settled by the user that day. Tags such as (D-W16) name the decision a requirement follows.
 
 **Status**: Draft; product defaults and all human-approval gate waivers follow the root autonomous objective. Requirements analysis, implementation and verification remain required.
 
@@ -65,8 +65,9 @@ The Targets page lists the user's Targets with tonight's planning columns. Searc
 - **PLAN-TGT-AC-11**: Given the rig "Esprit 100 + ASI2600MM" is selected, then a Fit column appears showing "fits", "N panels" or "tiny" per Target. The presets Mosaic candidates and Fits nicely become available. Mosaic candidates lists only Targets that need 2 or more panels. Fits nicely lists only Targets that cover 25% to 90% of the field. (D-W23)
 - **PLAN-TGT-AC-12**: Given a selected rig whose filters are L, R, G and B, then the Filters strip shows only L, R, G and B. The presets Narrowband (Moon up), Emission nebulae Ha and Planetary nebulae OIII are hidden. (D-W23, D-W31)
 - **PLAN-TGT-AC-13**: Given a selected OSC rig with a dual-band filter that passes Ha and OIII, then the Filters strip shows R, G, B, Ha and OIII, and the narrowband presets are offered. (D-W31)
-- **PLAN-TGT-AC-14**: Given the Targets page opened through "Open in Planner" from a Project with two rigs, then the rig selector shows "this Project's rigs". Fit shows one value per rig, labeled with the rig name. The Filters strip shows the bands either rig can capture. (D-W37)
+- **PLAN-TGT-AC-14**: Given the Targets page opened through "Open in Planner" from a Project with two rigs, then the rig selector shows "this Project's rigs". Fit shows one value per rig, labeled with the rig name. The Filters strip shows the union of the bands either rig can capture, and Mosaic candidates and Fits nicely match a Target when it matches on either rig. (D-W37, D-W62)
 - **PLAN-TGT-AC-15**: Given no saved planning site, when the Targets page opens, then the planning columns show "-" and the page shows "Add an observing site in Settings". Search, Add to targets, ★ and Sessions still work. (D-W18)
+- **PLAN-TGT-AC-16**: Given M 31 marked ★ and the open Project "Summer nebulae" with subject IC 1396, which is not marked ★. When the Targets page opens on My targets, then it lists M 31 and IC 1396, and IC 1396 carries a "Summer nebulae" Project badge. (D-W60)
 
 ### User Story 3 - Filters on optical trains (Priority: P2)
 
@@ -99,7 +100,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 ### Functional Requirements
 
 - **PLAN-FR-01**: Saved sites and a default site are set in Settings. The planning-site selector is independent of Projects and capture sites; changing it never alters Project subjects, run sessions or session sites. (D-W16)
-- **PLAN-FR-02**: A Target's Plan area sets altitude, darkness, Moon and minimum-duration criteria. Windows show their site and time-zone basis, and the active planning site is shown. Each open Project that has the Target as a subject shows its per-channel goal gap beside coverage. The gap names its "in project" and "captured" amounts with those labels. (D-W16, D-W36)
+- **PLAN-FR-02**: A Target's Plan area sets altitude, darkness, Moon and minimum-duration criteria. Windows show their site and time-zone basis, and the active planning site is shown. Each open Project that has the Target as a subject shows its per-channel goal gap beside coverage. The gap names its "in project" and "captured" amounts with those labels. For a mosaic subject, the Plan area lists each of its panels. (D-W16, D-W36, D-W63)
 - **PLAN-FR-03**: Mark Planned and Enable notifications are explicit opt-ins. Reminders use the displayed default site, and every reminder names it. Planning elsewhere never enables reminders there. Enabling reminders starts no indexing or image processing.
 - **PLAN-FR-04**: Export calendar confirms site, date range, time zone, and selected windows, then saves an .ics file through the native save dialog as a one-time snapshot.
 - **PLAN-FR-05**: Suitability is astronomical only: no weather, equipment, or processing-readiness claims, and no provider account or authorization.
@@ -113,11 +114,11 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   - the Moon's illumination, phase, rise and set;
   - tonight's darkness window.
 
-  Each value names its site and time zone. Targets without a window tonight are left out. The same computation tells Home whether a subject has a window tonight. (D-W39, D-W35)
+  Each value names its site and time zone. Targets without a window tonight are left out. A mosaic subject's window uses the mosaic's center. The same computation tells Home whether a subject has a window tonight. (D-W39, D-W35, D-W63)
 
 #### Targets list
 
-- **PLAN-TGT-FR-01**: The Targets page shows either "My targets" (the default) or "Browse catalogues". My targets holds the Targets the user has added; ★ on a row adds or removes it. (D-W17)
+- **PLAN-TGT-FR-01**: The Targets page shows either "My targets" (the default) or "Browse catalogues". My targets lists the ★ favourites plus every subject of an open Project, and each such subject carries a badge naming its Project. ★ on a row adds or removes the favourite; a subject of an open Project stays listed with its badge either way. (D-W17, D-W60)
 - **PLAN-TGT-FR-02**: Browse catalogues lists rows only once at least one bundled catalogue (Messier, NGC, IC, Sharpless, LBN, LDN, Caldwell, Barnard) or a preset is chosen. With neither chosen, it lists no rows and asks for a catalogue or a preset. (D-W17)
 - **PLAN-TGT-FR-03**: Search covers My targets, the bundled catalogues and SIMBAD. It ignores case and whitespace, so "M31", "M 31" and "m31" match the same Target. It searches every row, not only rows already shown, and each result names its source. A result not in My targets offers "Add to targets" inline. Adding writes the Target into the library and My targets; a failed add shows the error with Retry. Searching alone writes nothing. When SIMBAD cannot be reached, the results say SIMBAD was not searched. (D-W17)
 - **PLAN-TGT-FR-04**: The table has these columns, with values for tonight at the active planning site under the planning criteria:
@@ -133,7 +134,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 
   Every column except ★ sorts ascending or descending. Unknown values sort last, and the default sort is Designation ascending. A Target without catalogued coordinates shows "-" with the reason. (D-W18)
 - **PLAN-TGT-FR-05**: An Img time of zero shows why: altitude, Moon or darkness. Img time for a Target equals the total of its Plan area windows for tonight under the same site and criteria. (D-W18)
-- **PLAN-TGT-FR-06**: The Filters strip shows bands L, R, G, B, Ha, SII and OIII, each marked viable or limited by the Moon tonight, with a recommendation label. With a rig selected it shows only the bands the rig's filters pass (PLAN-EQ-FR-03). With no rig selected it shows all seven. (D-W18, D-W23, D-W31)
+- **PLAN-TGT-FR-06**: The Filters strip shows bands L, R, G, B, Ha, SII and OIII, each marked viable or limited by the Moon tonight, with a recommendation label. With a rig selected it shows only the bands the rig's filters pass (PLAN-EQ-FR-03); with several rigs, such as "this Project's rigs", it shows the union of their bands. With no rig selected it shows all seven. (D-W18, D-W23, D-W31, D-W62)
 - **PLAN-TGT-FR-07**: Moon illumination and phase appear once, in the toolbar, for tonight at the active planning site. No row repeats them. (D-W18)
 - **PLAN-TGT-FR-08**: Captured shows, per channel, the integration of every session whose confirmed Target is this Target, whatever its quality. Trashed sessions and frames count toward neither Captured nor Sessions. (D-W18, D-W43)
 - **PLAN-TGT-FR-09**: The built-in presets are Best tonight (broadband), Narrowband (Moon up), Emission nebulae Ha, Galaxies dark sky and Planetary nebulae OIII. Mosaic candidates and Fits nicely join them under PLAN-TGT-FR-12. The app offers no "Avoid tonight" preset. Each preset's definition is shown with it:
@@ -150,8 +151,8 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
   - each rig from Settings > Equipment;
   - "this Project's rigs", in a Project's context.
 
-  With a rig selected, the Fit column appears. Fit compares the Target's catalogued angular size with the rig's field of view. Coverage is the Target's major axis as a share of the field's shorter side. Fit reads "fits" when the Target fits in one field with coverage of at least 25%, "N panels" when it needs a grid of N fields, and "tiny" below 25%. With two or more rigs, Fit shows one value per rig, labeled with the rig name. A Target or rig without the size or field of view shows "-" with the reason. (D-W23, D-W37)
-- **PLAN-TGT-FR-12**: Mosaic candidates (2 or more panels) and Fits nicely (coverage of 25% to 90%) are offered only with a rig selected. With two or more rigs, a Target matches when it matches on any of them. (D-W23, D-W37)
+  With a rig selected, the Fit column appears. Fit compares the Target's catalogued angular size with the rig's field of view. Coverage is the Target's major axis as a share of the field's shorter side. Fit reads "fits" when the Target fits in one field with coverage of at least 25%, "N panels" when it needs a grid of N fields, and "tiny" below 25%. With two or more rigs, Fit shows one value per rig, labeled with the rig name. A Target or rig without the size or field of view shows "-" with the reason. (D-W23, D-W37, D-W61, D-W62)
+- **PLAN-TGT-FR-12**: Mosaic candidates (2 or more panels) and Fits nicely (coverage of 25% to 90%) are offered only with a rig selected. With two or more rigs, a Target matches when it matches on any of them. (D-W23, D-W37, D-W62)
 - **PLAN-TGT-FR-13**: Narrowband (Moon up), Emission nebulae Ha and Planetary nebulae OIII are hidden when a rig is selected and no filter on it passes Ha, SII or OIII. (D-W23, D-W31)
 - **PLAN-TGT-FR-14**: Selecting a row opens that Target's Plan area (PLAN-FR-02). (D-W16)
 
@@ -177,7 +178,7 @@ The [root contract](../063-clean-rebuild-contract/spec.md) governs file custody,
 Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). Feature-specific evidence and decisions retain their input identity, scope, and revision.
 
 - **Processing run (View)**: the root View; this spec calls it a run. Planning never changes which sessions a run holds.
-- **My targets**: the Targets the user has added, marked ★.
+- **My targets**: the Targets the user has marked ★, plus every subject of an open Project, shown with its Project badge. (D-W60)
 - **Rig**: an optical train from Settings > Equipment: telescope, camera, focal length, field of view and filter list.
 - **Rig filter**: one entry in a rig's filter list: name, matched FITS FILTER values and passed bands.
 - **Targets preset**: a named set of Targets list filters, either built in or saved by the user.
@@ -199,10 +200,10 @@ Use the [root vocabulary](../063-clean-rebuild-contract/spec.md#key-entities). F
 - [Product flow](../../docs/reviews/2026-10-03-product-flow-and-journeys.md) supplies the confirmed interactions and illustrative worked example.
 - This feature is independently specified; dependencies on other feature contracts are resolved in planning.
 - Conservative defaults and all human-approval gate waivers follow the root autonomous objective and decision register. Tests, requirements analysis, independent review and delivery evidence remain mandatory.
-- A Project's rigs (D-W37), Project subjects and goals (D-W9, D-W29, D-W36) and the Project Done state (D-W26) are defined by the Project feature; this feature reads them.
+- A Project's rigs (D-W37), Project subjects and goals (D-W9, D-W29, D-W36) and the Project Done state (D-W26, D-W46) are defined by the Project feature; this feature reads them.
 
 ## Decisions before feature approval
 
 - Root decisions D07 and D18 define opt-in reminders, explicit site/criteria/lead time, repeat suppression, permission recovery, honest scheduler capability and shared scientific calculations. Scheduler delivery claims require real platform evidence.
 - Root decision D19 has no PLAN consumer: no planning path consumes a recorded file, and calendar export writes computed windows.
-- Workflow decisions D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W37 and section 4 of D-W39 define Target-keyed planning, the Targets list, rig filters and Tonight. D-W30, D-W35, D-W36 and D-W43 are read here where they constrain this feature's outputs.
+- Workflow decisions D-W16, D-W17, D-W18, D-W19, D-W23, D-W31, D-W37, D-W60, D-W61, D-W62, D-W63 and section 4 of D-W39 define Target-keyed planning, the Targets list, rig filters and Tonight. D-W30, D-W35, D-W36, D-W43 and D-W46 are read here where they constrain this feature's outputs.

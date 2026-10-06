@@ -5,6 +5,8 @@ Status: draft interaction specification based on the functionality interview
 Delivery: documentation only; no product implementation or new wireframes
 Baseline comparison: local commit `94a3dc958c13e297baf501aa2721efa2c2628622`
 
+**Superseded in part, 2026-10-06:** the [workflow decisions log](../../specs/063-clean-rebuild-contract/workflow-decisions.md) (D-W1 through D-W63) supersedes this document wherever they disagree, and specs 063 through 072 carry the amended contract. Every View is a processing run inside exactly one Project, and Home is the default landing. Import replaces reviewed filing, calibration is assigned automatically, and P/X/U marks apply at once. Runs prepare to `<output>/<Project>/<Run>/` with a sibling Results folder, and a run's Clean up removes only prepared links, clones and copies. Where a line below still describes optional Projects, geometric or equipment preselection, Project checklists, a View location or cleanup of processing intermediates, the decisions govern.
+
 ## Scope and status
 
 This document specifies the proposed application. It does not describe shipped behavior. The functionality follows the user's interview answers. Button names, field arrangements, and interaction details are proposed for review.
@@ -20,8 +22,8 @@ The audited application is preserved at baseline commit `94a3dc958c13e297baf501a
 | Library | Indexed files, locations, metadata, quality decisions, and relationships. Indexing leaves originals where they are. |
 | Session | A metadata-homogeneous acquisition group. Separate Ha and OIII data are separate sessions. A night can contain multiple sessions. |
 | Target | A sky subject or region. It anchors accumulated coverage, planned observing windows, linked Projects, and results. |
-| Project | An optional named goal. It can span Targets, mosaic panels, equipment, and capture sites. |
-| View | A named, reviewed input selection for an application. It can stand alone or belong to a Project. |
+| Project | The required container for processing runs. It names its subjects (Targets or mosaics), the rigs taking part, and goals per subject and channel (D-W1, D-W9, D-W37). |
+| View | A named, reviewed input selection for an application, called a processing run in the interface. It belongs to exactly one Project and uses one of its subjects and one of its rigs (D-W3, D-W8, D-W37). |
 | Prepared View | A materialized input layout plus configuration, output location, and manifest. It stays fixed until explicitly refreshed. |
 | Direct-source View | The same reviewed selection, using original subs through supported application configuration or file lists, without staging or links. |
 | Result | A manually accepted final image or reusable processing product associated with a View. |
@@ -31,14 +33,14 @@ The interface need not expose a separate Run entity. View history can record pre
 
 ## Application surfaces
 
-Targets is the default home. The main navigation provides Targets, Sessions, Projects, Calibration, and Storage. Sessions can group their display by night; Night is not a replacement for the session identity model.
+Home is the default landing: a dashboard of Projects, new sessions needing work, Tonight and running work (D-W39). The main navigation provides Targets, Sessions, Projects, Calibration, and Storage, and Import and Planning have their own entries (D-W7). Sessions can group their display by night; Night is not a replacement for the session identity model.
 
 Activity and Settings are secondary utilities. Running operations, refusals, and recoverable failures remain visible without making audit administration the product's main task.
 
 | Surface | What the user sees | Main actions |
 |---|---|---|
 | Targets | Search, captured/usable coverage, Project goals, results, and planning | Open Target, New Project, Create View, Plan |
-| Sessions | Session table, metadata, counts, locations, and optional sky coverage | Select sessions, Create View, Inspect, optional File into library |
+| Sessions | Session table, metadata, counts, locations, optional sky coverage, and the "Needs a Target" and "Not in any Project" filters | Inspect, Create Project or Add to Project, start a processing run inside a Project (D-W1, D-W11, D-W25) |
 | Projects | Named goals and capture checklists; linked sessions; Views and accepted products | Edit checklist, Create View, open View |
 | Calibration | Masters and raw calibration sets; compatibility; missing evidence; adoption suggestions | Inspect, choose inputs, Adopt master |
 | Storage | Locations, availability, View footprints, duplicate candidates, archive transfers | Clean up View, Archive, locate/remap |
@@ -153,7 +155,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Do:** click **Create View** from the Project.
 
-**Observe:** the review workspace opens with the Project context and equipment. Alternatively, click **Create View** from a Target or selected Sessions without creating a Project.
+**Observe:** the review workspace opens with the Project context, the chosen subject and the chosen rig. From a Target or selected Sessions outside any Project, **Create View** first asks for Create Project or Add to Project; no View exists without a Project (D-W1, D-W8, D-W37).
 
 ## Journey C: select sessions for a View
 
@@ -165,9 +167,9 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Observe:** Sessions, Frames, Preview, and Calibration share one selection. Move among them without a forced Next/Back wizard. **Review preparation** gathers unresolved choices whenever the user requests handoff.
 
-**Enter:** a View name such as `NGC7000 HOO - Siril`. Choose an optional Project association. Choose an application profile or leave it until preparation.
+**Enter:** a run name such as `NGC7000 HOO - Siril`. Its Project, subject and rig were fixed when it was created (D-W1, D-W50). Choose an application profile or leave it until preparation.
 
-**Observe:** the draft selection belongs to this View. Target and Project associations provide optional context.
+**Observe:** the draft selection belongs to this run, inside its one Project (D-W8).
 
 ### C2. Inspect geometric suggestions
 
@@ -267,11 +269,11 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 ### D5. Mark library usability explicitly
 
-**Do:** select reviewed included frames. Click **Mark included frames usable** and inspect the named scope before confirming.
+**Do:** in frame review, press **P**, **X** or **U** on a frame or a multi-selection. The mark applies at once, with no confirmation, and the next frame becomes current (D-W14).
 
-**Observe:** library quality state changes for those frames. Target usable coverage updates without confusing it with View membership.
+**Observe:** library quality state changes for those frames and shows in every Project and run. Target usable coverage updates without confusing it with View membership. In an open run's Review step, a rejected frame also leaves the run's draft with the reason "Rejected"; un-rejecting restores it (D-W54).
 
-**Alternative:** choose **Reject for Project** for a Project-owned View, or **Mark unusable in library** for the broader library decision. Each confirmation names the scope. D10 separates Project progress from library quality and preserves existing fixed View membership; those boundaries still need runtime verification.
+**Alternative:** choose **Reject for this Project only**, a secondary action that leaves library quality unchanged and removes the frame from this Project's "in project" progress (D-W42). The workspace's bulk actions on a selection, **Mark included frames usable** and **Mark unusable in library**, still name their scope before confirming.
 
 **Trust:** preparing the View alone does not mark every included frame usable. Excluded frames stay View-specific unless the user chooses a broader decision.
 
@@ -291,15 +293,15 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 ### E1. Review calibration
 
-**See:** compatible masters or raw calibration sets preselected for the chosen light sessions. Inputs stay grouped by camera/settings/channel and relevant geometry.
+**See:** a readiness line. Fully compatible masters or raw calibration sets are assigned automatically for the chosen light groups, and **Review matches** opens the full requirement table. Inputs are grouped by settings, channel and relevant geometry for the run's one rig (D-W5, D-W37).
 
-**Do:** inspect a suggestion's criteria or choose another input. Open **Why this match** to inspect compatible, incompatible, and unknown criteria.
+**Do:** in **Review matches**, inspect an assignment's criteria or choose another input. Open **Why this match** to inspect compatible, incompatible, and unknown criteria.
 
-**Observe:** accepted assignments are distinct from suggestions. Raw flats can be handed to an external application that builds its own masters.
+**Observe:** automatic and accepted assignments are distinct from suggestions, and a match with an unknown or incompatible criterion is never assigned automatically (D-W5). Raw flats can be handed to an external application that builds its own masters.
 
 ### E2. Resolve exceptions
 
-**See:** the 24 Sep OIII session has a compatible 30 Sep OIII flat suggestion. The alternative 26 Sep flat set has unknown optical-train state, so choosing it leaves the flat unresolved.
+**See:** the 24 Sep OIII session has an automatic 30 Sep OIII flat assignment (D-W5). The alternative 26 Sep flat set has unknown optical-train state, so choosing it leaves the flat unresolved.
 
 **Do:** choose another candidate, exclude the affected session, defer preparation, or record an explicit scoped exception with a reason.
 
@@ -574,6 +576,8 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 ## Journey L: optional reviewed filing
 
+**Withdrawn (D-W11):** "File into library" is dropped, and Import replaces this journey. The user picks a source, previews templated destinations in Captures or Calibration storage, and chooses Copy or Move ([071 User Story 2](../../specs/071-storage-custody/spec.md)); "Add existing library folder" indexes an organized folder in place. Import and the Project Done / Archive sheet (071 STO-FR-13 and STO-FR-14) have no journey here yet. The steps below are kept for traceability only.
+
 **Goal:** organize selected indexed captures into a managed library location without making filing part of onboarding.
 
 **Do:** select sessions in Sessions and click **File into library**. Choose a configured destination and inspect the proposed layout.
@@ -614,11 +618,11 @@ Baseline status records source traces. Full runtime verification remains incompl
 
 | Capability | Baseline status | Agreed flow |
 |---|---|---|
-| Indexing, location availability, classification | Implemented | Keep index-in-place; simplify first use; optional reviewed filing |
+| Indexing, location availability, classification | Implemented | Keep index-in-place; simplify first use; Import (Copy or Move) replaces reviewed filing (D-W11) |
 | Metadata-based sessions | Implemented | Keep session identity; expose multi-session filtering/sorting and selection |
 | Target association and geometry helpers | Implemented | Use geometry/FOV and evidence; OBJECT stays a label/filter |
 | Session proximity picker | Not established in production | Add geometry-based suggestions/preselection and linked sky coverage |
-| Projects and source views | Implemented | Optional goals; standalone Views; saved criteria, explicit refresh, flexible paths |
+| Projects and source views | Implemented | Projects are the required container for runs; saved criteria, explicit refresh, `<output>/<Project>/<Run>/` layout (D-W1, D-W8, D-W51) |
 | Pixel preview and star/PSF measurements | Not established in production | Add native review analysis and optional imports; keep header readers lightweight |
 | Calibration matching and assignments | Implemented | Preselect compatible raw/master inputs; review exceptions; adopt outputs explicitly |
 | External application launch/profiles | Implemented, with documented layout fallbacks | Verified preparation/configuration for named applications; generic Open in... |

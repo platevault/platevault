@@ -43,4 +43,26 @@
 - D-W42: Quality has two levels. Library quality (P/X/U) is global. "Reject for this Project only" is a secondary action using the Project-scoped reject, and "in project" excludes Project-rejected frames.
 - D-W43: Trashing rejected frames is part of the Project's Done / Archive cleanup (D-W26), not a separate action, and not part of a run's Clean up. The sheet offers "Move N rejected frames to Trash (size)", covering the Project's candidates that are library-Unusable; Project-only rejects are never included. Files go to the OS Trash only, with no permanent delete; the 071 custody rules apply. The sheet lists the frames it refuses, with the reason: used in a prepared revision of a run that is not Complete (any Project), or a recorded input of a Result. A Trashed record stays for traceability but is hidden everywhere else: run pickers, candidates, frame review, Sessions, Targets, Home, overviews, goals and totals. It appears only under a "Trashed" filter in Sessions. Undo is "Put back" in the OS Trash; a rescan restores the record as Unusable.
 
+## Settled in round 6 (2026-10-06, all recommendations accepted)
+- D-W44: "In project" counts the frames in a run's saved membership, minus frames excluded from that run and frames rejected for the Project.
+- D-W45: A run member that stops being a candidate (its Target is re-confirmed, or its rig is removed) stays in the run and still counts "in project". The run's Refresh flags it as "no longer matches subject" and offers to remove it.
+- D-W46: For Archive, "another open Project still uses" means a member of a run in a Project that is not Done; being a candidate does not count. Mark Done asks the user to complete or abandon open runs first. A Done Project can be Reopened.
+- D-W47: Built-in goal template values, all editable after applying: HOO Ha 10h + OIII 10h; SHO Ha/OIII/SII 10h each; LRGB L 6h + R/G/B 2h each; OSC broadband 10h; OSC dual-band 15h.
+- D-W48: Home hides Done Projects behind a "Show done" filter. A "blocked run" is a run waiting on the user: unresolved inputs, calibration needing review, or a failed preparation.
+- D-W49: The run picker starts with every available candidate selected.
+- D-W50: A run's subject and rig are fixed at creation. Another subject or rig needs another run.
+- D-W51: A single run prepares to <output>/<Project>/<Run>/. Each new prepared revision gets a new folder (<Run> (rev 2)/); an existing prepared folder is never reused. Results go to a sibling <Run> Results/ folder, so WBPP never reads its own output as input. A mosaic group prepares to <output>/<Project>/<Mosaic>/Panel N/, with <Mosaic> Results/ as a sibling.
+- D-W52: A frame trashed after its run is Complete still shows in that run's fixed membership, marked "Trashed". It is hidden everywhere else.
+- D-W53: Shift+P and Shift+X mark the frame and move to the next one, even when auto-advance is off. Auto-advance is on by default.
+- D-W54: Rejecting a frame in a run's Review step removes it from that run's draft with the reason "Rejected"; un-rejecting restores it. Prepared revisions are unchanged.
+- D-W55: The calibration policy is automatic assignment on (the default) or off. A master found in a run's Results is offered once, in that run's Results step.
+- D-W56: Results from runs on another rig may be inputs to a run, shown with their rig. The one-rig rule applies to raw frames only.
+- D-W57: Trashing a frame with copies in two locations moves every copy. If any copy is refused, the whole frame is refused.
+- D-W58: The legacy "Auto-apply pattern" checkbox and the generic project folder pattern are dropped; runs own the output layout.
+- D-W59: Adding a "Not in any Project" session to a Project also adds its rig if the Project lacks it, with a visible note.
+- D-W60: "My targets" lists the ★ favourites plus every subject of an open Project, which carries a Project badge.
+- D-W61: Fit compares the Target's major axis with the shorter side of the field of view.
+- D-W62: With several Project rigs, the list shows one Fit per rig and the union of their bands, and presets match when any rig fits.
+- D-W63: Tonight's windows for a mosaic use the mosaic's centre; the Plan area lists each panel.
+
 Sources: the legacy facts are in legacy-frontend-facts.md.
