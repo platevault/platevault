@@ -2,7 +2,12 @@
  * Confirmation for destructive, irreversible or scope-changing actions
  * (foundation-owned). Always an AlertDialog. The dialog names the exact scope:
  * what changes and what stays unchanged (FR-006, VSEL-FR-11, STO-FR-04).
+ *
+ * Harness v4: Direction B's preview-then-confirm. The scope reads as a
+ * preview receipt, changes beside what stays, and says that nothing is
+ * written until the confirm button, which repeats the verb and object.
  */
+import { ArrowRight, Lock } from "lucide-react"
 import { type ReactElement, type ReactNode, useRef, useState } from "react"
 import {
   AlertDialog,
@@ -105,25 +110,36 @@ export function ConfirmDialog({
           <AlertDialogTitle className="text-balance">{shown.title}</AlertDialogTitle>
           <AlertDialogDescription>{shown.description}</AlertDialogDescription>
         </AlertDialogHeader>
-        <div className="space-y-3 text-sm">
-          <div>
-            <h3 className="mb-1 text-xs font-medium text-muted-foreground">This will</h3>
-            <ul className="list-disc space-y-0.5 pl-5">
-              {shown.changes.map((change) => (
-                <li key={change}>{change}</li>
-              ))}
-            </ul>
-          </div>
-          {shown.unchanged && shown.unchanged.length > 0 ? (
-            <div>
-              <h3 className="mb-1 text-xs font-medium text-muted-foreground">Unchanged</h3>
-              <ul className="list-disc space-y-0.5 pl-5 text-muted-foreground">
-                {shown.unchanged.map((item) => (
-                  <li key={item}>{item}</li>
+        <div className="space-y-2 text-sm">
+          <p data-chrome className="text-[0.75rem] text-muted-foreground">
+            Preview: nothing is written until you confirm.
+          </p>
+          <div className="divide-y divide-separator overflow-hidden rounded-[0.3125rem] border border-separator bg-background">
+            <section aria-label="This will" className="px-3 py-2">
+              <h3 className="mb-1 text-xs font-medium text-muted-foreground">This will</h3>
+              <ul className="space-y-0.5">
+                {shown.changes.map((change) => (
+                  <li key={change} className="flex gap-2">
+                    <ArrowRight aria-hidden="true" className={shown.tone === "destructive" ? "mt-0.5 size-3.5 shrink-0 text-destructive" : "mt-0.5 size-3.5 shrink-0 text-link"} />
+                    <span>{change}</span>
+                  </li>
                 ))}
               </ul>
-            </div>
-          ) : null}
+            </section>
+            {shown.unchanged && shown.unchanged.length > 0 ? (
+              <section aria-label="Unchanged" className="bg-muted/40 px-3 py-2">
+                <h3 className="mb-1 text-xs font-medium text-muted-foreground">Unchanged</h3>
+                <ul className="space-y-0.5 text-muted-foreground">
+                  {shown.unchanged.map((item) => (
+                    <li key={item} className="flex gap-2">
+                      <Lock aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </div>
           {error ? <ActionError message={error} /> : null}
         </div>
         <AlertDialogFooter>

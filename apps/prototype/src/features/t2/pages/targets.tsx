@@ -114,7 +114,7 @@ export function TargetsPage() {
         {header}
         <PageBody className="space-y-4">
           <LibraryStatus kind="light" notes={unresolvedNotes} />
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 border-y border-separator py-3 @min-[40rem]:grid-cols-4 @container">
+          <div className="grid grid-cols-4 gap-x-6 gap-y-3 border-y border-separator py-3 max-md:grid-cols-2">
             <Stat label="Targets" value={summaries.length} />
             <Stat label="Captured" value={formatDuration(captured)} />
             <Stat label="Usable" value={formatDuration(usable)} hint="Library-scope quality decisions only" />

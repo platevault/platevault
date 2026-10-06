@@ -114,26 +114,39 @@ function StarDetail({ field, star, scaleArcsec }: { field: StarField; star: Star
   )
 }
 
+/**
+ * Values with their source (Direction B): each column names where its values
+ * come from with a numbered footnote, and the notes under the table give the
+ * method, basis and input identity, so no value reads without its origin.
+ */
 function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurement | undefined; state: FrameMeasureState; applies: boolean; sha256: string }) {
   const builtIn = applies ? builtInMetrics(record) : []
   const imported = currentImportedMetrics(record, sha256)
   const earlier = historyImportedMetrics(record, sha256)
   const byKey = (list: Metric[], key: MetricKey) => list.find((m) => m.key === key)
   const warning = builtIn.find((m) => m.warning)?.warning
+  const noteId = useId()
   return (
     <div className="space-y-1.5">
       <table className="w-full text-sm">
-        <caption className="sr-only">Measurements of the current frame</caption>
-        <thead className="text-xs text-muted-foreground">
-          <tr className="border-b">
+        <caption className="sr-only">Measurements of the current frame, with their sources</caption>
+        <thead data-chrome className="text-[0.6875rem] text-muted-foreground">
+          <tr className="border-b border-separator">
             <th scope="col" className="py-1 text-left font-medium">
               Metric
             </th>
             <th scope="col" className="py-1 text-right font-medium">
               Built-in
+              {/* Plain markers: a `#` link would change the hash route; the notes sit directly below. */}
+              <sup className="ml-0.5 text-link" aria-describedby={`${noteId}-1`}>
+                1
+              </sup>
             </th>
             <th scope="col" className="py-1 text-right font-medium">
               Imported
+              <sup className="ml-0.5 text-link" aria-describedby={`${noteId}-2`}>
+                2
+              </sup>
             </th>
           </tr>
         </thead>
@@ -143,14 +156,14 @@ function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurem
             const other = byKey(imported, key)
             const past = other ? undefined : byKey(earlier, key)
             return (
-              <tr key={key} className="border-b last:border-0">
-                <th scope="row" className="py-1 text-left font-normal text-muted-foreground">
+              <tr key={key} className="border-b border-border/50 last:border-0">
+                <th scope="row" className="py-0.5 text-left font-normal text-muted-foreground">
                   {METRIC_LABEL[key]}
                 </th>
-                <td className="py-1 text-right">
+                <td className="py-0.5 text-right">
                   {own ? formatMetricFixed(own) : <UnknownValue label={state === "pending" ? "Pending" : state === "verifying" ? "Verifying" : "Not measured"} />}
                 </td>
-                <td className="py-1 text-right">
+                <td className="py-0.5 text-right">
                   {other ? (
                     <>
                       {formatMetricFixed(other)}
@@ -170,18 +183,33 @@ function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurem
           })}
         </tbody>
       </table>
-      {imported.length > 0 ? (
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <StatusBadge kind="match" value="unknown" label="Imported · content unverified" />
+      <ol aria-label="Sources" className="space-y-1 border-t border-separator pt-1.5 text-[0.6875rem] leading-4 text-muted-foreground">
+        <li id={`${noteId}-1`} className="flex gap-1.5">
+          <span className="w-2 shrink-0 text-right text-link tabular-nums">1</span>
           <span>
-            {imported[0]!.method} {imported[0]!.version} · units {[...new Set(imported.map((m) => m.unit || "none"))].join(", ")} · matched by file only; the SHA-256 noted at import detects later changes and never verifies the values.
+            {builtIn.length > 0
+              ? `${builtIn[0]!.method} ${builtIn[0]!.version} · ${builtIn[0]!.basis} · input SHA-256 ${record?.inputSha256 ? `${record.inputSha256.slice(0, 12)}…${record.inputSha256 === sha256 ? " (current bytes)" : " (earlier content)"}` : "not recorded"}${record?.computedAt ? ` · measured ${formatDateTime(record.computedAt)}` : ""}`
+              : `${BUILT_IN_METHOD.method} ${BUILT_IN_METHOD.version} · ${applies ? "no measurement for these bytes yet" : "does not apply to this frame"}`}
           </span>
-        </p>
-      ) : earlier.length > 0 ? (
-        <p className="text-xs text-muted-foreground">Imported values are history: they were imported for other content than this frame's current bytes.</p>
-      ) : null}
+        </li>
+        <li id={`${noteId}-2`} className="flex gap-1.5">
+          <span className="w-2 shrink-0 text-right text-link tabular-nums">2</span>
+          {imported.length > 0 ? (
+            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              <StatusBadge kind="match" value="unknown" label="Imported · content unverified" />
+              <span>
+                {imported[0]!.method} {imported[0]!.version} · units {[...new Set(imported.map((m) => m.unit || "none"))].join(", ")} · matched by file only; the SHA-256 noted at import detects later changes and never verifies the values.
+              </span>
+            </span>
+          ) : earlier.length > 0 ? (
+            <span>Imported values are history: they were imported for other content than this frame's current bytes.</span>
+          ) : (
+            <span>No imported measurement. Import measurements reads a CSV export.</span>
+          )}
+        </li>
+      </ol>
       {warning ? <p className="text-xs text-warning">{warning}</p> : null}
-      <p className="text-xs text-muted-foreground">Display stretch changes this preview only. Values are measured on linear data and never decide quality.</p>
+      <p className="text-[0.6875rem] text-muted-foreground">Display stretch changes this preview only. Values are measured on linear data and never decide quality.</p>
     </div>
   )
 }
@@ -340,6 +368,8 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
             </Toggle>
           </div>
 
+          {/* The plate on its mount (Direction B): a dark print in a matte with a caption, never a bare web card. */}
+          <figure className="rounded-[3px] bg-mount p-2 shadow-[inset_0_0_0_1px_var(--border),0_1px_2px_oklch(0_0_0/0.22)]">
           <div ref={frameRef} className="w-full">
             {mode === "whole" ? (
               <div
@@ -353,7 +383,7 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
                 onPointerUp={() => {
                   drag.current = null
                 }}
-                className={cn("relative overflow-hidden rounded-lg border bg-black select-none", zoom !== "fit" && "cursor-grab active:cursor-grabbing")}
+                className={cn("relative overflow-hidden rounded-[2px] bg-plate shadow-[0_0_0_1px_oklch(0_0_0/0.35)] select-none", zoom !== "fit" && "cursor-grab active:cursor-grabbing")}
                 style={{ height }}
               >
                 {width > 0 ? <Raster field={field} window={window} stretch={stretch} className="block" /> : null}
@@ -392,7 +422,7 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
                     return (
                       <figure key={`${row}-${col}`} className="relative">
                         {tileW > 0 ? (
-                          <Raster field={field} window={{ x0, y0, scale: 1, width: tileW, height: tileH }} stretch={stretch} className="block rounded-sm border" label={`${name} region at 1:1`} />
+                          <Raster field={field} window={{ x0, y0, scale: 1, width: tileW, height: tileH }} stretch={stretch} className="block rounded-[2px]" label={`${name} region at 1:1`} />
                         ) : null}
                         <figcaption className="absolute top-1 left-1 rounded-sm bg-black/70 px-1 text-[10px] text-white">{name}</figcaption>
                       </figure>
@@ -402,6 +432,13 @@ export function FramePreview({ asset, file, record, state, applies, scaleArcsec,
               </div>
             )}
           </div>
+            <figcaption className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 px-0.5 text-[0.6875rem] leading-4 text-muted-foreground">
+              <span className="min-w-0 truncate font-mono">{asset.fileName}</span>
+              <span className="tabular-nums">
+                {mode === "whole" ? zoomLabel : "Centre and corners at 1:1"} · {stretch === "linear" ? "Linear" : stretch === "auto" ? "Auto" : "Strong"} stretch, display only · {header.widthPx}×{header.heightPx} px
+              </span>
+            </figcaption>
+          </figure>
           <p id={helpId} className="text-xs text-muted-foreground">
             Prototype: a synthetic preview drawn from this frame's fixture facts, not its file pixels. {zoom === "fit" ? "Choose 1:1 or 2:1 to pan by dragging or with the arrow keys." : "Drag or use the arrow keys to pan; Shift pans further."}{" "}
             {field.cfa ? `CFA ${field.cfa} mosaic plane as recorded; not debayered.` : "Mono linear data."}
