@@ -8,11 +8,13 @@
 //! [`crate::commands::project_goals`] and [`crate::commands::observing_plans`]
 //! IPC surfaces, the catalog in its own data directory. The dialog and opener
 //! plugins serve the planning handlers' Rust calls, and the platform reminder
-//! notifier with the system clock is attached before any command runs. Nothing
-//! from the legacy composition root runs here: no `AppState`, legacy database,
-//! bootstrap job, watcher or legacy command registration; the legacy `plan`,
-//! `plans` and `plan_apply` commands stay unregistered. The legacy code stays
-//! archivable and is never booted by this binary.
+//! notifier with the system clock is attached before any command runs. The one
+//! window is labelled `library`, so it holds `capabilities/library.json` (plus
+//! the dev bridge grant with `dev-tools`) and none of the legacy `default.json`.
+//! Nothing from the legacy composition root runs here: no `AppState`, legacy
+//! database, bootstrap job, watcher or legacy command registration; the legacy
+//! `plan`, `plans` and `plan_apply` commands stay unregistered. The legacy code
+//! stays archivable and is never booted by this binary.
 //!
 //! In `dev-tools` (debug-only) builds the MCP bridge always starts, bound to IPv4
 //! loopback, and the webview loads the hosted dev URL so the bridge has a page
@@ -127,7 +129,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         planning::planning_review_calendar_export,
         planning::planning_export_calendar,
     ]);
-    // The planning handlers call these through their Rust APIs; no capability is added.
+    // The planning handlers call these through their Rust APIs, which need no
+    // grant; window `library` holds `capabilities/library.json` for the webview.
     let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);
@@ -341,6 +344,69 @@ mod tests {
             "127.000.000.001",
         ] {
             assert!(loopback_bind(Some(refused)).is_err(), "{refused} must be refused");
+        }
+    }
+}
+
+/// The window each library context creates holds `capabilities/library.json`
+/// and, with `dev-tools`, the dev bridge. The legacy `default.json` grants its
+/// windows more, and none of that reaches the library window.
+#[cfg(test)]
+mod window_grants {
+    use tauri::ipc::Origin;
+
+    use super::context;
+
+    /// `capabilities/library.json`: the core defaults, the file pickers and the path opener.
+    const LIBRARY: [&str; 4] = [
+        "plugin:event|listen",
+        "plugin:dialog|open",
+        "plugin:dialog|save",
+        "plugin:opener|open_path",
+    ];
+    /// `capabilities/dev/mcp-bridge.json`, compiled in only with `dev-tools`.
+    const DEV_BRIDGE: [&str; 3] = [
+        "plugin:mcp-bridge|execute_js",
+        "plugin:mcp-bridge|execute_command",
+        "plugin:mcp-bridge|start_ipc_monitor",
+    ];
+    /// Granted to the legacy `main` window by `default.json` only.
+    const LEGACY_ONLY: [&str; 10] = [
+        "plugin:dialog|message",
+        "plugin:opener|reveal_item_in_dir",
+        "plugin:webview|create_webview_window",
+        "plugin:webview|set_webview_zoom",
+        "plugin:window|close",
+        "plugin:window|show",
+        "plugin:window|set_focus",
+        "plugin:updater|check",
+        "plugin:process|restart",
+        "plugin:window-state|restore_state",
+    ];
+
+    #[test]
+    fn the_library_window_holds_only_the_library_grants() {
+        let mut context = context();
+        let windows = &context.config().app.windows;
+        assert_eq!(windows.len(), 1, "the library shell creates one window");
+        let label = windows[0].label.clone();
+        let authority = context.runtime_authority_mut();
+        let granted = |command: &str, window: &str| {
+            authority.resolve_access(command, window, window, &Origin::Local).is_some()
+        };
+        for command in LIBRARY {
+            assert!(granted(command, &label), "window {label} must hold {command}");
+        }
+        for command in DEV_BRIDGE {
+            assert_eq!(
+                granted(command, &label),
+                cfg!(feature = "dev-tools"),
+                "window {label}: {command}"
+            );
+        }
+        for command in LEGACY_ONLY {
+            assert!(granted(command, "main"), "default.json grants window main {command}");
+            assert!(!granted(command, &label), "window {label} must not hold {command}");
         }
     }
 }

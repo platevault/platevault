@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "label": "main",
+        "label": "library",
         "title": "PlateVault Library (rebuild, dev bridge)",
         "width": 1280,
         "height": 820,

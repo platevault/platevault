@@ -12,9 +12,9 @@
 //! file, opens a network connection or asks for an account.
 //!
 //! The handlers reach the native save dialog and the platform notification
-//! settings through the dialog and opener plugins' Rust APIs. This surface adds
-//! no capability: the shared `capabilities/default.json` already grants window
-//! `main` its dialog and opener-path permissions, as it does in the legacy shell.
+//! settings through the dialog and opener plugins' Rust APIs, which need no
+//! webview grant. The shell's window, labelled `library`, holds only
+//! `capabilities/library.json`; the legacy `default.json` names other windows.
 
 use std::sync::Arc;
 
