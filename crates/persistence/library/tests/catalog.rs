@@ -1858,6 +1858,9 @@ async fn a_deleted_or_moved_root_blocks_only_the_folders_that_hold_it() {
 
     // One root is deleted and the other moves into an archive folder: neither stored
     // root resolves, and the deleted one can never be reselected.
+    // The deleted folder stays open so ext4/XFS cannot hand its inode to a folder
+    // made later; that reuse is a documented residual this test does not cover.
+    let _held = std::fs::File::open(&test).unwrap();
     std::fs::remove_dir_all(&test).unwrap();
     let archive = volume.join("Archive");
     let moved = archive.join("Darks");
@@ -2579,7 +2582,11 @@ async fn a_deleted_root_without_folder_identity_is_freed_by_a_reviewed_retire() 
     let flat = sha_of(&flats.join("Flat_001.fits"));
 
     // The refusal names both ways out.
-    let error = catalog.register_location(&unstable(&flats)).await.unwrap_err();
+    // Unstable ids get reused by unrelated folders; the new folder carrying the
+    // deleted root's id must prove nothing.
+    let mut reused = unstable(&flats);
+    reused.identity.file_id.clone_from(&test_root.identity.file_id);
+    let error = catalog.register_location(&reused).await.unwrap_err();
     assert_eq!(kind(&error), "identity_conflict");
     let message = error.to_string();
     assert!(

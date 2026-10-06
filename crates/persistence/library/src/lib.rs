@@ -2463,7 +2463,9 @@ async fn plan_overlap(
         if Some(other.id) == exclude {
             continue;
         }
-        let overlaps = same_root(&other.identity, identity)
+        // Only a remount-stable id proves the same folder; an unstable id (FAT entry
+        // positions, SMB) can be reused by an unrelated folder.
+        let overlaps = root_proven(&other.identity, identity)
             || match CanonicalRoot::resolve(&other.path) {
                 Ok(resolved) => resolved.overlaps(&candidate, volume),
                 Err(error) => {
