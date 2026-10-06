@@ -1076,8 +1076,8 @@ fn record(
 }
 
 /// The review names the location, its root and availability, every copy, the
-/// session holding them and each View, Project and Result record, and says that
-/// no file changes.
+/// session holding them and each View, Project, Result and calibration record,
+/// and says that no file changes.
 fn assert_names_every_reference(
     review: &RetireReview,
     location: &Location,
@@ -1102,11 +1102,17 @@ fn assert_names_every_reference(
         (ReferenceKind::View, 0x7001),
         (ReferenceKind::View, view.as_u128()),
         (ReferenceKind::Project, project.as_u128()),
+        (ReferenceKind::Calibration, view.as_u128()),
     ];
     assert_eq!(referenced, expected);
     assert_eq!(
         review.consulted,
-        [ReferenceKind::View, ReferenceKind::Project, ReferenceKind::Result]
+        [
+            ReferenceKind::View,
+            ReferenceKind::Project,
+            ReferenceKind::Result,
+            ReferenceKind::Calibration
+        ]
     );
     assert!(
         review.statement.contains("deletes, moves or modifies no file"),
@@ -1173,8 +1179,9 @@ async fn mosaic_linking(catalog: &persistence_library::Catalog, session: Uuid) -
 
 /// LIB-AC-16: an offline location whose copies are fixed View members leaves the
 /// library only through a reviewed Retire location, and its folder registers again
-/// counting each capture once. The fixed View is a real saved View (spec 066);
-/// its prepared revision stays a stand-in record until PREP (069).
+/// counting each capture once. The fixed View is a real saved View (spec 066)
+/// with a real calibration exception (spec 068); its prepared revision stays a
+/// stand-in record until PREP (069).
 #[expect(clippy::too_many_lines, reason = "one composed retire scenario over one indexed library")]
 #[tokio::test]
 async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_once_again() {
@@ -1225,6 +1232,42 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
     }
     let fixed = views.snapshot().await;
 
+    // A calibration exception of the View holds its light members (spec 068).
+    let darks = temp.path().join("Darks");
+    std::fs::create_dir(&darks).unwrap();
+    support::fits(
+        &darks.join("dark_1.fits"),
+        &[("IMAGETYP", "'DARK'"), ("EXPTIME", "300"), ("DATE-OBS", "'2026-09-12T23:00:00'")],
+    )
+    .unwrap();
+    let dark_location = library
+        .register_location(NativePath::from_path(&darks), "Darks".into(), LocationRole::Calibration)
+        .await
+        .unwrap();
+    assert_eq!(scan_to_end(&library, dark_location.id).await.state, ScanState::Completed);
+    let dark = catalog.location_assets(dark_location.id).await.unwrap().remove(0);
+    let dark_session = catalog
+        .list_sessions(&SessionQuery::default())
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|s| s.session.asset_ids.contains(&dark.id))
+        .unwrap()
+        .session;
+    let item = DecisionItem {
+        light_session_id: session.id,
+        kind: InputKind::Dark,
+        input: InputRef::RawSet {
+            session_id: dark_session.id,
+            grouping_revision: dark_session.grouping_revision,
+        },
+    };
+    let excepted = library
+        .calibration_record_exception(view, 1, 0, &item, "Header-less test dark")
+        .await
+        .unwrap();
+    assert_eq!(excepted.plan_revision, 1);
+
     // Cold-1 goes offline: its last-observed contributions still count.
     let unplugged = temp.path().join("Cold-1 unplugged");
     std::fs::rename(&root, &unplugged).unwrap();
@@ -1257,7 +1300,7 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
     assert_eq!(stale.unwrap_err().response(None, None).kind, "conflict");
     assert_eq!(catalog.location(location.id).await.unwrap().lifecycle, LocationLifecycle::Active);
     let review = library.review_retire_location(location.id).await.unwrap();
-    assert_eq!(review.references.len(), 4, "{:?}", review.references);
+    assert_eq!(review.references.len(), 5, "{:?}", review.references);
     let retired =
         library.retire_location(review.id, location.id, review.expected_revision).await.unwrap();
     assert_eq!(retired.lifecycle, LocationLifecycle::Retired);
@@ -1306,7 +1349,11 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
     assert!(!coverage.provisional, "{coverage:?}");
     let sessions = catalog.list_sessions(&SessionQuery::default()).await.unwrap();
     assert_eq!(
-        sessions.iter().map(|session| session.capture_count).sum::<u64>(),
+        sessions
+            .iter()
+            .filter(|session| session.session.id != dark_session.id)
+            .map(|session| session.capture_count)
+            .sum::<u64>(),
         2,
         "{sessions:?}"
     );

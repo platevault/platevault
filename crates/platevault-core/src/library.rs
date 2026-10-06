@@ -14,6 +14,7 @@ use serde::Serialize;
 use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
 
+use crate::calibration::Rules;
 use crate::grouping::group_assets;
 use crate::inventory;
 use crate::projects::evaluate_checklist;
@@ -24,19 +25,21 @@ use crate::view_selection::{
     evaluate_candidates, matching_sessions, page_candidates, preselect, refresh_items, summarize,
 };
 use crate::{
-    AssetReference, AssociationKind, AssociationState, Availability, CandidateFilters,
-    CandidatePage, CandidateQuery, CriteriaInput, DraftEdit, FileIdentity, FramingPanel,
-    FramingSnapshot, FramingSource, FramingTarget, LibraryError, Location, LocationRole,
-    MemberBasis, MemberReason, MemberState, Membership, MembershipBasis, MembershipSummary,
-    Microseconds, NativePath, NewView, ObservationFingerprint, OpenChoice, OpenChoiceKind, Project,
-    ProjectDetail, QualityAction, QualityScope, QualityState, ReferenceKind, RefreshReview,
-    RefreshState, RemapReview, RetireReview, Revision, ScanOperation, ScanOptions, ScanState,
-    ScopeChannel, ScopeOwner, SessionChoice, SuggestedChoice, TargetCandidate, ViewDetail,
-    ViewOriginInput, ViewQuery, ViewRecord,
+    AdoptionDestination, AdoptionOperation, AdoptionReview, AdoptionSource, AdoptionState,
+    AssetReference, AssociationKind, AssociationState, Availability, CalibrationHandoff,
+    CalibrationPlan, CalibrationViewPlan, CandidateFilters, CandidatePage, CandidateQuery,
+    CandidateRef, CriteriaInput, CustodyFact, DecisionItem, DraftEdit, ExpectedSession,
+    FileIdentity, FramingPanel, FramingSnapshot, FramingSource, FramingTarget, InputKind,
+    LibraryError, Location, LocationRole, MemberBasis, MemberReason, MemberState, Membership,
+    MembershipBasis, MembershipSummary, Microseconds, NativePath, NewView, ObservationFingerprint,
+    OpenChoice, OpenChoiceKind, Project, ProjectDetail, QualityAction, QualityScope, QualityState,
+    ReferenceKind, RefreshReview, RefreshState, RemapReview, Requirement, RetireReview, Revision,
+    ScanOperation, ScanOptions, ScanState, ScopeChannel, ScopeOwner, SessionChoice,
+    SuggestedChoice, TargetCandidate, ViewDetail, ViewOriginInput, ViewQuery, ViewRecord,
 };
 use persistence_library::{
-    Catalog, CorrectionOutcome, LocationReferences, LocationRegistration, SessionDetail,
-    SessionQuery, SuggestedAssociation,
+    CalibrationInputDetail, CalibrationInputSummary, Catalog, CorrectionOutcome, InputQuery,
+    LocationReferences, LocationRegistration, SessionDetail, SessionQuery, SuggestedAssociation,
 };
 
 /// What [`AssetReferences::references_to`] returns.
@@ -85,6 +88,23 @@ impl AssetReferences for ViewReferences {
 
     fn references_to<'a>(&'a self, assets: &'a BTreeSet<Uuid>) -> ReferencesFuture<'a> {
         Box::pin(self.catalog.view_references(assets))
+    }
+}
+
+/// Calibration (spec 068) as a reference source: a View's effective decisions
+/// hold their light members and hashed inputs, at the plan revision, and an
+/// adopted master holds its source and indexed destination, at its revision.
+struct CalibrationReferences {
+    catalog: Arc<Catalog>,
+}
+
+impl AssetReferences for CalibrationReferences {
+    fn kind(&self) -> ReferenceKind {
+        ReferenceKind::Calibration
+    }
+
+    fn references_to<'a>(&'a self, assets: &'a BTreeSet<Uuid>) -> ReferencesFuture<'a> {
+        Box::pin(self.catalog.calibration_references(assets))
     }
 }
 
@@ -149,8 +169,8 @@ impl persistence_library::SourceProbe for InventoryProbe {
 
 impl Library {
     /// Open a fresh-schema catalog and load the offline target dataset, with the
-    /// catalog's Projects and Views registered as reference sources. Interrupted
-    /// scan recovery is owned by the catalog.
+    /// catalog's Projects, Views and calibration records registered as reference
+    /// sources. Interrupted scan and adoption recovery is owned by the catalog.
     ///
     /// # Errors
     /// Returns catalog persistence, seed validation or provider configuration errors.
@@ -166,6 +186,8 @@ impl Library {
             Arc::new(ProjectReferences { catalog: Arc::clone(&catalog) });
         let views: Arc<dyn AssetReferences> =
             Arc::new(ViewReferences { catalog: Arc::clone(&catalog) });
+        let calibration: Arc<dyn AssetReferences> =
+            Arc::new(CalibrationReferences { catalog: Arc::clone(&catalog) });
         Ok(Arc::new(Self {
             catalog,
             targets: Arc::new(targets),
@@ -173,7 +195,7 @@ impl Library {
             scans: Mutex::new(HashMap::new()),
             saved_targets: Mutex::new(None),
             progress,
-            references: tokio::sync::RwLock::new(vec![projects, views]),
+            references: tokio::sync::RwLock::new(vec![projects, views, calibration]),
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         }))
@@ -1066,6 +1088,186 @@ impl Library {
                 Err(error)
             }
         }
+    }
+}
+
+/// Calibration inputs (spec 068): each method composes one catalog method with
+/// the calibration [`Rules`] and, where files are hashed, the disk probe.
+impl Library {
+    /// Raw sets, adopted masters and detected candidates in group order.
+    ///
+    /// # Errors
+    /// See [`Catalog::calibration_inputs`].
+    pub async fn calibration_inputs(
+        &self,
+        query: &InputQuery,
+    ) -> Result<Vec<CalibrationInputSummary>, LibraryError> {
+        self.catalog.calibration_inputs(query, &Rules).await
+    }
+
+    /// One input's evidence, members, excluded members and provenance.
+    ///
+    /// # Errors
+    /// See [`Catalog::calibration_input`].
+    pub async fn calibration_input(
+        &self,
+        input: &CandidateRef,
+    ) -> Result<CalibrationInputDetail, LibraryError> {
+        self.catalog.calibration_input(input, &Rules).await
+    }
+
+    /// Every listed candidate per light Session and kind, without a View.
+    ///
+    /// # Errors
+    /// See [`Catalog::calibration_match`].
+    pub async fn calibration_match(
+        &self,
+        sessions: &[ExpectedSession],
+        kinds: &[InputKind],
+    ) -> Result<Vec<Requirement>, LibraryError> {
+        self.catalog.calibration_match(sessions, kinds, &Rules).await
+    }
+
+    /// The calibration plan of committed View revision `revision`.
+    ///
+    /// # Errors
+    /// See [`Catalog::calibration_view_plan`].
+    pub async fn calibration_view_plan(
+        &self,
+        view: Uuid,
+        revision: Revision,
+    ) -> Result<CalibrationViewPlan, LibraryError> {
+        self.catalog.calibration_view_plan(view, revision, &Rules).await
+    }
+
+    /// The PREP read of committed View revision `revision`.
+    ///
+    /// # Errors
+    /// See [`Catalog::calibration_handoff`].
+    pub async fn calibration_handoff(
+        &self,
+        view: Uuid,
+        revision: Revision,
+    ) -> Result<CalibrationHandoff, LibraryError> {
+        self.catalog.calibration_handoff(view, revision, &Rules).await
+    }
+
+    /// Record the kinds a View requires.
+    ///
+    /// # Errors
+    /// See [`Catalog::set_required_kinds`].
+    pub async fn calibration_set_required_kinds(
+        &self,
+        view: Uuid,
+        revision: Revision,
+        expected: Revision,
+        kinds: &[InputKind],
+    ) -> Result<CalibrationPlan, LibraryError> {
+        self.catalog.set_required_kinds(view, revision, expected, kinds).await
+    }
+
+    /// Accept all-compatible inputs after hashing every input file.
+    ///
+    /// # Errors
+    /// See [`Catalog::accept_calibration`].
+    pub async fn calibration_accept(
+        &self,
+        view: Uuid,
+        revision: Revision,
+        expected: Revision,
+        items: &[DecisionItem],
+    ) -> Result<CalibrationViewPlan, LibraryError> {
+        self.catalog
+            .accept_calibration(view, revision, expected, items, &Rules, InventoryProbe)
+            .await
+    }
+
+    /// Record a reasoned exception after hashing the input.
+    ///
+    /// # Errors
+    /// See [`Catalog::record_calibration_exception`].
+    pub async fn calibration_record_exception(
+        &self,
+        view: Uuid,
+        revision: Revision,
+        expected: Revision,
+        item: &DecisionItem,
+        reason: &str,
+    ) -> Result<CalibrationViewPlan, LibraryError> {
+        self.catalog
+            .record_calibration_exception(
+                view,
+                revision,
+                expected,
+                item,
+                reason,
+                &Rules,
+                InventoryProbe,
+            )
+            .await
+    }
+
+    /// End effective decisions per light Session and kind.
+    ///
+    /// # Errors
+    /// See [`Catalog::withdraw_calibration`].
+    pub async fn calibration_withdraw(
+        &self,
+        view: Uuid,
+        revision: Revision,
+        expected: Revision,
+        items: &[(Uuid, InputKind)],
+    ) -> Result<CalibrationViewPlan, LibraryError> {
+        self.catalog.withdraw_calibration(view, revision, expected, items, &Rules).await
+    }
+
+    /// Durably review adopting a detected master; writes no file.
+    ///
+    /// # Errors
+    /// See [`Catalog::review_adoption`].
+    pub async fn calibration_review_adoption(
+        &self,
+        source: &AdoptionSource,
+        destination: &AdoptionDestination,
+    ) -> Result<AdoptionReview, LibraryError> {
+        self.catalog.review_adoption(source, destination, &Rules, InventoryProbe).await
+    }
+
+    /// Confirm a reviewed adoption and return the settled operation.
+    ///
+    /// # Errors
+    /// See [`Catalog::adopt_master`].
+    pub async fn calibration_adopt(
+        &self,
+        review: Uuid,
+        expected: Revision,
+    ) -> Result<AdoptionOperation, LibraryError> {
+        Box::pin(self.catalog.adopt_master(review, expected, InventoryProbe)).await
+    }
+
+    /// Durable adoption operations, including interrupted ones after restart.
+    ///
+    /// # Errors
+    /// See [`Catalog::list_adoptions`].
+    pub async fn calibration_list_adoptions(
+        &self,
+        state: Option<AdoptionState>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<AdoptionOperation>, LibraryError> {
+        self.catalog.list_adoptions(state, offset, limit).await
+    }
+
+    /// The calibration files STO keeps for `view` (see
+    /// [`Catalog::calibration_custody_facts`]).
+    ///
+    /// # Errors
+    /// See [`Catalog::calibration_custody_facts`].
+    pub async fn calibration_custody_facts(
+        &self,
+        view: Uuid,
+    ) -> Result<Vec<CustodyFact>, LibraryError> {
+        self.catalog.calibration_custody_facts(view, &Rules).await
     }
 }
 
