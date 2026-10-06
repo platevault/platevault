@@ -54,6 +54,7 @@
   --color-pane: var(--pane);
   --color-selection: var(--selection);
   --color-plate: var(--plate);
+  --color-plate-ink: var(--plate-ink);
   --color-mount: var(--mount);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -128,8 +129,9 @@
   --pane: oklch(0.975 0 0);
   /* The cursor row: accent-tinted, never the checked set (that is the checkbox). */
   --selection: color-mix(in oklch, var(--primary) 14%, var(--background));
-  /* Plates are photographs: always dark, on a light mount. */
+  /* Plates are photographs: always dark, on a light mount, with light ink for marks drawn on them. */
   --plate: oklch(0.13 0 0);
+  --plate-ink: oklch(0.94 0.01 90);
   --mount: oklch(0.94 0 0);
   --chart-1: oklch(0.5 0.13 242);
   --chart-2: oklch(0.72 0.08 242);
@@ -176,6 +178,7 @@
   --pane: oklch(0.185 0 0);
   --selection: color-mix(in oklch, var(--primary) 16%, var(--background));
   --plate: oklch(0.1 0 0);
+  --plate-ink: oklch(0.94 0.01 90);
   --mount: oklch(0.255 0 0);
   --chart-1: oklch(0.74 0.11 238);
   --chart-2: oklch(0.5 0.08 238);

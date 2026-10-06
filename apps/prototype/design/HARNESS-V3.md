@@ -77,7 +77,7 @@ items at 32 px; D's rail listed every Target with sparklines):
 | A (mission control) | The always-visible status bus: running, interrupted and offline state live in a status bar, never in toasts | `StatusBar` in `src/app/shell.tsx` |
 | B (plates and provenance) | Values next to their source (`PropertyList`: value + source label); preview-then-confirm kept in the areas that own each write — the pipeline only routes, never acts | `src/components/app/panes.tsx`; areas unchanged |
 | C (pipeline) | Stages = the View areas in order, a readiness gate per stage (Done / Ready / Blocked / Running / Advisory / Waiting, icon + word), and one Next action docked under the area | `src/app/pipeline.ts`, `src/components/app/pipeline.tsx`, `features/t3/workspace.tsx` |
-| D (target-scoped, planner) | The IA: Views and plans hang from Targets; the Plan area reached from the menu and each Target | `navigation.ts`; Plans/Target Plan routes unchanged |
+| D (target-scoped, planner) | The IA: Views and plans hang from Targets. The Target document keeps one header with D's Target-scoped tabs as a segmented control (Overview · Sessions n · Views n · Plan · Results n; `?tab=` on the unchanged route, Plan is `/targets/$id/plan`). The Views tab shows each View's C stage strip and Next action. The Plan tab is a split pane: site and criteria on the leading side; the night timeline (noon to noon: sky bands from the Sun's altitude, Moon up, the Target's altitude curve against the minimum, windows, now) and the windows table, each row with its night as a strip, on the trailing side. The text summary above the timeline carries every time it draws. | `features/t2/pages/target.tsx`, `features/t5/plans.tsx`, `features/t5/night-timeline.tsx`, `nightProfile` in `features/t5/lib/planning.ts` (display only, same math as the windows) |
 | E (workspace) | Resizable panes with keyboard splitters, document tabs with a preview tab, a cursor-following inspector, the command field as the verb surface | `shell.tsx`, `doc-tabs.tsx`, `panes.tsx` |
 
 ## 5. Desktop conventions used
@@ -101,6 +101,16 @@ items at 32 px; D's rail listed every Target with sparklines):
 - Dark default for night use; light theme kept; themed scrollbars and
   `::selection`.
 
+### Target finder (`/targets`)
+
+One search field and a scope bar (All · With captures · Planned · Needs
+review, each with its count) in a chrome strip under the pane header, over a
+dense one-line-per-Target table: name with aliases inline, channels, a
+usable-of-captured bar with both numbers, Unreviewed, and an Attention
+column (needs review, unavailable, planned). The cursor Target (click or
+focus; `DataTable` `onCursorChange`) fills the inspector: position with each
+value's source (`PropertyList`), coverage by channel, and its work.
+
 ## 6. Screenshots
 
 `design/screenshots/harness-v3/` (restored J24-end state, dark theme):
@@ -108,7 +118,9 @@ items at 32 px; D's rail listed every Target with sparklines):
 - `v3-work-queue-1280.png`, `v3-work-queue-1024.png`
 - `v3-view-frames-1280.png`, `v3-view-frames-1024.png`
 - `v3-view-prepare-1280.png`, `v3-view-prepare-1024.png`
-- `v3-targets-1280.png`, `v3-targets-1024.png`
+- `v3-targets-1280.png`, `v3-targets-1024.png` (the concise finder, J27-end state)
+- `v3-target-overview-1280.png`, `v3-target-overview-1024.png`, `v3-target-views-1280.png`, `v3-target-views-1024.png`
+- `v3-target-plan-1280.png`, `v3-target-plan-1024.png` (night timeline and windows)
 - `v3-sessions-1280.png`, `v3-sessions-1024.png`
 - `v3-plans-1280.png`, `v3-plans-1024.png`
 
@@ -118,15 +130,14 @@ The shell, tokens, primitives, start page, menu and the View workspace
 pipeline are restyled end to end; these surfaces inherit the tokens and
 primitives but did not get their bespoke treatment yet:
 
-- Target finder: still the inherited table; the planned compact searchable
-  list with the cursor target in the inspector is not built.
-- Target page: D's target-scoped tabs (Overview, Sessions, Views, Plan,
-  Results) are not built; the page keeps its sections.
 - Frames review: B's plates-on-mounts preview and value-with-source rows are
   not applied to the frame preview (only the `PropertyList` primitive exists);
   the imported-measurements block still nests bordered boxes.
 - Results/artifacts: inherited only.
-- Plan area: D's night timeline (sky bands, Moon, windows) is not drawn; the
-  windows table is inherited.
+- Plans overview (`/plans`): inherited; the night timeline lives on each Target's Plan tab.
+- Journey walkers: the Target tabs move contributing sessions to the Sessions
+  tab and accepted Results to the Results tab, so the private walker copies
+  of J20 S1 and J26 S2/S3 need a tab click before their expectations; the
+  journeys' wording ("the Target page shows…") still holds.
 - Command palette: restyle and context verbs (Next action, stage jumps) not added.
 - The J18 tour copy still says "Your library starts here" on its Targets stop.

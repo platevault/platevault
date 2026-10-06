@@ -10,6 +10,8 @@ import { ChannelCoverage, KeyValueList, PathText } from "@/components/app/data"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { ActionError, EmptyState, Notice, SaveState, UnknownValue } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
+import { SplitView } from "@/components/app/panes"
+import { TargetHeader } from "@/features/t2/pages/target"
 import { StatusBadge, type StatusValue } from "@/components/app/status"
 import { openPanel } from "@/app/ui-state"
 import { Button } from "@/components/ui/button"
@@ -26,7 +28,8 @@ import { formatDateTime, formatDuration, formatNight, formatTime, plural } from 
 import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import { resetClock, setClockTo } from "@/store/simulation"
 import { disableNotifications, enableNotifications, type EnableOutcome, saveCalendarExport, savePlan, setPlanningSite } from "./lib/actions"
-import { calendarFile, computeWindows, criteriaSummary, defaultCriteria, downloadText, formatZonedDateTime, nightAt, PLAN_NIGHTS, reminderKey, zoneAbbreviation } from "./lib/planning"
+import { calendarFile, computeWindows, criteriaSummary, defaultCriteria, downloadText, formatZonedDateTime, nightAt, nightProfile, PLAN_NIGHTS, planNights, reminderKey, zoneAbbreviation } from "./lib/planning"
+import { NightTimeline, nightSummary } from "./night-timeline"
 import { PrototypeControls } from "./shared"
 
 const LEAD_TIMES = [
@@ -127,6 +130,13 @@ function TargetPlan({ target }: { target: Target }) {
     [target, planningSite, JSON.stringify(criteria), now, valid],
   )
 
+  // Tonight, or the coming night once this morning's darkness has ended (D's "tonight").
+  const tonight = useMemo(() => {
+    if (!planningSite) return null
+    const [current, next] = planNights(now, planningSite, 2).map((night) => ({ night, samples: nightProfile(target, planningSite, night) }))
+    return current!.samples.some((s) => s.t > now && s.sunAltDeg <= -12) ? current! : next!
+  }, [target, planningSite, now])
+
   const coverage = targetCoverage(disk, catalog, target.id)
   const projects = Object.values(catalog.projects).filter((p) => p.targetIds.includes(target.id))
 
@@ -140,225 +150,258 @@ function TargetPlan({ target }: { target: Target }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        eyebrow={
-          <Link to="/targets/$targetId" params={{ targetId: target.id }} className="hover:underline">
-            Target · {target.name}
-          </Link>
-        }
-        title={`Plan ${target.name}`}
-        description="Astronomical windows from a planning site you choose. Planning changes no library, Project or session data and starts no indexing."
-        meta={plan?.planned ? <StatusBadge kind="association" value="confirmed" label="Planned" /> : null}
-        actions={
-          // The reason sits under the button at a fixed measure, so it never squeezes the description (as Save View does).
-          <div className="flex flex-col items-end gap-1">
-            <Button variant="outline" disabled={windows.length === 0} aria-describedby={windows.length === 0 ? "t5-export-reason" : undefined} onClick={() => setExportOpen(true)}>
-              <CalendarDays aria-hidden="true" data-icon="inline-start" />
-              Export calendar
-            </Button>
-            {windows.length === 0 ? (
-              <span id="t5-export-reason" className="max-w-56 text-right text-xs text-pretty text-muted-foreground">
-                No windows to export: choose a planning site or relax the criteria.
-              </span>
+      <TargetHeader target={target} />
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b px-4 py-1.5">
+        <div className="min-w-0 flex-[1_1_20rem] space-y-0.5">
+          <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+            Plan {target.name}
+            {plan?.planned ? <StatusBadge kind="association" value="confirmed" label="Planned" /> : null}
+          </h2>
+          <p className="text-xs text-pretty text-muted-foreground">
+            Astronomical windows from a planning site you choose. Planning changes no library, Project or session data and starts no indexing.
+          </p>
+        </div>
+        {/* The reason sits under the button at a fixed measure, so it never squeezes the description (as Save View does). */}
+        <div className="flex flex-col items-end gap-1" data-chrome>
+          <Button size="sm" variant="outline" disabled={windows.length === 0} aria-describedby={windows.length === 0 ? "t5-export-reason" : undefined} onClick={() => setExportOpen(true)}>
+            <CalendarDays aria-hidden="true" data-icon="inline-start" />
+            Export calendar
+          </Button>
+          {windows.length === 0 ? (
+            <span id="t5-export-reason" className="max-w-56 text-right text-xs text-pretty text-muted-foreground">
+              No windows to export: choose a planning site or relax the criteria.
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <SplitView
+        storageKey="target-plan"
+        startLabel="Planning site and criteria"
+        endLabel="Night and windows"
+        defaultSize={300}
+        min={260}
+        max={420}
+        stackBelow={700}
+        start={
+          <div className="space-y-5 px-4 py-3">
+            {lastExport ? (
+              <Notice
+                tone="info"
+                title={`Saved ${lastExport.fileName}`}
+                actions={
+                  <Button size="sm" variant="outline" onClick={() => downloadSnapshot(lastExport)}>
+                    Download again
+                  </Button>
+                }
+              >
+                {plural(lastExport.windows.length, "window")} at {catalog.sites[lastExport.siteId]?.name}, times in {lastExport.timeZone}. The file is a one-time snapshot: later criteria changes need a new export.
+              </Notice>
             ) : null}
+
+            <Section level={3} id="t5-plan-site" title="Planning site" description="Only changes which windows you see. Project membership and session capture sites stay as they are.">
+              {sites.length === 0 ? (
+                <EmptyState
+                  icon={MapPin}
+                  title="No observing sites saved"
+                  description="Windows need a site with coordinates and a time zone."
+                  action={<Button render={<Link to="/settings/sites" search={{ return: returnPath }} />}>Add a site</Button>}
+                />
+              ) : (
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="space-y-1.5">
+                    <Label id={siteSelectId}>Planning site</Label>
+                    <Select
+                      items={sites.map((s) => ({ value: s.id, label: s.name }))}
+                      value={planningSite?.id ?? null}
+                      onValueChange={(value) => {
+                        const result = setPlanningSite(value as string, target.id)
+                        setSiteError(result.ok ? null : result.message)
+                      }}
+                    >
+                      <SelectTrigger aria-labelledby={siteSelectId} className="w-64">
+                        <SelectValue placeholder="Choose a planning site" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sites.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                            {s.id === settings.defaultSiteId ? " (default)" : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {planningSite ? (
+                    <span className="text-sm text-muted-foreground tabular-nums">
+                      {planningSite.latitude.toFixed(2)}°, {planningSite.longitude.toFixed(2)}° · {planningSite.timeZone}
+                    </span>
+                  ) : null}
+                  <Button variant="link" size="sm" render={<Link to="/settings/sites" search={{ return: returnPath }} />}>
+                    Manage sites
+                  </Button>
+                  {siteError ? <ActionError message={siteError} className="w-full" /> : null}
+                </div>
+              )}
+            </Section>
+
+            <Section level={3} id="t5-plan-criteria" title="Criteria" description="Every listed window meets all of these at each 10-minute sample it covers.">
+              <fieldset className="grid grid-cols-1 gap-3">
+                <legend className="sr-only">Window criteria</legend>
+                <NumberField id="min-alt" label="Minimum altitude (°)" value={textFor("minAltitudeDeg")} error={errors.minAltitudeDeg} onChange={(t) => setNumber("minAltitudeDeg", t)} />
+                <NumberField id="min-dur" label="Minimum duration (min)" value={textFor("minDurationMin")} error={errors.minDurationMin} onChange={(t) => setNumber("minDurationMin", t)} />
+                <fieldset className="space-y-1.5">
+                  <legend className="text-sm font-medium">Darkness</legend>
+                  <RadioGroup value={criteria.darkness} onValueChange={(v) => setCriteria((c) => ({ ...c, darkness: v as PlanCriteria["darkness"] }))} className="flex gap-4">
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="astronomical" id="dark-astro" />
+                      <Label htmlFor="dark-astro" className="font-normal">
+                        Astronomical
+                      </Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <RadioGroupItem value="nautical" id="dark-naut" />
+                      <Label htmlFor="dark-naut" className="font-normal">
+                        Nautical
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </fieldset>
+                <NumberField
+                  id="moon-illum"
+                  label="Maximum Moon illumination (%)"
+                  hint="Empty: no limit. Applies while the Moon is up."
+                  value={textFor("maxMoonIlluminationPct")}
+                  error={errors.maxMoonIlluminationPct}
+                  onChange={(t) => setNumber("maxMoonIlluminationPct", t, true)}
+                />
+                <NumberField
+                  id="moon-sep"
+                  label="Minimum Moon separation (°)"
+                  hint="Empty: no limit. Applies while the Moon is up."
+                  value={textFor("minMoonSeparationDeg")}
+                  error={errors.minMoonSeparationDeg}
+                  onChange={(t) => setNumber("minMoonSeparationDeg", t, true)}
+                />
+                <div>
+                  <SaveState state={!valid ? "unsaved" : saveState} message={saveMessage} onRetry={() => {
+                    const result = savePlan(target.id, { criteria }, criteria)
+                    setSaveState(result.ok ? "saved" : "failed")
+                    setSaveMessage(result.ok ? undefined : result.message)
+                  }} />
+                </div>
+              </fieldset>
+            </Section>
+
+            <Section level={3} id="t5-plan-planned" title="Planned" description="Marking a Target Planned is an explicit opt-in. Reminders cover planned Targets only.">
+              <div className="flex flex-wrap items-center gap-3">
+                <Switch
+                  id="t5-planned"
+                  checked={Boolean(plan?.planned)}
+                  onCheckedChange={(checked) => {
+                    const result = savePlan(target.id, { planned: checked }, criteria)
+                    setPlannedError(result.ok ? null : result.message)
+                  }}
+                />
+                <Label htmlFor="t5-planned">Planned</Label>
+                {plannedError ? <ActionError message={plannedError} className="w-full" /> : null}
+              </div>
+            </Section>
+
+            <RemindersSection target={target} planned={Boolean(plan?.planned)} planningSite={planningSite} defaultSite={defaultSite} savedCriteria={savedCriteria} now={now} returnPath={returnPath} />
+          </div>
+        }
+        end={
+          <div className="@container/plan space-y-5 px-4 py-3">
+            {planningSite && tonight ? (
+              <Section
+                level={3}
+                id="t5-plan-tonight"
+                title={`Night of ${formatNight(tonight.night)} at ${planningSite.name}`}
+                description={nightSummary(tonight.samples, windows, planningSite.timeZone, criteria.darkness === "astronomical" ? -18 : -12, target.name)}
+              >
+                <NightTimeline
+                  samples={tonight.samples}
+                  windows={windows}
+                  timeZone={planningSite.timeZone}
+                  minAltitudeDeg={valid ? criteria.minAltitudeDeg : undefined}
+                  nowMs={now}
+                  targetName={target.name}
+                />
+              </Section>
+            ) : null}
+            <Section
+              level={3}
+              id="t5-plan-windows"
+              title="Windows"
+              description={planningSite ? `Next ${PLAN_NIGHTS} nights at ${planningSite.name}. Times in ${planningSite.timeZone}.` : "Choose a planning site to calculate windows."}
+            >
+              {target.ra === null || target.dec === null ? (
+                <EmptyState
+                  icon={Telescope}
+                  title="Position unknown"
+                  description={`${target.name} has no coordinates, so no window can be calculated.`}
+                  action={<Button render={<Link to="/targets/$targetId" params={{ targetId: target.id }} />}>Open Target</Button>}
+                />
+              ) : !planningSite ? (
+                <p className="text-sm text-muted-foreground">No planning site chosen. PlateVault never picks one for you.</p>
+              ) : (
+                <WindowTable windows={windows} site={planningSite} target={target} now={now} onReset={() => {
+                  setDraftText({})
+                  setCriteria(defaultCriteria(planningSite))
+                }} />
+              )}
+              <p className="text-xs text-pretty text-muted-foreground">
+                Prototype calculation: astronomical suitability only. A window does not promise clear weather, telescope availability or processing readiness.
+              </p>
+            </Section>
+
+            <Section level={3} id="t5-plan-coverage" title="Coverage and Project goals" description="Captured and library-usable integration by channel, beside unmet Project checklist items.">
+              <div className="grid gap-5 @min-[40rem]/plan:grid-cols-2">
+                <div className="space-y-4">
+                  {coverage.channels.length === 0 ? <p className="text-sm text-muted-foreground">No light sessions for {target.name} yet.</p> : null}
+                  {coverage.channels.map((c) => (
+                    <ChannelCoverage key={c.channel} channel={c.channel} breakdown={c.breakdown} />
+                  ))}
+                </div>
+                <div className="space-y-3">
+                  {projects.length === 0 ? <p className="text-sm text-muted-foreground">No Project targets {target.name}.</p> : null}
+                  {projects.map((project) => {
+                    const gaps = projectProgress(catalog, project).filter((p) => p.state !== "met")
+                    return (
+                      <div key={project.id} className="space-y-1.5">
+                        <h3 className="text-sm font-semibold">
+                          <Link to="/projects/$projectId" params={{ projectId: project.id }} className="hover:underline">
+                            Project {project.name}
+                          </Link>
+                        </h3>
+                        {gaps.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Every checklist item is met.</p>
+                        ) : (
+                          <ul className="space-y-1 text-sm">
+                            {gaps.map((g) => (
+                              <li key={g.item.id} className="flex flex-wrap items-center justify-between gap-2">
+                                <span>
+                                  {g.item.kind === "integration"
+                                    ? `${g.item.channel} ${formatDuration(g.item.goalS)}: ${formatDuration(g.totals?.projectAccepted.seconds ?? 0)} Project-accepted`
+                                    : g.item.kind === "frame-count"
+                                      ? `${g.item.channel} ${g.item.goalFrames} frames: ${g.totals?.projectAccepted.frames ?? 0} Project-accepted`
+                                      : g.reason ?? g.item.kind}
+                                </span>
+                                <StatusBadge kind="checklist" value={g.state} />
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </Section>
+
           </div>
         }
       />
-      <PageBody>
-        {lastExport ? (
-          <Notice
-            tone="info"
-            title={`Saved ${lastExport.fileName}`}
-            actions={
-              <Button size="sm" variant="outline" onClick={() => downloadSnapshot(lastExport)}>
-                Download again
-              </Button>
-            }
-          >
-            {plural(lastExport.windows.length, "window")} at {catalog.sites[lastExport.siteId]?.name}, times in {lastExport.timeZone}. The file is a one-time snapshot: later criteria changes need a new export.
-          </Notice>
-        ) : null}
-
-        <Section id="t5-plan-site" title="Planning site" description="Only changes which windows you see. Project membership and session capture sites stay as they are.">
-          {sites.length === 0 ? (
-            <EmptyState
-              icon={MapPin}
-              title="No observing sites saved"
-              description="Windows need a site with coordinates and a time zone."
-              action={<Button render={<Link to="/settings/sites" search={{ return: returnPath }} />}>Add a site</Button>}
-            />
-          ) : (
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1.5">
-                <Label id={siteSelectId}>Planning site</Label>
-                <Select
-                  items={sites.map((s) => ({ value: s.id, label: s.name }))}
-                  value={planningSite?.id ?? null}
-                  onValueChange={(value) => {
-                    const result = setPlanningSite(value as string, target.id)
-                    setSiteError(result.ok ? null : result.message)
-                  }}
-                >
-                  <SelectTrigger aria-labelledby={siteSelectId} className="w-64">
-                    <SelectValue placeholder="Choose a planning site" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sites.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                        {s.id === settings.defaultSiteId ? " (default)" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {planningSite ? (
-                <span className="text-sm text-muted-foreground tabular-nums">
-                  {planningSite.latitude.toFixed(2)}°, {planningSite.longitude.toFixed(2)}° · {planningSite.timeZone}
-                </span>
-              ) : null}
-              <Button variant="link" size="sm" render={<Link to="/settings/sites" search={{ return: returnPath }} />}>
-                Manage sites
-              </Button>
-              {siteError ? <ActionError message={siteError} className="w-full" /> : null}
-            </div>
-          )}
-        </Section>
-
-        <Section id="t5-plan-criteria" title="Criteria" description="Every listed window meets all of these at each 10-minute sample it covers.">
-          <fieldset className="grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <legend className="sr-only">Window criteria</legend>
-            <NumberField id="min-alt" label="Minimum altitude (°)" value={textFor("minAltitudeDeg")} error={errors.minAltitudeDeg} onChange={(t) => setNumber("minAltitudeDeg", t)} />
-            <NumberField id="min-dur" label="Minimum duration (min)" value={textFor("minDurationMin")} error={errors.minDurationMin} onChange={(t) => setNumber("minDurationMin", t)} />
-            <fieldset className="space-y-1.5">
-              <legend className="text-sm font-medium">Darkness</legend>
-              <RadioGroup value={criteria.darkness} onValueChange={(v) => setCriteria((c) => ({ ...c, darkness: v as PlanCriteria["darkness"] }))} className="flex gap-4">
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="astronomical" id="dark-astro" />
-                  <Label htmlFor="dark-astro" className="font-normal">
-                    Astronomical
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="nautical" id="dark-naut" />
-                  <Label htmlFor="dark-naut" className="font-normal">
-                    Nautical
-                  </Label>
-                </div>
-              </RadioGroup>
-            </fieldset>
-            <NumberField
-              id="moon-illum"
-              label="Maximum Moon illumination (%)"
-              hint="Empty: no limit. Applies while the Moon is up."
-              value={textFor("maxMoonIlluminationPct")}
-              error={errors.maxMoonIlluminationPct}
-              onChange={(t) => setNumber("maxMoonIlluminationPct", t, true)}
-            />
-            <NumberField
-              id="moon-sep"
-              label="Minimum Moon separation (°)"
-              hint="Empty: no limit. Applies while the Moon is up."
-              value={textFor("minMoonSeparationDeg")}
-              error={errors.minMoonSeparationDeg}
-              onChange={(t) => setNumber("minMoonSeparationDeg", t, true)}
-            />
-            <div className="flex items-end">
-              <SaveState state={!valid ? "unsaved" : saveState} message={saveMessage} onRetry={() => {
-                const result = savePlan(target.id, { criteria }, criteria)
-                setSaveState(result.ok ? "saved" : "failed")
-                setSaveMessage(result.ok ? undefined : result.message)
-              }} />
-            </div>
-          </fieldset>
-        </Section>
-
-        <Section
-          id="t5-plan-windows"
-          title="Windows"
-          description={planningSite ? `Next ${PLAN_NIGHTS} nights at ${planningSite.name}. Times in ${planningSite.timeZone}.` : "Choose a planning site to calculate windows."}
-        >
-          {target.ra === null || target.dec === null ? (
-            <EmptyState
-              icon={Telescope}
-              title="Position unknown"
-              description={`${target.name} has no coordinates, so no window can be calculated.`}
-              action={<Button render={<Link to="/targets/$targetId" params={{ targetId: target.id }} />}>Open Target</Button>}
-            />
-          ) : !planningSite ? (
-            <p className="text-sm text-muted-foreground">No planning site chosen. PlateVault never picks one for you.</p>
-          ) : (
-            <WindowTable windows={windows} site={planningSite} onReset={() => {
-              setDraftText({})
-              setCriteria(defaultCriteria(planningSite))
-            }} />
-          )}
-          <p className="text-xs text-pretty text-muted-foreground">
-            Prototype calculation: astronomical suitability only. A window does not promise clear weather, telescope availability or processing readiness.
-          </p>
-        </Section>
-
-        <Section id="t5-plan-coverage" title="Coverage and Project goals" description="Captured and library-usable integration by channel, beside unmet Project checklist items.">
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="space-y-4">
-              {coverage.channels.length === 0 ? <p className="text-sm text-muted-foreground">No light sessions for {target.name} yet.</p> : null}
-              {coverage.channels.map((c) => (
-                <ChannelCoverage key={c.channel} channel={c.channel} breakdown={c.breakdown} />
-              ))}
-            </div>
-            <div className="space-y-3">
-              {projects.length === 0 ? <p className="text-sm text-muted-foreground">No Project targets {target.name}.</p> : null}
-              {projects.map((project) => {
-                const gaps = projectProgress(catalog, project).filter((p) => p.state !== "met")
-                return (
-                  <div key={project.id} className="space-y-1.5">
-                    <h3 className="text-sm font-semibold">
-                      <Link to="/projects/$projectId" params={{ projectId: project.id }} className="hover:underline">
-                        Project {project.name}
-                      </Link>
-                    </h3>
-                    {gaps.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Every checklist item is met.</p>
-                    ) : (
-                      <ul className="space-y-1 text-sm">
-                        {gaps.map((g) => (
-                          <li key={g.item.id} className="flex flex-wrap items-center justify-between gap-2">
-                            <span>
-                              {g.item.kind === "integration"
-                                ? `${g.item.channel} ${formatDuration(g.item.goalS)}: ${formatDuration(g.totals?.projectAccepted.seconds ?? 0)} Project-accepted`
-                                : g.item.kind === "frame-count"
-                                  ? `${g.item.channel} ${g.item.goalFrames} frames: ${g.totals?.projectAccepted.frames ?? 0} Project-accepted`
-                                  : g.reason ?? g.item.kind}
-                            </span>
-                            <StatusBadge kind="checklist" value={g.state} />
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </Section>
-
-        <Section id="t5-plan-planned" title="Planned" description="Marking a Target Planned is an explicit opt-in. Reminders cover planned Targets only.">
-          <div className="flex flex-wrap items-center gap-3">
-            <Switch
-              id="t5-planned"
-              checked={Boolean(plan?.planned)}
-              onCheckedChange={(checked) => {
-                const result = savePlan(target.id, { planned: checked }, criteria)
-                setPlannedError(result.ok ? null : result.message)
-              }}
-            />
-            <Label htmlFor="t5-planned">Planned</Label>
-            {plannedError ? <ActionError message={plannedError} className="w-full" /> : null}
-          </div>
-        </Section>
-
-        <RemindersSection target={target} planned={Boolean(plan?.planned)} planningSite={planningSite} defaultSite={defaultSite} savedCriteria={savedCriteria} now={now} returnPath={returnPath} />
-      </PageBody>
 
       {planningSite ? (
         <ExportDialog
@@ -411,9 +454,20 @@ function NumberField({ id, label, value, error, hint, onChange }: { id: string; 
   )
 }
 
-function WindowTable({ windows, site, onReset }: { windows: ObservingWindow[]; site: ObservingSite; onReset: () => void }) {
+/** The windows, each with its night drawn as a strip (D's planner): dark band, window bar and now. */
+function WindowTable({ windows, site, target, now, onReset }: { windows: ObservingWindow[]; site: ObservingSite; target: Target; now: number; onReset: () => void }) {
+  const profiles = useMemo(() => new Map(planNights(now, site).map((night) => [night, nightProfile(target, site, night)])), [target, site, now])
   const columns: Column<ObservingWindow>[] = [
     { id: "night", header: "Night", rowHeader: true, sortValue: (w) => w.start, cell: (w) => formatNight(nightAt(Date.parse(w.start), site), true) },
+    {
+      id: "sky",
+      header: "Noon to noon",
+      className: "w-36 min-w-28",
+      cell: (w) => {
+        const samples = profiles.get(nightAt(Date.parse(w.start), site))
+        return samples ? <NightTimeline variant="strip" samples={samples} windows={[w]} timeZone={site.timeZone} nowMs={now} /> : null
+      },
+    },
     { id: "time", header: `Time (${site.timeZone})`, cell: (w) => windowTimes(w, site) },
     { id: "duration", header: "Duration", align: "right", cell: (w) => windowDuration(w) },
     { id: "alt", header: "Max altitude", align: "right", cell: (w) => `${Math.round(w.maxAltitudeDeg)}°` },

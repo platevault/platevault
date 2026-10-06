@@ -154,6 +154,45 @@ export function computeWindows(target: Target, site: ObservingSite, criteria: Pl
   return windows
 }
 
+export interface NightSample {
+  /** Sample time, epoch ms. */
+  t: number
+  sunAltDeg: number
+  moonAltDeg: number
+  targetAltDeg: number | null
+}
+
+/** Evening dates (`YYYY-MM-DD`) of the nights `computeWindows` covers. */
+export function planNights(nowMs: number, site: ObservingSite, nights = PLAN_NIGHTS): string[] {
+  const first = Date.parse(`${nightAt(nowMs, site)}T00:00:00Z`)
+  return Array.from({ length: nights }, (_, n) => new Date(first + n * 86_400_000).toISOString().slice(0, 10))
+}
+
+/**
+ * Noon-to-noon altitudes of the Sun, the Moon and the Target for one night
+ * at a site, on the same grid and math as `computeWindows`, for the night
+ * timeline (Harness V3, from direction D). Display only: windows still come
+ * from `computeWindows`.
+ */
+export function nightProfile(target: Target, site: ObservingSite, night: string): NightSample[] {
+  const base = Date.parse(`${night}T12:00:00Z`) - (site.longitude / 15) * 3_600_000
+  const start0 = Math.round(base / (SAMPLE_MIN * 60_000)) * SAMPLE_MIN * 60_000
+  const samples: NightSample[] = []
+  for (let i = 0; i <= (24 * 60) / SAMPLE_MIN; i += 1) {
+    const t = start0 + i * SAMPLE_MIN * 60_000
+    const jd = julianDay(t)
+    const sun = sunPosition(jd)
+    const moon = moonPosition(jd)
+    samples.push({
+      t,
+      sunAltDeg: altitudeDeg(sun.ra, sun.dec, site.latitude, site.longitude, jd),
+      moonAltDeg: altitudeDeg(moon.ra, moon.dec, site.latitude, site.longitude, jd),
+      targetAltDeg: target.ra === null || target.dec === null ? null : altitudeDeg(target.ra, target.dec, site.latitude, site.longitude, jd),
+    })
+  }
+  return samples
+}
+
 /** Short zone name at an instant, e.g. "CEST". */
 export function zoneAbbreviation(iso: string, timeZone: string): string {
   const part = new Intl.DateTimeFormat("en-GB", { timeZone, timeZoneName: "short" }).formatToParts(new Date(iso)).find((p) => p.type === "timeZoneName")
