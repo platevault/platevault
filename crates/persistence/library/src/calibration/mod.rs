@@ -8,6 +8,8 @@
 //! product rules arrive as a [`CalibrationRules`] implementation, the way the
 //! grouping callback does, so the semantics stay pure and outside storage.
 
+mod adoption;
+mod contained_write;
 mod inventory;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -31,6 +33,7 @@ use super::{
     load_session_row, parse_uuid, path_from_key, revision, Catalog, Result, MAX_PAGE,
 };
 
+pub use adoption::recover_adoptions;
 pub use inventory::Listed;
 
 // ---------------------------------------------------------------------------
@@ -407,17 +410,31 @@ pub fn decision_from_row(row: &SqliteRow) -> Result<CalibrationDecision> {
     })
 }
 
+/// Adopted masters with the indexed destination asset a scan recorded at the
+/// master's location and path with the same digest.
+macro_rules! master_sql {
+    () => {
+        "SELECT m.*, (SELECT a.id FROM assets a WHERE a.location_id = m.location_id \
+         AND a.path_key = m.path_key AND a.content_sha256 = m.content_sha256) AS asset_id \
+         FROM adopted_masters m"
+    };
+}
+
 /// Every adopted master, with its indexed destination asset when a scan
 /// recorded the copy at its location and path with the same digest.
 pub async fn load_masters(conn: &mut SqliteConnection) -> Result<Vec<AdoptedMaster>> {
-    let rows = sqlx::query(
-        "SELECT m.*, (SELECT a.id FROM assets a WHERE a.location_id = m.location_id \
-         AND a.path_key = m.path_key AND a.content_sha256 = m.content_sha256) AS asset_id \
-         FROM adopted_masters m ORDER BY m.id",
-    )
-    .fetch_all(&mut *conn)
-    .await?;
+    let rows = sqlx::query(concat!(master_sql!(), " ORDER BY m.id")).fetch_all(&mut *conn).await?;
     rows.iter().map(master_from_row).collect()
+}
+
+/// One adopted master by id.
+pub async fn load_master(conn: &mut SqliteConnection, id: Uuid) -> Result<AdoptedMaster> {
+    let row = sqlx::query(concat!(master_sql!(), " WHERE m.id = ?1"))
+        .bind(id.to_string())
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or_else(|| LibraryError::NotFound(format!("adopted master {id}")))?;
+    master_from_row(&row)
 }
 
 pub fn master_from_row(row: &SqliteRow) -> Result<AdoptedMaster> {
