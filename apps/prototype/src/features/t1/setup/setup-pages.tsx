@@ -106,7 +106,7 @@ export function WelcomePage() {
               aria-describedby={laterId}
               onClick={() => {
                 completeOnboarding()
-                void navigate({ to: "/targets" })
+                void navigate({ to: "/" })
               }}
             >
               Set up later
@@ -141,7 +141,7 @@ export function WelcomePage() {
         confirmLabel="Load demo library"
         onConfirm={() => {
           resetPrototype("demo")
-          void navigate({ to: "/targets" })
+          void navigate({ to: "/" })
         }}
       />
     </div>
@@ -344,7 +344,7 @@ export function SetupIndexingPage() {
 
   function openLibrary() {
     completeOnboarding()
-    void navigate({ to: "/targets" })
+    void navigate({ to: "/" })
   }
 
   return (

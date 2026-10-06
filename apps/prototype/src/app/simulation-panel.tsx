@@ -399,7 +399,7 @@ export function SimulationControls() {
             if (!confirmSeed) return
             resetPrototype(confirmSeed)
             closePanel()
-            window.location.hash = confirmSeed === "demo" ? "#/targets" : "#/welcome"
+            window.location.hash = confirmSeed === "demo" ? "#/" : "#/welcome"
           }}
         />
       </Section>
