@@ -1,0 +1,47 @@
+# Library IPC contract
+
+Version: 1. Requests/responses are JSON with UUID identities. Angles are degrees, exposures seconds, temperatures Celsius and sizes bytes. Native paths use `{encoding: unix-bytes|windows-utf16, payload: number[], display: string}`; display is never identity. Batch edits carry per-record expected decision revisions and observation fingerprints.
+
+Fingerprint `modifiedNs` is a signed decimal string, preserving nanoseconds across JavaScript clients. The string is required in both responses and expected-fingerprint requests; display text and rounded JSON numbers are not identity evidence.
+
+## Commands
+
+| Command | Request | Response and behavior |
+| --- | --- | --- |
+| library_register_location | path, displayName, role | Location revision; registration does not scan or modify files. Roots of Retired locations do not count as overlapping. |
+| library_list_locations | none | Registered locations with lifecycle and last-observed/access/availability states. |
+| library_start_scan | locationId | Committed operationId and Running state, not terminal success. |
+| library_scan_status | operationId | Counts, complete/incomplete scope, per-item failures and terminal state. |
+| library_cancel_scan | operationId | Cancel request acknowledged; status names final applied observations. No source mutation. |
+| library_list_sessions | filters, sort, offset, limit | Sessions, coveredLocationIds, provisional scope, counts, date basis, availability and last observation; unknown values stay explicit. Browsing starts no measurement. |
+| library_session | sessionId | Asset identities, observed/corrected metadata and association evidence. |
+| library_preview_metadata | expected assets, field, value | Durable previewId with proposed effective values, predecessor/successor membership and conflicts. No correction or source changes. |
+| library_confirm_metadata | previewId, expected assets | Atomic correction plus regroup/lineage, or Conflict with no changes. Original headers remain unchanged. |
+| library_set_quality | expected assets, state | Decision revision bound to freshly hashed reviewed bytes and their observation fingerprint. No membership change; missing or changed digest proof keeps prior quality historical. |
+| library_search_targets | query?, cone? {raDeg, decDeg, radiusDeg}, limit | Offline seed and saved targets/aliases with distinct provenance; shared math provides cone filtering, never automatic association. |
+| library_resolve_target | query | Qualified provider candidate or ProviderUnavailable; core local use remains available. |
+| library_save_target | target fields, expectedRevision | Explicit durable user/provider target and aliases with provenance. |
+| library_associate_target | expected sessions, targetId | Explicit confirmed association/evidence revision; no capture-key change. |
+| library_save_equipment | camera/optical-train fields, expectedRevision | Durable evidence and confirmed state. |
+| library_confirm_equipment | expected sessions, equipmentId | Explicit confirmation revision; source evidence remains inspectable. |
+| library_target_coverage | targetId | Effective captured/applicable-usable/unreviewed exposure counting each logical capture once, unknownExposureCount, drift, verification-pending, duplicate-candidate and conflicting-copy counts, oldest lastVerifiedAt behind applicable-usable exposure, coveredLocationIds/provisional scope and per-contribution date/availability/last observation. Reading coverage starts no rehash. |
+| library_review_remap | locationId, native proposedPath | Durable catalog review of per-asset identity/digests/collisions; no image writes. NoByteProof is explicit. |
+| library_apply_remap | reviewed operationId, expectedRevision | Atomic per-location apply after every asset passes revalidated byte/identity checks; any refusal leaves all old paths unchanged. |
+| library_update_location | locationId, displayName, expectedDecisionRevision | Durable display name; no scan/source changes. |
+| library_retry_scope | locationId, native relative subtree | New recorded scan of the failed scope; uncertain scopes never imply Missing. |
+| library_reselect_location | locationId, path, expectedDecisionRevision | Restores access only to the verified same volume/root identity; mismatch needs remap review. A Retired location is refused. |
+| library_review_retire_location | locationId | Durable reviewId naming the location, root, availability and decision revision, the assets, sessions, Views, Projects and Results that reference its copies, and that retiring deletes, moves or modifies no file. |
+| library_retire_location | reviewId, locationId, expectedRevision | Re-reads the location, then commits lifecycle Retired; copies read Retired and leave integration totals, fixed Views name them unresolved, and the root stops blocking registration. Conflict on a stale review or revision, on availability that differs from the review, or while an operation affecting the location is Running or unfinished. Reads and changes no file bytes, so no rehash applies. |
+| library_list_operations | filters, offset, limit | Durable Activity operations, including interrupted scans after restart. |
+
+## Errors
+
+InvalidInput, NotFound, Conflict, IdentityConflict, SourceUnavailable, UnsupportedFormat, MetadataUnreadable, ProviderUnavailable and PersistenceFailure name the affected identity/path and retry/review applicability. Unknown evidence is data, never zero-valued success. Nothing reports saved success before its transaction commits.
+
+## Long-running work
+
+`library_scan_progress` events carry operationId, revision, counts and scope. Polling status is the durable truth after disconnect/restart; events alone do not prove terminal success. Scanning runs off the UI thread and permits progressive inspection. Recovery marks interrupted scan scope incomplete and requires safe rescan before absence reconciliation.
+
+## Development verification
+
+The isolated rebuilt shell exposes real core commands to a code-enforced loopback-only dev bridge using dev config/dev-tools. Legacy commands/jobs are not registered against this catalog. Release checks reject unauthenticated dev exposure. Backend IPC proof does not certify UI-dependent LIB criteria: the final clean-slate frontend must retain and validate real onboarding, Targets, Sessions, Settings and Activity through MCP and fresh J19 validation. Production MCP remains future optional work.

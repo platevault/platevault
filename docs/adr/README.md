@@ -8,8 +8,9 @@ old one `Superseded`.
 
 | ADR | Title | Status | Date |
 | --- | --- | --- | --- |
-| [0001](0001-astronomy-compute-boundary.md) | Planner astronomy math runs in the frontend (astronomy-engine), not a Rust core crate | Accepted | 2026-07-04 |
+| [0001](0001-astronomy-compute-boundary.md) | Planner astronomy math runs in the frontend (astronomy-engine), not a Rust core crate | Historical spec 044; superseded for the rebuild by [0003](0003-use-rust-scientific-execution-and-a-clean-local-catalog-for-the-platevault-rebuild.md) | 2026-07-04 |
 | [0002](0002-lock-and-infotip-stay-separate.md) | Lock and InfoTip stay separate components | Accepted | 2026-07-20 |
+| [0003](0003-use-rust-scientific-execution-and-a-clean-local-catalog-for-the-platevault-rebuild.md) | Rust scientific execution and a clean local catalog for the rebuild | Accepted | 2026-10-04 |
 
 ## Status values
 

@@ -1,0 +1,170 @@
+---
+id: J26
+title: Discover, attach, and accept results, reuse them, and adopt a generated master
+version: 1
+status: draft
+last_reviewed: 2026-10-03
+actors: [primary-user]
+surfaces: [results, view-review, preparation, calibration, projects, targets]
+interfaces: [desktop-ui, desktop-ui-macos]
+trace: [063-clean-rebuild-contract, 070-results-reuse, 068-calibration-inputs, 069-application-handoff, D04, D05, D09, D13, D19, specs/063-clean-rebuild-contract/decisions.md, specs/070-results-reuse/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-h-results-and-generated-masters]
+---
+
+## Goal
+
+After processing in Siril, the user finds what the application wrote, attaches a
+file saved elsewhere, accepts the valuable products with honest lineage, hands
+two accepted channel products to a new View, and adopts a generated master into
+the calibration library. Done means three accepted products appear on the View,
+Project and Target with actual lineage. The new View lists two product inputs
+and no raw integration. The master is reusable only after explicit adoption and
+a verified durable copy. An accepted product whose bytes change is not offered
+for reuse. Nothing is accepted, adopted or upgraded in lineage
+automatically.
+
+## Preconditions
+
+- P1: J24 completed (`28 Sep Ha copy check` is Prepared). In Siril, processing of `NGC7000-HOO-Siril` has written into `output/`: calibrated and registered intermediates, an Ha linear stack, an OIII linear stack, a master flat generated from the Ha raw flats, and a log.
+- P2: A helper process keeps appending to one further file in `output/` during S1.
+- P3: A final TIFF saved by the user outside the View, at `Work/Finals/NGC7000-HOO.tif`.
+- P4: The J19/P5 manifest is available.
+- P5: A helper outside PlateVault that saves a file's bytes and nanosecond mtime, then overwrites it in place with a same-size variant whose pixel bytes differ and restores the saved mtime. The helper later restores the saved bytes and mtime.
+- P6: A fault control pauses adoption after the destination copy re-reads and verifies and before the master is registered (G4).
+
+## Steps
+
+### S1 — Discover outputs {#S1}
+
+- **Do:** Open Results for `NGC7000 HOO - Siril`.
+- **Expect:** Candidates from the recorded output location show type, path, availability, and processing state where known. The growing file reads Pending. Recognized intermediates are listed apart from result candidates.
+- **Expect (negative):** No candidate reads accepted, and none is claimed to come from the complete reviewed selection.
+- **Trace:** flow H1 · RES-FR-01
+
+### S2 — Attach an external output {#S2}
+
+- **Do:** Click **Attach Result**, choose `Work/Finals/NGC7000-HOO.tif`, choose kind Final image, and associate it with `NGC7000 HOO - Siril`.
+- **Expect:** The file is listed as a Final image candidate with lineage User-linked.
+- **Expect (negative):** Lineage is not shown as Tool-recorded.
+- **Trace:** flow H2 · RES-FR-02, RES-FR-03 · RES-AC-02
+
+### S3 — Accept products {#S3}
+
+- **Do:** Inspect the Ha stack, the OIII stack, and the final image, each with its association. With the P5 helper, save the final image, overwrite it with its same-size variant, and restore its mtime. Select all three and click **Accept Result**.
+- **Expect:** The Ha and OIII stacks appear on the View, on Project `NGC 7000 HOO`, and on Target NGC 7000, read Keep for cleanup, and show the SHA-256 recorded at acceptance. The final image is refused as changed since inspection and asks to be inspected again.
+- **Expect (negative):** The final image is not accepted. Acceptance does not change any lineage value, and nothing claims that all 208 planned frames were used.
+- **Trace:** flow H3, cross-flow "External changes" · RES-FR-04 · RES-AC-03, RES-AC-10 · D19
+
+### S3a — Accept the re-inspected image {#S3a}
+
+- **Do:** With the P5 helper, restore the final image's saved bytes and mtime. Inspect it again and click **Accept Result**.
+- **Expect:** The final image appears on the View, Project and Target, reads Keep for cleanup, and shows the SHA-256 recorded at acceptance.
+- **Expect (negative):** Its lineage stays User-linked.
+- **Trace:** flow H3 · RES-FR-04 · RES-AC-10 · D19
+
+### S4 — Create a View from accepted results {#S4}
+
+- **Do:** Select the accepted Ha and OIII stacks, click **Create View from results**, and enter `NGC7000 HOO combine`.
+- **Expect:** A result picker groups products by originating View with kind, path, availability, and lineage. The new View lists two product inputs with their originating View, shown apart from raw light sessions.
+- **Expect (negative):** No raw session integration is added to the new View, and no raw-frame calibration is applied to the products.
+- **Trace:** flow H3a · RES-FR-05 · RES-AC-04
+
+### S5 — Choose a profile for product inputs {#S5}
+
+- **Do:** Choose the Siril profile and click **Review preparation**.
+- **Expect:** If the profile's capability evidence supports these product-input kinds, the review lists both products with their paths. Otherwise preparation is refused and names the unsupported product inputs.
+- **Expect (negative):** Products are not silently converted, and PlateVault does not combine channels or stitch panels itself.
+- **Trace:** flow H3a · RES-FR-05 · RES-AC-05 · D04
+
+### S6 — Prepare and open the product View {#S6}
+
+- **Do:** Only if S5 listed both products: confirm membership and read the suggested View location. Click **Choose location...**, choose `Work/Processing` and keep the suggested name. Prepare, and click **Open in Siril**; then quit Siril.
+- **Expect:** The suggestion is a new unique subfolder under `Scratch/Processing`, the last parent chosen in J24/S13. After the choice the View location is a new unique subfolder under `Work/Processing`. The View reads Prepared with exactly two entries, and Siril opens on it.
+- **Expect (negative):** No parent is substituted without the user's choice. Quitting Siril does not mark the View Complete.
+- **Trace:** flow H3a, F2, F5, F6 · PREP-FR-06, PREP-FR-09, PREP-FR-10
+
+### S7 — Detect same-stat reference drift {#S7}
+
+- **Do:** With the P5 helper, save the accepted OIII stack, overwrite it with its same-size variant, and restore its mtime. Reopen `NGC7000 HOO combine`, then click **Create View from results** and read the picker without creating a View.
+- **Expect:** The OIII product input reads drifted: its rehash differs from its acceptance digest, and it requires review. Its acceptance and lineage show as history for the earlier bytes. The picker lists the OIII stack as drifted and does not offer it, while the Ha stack is still offered.
+- **Expect (negative):** Equal size and mtime are not read as unchanged content. The accepted product is not silently replaced, re-accepted or offered for reuse.
+- **Trace:** flow H3a, cross-flow "External changes" · RES-FR-04, RES-FR-05 · RES-AC-09
+
+### S7a — Restore the accepted bytes {#S7a}
+
+- **Do:** With the P5 helper, restore the OIII stack's saved bytes and mtime. Reopen `NGC7000 HOO combine` and the **Create View from results** picker, then close the picker without creating a View.
+- **Expect:** The rehash matches the acceptance digest. The OIII product input reads accepted with its original lineage, and the picker offers it again.
+- **Expect (negative):** No new acceptance is recorded and no lineage value changes.
+- **Trace:** flow H3a · RES-FR-05 · RES-AC-09
+
+### S8 — See a generated master candidate {#S8}
+
+- **Do:** Open Calibration, then open the Calibration area of `28 Sep Ha copy check`.
+- **Expect:** Calibration lists the generated master flat as a detected candidate with **Add to calibration library**, its type, camera/settings, channel, source evidence, and origin.
+- **Expect (negative):** The candidate is not preselected in `28 Sep Ha copy check` or any other View.
+- **Trace:** flow H4 · CAL-FR-06 · CAL-AC-04 · D05
+
+### S8a — Meet an occupied adoption path {#S8a}
+
+- **Do:** Click **Add to calibration library**, choose `Astro-T7/Calibration` as the durable destination, and read the destination path in the review. Outside PlateVault, create an unrelated text file at that path and record its SHA-256. Then confirm.
+- **Expect:** Adoption is refused for that path, names the existing file, and asks for another name or destination.
+- **Expect (negative):** The unrelated file still matches its recorded SHA-256. No copy is written, no master is registered, and the generated source remains in `output/`.
+- **Trace:** flow H4, cross-flow "Destination collision" · CAL-FR-07 · CAL-AC-08 · D05
+
+### S8b — Change the master after review {#S8b}
+
+- **Do:** Enter a free file name under `Astro-T7/Calibration` and read the review, which shows the master flat's SHA-256. With the P5 helper, save the master flat, overwrite it with its same-size variant, and restore its mtime. Then confirm.
+- **Expect:** Adoption is blocked: the source's bytes differ from the reviewed digest, and a new review is required. Any copy it wrote is named as unregistered.
+- **Expect (negative):** No master is registered, `28 Sep Ha copy check` shows no adopted-master suggestion, and no copy is offered for reuse. PlateVault does not write to the generated source.
+- **Trace:** flow H4, cross-flow "External changes" · CAL-FR-07 · CAL-AC-09 · D05
+
+### S8c — Change the master before registration {#S8c}
+
+- **Do:** With the P5 helper, restore the master flat's saved bytes and mtime. Review adoption again with another free file name, arm the P6 pause, and confirm. When the pause reports the copy verified and awaiting registration, save the master flat with the P5 helper, overwrite it with its variant, restore its mtime, and release the pause.
+- **Expect:** Adoption is blocked with source drift named, and a new review is required. The verified copy is named as unregistered.
+- **Expect (negative):** No master is registered or suggested, and the unregistered copy is not offered for reuse. PlateVault does not write to the generated source.
+- **Trace:** flow H4 · CAL-FR-07 · CAL-AC-09 · D05
+
+### S9 — Adopt the master {#S9}
+
+- **Do:** With the P5 helper, restore the master flat's saved bytes and mtime. Review adoption again with another free file name under `Astro-T7/Calibration` and confirm. Then reopen the Calibration area of `28 Sep Ha copy check`.
+- **Expect:** The review shows the current SHA-256. PlateVault copies the master, re-reads and hash-verifies the copy, revalidates the source against the reviewed digest, and only then registers it in Calibration with origin `NGC7000 HOO - Siril` and its provenance. In `28 Sep Ha copy check` it appears as a compatible suggestion awaiting acceptance.
+- **Expect (negative):** The generated source in `output/` remains in place, and the S8a file is unchanged. Neither S8b nor S8c copy is registered or suggested. The adopted master is not handed off before it is accepted.
+- **Trace:** flow H4 · CAL-FR-06, CAL-FR-07 · CAL-AC-05, CAL-AC-07, CAL-AC-08, CAL-AC-09 · D05, D13
+
+### S9a — Change the adopted master {#S9a}
+
+- **Do:** With the P5 helper, save the adopted master in `Astro-T7/Calibration`, overwrite it with its variant, and restore its mtime. Open Calibration, then reopen the Calibration area of `28 Sep Ha copy check`.
+- **Expect:** Calibration lists the adopted master as drifted against its adoption digest, needing review. `28 Sep Ha copy check` shows no suggestion for it, and it cannot be accepted there.
+- **Expect (negative):** The master is not removed, re-adopted or offered to any View, and its adoption provenance stays as history.
+- **Trace:** flow H4, cross-flow "External changes" · CAL-FR-08 · CAL-AC-10 · D05, D19
+
+### S9b — Restore the adopted master {#S9b}
+
+- **Do:** With the P5 helper, restore the adopted master's saved bytes and mtime, then reopen the Calibration area of `28 Sep Ha copy check`.
+- **Expect:** The rehash matches the adoption digest, and the master appears again as a compatible suggestion awaiting acceptance.
+- **Expect (negative):** No new adoption is recorded.
+- **Trace:** flow H4 · CAL-FR-08 · CAL-AC-10 · D19
+
+## Success criteria
+
+- SC1: At S1 the growing file reads Pending and 0 candidates read accepted.
+- SC2: The attached file reads User-linked (S2); 0 lineage values change on acceptance (S3, S3a).
+- SC3: `NGC7000 HOO combine` has exactly 2 product inputs and 0 raw session integration (S4).
+- SC4: Product-input support is either listed or refused by name, never converted (S5).
+- SC5: Same-stat drift is flagged for review and the drifted product is offered for reuse 0 times (S7); after S7a it is offered again with 0 new acceptances.
+- SC6: The master is offered to 0 Views before adoption (S8); it is registered only after a verified copy, and its source remains (S9).
+- SC7: The occupied adoption path is refused and its file changes 0 bytes (S8a).
+- SC8: 0 masters are registered while the source differs from its reviewed digest (S8b, S8c); exactly 1 is registered after a fresh review (S9).
+- SC9: The product changed after inspection is accepted 0 times until inspected again (S3, S3a).
+- SC10: The drifted adopted master is suggested 0 times (S9a) and is suggested again with 0 new adoptions after S9b.
+
+## Known gaps
+
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D04, D05, D09, D13, and D19; no implementation has been validated against them.
+- G2: Unresolved implementation qualification — Siril's product-input capability (D04) decides which S5 branch applies; S6 runs only on the supported branch. Blocks readiness.
+- G3: Out of scope for this journey — mixed raw/product inputs in one View and **Add accepted results** in an existing View's workspace are not exercised. Blocks readiness until covered by a step or a journey.
+- G4: Unresolved implementation qualification: no fault control yet pauses adoption between destination verification and registration (P6). S8c depends on it. Blocks readiness.
+
+## Delta log
+
+- No entries (initial draft, version 1).

@@ -30,6 +30,17 @@ instead of being repeated per journey:
   reason, per-item error) — a badge changing somewhere else is not sufficient
   evidence of a completed step.
 
+## Clean rebuild validation
+
+J19 through J30 describe the rebuild contract in specs 063 through 072. They remain Draft and have no rebuild execution evidence. J01 through J18 and their run history describe the preserved baseline; those records do not certify the rebuild. The [interaction map](INTERACTIONS.json) assigns all 44 flow steps to formal journey steps and owning requirements.
+
+Both desktop MCP profiles apply to development rebuild validation. A functional Tauri MCP bridge is mandatory, binds only to loopback, and drives the actual Tauri backend and webview. Mock IPC is never validation evidence. Production MCP shipping is optional future work.
+
+New rebuild surfaces are `locations`, `indexing`, `view-review`, `frame-review`, `preparation`, `results`, `storage`, `filing` and `planning`. Their implementation paths are assigned by each active feature plan before changed-path validation. Existing surface keys retain their legacy mappings until a new path is implemented; validators explicitly choose rebuild journey IDs rather than treating old runs as current proof.
+
+Fixture permissions, disconnects, Trash, archive and header-patch checks operate only on generated or public sample files. The user authorized resetting existing application databases for this run; originals, credentials and unrelated work remain protected. Each authored journey's unqualified fixture or capability prerequisite remains an implementation acceptance obligation, not a waived verification gap.
+
+
 ## Interface profiles
 
 ### desktop-ui
@@ -218,10 +229,22 @@ validation. Agent judgment bridges anything unmapped.
 | `crates/calibration/**` | calibration |
 | `crates/targeting/**` | targets |
 | `crates/audit/**` | audit |
+| `crates/platevault-model/**` | locations, indexing, sessions, targets, equipment, activity |
+| `crates/persistence/library/**` | locations, indexing, sessions, targets, equipment, activity |
+| `crates/platevault-core/src/model.rs` | locations, indexing, sessions, targets, equipment, activity |
+| `crates/platevault-core/src/inventory.rs` | locations, indexing, sessions |
+| `crates/platevault-core/src/inventory/**` | locations, indexing, sessions |
+| `crates/platevault-core/src/grouping.rs` | indexing, sessions |
+| `crates/platevault-core/src/targets.rs` | targets, sessions |
+| `crates/platevault-core/src/library.rs` | locations, indexing, sessions, targets, equipment, activity |
+| `apps/desktop/src-tauri/src/library_shell.rs` | locations, indexing, sessions, targets, equipment, activity |
+| `apps/desktop/src-tauri/src/commands/library.rs` | locations, indexing, sessions, targets, equipment, activity |
 
 (Globs verified against the tree 2026-07-15; the Cleanup/AuditLog/Equipment
 pages live as files inside `features/settings/`, so those rows are
-file-prefix globs that refine the broader `settings` row. Validators should
+file-prefix globs that refine the broader `settings` row. The library rows
+follow `specs/064-library-inventory/plan.md` and the paths on the
+`064-library-backend` branch at 0462f5b0. Validators should
 still trust the repo over this table and propose corrections.)
 
 ## Intent-evidence sources
