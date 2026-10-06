@@ -5,12 +5,13 @@
 //! clean catalog.
 //!
 //! It boots only [`Library`] with the [`crate::commands::library`],
-//! [`crate::commands::project_goals`] and [`crate::commands::view_selection`]
-//! IPC surfaces, the catalog in its own data directory. Nothing from the legacy
-//! composition root runs here: no `AppState`, legacy database, bootstrap job,
-//! watcher or legacy command registration; the legacy `preparedview_*` and
-//! `sourceview_*` commands stay unregistered. The legacy code stays archivable
-//! and is never booted by this binary.
+//! [`crate::commands::project_goals`], [`crate::commands::view_selection`] and
+//! [`crate::commands::calibration_inputs`] IPC surfaces, the catalog in its own
+//! data directory. Nothing from the legacy composition root runs here: no
+//! `AppState`, legacy database, bootstrap job, watcher or legacy command
+//! registration; the legacy `preparedview_*`, `sourceview_*` and calibration
+//! commands stay unregistered. The legacy code stays archivable and is never
+//! booted by this binary.
 //!
 //! In `dev-tools` (debug-only) builds the MCP bridge always starts, bound to IPv4
 //! loopback, and the webview loads the hosted dev URL so the bridge has a page
@@ -43,6 +44,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::broadcast::error::RecvError;
 use uuid::Uuid;
 
+use crate::commands::calibration_inputs as calibration;
 use crate::commands::library as ipc;
 use crate::commands::project_goals as projects;
 use crate::commands::view_selection as views;
@@ -125,6 +127,19 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         views::view_quality_scope,
         views::view_apply_quality,
         views::view_revision,
+        calibration::calibration_list_inputs,
+        calibration::calibration_input,
+        calibration::calibration_match,
+        calibration::calibration_view_plan,
+        calibration::calibration_set_required_kinds,
+        calibration::calibration_accept,
+        calibration::calibration_record_exception,
+        calibration::calibration_withdraw,
+        calibration::calibration_handoff,
+        calibration::calibration_review_adoption,
+        calibration::calibration_adopt,
+        calibration::calibration_list_adoptions,
+        calibration::calibration_custody_facts,
     ]);
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);
