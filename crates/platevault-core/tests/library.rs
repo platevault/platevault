@@ -53,8 +53,12 @@ async fn real_composed_library_preserves_sources_quality_and_restart() {
         .await
         .unwrap();
     assert!(library.catalog().location_assets(location.id).await.unwrap().is_empty());
+    let mut progress = library.subscribe_scan_progress();
     let started = library.start_scan(location.id, None).await.unwrap();
     assert_eq!(started.state, ScanState::Running);
+    // The durable status turns terminal before scan-time target suggestions are
+    // recorded; the terminal event is published after them.
+    published_terminal(&mut progress, started.id).await;
     let finished = terminal(&library, started.id).await;
     assert_eq!(finished.state, ScanState::Completed);
     assert!(finished.revision > started.revision);
@@ -292,10 +296,18 @@ async fn malformed_headers_are_visible_file_issues_and_valid_siblings_commit() {
 async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
     let mut progress = library.subscribe_scan_progress();
     let started = library.start_scan(location, None).await.unwrap();
+    published_terminal(&mut progress, started.id).await
+}
+
+/// Wait for the terminal event of scan `id`, published after scan-time work.
+async fn published_terminal(
+    progress: &mut tokio::sync::broadcast::Receiver<ScanOperation>,
+    id: Uuid,
+) -> ScanOperation {
     tokio::time::timeout(Duration::from_secs(20), async {
         loop {
             let operation = progress.recv().await.unwrap();
-            if operation.id == started.id && operation.state != ScanState::Running {
+            if operation.id == id && operation.state != ScanState::Running {
                 return operation;
             }
         }
