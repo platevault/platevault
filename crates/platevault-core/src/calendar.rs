@@ -72,53 +72,52 @@ pub fn render_ics(snapshot: &CalendarSnapshot, stamp: OffsetDateTime) -> String 
 
 /// Write the snapshot bytes to the user-chosen `.ics` path: a new temporary
 /// file in the same folder, synced, renamed onto the path, then the folder
-/// synced. A failure removes the temporary file and leaves any existing file
-/// unchanged.
+/// synced. The temporary name has a fixed length, so any name the save panel
+/// accepts can be written. The folder is opened before anything is written,
+/// so every failure happens before the rename: it removes the temporary file
+/// and leaves any existing file unchanged. Once the rename has replaced the
+/// file, the write reports it saved: the new bytes are in place and synced,
+/// and a failed folder sync leaves only the rename's durability unconfirmed.
 ///
 /// # Errors
 /// `InvalidInput` for a path without the `.ics` extension or without a parent
 /// folder; `AccessDenied`, `NotFound` or `SourceUnavailable` naming the path
-/// when a filesystem step fails.
+/// when a filesystem step before the rename fails.
 pub fn write_snapshot(path: &Path, bytes: &[u8]) -> Result<SavedCalendar, LibraryError> {
     let is_ics = path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("ics"));
-    let (Some(folder), Some(name), true) = (path.parent(), path.file_name(), is_ics) else {
+    let (Some(folder), Some(_), true) = (path.parent(), path.file_name(), is_ics) else {
         return Err(LibraryError::InvalidInput(format!(
             "calendar path {} must name a file with the .ics extension",
             path.display()
         )));
     };
     let folder = if folder.as_os_str().is_empty() { Path::new(".") } else { folder };
-    let temporary =
-        folder.join(format!(".{}.{}.partial", name.to_string_lossy(), Uuid::new_v4().simple()));
+    // Windows commits a rename with the file's metadata; a folder handle
+    // cannot be synced there.
+    #[cfg(unix)]
+    let folder_handle =
+        std::fs::File::open(folder).map_err(|error| LibraryError::from_io(path, &error))?;
+    let temporary = folder.join(format!(".platevault-{}.ics.partial", Uuid::new_v4().simple()));
     let written = (|| {
         let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temporary)?;
         file.write_all(bytes)?;
         file.sync_all()?;
         drop(file);
-        std::fs::rename(&temporary, path)?;
-        sync_folder(folder)
+        std::fs::rename(&temporary, path)
     })();
     if let Err(error) = written {
         // Removing a temporary file that was never created fails harmlessly.
         let _ = std::fs::remove_file(&temporary);
         return Err(LibraryError::from_io(path, &error));
     }
+    // Commit the rename. The new bytes are in place and synced, so a failed
+    // folder sync cannot make the write a failure.
+    #[cfg(unix)]
+    let _ = folder_handle.sync_all();
     Ok(SavedCalendar {
         sha256: hex::encode(Sha256::digest(bytes)),
         byte_count: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
     })
-}
-
-#[cfg(unix)]
-fn sync_folder(folder: &Path) -> std::io::Result<()> {
-    std::fs::File::open(folder)?.sync_all()
-}
-
-#[cfg(not(unix))]
-fn sync_folder(_folder: &Path) -> std::io::Result<()> {
-    // Windows commits a rename with the file's metadata; a folder handle
-    // cannot be synced there.
-    Ok(())
 }
 
 fn uid(window: &ObservingWindow) -> String {

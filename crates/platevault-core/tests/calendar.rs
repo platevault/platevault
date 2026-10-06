@@ -265,6 +265,41 @@ fn a_failed_write_leaves_an_existing_file_byte_identical() {
     assert_eq!(entries(dir.path()), ["existing.ics"]);
 }
 
+/// A save-panel name near the 255-byte component limit is written: the
+/// temporary name has a fixed length whatever the chosen name.
+#[test]
+fn a_name_near_the_component_limit_is_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let name = format!("{}.ics", "a".repeat(251));
+    let path = dir.path().join(&name);
+    let bytes = render_ics(&snapshot(), STAMP).into_bytes();
+    let saved = write_snapshot(&path, &bytes).unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    assert_eq!(saved.sha256, sha(&bytes));
+    assert_eq!(entries(dir.path()), [name]);
+}
+
+/// A folder that cannot be opened for its sync fails the write before the
+/// rename, so the reported failure leaves the existing file byte-identical
+/// rather than replacing it.
+#[cfg(unix)]
+#[test]
+fn a_folder_that_cannot_be_synced_fails_before_replacing_the_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("existing.ics");
+    std::fs::write(&path, b"original calendar").unwrap();
+    // Write and search but no read: files can be created and renamed there,
+    // yet the folder itself cannot be opened.
+    std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o300)).unwrap();
+    let result = write_snapshot(&path, b"replacement");
+    std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let error = result.unwrap_err();
+    assert_eq!(error.response(None, None).kind, "access_denied", "{error:?}");
+    assert_eq!(std::fs::read(&path).unwrap(), b"original calendar");
+    assert_eq!(entries(dir.path()), ["existing.ics"]);
+}
+
 #[test]
 fn the_rendered_text_claims_only_astronomy() {
     let text = render_ics(&snapshot(), STAMP).to_lowercase();
