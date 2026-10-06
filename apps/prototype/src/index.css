@@ -96,9 +96,8 @@
   --radius: 0.3125rem;
   /* Density: table and list row height. Set by html[data-density]. */
   --row-h: 1.625rem;
-  /* Window chrome metrics: unified toolbar height and the traffic-light inset Tauri's overlay title bar reserves. */
+  /* Window chrome metrics: unified toolbar and status bar heights (the OS draws the window and its controls). */
   --toolbar-h: 3.25rem;
-  --traffic-lights-w: 4.75rem;
   --statusbar-h: 1.5rem;
 
   /* Window chrome (toolbar, status bar), content pane, group boxes. */

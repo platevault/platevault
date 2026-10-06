@@ -9,11 +9,12 @@ HIGH-LEVEL-DESIGN.md §4 is unchanged except the new `/overview` start page.
 
 PlateVault should feel like a first-party Mac app (Photos, Finder, Xcode
 organizer), not a web page in a window. The window is the layout: a
-full-height translucent source list with the traffic-light inset, a unified
-title-bar toolbar over the content, the content pane as the only scroller, a
-status bar at the bottom. System fonts at AppKit sizes, native-density
-controls, light and dark from the system, the system accent where the engine
-exposes it.
+full-height translucent source list, a unified toolbar over the content, the
+content pane as the only scroller, an inspector where a page has a current
+item, a status bar at the bottom. System fonts at AppKit sizes,
+native-density controls, light and dark from the system, the system accent
+where the engine exposes it. The OS (Tauri) draws the window, its title bar
+and its controls; the app draws none of them (user feedback 2026-10-06).
 
 ## Start page: Library overview (`/overview`)
 
@@ -65,8 +66,14 @@ of D's sky-first landing.
 - **A (instrument panel)**: the always-on status line — the status bar keeps
   running work, interrupted work and offline locations on screen everywhere.
 - **B (calm archive)**: preview-then-confirm (unchanged ConfirmDialogs, kept
-  as sheets), values beside their source in session and frame detail (inherited
-  tokens). The plate-on-mount frame presentation is **not done** (see Gaps).
+  as sheets) and **plates on mounts** (`components/app/plate.tsx`): an
+  always-dark plate inside a paper mat (`--mount`, `--plate`) with a catalogue
+  caption whose values sit beside their source (`120 s EXPTIME`, `L FILTER`,
+  `8.78″ FWHM · built-in`). Frames review mounts the preview and offers a
+  **Table | Plates** contact sheet (`features/t3/plates.tsx`, lazily drawn
+  from the same synthetic star field). Results mounts the inspected product
+  and offers **Table | Plates** for accepted Results; product plates are
+  labelled "Illustration, not product pixels".
 - **C (guided pipeline)**: the View areas are a pipeline rail — numbered
   stages Sessions → Frames → Calibration → Prepare → *you process* → Results →
   Cleanup, each with its readiness in a word and a shape (check, alert, number;
@@ -75,8 +82,13 @@ of D's sky-first landing.
   **Next** action to the first stage that is not done. Link names stay the area
   names; the readiness is their `aria-describedby`.
 - **D (sky-first)**: the IA above; Plan as its own area reached from the source
-  list and each Target. D's night timeline inside Plan is **not re-drawn** (see
-  Gaps); the existing Plan/Plans windows and reminders surfaces carry over.
+  list and each Target. **Night planner** (`features/t5/night-planner.tsx`)
+  on a Target's Plan: tonight's timeline (Day / civil / nautical /
+  astronomical twilight / Night bands, Moon strip, the Target's altitude
+  curve against the minimum altitude, windows outlined, now) with a legend
+  and a written summary, above a 14-night strip on one axis; picking a night
+  redraws the timeline. The Plans page opens with a **Tonight** strip of
+  planned Targets. `planning.ts` gained `nightProfile` (display sampling only).
 - **E (command workspace)**: ⌘K search field in the toolbar's trailing slot,
   back/forward history buttons, the persistent split panes.
 
@@ -93,14 +105,25 @@ of D's sky-first landing.
 - **Source list**: translucent material (`material-sidebar`, backdrop blur;
   solid under `prefers-reduced-transparency`), accent-tinted icons, 26 px rows,
   Finder-style selection fill, section headers, count badge.
-- **Traffic-light inset**: `--traffic-lights-w`; in Tauri use
-  `titleBarStyle: "Overlay"`, `hiddenTitle: true`, `windowEffects: ["sidebar"]`
-  with `transparent: true`; the browser preview draws decorative stand-ins
-  (`aria-hidden`), hidden when `__TAURI_INTERNALS__` exists. Toolbar and source
-  list header carry `data-tauri-drag-region`.
+- **No drawn window chrome**: no traffic lights, title-bar stand-ins or window
+  frame. In Tauri use the native title bar (or `titleBarStyle: "Overlay"`
+  with the toolbar's `data-tauri-drag-region`); the toolbar and source-list
+  header keep that attribute.
 - **Resizable splits**: `SplitHandle` (role `separator`, arrow keys ±8 px,
   Shift ±32 px, Home/End, Enter or double-click resets) for the sidebar
-  (176–320 px, persisted) and every `ListDetail` (Settings, Calibration).
+  (176–320 px, persisted), every `ListDetail` (Settings, Calibration) and the
+  inspector (240–420 px, persisted).
+- **Inspector** (`components/app/inspector.tsx`): trailing pane, sticky under
+  the toolbar, scrolls on its own, one shared width and shown/hidden
+  preference; ⌥⌘0 or the page's toggle. Used by Frames review (current frame
+  and measurement plot) and the Target finder (identity, integration by
+  channel, tonight's window, Projects, Open/Plan); it follows the clicked or
+  focused row.
+- **Row context menus** (`components/app/row-menu.tsx`, `DataTable.rowMenu`):
+  right-click, ⇧F10 or the Menu key; key equivalents right-aligned and in
+  `aria-keyshortcuts` (Frames: X exclude/restore; Targets: ⌘↓ Open, ⌥⌘0
+  inspector); Escape returns focus to the row. Every item repeats an action
+  reachable elsewhere.
 - **Status bar**: 24 px, library counts or the running operation, interrupted
   and offline links, Prototype, appearance menu.
 - **Controls (AppKit metrics)**: push button 24 px / small 22 / mini 20, 5 px
@@ -115,9 +138,10 @@ of D's sky-first landing.
   nested in a card loses its box.
 - **No text selection on chrome**: buttons, tabs, menu items, labels, table
   headers, badges and `[data-chrome]` regions do not select; content does.
-- **Keyboard**: ⌘K, `[` sidebar, G-sequences (G H Overview added), the
-  existing table keys; focus ring is the macOS halo (3 px accent, follows the
-  radius).
+- **Keyboard**: ⌘K, `[` sidebar, G-sequences (G H Overview added), ⌘1–⌘5
+  source-list items (desktop app; the browser keeps them for tabs), ⌥⌘0
+  inspector, ⇧F10 row menu, the existing table keys; focus ring is the macOS
+  halo (3 px accent, follows the radius).
 
 ## Tokens (`src/index.css`)
 
@@ -137,16 +161,22 @@ ratios hold. Theme default is now **Match system**.
 `hv1-targets-1024.png`, `hv1-sessions-1280.png`, `hv1-hv1-sessions-1024.png`,
 `hv1-hv1-frames-1280.png`, `hv1-hv1-frames-1024.png`, `hv1-hv1-prepare-1280.png`,
 `hv1-hv1-results-1280.png`, `hv1-plans-1280.png`, `hv1-plans-1024.png`
-(demo library, dark system appearance, private headless Chrome).
+(round 1); round 2: `hv1c-frames-table-1280.png`, `hv1c-frames-plates-1280.png`,
+`hv1c-frames-menu-1280.png`, `hv1c-results-1280.png`, `hv1c-targets-1280.png`,
+`hv1c-targets-menu-1280.png`, `hv1c-plan-1280.png` (demo library, dark system
+appearance, private headless Chrome). Round-1 shots still show the drawn
+traffic lights that round 2 removed.
 
 ## Gaps (this round)
 
-- Frames review: B's plate-on-mount preview and per-value source captions are
-  not restyled beyond tokens.
-- Results/artifacts: inherits tokens and toolbar; no plate presentation.
-- Plan area: D's night timeline is not redrawn; no Plans/Projects segmented
-  control yet (Projects is reached from Plan's own links, Targets and ⌘K).
-- Right inspector: the layout tokens and `SplitHandle` exist, no page uses an
-  inspector pane yet.
-- Context menus with shortcuts on rows: not added.
-- Critique (design-critic, a11y-auditor, `impeccable detect`) not run.
+- Structure is frozen for the coming IA rework (Project → Plan → View
+  pipeline, one main workflow page): no further pages, navigation or
+  start-page work was done in round 2.
+- Journey spot-walks J22 S12–S15a, J24 prepare, J27 S10, J29 S1–S7a were
+  not re-run. Round-1 walks broke at J20 S1 because the first-run
+  orientation walk re-opened over Targets (`scope: dialog`, Skip tour/Next)
+  after its trigger moved to `/overview`; that trigger is part of the
+  start-page change and is left for the IA rework.
+- Critique (design-critic, a11y-auditor, `impeccable detect`) not run; the
+  band, mount and curve contrast values are design targets, not measured.
+- Rendered checks this round were at 1280 only; 1024 not re-shot.

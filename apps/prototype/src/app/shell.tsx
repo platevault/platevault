@@ -3,10 +3,11 @@
  * minimal onboarding layout.
  *
  * HARNESS V1 (design/HARNESS-V1.md): a first-party macOS window. A
- * full-height translucent source list with the traffic-light inset, a unified
- * toolbar over the content (back/forward, the page title and actions, search),
- * an optional inspector the page provides, and a status bar. Nothing scrolls
- * the document; only content panes scroll.
+ * full-height translucent source list, a unified toolbar over the content
+ * (back/forward, the page title and actions, search), an optional inspector
+ * the page provides, and a status bar. Nothing scrolls the document; only
+ * content panes scroll. The OS draws the window itself (Tauri); the app draws
+ * no window controls or title bar.
  */
 import { Link, Outlet, useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router"
 import {
@@ -58,9 +59,6 @@ import { openPanel, SIDEBAR_WIDTH, setSidebarWidth, toggleSidebar, useShellUi } 
 
 const SHELLS = [t1Shell, t2Shell, t3Shell, t4Shell, t5Shell]
 
-/** Tauri draws the real traffic lights over its overlay title bar; the browser preview draws stand-ins. */
-const IN_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
-
 export function RootLayout() {
   useGlobalShortcuts()
   return (
@@ -87,18 +85,6 @@ function SkipLink() {
     >
       Skip to main content
     </a>
-  )
-}
-
-/** The window controls' place: real ones in Tauri (titleBarStyle "Overlay"), decorative stand-ins in a browser. */
-function TrafficLights() {
-  if (IN_TAURI) return null
-  return (
-    <div aria-hidden="true" data-traffic-lights="" className="pointer-events-none absolute top-[19px] left-[20px] flex gap-2">
-      <span className="size-3 rounded-full bg-[#ff5f57] shadow-[inset_0_0_0_0.5px_rgb(0_0_0/0.18)]" />
-      <span className="size-3 rounded-full bg-[#febc2e] shadow-[inset_0_0_0_0.5px_rgb(0_0_0/0.18)]" />
-      <span className="size-3 rounded-full bg-[#28c840] shadow-[inset_0_0_0_0.5px_rgb(0_0_0/0.18)]" />
-    </div>
   )
 }
 
@@ -227,7 +213,6 @@ function SidebarContent({ collapsed, drawer = false }: { collapsed: boolean; dra
           </>
         ) : (
           <>
-            <TrafficLights />
             <span className="sr-only">PlateVault</span>
             {collapsed ? null : (
               <Tooltip>
@@ -662,8 +647,7 @@ export function SetupShell() {
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-window">
       <SkipLink />
-      <header data-chrome="" data-tauri-drag-region="" className="relative flex h-(--toolbar-h) shrink-0 items-center gap-2 border-b pr-3 pl-(--traffic-lights-w)">
-        <TrafficLights />
+      <header data-chrome="" data-tauri-drag-region="" className="relative flex h-(--toolbar-h) shrink-0 items-center gap-2 border-b px-3">
         <Aperture aria-hidden="true" className="size-4 text-primary" />
         <span className="font-semibold">PlateVault</span>
         <div className="flex-1" />
