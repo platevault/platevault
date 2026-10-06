@@ -96,8 +96,10 @@ fn asset(effective: CaptureMetadata) -> Asset {
     }
 }
 
+/// A location-relative path written with `/`, joined with the platform's native
+/// separator as the scanner records it (`\` on Windows).
 fn rel(path: &str) -> NativePath {
-    NativePath::from_path(Path::new(path))
+    NativePath::from_path(&path.split('/').collect::<PathBuf>())
 }
 
 fn session_of(result: &GroupingResult, id: Uuid) -> &SessionCandidate {
@@ -405,7 +407,7 @@ fn capture_tree(root: &Path) -> PathBuf {
         PathBuf::from(std::ffi::OsString::from_vec(b"night1/\xffdark.fits".to_vec()))
     };
     #[cfg(not(target_os = "linux"))]
-    let odd_name = PathBuf::from("night1/Ne\u{301}buleuse-dark.fits");
+    let odd_name = Path::new("night1").join("Ne\u{301}buleuse-dark.fits");
     support::fits(&root.join(&odd_name), &with(&[("IMAGETYP", "'DARK'")])).unwrap();
     odd_name
 }
