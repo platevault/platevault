@@ -38,7 +38,7 @@ blocks a workflow. Done means:
 - P1: First-run setup has just completed on a fresh install or a reset development database. Only an empty Captures folder, `Empty/Captures`, is registered. No session, Project, processing run or My targets entry exists, and no demo or sample record exists anywhere.
 - P2: The desktop app is running with the sidebar in its default expanded state, unless a step says otherwise (S14 covers the icon-collapsed variant).
 - P3: Folder `Untyped/` holds only 2 frames with no frame-type header. Removable volume `Card-1` holds the 30 NGC 7000 Ha lights of J31/P2.
-- P4: A processing profile for Siril is configured and Siril is installed, as J24 requires for **Open in Siril**. Settings > Equipment holds rig RedCat 51 / ASI2600MM, the rig that captured the Card-1 lights.
+- P4: A processing profile for Siril is configured and Siril is installed, as J24 requires for **Open in Siril**. Settings > Equipment holds rig `RedCat` (RedCat 51 + ASI2600MM, as J15/S3 composes it), the rig that captured the Card-1 lights.
 
 ## Steps
 
@@ -110,14 +110,14 @@ blocks a workflow. Done means:
 
 ### S9a — A real Project create auto-ticks its item {#S9a}
 
-- **Do:** In Sessions, choose **Confirm Target** NGC 7000 for the Card-1 session. From Home, choose **New Project** and create a real Project with subject NGC 7000, rig RedCat 51 / ASI2600MM and any name.
+- **Do:** In Sessions, choose **Confirm Target** NGC 7000 for the Card-1 session. From Home, choose **New Project** and create a real Project with subject NGC 7000, rig `RedCat` and any name.
 - **Expect:** **Confirm a session's Target** ticks when the confirmation saves. **Create your first Project** ticks automatically when the Project is saved. Both use the same completion choreography as S9.
 - **Expect (negative):** No demo, sample or placeholder Project was created to produce the tick. Only the Project the user created exists, with the name, subject and rig the user entered.
 - **Trace:** PRJ-FR-01 · LIB-FR-05 · D-W1, D-W33
 
 ### S9b — A real tool launch auto-ticks its item {#S9b}
 
-- **Do:** In Sessions, choose **Confirm equipment** RedCat 51 / ASI2600MM for the Card-1 session. On the S9a Project, choose **Start a processing run**, save its membership and prepare it. First set the Siril profile's executable to a path that does not exist and choose **Open in Siril**. Then restore the real executable and choose **Open in Siril** again, so the launch actually starts Siril.
+- **Do:** In Sessions, choose **Confirm equipment** with rig `RedCat` for the Card-1 session. On the S9a Project, choose **Start a processing run**, save its membership and prepare it. First set the Siril profile's executable to a path that does not exist and choose **Open in Siril**. Then restore the real executable and choose **Open in Siril** again, so the launch actually starts Siril.
 - **Expect:** **Start a processing run** ticks when the run is created. **Open a run in your tool** ticks only when the second launch starts the Siril process, with the same choreography as S9.
 - **Expect (negative):** The failed first launch does not tick the item. Only a launch that actually starts the tool counts.
 - **Trace:** VSEL-FR-01 · D-W1, D-W3 · G3
@@ -225,4 +225,4 @@ steps above were checked against it.
 
 - **Δ3** 2026-10-06 · S1, S2, S5, S7, S8, S9, S9a, S9b, S17, S18 · behavior-change
   The walk starts on Home and visits Home, Import, Sessions and Targets, because the Inbox is gone and Home is the Projects dashboard. The checklist groups follow the same pages. Import replaces the Inbox confirm as the first auto-ticked item, and a 0-imported Import ticks nothing. A Project is created with a subject and rig, and the tool launch runs from a processing run. The restore-source step S10 is retired and its id stays unused; the 0-imported Import in S9 now covers outcome-shape filtering.
-  Evidence: D-W1, D-W3, D-W7, D-W11, D-W24, D-W33, D-W39; 063 FR-020; 064 LIB-FR-10, LIB-FR-16; 071 STO-IMP-FR-01 at e4476231 · by: agent (intent-gated, user instruction)
+  Evidence: D-W1, D-W3, D-W7, D-W11, D-W24, D-W33, D-W39, 063 FR-020, 064 LIB-FR-10, LIB-FR-16 and 071 STO-IMP-FR-01 at e4476231. Rig name `RedCat` from J15/S3; spec text for these steps unchanged at d45a22ad · by: agent (intent-gated, user instruction)

@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [planning, targets, projects, home, settings]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 065-project-goals, 072-observing-plans, D07, D17, D18, D-W16, D-W36, D-W37, D-W39, D-W60, specs/063-clean-rebuild-contract/decisions.md, specs/065-project-goals/spec.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-k-observing-plans-and-reminders]
+trace: [063-clean-rebuild-contract, 065-project-goals, 072-observing-plans, D07, D17, D18, D-W16, D-W36, D-W37, D-W39, D-W60, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/065-project-goals/spec.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-k-observing-plans-and-reminders]
 ---
 
 ## Goal
@@ -25,7 +25,7 @@ Project or session data and starts no indexing.
 
 ## Preconditions
 
-- P1: J15 and J20 completed (J21 to J28 are not required). Settings holds Backyard and `Remote site`, and no site is designated default. Project `NGC 7000 HOO` is open with subject NGC 7000, rig `RedCat`, Ha 10h and OIII 10h goals, and no processing run. It is the only Project. No Target is marked ★, so M 31 is not in My targets.
+- P1: J15 and J20 completed (J21 to J28 are not required). Settings holds Backyard and `Remote site`, and no site is designated default. Project `NGC 7000 HOO` is open as J20 left it: subject NGC 7000, rigs `RedCat` and `Esprit`, goals Ha 10h and OIII 12h, seven candidate sessions, and the run `NGC7000-HOO-Siril` at Select with no saved membership. It is the only Project. No Target is marked ★, so M 31 is not in My targets.
 - P2: The OS has not yet been asked for notification permission for PlateVault, so the first request can be denied.
 - P3: No calendar provider account is configured.
 - P4: A development-build clock control (D17) sets PlateVault's clock so that the first upcoming Backyard window reaches its reminder lead time while the app runs. The control keeps the clock inside that lead time across a relaunch, on a night when NGC 7000 and M 31 both have a window at Backyard (G3).
@@ -35,9 +35,9 @@ Project or session data and starts no indexing.
 ### S1 — Open the Plan area {#S1}
 
 - **Do:** On the Targets page, select the NGC 7000 row to open its Plan area, and choose Backyard as planning site.
-- **Expect:** Calculated windows show their site and time-zone basis, and the active planning site reads Backyard. Beside the coverage, Project `NGC 7000 HOO` shows its per-channel goal gap with labeled numbers. Ha reads 0h 00m "in project" and 9h 15m "captured" against the 10h goal, and OIII shows its own "in project" and "captured" amounts against 10h. Notifications read disabled.
-- **Expect (negative):** No window claims clear weather, telescope availability, or processing readiness. The gap never says "not in a run".
-- **Trace:** flow K · PLAN-FR-02, PLAN-FR-05, PLAN-TGT-FR-14 · root FR-023 · D07, D-W16, D-W36
+- **Expect:** Calculated windows show their site and time-zone basis, and the active planning site reads Backyard. Beside the coverage, Project `NGC 7000 HOO` shows its per-channel goal gap with labeled numbers. Ha reads 0h 00m "in project" and 12h 35m "captured" against the 10h goal, and OIII reads 0h 00m "in project" and 10h 35m "captured" against the 12h goal. "captured" counts all seven candidate sessions on both rigs. Notifications read disabled.
+- **Expect (negative):** No window claims clear weather, telescope availability, or processing readiness. The gap never says "not in a run" and never shows "in project" above "captured".
+- **Trace:** flow K · PLAN-FR-02, PLAN-FR-05, PLAN-TGT-FR-14 · PRJ-FR-04, PRJ-FR-21 · root FR-023 · D07, D-W16, D-W36, D-W66
 
 ### S2 — Set criteria {#S2}
 
@@ -140,13 +140,13 @@ Project or session data and starts no indexing.
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D07 and D18, and the workflow decisions D-W16, D-W36, D-W37, D-W39 and D-W60. No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D07 and D18, and the workflow decisions D-W16, D-W36, D-W37, D-W39, D-W60 and D-W66. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: how a scheduled reminder is observed before delivery is unspecified, and so is delivery while the app is closed, which is not claimed without an installed, tested scheduler (D07). S7 and S8 depend on it. Blocks readiness.
 - G3: Unresolved implementation qualification: no development clock control yet brings a window to its lead time or holds it there across a relaunch (P4). S7a, S8 and S13 depend on it. Blocks readiness.
-- G4: Out of scope for this journey: a mosaic subject's per-panel Plan area and its center-based Tonight window (PLAN-FR-02, PLAN-FR-11, D-W63), Tonight without a saved site (PLAN-AC-12), and Home's "Plan tonight" Next action (PRJ-FR-18) are not exercised. Blocks readiness until covered by a step or a journey.
+- G4: Out of scope for this journey: a mosaic subject's Plan area listing each panel (PLAN-FR-02, D-W63) is not exercised. Blocks readiness until covered by a step or a journey. J32/S5 and J32/S7 cover Home's **Plan tonight** Next action (PRJ-FR-18) and the mosaic's centre-based Tonight window (PLAN-FR-11), and J19/S6a covers Tonight without a saved site (PLAN-AC-12).
 
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, S3, S5, S6, +S11, +S12, +S13 · behavior-change
   The Plan area opens from a Targets row and shows the Project goal gap as "in project" and "captured". A Target outside any Project is planned without a Project. The Project page plans its own subjects and opens the Planner in its context. Home's Tonight lists the best windows at the default site.
-  Evidence: D-W16, D-W36, D-W37, D-W39, D-W60 (workflow decisions, settled 2026-10-06); 072 PLAN-FR-02, PLAN-FR-09, PLAN-FR-10, PLAN-FR-11, PLAN-AC-09, PLAN-AC-10, PLAN-AC-11 at e4476231 · by: agent (intent-gated, user instruction)
+  Evidence: D-W16, D-W36, D-W37, D-W39, D-W60 (workflow decisions, settled 2026-10-06); 072 PLAN-FR-02, PLAN-FR-09, PLAN-FR-10, PLAN-FR-11, PLAN-AC-09, PLAN-AC-10, PLAN-AC-11 at e4476231; D-W66, 065 PRJ-FR-04, PRJ-FR-21 at d45a22ad · by: agent (intent-gated, user instruction)

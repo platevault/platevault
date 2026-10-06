@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [archive, storage, projects, view-review, preparation, locations]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 071-storage-custody, D02, D06, D09, D11, D19, D-W3, D-W20, D-W26, D-W46, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 071-storage-custody, D02, D06, D09, D11, D19, D-W3, D-W20, D-W26, D-W46, D-W64, D-W71, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-j-verified-archive-transfer]
 ---
 
 ## Goal
@@ -28,7 +28,7 @@ and stay named in the run.
 
 ## Preconditions
 
-- P1: Fresh replay of J34 through S5: the Archive review is open on the `NGC 7000 HOO` Done / Archive sheet, returned to without approval, and no frame has been trashed. Every run of the Project is Complete or Abandoned. J25 and run Clean up (J27/S4 to J27/S11) were not run, so `NGC7000-HOO-Siril` reads Complete and keeps its 208 hardlink entries under `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril/` on `Astro-T7`. The open Project `NGC 7000 Ha deep` has the runs `Ha deep v1` (Complete) and `Ha deep` (Prepared), both with 28 Sep as a member. 30 Sep is only a candidate of the open Project `NGC 7000 SHO`. Siril is not running.
+- P1: Fresh replay of J34 through S5: the Archive review is open on the `NGC 7000 HOO` Done / Archive sheet, returned to without approval, and no frame has been trashed. Every run of the Project is Complete or Abandoned. J25 and run Clean up (J27/S4 to J27/S11) were not run, so `NGC7000-HOO-Siril` reads Complete and keeps its 208 hardlink entries under `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril/` on `Astro-T7`. The open Project `NGC 7000 Ha deep` has the runs `Ha deep v1` (Complete), `Ha deep` (Prepared) and `Ha deep trial` (Abandoned), each with 28 Sep as a member. 30 Sep is only a candidate of the open Project `NGC 7000 SHO`. Siril is not running.
 - P2: A disposable writable volume `Archive` with free space for the four archived sessions, and a second disposable volume that can be mounted under the same name `Archive`.
 - P3: The J19/P5 manifest and a SHA-256 list of the five member sessions' files are recorded. `Cold-1` stays offline.
 - P4: Write permission is removed from the run folder that holds the prepared entries of one named 24 Sep frame, so that its reference cannot be rebuilt (fault fixture for S8; G3).
@@ -170,5 +170,5 @@ and stay named in the run.
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, S5, S6, S8, S10, S11, S12, S13, P1, P2, +SC10 · behavior-change
-  Archive now starts from the Done / Archive sheet of a Done Project and keeps 28 Sep, which the open Project `NGC 7000 Ha deep` uses. A candidate-only use does not keep 30 Sep. Destinations follow the naming templates. Views are processing runs named per D-W51. Storage shows transfer phases during the interruption.
-  Evidence: D-W3, D-W20, D-W26, D-W46 (workflow decisions, settled 2026-10-06); 071 STO-FR-06, STO-FR-11, STO-FR-13, STO-AC-17; 063 FR-011 at e4476231 · by: agent (intent-gated, user instruction)
+  Archive now starts from the Done / Archive sheet of a Done Project and keeps 28 Sep, which the open Project `NGC 7000 Ha deep` uses. A candidate-only use does not keep 30 Sep. Destinations follow the naming templates. Views are processing runs named per D-W51. Storage shows transfer phases during the interruption. P1 adds J34's Abandoned run `Ha deep trial`.
+  Evidence: D-W3, D-W20, D-W26, D-W46 (workflow decisions, settled 2026-10-06); 071 STO-FR-06, STO-FR-11, STO-FR-13, STO-AC-17; 063 FR-011 at e4476231, plus D-W64, D-W71, 065 PRJ-AC-16 and 071 STO-FR-13, STO-AC-18 at d45a22ad · by: agent (intent-gated, user instruction)

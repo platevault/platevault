@@ -7,13 +7,13 @@ last_reviewed: 2026-07-14
 actors: [primary-user]
 surfaces: [targets, planning, projects, sessions, home, view-review]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 072-observing-plans, D-W1, D-W8, D-W17, D-W23, D-W30, D-W33, D-W36, D-W37, D-W47, D-W49, D-W50, D-W59, D-W60, D-W61, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/072-observing-plans/spec.md]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 072-observing-plans, D-W1, D-W8, D-W17, D-W23, D-W30, D-W33, D-W36, D-W37, D-W47, D-W49, D-W50, D-W59, D-W60, D-W61, D-W65, D-W66, specs/063-clean-rebuild-contract/spec.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/072-observing-plans/spec.md]
 ---
 
 ## Goal
 
 The user knows what to shoot and process next: NGC 7000. They find it on the
-Targets list, check that it fits their RedCat rig, and choose **Start a
+Targets list, check that it fits their `RedCat` rig, and choose **Start a
 processing run** on its Target page before any Project exists. PlateVault first
 asks for a Project, creates `NGC 7000 HOO` prefilled with the Target, and only
 then creates the run inside it. Later the user adds the other-camera session
@@ -26,16 +26,16 @@ to the same Project from the **Not in any Project** filter. Done means:
 
 ## Preconditions
 
-- P1: J19 completed through S15. All seven light sessions have confirmed Target NGC 7000, the six RedCat sessions read rig RedCat 51 / ASI2600MM, the other-camera session reads rig Esprit 100 / ASI533MC, and `Cold-1` is offline.
+- P1: J19 completed through S15. All seven light sessions have confirmed Target NGC 7000, the six RedCat sessions read rig `RedCat`, the other-camera session reads rig `Esprit`, and `Cold-1` is offline.
 - P2: No Project and no processing run exist. My targets has no ★ favourite.
-- P3: Settings > Equipment holds rig RedCat 51 / ASI2600MM with a 250 mm focal length and the ASI2600MM sensor size and pixel size, so its field of view is known. Its filter list holds Ha and OIII.
+- P3: Settings > Equipment holds rig `RedCat` (RedCat 51 + ASI2600MM) as J15/S2 to S4 create it, with a 250 mm focal length and the ASI2600MM sensor size and pixel size, so its field of view is known. Its filter list holds Ha and OIII.
 - P4: A manifest (relative path, size, SHA-256) of every file under the J19 folders, recorded outside PlateVault before S1, with `Cold-1` remounted for the recording and ejected again afterwards.
 
 ## Steps
 
 ### S1 — Find NGC 7000 on the Targets list {#S1}
 
-- **Do:** From Home, open **Targets**. Search for `ngc7000`. Choose **Add to targets** on the NGC 7000 result. In the toolbar rig selector, choose RedCat 51 / ASI2600MM.
+- **Do:** From Home, open **Targets**. Search for `ngc7000`. Choose **Add to targets** on the NGC 7000 result. In the toolbar rig selector, choose `RedCat`.
 - **Expect:** Targets opens on **My targets**, which is empty before the search. The search lists NGC 7000 from the bundled catalogues with its source, and `ngc7000` matches the same Target as `NGC 7000`. After **Add to targets**, NGC 7000 is listed under My targets with ★ set. Choosing the rig adds a Fit column, and NGC 7000's Fit reads "fits": its major axis is about 2° against the rig's 3.6° shorter side. The Filters strip shows only the bands the rig's filters pass, Ha and OIII.
 - **Expect (negative):** Adding a Target to My targets creates no Project and assigns no session to anything.
 - **Trace:** Targets list · PLAN-TGT-FR-01, PLAN-TGT-FR-03, PLAN-TGT-FR-11, PLAN-TGT-FR-06 · PLAN-TGT-AC-03, PLAN-TGT-AC-11 · D-W17, D-W23, D-W61
@@ -55,15 +55,15 @@ to the same Project from the **Not in any Project** filter. Done means:
 
 ### S4 — Create the prefilled Project {#S4}
 
-- **Do:** Choose **Create Project**. Enter the name `NGC 7000 HOO`. Add rig RedCat 51 / ASI2600MM and apply the built-in HOO goal template. Save.
-- **Expect:** The New Project form opens with subject NGC 7000 already filled in. Applying HOO copies the goals Ha 10h and OIII 10h into the Project. After saving, Ha reads `0h00 in project · 9h15 captured · goal 10h`, and OIII reads `0h00 in project · 10h35 captured · goal 10h`. Both goals are unmet, although OIII captured exceeds its goal. PlateVault then creates the run: subject NGC 7000 and rig RedCat 51 / ASI2600MM are the only choices. The user names the run `NGC7000-HOO-Siril`, and it opens at its Select step inside the Project.
-- **Expect (negative):** The captured values leave out the Esprit 100 / ASI533MC session, because that rig is not on the Project. The Project stays open; no goal state marks it Done.
-- **Trace:** flow B2, B4 · PRJ-FR-01, PRJ-FR-02, PRJ-FR-04, PRJ-FR-10, PRJ-FR-12 · PRJ-AC-01, PRJ-AC-03, PRJ-AC-14 · VSEL-AC-16 · D-W30, D-W36, D-W47
+- **Do:** Choose **Create Project**. Enter the name `NGC 7000 HOO`. Add rig `RedCat` and apply the built-in HOO goal template. Save.
+- **Expect:** The New Project form opens with subject NGC 7000 already filled in. Applying HOO copies the goals Ha 10h and OIII 10h into the Project. After saving, Ha reads `0h00 in project · 9h15 captured · goal 10h`, and OIII reads `0h00 in project · 10h35 captured · goal 10h`. "captured" counts the six RedCat candidates, 12 Sep included, because no run has members yet. Both goals are unmet, although OIII captured exceeds its goal. PlateVault then creates the run: subject NGC 7000 and rig `RedCat` are the only choices. The user names the run `NGC7000-HOO-Siril`, and it opens at its Select step inside the Project.
+- **Expect (negative):** The captured values leave out the `Esprit` session, because it is neither a candidate nor a run member: its rig is not on the Project. No goal reads "in project" above "captured". The Project stays open; no goal state marks it Done.
+- **Trace:** flow B2, B4 · PRJ-FR-01, PRJ-FR-02, PRJ-FR-04, PRJ-FR-10, PRJ-FR-12, PRJ-FR-21 · PRJ-AC-01, PRJ-AC-03, PRJ-AC-14 · VSEL-AC-16 · D-W30, D-W36, D-W47, D-W66
 
 ### S5 — Read the run's candidates and ownership {#S5}
 
 - **Do:** In the run's Select step, read the session picker and the run's header.
-- **Expect:** The header names Project `NGC 7000 HOO`, subject NGC 7000 and rig RedCat 51 / ASI2600MM. The picker lists the six RedCat sessions with the reason `Target NGC 7000 on RedCat 51 / ASI2600MM`. The five available sessions (18, 24, 26, 28 and 30 Sep) start selected, and 12 Sep is flagged Offline.
+- **Expect:** The header names Project `NGC 7000 HOO`, subject NGC 7000 and rig `RedCat`. The picker lists the six RedCat sessions with the reason `Target NGC 7000 on RedCat`. The five available sessions (18, 24, 26, 28 and 30 Sep) start selected, and 12 Sep is flagged Offline.
 - **Expect (negative):** The other-camera session is not listed, even after the picker's filters are cleared. The run offers no control to move it to another Project or to share it with one.
 - **Trace:** flow C2 · VSEL-FR-01, VSEL-FR-03, VSEL-FR-09 · VSEL-AC-01, VSEL-AC-16, VSEL-AC-18 · D-W8, D-W37, D-W49
 
@@ -77,9 +77,9 @@ to the same Project from the **Not in any Project** filter. Done means:
 ### S7 — Add the other-camera session from Not in any Project {#S7}
 
 - **Do:** Open Sessions and choose the **Not in any Project** filter. On the other-camera session's row, choose **Add to Project** and pick `NGC 7000 HOO`. Read the confirmation, then save. Return to Home and to the run's Select step.
-- **Expect:** Before saving, **Not in any Project** lists exactly the other-camera session. Its row offers **Create Project** and **Add to Project**. The confirmation has a visible note that rig Esprit 100 / ASI533MC will be added to the Project. After saving, the Project lists both rigs, and Ha reads `0h00 in project · 12h35 captured · goal 10h`. **Not in any Project** lists no session, and Home's top line reads `0 sessions need a Target · 0 not in any Project`.
-- **Expect (negative):** Adding the session assigns it to no run. The picker of `NGC7000-HOO-Siril` still lists only RedCat sessions, because a run's rig is fixed at creation.
-- **Trace:** Sessions filters · LIB-FR-17 · LIB-AC-18 · PRJ-FR-19 · PRJ-AC-09 · VSEL-AC-18 · D-W37, D-W50, D-W59
+- **Expect:** Before saving, **Not in any Project** lists exactly the other-camera session. Its row offers **Create Project** and **Add to Project**. The confirmation has a visible note that rig `Esprit` will be added to the Project. After saving, the Project lists both rigs, and Ha reads `0h00 in project · 12h35 captured · goal 10h`, because the other-camera session is now a candidate. **Not in any Project** lists no session, and Home's top line reads `0 sessions need a Target · 0 not in any Project`.
+- **Expect (negative):** Adding the session assigns it to no run. The picker of `NGC7000-HOO-Siril` still lists only RedCat sessions, because a run's rig is fixed at creation. No label reads "not in a run".
+- **Trace:** Sessions filters · LIB-FR-17 · LIB-AC-18 · PRJ-FR-04, PRJ-FR-19, PRJ-FR-21 · PRJ-AC-09 · VSEL-AC-18 · D-W37, D-W50, D-W59, D-W66
 
 ### S8 — Confirm there were no side effects {#S8}
 
@@ -99,12 +99,12 @@ to the same Project from the **Not in any Project** filter. Done means:
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Behavior follows specs 063 to 072 at e4476231 and the workflow decisions of 2026-10-06. No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Behavior follows specs 063 to 072 at d45a22ad and the workflow decisions of 2026-10-06. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: S1 assumes NGC 7000's catalogued major axis is about 2°. The bundled catalogue's size value has not been checked, so the exact coverage behind "fits" is unverified. Blocks readiness.
-- G3: Out of scope for this journey: **Add to Project** from a Target into an existing Project and a mosaic subject. J20 covers the refusal to remove a rig that a run uses, and J33 covers mosaics.
+- G3: Out of scope for this journey: **Add to Project** from a Target into an existing Project and a mosaic subject. J20 covers the refusal to remove a rig or subject that a run uses, and J33 covers mosaics.
 
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, S2, S3, S4, S5, S6, S7, +S8 · behavior-change
   Every processing run now lives in a Project. Starting a run from a Target first asks for Create Project or Add to Project, the Project is prefilled from the Target, and the run is created inside it. The Targets list (My targets, search, rig selector, Fit) replaces the planner columns, and Add to Project from Not in any Project adds the session's rig with a note. The legacy wizard defects of v1 no longer apply.
-  Evidence: D-W1, D-W8, D-W17, D-W23, D-W33, D-W37, D-W50, D-W59, D-W60 and VSEL-FR-01, VSEL-AC-16, PRJ-FR-01, PRJ-FR-19, LIB-FR-17, PLAN-TGT-FR-01, PLAN-TGT-FR-11 at e4476231 · by: agent (intent-gated, user instruction)
+  Evidence: D-W1, D-W8, D-W17, D-W23, D-W33, D-W37, D-W50, D-W59, D-W60 and VSEL-FR-01, VSEL-AC-16, PRJ-FR-01, PRJ-FR-19, LIB-FR-17, PLAN-TGT-FR-01, PLAN-TGT-FR-11 at e4476231; D-W65, D-W66 ("captured" is candidates plus run members) and PRJ-FR-02, PRJ-FR-04, PRJ-FR-21, root FR-023 at d45a22ad; rig names `RedCat` and `Esprit` from J15/S3 and S3a · by: agent (intent-gated, user instruction)

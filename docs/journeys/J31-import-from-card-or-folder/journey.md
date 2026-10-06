@@ -148,7 +148,7 @@ added in place. Done means:
 
 ## Known gaps
 
-- G1: Not validated. The rebuilt application does not exist. Behavior follows specs 064 and 071 at e4476231 and the 2026-10-06 workflow decisions. No implementation has been validated against them.
+- G1: Not validated. The rebuilt application does not exist. Behavior follows specs 064 and 071 at d45a22ad and the 2026-10-06 workflow decisions. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: the growing-file writer (P2) and unmounting the share at a known point (S10) need fixture tooling that does not exist yet. Blocks readiness.
 - G3: Out of scope for this journey: a failed destination verification and a source that changes after its snapshot (STO-IMP-AC-03, STO-AC-14) need fault injection. They are not exercised. Blocks readiness until covered by a step or a journey.
 - G4: Out of scope for this journey: a role with no location, which blocks its items with the missing role named (STO-IMP-FR-02), and the unknown-filter prompt in the preview (STO-IMP-FR-03, PLAN-EQ-FR-04) are not exercised. Blocks readiness until covered by a step or a journey.

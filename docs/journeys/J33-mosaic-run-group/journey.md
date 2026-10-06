@@ -21,16 +21,18 @@ panel, and prepares all panels into one folder that WBPP can load. The user
 then picks up panel Results and an assembled mosaic from the group's Results
 folder. Done means the four panel runs hold 40, 30, 30 and 20 lights. They are
 prepared under `Work/Processing/Veil Mosaic HOO/Veil Mosaic/Panel 1/` to
-`Panel 4/`, and a re-prepared Panel 2 revision lands in a new
-`Veil Mosaic (rev 2)/` folder while the first folder stays unchanged. Panel
-Results come from `Veil Mosaic Results/`, and the assembled image is accepted
-as the group Result with lineage Unknown. No panel run's status, membership
-or revision changes because of another panel or the group Result.
+`Panel 4/`. A re-prepared Panel 2 revision lands in a new
+`Veil Mosaic (rev 2)/` folder with its own `Panel N/` folders, while the first
+folder stays unchanged. Panel Results of both revisions come from the one
+`Veil Mosaic Results/` folder, and each names the revision it came from. The
+user places the assembled image on the group, and it is accepted as the group
+Result with lineage Unknown. No panel run's status, membership or revision
+changes because of another panel or the group Result.
 
 ## Preconditions
 
-- P1: The J19 catalog exists (rig RedCat 51 / ASI2600MM is recorded), and no Project named `Veil Mosaic HOO` exists.
-- P2: `Astro-T7/Captures` holds eight further RedCat 51 / ASI2600MM sessions of mono 300 s lights at the J19 gain, offset, temperature and binning. They are indexed, with confirmed Target Veil Nebula and confirmed rig RedCat 51 / ASI2600MM. The 17 Aug Target was confirmed by hand because it has no pointing.
+- P1: The J19 catalog exists with rig `RedCat` (RedCat 51 + ASI2600MM), and no Project named `Veil Mosaic HOO` exists.
+- P2: `Astro-T7/Captures` holds eight further sessions of mono 300 s lights on rig `RedCat`, at the J19 gain, offset, temperature and binning. They are indexed, with confirmed Target Veil Nebula and confirmed rig `RedCat`. The 17 Aug Target was confirmed by hand because it has no pointing.
 
   | Session | Channel | Frames | Pointing |
   |---|---|---|---|
@@ -54,14 +56,14 @@ or revision changes because of another panel or the group Result.
 
 ### S1 — Create the mosaic Project {#S1}
 
-- **Do:** Click **New Project**. Enter `Veil Mosaic HOO`. Add subject Veil Nebula, mark it **Mosaic**, name it `Veil Mosaic`, and enter the four P3 panels by centre and rotation. Add rig RedCat 51 / ASI2600MM and apply the built-in HOO goal template. Save.
-- **Expect:** The Project lists subject `Veil Mosaic` with Panels 1 to 4 and rig RedCat 51 / ASI2600MM. Each panel has its own goals, Ha 10h and OIII 10h, each showing "in project" and "captured". All read `0h 00m in project`. Captured reads Ha 1h 40m and OIII 1h 40m for Panel 1, Ha 1h 40m for Panels 2 and 3, and OIII 1h 40m for Panel 4. The Project page lists the eight sessions as candidates, and 15, 16 and 17 Aug count toward no panel.
+- **Do:** Click **New Project**. Enter `Veil Mosaic HOO`. Add subject Veil Nebula, mark it **Mosaic**, name it `Veil Mosaic`, and enter the four P3 panels by centre and rotation. Add rig `RedCat` and apply the built-in HOO goal template. Save.
+- **Expect:** The Project lists subject `Veil Mosaic` with Panels 1 to 4 and rig `RedCat`. Each panel has its own goals, Ha 10h and OIII 10h, each showing "in project" and "captured". All read `0h 00m in project`. Captured reads Ha 1h 40m and OIII 1h 40m for Panel 1, Ha 1h 40m for Panels 2 and 3, and OIII 1h 40m for Panel 4. The Project page lists the eight sessions as candidates, and 15, 16 and 17 Aug count toward no panel.
 - **Expect (negative):** Creating the Project changes no file, creates no run and changes no quality state.
 - **Trace:** PRJ-FR-01, PRJ-FR-03, PRJ-FR-05 · PRJ-AC-13, PRJ-AC-14 · D-W29, D-W38, D-W47
 
 ### S2 — Start a run on the mosaic subject {#S2}
 
-- **Do:** On the Project page click **Start a processing run**. Choose subject `Veil Mosaic` and rig RedCat 51 / ASI2600MM.
+- **Do:** On the Project page click **Start a processing run**. Choose subject `Veil Mosaic` and rig `RedCat`.
 - **Expect:** The only choice offered for the mosaic subject is a run group. PlateVault creates run group `Veil Mosaic` with four panel runs, Panel 1 to Panel 4, each at its Select step. 10 and 11 Aug join Panel 1, 12 Aug joins Panel 2, 13 Aug joins Panel 3 and 14 Aug joins Panel 4. Each reason names the session's pointing inside that panel. 15 Aug is flagged as in Panels 1 and 2, 16 Aug as outside every panel, and 17 Aug as Position unknown. Each flagged session waits for the user to assign a panel or leave it out.
 - **Expect (negative):** No single whole-mosaic run is offered. No flagged session joins a panel run, and no session joins a panel without pointing evidence. No folder is created on disk.
 - **Trace:** Mosaic run group · VSEL-FR-01, VSEL-FR-03, VSEL-FR-04, VSEL-FR-18 · VSEL-AC-21 · PRJ-FR-10 · D-W38
@@ -124,31 +126,34 @@ or revision changes because of another panel or the group Result.
 
 ### S11 — Discover panel Results and the group candidate {#S11}
 
-- **Do:** Outside PlateVault, copy one P8 panel image into each of `Veil Mosaic Results/Panel 1/` to `Panel 4/`. Copy `Panel4_OIII_drizzle.xisf` and `Veil_HOO_mosaic.xisf` into `Veil Mosaic Results/`, and `stray.xisf` into `Veil Mosaic/Panel 1/`. Open the group's **Results** step.
-- **Expect:** Each panel run lists only the candidate in its own `Panel N/` folder. Panel 4 also lists `Panel4_OIII_drizzle.xisf`, assigned by its file name. `Veil_HOO_mosaic.xisf` is listed as a group Result candidate of kind Assembled mosaic, outside every panel list. Each discovered Result names the group preparation it came from, `Veil Mosaic`. **Attach Result** is visible beside the discovered list.
-- **Expect (negative):** `stray.xisf` is not discovered. Nothing is accepted automatically.
-- **Trace:** Run group Results: panel discovery and the optional group Result · RES-FR-01, RES-FR-02, RES-FR-08 · RES-AC-11 · D-W4, D-W51, D-W67, D-W68
+- **Do:** Outside PlateVault, copy one P8 panel image into each of `Veil Mosaic Results/Panel 1/` to `Panel 4/`. Copy `Panel4_OIII_drizzle.xisf` and `Veil_HOO_mosaic.xisf` into `Veil Mosaic Results/`, and `stray.xisf` into `Veil Mosaic/Panel 1/`. Open the group's **Results** step. Place `Veil_HOO_mosaic.xisf` on the group.
+- **Expect:**
+  - Each panel run lists only the candidate in its own `Panel N/` folder. Panel 4 also lists `Panel4_OIII_drizzle.xisf`, assigned by its file name.
+  - `Veil_HOO_mosaic.xisf` has neither a `Panel N/` subfolder nor tool evidence, so it is listed as unplaced, outside every panel list. After the user places it on the group, it is listed as a group Result candidate of kind Assembled mosaic.
+  - Each discovered Result names the group preparation it came from, `Veil Mosaic`. **Attach Result** is visible beside the discovered list.
+- **Expect (negative):** `stray.xisf` is not discovered. Nothing is accepted automatically, and PlateVault places no unplaced candidate on a panel run or on the group by itself.
+- **Trace:** Run group Results: panel discovery, user placement of unplaced candidates and the optional group Result · RES-FR-01, RES-FR-02, RES-FR-08 · RES-AC-11 · D-W4, D-W51, D-W67, D-W68
 
 ### S12 — Accept a panel Result and the group Result {#S12}
 
 - **Do:** Inspect and accept Panel 1's result. Inspect and accept `Veil_HOO_mosaic.xisf` as the group Result.
 - **Expect:** Panel 1's result appears on Panel 1. The group Result appears on run group `Veil Mosaic`, on Project `Veil Mosaic HOO` and on subject `Veil Mosaic`, with lineage Unknown and the SHA-256 recorded at acceptance.
 - **Expect (negative):** Accepting the group Result changes no panel run's status, membership or revision. The lineage does not claim the panel Results as inputs.
-- **Trace:** Run group Results: panel discovery and the optional group Result · RES-FR-04, RES-FR-08 · RES-AC-11 · D19, D-W38
+- **Trace:** Run group Results: panel discovery, user placement of unplaced candidates and the optional group Result · RES-FR-04, RES-FR-08 · RES-AC-11 · D19, D-W38, D-W68
 
 ### S13 — Re-prepare one panel into a new group folder {#S13}
 
 - **Do:** Record a listing (path, inode, size) of `Veil Mosaic/` outside PlateVault. In Panel 2, choose **Exclude from run** for Q2 and click **Save run**. Click **Prepare** on Panel 2, read the review, and approve.
-- **Expect:** Panel 2 reads saved membership revision 2 with 29 lights. The review proposes the new group folder `Work/Processing/Veil Mosaic HOO/Veil Mosaic (rev 2)/` holding `Panel 1/` to `Panel 4/`, and names `Veil Mosaic Results/` as the unchanged Results folder. After approval, `Veil Mosaic (rev 2)/Panel 2/` holds 29 lights and every panel reads Prepared.
-- **Expect (negative):** `Veil Mosaic/` and its `Panel N/` folders equal the recorded listing, and no existing folder is reused or cleared. The previous group folder stays until the user approves its cleanup.
-- **Trace:** Run group: Prepare all and the panel folder layout · PREP-FR-06, PREP-FR-13 · PREP-AC-18 · D-W51, D-W67
+- **Expect:** Panel 2 reads saved membership revision 2 with 29 lights. The review proposes the new group folder `Work/Processing/Veil Mosaic HOO/Veil Mosaic (rev 2)/`, with a `Panel N/` folder inside it for every panel run, `Panel 1/` to `Panel 4/`. It names `Veil Mosaic Results/` as the unchanged Results folder that serves both revisions. After approval, `Veil Mosaic (rev 2)/Panel 2/` holds 29 lights and every panel reads Prepared.
+- **Expect (negative):** `Veil Mosaic/` and its `Panel N/` folders equal the recorded listing, and no existing folder is reused or cleared. The previous group folder stays until the user approves its cleanup. No second Results folder is proposed.
+- **Trace:** Run group: Prepare all and the panel folder layout · PREP-FR-06, PREP-FR-07, PREP-FR-11, PREP-FR-13 · PREP-AC-18 · D-W51, D-W67
 
 ### S14 — Discover a Result from the new revision {#S14}
 
-- **Do:** Outside PlateVault, copy a second P8 panel image into `Veil Mosaic Results/Panel 2/`. Reopen the group's **Results** step.
-- **Expect:** Panel 2 lists the new candidate, naming `Veil Mosaic (rev 2)` as the preparation it came from. The S11 candidates still name `Veil Mosaic`. The group Result accepted at S12 is unchanged.
+- **Do:** Outside PlateVault, copy a second P8 panel image into `Veil Mosaic Results/Panel 2/`. Open the group's **Results** step again.
+- **Expect:** Panel 2 lists the new candidate, naming `Veil Mosaic (rev 2)` as the preparation it came from. The S11 candidates, in the same `Veil Mosaic Results/` folder, still name `Veil Mosaic`. The group Result accepted at S12 is unchanged.
 - **Expect (negative):** No candidate is discovered inside `Veil Mosaic (rev 2)/`.
-- **Trace:** Run group Results: panel discovery and the optional group Result · RES-FR-08 · D-W67
+- **Trace:** Run group Results: panel discovery, user placement of unplaced candidates and the optional group Result · RES-FR-01, RES-FR-08 · RES-AC-16 · D-W67 · G5
 
 ### S15 — Complete each panel run {#S15}
 
@@ -164,7 +169,7 @@ or revision changes because of another panel or the group Result.
 - SC3: At S6 marking Q1 changes exactly 1 frame's quality and 1 panel draft; the Panel 2 filter lists exactly 30 frames.
 - SC4: At S7 the Panel 3 exception changes 0 assignments in Panels 1, 2 and 4.
 - SC5: At S9 the group reads Partial with exactly Panel 2 Partial and 2 blocked items, and the group-folder Open is absent; after S10 the group reads Prepared.
-- SC6: At S11 `stray.xisf` is discovered 0 times and exactly 1 group Result candidate is listed; S12 changes 0 panel statuses, memberships or revisions.
+- SC6: At S11 `stray.xisf` is discovered 0 times, `Veil_HOO_mosaic.xisf` stays unplaced until the user places it, and then exactly 1 group Result candidate is listed; S12 changes 0 panel statuses, memberships or revisions.
 - SC7: After S13 `Veil Mosaic/` equals its recorded listing and `Veil Mosaic (rev 2)/` holds 4 panel folders.
 
 ## Known gaps
@@ -172,7 +177,8 @@ or revision changes because of another panel or the group Result.
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs, decisions D04 and D19, and workflow decisions D-W29, D-W38, D-W41, D-W51, D-W55, D-W67 and D-W68. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: the WBPP profile's capability probe (D04) and the folder input it uses are not qualified, and the flow names no control for naming a mosaic subject or entering panel centres and rotation (S1). Blocks readiness.
 - G3: Unresolved implementation qualification: the panel-assignment geometry rule (pointing inside a panel's centre-and-rotation footprint, D-W38) has no fixed tolerance. The P3 panel definitions must place each P2 session by an unambiguous margin once the rule is chosen. Blocks readiness.
-- G4: Out of scope for this journey: Cancel or Pause of Prepare all, a group whose every panel fails, cleanup of the previous `Veil Mosaic/` folder, and a run group with no group Result (RES-AC-12 in its stated form) are not exercised. Blocks readiness until covered by a step or a journey.
+- G4: Out of scope for this journey: Cancel or Pause of Prepare all, a group whose every panel fails, cleanup of the previous `Veil Mosaic/` folder, placing an unplaced candidate on a panel run (RES-FR-08), and a run group with no group Result (RES-AC-12 in its stated form) are not exercised. Blocks readiness until covered by a step or a journey.
+- G5: Unresolved product question: RES-FR-01 and RES-AC-16 require each discovered Result to record the prepared revision it came from, but do not say how PlateVault decides it. S14 assumes that a file which appears after the rev 2 preparation names rev 2. Blocks readiness.
 
 ## Delta log
 

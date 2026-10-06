@@ -25,7 +25,7 @@ targets**.
 
 ## Preconditions
 
-- P1: Fresh replay of J15, J19 and J20, with J21 to J34 not run. The rigs `RedCat` and `Esprit` exist as J15 left them. `RedCat` is mono with the filters Ha, OIII and Halpha and a field of about 5.4° × 3.6°. `Esprit` is OSC with an empty filter list and a field of about 1.2° × 1.2°. Settings holds Backyard and `Remote site`. Project `NGC 7000 HOO` is open with subject NGC 7000 and rig `RedCat`. No Target is marked ★.
+- P1: Fresh replay of J15, J19 and J20, with J21 to J34 not run. The rigs `RedCat` and `Esprit` exist as J15 left them. `RedCat` is mono with the filters Ha, OIII and Halpha and a field of about 5.4° × 3.6°. `Esprit` is OSC with an empty filter list and a field of about 1.2° × 1.2°. Settings holds Backyard and `Remote site`. Project `NGC 7000 HOO` is open as J20 left it: subject NGC 7000, rigs `RedCat` and `Esprit`, and the run `NGC7000-HOO-Siril` at Select with no saved membership. Seven sessions, six on `RedCat` and one on `Esprit`, have confirmed Target NGC 7000. No Target is marked ★.
 - P2: A second open Project `Summer nebulae`, created with New Project as in J20, has the single subject IC 1396 and the rigs `RedCat` and `Esprit`, and no run. IC 1396 is not marked ★.
 - P3: The bundled catalogues (Messier, NGC, IC, Sharpless, LBN, LDN, Caldwell, Barnard) are installed. SIMBAD is reachable until S6, and a network control can then block it (G2).
 - P4: The planning site selector reads Backyard. A development-build clock control (D17) fixes tonight to one date, so the S1 and S3 values can be compared.
@@ -43,7 +43,7 @@ targets**.
 ### S2 — Read Sessions and Captured, and sort {#S2}
 
 - **Do:** Read the NGC 7000 and IC 1396 rows, open NGC 7000's Target page, then return and sort by Img time descending and again ascending.
-- **Expect:** NGC 7000's Sessions equals the number of sessions its Target page lists. Its Captured reads Ha 9h 15m, and OIII equals the OIII captured integration on its Target page. IC 1396 reads "-" for Sessions. Each sort reorders the rows by Img time, and a row with an unknown value sorts last both times.
+- **Expect:** NGC 7000's Sessions equals the number of sessions its Target page lists. Its Captured reads Ha 12h 35m, from the Ha sessions on both rigs, and OIII equals the OIII captured integration on its Target page. IC 1396 reads "-" for Sessions. Each sort reorders the rows by Img time, and a row with an unknown value sorts last both times.
 - **Expect (negative):** The ★ column offers no sort.
 - **Trace:** Targets list · PLAN-TGT-FR-04, PLAN-TGT-FR-08 · PLAN-TGT-AC-08 · D-W18
 
@@ -145,8 +145,8 @@ targets**.
 - G1: Not validated. The rebuilt application does not exist. Product behavior follows the specs and the workflow decisions D-W16 to D-W19, D-W23, D-W31, D-W37 and D-W60 to D-W62. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: no network control yet blocks SIMBAD alone (P3), and no fault control fails **Add to targets** to exercise its Retry (PLAN-TGT-FR-03). S6 depends on the first. Blocks readiness.
 - G3: Out of scope for this journey: the Moon and darkness reasons for a zero Img time (PLAN-TGT-AC-06) and a Target without catalogued coordinates (PLAN-TGT-AC-07) need fixture nights and Targets that are not specified. Blocks readiness until covered by a step or a journey.
-- G4: Out of scope for this journey: Fit's "Size unknown" and "Field of view unknown" reasons (072 edge cases, PLAN-EQ-FR-05) and the Targets page with no saved planning site (PLAN-TGT-AC-15) are not exercised. Blocks readiness until covered by a step or a journey.
-- G5: Out of scope for this journey: Trashed sessions leaving Sessions and Captured (PLAN-TGT-AC-08, D-W43) need the trash fixture of J34 and are not exercised here. Blocks readiness until covered by a step or a journey.
+- G4: Out of scope for this journey: Fit's "Size unknown" and "Field of view unknown" reasons (072 edge cases, PLAN-EQ-FR-05) are not exercised. Blocks readiness until covered by a step or a journey. J19/S6a covers the Targets page with no saved planning site (PLAN-TGT-AC-15).
+- G5: Out of scope for this journey: no session is Trashed here. J34/S7 covers trashed frames leaving Sessions and the Captured column of Target NGC 7000 (PLAN-TGT-FR-08, D-W43). A wholly Trashed session (PLAN-TGT-AC-08) is not exercised. Blocks readiness until covered by a step or a journey.
 - G6: Unresolved implementation qualification: the bundled catalogue's angular sizes for NGC 7000, IC 1396 and M 57 are assumed to place them as S10, S11 and S12 state for the J15 fields of view. A different catalogue value changes the expected Fit readings. Blocks readiness.
 
 ## Delta log

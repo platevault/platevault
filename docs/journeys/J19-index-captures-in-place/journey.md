@@ -26,7 +26,7 @@ onboarding the app opens on Home, the Projects dashboard. Done means:
 ## Preconditions
 
 - P1: A clean development build of the rebuilt PlateVault (D17) with no catalog, no saved observing site and no network connection. First launch shows onboarding.
-- P2: Volume `Astro-T7` holds `Captures/` with one subfolder per session. The five dated sessions use mono 300 s lights from the RedCat 51 / ASI2600MM train at one gain, offset, temperature and 1x1 binning, captured at the Backyard coordinates. The `other camera` session holds 300 s lights from the Esprit 100 / ASI533MC camera and optical train. A plain-text note is an unsupported item. The 30 Sep session also carries the frame-review properties of J22/P2.
+- P2: Volume `Astro-T7` holds `Captures/` with one subfolder per session. The five dated sessions use mono 300 s lights from rig `RedCat` (RedCat 51 + ASI2600MM) at one gain, offset, temperature and 1x1 binning, captured at the Backyard coordinates. The `other camera` session holds 300 s lights from rig `Esprit` (Esprit 100 + ASI533MC). A plain-text note is an unsupported item. The 30 Sep session also carries the frame-review properties of J22/P2.
 
   | Session | Channel | Lights | OBJECT | Pointing | Orientation | Optics keywords |
   | --- | --- | --- | --- | --- | --- | --- |
@@ -35,9 +35,9 @@ onboarding the app opens on Home, the Projects dashboard. Done means:
   | 26 Sep | OIII | 35 | `Cygnus field` | yes, overlapping NGC 7000 | yes | yes |
   | 28 Sep | Ha | 56 | NGC 7000 | yes | yes | telescope and focal length absent |
   | 30 Sep | OIII | 48 | NGC 7000 | yes | yes | yes |
-  | other camera | Ha | 40 | NGC 7000 | yes, overlapping | yes | Esprit 100 / ASI533MC |
+  | other camera | Ha | 40 | NGC 7000 | yes, overlapping | yes | Esprit 100 and ASI533MC |
 
-- P3: Volume `Cold-1` is mounted and holds `Captures/` with a 12 Sep session of 24 OIII 300 s RedCat lights (OBJECT, pointing and orientation present). It was captured at the coordinates of the second saved site used in J20/P2.
+- P3: Volume `Cold-1` is mounted and holds `Captures/` with a 12 Sep session of 24 OIII 300 s RedCat lights (OBJECT, pointing and orientation present). It was captured at the coordinates of `Remote site`, the second saved site of J15/S7 and J20/P2.
 - P4: `Astro-T7/Calibration/` holds the calibration fixture of J23/P2.
 - P5: A manifest (relative path, size, SHA-256) of every file under the three folders, recorded outside PlateVault before S1.
 - P6: A catalog-write fault fixture that makes the next catalog write fail on demand (G3).
@@ -139,14 +139,14 @@ onboarding the app opens on Home, the Projects dashboard. Done means:
 
 ### S10 — Confirm and correct associations in the catalog {#S10}
 
-- **Do:** Choose **Confirm Target** NGC 7000 for 24 Sep and for 26 Sep. Choose **Confirm equipment** with the RedCat 51 / ASI2600MM rig (camera and optical-train record) for the six RedCat sessions: 12, 18, 24, 26, 28 and 30 Sep.
-- **Expect:** Each session shows the confirmed association next to its original evidence. 26 Sep still displays its `Cygnus field` label, and 28 Sep's equipment no longer reads Needs review. Each of the six sessions reads rig RedCat 51 / ASI2600MM. A grouping revision created by a confirmation keeps the previous session identity traceable. **Needs a Target** now lists no session, and **Not in any Project** lists all seven.
+- **Do:** Choose **Confirm Target** NGC 7000 for 24 Sep and for 26 Sep. Choose **Confirm equipment** with rig `RedCat` (camera and optical-train record) for the six RedCat sessions: 12, 18, 24, 26, 28 and 30 Sep.
+- **Expect:** Each session shows the confirmed association next to its original evidence. 26 Sep still displays its `Cygnus field` label, and 28 Sep's equipment no longer reads Needs review. Each of the six sessions reads rig `RedCat`. A grouping revision created by a confirmation keeps the previous session identity traceable. **Needs a Target** now lists no session, and **Not in any Project** lists all seven.
 - **Expect (negative):** Source bytes still match P5, including the 26 Sep OBJECT keyword and the absent 28 Sep optics keywords. Session boundaries and frame counts do not change.
 - **Trace:** flow A3 · LIB-FR-05, LIB-FR-12, LIB-FR-17 · LIB-AC-06 · root FR-002 · D11, D15, D-W37 · G2
 
 ### S11 — See a failed catalog write {#S11}
 
-- **Do:** Arm the P6 fault. Choose **Confirm equipment** with the Esprit 100 / ASI533MC rig for the other-camera session. Disarm the fault and click **Retry**.
+- **Do:** Arm the P6 fault. Choose **Confirm equipment** with rig `Esprit` for the other-camera session. Disarm the fault and click **Retry**.
 - **Expect:** While the fault is armed, the edited value stays visibly unsaved with an error and **Retry**. After Retry it reads saved.
 - **Expect (negative):** The value never reads Saved before the write succeeds.
 - **Trace:** flow cross-flow "Unsaved catalog write fails" · LIB-FR-11 · LIB-AC-08 · root FR-012 · D08
@@ -183,7 +183,7 @@ onboarding the app opens on Home, the Projects dashboard. Done means:
 - SC1: After S8, exactly 7 light sessions exist and none mixes channels. Night grouping leaves boundaries and counts identical (S8).
 - SC2: The S14 manifest equals P5 for 100% of files.
 - SC3: Zero frames read Missing at S5, S12, and S15. 18 Sep reads 55 frames again after S13.
-- SC4: After S10, 24 Sep and 26 Sep read NGC 7000 (user-confirmed), the six RedCat sessions read rig RedCat 51 / ASI2600MM, and their source headers equal P5 (S10, S14).
+- SC4: After S10, 24 Sep and 26 Sep read NGC 7000 (user-confirmed), the six RedCat sessions read rig `RedCat`, and their source headers equal P5 (S10, S14).
 - SC5: After S7, the Calibration row has no failure and its frames are indexed. The failure offered both recovery actions (S5).
 - SC6: At the end, 0 frames read Usable (S8).
 - SC7: A failing catalog write never reads Saved (S11).
@@ -193,7 +193,7 @@ onboarding the app opens on Home, the Projects dashboard. Done means:
 ## Known gaps
 
 - G1: Not validated. The rebuilt application does not exist. Product behavior follows the specs and the defaults that the authorized autonomous run set in decisions D01, D08, D11, D15, and D18. No implementation has been validated against them.
-- G2: Unresolved implementation qualification: the flow names no control for creating the rig record (camera and optical train, D11) used in S10 and S11. Same-asset locate/remap (LIB-FR-07, D11) and "locate a known copy" are not exercised in this journey. Blocks readiness.
+- G2: Unresolved implementation qualification: S10 and S11 confirm the rigs `RedCat` and `Esprit`. J15/S1 to S4 covers the Settings > Equipment controls that create them (S3 and S3a compose the trains), but this journey starts with no rig (P1) and names no point where that setup runs. Same-asset locate/remap (LIB-FR-07, D11) and "locate a known copy" are not exercised in this journey. Blocks readiness.
 - G3: Unresolved implementation qualification: no fault-injection mechanism exists yet for the S11 catalog-write failure (P6). Blocks readiness.
 - G4: Unresolved implementation qualification: the flow names no control for re-indexing an already registered location. S12 and S13 assume one. Blocks readiness.
 - G5: Unresolved implementation qualification: S6 needs indexing to run long enough to observe. Fixture sizing or a slow volume is unspecified. Blocks readiness.
@@ -205,4 +205,4 @@ onboarding the app opens on Home, the Projects dashboard. Done means:
 
 - **Δ2** 2026-10-06 · S1, S2, S6, S10, S11, +S6a, +S9a · behavior-change
   The app opens on Home, the Projects dashboard, and main navigation gives Import and Planning (Targets) their own entries. S6a checks planning with no saved site. S9a checks the Needs a Target and Not in any Project filters and Home's top line. S10 confirms the RedCat rig for all six RedCat sessions, because a candidate needs a confirmed rig. P2 gives the other-camera session 40 lights at 300 s.
-  Evidence: D-W7 (navigation), D-W12, D-W17, D-W33, D-W35, D-W37, D-W39 (workflow decisions, settled 2026-10-06); 064 LIB-FR-10, LIB-FR-17, LIB-FR-19; 065 PRJ-FR-17, PRJ-FR-19; 072 PLAN-AC-12, PLAN-TGT-AC-15 at e4476231 · by: agent (intent-gated, user instruction)
+  Evidence: D-W7 (navigation), D-W12, D-W17, D-W33, D-W35, D-W37, D-W39 (workflow decisions, settled 2026-10-06), 064 LIB-FR-10, LIB-FR-17, LIB-FR-19, 065 PRJ-FR-17, PRJ-FR-19 and 072 PLAN-AC-12, PLAN-TGT-AC-15 at e4476231. Rig names `RedCat` and `Esprit` (J15/S3, S3a) and site `Remote site` (J15/S7); spec text for these steps unchanged at d45a22ad · by: agent (intent-gated, user instruction)

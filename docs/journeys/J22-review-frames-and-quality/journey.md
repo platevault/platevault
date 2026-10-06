@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [frame-review, view-review, targets, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, D02, D03, D08, D10, D19, D-W13, D-W14, D-W15, D-W22, D-W36, D-W40, D-W42, D-W44, D-W53, D-W54, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-d-inspect-frames-and-quality]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 067-frame-review, D02, D03, D08, D10, D19, D-W13, D-W14, D-W15, D-W22, D-W36, D-W40, D-W42, D-W44, D-W53, D-W54, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/067-frame-review/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-d-inspect-frames-and-quality]
 ---
 
 ## Goal
@@ -27,7 +27,7 @@ source file.
 
 ## Preconditions
 
-- P1: J21 completed: `NGC7000-HOO-Siril` holds saved membership revision 1 with the five sessions (214 lights, all Unreviewed), and no measurement is cached.
+- P1: J21 completed: `NGC7000-HOO-Siril` holds saved membership revision 1 with the five sessions (214 lights, all Unreviewed), and no measurement is cached. Project `NGC 7000 HOO` reads Ha `9h 15m in project` with `12h 35m captured` against goal 10h, and OIII `8h 35m in project` with `10h 35m captured` against goal 12h.
 - P2: Frame-review properties of the J19 fixture: six named 30 Sep OIII frames have visibly trailed stars; one of the other 42 frames contains a saturated star whose PSF fit fails, at a recorded pixel position; at least one frame has a well-exposed unsaturated star at a recorded position.
 - P3: A PixInsight SubframeSelector CSV export covering the five sessions with FWHM values, plus one row naming a file in no session, one filename present in two session subfolders, and one column with no units and no native equivalent.
 - P4: The J19/P5 manifest is available.
@@ -119,9 +119,9 @@ source file.
 ### S10 — Read the run totals and save {#S10}
 
 - **Do:** Read the selection summary. Click **Save run**, then open Project `NGC 7000 HOO`.
-- **Expect:** The summary reads Ha 111 / 9h 15m and OIII 97 / 8h 05m across 24, 26 and 30 Sep, and 208 lights / 17h 20m, with no unresolved member. The run reads saved membership revision 2. The Project reads Ha `9h 15m in project` and OIII `8h 05m in project`.
+- **Expect:** The summary reads Ha 111 / 9h 15m and OIII 97 / 8h 05m across 24, 26 and 30 Sep, and 208 lights / 17h 20m, with no unresolved member. The run reads saved membership revision 2. The Project reads Ha `9h 15m in project` with `12h 35m captured`, and OIII `8h 05m in project` with `10h 35m captured`. The six excluded frames leave "in project" and still count "captured".
 - **Expect (negative):** No library quality state has changed.
-- **Trace:** flow D4, C5 · VSEL-FR-08, VSEL-FR-12, VSEL-FR-16 · VSEL-AC-04 · D02, D-W44
+- **Trace:** flow D4, C5 · VSEL-FR-08, VSEL-FR-12, VSEL-FR-16 · VSEL-AC-04 · PRJ-FR-04, PRJ-FR-21 · D02, D-W44, D-W66
 
 ### S11 — Mark included frames usable {#S11}
 
@@ -140,23 +140,23 @@ source file.
 ### S11b — Reject a frame for this Project only {#S11b}
 
 - **Do:** On F2 open the frame menu and choose **Reject for this Project only**. Read the Project's Ha goal. Then choose **Clear Project reject** on F2 and read the goal again.
-- **Expect:** F2 reads Rejected with scope This Project and its library quality stays Usable. The draft holds 207 lights and lists F2 with the reason "Rejected". Ha reads `9h 10m in project`, and its captured value is unchanged. After **Clear Project reject**, F2 reads Picked, the draft holds 208 lights, and Ha reads `9h 15m in project`.
+- **Expect:** F2 reads Rejected with scope This Project and its library quality stays Usable. The draft holds 207 lights and lists F2 with the reason "Rejected". Ha reads `9h 10m in project`, and its captured value stays `12h 35m`. After **Clear Project reject**, F2 reads Picked, the draft holds 208 lights, and Ha reads `9h 15m in project`.
 - **Expect (negative):** NGC 7000 usable Ha stays 9h 15m. No single-key hotkey performs this action. Saved membership revision 2 is unchanged.
-- **Trace:** flow D5 · PIX-FR-14 · VSEL-FR-11, VSEL-FR-15 · VSEL-AC-11, PRJ-AC-08 · D10, D-W42, D-W44, D-W54
+- **Trace:** flow D5 · PIX-FR-14 · VSEL-FR-11, VSEL-FR-15 · VSEL-AC-11, PRJ-AC-08 · PRJ-FR-04 · D10, D-W42, D-W44, D-W54, D-W66
 
 ### S12 — Meet a goal without closing the Project {#S12}
 
 - **Do:** Open Project `NGC 7000 HOO` and read the Ha goal. Edit the Ha goal from 10h to 9h and read it again. Edit it back to 10h.
-- **Expect:** Before the edit, Ha reads `9h 15m in project` against goal 10h, unmet, with its captured value shown beside it. At 9h it reads met. Back at 10h it reads unmet again. The Project stays open throughout.
+- **Expect:** Before the edit, Ha reads `9h 15m in project` against goal 10h, unmet, with `12h 35m captured` beside it. At 9h it reads met. Back at 10h it reads unmet again. The Project stays open throughout.
 - **Expect (negative):** Meeting a goal creates no run, marks no Project Done and changes no quality state.
-- **Trace:** flow B2 · PRJ-AC-03 · D10, D-W36
+- **Trace:** flow B2 · PRJ-FR-04 · PRJ-AC-03 · D10, D-W36, D-W66
 
 ### S13 — Mark the excluded frames in the grid {#S13}
 
 - **Do:** Show excluded rows and press **G**. Select the six excluded 30 Sep frames and press **X**. Then select only the first of them, press **U**, and choose **Reject for this Project only** from its frame menu. Press **⌘3**. Return to the table view. Leave the Review step and open it again in the grid.
 - **Expect:** All six read Rejected with scope Library after **X**, and NGC 7000 Unreviewed OIII integration falls by 0h 30m. After **U** and the Project reject, the first frame reads Rejected with scope This Project and its library quality is Unreviewed. **⌘3** lists exactly the six frames, with five labelled Library and one labelled This Project. The table keeps the same selection, current frame, filter and sort as the grid. On reopening, the grid shows the cached thumbnails with no pending state.
-- **Expect (negative):** The draft still holds 208 lights, and NGC 7000 usable integration and the Project's in-project values are unchanged. No mark asks for confirmation.
-- **Trace:** flow D5 · PIX-FR-11, PIX-FR-12, PIX-FR-13, PIX-FR-14 · VSEL-FR-15 · PIX-AC-16 · D10, D-W40, D-W42, D-W54
+- **Expect (negative):** The draft still holds 208 lights, and NGC 7000 usable integration and the Project's "in project" and "captured" values are unchanged. No mark asks for confirmation.
+- **Trace:** flow D5 · PIX-FR-11, PIX-FR-12, PIX-FR-13, PIX-FR-14 · VSEL-FR-15 · PIX-AC-16 · PRJ-FR-04 · D10, D-W40, D-W42, D-W54, D-W66
 
 ### S14 — Import measurements {#S14}
 
@@ -195,7 +195,7 @@ source file.
 
 ## Success criteria
 
-- SC1: The run reads exactly Ha 111 / 9h 15m, OIII 97 / 8h 05m and 208 / 17h 20m after S10 and after S16, and the Project reads Ha 9h 15m and OIII 8h 05m in project after S10.
+- SC1: The run reads exactly Ha 111 / 9h 15m, OIII 97 / 8h 05m and 208 / 17h 20m after S10 and after S16, and the Project reads Ha 9h 15m and OIII 8h 05m in project, with 12h 35m and 10h 35m captured, after S10.
 - SC2: Source bytes equal P4 for 100% of files at S5, at S5b and at the end.
 - SC3: Measured values are identical with the stretch on and off (S5); the failed fit shows 0 width numbers (S7).
 - SC4: Library quality changes only at S11 (208 frames), S11a (F1, restored), S13 (six frames, then one back to Unreviewed) and through S15a/S15b applicability. Project-only rejection changes 0 library totals (S11b, S13).
@@ -205,14 +205,14 @@ source file.
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults set in decisions D02, D03, D08, D10 and D19 and workflow decisions D-W13, D-W14, D-W15, D-W22, D-W40, D-W42, D-W44, D-W53 and D-W54. No implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults set in decisions D02, D03, D08, D10 and D19 and workflow decisions D-W13, D-W14, D-W15, D-W22, D-W40, D-W42, D-W44, D-W53, D-W54 and D-W66. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: numerical measurement methods, metric set, masks, saturation, background, aperture and tolerances need fixture qualification in PIX planning (D03). The P2 fixture is mono, so CFA inspection as the recorded mosaic plane (D03) is not exercised. Blocks readiness.
 - G3: Out of scope for this journey: no fixture holds NaN, infinity or masked samples, so PIX-AC-08's invalid-sample evidence is not exercised. Blocks readiness until covered by a step or a journey.
 - G4: Out of scope for this journey: a frame shared with a second Project's candidates (PIX-AC-13) and its Rejected state in other Projects' runs (PIX-AC-12) are not observed, because the fixture has one NGC 7000 Project. A session entering a draft with library-Unusable frames that start visibly excluded (VSEL-AC-13) is not exercised. Blocks readiness until covered by a step or a journey.
-- G5: Out of scope for this journey: a Trashed frame's absence from frame review (PIX-AC-19) is not exercised, because no frame is trashed before this journey. Run-group review across panels (PIX-AC-18) is covered by J33. Blocks readiness until PIX-AC-19 is covered by a step or a journey.
+- G5: Out of scope for this journey: no frame is trashed before this journey. J34/S7 covers a Trashed frame's absence from frame review (PIX-AC-19), and J33/S6 covers run-group review across panels (PIX-AC-18).
 
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, S10 to S13, S15a, S16, +S5a, +S5b, +S7a, +S11a, +S11b · behavior-change
   Review is a step of processing run `NGC7000-HOO-Siril`, with table, filmstrip and grid views, Lightroom hotkeys, and threshold selection. Quality has two levels, library (P/X/U) and "Reject for this Project only", and rejecting a frame in Review removes it from the draft. Goals read "in project"; the standalone-View step 13a is retired.
-  Evidence: specs/067-frame-review PIX-FR-10 to PIX-FR-16, PIX-AC-12, PIX-AC-14 to PIX-AC-17; specs/066-view-selection VSEL-FR-15, VSEL-AC-23; specs/065-project-goals PRJ-AC-08; workflow decisions D-W13, D-W14, D-W15, D-W22, D-W40, D-W42, D-W44, D-W53, D-W54 · by: journey-scribe (intent-gated)
+  Evidence: specs/067-frame-review PIX-FR-10 to PIX-FR-16, PIX-AC-12, PIX-AC-14 to PIX-AC-17; specs/066-view-selection VSEL-FR-15, VSEL-AC-23; specs/065-project-goals PRJ-AC-08, PRJ-FR-04 and PRJ-FR-21 with workflow decisions D-W13, D-W14, D-W15, D-W22, D-W40, D-W42, D-W44, D-W53, D-W54 and D-W66 at d45a22ad · by: journey-scribe (intent-gated)

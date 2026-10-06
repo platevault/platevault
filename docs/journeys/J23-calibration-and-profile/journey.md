@@ -5,7 +5,7 @@ version: 2
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
-surfaces: [calibration, run-workspace, preparation, projects]
+surfaces: [calibration, view-review, preparation, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
 trace: [063-clean-rebuild-contract, 068-calibration-inputs, 069-application-handoff, D04, D13, D15, D19, D-W3, D-W5, D-W37, D-W49, D-W50, D-W55, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-e-choose-calibration-and-application-preparation]
 ---
@@ -138,7 +138,7 @@ application. Done means:
 
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs, the decisions D04, D13, D15 and D19 set by the authorized autonomous run, and the user's workflow decisions D-W3 to D-W55 cited above. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: Siril profile capability probes (D04) must exist before S8 can show verified evidence. The PixInsight/WBPP and SETI Astro Suite Pro profiles are not exercised in this journey. Blocks readiness.
-- G3: Out of scope for this journey: per-panel calibration in a mosaic run group (CAL-FR-11, CAL-AC-13) is not exercised here. Blocks readiness until covered by a step or a journey.
+- G3: Out of scope for this journey: per-panel calibration in a mosaic run group (CAL-FR-11, CAL-AC-13) is covered by J33/S7.
 
 ## Delta log
 
