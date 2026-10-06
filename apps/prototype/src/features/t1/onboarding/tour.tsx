@@ -28,7 +28,7 @@ const STOPS: Stop[] = [
   { title: "Targets", route: "/targets", anchor: 'nav[aria-label="Main"] [href$="#/targets"]', body: "Your library starts here. Each Target shows captured, usable and Unreviewed integration by channel, with its Projects, Views and plans." },
   { title: "Sessions", route: "/sessions", anchor: 'nav[aria-label="Main"] [href$="#/sessions"]', body: "Every indexed session, one per filter, exposure and equipment. Inspect the evidence, confirm Targets and equipment, and select sessions to create a View." },
   { title: "Calibration", route: "/calibration", anchor: 'nav[aria-label="Main"] [href$="#/calibration"]', body: "Masters and raw calibration sets, grouped by camera, settings and channel. PlateVault shows compatibility; it never builds masters." },
-  { title: "Projects", route: "/projects", anchor: 'nav[aria-label="Main"] [href$="#/projects"]', body: "Optional goals with a capture checklist. A Project never moves files and never blocks creating a View." },
+  { title: "Projects", route: "/projects", anchor: 'nav[aria-label="Main"] [href$="#/plans"]', body: "Optional goals with a capture checklist, in the Plan area beside tonight's windows. A Project never moves files and never blocks creating a View." },
   { title: "Views", route: "/views", anchor: 'nav[aria-label="Main"] [href$="#/views"]', body: "A View is a named, reviewed set of frames. Review frames, accept calibration and prepare inputs for PixInsight, Siril or another app." },
   { title: "Getting started", anchor: "[data-getting-started-trigger]", body: "This checklist ticks itself from what you do. Open it any time, or remove it from its menu." },
 ]
@@ -52,7 +52,7 @@ export function OrientationTour() {
   // While the setup scan still runs the user may go straight to Sessions (J19 S6), so the one-time
   // tour waits for it to settle and opens on Targets; once started it follows its own stops.
   const setupRunning = useStore((s) => s.slices.t1.setupOperationIds.some((id) => { const op = s.operations[id]; return op !== undefined && !isSettled(op.status) && op.status !== "interrupted" }))
-  const firstRun = completedAt !== null && tourCompletedAt === null && (tour.stop > 0 || (pathname === "/targets" && !setupRunning))
+  const firstRun = completedAt !== null && tourCompletedAt === null && (tour.stop > 0 || (pathname === "/overview" && !setupRunning))
   const open = !inSetup && (firstRun || tour.replaying)
   const index = Math.min(tour.stop, STOPS.length - 1)
   const stop = index === STOPS.length - 1 && checklistHidden ? REMOVED_LAST_STOP : STOPS[index]!

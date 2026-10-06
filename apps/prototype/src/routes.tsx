@@ -11,6 +11,7 @@ import { createHashHistory, createRootRoute, createRoute, createRouter, redirect
 import type { ReactNode } from "react"
 import { AppShell, NotFoundPage, RootLayout, SetupShell } from "@/app/shell"
 import { DesignSystemPage } from "@/app/design-system-page"
+import { OverviewPage } from "@/app/overview-page"
 import { isLibraryEmpty } from "@/domain/derive"
 import { t1Pages } from "@/features/t1/routes"
 import { t2Pages } from "@/features/t2/routes"
@@ -55,7 +56,7 @@ const indexRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/",
   beforeLoad: () => {
-    throw redirect({ to: "/targets" })
+    throw redirect({ to: "/overview" })
   },
 })
 
@@ -118,8 +119,9 @@ const viewChildren = [
 // T4: calibration library.
 const calibrationRoutes = [page("/calibration", t4Pages.calibration), page("/calibration/$calibrationId", t4Pages.calibrationItem)]
 
-// Foundation: design-system reference (not in the sidebar; palette only).
+// Foundation: design-system reference (not in the sidebar; palette only) and the Overview start page (HARNESS V1).
 const designSystemRoute = page("/design-system", DesignSystemPage)
+const overviewRoute = page("/overview", OverviewPage)
 
 // T5: storage custody and plans.
 const custodyRoutes = [
@@ -143,6 +145,7 @@ const routeTree = rootRoute.addChildren([
     ...calibrationRoutes,
     ...custodyRoutes,
     designSystemRoute,
+    overviewRoute,
   ]),
 ])
 

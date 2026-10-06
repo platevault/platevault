@@ -5,7 +5,7 @@
  * h1; areas render level-2 headers. Hosts T4 and T5 areas through <Outlet />.
  */
 import { Link, Outlet, useNavigate, useParams } from "@tanstack/react-router"
-import { FolderSearch, RefreshCw, Save } from "lucide-react"
+import { ArrowRight, Check, CircleAlert, FolderSearch, RefreshCw, Save } from "lucide-react"
 import { createContext, type ReactNode, useContext, useId, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { ActionError, EmptyState, Notice, SaveState } from "@/components/app/feedback"
@@ -99,9 +99,9 @@ function SummaryStrip({ summary, content }: { summary: ViewSummary; content: Mem
   }
   if (content.productInputs.length > 0) items.push({ label: "Result inputs", value: content.productInputs.length })
   return (
-    <div className="border-b px-6 py-2">
+    <div className="border-b bg-window/50 px-4 py-1.5">
       <h2 className="sr-only">Selection summary</h2>
-      <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm tabular-nums">
+      <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 text-sm tabular-nums">
         {items.map((item) => (
           <div key={item.label} className={cn("flex items-baseline gap-1.5", item.tone === "warning" && "text-warning")}>
             <dt className={cn("text-xs", item.tone === "warning" ? "" : "text-muted-foreground")}>{item.label}</dt>
@@ -113,25 +113,98 @@ function SummaryStrip({ summary, content }: { summary: ViewSummary; content: Mem
   )
 }
 
-function AreaNav({ viewId }: { viewId: string }) {
+type StageState = "done" | "attention" | "todo"
+
+/**
+ * HARNESS V1: Direction C's pipeline as the area navigation. Each area is a
+ * numbered stage with its readiness in a word and a shape (never colour
+ * alone); processing happens in the application between Prepare and Results;
+ * one Next action points at the first stage that is not done. Link names stay
+ * the area names; the readiness is their description.
+ */
+function AreaNav({ viewId, summary }: { viewId: string; summary: ViewSummary }) {
+  const facts = useStore((s) => {
+    const view = s.catalog.views[viewId]
+    const preps = Object.values(s.catalog.preparations)
+      .filter((p) => p.viewId === viewId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    const accepted = Object.values(s.catalog.results).filter((r) => r.viewId === viewId && r.acceptance === "accepted").length
+    return { prep: preps.at(-1)?.state ?? null, accepted, complete: Boolean(view?.completedAt) }
+  })
+  const stages: Array<{ label: (typeof AREAS)[number]["label"]; state: StageState; status: string; next: string }> = [
+    summary.included.frames > 0
+      ? { label: "Sessions", state: "done", status: plural(summary.included.frames, "light"), next: "Choose sessions" }
+      : { label: "Sessions", state: "todo", status: "Choose sessions", next: "Choose sessions" },
+    summary.unreviewed > 0
+      ? { label: "Frames", state: "attention", status: `${summary.unreviewed} unreviewed`, next: "Review frames" }
+      : { label: "Frames", state: summary.included.frames > 0 ? "done" : "todo", status: summary.included.frames > 0 ? "Reviewed" : "No frames yet", next: "Review frames" },
+    { label: "Calibration", state: facts.prep ? "done" : "todo", status: facts.prep ? "Matched" : "Match masters", next: "Review calibration" },
+    facts.prep === "prepared"
+      ? { label: "Prepare", state: "done", status: "Prepared", next: "Prepare" }
+      : facts.prep
+        ? { label: "Prepare", state: "attention", status: facts.prep[0]!.toUpperCase() + facts.prep.slice(1), next: "Review preparation" }
+        : { label: "Prepare", state: "todo", status: "Not prepared", next: "Review preparation" },
+    facts.accepted > 0
+      ? { label: "Results", state: "done", status: `${facts.accepted} accepted`, next: "Accept Results" }
+      : { label: "Results", state: "todo", status: "None accepted", next: "Accept Results" },
+    { label: "Cleanup", state: facts.complete ? "done" : "todo", status: facts.complete ? "View complete" : "After completion", next: "Clean up" },
+  ]
+  const nextIndex = stages.findIndex((s) => s.state !== "done")
+  const next = nextIndex >= 0 ? stages[nextIndex]! : null
   return (
-    <nav aria-label="View areas" className="border-b px-4">
-      <ul className="-mb-px flex flex-wrap gap-1">
-        {AREAS.map((area) => (
-          <li key={area.to}>
-            <Link
-              to={area.to}
-              params={{ viewId }}
-              className={cn(
-                "inline-flex h-9 items-center border-b-2 border-transparent px-2.5 text-sm text-muted-foreground hover:text-foreground",
-                "data-[status=active]:border-primary data-[status=active]:font-medium data-[status=active]:text-foreground",
-              )}
-            >
-              {area.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
+    <nav aria-label="View areas" data-chrome="" className="flex items-center gap-2 border-b px-3 py-1.5">
+      <ol className="flex min-w-0 flex-1 flex-wrap items-center gap-y-1">
+        {stages.map((stage, index) => {
+          const area = AREAS[index]!
+          const statusId = `${viewId}-stage-${area.label}`
+          return (
+            <li key={area.to} className="flex items-center">
+              <Link
+                to={area.to}
+                params={{ viewId }}
+                aria-label={area.label}
+                aria-describedby={statusId}
+                className="group/stage flex items-center gap-2 rounded-md px-2 py-1 hover:bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)] data-[status=active]:bg-primary/14"
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "flex size-5 shrink-0 items-center justify-center rounded-full border text-xs font-semibold tabular-nums",
+                    stage.state === "done" && "border-success bg-success/12 text-success",
+                    stage.state === "attention" && "border-warning bg-warning/12 text-warning",
+                    stage.state === "todo" && "border-input text-muted-foreground",
+                    "group-data-[status=active]/stage:border-primary group-data-[status=active]/stage:bg-key group-data-[status=active]/stage:text-key-foreground",
+                  )}
+                >
+                  {stage.state === "done" ? <Check className="size-3" strokeWidth={3} /> : stage.state === "attention" ? <CircleAlert className="size-3" /> : index + 1}
+                </span>
+                <span className="flex flex-col leading-tight">
+                  <span className="text-sm group-data-[status=active]/stage:font-semibold">{area.label}</span>
+                  <span id={statusId} className={cn("text-xs", stage.state === "attention" ? "text-warning" : "text-muted-foreground")}>
+                    {stage.status}
+                  </span>
+                </span>
+              </Link>
+              {index < stages.length - 1 ? (
+                index === 3 ? (
+                  <span className="mx-1 flex flex-col items-center text-[11px] leading-tight text-muted-foreground" title="Processing happens in your application">
+                    <span aria-hidden="true" className="block h-0 w-8 border-t border-dashed border-input" />
+                    <span className="sr-only">Then </span>you process
+                  </span>
+                ) : (
+                  <span aria-hidden="true" className={cn("mx-0.5 block h-px w-4", stage.state === "done" ? "bg-success" : "bg-input")} />
+                )
+              ) : null}
+            </li>
+          )
+        })}
+      </ol>
+      {next ? (
+        <Button size="sm" render={<Link to={AREAS[nextIndex]!.to} params={{ viewId }} />} className="shrink-0">
+          Next: {next.next}
+          <ArrowRight data-icon="inline-end" aria-hidden="true" />
+        </Button>
+      ) : null}
     </nav>
   )
 }
@@ -436,7 +509,7 @@ export function ViewWorkspacePage() {
           }
         />
         <SummaryStrip summary={summary} content={content} />
-        <AreaNav viewId={viewId} />
+        <AreaNav viewId={viewId} summary={summary} />
         <div className="space-y-3 px-6 pt-4 empty:hidden">
           {saveFeedback?.state === "reviewed" ? (
             <Notice tone="info" title="Reviewed: the View changed elsewhere">

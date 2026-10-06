@@ -1,5 +1,5 @@
 /**
- * Shell preferences: theme (dark default, light, system), density, and
+ * Shell preferences: theme (match system default, dark, light), density, and
  * whether single-key shortcuts are on (WCAG 2.1.4). Stored outside the
  * prototype catalog so Reset keeps them; the pre-paint script in index.html
  * reads theme and density so the first frame is correct.
@@ -40,7 +40,7 @@ function resolve(theme: ThemePreference): "dark" | "light" {
 }
 
 let current: Preferences = (() => {
-  const theme = read<ThemePreference>(THEME_KEY, ["dark", "light", "system"], "dark")
+  const theme = read<ThemePreference>(THEME_KEY, ["dark", "light", "system"], "system")
   return {
     theme,
     density: read<Density>(DENSITY_KEY, ["compact", "comfortable", "spacious"], "comfortable"),

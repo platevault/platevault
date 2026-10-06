@@ -1,7 +1,13 @@
 /**
- * Information architecture (foundation-owned): sidebar groups, go-to
- * shortcuts and the static route table the command palette lists.
- * Route paths are fixed in HIGH-LEVEL-DESIGN.md §4 and must not drift.
+ * Information architecture (foundation-owned): the source list, go-to
+ * shortcuts and the static route table the command palette lists. Route
+ * paths are fixed in HIGH-LEVEL-DESIGN.md §4 and must not drift.
+ *
+ * HARNESS V1 (design/HARNESS-V1.md): Direction D's Target-scoped structure in
+ * a concise macOS source list. Overview is the start page; seven items in two
+ * groups; Projects live in the Plan area beside D's planner; Activity and
+ * Settings sit in the sidebar's bottom bar and the status bar, as macOS keeps
+ * Settings out of the source list.
  */
 import {
   Activity,
@@ -9,6 +15,7 @@ import {
   Crosshair,
   Goal,
   HardDrive,
+  LayoutGrid,
   Layers,
   ListChecks,
   type LucideIcon,
@@ -22,6 +29,10 @@ export interface NavItem {
   icon: LucideIcon
   /** Second key after `g` for the go-to shortcut. */
   goKey: string
+  /** ⌘-number shortcut shown in the source list, as Xcode and Finder do. */
+  digit?: string
+  /** Other route prefixes that belong to this item's area. */
+  area?: string[]
 }
 
 export interface NavGroup {
@@ -29,21 +40,24 @@ export interface NavGroup {
   items: NavItem[]
 }
 
+export const HOME_ITEM: NavItem = { to: "/overview", label: "Overview", icon: LayoutGrid, goKey: "h", digit: "1" }
+
+export const PROJECTS_ITEM: NavItem = { to: "/projects", label: "Projects", icon: Goal, goKey: "p" }
+
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Library",
     items: [
-      { to: "/targets", label: "Targets", icon: Crosshair, goKey: "t" },
-      { to: "/sessions", label: "Sessions", icon: Layers, goKey: "s" },
+      { to: "/targets", label: "Targets", icon: Crosshair, goKey: "t", digit: "2" },
+      { to: "/sessions", label: "Sessions", icon: Layers, goKey: "s", digit: "3" },
       { to: "/calibration", label: "Calibration", icon: SlidersHorizontal, goKey: "c" },
     ],
   },
   {
     label: "Work",
     items: [
-      { to: "/projects", label: "Projects", icon: Goal, goKey: "p" },
-      { to: "/views", label: "Views", icon: ListChecks, goKey: "v" },
-      { to: "/plans", label: "Plans", icon: CalendarClock, goKey: "l" },
+      { to: "/views", label: "Views", icon: ListChecks, goKey: "v", digit: "4" },
+      { to: "/plans", label: "Plan", icon: CalendarClock, goKey: "l", digit: "5", area: ["/projects"] },
       { to: "/storage", label: "Storage", icon: HardDrive, goKey: "o" },
     ],
   },
@@ -54,7 +68,7 @@ export const UTILITY_ITEMS: NavItem[] = [
   { to: "/settings", label: "Settings", icon: Settings, goKey: "," },
 ]
 
-export const ALL_NAV_ITEMS: NavItem[] = [...NAV_GROUPS.flatMap((g) => g.items), ...UTILITY_ITEMS]
+export const ALL_NAV_ITEMS: NavItem[] = [HOME_ITEM, ...NAV_GROUPS.flatMap((g) => g.items), PROJECTS_ITEM, ...UTILITY_ITEMS]
 
 /** Static destinations listed in the command palette, beyond the sidebar. */
 export const STATIC_DESTINATIONS: Array<{ to: string; label: string; keywords: string }> = [

@@ -81,7 +81,7 @@ export function AboutPage() {
                 variant="outline"
                 onClick={() => {
                   replayTour()
-                  void navigate({ to: "/targets" })
+                  void navigate({ to: "/overview" })
                 }}
               >
                 Replay orientation

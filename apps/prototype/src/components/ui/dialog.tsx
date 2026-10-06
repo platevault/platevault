@@ -32,7 +32,7 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/50 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-black/25 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       {...props}
@@ -58,7 +58,7 @@ function DialogContent({
         className={cn(
           // Never taller than the viewport inside its safe area: a tall dialog scrolls inside itself and its footer stays reachable.
           // scroll-padding keeps a focused control from being scrolled under the sticky footer (WCAG 2.4.11).
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh_-_2rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto overscroll-contain rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none has-data-[slot=dialog-footer]:scroll-pb-20 sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh_-_2rem_-_env(safe-area-inset-top)_-_env(safe-area-inset-bottom))] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-3 overflow-y-auto overscroll-contain rounded-[10px] bg-popover p-4 text-sm text-popover-foreground shadow-(--shadow-window) duration-100 outline-none has-data-[slot=dialog-footer]:scroll-pb-16 sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-[0.98] data-closed:animate-out data-closed:fade-out-0",
           className
         )}
         {...props}

@@ -189,7 +189,7 @@ export function DataTable<T>({
     stickyFirstColumn
       ? cn(
           "sticky",
-          head ? "bg-card" : "z-1 bg-card [background-image:linear-gradient(var(--row-bg),var(--row-bg))]",
+          head ? "bg-background" : "z-1 bg-background [background-image:linear-gradient(var(--row-bg),var(--row-bg))]",
           position === "last" ? "left-10" : "left-0",
           position !== "first" && "shadow-[inset_-1px_0_0_var(--border)]",
           !head && position !== "last" && "group-aria-[current=true]/row:shadow-[inset_2px_0_0_var(--primary)]",
@@ -204,8 +204,8 @@ export function DataTable<T>({
         // The frame is the scroll container in both axes so the header row
         // stays pinned while long tables scroll inside it. Scroll padding the
         // height of that header keeps a focused row out from under it (WCAG 2.4.11).
-        "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-lg border",
-        stickyFirstColumn && "scroll-pl-(--pinned-w) bg-card",
+        "relative scroll-pt-[calc(var(--row-h)+1px)] overflow-auto rounded-md border bg-background",
+        stickyFirstColumn && "scroll-pl-(--pinned-w)",
         scroll === "frame" && "max-h-[calc(100dvh-14rem)]",
         className,
       )}
@@ -213,7 +213,7 @@ export function DataTable<T>({
     >
       <table className="w-full text-sm">
         <caption className="sr-only">{loading ? `Loading ${label}` : label}</caption>
-        <thead className="sticky top-0 z-10 bg-card text-xs text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
+        <thead className="sticky top-0 z-10 bg-background text-xs text-muted-foreground shadow-[inset_0_-1px_0_var(--border)] [&_th+th]:shadow-[inset_1px_0_0_var(--border)]">
           <tr>
             {selection ? (
               <th scope="col" className={cn("h-(--row-h) w-10 px-3", pinned("first", true))}>
@@ -236,7 +236,7 @@ export function DataTable<T>({
                   scope="col"
                   aria-sort={ariaSort}
                   className={cn(
-                    "h-(--row-h) px-3 font-medium whitespace-nowrap",
+                    "h-(--row-h) px-2.5 font-medium whitespace-nowrap",
                     column.align === "right" ? "text-right" : "text-left",
                     column.className,
                     columnIndex === 0 && pinned(columnPin, true),
@@ -245,7 +245,7 @@ export function DataTable<T>({
                   {column.sortValue ? (
                     <button
                       type="button"
-                      className={cn("inline-flex h-6 items-center gap-1 rounded-sm hover:text-foreground", active && "text-foreground")}
+                      className={cn("inline-flex h-5 items-center gap-1 rounded-sm hover:text-foreground", active && "font-semibold text-foreground")}
                       onClick={() =>
                         setSort((current) =>
                           current?.columnId === column.id
@@ -272,9 +272,9 @@ export function DataTable<T>({
         {loading ? (
           <tbody>
             {Array.from({ length: 6 }, (_, r) => (
-              <tr key={r} className="h-(--row-h) border-b last:border-0">
+              <tr key={r} className="h-(--row-h) even:bg-row-alt">
                 {Array.from({ length: columnCount }, (_, c) => (
-                  <td key={c} className="px-3">
+                  <td key={c} className="px-2.5">
                     <Skeleton className={cn("h-3", c === 0 && selection ? "size-4" : "w-3/4")} />
                   </td>
                 ))}
@@ -284,7 +284,7 @@ export function DataTable<T>({
         ) : sorted.length === 0 ? (
           <tbody>
             <tr>
-              <td colSpan={columnCount} className="p-4">
+              <td colSpan={columnCount} className="p-3">
                 {empty ?? <p className="text-sm text-muted-foreground">No rows.</p>}
               </td>
             </tr>
@@ -293,8 +293,8 @@ export function DataTable<T>({
           bodies.map((body, bodyIndex) => (
             <tbody key={body.key ?? "rows"} onKeyDown={onKeyDown}>
               {body.key !== null && groups ? (
-                <tr className={cn("border-b bg-muted/40", bodyIndex > 0 && "border-t")}>
-                  <th scope="rowgroup" colSpan={columnCount} className="h-(--row-h) px-3 text-left text-xs font-semibold">
+                <tr className={cn("border-b bg-window", bodyIndex > 0 && "border-t")}>
+                  <th scope="rowgroup" colSpan={columnCount} className="h-(--row-h) px-2.5 text-left text-xs font-semibold text-muted-foreground">
                     {/* The label stays in view while the table scrolls sideways. */}
                     <span className={cn(stickyFirstColumn && "sticky left-3")}>{groups.label(body.key, body.rows)}</span>
                   </th>
@@ -311,13 +311,13 @@ export function DataTable<T>({
                     aria-current={activeRowId === id ? "true" : undefined}
                     data-selected={isSelected || undefined}
                     className={cn(
-                      "group/row h-(--row-h) border-b last:border-0 hover:bg-muted/60",
-                      "data-selected:bg-primary/10 data-selected:hover:bg-primary/16",
-                      "aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
+                      "group/row h-(--row-h) even:bg-row-alt hover:bg-[color-mix(in_oklab,var(--foreground)_5%,transparent)]",
+                      "data-selected:bg-primary/12 data-selected:hover:bg-primary/16",
+                      "aria-[current=true]:bg-primary/20 aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
                       // The same tints as a variable, for pinned cells that paint over the row.
-                      "[--row-bg:transparent] hover:[--row-bg:color-mix(in_oklab,var(--muted)_60%,transparent)]",
+                      "[--row-bg:transparent] even:[--row-bg:var(--row-alt)] hover:[--row-bg:color-mix(in_oklab,var(--foreground)_5%,var(--background))]",
                       "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_10%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_16%,transparent)]",
-                      "aria-[current=true]:[--row-bg:var(--accent)]",
+                      "aria-[current=true]:[--row-bg:color-mix(in_oklab,var(--primary)_20%,var(--background))]",
                       rowClassName?.(row),
                     )}
                   >
@@ -338,7 +338,7 @@ export function DataTable<T>({
                           key={column.id}
                           scope={column.rowHeader ? "row" : undefined}
                           className={cn(
-                            "px-3 py-1 font-normal tabular-nums",
+                            "px-2.5 py-0.5 font-normal tabular-nums",
                             column.truncate ? "max-w-72 truncate" : "whitespace-nowrap",
                             column.align === "right" ? "text-right" : "text-left",
                             column.className,
@@ -377,8 +377,8 @@ export function TableToolbar({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {search ? (
-        <div className="relative w-64 min-w-0">
-          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative w-56 min-w-0">
+          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             data-page-search
             type="search"
@@ -386,7 +386,7 @@ export function TableToolbar({
             placeholder={search.placeholder}
             value={search.value}
             onChange={(event) => search.onChange(event.target.value)}
-            className="pl-8"
+            className="rounded-md pl-7"
           />
         </div>
       ) : null}
@@ -436,7 +436,7 @@ export function SelectionBar({
   // Out of the layout flow, so an empty bar adds no gap between its siblings.
   if (count === 0) return <div className="sr-only">{live}</div>
   return (
-    <div role="region" aria-label="Selection" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/8 px-3 py-1.5 text-sm">
+    <div role="region" aria-label="Selection" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-primary/35 bg-primary/8 px-2.5 py-1 text-sm">
       {live}
       {onShowSelected ? (
         <Button size="sm" variant="ghost" onClick={onShowSelected}>

@@ -1,9 +1,16 @@
 /**
  * Page-level layout primitives (foundation-owned): page header, sections,
  * list + detail, step indicator and the pre-created placeholder page.
+ *
+ * HARNESS V1: the window is the layout. A level-1 PageHeader renders into the
+ * unified window toolbar (title, path, subtitle and page actions); the toolbar
+ * lives inside <main>, so the h1 and its actions stay in the main landmark.
+ * Level-2 headers are compact area bars. ListDetail is a resizable split.
  */
-import { Check } from "lucide-react"
-import { useEffect, type ReactNode } from "react"
+import { Check, ChevronRight } from "lucide-react"
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react"
+import { createPortal } from "react-dom"
+import { SplitHandle } from "@/components/app/split"
 import { cn } from "@/lib/utils"
 
 const APP_TITLE = "PlateVault prototype"
@@ -30,11 +37,25 @@ export function useDocumentTitle(title: string, level: 1 | 2 = 1) {
   }, [title, level])
 }
 
+/** Toolbar slots the shell provides; null outside the app window (setup shell, dialogs). */
+export interface ToolbarSlots {
+  title: HTMLElement | null
+  actions: HTMLElement | null
+}
+
+export const ToolbarSlotsContext = createContext<ToolbarSlots>({ title: null, actions: null })
+
+/** Extra items for the window toolbar's trailing group (inspector toggle, view switches). */
+export function ToolbarItems({ children }: { children: ReactNode }) {
+  const { actions } = useContext(ToolbarSlotsContext)
+  return actions ? createPortal(children, actions) : null
+}
+
 export interface PageHeaderProps {
   title: string
-  /** One sentence: what this surface is for. */
+  /** One sentence: what this surface is for. Shown as the toolbar subtitle. */
   description?: ReactNode
-  /** Small context line above the title, e.g. the parent Target or Project. */
+  /** The path to this surface, e.g. the parent Target or Project; shown before the title. */
   eyebrow?: ReactNode
   /** Status badges shown beside the title. */
   meta?: ReactNode
@@ -50,18 +71,43 @@ export interface PageHeaderProps {
 
 export function PageHeader({ title, description, eyebrow, meta, actions, className, level = 1 }: PageHeaderProps) {
   useDocumentTitle(title, level)
+  const slots = useContext(ToolbarSlotsContext)
+  if (level === 1 && slots.title) {
+    return (
+      <>
+        {createPortal(
+          // `className` styles the in-place header only; the toolbar title keeps the toolbar's metrics.
+          <div className="flex min-w-0 flex-col justify-center gap-px py-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+              {eyebrow ? (
+                <span className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground [&_a]:text-muted-foreground [&_a:hover]:text-foreground">
+                  {eyebrow}
+                  <ChevronRight aria-hidden="true" className="size-3 shrink-0 opacity-70" />
+                </span>
+              ) : null}
+              <h1 className="min-w-0 text-lg leading-5 font-semibold">{title}</h1>
+              {meta}
+            </div>
+            {description ? <div className="max-w-[44rem] text-xs text-pretty text-muted-foreground">{description}</div> : null}
+          </div>,
+          slots.title,
+        )}
+        {actions && slots.actions ? createPortal(<div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">{actions}</div>, slots.actions) : null}
+      </>
+    )
+  }
   const Heading = level === 1 ? "h1" : "h2"
   return (
-    <header className={cn("flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b px-6 py-4", className)}>
-      <div className="min-w-0 flex-[1_1_16rem] space-y-1">
+    <header className={cn("flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b px-4 py-2", className)}>
+      <div className="min-w-0 flex-[1_1_16rem] space-y-px">
         {eyebrow ? <div className="text-xs text-muted-foreground">{eyebrow}</div> : null}
         <div className="flex flex-wrap items-center gap-2">
-          <Heading className={cn("font-semibold text-balance", level === 1 ? "text-lg" : "text-base")}>{title}</Heading>
+          <Heading className={cn("font-semibold", level === 1 ? "text-lg" : "text-sm")}>{title}</Heading>
           {meta}
         </div>
-        {description ? <p className="max-w-prose text-sm text-pretty text-muted-foreground">{description}</p> : null}
+        {description ? <p className="max-w-prose text-xs text-pretty text-muted-foreground">{description}</p> : null}
       </div>
-      {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">{actions}</div> : null}
     </header>
   )
 }
@@ -80,25 +126,25 @@ export interface SectionProps {
 export function Section({ title, description, actions, children, className, level = 2, id }: SectionProps) {
   const Heading = level === 2 ? "h2" : "h3"
   return (
-    <section aria-labelledby={id ? `${id}-title` : undefined} className={cn("space-y-3", className)}>
+    <section aria-labelledby={id ? `${id}-title` : undefined} className={cn("space-y-2", className)}>
       <div className="flex flex-wrap items-end justify-between gap-2">
         {/* Like PageHeader: the heading block takes the free space and wraps its description, so actions stay beside it. */}
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <Heading id={id ? `${id}-title` : undefined} className={cn("font-semibold", level === 2 ? "text-base" : "text-sm")}>
+        <div className="min-w-0 flex-1 space-y-px">
+          <Heading id={id ? `${id}-title` : undefined} className={cn("font-semibold", level === 2 ? "text-sm" : "text-xs text-muted-foreground")}>
             {title}
           </Heading>
-          {description ? <p className="text-sm text-pretty text-muted-foreground">{description}</p> : null}
+          {description ? <p className="text-xs text-pretty text-muted-foreground">{description}</p> : null}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2 self-start">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap items-center gap-1.5 self-start">{actions}</div> : null}
       </div>
       {children}
     </section>
   )
 }
 
-/** Scrollable page body with the standard padding and vertical rhythm. */
+/** Scrollable page body with the window margins (20 px, AppKit standard) and vertical rhythm. */
 export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("space-y-6 px-6 py-5", className)}>{children}</div>
+  return <div className={cn("space-y-5 px-5 py-4", className)}>{children}</div>
 }
 
 export interface ListDetailProps {
@@ -109,23 +155,29 @@ export interface ListDetailProps {
   className?: string
 }
 
+const LIST_WIDTH = { min: 200, max: 420, initial: 264 }
+
 /**
- * List + detail pattern: the list stays visible while the detail changes.
- * At 1024 px the list keeps 18rem and the detail takes the rest. Below
- * 768 px the panes stack and scroll with the page (WCAG 1.4.10).
+ * List + detail pattern: the list stays visible while the detail changes, in
+ * a resizable split like an AppKit split view. Below 768 px the panes stack
+ * and scroll with the page (WCAG 1.4.10).
  */
 export function ListDetail({ list, detail, listLabel, className }: ListDetailProps) {
+  const [width, setWidth] = useState(LIST_WIDTH.initial)
   return (
-    <div
-      className={cn(
-        "grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)] max-md:flex-none max-md:grid-cols-1 xl:grid-cols-[22rem_minmax(0,1fr)]",
-        className,
-      )}
-    >
-      <nav aria-label={listLabel} className="min-h-0 overflow-y-auto border-r max-md:border-r-0 max-md:border-b">
+    <div className={cn("flex min-h-0 flex-1 max-md:flex-none max-md:flex-col", className)}>
+      <nav aria-label={listLabel} style={{ width }} className="min-h-0 shrink-0 overflow-y-auto bg-window/40 max-md:w-auto! max-md:border-b">
         {list}
       </nav>
-      <div className="min-h-0 min-w-0 overflow-y-auto">{detail}</div>
+      <SplitHandle
+        label={`Resize ${listLabel}`}
+        value={width}
+        {...LIST_WIDTH}
+        onChange={(next) => setWidth(Math.min(LIST_WIDTH.max, Math.max(LIST_WIDTH.min, next)))}
+        pane="before"
+        className="max-md:hidden"
+      />
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">{detail}</div>
     </div>
   )
 }
@@ -146,8 +198,8 @@ export function StepIndicator({ steps, current, completed = [], label }: { steps
           <li key={step.id} aria-current={isCurrent ? "step" : undefined} className="flex items-center gap-2">
             <span
               className={cn(
-                "flex size-6 items-center justify-center rounded-full border text-xs tabular-nums",
-                isCurrent && "border-primary bg-primary text-primary-foreground",
+                "flex size-5 items-center justify-center rounded-full border text-xs tabular-nums",
+                isCurrent && "border-key bg-key text-key-foreground",
                 isDone && !isCurrent && "border-success text-success",
                 !isCurrent && !isDone && "text-muted-foreground",
               )}

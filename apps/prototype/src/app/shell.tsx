@@ -1,12 +1,32 @@
 /**
- * App shell (foundation-owned): root providers, the main layout with sidebar,
- * header and status area, and the minimal onboarding layout.
+ * App shell (foundation-owned): root providers, the window frame and the
+ * minimal onboarding layout.
+ *
+ * HARNESS V1 (design/HARNESS-V1.md): a first-party macOS window. A
+ * full-height translucent source list with the traffic-light inset, a unified
+ * toolbar over the content (back/forward, the page title and actions, search),
+ * an optional inspector the page provides, and a status bar. Nothing scrolls
+ * the document; only content panes scroll.
  */
-import { Link, Outlet, useRouterState } from "@tanstack/react-router"
-import { Aperture, FlaskConical, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
-import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { Link, Outlet, useCanGoBack, useRouter, useRouterState } from "@tanstack/react-router"
+import {
+  Aperture,
+  ChevronLeft,
+  ChevronRight,
+  FlaskConical,
+  MapPinOff,
+  Monitor,
+  Moon,
+  PanelLeft,
+  Search,
+  Sun,
+  TriangleAlert,
+  Unplug,
+} from "lucide-react"
+import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { EmptyState, LiveAnnouncer } from "@/components/app/feedback"
-import { useDocumentTitle } from "@/components/app/page"
+import { ToolbarSlotsContext, useDocumentTitle } from "@/components/app/page"
+import { SplitHandle } from "@/components/app/split"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -26,16 +46,20 @@ import { t2Shell } from "@/features/t2/shell"
 import { t3Shell } from "@/features/t3/shell"
 import { t4Shell } from "@/features/t4/shell"
 import { t5Shell } from "@/features/t5/shell"
+import { formatDuration } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { CommandPalette } from "./command-palette"
-import { NAV_GROUPS, type NavItem, UTILITY_ITEMS } from "./navigation"
+import { HOME_ITEM, NAV_GROUPS, type NavItem, UTILITY_ITEMS } from "./navigation"
 import { setTheme, type ThemePreference, usePreferences } from "./preferences"
 import { MOD_LABEL, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
 import { SimulationSheet } from "./simulation-panel"
-import { openPanel, toggleSidebar, useShellUi } from "./ui-state"
+import { openPanel, SIDEBAR_WIDTH, setSidebarWidth, toggleSidebar, useShellUi } from "./ui-state"
 
 const SHELLS = [t1Shell, t2Shell, t3Shell, t4Shell, t5Shell]
+
+/** Tauri draws the real traffic lights over its overlay title bar; the browser preview draws stand-ins. */
+const IN_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 
 export function RootLayout() {
   useGlobalShortcuts()
@@ -59,27 +83,48 @@ function SkipLink() {
         event.preventDefault()
         document.getElementById("main")?.focus()
       }}
-      className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:px-3 focus:py-2"
+      className="sr-only z-50 rounded-md bg-key px-3 py-1.5 text-key-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-24 focus:px-3 focus:py-1.5"
     >
       Skip to main content
     </a>
   )
 }
 
-function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+/** The window controls' place: real ones in Tauri (titleBarStyle "Overlay"), decorative stand-ins in a browser. */
+function TrafficLights() {
+  if (IN_TAURI) return null
+  return (
+    <div aria-hidden="true" data-traffic-lights="" className="pointer-events-none absolute top-[19px] left-[20px] flex gap-2">
+      <span className="size-3 rounded-full bg-[#ff5f57] shadow-[inset_0_0_0_0.5px_rgb(0_0_0/0.18)]" />
+      <span className="size-3 rounded-full bg-[#febc2e] shadow-[inset_0_0_0_0.5px_rgb(0_0_0/0.18)]" />
+      <span className="size-3 rounded-full bg-[#28c840] shadow-[inset_0_0_0_0.5px_rgb(0_0_0/0.18)]" />
+    </div>
+  )
+}
+
+function useAreaActive(item: NavItem): boolean {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  return [item.to, ...(item.area ?? [])].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
+}
+
+/** A source-list row: 26 px, accent-tinted icon, a selection fill like Finder's sidebar. */
+function SourceListLink({ item, collapsed, trailing }: { item: NavItem; collapsed: boolean; trailing?: ReactNode }) {
   const Icon = item.icon
+  const active = useAreaActive(item)
   const link = (
     <Link
       to={item.to}
+      aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-8 items-center gap-2.5 rounded-md px-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        "data-[status=active]:bg-sidebar-accent data-[status=active]:font-medium data-[status=active]:text-sidebar-accent-foreground data-[status=active]:shadow-[inset_2px_0_0_var(--sidebar-primary)]",
+        "flex h-[26px] items-center gap-2 rounded-md px-2 text-sm text-sidebar-foreground hover:bg-[color-mix(in_oklab,var(--sidebar-foreground)_6%,transparent)]",
+        "aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium",
         collapsed && "justify-center px-0",
       )}
       aria-label={collapsed ? item.label : undefined}
     >
-      <Icon aria-hidden="true" className="size-4 shrink-0" />
-      {collapsed ? null : <span className="truncate">{item.label}</span>}
+      <Icon aria-hidden="true" className="size-4 shrink-0 text-sidebar-primary" />
+      {collapsed ? null : <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+      {collapsed ? null : trailing}
     </Link>
   )
   if (!collapsed) return link
@@ -91,9 +136,20 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   )
 }
 
+/** The trailing count a source list shows for attention items (Mail's unread badge). */
+function SourceListBadge({ count, label }: { count: number; label: string }) {
+  if (count === 0) return null
+  return (
+    <span className="rounded-full bg-[color-mix(in_oklab,var(--sidebar-foreground)_12%,transparent)] px-1.5 text-xs font-medium tabular-nums">
+      {count}
+      <span className="sr-only"> {label}</span>
+    </span>
+  )
+}
+
 /**
  * Below 768 px (WCAG 1.4.10 reflow, 1280 px at 200 % and up) the sidebar
- * leaves the layout and opens as an overlay from the header instead.
+ * leaves the layout and opens as an overlay from the toolbar instead.
  */
 const NARROW_QUERY = "(max-width: 767.98px)"
 
@@ -108,39 +164,143 @@ function useNarrowViewport(): boolean {
   )
 }
 
-function SidebarContent({ collapsed }: { collapsed: boolean }) {
+/** Recently captured Targets, newest first: the Target context D's rail gave, in three rows. */
+function RecentTargets({ collapsed }: { collapsed: boolean }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const rows = useStore((s) => {
+    const latest: Record<string, { at: string; seconds: number }> = {}
+    for (const session of Object.values(s.catalog.sessions)) {
+      const id = session.target.value
+      if (!id || session.supersededBy || session.imageType !== "light") continue
+      const entry = (latest[id] ??= { at: "", seconds: 0 })
+      if (session.startedAt > entry.at) entry.at = session.startedAt
+      entry.seconds += session.assetIds.length * session.exposureS
+    }
+    return Object.entries(latest)
+      .sort((a, b) => b[1].at.localeCompare(a[1].at))
+      .slice(0, 3)
+      .flatMap(([id, entry]) => {
+        const target = s.catalog.targets[id]
+        return target ? [{ id, name: target.name, seconds: entry.seconds }] : []
+      })
+  })
+  if (collapsed || rows.length === 0) return null
+  return (
+    <div className="space-y-px">
+      <h2 className="px-2 pt-3 pb-1 text-xs font-semibold text-sidebar-foreground/70">Recent Targets</h2>
+      <ul className="space-y-px">
+        {rows.map((row) => {
+          const current = pathname === `/targets/${row.id}` || pathname.startsWith(`/targets/${row.id}/`)
+          return (
+            <li key={row.id}>
+              <Link
+                to="/targets/$targetId"
+                params={{ targetId: row.id }}
+                aria-current={current ? "page" : undefined}
+                className="flex h-[26px] items-center gap-2 rounded-md px-2 text-sm text-sidebar-foreground hover:bg-[color-mix(in_oklab,var(--sidebar-foreground)_6%,transparent)] aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium"
+              >
+                <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">
+                  <span className="size-2 rounded-full border-[1.5px] border-sidebar-primary" />
+                </span>
+                <span className="min-w-0 flex-1 truncate">{row.name}</span>
+                <span className="text-xs text-sidebar-foreground/70 tabular-nums">{formatDuration(row.seconds)}</span>
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+function SidebarContent({ collapsed, drawer = false }: { collapsed: boolean; drawer?: boolean }) {
+  const needsReview = useStore(
+    (s) => Object.values(s.catalog.sessions).filter((x) => !x.supersededBy && x.imageType === "light" && (x.target.status === "needs-review" || x.target.status === "unresolved")).length,
+  )
   return (
     <>
-      <div className={cn("flex h-11 shrink-0 items-center gap-2 border-b border-sidebar-border px-3", collapsed && "justify-center px-0")}>
-        <Aperture aria-hidden="true" className="size-5 shrink-0 text-primary" />
-        {collapsed ? <span className="sr-only">PlateVault</span> : <span className="font-semibold">PlateVault</span>}
-      </div>
-      <nav aria-label="Main" className="flex-1 space-y-4 overflow-y-auto p-2">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label} className="space-y-0.5">
-            {collapsed ? (
-              <div className="mx-auto my-1 h-px w-6 bg-sidebar-border" aria-hidden="true" />
-            ) : (
-              <div className="px-2 pb-1 text-xs text-sidebar-foreground/60">{group.label}</div>
+      <div className={cn("relative flex h-(--toolbar-h) shrink-0 items-center justify-end gap-1 px-2", drawer && "justify-start px-4")} data-tauri-drag-region="">
+        {drawer ? (
+          <>
+            <Aperture aria-hidden="true" className="size-4 text-sidebar-primary" />
+            <span className="font-semibold">PlateVault</span>
+          </>
+        ) : (
+          <>
+            <TrafficLights />
+            <span className="sr-only">PlateVault</span>
+            {collapsed ? null : (
+              <Tooltip>
+                <TooltipTrigger
+                  render={<Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label="Collapse sidebar" className="text-sidebar-foreground/80" />}
+                >
+                  <PanelLeft aria-hidden="true" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Hide sidebar ([)</TooltipContent>
+              </Tooltip>
             )}
-            <ul className="space-y-0.5">
+          </>
+        )}
+      </div>
+      {collapsed ? (
+        <div className="flex justify-center pb-1">
+          <Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label="Expand sidebar">
+            <PanelLeft aria-hidden="true" />
+          </Button>
+        </div>
+      ) : null}
+      <nav aria-label="Main" className={cn("min-h-0 flex-1 overflow-y-auto px-2.5 pb-2", collapsed && "px-1.5")}>
+        <ul className="space-y-px">
+          <li>
+            <SourceListLink item={HOME_ITEM} collapsed={collapsed} trailing={<SourceListBadge count={needsReview} label="sessions need a Target decision" />} />
+          </li>
+        </ul>
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label} className="space-y-px">
+            {collapsed ? (
+              <div className="mx-auto my-2 h-px w-6 bg-sidebar-border" aria-hidden="true" />
+            ) : (
+              <h2 className="px-2 pt-3 pb-1 text-xs font-semibold text-sidebar-foreground/70">{group.label}</h2>
+            )}
+            <ul className="space-y-px">
               {group.items.map((item) => (
                 <li key={item.to}>
-                  <NavLink item={item} collapsed={collapsed} />
+                  <SourceListLink item={item} collapsed={collapsed} />
                 </li>
               ))}
             </ul>
           </div>
         ))}
+        <RecentTargets collapsed={collapsed} />
       </nav>
-      <div className="space-y-0.5 border-t border-sidebar-border p-2">
+      <div className={cn("space-y-px border-t border-sidebar-border px-2.5 py-1.5", collapsed && "px-1.5")}>
         {SHELLS.map((shell, index) => (shell.SidebarFooter ? <shell.SidebarFooter key={index} collapsed={collapsed} /> : null))}
-        <ul className="space-y-0.5" aria-label="Utilities">
-          {UTILITY_ITEMS.map((item) => (
-            <li key={item.to}>
-              <NavLink item={item} collapsed={collapsed} />
-            </li>
-          ))}
+        <ul aria-label="Utilities" className={cn("flex gap-0.5", collapsed && "flex-col items-center")}>
+          {UTILITY_ITEMS.map((item) => {
+            const Icon = item.icon
+            return (
+              <li key={item.to}>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        render={<Link to={item.to} />}
+                        aria-label={item.label}
+                        className="text-sidebar-foreground/80 data-[status=active]:bg-sidebar-accent data-[status=active]:text-sidebar-foreground"
+                      />
+                    }
+                  >
+                    <Icon aria-hidden="true" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    {item.label} (G {item.goKey === "," ? "," : item.goKey.toUpperCase()})
+                  </TooltipContent>
+                </Tooltip>
+              </li>
+            )
+          })}
         </ul>
       </div>
     </>
@@ -148,19 +308,26 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
 }
 
 function Sidebar() {
-  const { sidebarCollapsed: collapsed } = useShellUi()
+  const { sidebarCollapsed: collapsed, sidebarWidth } = useShellUi()
   return (
-    <aside
-      className={cn("flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground", collapsed ? "w-12" : "w-56")}
-      aria-label="Sidebar"
-    >
-      <SidebarContent collapsed={collapsed} />
-    </aside>
+    <>
+      <aside
+        data-chrome=""
+        style={{ width: collapsed ? 76 : sidebarWidth }}
+        className="material-sidebar relative flex shrink-0 flex-col border-r border-sidebar-border text-sidebar-foreground"
+        aria-label="Sidebar"
+      >
+        <SidebarContent collapsed={collapsed} />
+      </aside>
+      {collapsed ? null : (
+        <SplitHandle label="Resize sidebar" value={sidebarWidth} {...SIDEBAR_WIDTH} onChange={setSidebarWidth} pane="before" className="-ml-[4px] mr-[-3px]" />
+      )}
+    </>
   )
 }
 
 /**
- * The sidebar as an overlay below 768 px, opened from the header. Choosing a
+ * The sidebar as an overlay below 768 px, opened from the toolbar. Choosing a
  * link closes it and focus moves to the new page's heading; Escape or the
  * backdrop returns focus to the menu button.
  */
@@ -176,11 +343,11 @@ function SidebarDrawer() {
       }}
     >
       <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open navigation" />}>
-        <PanelLeftOpen aria-hidden="true" />
+        <PanelLeft aria-hidden="true" />
       </SheetTrigger>
       <SheetContent
         side="left"
-        className="w-64 max-w-[85vw] gap-0 bg-sidebar p-0 text-sidebar-foreground"
+        className="material-sidebar w-64 max-w-[85vw] gap-0 p-0 text-sidebar-foreground"
         finalFocus={() => (navigated.current ? (routeFocusTarget(null) ?? true) : true)}
         onClick={(event) => {
           if (!(event.target as Element).closest("a[href]")) return
@@ -189,7 +356,7 @@ function SidebarDrawer() {
         }}
       >
         <SheetTitle className="sr-only">Navigation</SheetTitle>
-        <SidebarContent collapsed={false} />
+        <SidebarContent collapsed={false} drawer />
       </SheetContent>
     </Sheet>
   )
@@ -202,16 +369,16 @@ function ThemeMenu() {
   const Icon = THEME_ICON[theme]
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={`Theme: ${theme === "system" ? "match system" : theme}`} />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" aria-label={`Theme: ${theme === "system" ? "match system" : theme}`} />}>
         <Icon aria-hidden="true" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align="end" side="top" className="w-44">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Theme</DropdownMenuLabel>
+          <DropdownMenuLabel>Appearance</DropdownMenuLabel>
           <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as ThemePreference)}>
-            <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="system">Match system</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
       </DropdownMenuContent>
@@ -219,17 +386,25 @@ function ThemeMenu() {
   )
 }
 
-/** Header status area: running work, interrupted work and offline locations. */
-function StatusArea({ narrow }: { narrow: boolean }) {
+/** Window status bar: running and interrupted work, offline locations, prototype controls. */
+function StatusBar({ narrow }: { narrow: boolean }) {
   const running = useStore((s) => Object.values(s.operations).filter((op) => op.status === "running"))
   const interrupted = useStore((s) => Object.values(s.operations).filter((op) => op.status === "interrupted").length)
-  const offline = useStore((s) => Object.values(s.catalog.locations).filter((l) => !s.disk.volumes[l.volumeId]?.mounted))
+  const offline = useStore((s) => Object.values(s.catalog.locations).filter((l) => !l.retiredAt && !s.disk.volumes[l.volumeId]?.mounted))
+  const counts = useStore((s) => {
+    const sessions = Object.values(s.catalog.sessions).filter((x) => !x.supersededBy && x.imageType === "light")
+    return { targets: Object.keys(s.catalog.targets).length, sessions: sessions.length }
+  })
   const first = running[0]
   const pct = first && first.progress.total > 0 ? Math.round((first.progress.done / first.progress.total) * 100) : null
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <footer
+      data-chrome=""
+      aria-label="Status bar"
+      className="material-toolbar flex h-(--statusbar-h) shrink-0 items-center gap-1 border-t px-2 text-xs text-muted-foreground"
+    >
       {first ? (
-        <Button variant="ghost" size="sm" render={<Link to="/activity" />} className="min-w-0 max-w-48 shrink tabular-nums xl:max-w-64">
+        <Button variant="ghost" size="xs" render={<Link to="/activity" />} className="min-w-0 max-w-64 shrink text-foreground tabular-nums">
           <Spinner data-icon="inline-start" aria-hidden="true" />
           <span className="truncate">
             {first.title}
@@ -237,52 +412,103 @@ function StatusArea({ narrow }: { narrow: boolean }) {
             {running.length > 1 ? ` (+${running.length - 1})` : ""}
           </span>
         </Button>
-      ) : null}
+      ) : (
+        <span className="truncate px-1.5 tabular-nums">
+          {counts.targets} Targets · {counts.sessions} light sessions
+        </span>
+      )}
       {interrupted > 0 ? (
-        <Button variant="ghost" size="sm" render={<Link to="/activity" />} className="text-warning" aria-label={`${interrupted} interrupted operation${interrupted === 1 ? "" : "s"}`}>
+        <Button variant="ghost" size="xs" render={<Link to="/activity" />} className="text-warning" aria-label={`${interrupted} interrupted operation${interrupted === 1 ? "" : "s"}`}>
           <TriangleAlert data-icon="inline-start" aria-hidden="true" />
-          <span className="tabular-nums">{interrupted}</span>
-          <span className="hidden xl:inline">interrupted</span>
+          <span className="tabular-nums">{interrupted} interrupted</span>
         </Button>
       ) : null}
       {offline.length > 0 ? (
         <Button
           variant="ghost"
-          size="sm"
+          size="xs"
           render={<Link to="/storage" />}
-          className="text-warning"
+          className="min-w-0 text-warning"
           aria-label={offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}
         >
           <Unplug data-icon="inline-start" aria-hidden="true" />
-          <span className="tabular-nums xl:hidden">{offline.length}</span>
-          <span className="hidden xl:inline">{offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}</span>
+          <span className="truncate">{offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}</span>
         </Button>
       ) : null}
-      <Button variant="outline" size={narrow ? "icon-sm" : "sm"} onClick={() => openPanel("simulation")}>
+      <div className="min-w-0 flex-1" />
+      <Button variant="ghost" size="xs" onClick={() => openPanel("simulation")} className="text-foreground">
         <FlaskConical data-icon="inline-start" aria-hidden="true" />
         <span className={cn(narrow && "sr-only")}>Prototype</span>
       </Button>
       <ThemeMenu />
-    </div>
+    </footer>
   )
 }
 
-/** The palette trigger keeps its whole label from 768 px up; below that it is an icon button with the same name. */
-function PaletteTrigger({ narrow }: { narrow: boolean }) {
+/** The toolbar search field: opens the command palette (⌘K), placed trailing as AppKit's NSSearchToolbarItem. */
+function ToolbarSearch({ narrow }: { narrow: boolean }) {
   if (narrow) {
     return (
-      <Button variant="outline" size="icon-sm" className="text-muted-foreground" onClick={() => openPanel("palette")}>
+      <Button variant="ghost" size="icon" className="text-muted-foreground" onClick={() => openPanel("palette")}>
         <Search aria-hidden="true" />
         <span className="sr-only">Search or jump to…</span>
       </Button>
     )
   }
   return (
-    <Button variant="outline" size="sm" className="w-60 min-w-0 shrink justify-start text-muted-foreground xl:w-72" onClick={() => openPanel("palette")}>
+    <Button
+      variant="outline"
+      size="sm"
+      className="w-44 min-w-0 shrink justify-start rounded-md bg-[color-mix(in_oklab,var(--foreground)_6%,transparent)] text-muted-foreground shadow-none xl:w-56 dark:bg-[color-mix(in_oklab,var(--foreground)_8%,transparent)]"
+      onClick={() => openPanel("palette")}
+    >
       <Search data-icon="inline-start" aria-hidden="true" />
       <span className="min-w-0 flex-1 truncate text-left">Search or jump to…</span>
-      <Kbd>{MOD_LABEL} K</Kbd>
+      <Kbd>{MOD_LABEL}K</Kbd>
     </Button>
+  )
+}
+
+/** Back and forward through this window's history, like Finder's toolbar. */
+function HistoryButtons() {
+  const router = useRouter()
+  const canGoBack = useCanGoBack()
+  const [forward, setForward] = useState(0)
+  const stepping = useRef(false)
+  const location = useRouterState({ select: (s) => s.location.href })
+  useEffect(() => {
+    if (stepping.current) stepping.current = false
+    else setForward(0)
+  }, [location])
+  return (
+    <div className="flex shrink-0 items-center" role="group" aria-label="History">
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Back"
+        disabled={!canGoBack}
+        onClick={() => {
+          stepping.current = true
+          setForward((n) => n + 1)
+          router.history.back()
+        }}
+      >
+        <ChevronLeft aria-hidden="true" className="size-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Forward"
+        disabled={forward === 0}
+        onClick={() => {
+          stepping.current = true
+          setForward((n) => Math.max(0, n - 1))
+          router.history.forward()
+        }}
+      >
+        <ChevronRight aria-hidden="true" className="size-4" />
+      </Button>
+    </div>
   )
 }
 
@@ -340,41 +566,61 @@ function routeFocusTarget(anchorId: string | null): HTMLElement | null {
   return target
 }
 
-/** The single scroll container; the skip link targets it. */
-function MainArea({ children }: { children: ReactNode }) {
+/**
+ * The main landmark: the unified toolbar (inside main, so the page h1 and its
+ * actions stay in the landmark) and the single content scroll area.
+ */
+function MainArea({ children, toolbar, trailing }: { children: ReactNode; toolbar: ReactNode | null; trailing?: ReactNode }) {
   const announcement = useRouteFocus()
+  const [title, setTitle] = useState<HTMLElement | null>(null)
+  const [actions, setActions] = useState<HTMLElement | null>(null)
+  const slots = useMemo(() => ({ title, actions }), [title, actions])
   return (
-    <main id="main" tabIndex={-1} className="relative flex min-h-0 flex-1 flex-col overflow-y-auto outline-none">
+    <main id="main" tabIndex={-1} className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-background outline-none">
       <p className="sr-only" aria-live="polite" data-route-announcer="">
         {announcement}
       </p>
-      {children}
+      {toolbar === null ? null : (
+        <div
+          data-chrome=""
+          data-tauri-drag-region=""
+          className="material-toolbar z-20 flex min-h-(--toolbar-h) shrink-0 items-center gap-2 border-b px-2"
+        >
+          {toolbar}
+          <div ref={setTitle} data-toolbar-title="" className="flex min-w-0 flex-1 items-center" />
+          <div ref={setActions} data-toolbar-actions="" className="flex min-w-0 shrink items-center justify-end gap-1.5" />
+          {trailing}
+        </div>
+      )}
+      <ToolbarSlotsContext.Provider value={toolbar === null ? { title: null, actions: null } : slots}>
+        <div data-scroll-area="" className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {children}
+        </div>
+      </ToolbarSlotsContext.Provider>
     </main>
   )
 }
 
-/** Sidebar, header and main area; the page goes in `children`. */
+/** Window frame: source list, toolbar + content, status bar; the page goes in `children`. */
 function AppFrame({ children }: { children: ReactNode }) {
-  const { sidebarCollapsed } = useShellUi()
   const narrow = useNarrowViewport()
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="flex h-dvh overflow-hidden bg-window">
       <SkipLink />
       {narrow ? null : <Sidebar />}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="z-20 flex min-h-11 min-w-0 shrink-0 flex-wrap items-center gap-2 border-b px-2 py-1">
-          {narrow ? (
-            <SidebarDrawer />
-          ) : (
-            <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
-              {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
-            </Button>
-          )}
-          <PaletteTrigger narrow={narrow} />
-          <div className="min-w-0 flex-1" />
-          <StatusArea narrow={narrow} />
-        </header>
-        <MainArea>{children}</MainArea>
+        <MainArea
+          toolbar={
+            <>
+              {narrow ? <SidebarDrawer /> : null}
+              <HistoryButtons />
+            </>
+          }
+          trailing={<ToolbarSearch narrow={narrow} />}
+        >
+          {children}
+        </MainArea>
+        <StatusBar narrow={narrow} />
       </div>
     </div>
   )
@@ -400,8 +646,8 @@ export function NotFoundPage() {
           titleAs="h1"
           description="The link may come from an older prototype build. Your library is unchanged."
           action={
-            <Button render={<Link to="/targets" />} size="sm">
-              Go to Targets
+            <Button render={<Link to="/overview" />} size="sm">
+              Go to Overview
             </Button>
           }
         />
@@ -410,13 +656,14 @@ export function NotFoundPage() {
   )
 }
 
-/** Focused layout for first-run setup: no sidebar, one task at a time. */
+/** Focused layout for first-run setup: no sidebar, one task at a time, in a plain window. */
 export function SetupShell() {
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
+    <div className="flex h-dvh flex-col overflow-hidden bg-window">
       <SkipLink />
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b px-4">
-        <Aperture aria-hidden="true" className="size-5 text-primary" />
+      <header data-chrome="" data-tauri-drag-region="" className="relative flex h-(--toolbar-h) shrink-0 items-center gap-2 border-b pr-3 pl-(--traffic-lights-w)">
+        <TrafficLights />
+        <Aperture aria-hidden="true" className="size-4 text-primary" />
         <span className="font-semibold">PlateVault</span>
         <div className="flex-1" />
         <Button variant="outline" size="sm" onClick={() => openPanel("simulation")}>
@@ -425,7 +672,7 @@ export function SetupShell() {
         </Button>
         <ThemeMenu />
       </header>
-      <MainArea>
+      <MainArea toolbar={null}>
         <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col">
           <Outlet />
         </div>
