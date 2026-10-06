@@ -1128,7 +1128,12 @@ fn open_choices(
         (
             OpenChoiceKind::UnresolvedMembers,
             summary.map_or(0, |summary| {
-                count(summary.unresolved.iter().map(|source| source.member_keys.len()).sum())
+                let members: BTreeSet<Uuid> = summary
+                    .unresolved
+                    .iter()
+                    .flat_map(|source| source.member_keys.iter().copied())
+                    .collect();
+                count(members.len())
             }),
         ),
         (

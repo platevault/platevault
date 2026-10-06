@@ -1040,8 +1040,10 @@ pub enum UnresolvedAction {
     Remove,
 }
 
-/// Included members of one session and location with no Available copy. The
-/// last-observed values are never verified counts.
+/// Included members of one session, location and availability with no
+/// Available copy. A member with copies at several locations is named under
+/// each; its last-observed values count once, and they are never verified
+/// counts.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnresolvedSource {

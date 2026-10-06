@@ -571,39 +571,48 @@ fn unresolved_actions(availability: Availability) -> Vec<UnresolvedAction> {
 }
 
 /// Name an unresolved member under its session and the location and
-/// availability of its member-key copy, with last-observed values that are
+/// availability of each of its copies, none of them Available, so every
+/// location's actions are offered (R15). The capture's last-observed frame and
+/// seconds count once, under its member-key copy, else its first copy; they are
 /// never verified counts.
 fn add_unresolved(
     sources: &mut BTreeMap<(Uuid, Uuid, u8), UnresolvedSource>,
     member: &MemberBasis,
 ) {
     let key = member.member.member_key;
-    let Some(copy) =
-        member.copies.iter().find(|copy| copy.asset_id == key).or_else(|| member.copies.first())
-    else {
-        return;
-    };
+    let counted = member.copies.iter().position(|copy| copy.asset_id == key).unwrap_or(0);
     let session_id = member.member.session_id;
-    let source = sources
-        .entry((session_id, copy.location_id, availability_rank(copy.availability)))
-        .or_insert_with(|| UnresolvedSource {
-            session_id,
-            location_id: copy.location_id,
-            location_name: copy.location_name.clone(),
-            availability: copy.availability,
-            failure_reason: copy.failure_reason.clone(),
-            member_keys: Vec::new(),
-            paths: Vec::new(),
-            last_observed_frames: 0,
-            last_observed_seconds: Microseconds::default(),
-            verified: false,
-            actions: unresolved_actions(copy.availability),
-        });
-    source.member_keys.push(key);
-    source.paths.push(copy.path.clone());
-    source.last_observed_frames += 1;
-    if let Some(exposure) = member.frame.exposure_seconds.and_then(Microseconds::from_seconds) {
-        source.last_observed_seconds = source.last_observed_seconds.saturating_add(exposure);
+    for (index, copy) in member.copies.iter().enumerate() {
+        let source = sources
+            .entry((session_id, copy.location_id, availability_rank(copy.availability)))
+            .or_insert_with(|| UnresolvedSource {
+                session_id,
+                location_id: copy.location_id,
+                location_name: copy.location_name.clone(),
+                availability: copy.availability,
+                failure_reason: copy.failure_reason.clone(),
+                member_keys: Vec::new(),
+                paths: Vec::new(),
+                last_observed_frames: 0,
+                last_observed_seconds: Microseconds::default(),
+                verified: false,
+                actions: unresolved_actions(copy.availability),
+            });
+        // This member's copies are added together, so a second copy in the
+        // same source finds its key last.
+        if source.member_keys.last() != Some(&key) {
+            source.member_keys.push(key);
+        }
+        source.paths.push(copy.path.clone());
+        if index == counted {
+            source.last_observed_frames += 1;
+            if let Some(exposure) =
+                member.frame.exposure_seconds.and_then(Microseconds::from_seconds)
+            {
+                source.last_observed_seconds =
+                    source.last_observed_seconds.saturating_add(exposure);
+            }
+        }
     }
 }
 

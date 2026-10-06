@@ -44,7 +44,7 @@ No command reads or writes an image file except `view_apply_quality`, which hash
 - `profile`: null in version 1. PREP (069) fills it from its handoff settings; `profile_unset` stays in the open choices until a profile is set.
 - `sessions[]`: session ID, grouping revision, state, reason, evidence and the current `SessionSummary` with successors when superseded.
 - `summary` per membership: `channels[]` and `unknownChannel` rows with `includedFrames`, `includedSeconds`, `unreviewedFrames`, `usableFrames`, `unknownExposureCount`, `unknownImageTypeCount`, and `excluded` counts by reason. It also carries `unresolved[]` and `changedSinceReview[]`.
-- `unresolved[]`: session ID, location ID and name, availability, failure reason, member keys, paths, `lastObservedFrames`, `lastObservedSeconds`, `verified: false` and `actions` naming `reconnect`, `locate` or `remove`.
+- `unresolved[]`: one entry per session, location and availability, with session ID, location ID and name, availability, failure reason, member keys, paths, `lastObservedFrames`, `lastObservedSeconds`, `verified: false` and `actions` naming `reconnect`, `locate` or `remove`. A member with copies at several locations is named under each location, and its last-observed frame and seconds count once.
 - `openChoices[]`: `unsaved_draft`, `stale_draft`, `unresolved_members`, `quality_needs_review`, `changed_since_review`, `project_context_changed` and `profile_unset`, each with its count.
 
 ## View revision

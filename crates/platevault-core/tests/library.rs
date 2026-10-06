@@ -1320,6 +1320,87 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
     }
 }
 
+/// FR-09/R15: a saved View member whose T7 copy was retired and whose NAS copy
+/// is now offline is named under both locations with each one's actions, so
+/// Reconnect stays offered for NAS. Its last-observed frames and seconds, and
+/// the unresolved-members choice, count each capture once.
+#[tokio::test]
+async fn an_unresolved_member_names_every_unavailable_copy_and_counts_its_capture_once() {
+    let temp = tempfile::tempdir().unwrap();
+    let (library, locations, _) =
+        two_location_library(&temp, 2, Some("2026-09-18T22:00:00"), &[]).await;
+    let (summary, _) = only_session(&library).await;
+    assert_eq!(summary.capture_count, 2, "each frame's two copies form one capture");
+    let catalog = library.catalog();
+    let origin =
+        ViewOriginInput::Sessions { sessions: vec![expected_session_of(&summary.session)] };
+    let view = library.create_view(&origin, Some("Ha pairs".into())).await.unwrap().view.id;
+    assert_eq!(catalog.save_view(view, 0, 1).await.unwrap().view.revision, 1);
+    let mut members: Vec<Uuid> = catalog
+        .view_membership(view, Membership::Committed)
+        .await
+        .unwrap()
+        .members
+        .iter()
+        .map(|member| member.member.member_key)
+        .collect();
+    members.sort_unstable();
+    assert_eq!(members.len(), 2);
+
+    let unplug = async |location: &Location| {
+        let root = temp.path().join(&location.name);
+        std::fs::rename(&root, root.with_file_name(format!("{} unplugged", location.name)))
+            .unwrap();
+        assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Failed);
+    };
+    let (t7, nas) = (&locations[0], &locations[1]);
+    unplug(t7).await;
+    let review = library.review_retire_location(t7.id).await.unwrap();
+    library.retire_location(review.id, t7.id, review.expected_revision).await.unwrap();
+    unplug(nas).await;
+
+    let detail = library.view_detail(view).await.unwrap();
+    let named = |location: &Location| {
+        let source = detail
+            .unresolved
+            .iter()
+            .find(|source| source.location_id == location.id)
+            .unwrap_or_else(|| panic!("{} is named: {:?}", location.name, detail.unresolved));
+        let mut keys = source.member_keys.clone();
+        keys.sort_unstable();
+        (source.availability, keys, source.paths.len(), source.actions.clone())
+    };
+    assert_eq!(detail.unresolved.len(), 2, "{:?}", detail.unresolved);
+    assert_eq!(
+        named(t7),
+        (
+            Availability::Retired,
+            members.clone(),
+            2,
+            vec![UnresolvedAction::Locate, UnresolvedAction::Remove]
+        )
+    );
+    assert_eq!(
+        named(nas),
+        (
+            Availability::Offline,
+            members,
+            2,
+            vec![UnresolvedAction::Reconnect, UnresolvedAction::Locate, UnresolvedAction::Remove]
+        )
+    );
+    let frames: u64 = detail.unresolved.iter().map(|source| source.last_observed_frames).sum();
+    let seconds = detail
+        .unresolved
+        .iter()
+        .map(|source| source.last_observed_seconds)
+        .fold(Microseconds::default(), Microseconds::saturating_add);
+    assert_eq!((frames, seconds), (2, Microseconds(600 * Microseconds::PER_SECOND)));
+    let open =
+        detail.open_choices.iter().find(|choice| choice.kind == OpenChoiceKind::UnresolvedMembers);
+    assert_eq!(open.map(|choice| choice.count), Some(2));
+}
+
 fn expected_session_of(session: &Session) -> ExpectedSession {
     ExpectedSession {
         session_id: session.id,
