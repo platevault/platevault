@@ -5,7 +5,10 @@
 //!
 //! The walker never writes, renames or follows links. It reuses the
 //! `metadata_fits`/`metadata_xisf` header adapters and the `fs_pathsafe`
-//! link/junction classifier.
+//! link/junction classifier. An entry counts only while every folder from the
+//! root down to it is still the directory it was listed from, checked before
+//! and after its header is read, so a folder swapped for a link mid-scan never
+//! brings an outside file into the location.
 //!
 //! # Scope semantics
 //!
@@ -28,9 +31,11 @@
 #[path = "inventory/identity.rs"]
 mod identity;
 
-use std::ffi::OsString;
+use std::cell::Cell;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
 use std::path::{Component, Path, PathBuf};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -144,7 +149,7 @@ pub fn scan(
             identity::compare(&location.identity, &observed.identity, &root).map(|()| observed)
         })
         .map_err(|error| locate(error, location))?;
-    let scope_stamp =
+    let scope_folder =
         enter_scope(&root, &scope, &anchor.stamp).map_err(|error| locate(error, location))?;
 
     let mut walk = Walk {
@@ -161,7 +166,7 @@ pub fn scan(
         issues: Vec::new(),
         incomplete: Vec::new(),
     };
-    let halt = walk.run(&scope, scope_stamp).err();
+    let halt = walk.run(&scope_folder).err();
     let Walk { totals, files, mut issues, mut incomplete, .. } = walk;
     let scope = NativePath::from_path(&scope);
 
@@ -228,13 +233,18 @@ fn scope_path(scope: Option<&NativePath>) -> Result<PathBuf, LibraryError> {
 }
 
 /// Descend to the scan scope without following links or leaving the volume.
-fn enter_scope(root: &Path, scope: &Path, root_stamp: &Stamp) -> Result<Stamp, LibraryError> {
-    let mut current = root.to_path_buf();
-    let mut stamp = *root_stamp;
+fn enter_scope(root: &Path, scope: &Path, root_stamp: &Stamp) -> Result<Rc<Folder>, LibraryError> {
+    let mut folder = Rc::new(Folder {
+        relative: PathBuf::new(),
+        path: root.to_path_buf(),
+        stamp: *root_stamp,
+        parent: None,
+        excluded: Cell::new(false),
+    });
     for part in scope.components() {
-        current.push(part);
-        let meta = fs::symlink_metadata(&current)
-            .map_err(|error| LibraryError::from_io(&current, &error))?;
+        let path = folder.path.join(part);
+        let meta =
+            fs::symlink_metadata(&path).map_err(|error| LibraryError::from_io(&path, &error))?;
         let refusal = if fs_pathsafe::is_link_or_junction_metadata(&meta) {
             Some(LibraryError::InvalidInput("scan scope passes through a link or junction".into()))
         } else if !meta.is_dir() {
@@ -245,11 +255,45 @@ fn enter_scope(root: &Path, scope: &Path, root_stamp: &Stamp) -> Result<Stamp, L
             None
         };
         if let Some(error) = refusal {
-            return Err(identity::scoped(error, &current));
+            return Err(identity::scoped(error, &path));
         }
-        stamp = identity::stamp(&meta);
+        folder = Rc::new(Folder {
+            relative: folder.relative.join(part),
+            path,
+            stamp: identity::stamp(&meta),
+            parent: Some(folder),
+            excluded: Cell::new(false),
+        });
     }
-    Ok(stamp)
+    Ok(folder)
+}
+
+/// A folder the walk entered or listed, with the stamp it had then.
+///
+/// Entries are reached by path, which resolves every folder above them again.
+/// An entry counts only while each folder from the root down still holds its
+/// recorded stamp, so a folder swapped for a link or junction after it was
+/// listed never redirects its listed entries outside the root.
+struct Folder {
+    relative: PathBuf,
+    path: PathBuf,
+    stamp: Stamp,
+    parent: Option<Rc<Self>>,
+    /// Already recorded as an incomplete scope; its subtree is uncertain.
+    excluded: Cell<bool>,
+}
+
+/// The topmost folder from the root down to `folder` that is no longer the
+/// real directory the walk recorded, if any.
+fn changed_folder(folder: &Folder) -> Option<&Folder> {
+    folder.parent.as_deref().and_then(changed_folder).or_else(|| {
+        let unchanged = fs::symlink_metadata(&folder.path).is_ok_and(|meta| {
+            !fs_pathsafe::is_link_or_junction_metadata(&meta)
+                && meta.is_dir()
+                && identity::stamp(&meta) == folder.stamp
+        });
+        (!unchanged).then_some(folder)
+    })
 }
 
 enum Halt {
@@ -275,18 +319,18 @@ struct Walk<'a, F> {
 }
 
 impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
-    fn run(&mut self, scope: &Path, scope_stamp: Stamp) -> Result<(), Halt> {
-        let mut stack = vec![(scope.to_path_buf(), scope_stamp)];
-        while let Some((directory, expected)) = stack.pop() {
+    fn run(&mut self, scope: &Rc<Folder>) -> Result<(), Halt> {
+        let mut stack = vec![Rc::clone(scope)];
+        while let Some(directory) = stack.pop() {
             self.check_canceled()?;
-            let is_scope = directory.as_path() == scope;
-            let Some(names) = self.list(&directory, expected, is_scope)? else {
+            let is_scope = Rc::ptr_eq(&directory, scope);
+            let Some(names) = self.list(&directory, is_scope)? else {
                 continue;
             };
             let mut children = Vec::new();
             for name in names {
                 self.check_canceled()?;
-                self.visit(directory.join(name), &mut children)?;
+                self.visit(&directory, &name, &mut children)?;
             }
             stack.extend(children.into_iter().rev());
         }
@@ -314,23 +358,12 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
     ///
     /// A failure at the scan scope itself ends the scan with an error; below
     /// it, the directory becomes an issue and an incomplete scope.
-    fn list(
-        &mut self,
-        directory: &Path,
-        expected: Stamp,
-        is_scope: bool,
-    ) -> Result<Option<Vec<OsString>>, Halt> {
-        let path = self.root.join(directory);
-        let unchanged = || {
-            fs::symlink_metadata(&path).is_ok_and(|meta| {
-                !fs_pathsafe::is_link_or_junction_metadata(&meta)
-                    && meta.is_dir()
-                    && identity::stamp(&meta) == expected
-            })
-        };
+    fn list(&mut self, folder: &Folder, is_scope: bool) -> Result<Option<Vec<OsString>>, Halt> {
         let mut names = Vec::new();
-        let failure = if unchanged() {
-            match fs::read_dir(&path) {
+        let failure = if let Some(changed) = changed_folder(folder) {
+            Some((changed, ListingFailure::changed()))
+        } else {
+            match fs::read_dir(&folder.path) {
                 Ok(entries) => {
                     let mut interrupted = None;
                     for entry in entries {
@@ -342,33 +375,32 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
                             }
                         }
                     }
-                    // A listing taken from a directory swapped mid-read is not
-                    // evidence of its contents.
-                    if unchanged() {
-                        interrupted
-                            .map(|error| ListingFailure::io("listing interrupted", &error, true))
-                    } else {
-                        Some(ListingFailure::changed())
+                    // A listing taken from a directory swapped mid-read, or
+                    // through a swapped folder above it, is not evidence of
+                    // its contents.
+                    match changed_folder(folder) {
+                        Some(changed) => Some((changed, ListingFailure::changed())),
+                        None => interrupted.map(|error| {
+                            (folder, ListingFailure::io("listing interrupted", &error, true))
+                        }),
                     }
                 }
-                Err(error) => Some(ListingFailure::io("unreadable", &error, false)),
+                Err(error) => Some((folder, ListingFailure::io("unreadable", &error, false))),
             }
-        } else {
-            Some(ListingFailure::changed())
         };
-        let Some(failure) = failure else {
+        let Some((at, failure)) = failure else {
             self.totals.complete_directories += 1;
             names.sort();
             return Ok(Some(names));
         };
         if is_scope {
             return Err(Halt::Failed(locate(
-                identity::scoped(failure.error, &path),
+                identity::scoped(failure.error, &at.path),
                 self.location,
             )));
         }
         self.totals.unreadable += 1;
-        self.exclude(directory, failure.reason, failure.availability);
+        self.exclude_folder(at, failure.reason, failure.availability);
         // Entries read before an interruption are still observations; their
         // subtree is already excluded from absence reconciliation.
         if failure.keep_names {
@@ -380,10 +412,12 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
 
     fn visit(
         &mut self,
-        relative: PathBuf,
-        children: &mut Vec<(PathBuf, Stamp)>,
+        parent: &Rc<Folder>,
+        name: &OsStr,
+        children: &mut Vec<Rc<Folder>>,
     ) -> Result<(), Halt> {
-        let path = self.root.join(&relative);
+        let relative = parent.relative.join(name);
+        let path = parent.path.join(name);
         match fs::symlink_metadata(&path) {
             Err(error) => {
                 self.totals.unreadable += 1;
@@ -403,7 +437,13 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
             Ok(meta) if meta.is_dir() => {
                 let stamp = identity::stamp(&meta);
                 if stamp.same_device(&self.root_stamp) {
-                    children.push((relative, stamp));
+                    children.push(Rc::new(Folder {
+                        relative,
+                        path,
+                        stamp,
+                        parent: Some(Rc::clone(parent)),
+                        excluded: Cell::new(false),
+                    }));
                 } else {
                     self.exclude(
                         &relative,
@@ -417,8 +457,12 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
                 let format =
                     if meta.is_file() { format_of(&relative) } else { ImageFormat::Unsupported };
                 match format {
-                    ImageFormat::Fits => self.read(&relative, &path, &meta, format, &FitsExtractor),
-                    ImageFormat::Xisf => self.read(&relative, &path, &meta, format, &XisfExtractor),
+                    ImageFormat::Fits => {
+                        self.read(parent, &relative, &path, &meta, format, &FitsExtractor);
+                    }
+                    ImageFormat::Xisf => {
+                        self.read(parent, &relative, &path, &meta, format, &XisfExtractor);
+                    }
                     ImageFormat::Unsupported => self.totals.unsupported += 1,
                 }
             }
@@ -431,12 +475,18 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
 
     fn read(
         &mut self,
+        parent: &Folder,
         relative: &Path,
         path: &Path,
         before: &Metadata,
         format: ImageFormat,
         extractor: &dyn MetadataExtractor,
     ) {
+        // The adapters open by path: never open one through a folder that is
+        // no longer the one its name was listed from.
+        if self.above_changed(parent) {
+            return;
+        }
         // Every header the adapters cannot turn into metadata is one per-file
         // issue with Unreadable availability: the catalog records it, keeps the
         // file out of absence reconciliation and commits its readable siblings.
@@ -503,6 +553,11 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
                 return;
             }
         };
+        // The header and file ID were read by path: they describe an entry
+        // below the root only if every folder above it is still unchanged.
+        if self.above_changed(parent) {
+            return;
+        }
         self.totals.metadata_read += 1;
         self.pending.files.push(ScanFile {
             relative_path: NativePath::from_path(relative),
@@ -517,6 +572,26 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
         let relative_path = NativePath::from_path(relative);
         self.incomplete.push(relative_path.clone());
         self.pending.issues.push(ScanIssue { relative_path, reason, availability });
+    }
+
+    /// Exclude a folder once; later failures below it are already uncertain.
+    fn exclude_folder(&mut self, folder: &Folder, reason: String, availability: Availability) {
+        if !folder.excluded.replace(true) {
+            self.exclude(&folder.relative, reason, availability);
+        }
+    }
+
+    /// Refuse an entry when a folder from the root down to `parent` changed
+    /// since the walk recorded it: the entry counts as unreadable and the
+    /// topmost changed folder becomes an incomplete scope.
+    fn above_changed(&mut self, parent: &Folder) -> bool {
+        let Some(changed) = changed_folder(parent) else {
+            return false;
+        };
+        self.totals.unreadable += 1;
+        let failure = ListingFailure::changed();
+        self.exclude_folder(changed, failure.reason, failure.availability);
+        true
     }
 
     /// Deliver the pending batch once cancellation and root continuity pass.

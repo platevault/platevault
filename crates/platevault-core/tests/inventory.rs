@@ -502,6 +502,54 @@ fn denied_and_linked_subtrees_stay_uncertain_while_siblings_reconcile() {
     assert_eq!(snapshot(outside.path()), outside_before);
 }
 
+/// A folder swapped for a link after it was listed must not redirect the
+/// entries listed from it: no outside file is indexed and the folder stays
+/// uncertain.
+#[cfg(unix)]
+#[test]
+fn folder_swapped_for_a_link_after_listing_never_indexes_outside_files() {
+    let parent = tempfile::tempdir().unwrap();
+    let root = parent.path().join("Captures");
+    let outside = parent.path().join("outside");
+    std::fs::create_dir_all(root.join("sub")).unwrap();
+    std::fs::create_dir(&outside).unwrap();
+    support::fits(&root.join("sub/a.fits"), &LIGHT).unwrap();
+    support::fits(&root.join("sub/b.fits"), &LIGHT).unwrap();
+    support::fits(&outside.join("b.fits"), &with(&[("OBJECT", "'OUTSIDE'")])).unwrap();
+    let location = location(&root);
+    let outside_before = snapshot(&outside);
+    let mut swapped = false;
+    let observation = inventory::scan(
+        &location,
+        &ScanOptions { batch_size: 1, relative_scope: None },
+        |batch| {
+            // `sub` is listed before `sub/a.fits` is read, so `sub/b.fits` is
+            // already a listed name when the folder becomes a link.
+            if !swapped && batch.files.iter().any(|file| file.relative_path == rel("sub/a.fits")) {
+                std::fs::rename(root.join("sub"), parent.path().join("moved")).unwrap();
+                std::os::unix::fs::symlink(&outside, root.join("sub")).unwrap();
+                swapped = true;
+            }
+            Ok(())
+        },
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+
+    assert!(swapped, "the swap ran between listing and visit");
+    let paths: Vec<_> = observation.files.iter().map(|file| file.relative_path.clone()).collect();
+    assert_eq!(paths, vec![rel("sub/a.fits")]);
+    assert!(observation
+        .files
+        .iter()
+        .all(|file| file.metadata.object.as_deref() != Some("OUTSIDE")));
+    assert_eq!(observation.state, ScanState::Partial);
+    assert!(observation.incomplete_scopes.contains(&rel("sub")), "{observation:?}");
+    assert!(!inventory::absence_provable(&observation, &rel("sub/b.fits")));
+    assert!(!inventory::absence_provable(&observation, &rel("sub/c.fits")));
+    assert_eq!(snapshot(&outside), outside_before);
+}
+
 #[test]
 fn cancel_and_callback_failure_never_produce_complete_scopes() {
     let dir = tempfile::tempdir().unwrap();
