@@ -48,13 +48,15 @@ in a compact source list:
 |---|---|
 | — | Overview (badge: sessions waiting for a Target decision) |
 | Library | Targets, Sessions, Calibration |
-| Work | Views, Plan (Plans + Projects), Storage |
+| Work | Views, Projects, Plan, Storage |
 | Recent Targets | the three most recently captured Targets with integration — D's "Targets are the navigation" in three rows instead of a full sky rail |
 | Bottom bar | Getting started (T1), Activity and Settings as icon buttons |
 
-Seven top-level items in two groups (was nine plus utilities). Projects live in
-the Plan area beside the planner (the orientation walk's Projects stop points at
-Plan). The Target finder is the dense, searchable Targets table — one 26 px row
+Eight top-level items in two groups plus Overview (was nine plus a utilities
+list), single-line 26 px rows, no sparklines or per-Target rows beyond the
+three Recent Targets. A first cut moved Projects into Plan; the journey walk
+showed J20/J21 and the orientation walk reach Projects from the source list,
+so it stays there. The Target finder is the dense, searchable Targets table — one 26 px row
 per Target with channels, captured / usable / Unreviewed integration — instead
 of D's sky-first landing.
 
