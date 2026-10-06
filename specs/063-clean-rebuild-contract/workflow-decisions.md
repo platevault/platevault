@@ -65,4 +65,13 @@
 - D-W62: With several Project rigs, the list shows one Fit per rig and the union of their bands, and presets match when any rig fits.
 - D-W63: Tonight's windows for a mosaic use the mosaic's centre; the Plan area lists each panel.
 
+## Round 7 (2026-10-06): recommendations applied by default after the user said "continue please"; any of them can be reverted before the contract PR lands
+- D-W64: A run can be marked Abandoned. An Abandoned run is kept read-only, its frames stop counting "in project", and it can be Reopened.
+- D-W65: A rig cannot be removed from a Project while any run that is not Abandoned uses it. Under D-W45, a session stops being a candidate only when its own rig or Target changes.
+- D-W66: "Captured" means candidates plus run members, so "in project" never exceeds "captured" (refines D-W36).
+- D-W67: A mosaic group's new prepared revision goes to <Mosaic> (rev 2)/ with Panel N/ folders inside it. <Run> Results/ is one folder shared by all revisions of the run; each discovered Result records the revision it came from.
+- D-W68: Results in <Mosaic> Results/ are assigned to a panel by a Panel N/ subfolder or by evidence from the processing tool (header or file name). Otherwise the user places them.
+- D-W69: A Project can be Reopened after Archive. Archived sessions show as Archived until the user restores them; reopening moves no files.
+- D-W70: The Project Done / Archive sheet also offers "Move N processing intermediates to Trash (size)". Final Results and adopted masters are kept, and the D-W43 trash rules apply.
+
 Sources: the legacy facts are in legacy-frontend-facts.md.

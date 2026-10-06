@@ -17,7 +17,7 @@ Feature: [Specification](../spec.md)
 - [x] Existing uncommitted work and the archived reference remain outside destructive actions.
 - [x] Independent cross-feature requirements review of the pre-redesign text passed after M1 through M13, R1 through R9 and C1 corrections; implementation readiness is not certified.
 - [x] Conservative product defaults are encoded in D01 through D19 under the user-authorized autonomous run.
-- [x] The 2026-10-06 workflow decisions D-W1 through D-W63 are copied verbatim into the repository, and every D01 to D19 entry they contradict names its superseding decision.
+- [x] The 2026-10-06 workflow decisions D-W1 through D-W70 are copied verbatim into the repository, and every D01 to D19 entry they contradict names its superseding decision.
 - [x] Changed and added requirements end with their D-W tag; the cross-spec flow states the Project, run stage and Project Done / Archive model.
 - [ ] Independent requirements review of the 2026-10-06 workflow amendment has not yet run.
 

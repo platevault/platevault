@@ -5,7 +5,7 @@ Status: draft interaction specification based on the functionality interview
 Delivery: documentation only; no product implementation or new wireframes
 Baseline comparison: local commit `94a3dc958c13e297baf501aa2721efa2c2628622`
 
-**Superseded in part, 2026-10-06:** the [workflow decisions log](../../specs/063-clean-rebuild-contract/workflow-decisions.md) (D-W1 through D-W63) supersedes this document wherever they disagree, and specs 063 through 072 carry the amended contract. Every View is a processing run inside exactly one Project, and Home is the default landing. Import replaces reviewed filing, calibration is assigned automatically, and P/X/U marks apply at once. Runs prepare to `<output>/<Project>/<Run>/` with a sibling Results folder, and a run's Clean up removes only prepared links, clones and copies. Where a line below still describes optional Projects, geometric or equipment preselection, Project checklists, a View location or cleanup of processing intermediates, the decisions govern.
+**Superseded in part, 2026-10-06:** the [workflow decisions log](../../specs/063-clean-rebuild-contract/workflow-decisions.md) (D-W1 through D-W70) supersedes this document wherever they disagree, and specs 063 through 072 carry the amended contract. Every View is a processing run inside exactly one Project, and Home is the default landing. Import replaces reviewed filing, calibration is assigned automatically, and P/X/U marks apply at once. Runs prepare to `<output>/<Project>/<Run>/` with a sibling Results folder, and a run's Clean up removes only prepared links, clones and copies. Where a line below still describes optional Projects, geometric or equipment preselection, Project checklists, a View location or cleanup of processing intermediates, the decisions govern.
 
 ## Scope and status
 
@@ -167,7 +167,7 @@ These totals describe the user's confirmed membership after frame review, not a 
 
 **Observe:** Sessions, Frames, Preview, and Calibration share one selection. Move among them without a forced Next/Back wizard. **Review preparation** gathers unresolved choices whenever the user requests handoff.
 
-**Enter:** a run name such as `NGC7000 HOO - Siril`. Its Project, subject and rig were fixed when it was created (D-W1, D-W50). Choose an application profile or leave it until preparation.
+**Enter:** a run name such as `NGC7000-HOO-Siril`. Its Project, subject and rig were fixed when it was created (D-W1, D-W50). Choose an application profile or leave it until preparation.
 
 **Observe:** the draft selection belongs to this run, inside its one Project (D-W8).
 
