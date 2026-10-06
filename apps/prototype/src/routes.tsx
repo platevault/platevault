@@ -51,13 +51,8 @@ function page<TPath extends string>(path: TPath, component: () => ReactNode) {
   return createRoute({ getParentRoute: () => appLayout, path, component, validateSearch: looseSearch })
 }
 
-const indexRoute = createRoute({
-  getParentRoute: () => appLayout,
-  path: "/",
-  beforeLoad: () => {
-    throw redirect({ to: "/targets" })
-  },
-})
+// Harness v2: the start page is Recent sessions (HARNESS-V2.md §Start page), not Targets.
+const indexRoute = page("/", t2Pages.recent)
 
 // T1: onboarding (minimal shell) and Settings.
 const welcomeRoute = createRoute({ getParentRoute: () => setupLayout, path: "/welcome", component: t1Pages.welcome, validateSearch: looseSearch })

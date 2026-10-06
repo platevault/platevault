@@ -1,7 +1,11 @@
 /**
- * Information architecture (foundation-owned): sidebar groups, go-to
+ * Information architecture (foundation-owned): source-list groups, go-to
  * shortcuts and the static route table the command palette lists.
  * Route paths are fixed in HIGH-LEVEL-DESIGN.md §4 and must not drift.
+ *
+ * Harness v2 (HARNESS-V2.md §Menu): seven destinations in two groups, with
+ * Targets as a searchable finder panel between them rather than a menu item,
+ * and Activity and Settings moved to the status bar and the toolbar.
  */
 import {
   Activity,
@@ -9,6 +13,7 @@ import {
   Crosshair,
   Goal,
   HardDrive,
+  Images,
   Layers,
   ListChecks,
   type LucideIcon,
@@ -25,31 +30,36 @@ export interface NavItem {
 }
 
 export interface NavGroup {
+  id: string
   label: string
   items: NavItem[]
 }
 
 export const NAV_GROUPS: NavGroup[] = [
   {
+    id: "library",
     label: "Library",
     items: [
-      { to: "/targets", label: "Targets", icon: Crosshair, goKey: "t" },
+      { to: "/", label: "Recent", icon: Images, goKey: "r" },
       { to: "/sessions", label: "Sessions", icon: Layers, goKey: "s" },
       { to: "/calibration", label: "Calibration", icon: SlidersHorizontal, goKey: "c" },
     ],
   },
   {
+    id: "work",
     label: "Work",
     items: [
-      { to: "/projects", label: "Projects", icon: Goal, goKey: "p" },
       { to: "/views", label: "Views", icon: ListChecks, goKey: "v" },
-      { to: "/plans", label: "Plans", icon: CalendarClock, goKey: "l" },
+      { to: "/projects", label: "Projects", icon: Goal, goKey: "p" },
+      { to: "/plans", label: "Plan", icon: CalendarClock, goKey: "l" },
       { to: "/storage", label: "Storage", icon: HardDrive, goKey: "o" },
     ],
   },
 ]
 
+/** Reached from the Target finder header, the status bar and the toolbar; still go-to targets. */
 export const UTILITY_ITEMS: NavItem[] = [
+  { to: "/targets", label: "Targets", icon: Crosshair, goKey: "t" },
   { to: "/activity", label: "Activity", icon: Activity, goKey: "a" },
   { to: "/settings", label: "Settings", icon: Settings, goKey: "," },
 ]

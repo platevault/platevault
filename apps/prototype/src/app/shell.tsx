@@ -1,12 +1,37 @@
 /**
- * App shell (foundation-owned): root providers, the main layout with sidebar,
- * header and status area, and the minimal onboarding layout.
+ * App shell (foundation-owned): root providers and the window layout.
+ *
+ * Harness v2 (HARNESS-V2.md §Window): the window is the layout. A unified
+ * toolbar on top, the source list on the left (resizable, collapsible to an
+ * icon rail with `[`), the content pane, and a status bar at the bottom. The
+ * window never scrolls; each pane scrolls on its own. Below 768 px (WCAG
+ * 1.4.10 reflow) the source list leaves the layout and opens as a drawer.
  */
-import { Link, Outlet, useRouterState } from "@tanstack/react-router"
-import { Aperture, FlaskConical, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
+import { Link, Outlet, useRouter, useRouterState } from "@tanstack/react-router"
+import {
+  Activity,
+  Aperture,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Crosshair,
+  FlaskConical,
+  Keyboard,
+  MapPinOff,
+  Monitor,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Settings,
+  Sun,
+  TriangleAlert,
+  Unplug,
+} from "lucide-react"
 import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { EmptyState, LiveAnnouncer } from "@/components/app/feedback"
 import { useDocumentTitle } from "@/components/app/page"
+import { SplitHandle, useStoredState } from "@/components/app/studio"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -29,10 +54,11 @@ import { t5Shell } from "@/features/t5/shell"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { CommandPalette } from "./command-palette"
-import { NAV_GROUPS, type NavItem, UTILITY_ITEMS } from "./navigation"
+import { NAV_GROUPS, type NavGroup, type NavItem } from "./navigation"
 import { setTheme, type ThemePreference, usePreferences } from "./preferences"
 import { MOD_LABEL, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
 import { SimulationSheet } from "./simulation-panel"
+import { TargetFinder } from "./target-finder"
 import { openPanel, toggleSidebar, useShellUi } from "./ui-state"
 
 const SHELLS = [t1Shell, t2Shell, t3Shell, t4Shell, t5Shell]
@@ -59,26 +85,30 @@ function SkipLink() {
         event.preventDefault()
         document.getElementById("main")?.focus()
       }}
-      className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:px-3 focus:py-2"
+      className="sr-only rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[80]"
     >
       Skip to main content
     </a>
   )
 }
 
-function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+/* ---------------------------------------------------------------- source list */
+
+function SourceLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const Icon = item.icon
   const link = (
     <Link
       to={item.to}
+      activeOptions={{ exact: item.to === "/" }}
+      data-inset-focus=""
       className={cn(
-        "flex h-8 items-center gap-2.5 rounded-md px-2 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        "data-[status=active]:bg-sidebar-accent data-[status=active]:font-medium data-[status=active]:text-sidebar-accent-foreground data-[status=active]:shadow-[inset_2px_0_0_var(--sidebar-primary)]",
+        "flex h-6.5 items-center gap-2 rounded-sm px-2 text-sm text-sidebar-foreground outline-none hover:bg-hover",
+        "data-[status=active]:bg-selected data-[status=active]:font-medium data-[status=active]:text-selected-foreground",
         collapsed && "justify-center px-0",
       )}
       aria-label={collapsed ? item.label : undefined}
     >
-      <Icon aria-hidden="true" className="size-4 shrink-0" />
+      <Icon aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground in-data-[status=active]:text-primary" />
       {collapsed ? null : <span className="truncate">{item.label}</span>}
     </Link>
   )
@@ -91,9 +121,90 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   )
 }
 
+function SourceGroup({ group, collapsed }: { group: NavGroup; collapsed: boolean }) {
+  const [open, setOpen] = useStoredState<boolean>(`nav.${group.id}`, true)
+  const Chevron = open ? ChevronDown : ChevronRight
+  const items = (
+    <ul className="space-y-px px-1.5" aria-label={collapsed ? group.label : undefined}>
+      {group.items.map((item) => (
+        <li key={item.to}>
+          <SourceLink item={item} collapsed={collapsed} />
+        </li>
+      ))}
+    </ul>
+  )
+  if (collapsed) return <div className="py-1">{items}</div>
+  return (
+    <section aria-labelledby={`nav-${group.id}`} className="py-1">
+      <h2 id={`nav-${group.id}`}>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={`nav-${group.id}-items`}
+          onClick={() => setOpen(!open)}
+          data-inset-focus=""
+          className="flex h-6 w-full items-center gap-1 pl-2 text-left outline-none"
+        >
+          <Chevron aria-hidden="true" className="size-3 text-muted-foreground" />
+          <span className="panel-title">{group.label}</span>
+        </button>
+      </h2>
+      <div id={`nav-${group.id}-items`} hidden={!open}>
+        {items}
+      </div>
+    </section>
+  )
+}
+
+function SourceListContent({ collapsed }: { collapsed: boolean }) {
+  const [library, work] = NAV_GROUPS as [NavGroup, NavGroup]
+  return (
+    <>
+      <nav aria-label="Main" className="flex min-h-0 flex-1 flex-col overflow-y-auto py-1">
+        <SourceGroup group={library} collapsed={collapsed} />
+        {collapsed ? (
+          <div className="px-1.5 py-1">
+            <SourceLink item={{ to: "/targets", label: "Targets", icon: Crosshair, goKey: "t" }} collapsed />
+          </div>
+        ) : (
+          <TargetFinder />
+        )}
+        <SourceGroup group={work} collapsed={collapsed} />
+      </nav>
+      <div className="space-y-px border-t border-seam p-1.5">
+        {SHELLS.map((shell, index) => (shell.SidebarFooter ? <shell.SidebarFooter key={index} collapsed={collapsed} /> : null))}
+      </div>
+    </>
+  )
+}
+
+const SOURCE_LIST_WIDTH = 216
+
+function SourceList() {
+  const { sidebarCollapsed: collapsed } = useShellUi()
+  const [width, setWidth] = useStoredState<number>("width.source-list", SOURCE_LIST_WIDTH)
+  return (
+    <>
+      <aside
+        id="source-list"
+        aria-label="Source list"
+        style={collapsed ? undefined : { width }}
+        className={cn("chrome flex shrink-0 flex-col bg-sidebar text-sidebar-foreground", collapsed && "w-10")}
+      >
+        <SourceListContent collapsed={collapsed} />
+      </aside>
+      {collapsed ? (
+        <div aria-hidden="true" className="w-px shrink-0 bg-seam" />
+      ) : (
+        <SplitHandle label="Resize source list" value={width} min={184} max={320} reset={SOURCE_LIST_WIDTH} direction={1} onChange={setWidth} controls="source-list" />
+      )}
+    </>
+  )
+}
+
 /**
- * Below 768 px (WCAG 1.4.10 reflow, 1280 px at 200 % and up) the sidebar
- * leaves the layout and opens as an overlay from the header instead.
+ * Below 768 px (WCAG 1.4.10 reflow, 1280 px at 200 % and up) the source
+ * list leaves the layout and opens as a drawer from the toolbar.
  */
 const NARROW_QUERY = "(max-width: 767.98px)"
 
@@ -108,63 +219,12 @@ function useNarrowViewport(): boolean {
   )
 }
 
-function SidebarContent({ collapsed }: { collapsed: boolean }) {
-  return (
-    <>
-      <div className={cn("flex h-11 shrink-0 items-center gap-2 border-b border-sidebar-border px-3", collapsed && "justify-center px-0")}>
-        <Aperture aria-hidden="true" className="size-5 shrink-0 text-primary" />
-        {collapsed ? <span className="sr-only">PlateVault</span> : <span className="font-semibold">PlateVault</span>}
-      </div>
-      <nav aria-label="Main" className="flex-1 space-y-4 overflow-y-auto p-2">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label} className="space-y-0.5">
-            {collapsed ? (
-              <div className="mx-auto my-1 h-px w-6 bg-sidebar-border" aria-hidden="true" />
-            ) : (
-              <div className="px-2 pb-1 text-xs text-sidebar-foreground/60">{group.label}</div>
-            )}
-            <ul className="space-y-0.5">
-              {group.items.map((item) => (
-                <li key={item.to}>
-                  <NavLink item={item} collapsed={collapsed} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </nav>
-      <div className="space-y-0.5 border-t border-sidebar-border p-2">
-        {SHELLS.map((shell, index) => (shell.SidebarFooter ? <shell.SidebarFooter key={index} collapsed={collapsed} /> : null))}
-        <ul className="space-y-0.5" aria-label="Utilities">
-          {UTILITY_ITEMS.map((item) => (
-            <li key={item.to}>
-              <NavLink item={item} collapsed={collapsed} />
-            </li>
-          ))}
-        </ul>
-      </div>
-    </>
-  )
-}
-
-function Sidebar() {
-  const { sidebarCollapsed: collapsed } = useShellUi()
-  return (
-    <aside
-      className={cn("flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground", collapsed ? "w-12" : "w-56")}
-      aria-label="Sidebar"
-    >
-      <SidebarContent collapsed={collapsed} />
-    </aside>
-  )
-}
-
 /**
- * The sidebar as an overlay below 768 px, opened from the header. Choosing a
- * link closes it and focus moves to the new page's heading; Escape or the
- * backdrop returns focus to the menu button.
+ * The source list as a drawer below 768 px. Choosing a link closes it and
+ * focus moves to the new page's heading; Escape or the backdrop returns
+ * focus to the menu button.
  */
-function SidebarDrawer() {
+function SourceListDrawer() {
   const [open, setOpen] = useState(false)
   const navigated = useRef(false)
   return (
@@ -175,7 +235,7 @@ function SidebarDrawer() {
         setOpen(next)
       }}
     >
-      <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open navigation" />}>
+      <SheetTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Open navigation" />}>
         <PanelLeftOpen aria-hidden="true" />
       </SheetTrigger>
       <SheetContent
@@ -189,11 +249,13 @@ function SidebarDrawer() {
         }}
       >
         <SheetTitle className="sr-only">Navigation</SheetTitle>
-        <SidebarContent collapsed={false} />
+        <SourceListContent collapsed={false} />
       </SheetContent>
     </Sheet>
   )
 }
+
+/* ---------------------------------------------------------------- toolbar */
 
 const THEME_ICON: Record<ThemePreference, typeof Moon> = { dark: Moon, light: Sun, system: Monitor }
 
@@ -202,7 +264,7 @@ function ThemeMenu() {
   const Icon = THEME_ICON[theme]
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={`Theme: ${theme === "system" ? "match system" : theme}`} />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Theme: ${theme === "system" ? "match system" : theme}`} />}>
         <Icon aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
@@ -219,72 +281,141 @@ function ThemeMenu() {
   )
 }
 
-/** Header status area: running work, interrupted work and offline locations. */
-function StatusArea({ narrow }: { narrow: boolean }) {
+/** The palette trigger reads as the toolbar's search field; below 768 px it is an icon button with the same name. */
+function PaletteTrigger({ narrow }: { narrow: boolean }) {
+  if (narrow) {
+    return (
+      <Button variant="ghost" size="icon-sm" onClick={() => openPanel("palette")}>
+        <Search aria-hidden="true" />
+        <span className="sr-only">Search or jump to...</span>
+      </Button>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => openPanel("palette")}
+      className="flex h-6.5 w-72 min-w-0 shrink items-center gap-1.5 rounded-md border border-input/60 bg-canvas px-2 text-left text-xs text-muted-foreground outline-none hover:border-input xl:w-96"
+    >
+      <Search aria-hidden="true" className="size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">Search or jump to...</span>
+      <Kbd>{MOD_LABEL} K</Kbd>
+    </button>
+  )
+}
+
+function Toolbar({ narrow }: { narrow: boolean }) {
+  const router = useRouter()
+  const { sidebarCollapsed } = useShellUi()
+  return (
+    <header className="chrome z-20 flex h-[var(--toolbar-h)] min-w-0 shrink-0 items-center gap-1 border-b border-seam bg-toolbar px-2">
+      {narrow ? (
+        <SourceListDrawer />
+      ) : (
+        <Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Expand source list" : "Collapse source list"} aria-controls="source-list">
+          {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+        </Button>
+      )}
+      <div className="flex items-center" role="group" aria-label="History">
+        <Button variant="ghost" size="icon-sm" aria-label="Back" onClick={() => router.history.back()}>
+          <ChevronLeft aria-hidden="true" />
+        </Button>
+        <Button variant="ghost" size="icon-sm" aria-label="Forward" onClick={() => router.history.forward()}>
+          <ChevronRight aria-hidden="true" />
+        </Button>
+      </div>
+      <div className="flex min-w-0 items-center gap-1.5 px-1.5 max-sm:hidden">
+        <Aperture aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+        <span className="text-sm font-semibold text-foreground">PlateVault</span>
+      </div>
+      <div className="flex min-w-0 flex-1 justify-center px-2">
+        <PaletteTrigger narrow={narrow} />
+      </div>
+      <Button variant="ghost" size={narrow ? "icon-sm" : "sm"} onClick={() => openPanel("simulation")}>
+        <FlaskConical data-icon="inline-start" aria-hidden="true" />
+        <span className={cn(narrow && "sr-only")}>Prototype</span>
+      </Button>
+      <ThemeMenu />
+      <Button variant="ghost" size="icon-sm" aria-label="Settings" render={<Link to="/settings" />}>
+        <Settings aria-hidden="true" />
+      </Button>
+    </header>
+  )
+}
+
+/* ---------------------------------------------------------------- status bar */
+
+/** Library totals in the status bar: what the catalogue holds right now. */
+function LibraryTotals() {
+  const catalog = useStore((s) => s.catalog)
+  let sessions = 0
+  let frames = 0
+  for (const session of Object.values(catalog.sessions)) {
+    if (session.supersededBy || session.imageType !== "light") continue
+    sessions += 1
+    frames += session.assetIds.length
+  }
+  return (
+    <span className="num truncate max-md:hidden">
+      {sessions} light sessions · {frames} frames
+    </span>
+  )
+}
+
+/** Status bar: running and interrupted work, offline locations, totals, and Activity. */
+function StatusBar() {
   const running = useStore((s) => Object.values(s.operations).filter((op) => op.status === "running"))
   const interrupted = useStore((s) => Object.values(s.operations).filter((op) => op.status === "interrupted").length)
   const offline = useStore((s) => Object.values(s.catalog.locations).filter((l) => !s.disk.volumes[l.volumeId]?.mounted))
   const first = running[0]
   const pct = first && first.progress.total > 0 ? Math.round((first.progress.done / first.progress.total) * 100) : null
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
+    <footer
+      aria-label="Status bar"
+      className="chrome flex h-[var(--statusbar-h)] min-w-0 shrink-0 items-center gap-1 border-t border-seam bg-toolbar px-1.5 text-xs text-muted-foreground"
+    >
       {first ? (
-        <Button variant="ghost" size="sm" render={<Link to="/activity" />} className="min-w-0 max-w-48 shrink tabular-nums xl:max-w-64">
+        <Button variant="ghost" size="xs" render={<Link to="/activity" />} className="min-w-0 max-w-64 font-normal text-foreground">
           <Spinner data-icon="inline-start" aria-hidden="true" />
-          <span className="truncate">
+          <span className="num truncate">
             {first.title}
             {pct !== null ? ` ${pct}%` : ""}
             {running.length > 1 ? ` (+${running.length - 1})` : ""}
           </span>
         </Button>
-      ) : null}
+      ) : (
+        <span className="px-1.5 max-sm:hidden">Idle</span>
+      )}
       {interrupted > 0 ? (
-        <Button variant="ghost" size="sm" render={<Link to="/activity" />} className="text-warning" aria-label={`${interrupted} interrupted operation${interrupted === 1 ? "" : "s"}`}>
+        <Button variant="ghost" size="xs" render={<Link to="/activity" />} className="font-normal text-warning">
           <TriangleAlert data-icon="inline-start" aria-hidden="true" />
-          <span className="tabular-nums">{interrupted}</span>
-          <span className="hidden xl:inline">interrupted</span>
+          <span className="num">
+            {interrupted} interrupted
+          </span>
         </Button>
       ) : null}
       {offline.length > 0 ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          render={<Link to="/storage" />}
-          className="text-warning"
-          aria-label={offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}
-        >
+        <Button variant="ghost" size="xs" render={<Link to="/storage" />} className="min-w-0 font-normal text-warning">
           <Unplug data-icon="inline-start" aria-hidden="true" />
-          <span className="tabular-nums xl:hidden">{offline.length}</span>
-          <span className="hidden xl:inline">{offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}</span>
+          <span className="truncate">{offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}</span>
         </Button>
       ) : null}
-      <Button variant="outline" size={narrow ? "icon-sm" : "sm"} onClick={() => openPanel("simulation")}>
-        <FlaskConical data-icon="inline-start" aria-hidden="true" />
-        <span className={cn(narrow && "sr-only")}>Prototype</span>
+      <span aria-hidden="true" className="mx-1 h-3 w-px bg-border max-md:hidden" />
+      <LibraryTotals />
+      <span className="flex-1" />
+      <Button variant="ghost" size="xs" onClick={() => openPanel("shortcuts")} className="font-normal max-sm:hidden">
+        <Keyboard data-icon="inline-start" aria-hidden="true" />
+        Shortcuts
       </Button>
-      <ThemeMenu />
-    </div>
+      <Button variant="ghost" size="xs" render={<Link to="/activity" />} className="font-normal data-[status=active]:text-primary">
+        <Activity data-icon="inline-start" aria-hidden="true" />
+        Activity
+      </Button>
+    </footer>
   )
 }
 
-/** The palette trigger keeps its whole label from 768 px up; below that it is an icon button with the same name. */
-function PaletteTrigger({ narrow }: { narrow: boolean }) {
-  if (narrow) {
-    return (
-      <Button variant="outline" size="icon-sm" className="text-muted-foreground" onClick={() => openPanel("palette")}>
-        <Search aria-hidden="true" />
-        <span className="sr-only">Search or jump to…</span>
-      </Button>
-    )
-  }
-  return (
-    <Button variant="outline" size="sm" className="w-60 min-w-0 shrink justify-start text-muted-foreground xl:w-72" onClick={() => openPanel("palette")}>
-      <Search data-icon="inline-start" aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate text-left">Search or jump to…</span>
-      <Kbd>{MOD_LABEL} K</Kbd>
-    </Button>
-  )
-}
+/* ---------------------------------------------------------------- route focus */
 
 /**
  * Route last shown by any MainArea, and a navigation whose focus move has
@@ -297,9 +428,9 @@ let pendingRoute: string | null = null
 /**
  * After a route change (WCAG 2.4.3, 4.1.3): when the activated control went
  * away with the old page, focus moves to the URL's anchor, else the page h1,
- * else #main. A control that survives the change (sidebar link, View tab)
- * keeps focus. The new document title is announced either way. Search-param
- * changes (filters) never move focus.
+ * else #main. A control that survives the change (source list link, View
+ * tab) keeps focus. The new document title is announced either way.
+ * Search-param changes (filters) never move focus.
  */
 function useRouteFocus(): string {
   const route = useRouterState({ select: (s) => `${s.location.pathname}#${s.location.hash}` })
@@ -308,7 +439,7 @@ function useRouteFocus(): string {
     if (shownRoute !== null && shownRoute !== route) pendingRoute = route
     shownRoute = route
     if (pendingRoute !== route) return
-    const anchorId = route.slice(route.indexOf("#") + 1)
+    const anchorId = route.slice(route.indexOf("#") + 1) || null
     const moveFocus = (force: boolean) => {
       const active = document.activeElement
       const lost = !active || active === document.body || !active.isConnected
@@ -340,11 +471,11 @@ function routeFocusTarget(anchorId: string | null): HTMLElement | null {
   return target
 }
 
-/** The single scroll container; the skip link targets it. */
+/** The content pane; it scrolls on its own and the skip link targets it. */
 function MainArea({ children }: { children: ReactNode }) {
   const announcement = useRouteFocus()
   return (
-    <main id="main" tabIndex={-1} className="relative flex min-h-0 flex-1 flex-col overflow-y-auto outline-none">
+    <main id="main" tabIndex={-1} className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-background outline-none">
       <p className="sr-only" aria-live="polite" data-route-announcer="">
         {announcement}
       </p>
@@ -353,29 +484,18 @@ function MainArea({ children }: { children: ReactNode }) {
   )
 }
 
-/** Sidebar, header and main area; the page goes in `children`. */
+/** Toolbar, source list, content pane and status bar; the page goes in `children`. */
 function AppFrame({ children }: { children: ReactNode }) {
-  const { sidebarCollapsed } = useShellUi()
   const narrow = useNarrowViewport()
   return (
-    <div className="flex h-dvh overflow-hidden">
+    <div className="flex h-dvh flex-col overflow-hidden bg-seam">
       <SkipLink />
-      {narrow ? null : <Sidebar />}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="z-20 flex min-h-11 min-w-0 shrink-0 flex-wrap items-center gap-2 border-b px-2 py-1">
-          {narrow ? (
-            <SidebarDrawer />
-          ) : (
-            <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
-              {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
-            </Button>
-          )}
-          <PaletteTrigger narrow={narrow} />
-          <div className="min-w-0 flex-1" />
-          <StatusArea narrow={narrow} />
-        </header>
+      <Toolbar narrow={narrow} />
+      <div className="flex min-h-0 flex-1">
+        {narrow ? null : <SourceList />}
         <MainArea>{children}</MainArea>
       </div>
+      <StatusBar />
     </div>
   )
 }
@@ -388,7 +508,7 @@ export function AppShell() {
   )
 }
 
-/** Unknown route: say what happened and offer the home surface, inside the shell. */
+/** Unknown route: say what happened and offer the start page, inside the shell. */
 export function NotFoundPage() {
   useDocumentTitle("Page not found")
   return (
@@ -400,8 +520,8 @@ export function NotFoundPage() {
           titleAs="h1"
           description="The link may come from an older prototype build. Your library is unchanged."
           action={
-            <Button render={<Link to="/targets" />} size="sm">
-              Go to Targets
+            <Button render={<Link to="/" />} size="sm">
+              Go to Recent sessions
             </Button>
           }
         />
@@ -410,20 +530,19 @@ export function NotFoundPage() {
   )
 }
 
-/** Focused layout for first-run setup: no sidebar, one task at a time. */
+/** Focused layout for first-run setup: no source list, one task at a time. */
 export function SetupShell() {
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
+    <div className="flex h-dvh flex-col overflow-hidden bg-seam">
       <SkipLink />
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b px-4">
-        <Aperture aria-hidden="true" className="size-5 text-primary" />
-        <span className="font-semibold">PlateVault</span>
+      <header className="chrome flex h-[var(--toolbar-h)] shrink-0 items-center gap-2 border-b border-seam bg-toolbar px-3">
+        <Aperture aria-hidden="true" className="size-4 text-muted-foreground" />
+        <span className="text-sm font-semibold">PlateVault</span>
         <div className="flex-1" />
-        <Button variant="outline" size="sm" onClick={() => openPanel("simulation")}>
+        <Button variant="ghost" size="sm" onClick={() => openPanel("simulation")}>
           <FlaskConical data-icon="inline-start" aria-hidden="true" />
           Prototype
         </Button>
-        <ThemeMenu />
       </header>
       <MainArea>
         <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col">

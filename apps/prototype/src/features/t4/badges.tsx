@@ -34,7 +34,7 @@ export function T4Badge({ value, label, className }: { value: T4BadgeValue; labe
   const meta = META[value]
   const Icon = meta.icon
   return (
-    <Badge variant="outline" className={cn("rounded-md border-transparent", TONE_CLASS[meta.tone], className)} data-status={value}>
+    <Badge variant="outline" className={cn("h-[1.125rem] rounded-sm px-1 text-xs font-medium", TONE_CLASS[meta.tone], className)} data-status={value}>
       <Icon aria-hidden="true" />
       {label ?? meta.label}
     </Badge>

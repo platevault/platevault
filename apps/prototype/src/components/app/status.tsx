@@ -207,15 +207,20 @@ export const STATUS = {
 export type StatusKind = keyof typeof STATUS
 export type StatusValue<K extends StatusKind> = keyof (typeof STATUS)[K] & string
 
+/*
+ * Studio status tags (HARNESS-V2.md): a glyph and a word in the tone colour on
+ * a hairline chip, never a filled pill, so a row of tags reads like an
+ * instrument readout and the selected row keeps 4.5:1 for every tone.
+ */
 export const TONE_CLASS: Record<Tone, string> = {
-  neutral: "bg-secondary text-secondary-foreground",
+  neutral: "border-border bg-transparent text-foreground",
   muted: "border-border bg-transparent text-muted-foreground",
-  // Info stays neutral text with an accent icon so badges never compete with
-  // the one accent used for primary actions and selection.
-  info: "bg-secondary text-secondary-foreground [&>svg]:text-info",
-  success: "bg-success/12 text-success",
-  warning: "bg-warning/14 text-warning",
-  danger: "bg-destructive/12 text-destructive",
+  // Info stays neutral text with an accent icon so tags never compete with
+  // the one accent used for selection and the Next action.
+  info: "border-border bg-transparent text-foreground [&>svg]:text-info",
+  success: "border-success/35 bg-transparent text-success",
+  warning: "border-warning/40 bg-transparent text-warning",
+  danger: "border-destructive/45 bg-transparent text-destructive",
 }
 
 export function statusMeta<K extends StatusKind>(kind: K, value: StatusValue<K>): StatusMeta {
@@ -234,7 +239,7 @@ export function StatusBadge<K extends StatusKind>({ kind, value, label, classNam
   const meta = statusMeta(kind, value)
   const Icon = meta.icon
   return (
-    <Badge variant="outline" className={cn("rounded-md border-transparent", TONE_CLASS[meta.tone], className)} data-status={`${kind}:${value}`}>
+    <Badge variant="outline" className={cn("h-[1.125rem] rounded-sm px-1 text-xs font-medium", TONE_CLASS[meta.tone], className)} data-status={`${kind}:${value}`}>
       <Icon aria-hidden="true" className={cn(value === "running" && "motion-safe:animate-spin")} />
       {label ?? meta.label}
     </Badge>

@@ -7,12 +7,14 @@ import { ActivityPage } from "./pages/activity"
 import { ProjectPage } from "./pages/project"
 import { ProjectNewPage } from "./pages/project-new"
 import { ProjectsPage } from "./pages/projects"
+import { RecentPage } from "./pages/recent"
 import { SessionPage } from "./pages/session"
 import { SessionsPage } from "./pages/sessions"
 import { TargetPage } from "./pages/target"
 import { TargetsPage } from "./pages/targets"
 
 export const t2Pages = {
+  recent: RecentPage,
   targets: TargetsPage,
   target: TargetPage,
   sessions: SessionsPage,

@@ -68,6 +68,14 @@ export function useGlobalShortcuts() {
           event.preventDefault()
           search.focus()
         }
+        return
+      }
+      if (event.key === "f") {
+        const finder = document.querySelector<HTMLElement>("[data-target-finder]")
+        if (finder) {
+          event.preventDefault()
+          finder.focus()
+        }
       }
     }
     window.addEventListener("keydown", onKeyDown)
@@ -82,6 +90,7 @@ export const SHORTCUTS: Array<{ keys: string[]; label: string }> = [
   { keys: [MOD_LABEL, "K"], label: "Search or jump to anything" },
   { keys: ["?"], label: "Show keyboard shortcuts" },
   { keys: ["/"], label: "Focus the page search or filter" },
+  { keys: ["F"], label: "Find a Target in the source list" },
   { keys: ["["], label: "Collapse or expand the sidebar" },
   ...ALL_NAV_ITEMS.map((item) => ({ keys: ["G", item.goKey === "," ? "," : item.goKey.toUpperCase()], label: `Go to ${item.label}` })),
   { keys: ["↑", "↓"], label: "Move between table rows" },

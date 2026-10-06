@@ -3,14 +3,41 @@
 @import "shadcn/tailwind.css";
 
 /*
- * PlateVault prototype tokens. Decisions are recorded in
- * design/HIGH-LEVEL-DESIGN.md §7. Neutral base, one accent (sky blue),
- * semantic status roles, Tailwind default type and spacing scales.
- * Dark is the default theme; `html.dark` selects it (see index.html).
+ * PlateVault harness v2 · "Pro imaging studio" tokens.
+ * Decisions: design/HARNESS-V2.md §Tokens (supersedes HLD §7 for the look).
+ *
+ * A dark neutral-grey workspace that puts pixels first: surfaces are steps of
+ * one grey ramp separated by dark seams, never tinted; the single accent marks
+ * state only (selection, focus, the current step, the one Next action); status
+ * colours are muted and always travel with an icon and a word. Type is the
+ * system UI face on a tight 11.5 / 13 / 14 px scale. Dark is the default;
+ * `html.dark` selects it (see index.html). Light is a complete grey variant.
  */
 
 @custom-variant dark (&:is(.dark *));
 @custom-variant compact (&:where([data-density="compact"] *));
+
+@theme {
+  /* Tight desktop type scale (pro-app density); every size keeps its own leading. */
+  --text-2xs: 0.65625rem;
+  --text-2xs--line-height: 0.875rem;
+  --text-xs: 0.71875rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.125rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.25rem;
+  --text-lg: 0.9375rem;
+  --text-lg--line-height: 1.375rem;
+  --text-xl: 1.0625rem;
+  --text-xl--line-height: 1.5rem;
+  --text-2xl: 1.25rem;
+  --text-2xl--line-height: 1.75rem;
+  --text-3xl: 1.5rem;
+  --text-3xl--line-height: 2rem;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -47,105 +74,172 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  /* Studio surfaces (one grey ramp, darkest to lightest). */
+  --color-seam: var(--seam);
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-panel-header: var(--panel-header);
+  --color-toolbar: var(--toolbar);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-selected-foreground: var(--selected-foreground);
+  --color-strong: var(--strong);
+  --color-strong-foreground: var(--strong-foreground);
+  --color-mount: var(--mount);
+  --color-mount-edge: var(--mount-edge);
+  /* Channel colours: histogram traces and channel chips, always beside the channel name. */
+  --color-ch-l: var(--ch-l);
+  --color-ch-r: var(--ch-r);
+  --color-ch-g: var(--ch-g);
+  --color-ch-b: var(--ch-b);
+  --color-ch-ha: var(--ch-ha);
+  --color-ch-oiii: var(--ch-oiii);
+  --color-ch-sii: var(--ch-sii);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-xl: calc(var(--radius) * 1.25);
+  --radius-2xl: calc(var(--radius) * 1.5);
 }
 
 :root {
-  --radius: 0.375rem;
+  /* Square-ish desktop controls: 4 px buttons and fields, 2-3 px chips. */
+  --radius: 0.25rem;
   /* Density: table and list row height. Set by html[data-density]. */
-  --row-h: 2rem;
+  --row-h: 1.75rem;
+  /* Shell metrics shared by the frame and the panes. */
+  --toolbar-h: 2.375rem;
+  --statusbar-h: 1.5rem;
+  --pane-header-h: 2rem;
 
-  --background: oklch(0.99 0 0);
-  --foreground: oklch(0.18 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0 0);
-  /* Link text meets 4.5:1 on every row surface, including the active row (accent). */
-  --primary: oklch(0.49 0.13 242);
+  /* Light studio: neutral greys, same structure as dark. */
+  --seam: oklch(0.8 0 0);
+  --canvas: oklch(0.88 0 0);
+  --background: oklch(0.975 0 0);
+  --foreground: oklch(0.22 0 0);
+  --panel: oklch(0.945 0 0);
+  --panel-header: oklch(0.915 0 0);
+  --toolbar: oklch(0.925 0 0);
+  --raised: oklch(0.99 0 0);
+  --hover: oklch(0.9 0 0);
+  --selected: oklch(0.87 0.05 250);
+  --selected-foreground: oklch(0.2 0 0);
+  --strong: oklch(0.4 0 0);
+  --strong-foreground: oklch(0.99 0 0);
+  --mount: oklch(0.96 0 0);
+  --mount-edge: oklch(0.82 0 0);
+  --card: var(--panel);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.99 0 0);
+  --popover-foreground: var(--foreground);
+  /* The one accent: selection, focus, links, the current step and the Next action. ≥ 4.5:1 on every surface incl. the selected row. */
+  --primary: oklch(0.46 0.13 250);
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.955 0 0);
-  --secondary-foreground: oklch(0.2 0 0);
-  --muted: oklch(0.96 0 0);
-  --muted-foreground: oklch(0.47 0 0);
-  --accent: oklch(0.91 0 0);
-  --accent-foreground: oklch(0.18 0 0);
-  /* Danger badge text over its 12% tint meets 4.5:1 on every row surface, including the active row (accent). */
-  --destructive: oklch(0.45 0.2 27);
-  /* Badge text (success over its 12% tint, warning over its 14% tint) meets 4.5:1 on every row surface, including the active row (accent). */
-  --success: oklch(0.43 0.12 155);
-  --warning: oklch(0.45 0.12 65);
-  --info: oklch(0.5 0.13 242);
-  --border: oklch(0.89 0 0);
-  /* Control boundaries meet 3:1 against the canvas (WCAG 1.4.11). */
-  --input: oklch(0.62 0 0);
-  --ring: oklch(0.5 0.13 242);
-  --sidebar: oklch(0.975 0 0);
-  --sidebar-foreground: oklch(0.2 0 0);
-  --sidebar-primary: oklch(0.5 0.13 242);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.93 0 0);
-  --sidebar-accent-foreground: oklch(0.18 0 0);
-  --sidebar-border: oklch(0.9 0 0);
-  --sidebar-ring: oklch(0.5 0.13 242);
-  --chart-1: oklch(0.5 0.13 242);
-  --chart-2: oklch(0.72 0.08 242);
+  --secondary: var(--raised);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.935 0 0);
+  --muted-foreground: oklch(0.45 0 0);
+  --accent: var(--hover);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.48 0.18 27);
+  --success: oklch(0.44 0.12 155);
+  --warning: oklch(0.46 0.11 65);
+  --info: oklch(0.46 0.13 250);
+  --border: oklch(0.86 0 0);
+  /* Control boundaries meet 3:1 against panel and background (WCAG 1.4.11). */
+  --input: oklch(0.6 0 0);
+  --ring: oklch(0.46 0.13 250);
+  --sidebar: var(--panel);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--hover);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --chart-1: oklch(0.46 0.13 250);
+  --chart-2: oklch(0.7 0.08 250);
   --chart-3: oklch(0.6 0 0);
   --chart-4: oklch(0.8 0 0);
   --chart-5: oklch(0.4 0 0);
+  --ch-l: oklch(0.45 0 0);
+  --ch-r: oklch(0.55 0.18 25);
+  --ch-g: oklch(0.55 0.14 150);
+  --ch-b: oklch(0.5 0.15 255);
+  --ch-ha: oklch(0.52 0.19 20);
+  --ch-oiii: oklch(0.55 0.1 195);
+  --ch-sii: oklch(0.6 0.14 60);
   color-scheme: light;
 }
 
 .dark {
-  --background: oklch(0.155 0 0);
-  --foreground: oklch(0.93 0 0);
-  --card: oklch(0.195 0 0);
-  --card-foreground: oklch(0.93 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.93 0 0);
-  --primary: oklch(0.74 0.11 238);
-  --primary-foreground: oklch(0.17 0.02 240);
-  --secondary: oklch(0.25 0 0);
-  --secondary-foreground: oklch(0.93 0 0);
-  --muted: oklch(0.23 0 0);
-  --muted-foreground: oklch(0.72 0 0);
-  /* Hover and highlighted-option surface; visible against the popover. */
-  --accent: oklch(0.3 0 0);
+  --seam: oklch(0.165 0 0);
+  --canvas: oklch(0.195 0 0);
+  --background: oklch(0.235 0 0);
+  --foreground: oklch(0.895 0 0);
+  --panel: oklch(0.262 0 0);
+  --panel-header: oklch(0.29 0 0);
+  --toolbar: oklch(0.285 0 0);
+  --raised: oklch(0.33 0 0);
+  --hover: oklch(0.36 0 0);
+  --selected: oklch(0.35 0.06 252);
+  --selected-foreground: oklch(0.95 0 0);
+  --strong: oklch(0.44 0 0);
+  --strong-foreground: oklch(0.97 0 0);
+  /* The mat a plate sits on (B's mounts): one step lighter than the canvas, with an inner edge. */
+  --mount: oklch(0.29 0 0);
+  --mount-edge: oklch(0.38 0 0);
+  --card: var(--panel);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.3 0 0);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.77 0.11 248);
+  --primary-foreground: oklch(0.17 0.02 250);
+  --secondary: var(--raised);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.275 0 0);
+  --muted-foreground: oklch(0.74 0 0);
+  --accent: var(--hover);
   --accent-foreground: oklch(0.95 0 0);
-  /* Danger badge text over its 12% tint meets 4.5:1 on every row surface, including the active and selected rows. */
-  --destructive: oklch(0.76 0.15 22);
-  --success: oklch(0.75 0.13 155);
-  --warning: oklch(0.8 0.13 80);
-  --info: oklch(0.74 0.11 238);
-  --border: oklch(1 0 0 / 11%);
-  --input: oklch(0.53 0 0);
-  --ring: oklch(0.74 0.11 238);
-  --sidebar: oklch(0.17 0 0);
-  --sidebar-foreground: oklch(0.9 0 0);
-  --sidebar-primary: oklch(0.74 0.11 238);
-  --sidebar-primary-foreground: oklch(0.17 0.02 240);
-  --sidebar-accent: oklch(0.25 0 0);
+  /* Status text meets 4.5:1 on every surface up to hover and the selected row. */
+  --destructive: oklch(0.77 0.13 25);
+  --success: oklch(0.78 0.11 155);
+  --warning: oklch(0.82 0.12 82);
+  --info: oklch(0.77 0.11 248);
+  /* In-panel dividers; panels themselves are separated by the darker seam. */
+  --border: oklch(0.33 0 0);
+  --input: oklch(0.58 0 0);
+  --ring: oklch(0.77 0.11 248);
+  --sidebar: var(--panel);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--hover);
   --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(1 0 0 / 9%);
-  --sidebar-ring: oklch(0.74 0.11 238);
-  --chart-1: oklch(0.74 0.11 238);
-  --chart-2: oklch(0.5 0.08 238);
+  --sidebar-border: var(--seam);
+  --sidebar-ring: var(--ring);
+  --chart-1: oklch(0.77 0.11 248);
+  --chart-2: oklch(0.5 0.08 248);
   --chart-3: oklch(0.55 0 0);
   --chart-4: oklch(0.38 0 0);
   --chart-5: oklch(0.8 0 0);
+  --ch-l: oklch(0.86 0 0);
+  --ch-r: oklch(0.7 0.17 25);
+  --ch-g: oklch(0.75 0.15 150);
+  --ch-b: oklch(0.7 0.14 255);
+  --ch-ha: oklch(0.68 0.19 20);
+  --ch-oiii: oklch(0.76 0.11 195);
+  --ch-sii: oklch(0.78 0.14 65);
   color-scheme: dark;
 }
 
 html[data-density="compact"] {
-  --row-h: 1.75rem;
+  --row-h: 1.5rem;
 }
 
 html[data-density="spacious"] {
-  --row-h: 2.5rem;
+  --row-h: 2.125rem;
 }
 
 @layer base {
@@ -157,10 +251,14 @@ html[data-density="spacious"] {
   html {
     @apply font-sans;
     accent-color: var(--primary);
+    scrollbar-color: var(--raised) transparent;
+    scrollbar-width: thin;
   }
 
   body {
-    @apply bg-background text-sm text-foreground antialiased;
+    @apply bg-seam text-sm text-foreground antialiased;
+    /* Desktop pointer: arrow over chrome and text, I-beam only in fields. */
+    cursor: default;
   }
 
   h1,
@@ -185,9 +283,36 @@ html[data-density="spacious"] {
 }
 
 /*
+ * Chrome is not document text: the toolbar, source list, pane headers,
+ * inspectors' labels and the status bar never take a text selection, like a
+ * native window. Content (values, paths, headers) stays selectable.
+ */
+@utility chrome {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+/* Labels in panel stacks: small caps-height section titles (Lightroom panel headers). */
+@utility panel-title {
+  font-size: var(--text-2xs);
+  line-height: var(--text-2xs--line-height);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Numbers in tables, readouts and the status bar line up. */
+@utility num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/*
  * Focus indicator: one treatment everywhere, a 2 px accent outline (≥ 3:1 on
  * every surface in both themes). Unlayered so it wins over the primitives'
- * `outline-none` utilities. Items inside popups draw it inset so the popup's
+ * `outline-none` utilities. Items inside popups and rows draw it inset so
  * overflow clipping cannot hide it. Programmatic targets (tabindex=-1, the
  * skip-link target) are excluded.
  */
@@ -196,8 +321,8 @@ html[data-density="spacious"] {
   outline-offset: 2px;
 }
 
-:is([role="option"], [role^="menuitem"], [role="tab"], td, th) :focus-visible,
-:is([role="option"], [role^="menuitem"]):focus-visible {
+:is([role="option"], [role^="menuitem"], [role="tab"], td, th, [data-inset-focus]) :focus-visible,
+:is([role="option"], [role^="menuitem"], [data-inset-focus]):focus-visible {
   outline-offset: -2px;
 }
 

@@ -48,20 +48,36 @@ export interface PageHeaderProps {
   level?: 1 | 2
 }
 
+/**
+ * Pane header (harness v2): a compact strip, not a web-page hero. Eyebrow,
+ * title and status meta share one line; the description sits under it in
+ * small muted type; actions align right at control height.
+ */
 export function PageHeader({ title, description, eyebrow, meta, actions, className, level = 1 }: PageHeaderProps) {
   useDocumentTitle(title, level)
   const Heading = level === 1 ? "h1" : "h2"
   return (
-    <header className={cn("flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b px-6 py-4", className)}>
-      <div className="min-w-0 flex-[1_1_16rem] space-y-1">
-        {eyebrow ? <div className="text-xs text-muted-foreground">{eyebrow}</div> : null}
-        <div className="flex flex-wrap items-center gap-2">
-          <Heading className={cn("font-semibold text-balance", level === 1 ? "text-lg" : "text-base")}>{title}</Heading>
+    <header
+      className={cn(
+        "flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-seam bg-panel px-3 py-1.5",
+        level === 2 && "bg-background",
+        className,
+      )}
+    >
+      <div className="min-w-0 flex-[1_1_16rem]">
+        <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-0.5">
+          {eyebrow ? <div className="chrome text-xs text-muted-foreground">{eyebrow}</div> : null}
+          {eyebrow ? (
+            <span aria-hidden="true" className="chrome text-xs text-muted-foreground">
+              ›
+            </span>
+          ) : null}
+          <Heading className={cn("font-semibold text-balance", level === 1 ? "text-base" : "text-sm")}>{title}</Heading>
           {meta}
         </div>
-        {description ? <p className="max-w-prose text-sm text-pretty text-muted-foreground">{description}</p> : null}
+        {description ? <p className="max-w-[90ch] text-xs text-pretty text-muted-foreground">{description}</p> : null}
       </div>
-      {actions ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="chrome flex min-w-0 max-w-full flex-wrap items-center gap-1.5">{actions}</div> : null}
     </header>
   )
 }
@@ -80,25 +96,25 @@ export interface SectionProps {
 export function Section({ title, description, actions, children, className, level = 2, id }: SectionProps) {
   const Heading = level === 2 ? "h2" : "h3"
   return (
-    <section aria-labelledby={id ? `${id}-title` : undefined} className={cn("space-y-3", className)}>
-      <div className="flex flex-wrap items-end justify-between gap-2">
+    <section aria-labelledby={id ? `${id}-title` : undefined} className={cn("space-y-2", className)}>
+      <div className="flex flex-wrap items-end justify-between gap-2 border-b border-border pb-1">
         {/* Like PageHeader: the heading block takes the free space and wraps its description, so actions stay beside it. */}
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <Heading id={id ? `${id}-title` : undefined} className={cn("font-semibold", level === 2 ? "text-base" : "text-sm")}>
+        <div className="min-w-0 flex-1">
+          <Heading id={id ? `${id}-title` : undefined} className={cn("font-semibold", level === 2 ? "text-sm" : "text-xs")}>
             {title}
           </Heading>
-          {description ? <p className="text-sm text-pretty text-muted-foreground">{description}</p> : null}
+          {description ? <p className="text-xs text-pretty text-muted-foreground">{description}</p> : null}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2 self-start">{actions}</div> : null}
+        {actions ? <div className="chrome flex flex-wrap items-center gap-1.5 self-end">{actions}</div> : null}
       </div>
       {children}
     </section>
   )
 }
 
-/** Scrollable page body with the standard padding and vertical rhythm. */
+/** Scrollable pane body with the studio padding and vertical rhythm. */
 export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("space-y-6 px-6 py-5", className)}>{children}</div>
+  return <div className={cn("space-y-4 px-3 py-3", className)}>{children}</div>
 }
 
 export interface ListDetailProps {
