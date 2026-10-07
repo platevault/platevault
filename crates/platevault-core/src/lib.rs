@@ -19,6 +19,7 @@ pub mod planning;
 pub mod projects;
 pub mod reminders;
 pub mod rig;
+pub mod run_lifecycle;
 pub mod subframe_csv;
 pub mod targets;
 pub mod view_geometry;

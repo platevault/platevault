@@ -119,19 +119,6 @@ impl World {
         };
         self.catalog.create_view(&input).await.unwrap()
     }
-
-    /// Run SQL a later unit's write owns (U16 Complete and Reopen) directly.
-    async fn raw_sql(mut self, statement: &str) -> Self {
-        self.catalog.close().await.unwrap();
-        let mut conn =
-            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&self.fx.db))
-                .await
-                .unwrap();
-        sqlx::query(sqlx::AssertSqlSafe(statement.to_owned())).execute(&mut conn).await.unwrap();
-        conn.close().await.unwrap();
-        self.catalog = Catalog::open(&self.fx.db).await.unwrap();
-        self
-    }
 }
 
 fn scan_file(fx: &Fixture, (path, filter, camera): (&str, &str, &str)) -> ScanFile {
@@ -335,12 +322,7 @@ async fn complete_run_refuses_membership_change_until_reopen() {
     let id = world.run(&project, world.redcat.id, "HOO").await.view.id;
     world.catalog.save_view(id, 0, 1).await.unwrap();
     world.confirm(RC_SII, Some(world.ngc7000.candidate.id), None).await;
-    let world = world
-        .raw_sql(&format!(
-            "UPDATE views SET completion = 'complete', stage_before_complete = 'review', \
-             stage = 'done' WHERE id = '{id}'"
-        ))
-        .await;
+    world.catalog.complete_view(id, |_| async { Ok(Vec::new()) }).await.unwrap();
     assert_eq!(world.catalog.view_new_candidate_count(id).await.unwrap(), 1, "still offered");
     let rename = DraftEdit::Details { name: "HOO 2".into() };
     refused(&world.catalog.edit_view_draft(id, 0, &rename).await.unwrap_err(), "reopen");
@@ -349,12 +331,7 @@ async fn complete_run_refuses_membership_change_until_reopen() {
     refused(&error, "reopen");
     let committed = world.catalog.view_membership(id, Membership::Committed).await.unwrap();
     assert_eq!(committed.sessions.len(), 2, "declining leaves the membership unchanged");
-    let world = world
-        .raw_sql(&format!(
-            "UPDATE views SET completion = 'open', stage = stage_before_complete, \
-             stage_before_complete = NULL WHERE id = '{id}'"
-        ))
-        .await;
+    world.catalog.reopen_view(id).await.unwrap();
     let mut item = session_item(RefreshItemKind::AddedSession, &sii);
     let assets = world.catalog.session(sii.id).await.unwrap().assets;
     item.assessed = Some(platevault_model::AssessedMembers {
@@ -470,12 +447,7 @@ async fn removing_rig_used_by_run_refused_naming_run() {
         world.project(&[world.redcat.id, world.esprit.id], &[&world.ngc7000, &world.m81]).await;
     let complete = world.run(&project, world.redcat.id, "Ha-only").await.view.id;
     world.run(&project, world.redcat.id, "HOO").await;
-    let world = world
-        .raw_sql(&format!(
-            "UPDATE views SET completion = 'complete', stage_before_complete = 'review', \
-             stage = 'done' WHERE id = '{complete}'"
-        ))
-        .await;
+    world.catalog.complete_view(complete, |_| async { Ok(Vec::new()) }).await.unwrap();
     let project = world
         .catalog
         .set_project_rigs(project.id, project.revision, &[world.redcat.id])
