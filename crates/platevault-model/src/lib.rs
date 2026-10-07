@@ -30,6 +30,8 @@ mod catalogue;
 pub use catalogue::*;
 mod volume;
 pub use volume::*;
+mod view;
+pub use view::*;
 
 pub type Revision = u64;
 
