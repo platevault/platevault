@@ -154,6 +154,12 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::view_selection::view_review_mark,
         crate::commands::view_selection::view_revision,
         crate::commands::view_selection::project_members,
+        crate::commands::view_lifecycle::view_mark_complete,
+        crate::commands::view_lifecycle::view_reopen,
+        crate::commands::view_lifecycle::view_move_to_trash,
+        crate::commands::view_lifecycle::view_restore,
+        crate::commands::view_lifecycle::view_trash_list,
+        crate::commands::view_lifecycle::view_empty_trash_review,
         // frame review
         crate::commands::frame_review::pix_review_frames,
         crate::commands::frame_review::pix_start_measurement,

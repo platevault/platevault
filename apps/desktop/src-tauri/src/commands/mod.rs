@@ -65,4 +65,5 @@ pub mod target_lookup;
 pub mod target_management;
 pub mod targets_list;
 pub mod tools;
+pub mod view_lifecycle;
 pub mod view_selection;
