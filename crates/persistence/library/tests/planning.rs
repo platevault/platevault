@@ -445,22 +445,26 @@ async fn reopen_restores_every_planning_record_unchanged() {
 }
 
 #[tokio::test]
-async fn a_catalog_recorded_at_schema_version_7_is_refused_before_any_ddl() {
+async fn a_catalog_recorded_at_an_older_schema_version_is_refused_before_any_ddl() {
     let fx = Fixture::new();
     Catalog::open(&fx.db).await.unwrap().close().await.unwrap();
-    // The version 7 shape: every library and Project table and no planning table.
+    // The previous version's shape: every library and Project table and no planning table.
+    let older = persistence_library::SCHEMA_VERSION - 1;
     let mut conn = raw(&fx.db).await;
     let drops = PLANNING_TABLES.map(|table| format!("DROP TABLE {table};")).join(" ");
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "{drops} UPDATE catalog_meta SET value = 7 WHERE key = 'schema_version';"
+        "{drops} UPDATE catalog_meta SET value = {older} WHERE key = 'schema_version';"
     )))
     .execute(&mut conn)
     .await
     .unwrap();
     conn.close().await.unwrap();
 
-    let error = Catalog::open(&fx.db).await.err().expect("a version 7 catalog is refused");
-    assert_eq!(error.to_string(), "invalid input: unsupported catalog schema version 7");
+    let error = Catalog::open(&fx.db).await.err().expect("an older catalog is refused");
+    assert_eq!(
+        error.to_string(),
+        format!("invalid input: unsupported catalog schema version {older}")
+    );
     let mut conn = raw(&fx.db).await;
     let tables: Vec<String> = sqlx::query_scalar(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN \
