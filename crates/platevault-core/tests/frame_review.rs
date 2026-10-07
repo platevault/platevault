@@ -143,19 +143,32 @@ async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
     .expect("scan must publish its terminal state")
 }
 
-/// Poll the durable status until the run leaves Running.
+/// Poll the durable status until the run leaves Running, failing only once no
+/// frame has settled for two minutes.
+///
+/// Each frame's contained read probes the volume three times (root, file,
+/// root). On Windows a probe is a PowerShell CIM query bounded at 30 s, so a
+/// 100-frame run on a loaded runner outlasts any fixed total budget while still
+/// settling frame after frame; a worker settles its frame within 90 s or fails it.
 async fn finished(review: &FrameReview, run: Uuid) -> MeasurementRun {
-    tokio::time::timeout(Duration::from_secs(120), async {
-        loop {
-            let status = review.measurement_status(run).await.unwrap();
-            if status.state != RunState::Running {
-                return status;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+    const STALLED: Duration = Duration::from_secs(120);
+    let mut remaining = None;
+    let mut deadline = tokio::time::Instant::now() + STALLED;
+    loop {
+        let status = review.measurement_status(run).await.unwrap();
+        if status.state != RunState::Running {
+            return status;
         }
-    })
-    .await
-    .expect("the run must settle")
+        if remaining != Some(status.counters.remaining) {
+            remaining = Some(status.counters.remaining);
+            deadline = tokio::time::Instant::now() + STALLED;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the run must settle: no frame settled for {STALLED:?}: {status:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 }
 
 /// Wait until `run` publishes a settled frame.
