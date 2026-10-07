@@ -855,7 +855,7 @@ fn template_from_row(row: &SqliteRow) -> Result<GoalTemplate> {
     })
 }
 
-async fn load_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Project> {
+pub async fn load_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Project> {
     let row = sqlx::query(
         "SELECT name, notes, state, done_at, revision, created_at, updated_at FROM projects \
          WHERE id = ?1",

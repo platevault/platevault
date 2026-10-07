@@ -159,6 +159,9 @@ pub async fn library_cancel_scan(
 /// Session summaries, newest night first; browsing measures nothing. Sessions
 /// lists light sessions of Captures locations; `filter` `trashed` lists the
 /// sessions holding Trashed frames, summarized over those frames (LIB-FR-16/18).
+/// `needs_target` lists the sessions with no confirmed Target and
+/// `not_in_any_project` those with one that are no Project's candidate and no
+/// run's member (LIB-FR-17); neither assigns anything to a run.
 ///
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.

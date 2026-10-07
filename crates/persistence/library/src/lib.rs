@@ -131,6 +131,7 @@ mod projects;
 pub use frame_thumbnails::{StoredThumbnail, ThumbnailBasis};
 pub use measurements::{FrameRecordBasis, ImportReviewInput};
 mod import;
+mod session_filters;
 mod storage;
 mod views;
 pub use views::{CandidateBasis, CandidateSession, ChoiceBasis, MembershipBasis};
@@ -201,6 +202,12 @@ pub enum SessionFilter {
     /// The only list that shows Trashed frames: sessions holding any, each
     /// summarized over its Trashed frames alone.
     Trashed,
+    /// Sessions with no confirmed Target, whatever their automatic Target row
+    /// says (Unresolved, Suggested, Needs review or none).
+    NeedsTarget,
+    /// Sessions with a confirmed Target that are neither a Project's candidate
+    /// nor a member of any Project's run.
+    NotInAnyProject,
 }
 
 /// A page of Sessions: light sessions of Captures locations (LIB-FR-16), newest
@@ -1082,6 +1089,7 @@ impl Catalog {
         let listed =
             listed_sessions(&mut conn, query.include_superseded, query.location_id, members)
                 .await?;
+        let listed = session_filters::retain(&mut conn, query.filter, listed).await?;
         let limit = if query.limit == 0 { MAX_PAGE } else { query.limit.min(MAX_PAGE) };
         let page = listed
             .into_iter()
@@ -1132,7 +1140,7 @@ enum Members {
 impl Members {
     fn of(filter: Option<SessionFilter>) -> Self {
         match filter {
-            None => Self::Live,
+            None | Some(SessionFilter::NeedsTarget | SessionFilter::NotInAnyProject) => Self::Live,
             Some(SessionFilter::Trashed) => Self::Trashed,
         }
     }
