@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS import_operations (
     id TEXT PRIMARY KEY NOT NULL,
     source_id TEXT REFERENCES import_sources (id),
     source_path BLOB NOT NULL,
+    -- The source folder's identity as the preview observed it (JSON): another
+    -- folder at the path, or an unmounted share's mount point, is not the source.
+    source_identity TEXT NOT NULL,
     mode TEXT CHECK (mode IS NULL OR mode IN ('copy', 'move')),
     state TEXT NOT NULL CHECK (state IN ('previewed', 'running', 'interrupted', 'settled')),
     -- The location chosen per role where a role has several.

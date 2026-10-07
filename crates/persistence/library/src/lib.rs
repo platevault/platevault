@@ -3071,14 +3071,16 @@ async fn location_provisional(conn: &mut SqliteConnection, id: Uuid) -> Result<b
 /// decided live asset in its scope, and every live copy whose recorded digest
 /// carries a live decided copy's decision in another location.
 ///
-/// With none of the location's assets still verification pending, a new run
-/// begins at the operation's start and marks each of them pending. Otherwise an
-/// interruption or unmount left the run unfinished and this operation resumes it
-/// (LIB-FR-19): an asset the run already rehashed is kept, and only the remaining
-/// ones are pending, so their count is what this scan sets out to hash. Each
-/// successful rehash clears the mark; a canceled scan or a failed rehash leaves
-/// it. Offline scans never get here, so offline inputs keep their last-observed
-/// quality. A Trashed frame is in the OS Trash, so it awaits no rehash (LIB-FR-18).
+/// With none of the location's assets still verification pending, or once a
+/// scan of the whole location reached its end, a new run begins at the
+/// operation's start and marks each of them pending. Otherwise an interruption
+/// or unmount left the run unfinished and this operation resumes it
+/// (LIB-FR-19): an asset the run already rehashed is kept, and only the
+/// remaining ones are pending, so their count is what this scan sets out to
+/// hash. Each successful rehash clears the mark; a canceled scan or a failed
+/// rehash leaves it. Offline scans never get here, so offline inputs keep their
+/// last-observed quality. A Trashed frame is in the OS Trash, so it awaits no
+/// rehash (LIB-FR-18).
 async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Result<()> {
     let armed = sqlx::query(
         "UPDATE scan_operations SET verification_armed = 1 WHERE id = ?1 AND verification_armed = 0",
@@ -3141,7 +3143,8 @@ async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Res
 }
 
 /// When the location's unfinished rehash run began: some of its assets are still
-/// verification pending since then (LIB-FR-19).
+/// verification pending since then, and no scan of the whole location reached
+/// its end since (LIB-FR-19).
 async fn unfinished_rehash(
     conn: &mut SqliteConnection,
     location_id: Uuid,
@@ -3168,6 +3171,42 @@ async fn rehash_started_at(
             .fetch_one(&mut *conn)
             .await?;
     Ok(started.as_deref().and_then(instant))
+}
+
+/// End the location's rehash run once a scan of its whole scope reached its end
+/// (Completed or Partial). A decided frame it could not hash stays pending, but
+/// the next scan begins a new run that rechecks every decided frame instead of
+/// keeping this run's rehashes (D19). Only a canceled, failed or root-lost scan,
+/// or a scan of a subtree, leaves the run for the next scan to resume
+/// (LIB-FR-19).
+async fn end_rehash_run(
+    conn: &mut SqliteConnection,
+    op: &OperationRow,
+    terminal: bool,
+) -> Result<()> {
+    if !terminal || !components(&op.scope).is_empty() {
+        return Ok(());
+    }
+    sqlx::query("UPDATE locations SET rehash_started_at = NULL WHERE id = ?1")
+        .bind(op.location_id.to_string())
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+/// The operation's incomplete scopes plus those the terminal observation adds.
+fn recorded_incomplete(
+    op: &OperationRow,
+    observation: &ScanObservation,
+) -> Result<Vec<NativePath>> {
+    let mut incomplete = op.incomplete.clone();
+    for scope in &observation.incomplete_scopes {
+        scope
+            .relative_path()
+            .map_err(|error| scoped(error, scope.clone(), Some(op.location_id)))?;
+        push_unique(&mut incomplete, scope.clone());
+    }
+    Ok(incomplete)
 }
 
 /// The rehash run an operation takes part in: the one it began or resumed once
@@ -3318,13 +3357,7 @@ where
     invalidate_inferences(conn, &changed.evidence).await?;
     mark_location_observed(conn, location.id).await?;
     let op = load_operation_row(conn, op.id).await?;
-    let mut incomplete = op.incomplete.clone();
-    for scope in &observation.incomplete_scopes {
-        scope
-            .relative_path()
-            .map_err(|error| scoped(error, scope.clone(), Some(op.location_id)))?;
-        push_unique(&mut incomplete, scope.clone());
-    }
+    let mut incomplete = recorded_incomplete(&op, observation)?;
     let terminal = matches!(observation.state, ScanState::Completed | ScanState::Partial);
     if !terminal {
         push_unique(&mut incomplete, op.scope.clone());
@@ -3347,6 +3380,7 @@ where
         reconcile_absence(conn, &op, &complete, &incomplete).await?;
     }
     let issues = load_issue_paths(conn, op.id).await?;
+    end_rehash_run(conn, &op, terminal).await?;
     let state = match observation.state {
         ScanState::Completed
             if !incomplete.is_empty() || !issues.is_empty() || complete.is_empty() =>

@@ -372,6 +372,40 @@ async fn complete_run_refuses_membership_change_until_reopen() {
 }
 
 #[tokio::test]
+async fn trashed_or_complete_run_refuses_discard() {
+    let world = world().await;
+    let project = world.project(&[world.redcat.id], &[&world.ngc7000]).await;
+    // Never saved: discarding its draft would delete the run itself.
+    let trashed = world.run(&project, world.redcat.id, "HOO").await;
+    let trashed_draft = trashed.draft.unwrap().draft_revision;
+    let trashed = trashed.view.id;
+    let complete = world.run(&project, world.redcat.id, "SHO").await.view.id;
+    world.catalog.save_view(complete, 0, 1).await.unwrap();
+    let rename = DraftEdit::Details { name: "SHO 2".into() };
+    let edited = world.catalog.edit_view_draft(complete, 0, &rename).await.unwrap();
+    let complete_draft = edited.draft.unwrap().draft_revision;
+    let world = world
+        .raw_sql(&format!(
+            "UPDATE views SET trashed_at = '2026-10-01T00:00:00Z' WHERE id = '{trashed}'"
+        ))
+        .await
+        .raw_sql(&format!(
+            "UPDATE views SET completion = 'complete', stage_before_complete = 'review', \
+             stage = 'done' WHERE id = '{complete}'"
+        ))
+        .await;
+
+    let error = world.catalog.discard_view_draft(trashed, trashed_draft).await.unwrap_err();
+    refused(&error, "restore");
+    let kept = world.catalog.view(trashed).await.unwrap();
+    assert!(kept.draft.is_some(), "the run in the Trash keeps its draft");
+    let error = world.catalog.discard_view_draft(complete, complete_draft).await.unwrap_err();
+    refused(&error, "reopen");
+    let kept = world.catalog.view(complete).await.unwrap();
+    assert_eq!(kept.draft.map(|draft| draft.draft_revision), Some(complete_draft));
+}
+
+#[tokio::test]
 async fn member_no_longer_matching_subject_flagged_and_still_member() {
     let world = world().await;
     let project = world.project(&[world.redcat.id], &[&world.ngc7000]).await;

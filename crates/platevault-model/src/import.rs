@@ -117,7 +117,7 @@ impl ImportItemPhase {
 
 /// What a skipped duplicate matches.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum ImportDuplicate {
     /// A frame already indexed in the library.
     IndexedFrame { asset_id: Uuid },
@@ -131,7 +131,7 @@ pub enum ImportDuplicate {
 
 /// Why a preview item is held.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum ImportBlock {
     /// No active location has the role; register one (LIB-FR-01).
     MissingRole { role: LocationRole },
@@ -264,6 +264,10 @@ pub struct ImportRecord {
     pub id: Uuid,
     pub source_id: Option<Uuid>,
     pub source_path: NativePath,
+    /// The source folder as the preview observed it: its volume and, where
+    /// the volume's IDs are stable, its folder ID. Another folder at the path,
+    /// or the mount point an unmounted share left, is not this source.
+    pub source_identity: FileIdentity,
     pub mode: Option<ImportMode>,
     pub state: ImportState,
     pub choices: Vec<ImportChoice>,
@@ -279,6 +283,7 @@ pub struct ImportRecord {
 pub struct ImportDraft {
     pub source_id: Option<Uuid>,
     pub source_path: NativePath,
+    pub source_identity: FileIdentity,
     pub items: Vec<ImportItemRecord>,
 }
 
@@ -360,4 +365,39 @@ pub struct ImportOperation {
     pub created_at: String,
     pub updated_at: String,
     pub settled_at: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duplicate_and_block_fields_are_camel_case() {
+        let id = Uuid::new_v4();
+        let source_path = NativePath::UnixBytes(b"/Volumes/card/light_001.fits".to_vec());
+        let duplicates = [
+            (ImportDuplicate::IndexedFrame { asset_id: id }, "assetId"),
+            (ImportDuplicate::SameImport { seq: 1, source_path }, "sourcePath"),
+            (ImportDuplicate::SameSource { operation_id: id }, "operationId"),
+        ];
+        for (duplicate, field) in duplicates {
+            let wire = serde_json::to_value(&duplicate).unwrap();
+            assert!(wire.get(field).is_some(), "{wire}");
+            assert_eq!(serde_json::from_value::<ImportDuplicate>(wire).unwrap(), duplicate);
+        }
+        let blocks = [
+            (
+                ImportBlock::DestinationUnwritable { location_id: id, detail: "x".into() },
+                "locationId",
+            ),
+            (ImportBlock::DuplicateUnproven { asset_id: id, detail: "x".into() }, "assetId"),
+        ];
+        for (block, field) in blocks {
+            let wire = serde_json::to_value(&block).unwrap();
+            assert!(wire.get(field).is_some(), "{wire}");
+            assert_eq!(serde_json::from_value::<ImportBlock>(wire).unwrap(), block);
+        }
+        let wire = serde_json::to_value(ImportDuplicate::IndexedFrame { asset_id: id }).unwrap();
+        assert_eq!(wire["kind"], "indexed_frame", "variant tags stay snake_case");
+    }
 }

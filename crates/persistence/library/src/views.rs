@@ -301,6 +301,7 @@ impl Catalog {
     /// and `None` is returned.
     ///
     /// # Errors
+    /// `InvalidInput` for a run in the Project's Trash or a Complete run;
     /// `Conflict` carrying the current draft revision for a stale
     /// `expected_draft`; `NotFound` for an unknown run.
     pub async fn discard_view_draft(
@@ -310,6 +311,7 @@ impl Catalog {
     ) -> Result<Option<ViewRecord>> {
         let record = write_txn!(self, |conn| {
             let view = load_view(conn, id).await?;
+            require_open(&view)?;
             let draft = require_draft(conn, id, expected_draft).await?;
             delete_revision_rows(conn, draft.row).await?;
             if view.revision == 0 {

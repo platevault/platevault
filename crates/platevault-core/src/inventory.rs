@@ -84,6 +84,29 @@ pub fn observe_root_identity(root: &Path) -> Result<FileIdentity, LibraryError> 
     observe_root(root).map(|observed| observed.identity)
 }
 
+/// Observe a folder's identity without following a link: its qualified volume
+/// and, where the volume's file IDs are stable, its folder ID. Unlike
+/// [`observe_root`], a folder without a remount-stable ID (FAT, `exFAT`) is
+/// accepted; its identity then names the volume only.
+///
+/// # Errors
+/// `InvalidInput` for a link, a junction or anything but a folder, the I/O
+/// error kind when the folder cannot be inspected, and `IdentityConflict`
+/// when the volume identity cannot be qualified.
+pub fn observe_folder_identity(root: &Path) -> Result<FileIdentity, LibraryError> {
+    let meta = fs::symlink_metadata(root).map_err(|error| LibraryError::from_io(root, &error))?;
+    if fs_pathsafe::is_link_or_junction_metadata(&meta) || !meta.is_dir() {
+        return Err(identity::scoped(
+            LibraryError::InvalidInput("not a folder; links are not followed".into()),
+            root,
+        ));
+    }
+    let volume = identity::volume_of(root, &meta)?;
+    let file_id = identity::file_id(root, &meta, &volume)
+        .map_err(|error| LibraryError::from_io(root, &error))?;
+    Ok(FileIdentity { volume, file_id })
+}
+
 /// Re-observe a registered root and refuse it unless it is the registered
 /// volume and folder. Intended inside final reconciliation transactions.
 ///

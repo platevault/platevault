@@ -6,6 +6,7 @@
 //! A location on a share the OS mounted is flagged as a network volume. An
 //! unmount mid-rehash reads Offline and keeps completed hashes; the next scan
 //! resumes with the remaining files and never hashes the completed ones again.
+#![cfg(unix)]
 
 mod support;
 
@@ -294,6 +295,37 @@ async fn remount_resumes_without_rehashing_completed() {
     assert_eq!(
         catalog.asset(after[0].id).await.unwrap().applicable_quality(),
         ApplicableQuality::ChangedContent { previous: Quality::Usable }
+    );
+    catalog.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn unreadable_decided_frame_does_not_freeze_rehash_run() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = Fixture::new();
+    let (catalog, location, reviewed) = reviewed_on_network(&fx).await;
+    let locked = fx.root.join(FRAMES[0]);
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    // A whole-location scan reaches its end with one decided frame unhashed.
+    let partial = scan(&catalog, &fx, &location, &FRAMES).await;
+    assert_eq!(partial.state, ScanState::Partial, "{partial:?}");
+    assert!(
+        frames(&catalog, &location).await[0].verification_pending,
+        "the unhashed frame still awaits verification"
+    );
+
+    // Bytes change behind unchanged stats while that frame stays unreadable:
+    // the ended run keeps no earlier rehash, so the next scan rechecks them.
+    rewrite_same_stat(&fx, FRAMES[1], b"frame X bytes");
+    let rescan = scan(&catalog, &fx, &location, &FRAMES).await;
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+    assert_eq!(
+        catalog.asset(reviewed[1].id).await.unwrap().applicable_quality(),
+        ApplicableQuality::ChangedContent { previous: Quality::Usable },
+        "{:?}",
+        rescan.progress
     );
     catalog.close().await.unwrap();
 }
