@@ -125,13 +125,14 @@ impl Catalog {
             }
             let at = now()?;
             sqlx::query(
-                "INSERT INTO import_operations (id, source_id, source_path, mode, state, choices, \
-                 revision, created_at, updated_at, settled_at) \
-                 VALUES (?1, ?2, ?3, NULL, 'previewed', '[]', 1, ?4, ?4, NULL)",
+                "INSERT INTO import_operations (id, source_id, source_path, source_identity, \
+                 mode, state, choices, revision, created_at, updated_at, settled_at) \
+                 VALUES (?1, ?2, ?3, ?4, NULL, 'previewed', '[]', 1, ?5, ?5, NULL)",
             )
             .bind(id.to_string())
             .bind(draft.source_id.map(|source| source.to_string()))
             .bind(path_key(&draft.source_path))
+            .bind(to_json(&draft.source_identity)?)
             .bind(&at)
             .execute(&mut *conn)
             .await?;
@@ -150,7 +151,8 @@ impl Catalog {
         load_import(&mut conn, id).await
     }
 
-    /// Replace a preview's choices and items (a recheck may add files).
+    /// Replace a preview's source identity, choices and items (a recheck
+    /// observes the source again and may add files).
     ///
     /// # Errors
     /// `Conflict` for a stale `expected` revision; `InvalidInput` once the
@@ -159,6 +161,7 @@ impl Catalog {
         &self,
         id: Uuid,
         expected: Revision,
+        source_identity: &FileIdentity,
         choices: &[ImportChoice],
         items: &[ImportItemRecord],
     ) -> Result<ImportRecord> {
@@ -181,10 +184,11 @@ impl Catalog {
                 insert_item(conn, id, item).await?;
             }
             sqlx::query(
-                "UPDATE import_operations SET choices = ?2, revision = revision + 1, \
-                 updated_at = ?3 WHERE id = ?1",
+                "UPDATE import_operations SET source_identity = ?2, choices = ?3, \
+                 revision = revision + 1, updated_at = ?4 WHERE id = ?1",
             )
             .bind(id.to_string())
+            .bind(to_json(source_identity)?)
             .bind(to_json(choices)?)
             .bind(now()?)
             .execute(&mut *conn)
@@ -575,8 +579,8 @@ async fn update_item(
 
 async fn load_import(conn: &mut SqliteConnection, id: Uuid) -> Result<ImportRecord> {
     let row = sqlx::query(
-        "SELECT source_id, source_path, mode, state, choices, revision, created_at, updated_at, \
-         settled_at FROM import_operations WHERE id = ?1",
+        "SELECT source_id, source_path, source_identity, mode, state, choices, revision, \
+         created_at, updated_at, settled_at FROM import_operations WHERE id = ?1",
     )
     .bind(id.to_string())
     .fetch_optional(&mut *conn)
@@ -598,6 +602,7 @@ async fn load_import(conn: &mut SqliteConnection, id: Uuid) -> Result<ImportReco
             .map(parse_uuid)
             .transpose()?,
         source_path: path_from_key(&row.try_get::<Vec<u8>, _>("source_path")?)?,
+        source_identity: from_json(&row.try_get::<String, _>("source_identity")?)?,
         mode: row.try_get::<Option<String>, _>("mode")?.as_deref().map(from_text).transpose()?,
         state: from_text(&row.try_get::<String, _>("state")?)?,
         choices: from_json(&row.try_get::<String, _>("choices")?)?,

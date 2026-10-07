@@ -950,3 +950,164 @@ async fn unknown_filter_prompt_holds_nothing_back() {
         "previewing changes no rig"
     );
 }
+
+#[tokio::test]
+async fn untyped_master_names_held_unclassified() {
+    let fixture = Fixture::new().await;
+    let card = &fixture.card;
+    untyped(&card.join("masterDark_300s.fits"), "2026-04-12T23:00:00");
+    frame(
+        &card.join("darks/stack_001.fits"),
+        &[
+            ("NCOMBINE", "20"),
+            ("EXPTIME", "300"),
+            ("DATE-OBS", "'2026-04-12T23:05:00'"),
+            ("INSTRUME", CAMERA),
+        ],
+    );
+
+    let preview = fixture.preview().await;
+
+    for relative in ["masterDark_300s.fits", "darks/stack_001.fits"] {
+        let held = item(&preview, relative);
+        assert_eq!(
+            (held.classification, held.phase),
+            (None, ImportItemPhase::Unclassified),
+            "{relative}: a name never stands in for a frame-type header"
+        );
+        assert_eq!(held.destination_location_id, None, "{relative}");
+    }
+}
+
+/// Put a different, empty folder at `folder`'s path: the path still resolves
+/// to a folder, but not the one recorded. Returns where the original went.
+fn replace_folder(folder: &Path) -> PathBuf {
+    let original = folder.with_extension("original");
+    fs::rename(folder, &original).unwrap();
+    fs::create_dir(folder).unwrap();
+    original
+}
+
+fn restore_folder(folder: &Path, original: &Path) {
+    fs::remove_dir_all(folder).unwrap();
+    fs::rename(original, folder).unwrap();
+}
+
+#[tokio::test]
+async fn replaced_destination_folder_interrupts_with_nothing_written() {
+    let fixture = Fixture::new().await;
+    let card = &fixture.card;
+    let sources = [
+        light(&card.join("light_001.fits"), Some("NGC7000"), "Ha", "2026-04-12T22:00:00"),
+        light(&card.join("light_002.fits"), Some("NGC7000"), "Ha", "2026-04-12T22:05:00"),
+    ];
+    let preview = fixture.preview().await;
+    let started =
+        fixture.library.start_import(preview.id, preview.revision, ImportMode::Move).await.unwrap();
+    let original = replace_folder(&fixture.captures);
+    let trash = fixture.trash();
+
+    let outcome = fixture.library.run_import(started.id, as_dyn(&trash)).await;
+
+    assert!(trash.moved().is_empty(), "no source is trashed");
+    let written = files_below(&fixture.captures);
+    assert!(written.is_empty(), "nothing is written into the other folder: {written:?}");
+    let interrupted = outcome.unwrap();
+    assert_eq!(interrupted.state, ImportState::Interrupted);
+    for relative in ["light_001.fits", "light_002.fits"] {
+        assert_eq!(item(&interrupted, relative).phase, ImportItemPhase::Pending, "{relative}");
+    }
+    assert!(sources.iter().all(|source| source.exists()), "every source stays in place");
+
+    restore_folder(&fixture.captures, &original);
+    let resumed = fixture.library.run_import(interrupted.id, as_dyn(&trash)).await.unwrap();
+
+    assert_eq!(resumed.state, ImportState::Settled);
+    for relative in ["light_001.fits", "light_002.fits"] {
+        assert_eq!(item(&resumed, relative).phase, ImportItemPhase::Moved, "{relative}");
+    }
+    assert_eq!(files_below(&fixture.captures).len(), 2);
+}
+
+#[tokio::test]
+async fn replaced_source_folder_interrupts_until_it_returns() {
+    let fixture = Fixture::new().await;
+    let card = &fixture.card;
+    let sources = [
+        light(&card.join("light_001.fits"), Some("NGC7000"), "Ha", "2026-04-12T22:00:00"),
+        light(&card.join("light_002.fits"), Some("NGC7000"), "Ha", "2026-04-12T22:05:00"),
+    ];
+    let preview = fixture.preview().await;
+    let started =
+        fixture.library.start_import(preview.id, preview.revision, ImportMode::Move).await.unwrap();
+    let original = replace_folder(card);
+    let trash = fixture.trash();
+
+    let outcome = fixture.library.run_import(started.id, as_dyn(&trash)).await;
+
+    assert!(trash.moved().is_empty(), "no source is trashed");
+    assert!(files_below(&fixture.captures).is_empty(), "nothing is copied");
+    let interrupted = outcome.unwrap();
+    assert_eq!(interrupted.state, ImportState::Interrupted);
+    assert_ne!(
+        interrupted.source_availability,
+        Availability::Available,
+        "another folder at the source path is not the previewed source"
+    );
+    for relative in ["light_001.fits", "light_002.fits"] {
+        assert_eq!(item(&interrupted, relative).phase, ImportItemPhase::Pending, "{relative}");
+    }
+
+    restore_folder(card, &original);
+    let resumed = fixture.library.run_import(interrupted.id, as_dyn(&trash)).await.unwrap();
+
+    assert_eq!(resumed.state, ImportState::Settled);
+    assert_eq!(resumed.source_availability, Availability::Available);
+    for relative in ["light_001.fits", "light_002.fits"] {
+        assert_eq!(item(&resumed, relative).phase, ImportItemPhase::Moved, "{relative}");
+    }
+    assert_eq!(trash.moved(), sources.to_vec());
+}
+
+#[tokio::test]
+async fn destination_offline_before_indexing_interrupts_until_indexed() {
+    let fixture = Fixture::new().await;
+    untyped(&fixture.card.join("frame_a.fits"), "2026-04-12T23:00:00");
+    let unmounted = fixture.calibration.with_extension("unmounted");
+    let mut trash = FakeTrash::new(&fixture.temp.path().join("bin"));
+    {
+        // The Calibration volume drops right after the last source reached the
+        // OS Trash, before its landed copy is indexed.
+        let (calibration, unmounted) = (fixture.calibration.clone(), unmounted.clone());
+        trash.after_move = Some(Box::new(move |_| fs::rename(&calibration, &unmounted).unwrap()));
+    }
+    let trash = Arc::new(trash);
+    let preview = fixture.preview().await;
+    let seq = item(&preview, "frame_a.fits").seq;
+    let typed = fixture
+        .library
+        .set_import_type(preview.id, preview.revision, seq, Some(NamingFrameType::Flat))
+        .await
+        .unwrap();
+
+    let interrupted = fixture.run(&typed, ImportMode::Move, &trash).await;
+
+    assert_eq!(interrupted.state, ImportState::Interrupted, "the landed copy is not indexed yet");
+    let moved = item(&interrupted, "frame_a.fits");
+    assert_eq!(moved.phase, ImportItemPhase::Moved, "a verified item keeps its state");
+    assert!(!moved.indexed);
+
+    fs::rename(&unmounted, &fixture.calibration).unwrap();
+    let resumed = fixture.library.run_import(interrupted.id, as_dyn(&trash)).await.unwrap();
+
+    assert_eq!(resumed.state, ImportState::Settled);
+    assert!(item(&resumed, "frame_a.fits").indexed, "Retry indexes the landed copy");
+    let calibration =
+        fixture.library.catalog().location_assets(fixture.calibration_id.unwrap()).await.unwrap();
+    assert_eq!(calibration.len(), 1);
+    assert_eq!(
+        calibration[0].effective.image_type.as_deref(),
+        Some("Flat"),
+        "the type the user set is recorded"
+    );
+}

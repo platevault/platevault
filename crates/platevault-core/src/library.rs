@@ -774,7 +774,10 @@ pub(crate) async fn blocking<T: Send + 'static>(
     })?
 }
 
-fn root_failure(error: &LibraryError) -> Option<Availability> {
+/// How a root that failed its identity check reads: Offline when it is gone,
+/// Unreadable when access is denied, `IdentityConflict` for another volume or
+/// folder; `None` for any other failure.
+pub(crate) fn root_failure(error: &LibraryError) -> Option<Availability> {
     match error {
         LibraryError::Context { error, .. } => root_failure(error),
         LibraryError::IdentityConflict(_) => Some(Availability::IdentityConflict),

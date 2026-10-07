@@ -18,10 +18,13 @@
 //! runs them through the custody journal: Copy is a verified transfer, Move
 //! also re-verifies the source against its snapshot immediately before the OS
 //! Trash takes it, and a source the OS Trash cannot keep stays where it is.
-//! When the source or a destination goes away the import is Interrupted:
-//! verified items keep their state, the rest stay pending, and Retry resumes
-//! from the recorded journal, never from file names. Landed copies are indexed
-//! by a scan of their destination folder.
+//! When the source or a destination goes away the import is Interrupted: a
+//! folder at its path that is not the previewed source or the location's
+//! registered folder (such as the mount point an unmounted share leaves)
+//! counts as gone. Verified items keep their state, the rest stay pending, and
+//! Retry resumes from the recorded journal, never from file names. Landed
+//! copies are indexed by a scan of their destination folder; while one waits
+//! for its offline destination the import stays Interrupted.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -40,7 +43,7 @@ use crate::calibration::Rules;
 use crate::custody::trash::OsTrash;
 use crate::grouping::{group_assets, observing_night};
 use crate::inventory;
-use crate::library::{blocking, InventoryProbe, Library};
+use crate::library::{blocking, root_failure, InventoryProbe, Library};
 use crate::{
     Availability, CalibrationRules, CaptureMetadata, CorrectionInput, EntryKind, ExpectedAsset,
     FileIdentity, ImageTypeEvidence, ImportBlock, ImportChoice, ImportDestination, ImportDraft,
@@ -158,17 +161,19 @@ impl Library {
             }
             ImportSourceSpec::Folder { path } => (None, path),
         };
-        let root = online_root(&source_path).await?;
+        let (root, source_identity) = observe_source(&source_path).await?;
         let mut items = self.settle_source(&root, Vec::new(), check).await?;
         self.route(source_id, Uuid::nil(), &[], &mut items).await?;
-        let record =
-            self.catalog().record_import(&ImportDraft { source_id, source_path, items }).await?;
+        let draft = ImportDraft { source_id, source_path, source_identity, items };
+        let record = self.catalog().record_import(&draft).await?;
         self.import_view(record).await
     }
 
     /// Check the source again: settling files that held still are offered,
     /// changed files settle again, new files are added, and every item is
     /// routed again (a saved naming template or a new location takes effect).
+    /// The source's identity is recorded again with them: a file whose
+    /// reviewed evidence came from another folder at this path settles again.
     ///
     /// # Errors
     /// `Conflict` for a stale revision; `InvalidInput` once started;
@@ -180,11 +185,13 @@ impl Library {
         check: ImportCheck,
     ) -> Result<ImportOperation, LibraryError> {
         let record = self.preview_record(id, expected_revision).await?;
-        let root = online_root(&record.source_path).await?;
+        let (root, source_identity) = observe_source(&record.source_path).await?;
         let mut items = self.settle_source(&root, record.items, check).await?;
         self.route(record.source_id, id, &record.choices, &mut items).await?;
-        let record =
-            self.catalog().revise_import(id, expected_revision, &record.choices, &items).await?;
+        let record = self
+            .catalog()
+            .revise_import(id, expected_revision, &source_identity, &record.choices, &items)
+            .await?;
         self.import_view(record).await
     }
 
@@ -273,7 +280,9 @@ impl Library {
 
     /// Execute or resume a started import until every approved item has an
     /// outcome, or until its source or a destination goes offline (the import
-    /// is then Interrupted and this is its Retry). Landed copies are indexed.
+    /// is then Interrupted and this is its Retry). Landed copies are indexed;
+    /// while one waits for its offline destination the import stays
+    /// Interrupted, so its Retry indexes it and records the type the user set.
     ///
     /// # Errors
     /// `InvalidInput` for a preview or while another call runs this import;
@@ -313,8 +322,12 @@ impl Library {
                 Advance::Done => break,
             }
         }
-        self.index_landed(id, &roots).await?;
-        let record = self.catalog().set_import_state(id, ImportState::Settled).await?;
+        let state = if self.index_landed(id, &roots).await? {
+            ImportState::Interrupted
+        } else {
+            ImportState::Settled
+        };
+        let record = self.catalog().set_import_state(id, state).await?;
         self.import_view(record).await
     }
 
@@ -331,7 +344,7 @@ impl Library {
         let online = roots.online(&record).await?;
         if let Some(storage_id) = record.items.iter().find_map(|item| item.storage) {
             let operation = self.catalog().storage_operation(storage_id.operation_id).await?;
-            let changes = journal_changes(&record, &operation, roots, online)?;
+            let changes = journal_changes(&record, &operation, online)?;
             if !changes.is_empty() {
                 self.catalog().record_import_progress(id, &changes).await?;
             }
@@ -417,7 +430,13 @@ impl Library {
         self.route(record.source_id, id, &record.choices, &mut record.items).await?;
         let record = self
             .catalog()
-            .revise_import(id, expected_revision, &record.choices, &record.items)
+            .revise_import(
+                id,
+                expected_revision,
+                &record.source_identity,
+                &record.choices,
+                &record.items,
+            )
             .await?;
         self.import_view(record).await
     }
@@ -834,12 +853,15 @@ impl Library {
                 if let std::collections::hash_map::Entry::Vacant(entry) =
                     destinations.entry(location_id)
                 {
-                    let location = self.catalog().location(location_id).await?;
-                    entry.insert(location.path);
+                    entry.insert(self.catalog().location(location_id).await?);
                 }
             }
         }
-        Ok(Roots { source: record.source_path.to_path_buf()?, destinations })
+        Ok(Roots {
+            source: record.source_path.to_path_buf()?,
+            source_identity: record.source_identity.clone(),
+            destinations,
+        })
     }
 
     async fn interrupt(self: &Arc<Self>, id: Uuid) -> Result<ImportOperation, LibraryError> {
@@ -927,8 +949,10 @@ impl Library {
     /// Index every landed, unindexed copy: one scan per destination folder,
     /// then each copy counts as indexed once the catalog holds a frame at its
     /// path with the identity the transfer wrote. A frame type the user set is
-    /// recorded as the frame's IMAGETYP correction.
-    async fn index_landed(self: &Arc<Self>, id: Uuid, roots: &Roots) -> Result<(), LibraryError> {
+    /// recorded as the frame's IMAGETYP correction. Returns whether a landed
+    /// copy still waits for its offline destination; only a scan of that
+    /// destination can index it and record its type (STO-IMP-FR-08).
+    async fn index_landed(self: &Arc<Self>, id: Uuid, roots: &Roots) -> Result<bool, LibraryError> {
         let record = self.catalog().import_record(id).await?;
         let landed: Vec<&ImportItemRecord> =
             record.items.iter().filter(|item| item.item.landed && !item.item.indexed).collect();
@@ -944,11 +968,15 @@ impl Library {
                 scopes.push((location_id, folder));
             }
         }
+        let mut offline = HashSet::new();
         for (location_id, folder) in scopes {
             if roots.destination_online(location_id).await? {
                 self.scan_scope(location_id, &folder).await?;
+            } else {
+                offline.insert(location_id);
             }
         }
+        let mut waiting = false;
         let mut indexed = Vec::new();
         for record in landed {
             let (Some(location_id), Some(path), Some(written)) = (
@@ -958,6 +986,10 @@ impl Library {
             ) else {
                 continue;
             };
+            if offline.contains(&location_id) {
+                waiting = true;
+                continue;
+            }
             let Some((asset_id, identity)) =
                 self.catalog().live_asset_at(location_id, path).await?
             else {
@@ -978,7 +1010,7 @@ impl Library {
         if !indexed.is_empty() {
             self.catalog().record_import_progress(id, &indexed).await?;
         }
-        Ok(())
+        Ok(waiting)
     }
 
     /// Record the type the user gave an untyped frame as its IMAGETYP
@@ -1076,20 +1108,16 @@ impl Library {
     async fn import_view(&self, record: ImportRecord) -> Result<ImportOperation, LibraryError> {
         let locations = self.active_locations().await?;
         let source = record.source_path.to_path_buf();
-        let probes = locations
-            .iter()
-            .map(|location| (location.id, location.path.to_path_buf()))
-            .collect::<Vec<_>>();
+        let identity = record.source_identity.clone();
+        let probes = locations.clone();
         let (source_availability, volumes) = blocking(move || {
             let availability =
-                source.map_or(Availability::Unreadable, |root| folder_availability(&root));
+                source.map_or(Availability::Unreadable, |root| source_state(&root, &identity));
             let volumes = probes
-                .into_iter()
-                .map(|(id, root)| match root {
-                    Ok(root) => (id, fs4::available_space(&root).ok(), writability(&root)),
-                    Err(error) => {
-                        (id, None, Writability::NotWritable { detail: error.to_string() })
-                    }
+                .iter()
+                .map(|location| match mounted_root(location) {
+                    Ok(root) => (fs4::available_space(&root).ok(), writability(&root)),
+                    Err(error) => (None, Writability::NotWritable { detail: error.to_string() }),
                 })
                 .collect::<Vec<_>>();
             Ok((availability, volumes))
@@ -1099,7 +1127,7 @@ impl Library {
         let destinations = locations
             .iter()
             .zip(volumes)
-            .map(|(location, (_, free_bytes, writability))| {
+            .map(|(location, (free_bytes, writability))| {
                 let routed = items.iter().filter(|item| {
                     item.destination_location_id == Some(location.id) && counts_toward(item.phase)
                 });
@@ -1140,13 +1168,22 @@ impl Library {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/// The roots an import reads from and writes to.
+/// The roots an import reads from and writes to, with the identity each must
+/// still have: the source as the preview observed it, and each destination
+/// as its location registered it.
 struct Roots {
     source: PathBuf,
-    destinations: HashMap<Uuid, NativePath>,
+    source_identity: FileIdentity,
+    destinations: HashMap<Uuid, Location>,
 }
 
 impl Roots {
+    fn destination(&self, location_id: Uuid) -> Result<&Location, LibraryError> {
+        self.destinations.get(&location_id).ok_or_else(|| {
+            LibraryError::PersistenceFailure(format!("location {location_id} is not loaded"))
+        })
+    }
+
     fn destination_of(&self, item: &ImportItem) -> Result<PathBuf, LibraryError> {
         let (Some(location_id), Some(path)) =
             (item.destination_location_id, &item.destination_path)
@@ -1156,42 +1193,36 @@ impl Roots {
                 item.seq
             )));
         };
-        let root = self.destinations.get(&location_id).ok_or_else(|| {
-            LibraryError::PersistenceFailure(format!("location {location_id} is not loaded"))
-        })?;
-        Ok(root.to_path_buf()?.join(path.relative_path()?))
-    }
-
-    fn destination_root(&self, location_id: Uuid) -> Result<PathBuf, LibraryError> {
-        self.destinations
-            .get(&location_id)
-            .ok_or_else(|| {
-                LibraryError::PersistenceFailure(format!("location {location_id} is not loaded"))
-            })?
-            .to_path_buf()
+        Ok(self.destination(location_id)?.path.to_path_buf()?.join(path.relative_path()?))
     }
 
     async fn destination_online(&self, location_id: Uuid) -> Result<bool, LibraryError> {
-        let root = self.destination_root(location_id)?;
-        blocking(move || Ok(folder_availability(&root) == Availability::Available)).await
+        let location = self.destination(location_id)?.clone();
+        blocking(move || Ok(mounted_root(&location).is_ok())).await
     }
 
-    /// The source folder and the destination of every unsettled approved
-    /// item are mounted.
+    /// While an approved item is unsettled, the source folder is the one the
+    /// preview observed and each such item's destination is its location's
+    /// registered folder. With nothing left to transfer or retire, the source
+    /// is not needed.
     async fn online(&self, record: &ImportRecord) -> Result<bool, LibraryError> {
-        let mut folders = vec![self.source.clone()];
+        let mut unsettled = false;
+        let mut destinations: Vec<Location> = Vec::new();
         for item in &record.items {
             if matches!(item.item.phase, ImportItemPhase::Pending | ImportItemPhase::Landed) {
+                unsettled = true;
                 if let Some(location_id) = item.item.destination_location_id {
-                    let root = self.destination_root(location_id)?;
-                    if !folders.contains(&root) {
-                        folders.push(root);
+                    if !destinations.iter().any(|known| known.id == location_id) {
+                        destinations.push(self.destination(location_id)?.clone());
                     }
                 }
             }
         }
+        let source = unsettled.then(|| (self.source.clone(), self.source_identity.clone()));
         blocking(move || {
-            Ok(folders.iter().all(|folder| folder_availability(folder) == Availability::Available))
+            Ok(source.is_none_or(|(root, identity)| {
+                source_state(&root, &identity) == Availability::Available
+            }) && destinations.iter().all(|location| mounted_root(location).is_ok()))
         })
         .await
     }
@@ -1402,35 +1433,39 @@ fn chosen_location<'a>(
     }
 }
 
+/// Whether each location can take new files: only its registered folder can,
+/// so a location whose folder is not mounted reads not writable.
 async fn destination_writability(
     locations: &[Location],
 ) -> Result<HashMap<Uuid, Writability>, LibraryError> {
-    let roots = locations
-        .iter()
-        .map(|location| (location.id, location.path.to_path_buf()))
-        .collect::<Vec<_>>();
+    let locations = locations.to_vec();
     blocking(move || {
-        Ok(roots
-            .into_iter()
-            .map(|(id, root)| {
-                let state = match root {
+        Ok(locations
+            .iter()
+            .map(|location| {
+                let state = match mounted_root(location) {
                     Ok(root) => writability(&root),
                     Err(error) => Writability::NotWritable { detail: error.to_string() },
                 };
-                (id, state)
+                (location.id, state)
             })
             .collect())
     })
     .await
 }
 
-/// The header frame type: a calibration frame or master by the calibration
-/// rules (IMAGETYP, stack count, then a labelled name inference), else a
-/// single light by IMAGETYP. Anything else is Unclassified.
+/// The header frame type (STO-IMP-FR-02): a calibration frame or master by
+/// the calibration rules (IMAGETYP, stack count, then a labelled name
+/// inference), else a single light by IMAGETYP. A file without IMAGETYP is
+/// Unclassified: neither its name nor its stack count stands in for the
+/// frame-type header.
 pub(crate) fn classify(
     metadata: &CaptureMetadata,
     relative_path: &NativePath,
 ) -> Option<NamingFrameType> {
+    if metadata.image_type.as_deref().is_none_or(|text| text.trim().is_empty()) {
+        return None;
+    }
     if let Some(found) = Rules.classify(metadata, relative_path) {
         let master = found.master.is_some();
         return Some(match (found.kind, master) {
@@ -1500,15 +1535,47 @@ fn folder_availability(root: &Path) -> Availability {
     }
 }
 
-async fn online_root(path: &NativePath) -> Result<PathBuf, LibraryError> {
+/// Whether the folder at the source path is the source the preview observed
+/// (LIB-FR-19). The mount point an unmounted share leaves is on another volume
+/// and reads Offline; another folder on the same volume reads as an identity
+/// conflict.
+fn source_state(root: &Path, recorded: &FileIdentity) -> Availability {
+    match folder_availability(root) {
+        Availability::Available => {}
+        availability => return availability,
+    }
+    match inventory::observe_folder_identity(root) {
+        Ok(observed) if same_identity(&observed, recorded) => Availability::Available,
+        Ok(observed) if observed.volume == recorded.volume => Availability::IdentityConflict,
+        Ok(_) => Availability::Offline,
+        Err(error) => root_failure(&error).unwrap_or(Availability::Offline),
+    }
+}
+
+/// A location's folder, only while it is the registered volume and folder
+/// (LIB-FR-19): the mount point an unmounted share leaves, or another folder
+/// at the path, is refused.
+fn mounted_root(location: &Location) -> Result<PathBuf, LibraryError> {
+    inventory::validate_location_root(location)?;
+    location.path.to_path_buf()
+}
+
+/// The mounted source folder of a preview, with the identity every later
+/// check holds it to.
+async fn observe_source(path: &NativePath) -> Result<(PathBuf, FileIdentity), LibraryError> {
     let root = path.to_path_buf()?;
     if !root.is_absolute() {
         return Err(LibraryError::InvalidInput("an import source path is absolute".into()));
     }
     let probe = root.clone();
-    match blocking(move || Ok(folder_availability(&probe))).await? {
-        Availability::Available => Ok(root),
-        availability => Err(LibraryError::Context {
+    let observed = blocking(move || match folder_availability(&probe) {
+        Availability::Available => inventory::observe_folder_identity(&probe).map(Ok),
+        availability => Ok(Err(availability)),
+    })
+    .await?;
+    match observed {
+        Ok(identity) => Ok((root, identity)),
+        Err(availability) => Err(LibraryError::Context {
             error: Box::new(LibraryError::SourceUnavailable(format!(
                 "the import source is {availability:?}; PlateVault mounts nothing"
             ))),
@@ -1651,9 +1718,7 @@ fn transfer_draft(
             record.item.seq
         )));
     };
-    let root = roots.destinations.get(&location_id).cloned().ok_or_else(|| {
-        LibraryError::PersistenceFailure(format!("location {location_id} is not loaded"))
-    })?;
+    let root = roots.destination(location_id)?.path.clone();
     Ok(StorageItemDraft {
         source,
         relied_on: Vec::new(),
@@ -1664,10 +1729,11 @@ fn transfer_draft(
 /// Import item changes the journal's recorded progress implies: a copy that
 /// verified is landed, a settled item takes its outcome, and an item stopped
 /// because its source or destination went offline stays pending for Retry.
+/// `online` is [`Roots::online`] for this record: the journal's items are its
+/// unsettled ones, so it covers each of their sources and destinations.
 fn journal_changes(
     record: &ImportRecord,
     operation: &StorageOperation,
-    roots: &Roots,
     online: bool,
 ) -> Result<Vec<ImportItemRecord>, LibraryError> {
     let mut changes = Vec::new();
@@ -1683,7 +1749,7 @@ fn journal_changes(
                     operation.id, storage.seq, current.item.seq
                 ))
             })?;
-        let next = settle_from_journal(current, journal, operation.kind, roots, online);
+        let next = settle_from_journal(current, journal, operation.kind, online);
         if next.item != current.item
             || next.storage != current.storage
             || next.written != current.written
@@ -1698,7 +1764,6 @@ fn settle_from_journal(
     current: &ImportItemRecord,
     journal: &StorageItem,
     kind: StorageOperationKind,
-    roots: &Roots,
     online: bool,
 ) -> ImportItemRecord {
     let mut next = current.clone();
@@ -1714,14 +1779,8 @@ fn settle_from_journal(
     let Some(outcome) = journal.outcome else { return next };
     next.storage = None;
     next.item.reason.clone_from(&journal.reason);
-    let offline = !online
-        || next
-            .item
-            .destination_location_id
-            .and_then(|location_id| roots.destination_root(location_id).ok())
-            .is_some_and(|root| folder_availability(&root) != Availability::Available);
     let stopped_by_unmount = outcome == ItemOutcome::Blocked
-        && offline
+        && !online
         && journal.reason.as_ref().is_some_and(|reason| {
             matches!(
                 reason.code,
