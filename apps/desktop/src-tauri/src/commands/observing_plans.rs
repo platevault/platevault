@@ -1,7 +1,7 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Observing-plan IPC (spec 072, PLAN-FR-01/03..08).
+//! Observing-plan IPC (spec 072, PLAN-FR-01..11).
 //!
 //! Registered only by the isolated rebuilt shell ([`crate::library_shell`])
 //! beside the other library commands; the legacy `plan`, `plans` and
@@ -19,6 +19,8 @@
 use std::sync::Arc;
 
 use platevault_core::library::Library;
+use platevault_core::planning_project::{ProjectGaps, ProjectPlanning, ProjectPlanningQuery};
+use platevault_core::tonight::{Tonight, TonightQuery};
 use platevault_core::{
     CalendarExportOutcome, CalendarExportReview, DefaultSiteSaved, EnableReminders, ErrorResponse,
     ExportSelection, LibraryError, PlanningSites, ReminderInput, ReminderReview, ReminderStatus,
@@ -248,6 +250,55 @@ pub async fn planning_export_calendar(
         )))
     })?;
     library.write_calendar_export(prepared, path).await.map_err(fail(target))
+}
+
+// ---------------------------------------------------------------------------
+// Tonight and Project planning (PLAN-FR-02/09/10/11)
+// ---------------------------------------------------------------------------
+
+/// Home's Tonight at the default site: the best window tonight of each Target
+/// in My targets that has one, the Moon and the darkness window, each naming
+/// the site and time zone. Without a default site it lists no windows and
+/// names the reason. Read-only.
+///
+/// # Errors
+/// `InvalidInput` for invalid criteria or a night outside the supported
+/// calendar.
+#[tauri::command]
+pub async fn planning_tonight(
+    library: State<'_, Arc<Library>>,
+    query: TonightQuery,
+) -> Reply<Tonight> {
+    library.tonight(&query).await.map_err(fail(None))
+}
+
+/// A Project page's planning: the windows of its own subjects at the planning
+/// site, each subject's and mosaic panel's goal gaps, and the "Open in
+/// Planner" context. Read-only.
+///
+/// # Errors
+/// `InvalidInput` for an invalid query; `NotFound` for an unknown Project or
+/// site; `Conflict` when the Project changed between its reads.
+#[tauri::command]
+pub async fn planning_project_windows(
+    library: State<'_, Arc<Library>>,
+    query: ProjectPlanningQuery,
+) -> Reply<ProjectPlanning> {
+    library.project_planning(&query).await.map_err(fail(Some(query.project_id)))
+}
+
+/// The goal gaps a Target's Plan area shows for each open Project that has the
+/// Target as a subject. Read-only.
+///
+/// # Errors
+/// `NotFound` for an unknown Target; `Conflict` when a Project changed between
+/// its reads.
+#[tauri::command]
+pub async fn planning_target_gaps(
+    library: State<'_, Arc<Library>>,
+    target_id: Uuid,
+) -> Reply<Vec<ProjectGaps>> {
+    library.target_project_gaps(target_id).await.map_err(fail(Some(target_id)))
 }
 
 fn unavailable(message: String, identity: Option<Uuid>) -> ErrorResponse {
