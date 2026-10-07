@@ -69,7 +69,7 @@ const SCHEMA: &str = schema_modules![
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
 /// version is refused before any module's DDL runs.
-pub const SCHEMA_VERSION: i64 = 6;
+pub const SCHEMA_VERSION: i64 = 7;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -111,8 +111,8 @@ macro_rules! asset_sql {
 }
 
 mod naming;
-mod rigs;
 mod planning;
+mod rigs;
 pub use planning::{DeliveryClaim, DeliveryOutcome, SubscriptionWrite, PLANNING_SETTINGS_ID};
 mod calibration;
 
@@ -121,9 +121,9 @@ pub use calibration::{
 };
 mod trash;
 pub use trash::{TrashEpisode, TrashedAsset, TrashedFrame, TrashedQuery};
-mod projects;
 mod frame_thumbnails;
 mod measurements;
+mod projects;
 
 pub use frame_thumbnails::{StoredThumbnail, ThumbnailBasis};
 pub use measurements::{FrameRecordBasis, ImportReviewInput};
