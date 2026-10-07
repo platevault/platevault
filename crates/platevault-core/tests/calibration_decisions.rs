@@ -935,3 +935,44 @@ async fn project_evidence_names_missing_calibration_and_assigns_nothing() {
     assert_eq!(oiii.missing, [InputKind::Dark, InputKind::Flat]);
     assert_eq!(world.plan(1).await.plan_revision, before, "evidence assigns nothing");
 }
+
+/// LIB-FR-18: a member copy Trashed after the Save is no light of the run's
+/// calibration: no requirement, decision or handoff assignment binds it.
+#[tokio::test]
+async fn trashed_member_copy_is_no_calibration_light() {
+    let world = world(&standard_calibration(), &[]).await;
+    let kept = world.asset_at(&world.captures, HA_LIGHTS[0]).await.id;
+    let trashed = world.asset_at(&world.captures, HA_LIGHTS[1]).await.id;
+    let path = world.root(&world.captures).join(HA_LIGHTS[1]);
+    let frame = persistence_library::TrashedFrame {
+        asset_id: trashed,
+        sha256: support::digest(&path),
+        complete_view_ids: Vec::new(),
+    };
+    world.catalog().record_trashed(Uuid::new_v4(), &[frame]).await.unwrap();
+
+    let before = world.plan(1).await;
+    for kind in [InputKind::Dark, InputKind::Flat] {
+        let ha = row(&before, "Ha", kind);
+        assert_eq!(ha.light_asset_ids, [kept].into(), "{kind:?}: {ha:#?}");
+    }
+    let outcome = world.assign(1).await;
+    assert_eq!(outcome.assigned.len(), 4, "{outcome:#?}");
+    for requirement in &outcome.plan.requirements {
+        assert!(!requirement.light_asset_ids.contains(&trashed), "{requirement:#?}");
+        assert!(!effective(requirement).light_asset_ids.contains(&trashed), "{requirement:#?}");
+    }
+    let handoff = world.library.calibration_handoff(world.run, 1).await.unwrap();
+    assert_eq!(handoff.assignments.len(), 4);
+    for assignment in &handoff.assignments {
+        let requirement = outcome
+            .plan
+            .requirements
+            .iter()
+            .find(|r| r.light_group == assignment.light_group && r.kind == assignment.kind)
+            .unwrap();
+        let decision = effective(requirement);
+        assert_eq!(assignment.id, decision.id, "the handoff carries the decision");
+        assert!(!decision.light_asset_ids.contains(&trashed));
+    }
+}

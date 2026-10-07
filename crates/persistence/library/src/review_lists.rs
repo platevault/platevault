@@ -336,7 +336,7 @@ fn reviewed_copy<'a>(
 }
 
 /// The assets of `ids` outside the Trash, in id order.
-async fn live_assets(conn: &mut SqliteConnection, ids: &BTreeSet<Uuid>) -> Result<Vec<Asset>> {
+pub async fn live_assets(conn: &mut SqliteConnection, ids: &BTreeSet<Uuid>) -> Result<Vec<Asset>> {
     let query = asset_sql!(live "WHERE a.id IN (SELECT value FROM json_each(?1)) ORDER BY a.id");
     let rows = sqlx::query(query).bind(json_ids(ids)?).fetch_all(&mut *conn).await?;
     rows.iter().map(asset_from_row).collect()

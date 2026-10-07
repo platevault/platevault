@@ -33,6 +33,7 @@ use uuid::Uuid;
 
 use super::inventory::{self, Listed};
 use super::{light_basis, load_master};
+use crate::review_lists::live_assets;
 use crate::views::{committed_header, load_members, load_view};
 use crate::{
     blocking, check_expected_assets, conflict, current_digest, db_revision, from_json, from_text,
@@ -706,7 +707,8 @@ fn require_open_run(run: &View) -> Result<()> {
 
 /// The evidence the planner reads for committed revision `revision` of
 /// `run`, with the listed inputs it was built from. Each light carries the
-/// run's rig as its Confirmed Equipment (D-W37).
+/// run's rig as its Confirmed Equipment (D-W37) and only its member copies
+/// outside the Trash (LIB-FR-18).
 pub async fn view_basis<R: CalibrationRules + ?Sized>(
     conn: &mut SqliteConnection,
     run: &View,
@@ -722,6 +724,12 @@ pub async fn view_basis<R: CalibrationRules + ?Sized>(
                 .or_default()
                 .extend(member.copies.iter().map(|copy| copy.asset_id));
         }
+    }
+    let copies: BTreeSet<Uuid> = included.values().flatten().copied().collect();
+    let live: BTreeSet<Uuid> =
+        live_assets(conn, &copies).await?.into_iter().map(|asset| asset.id).collect();
+    for assets in included.values_mut() {
+        assets.retain(|asset| live.contains(asset));
     }
     let mut lights = Vec::with_capacity(included.len());
     for (session, assets) in &included {
