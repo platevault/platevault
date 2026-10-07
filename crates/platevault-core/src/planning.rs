@@ -23,16 +23,16 @@ use std::sync::LazyLock;
 
 use jiff::tz::{TimeZone, TimeZoneDatabase};
 use skymath::{
-    alt_az, altitude_crossings, lunar_separation, moon_crossings, moon_illumination,
-    moon_phase_angle, moon_position_topocentric, sun_position, transit, twilight, Angle,
-    CrossingOutcome, Equatorial, Location, Twilight, TwilightOutcome,
+    alt_az, altitude_crossings, circular_distance, lunar_separation, moon_crossings,
+    moon_illumination, moon_phase_angle, moon_position_topocentric, sun_position, transit,
+    twilight, Angle, CrossingOutcome, Equatorial, Location, Twilight, TwilightOutcome,
 };
 use time::{Date, Duration, OffsetDateTime, UtcOffset};
 
 use crate::{
-    Darkness, DarknessWindow, LibraryError, MoonCriterion, MoonPhase, NightMoon, NightPlan,
-    NightSky, NoWindowReason, ObservingSite, ObservingWindow, PlanCriteria, TargetRecord,
-    WindowBasis, WindowKey, WindowQuery, WindowSet, WindowUnavailableReason,
+    Darkness, DarknessWindow, ImgTimeZeroReason, LibraryError, MoonCriterion, MoonPhase, NightMoon,
+    NightPlan, NightSky, NoWindowReason, ObservingSite, ObservingWindow, PlanCriteria,
+    TargetRecord, WindowBasis, WindowKey, WindowQuery, WindowSet, WindowUnavailableReason,
 };
 
 /// How every window is computed; named in each window basis.
@@ -332,6 +332,178 @@ fn local_noon(zone: &TimeZone, date: Date) -> Result<OffsetDateTime, LibraryErro
 // One night
 // ---------------------------------------------------------------------------
 
+/// The Target-independent intervals of one night at one site under one set
+/// of criteria: the night's bounds, its dark interval and where the Moon is
+/// up. Every Target of a Targets list page shares one, so each listed window
+/// comes from the same computation as [`compute_windows`].
+pub struct NightContext {
+    zone: TimeZone,
+    location: Location,
+    criteria: PlanCriteria,
+    night: Date,
+    bounds: Span,
+    probes: [OffsetDateTime; 3],
+    dark: Vec<Span>,
+    moon_up: Vec<Span>,
+    moon_down: Vec<Span>,
+}
+
+impl NightContext {
+    /// The context of `night` at `site` under `criteria`.
+    ///
+    /// # Errors
+    /// `InvalidInput` for invalid criteria, an unbundled zone, an invalid site
+    /// position or a night outside the supported calendar.
+    pub fn new(
+        site: &ObservingSite,
+        night: Date,
+        criteria: &PlanCriteria,
+    ) -> Result<Self, LibraryError> {
+        criteria.validate()?;
+        Self::of(zone(&site.time_zone)?, location(site)?, *criteria, night)
+    }
+
+    fn of(
+        zone: TimeZone,
+        location: Location,
+        criteria: PlanCriteria,
+        night: Date,
+    ) -> Result<Self, LibraryError> {
+        let bounds = night_bounds(&zone, night)?;
+        let probes = probes(bounds);
+        let dark = dark_spans(criteria.darkness, &probes, bounds, &location);
+        let moon_up = moon_up_spans(&probes, bounds, &location);
+        let moon_down = complement(&moon_up, bounds);
+        Ok(Self { zone, location, criteria, night, bounds, probes, dark, moon_up, moon_down })
+    }
+
+    /// The night's midpoint, where the Moon's illumination and phase and
+    /// every Target's lunar separation are taken.
+    #[must_use]
+    pub fn middle(&self) -> OffsetDateTime {
+        self.bounds.start + (self.bounds.end - self.bounds.start) / 2
+    }
+
+    /// Days from full Moon at the night's midpoint: 0 at full, about 14.77 at
+    /// new, from the Moon's phase angle.
+    #[must_use]
+    pub fn moon_age_days(&self) -> f64 {
+        moon_phase_angle(self.middle()).degrees() / 180.0 * HALF_SYNODIC_DAYS
+    }
+}
+
+/// Half a mean synodic month, in days.
+const HALF_SYNODIC_DAYS: f64 = 29.530_589 / 2.0;
+
+/// Days ahead [`target_night`] searches for the next opposition.
+const OPPOSITION_SCAN_DAYS: u16 = 366;
+
+/// One Target's values for one night (PLAN-TGT-FR-04/05): its windows,
+/// exactly as [`compute_windows`] lists them for that night, and the Targets
+/// list columns computed from the same intervals.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TargetNight {
+    pub plan: NightPlan,
+    /// The total of `plan`'s windows.
+    pub img_time_minutes: u32,
+    /// Why `img_time_minutes` is zero; absent when it is not.
+    pub img_time_zero_reason: Option<ImgTimeZeroReason>,
+    /// Peak geometric altitude within the night's dark interval; absent on a
+    /// night that is never dark under the criteria.
+    pub peak_dark_altitude_deg: Option<f64>,
+    /// Topocentric separation from the Moon at the night's midpoint.
+    pub lunar_separation_deg: f64,
+    /// Window minutes while the Moon is above the horizon.
+    pub moon_up_window_minutes: u32,
+    /// The first night, from this one, the Sun is opposite the Target in right
+    /// ascension, to the day within the next year.
+    pub next_opposition: Date,
+}
+
+/// One Target's [`TargetNight`] over a shared night context.
+///
+/// # Errors
+/// `Ok(Err(reason))` for a Target without a usable position, which never
+/// becomes a zero position; `InvalidInput` for a night outside the supported
+/// calendar.
+pub fn target_night(
+    context: &NightContext,
+    target: &TargetRecord,
+    site: &ObservingSite,
+) -> Result<Result<TargetNight, WindowUnavailableReason>, LibraryError> {
+    let position = match position(target) {
+        Ok(position) => position,
+        Err(reason) => return Ok(Err(reason)),
+    };
+    let sky = Sky { position, location: context.location, criteria: context.criteria };
+    let spans = sky.spans(context);
+    let plan = plan_night(&sky, &context.zone, target, site, &spans)?;
+    let img_time_minutes = plan.windows.iter().map(|window| window.duration_minutes).sum();
+    let windows: Vec<Span> = plan
+        .windows
+        .iter()
+        .map(|window| Span { start: window.start_utc, end: window.end_utc })
+        .collect();
+    let moon_up_window_minutes = whole_minutes(&intersect(&windows, &context.moon_up));
+    let peak_dark_altitude_deg = spans
+        .dark
+        .iter()
+        .map(|span| sky.peak_altitude(span.start, span.end))
+        .max_by(f64::total_cmp);
+    let img_time_zero_reason =
+        (img_time_minutes == 0).then(|| zero_reason(&spans, context.criteria.min_duration_minutes));
+    Ok(Ok(TargetNight {
+        plan,
+        img_time_minutes,
+        img_time_zero_reason,
+        peak_dark_altitude_deg,
+        lunar_separation_deg: lunar_separation(position, context.middle(), &context.location)
+            .degrees(),
+        moon_up_window_minutes,
+        next_opposition: next_opposition(position, context)?,
+    }))
+}
+
+/// What keeps a night with no window empty: no darkness, the Target never
+/// above the altitude in darkness, else the Moon; each judged by whether its
+/// own intervals reach the minimum duration.
+fn zero_reason(spans: &NightSpans, min_minutes: u32) -> ImgTimeZeroReason {
+    let longest = |spans: &[Span]| {
+        spans.iter().map(|span| (span.end - span.start).whole_minutes()).max().unwrap_or(0)
+    };
+    let minimum = i64::from(min_minutes);
+    if longest(&spans.dark) < minimum {
+        ImgTimeZeroReason::Darkness
+    } else if longest(&intersect(&spans.dark, &spans.above)) < minimum {
+        ImgTimeZeroReason::Altitude
+    } else {
+        ImgTimeZeroReason::Moon
+    }
+}
+
+fn whole_minutes(spans: &[Span]) -> u32 {
+    let total: i64 = spans.iter().map(|span| (span.end - span.start).whole_minutes()).sum();
+    u32::try_from(total).unwrap_or(u32::MAX)
+}
+
+/// The day, from the context's night, whose midpoint Sun is closest to
+/// opposite `position` in right ascension.
+fn next_opposition(position: Equatorial, context: &NightContext) -> Result<Date, LibraryError> {
+    let opposite = Angle::from_degrees(position.ra().degrees() + 180.0).normalized_0_360();
+    let middle = context.middle();
+    let best = (0..=OPPOSITION_SCAN_DAYS)
+        .map(|day| {
+            let sun = sun_position(middle + Duration::days(i64::from(day))).ra();
+            (day, circular_distance(sun, opposite).degrees().abs())
+        })
+        .min_by(|(_, a), (_, b)| a.total_cmp(b))
+        .map_or(0, |(day, _)| day);
+    context
+        .night
+        .checked_add(Duration::days(i64::from(best)))
+        .ok_or_else(|| out_of_range(context.night))
+}
+
 struct Sky {
     position: Equatorial,
     location: Location,
@@ -340,12 +512,15 @@ struct Sky {
 
 impl Sky {
     fn night(&self, zone: &TimeZone, night: Date) -> Result<NightSpans, LibraryError> {
-        let bounds = night_bounds(zone, night)?;
-        let Span { start, end } = bounds;
-        let probes = probes(bounds);
-        let dark = dark_spans(self.criteria.darkness, &probes, bounds, &self.location);
+        Ok(self.spans(&NightContext::of(zone.clone(), self.location, self.criteria, night)?))
+    }
+
+    /// The night's intervals for this Target over the Target-independent ones
+    /// of `context`, which shares this Sky's site and criteria.
+    fn spans(&self, context: &NightContext) -> NightSpans {
+        let bounds = context.bounds;
         let threshold = Angle::from_degrees(self.criteria.min_altitude_deg);
-        let above = merge(probes.iter().map(|near| {
+        let above = merge(context.probes.iter().map(|near| {
             crossing_span(
                 altitude_crossings(self.position, threshold, *near, &self.location),
                 bounds,
@@ -353,19 +528,22 @@ impl Sky {
         }));
         let moon_allowed = match self.criteria.moon {
             MoonCriterion::None => vec![bounds],
-            MoonCriterion::BelowHorizon => self.moon_down(&probes, bounds),
+            MoonCriterion::BelowHorizon => context.moon_down.clone(),
             MoonCriterion::MinSeparation { min_separation_deg } => {
                 let apart = self.separated(bounds, min_separation_deg);
-                union(&self.moon_down(&probes, bounds), &apart)
+                union(&context.moon_down, &apart)
             }
         };
-        let windows = intersect(&intersect(&dark, &above), &moon_allowed);
-        Ok(NightSpans { night, start, end, dark, above, moon_allowed, windows })
-    }
-
-    fn moon_down(&self, probes: &[OffsetDateTime], bounds: Span) -> Vec<Span> {
-        let up = moon_up_spans(probes, bounds, &self.location);
-        complement(&up, bounds)
+        let windows = intersect(&intersect(&context.dark, &above), &moon_allowed);
+        NightSpans {
+            night: context.night,
+            start: bounds.start,
+            end: bounds.end,
+            dark: context.dark.clone(),
+            above,
+            moon_allowed,
+            windows,
+        }
     }
 
     /// Where the topocentric separation is at least `limit` degrees.

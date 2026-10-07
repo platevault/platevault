@@ -207,6 +207,14 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::observing_plans::planning_review_calendar_export,
         crate::commands::observing_plans::planning_export_calendar,
         // targets
+        crate::commands::targets_list::planning_target_rows,
+        crate::commands::targets_list::targets_search,
+        crate::commands::targets_list::targets_add,
+        crate::commands::targets_list::targets_set_favourite,
+        crate::commands::targets_list::targets_presets_list,
+        crate::commands::targets_list::targets_preset_save,
+        crate::commands::targets_list::targets_preset_rename,
+        crate::commands::targets_list::targets_preset_delete,
         // home
     ]);
     // The planning handlers call these through their Rust APIs, which need no

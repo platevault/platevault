@@ -36,6 +36,8 @@ pub mod import;
 pub use import::*;
 mod session_filters;
 pub use session_filters::*;
+mod targets_list;
+pub use targets_list::*;
 
 pub type Revision = u64;
 

@@ -68,6 +68,7 @@ const SCHEMA: &str = schema_modules![
     "storage.sql",
     "views.sql",
     "import.sql",
+    "targets_list.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -133,6 +134,7 @@ pub use measurements::{FrameRecordBasis, ImportReviewInput};
 mod import;
 mod session_filters;
 mod storage;
+mod targets_list;
 mod views;
 pub use views::{CandidateBasis, CandidateSession, ChoiceBasis, MembershipBasis};
 
