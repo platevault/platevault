@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [targets, projects, planning, settings, view-review]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 072-observing-plans, D07, D10, D12, D18, D-W1, D-W3, D-W9, D-W16, D-W29, D-W30, D-W33, D-W34, D-W36, D-W37, D-W39, D-W47, D-W49, D-W50, D-W62, D-W64, D-W65, D-W66, D-W71, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-b-target-and-optional-project]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 072-observing-plans, D07, D10, D12, D18, D-W1, D-W3, D-W9, D-W16, D-W29, D-W30, D-W33, D-W34, D-W36, D-W37, D-W39, D-W47, D-W49, D-W50, D-W62, D-W65, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/072-observing-plans/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-b-target-and-optional-project]
 ---
 
 ## Goal
@@ -21,7 +21,7 @@ and start the first processing run from the Project page. Done means:
 - The Project's candidates are exactly the sessions whose confirmed Target is NGC 7000 and whose rig is a Project rig. Nothing is assigned to the Project itself.
 - Goal progress reads "in project" and "captured", "captured" never reads below "in project", and every goal is unmet while no run has a saved membership.
 - Switching planning site changes only visibility.
-- The run `NGC7000-HOO-Siril` opens at Select inside the Project. A rig or subject that a run that is not Abandoned uses cannot be removed.
+- The run `NGC7000-HOO-Siril` opens at Select inside the Project. A rig or subject that any run uses cannot be removed.
 - Project edits change no file, quality state or run.
 
 ## Preconditions
@@ -91,9 +91,9 @@ and start the first processing run from the Project page. Done means:
 ### S9 — Try to remove the run's rig and subject {#S9}
 
 - **Do:** Return to the Project page and try to remove rig `RedCat`, then subject NGC 7000. Then remove rig `Esprit` and add it back.
-- **Expect:** Removing `RedCat` is refused, and the refusal names the run `NGC7000-HOO-Siril`, which is at Select and not Abandoned. Removing subject NGC 7000 is refused the same way and names the same run. Removing `Esprit`, which no run uses, succeeds: the other-camera session stops being a candidate, is a member of no run, and Ha captured reads 9h15 again. Adding `Esprit` back restores the seventh candidate and Ha captured 12h35.
+- **Expect:** Removing `RedCat` is refused, and the refusal names `NGC7000-HOO-Siril`, the one run that uses it. Removing subject NGC 7000 is refused the same way and names the same run. Removing `Esprit`, which no run uses, succeeds: the other-camera session stops being a candidate, is a member of no run, and Ha captured reads 9h15 again. Adding `Esprit` back restores the seventh candidate and Ha captured 12h35.
 - **Expect (negative):** The refused removals change neither the Project's subjects and rigs nor the run's subject, rig or picker.
-- **Trace:** Projects surface · PRJ-FR-02, PRJ-FR-04 · PRJ-AC-06, PRJ-AC-25 · 065 edge cases "Removing a subject or a rig is refused while any run that is not Abandoned uses it" and "Removing a subject or rig that no run, or only an Abandoned run, uses takes the matching sessions out of the candidates" · D-W37, D-W65, D-W66, D-W71
+- **Trace:** Projects surface · PRJ-FR-02, PRJ-FR-04 · PRJ-AC-06, PRJ-AC-25 · 065 edge case "Removing a subject or a rig is refused while any run uses it" · D-W37, D-W65, D-W66
 
 ## Success criteria
 
@@ -110,10 +110,9 @@ and start the first processing run from the Project page. Done means:
 - G2: Out of scope for this journey: mosaic subjects (panels by centre and rotation, run groups) are covered by J33, not here.
 - G3: Unresolved implementation qualification: J15/S6 and J15/S7 save the P2 sites, but J15/G8 records that the flow names no Settings pane or label for observing sites. Blocks readiness.
 - G4: Out of scope for this journey: external resolver enrichment of a saved target, its provider provenance and a resolver failure (LIB-AC-12, D18) are not exercised. Blocks readiness until covered by a step or a journey.
-- G5: Out of scope for this journey: removing a rig or subject used only by an Abandoned run succeeds (PRJ-AC-25). Reopen of that run is then refused until both are back on the Project (RES-FR-09). No run here is Abandoned, so neither branch is exercised. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, S2, S3, S4, S5, S6, S7, S8, +S9 · behavior-change
-  A Project is now required for every processing run and holds subjects, rigs and goals from templates. Candidates are derived from confirmed Target and rig, so S3 reads them instead of linking sessions. Goals read "in project" and "captured" (candidates plus run members), and the exposure preference is dropped. Home opens first, Open in Planner uses the Project's rigs, S8 starts the run `NGC7000-HOO-Siril`, and S9 checks that a rig or subject in use by a run that is not Abandoned cannot be removed.
-  Evidence: D-W1, D-W3, D-W9, D-W16, D-W29, D-W30, D-W33, D-W34, D-W36, D-W37, D-W39, D-W50; 065 PRJ-FR-01 to PRJ-FR-12, PRJ-FR-20; 066 VSEL-FR-01; 072 PLAN-FR-10 at e4476231; D-W64, D-W65, D-W66, D-W71; 065 PRJ-FR-02, PRJ-FR-04, PRJ-FR-20, PRJ-FR-21, PRJ-AC-25; root FR-023 at d45a22ad; rig names `RedCat`, `Esprit` and site `Remote site` from J15 · by: agent (intent-gated, user instruction)
+  A Project is now required for every processing run and holds subjects, rigs and goals from templates. Candidates are derived from confirmed Target and rig, so S3 reads them instead of linking sessions. Goals read "in project" and "captured" (candidates plus run members), and the exposure preference is dropped. Home opens first, Open in Planner uses the Project's rigs, S8 starts the run `NGC7000-HOO-Siril`, and S9 checks that a rig or subject that any run uses cannot be removed.
+  Evidence: D-W1, D-W3, D-W9, D-W16, D-W29, D-W30, D-W33, D-W34, D-W36, D-W37, D-W39, D-W50. 065 PRJ-FR-01 to PRJ-FR-12, PRJ-FR-20. 066 VSEL-FR-01. 072 PLAN-FR-10 at e4476231. D-W65 and D-W66 as narrowed by D-W72. 065 PRJ-FR-02, PRJ-FR-04, PRJ-FR-20, PRJ-FR-21, PRJ-AC-25. Root FR-023. Rig names `RedCat`, `Esprit` and site `Remote site` from J15 · by: agent (intent-gated, user instruction)

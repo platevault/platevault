@@ -1,13 +1,13 @@
 ---
 id: J27
-title: Complete a processing run, clean up its prepared entries, and abandon or reopen a run
+title: Complete a processing run, clean up its prepared entries, reopen a run and delete one
 version: 2
 status: draft
 last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [results, cleanup, storage, view-review, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, 065-project-goals, D09, D16, D19, D-W26, D-W43, D-W51, D-W64, D-W65, D-W66, D-W70, D-W71, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, specs/065-project-goals/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-i-completion-and-selectable-cleanup]
+trace: [063-clean-rebuild-contract, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, 065-project-goals, D09, D16, D19, D-W26, D-W43, D-W51, D-W66, D-W70, D-W72, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, specs/065-project-goals/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-i-completion-and-selectable-cleanup]
 ---
 
 ## Goal
@@ -16,12 +16,12 @@ The user records that a processing run is finished, whether it has an
 accepted Result. Clean up then sends the run's prepared entries (links,
 clones and copies) to the OS Trash. The run's Results folder, the
 originals, accepted products and masters stay out of Clean up entirely. The
-user also abandons a run and reopens it. Done means:
+user also reopens a run and deletes one. Done means:
 - Both runs read Complete, and completing them removed nothing.
 - Clean up listed only prepared entries and removed only the reviewed selection, to the OS Trash, without following link targets.
 - An entry that may hold the last copy of a capture was refused.
 - A location without safe Trash refused removal, with no permanent-delete fallback.
-- The abandoned run refused membership and calibration changes, accepted a notes edit and was offered Clean up. Reopen returned it to Calibrate, the stage it was in, with its decisions unchanged.
+- Delete run was refused while another run used the run's accepted Results. Deleting a run on a location without Trash left its prepared folders in place and named them, sent its ticked Results folder to the OS Trash, and changed no goal number.
 
 ## Preconditions
 
@@ -124,25 +124,26 @@ user also abandons a run and reopens it. Done means:
 
 - **Do:** Open `24 Sep flat check` and choose **Reopen**.
 - **Expect:** The run reads open again, back at Calibrate, the stage it was in when it was marked Complete. Its membership and calibration decisions are unchanged, and **Exclude from run** is available again.
-- **Expect (negative):** Reopening removes no file and does not create a membership revision. Clean up is not offered, because the run is neither Complete nor Abandoned.
-- **Trace:** RES-FR-07 · RES-AC-08 · VSEL-FR-17 · PREP-FR-14, STO-FR-01 · D09, D-W64, D-W71
+- **Expect (negative):** Reopening removes no file and does not create a membership revision. Clean up is not offered, because the run is not Complete.
+- **Trace:** RES-FR-07 · RES-AC-08 · VSEL-FR-17 · PREP-FR-14, STO-FR-01 · D09
 
-### S13 — Abandon a run {#S13}
+### S13 — Try to delete a run whose Results another run uses {#S13}
 
-- **Do:** In `24 Sep flat check`, choose **Abandon run**. Then try **Exclude from run** and a change in Review matches, and edit the run's notes. Open Project `NGC 7000 HOO` and read the OIII goal.
+- **Do:** In `NGC7000-HOO-Siril`, choose **Delete run**.
+- **Expect:** Delete run is refused, and the refusal names `NGC7000 HOO combine`, which uses the run's accepted Ha and OIII stacks as inputs (J26/S4). The run still reads Complete.
+- **Expect (negative):** No file moves, and the run's membership, prepared folder and Results folder are unchanged.
+- **Trace:** RES-FR-05, RES-FR-10 · RES-AC-20 · root FR-009 · D-W72
+
+### S14 — Delete a run on a location without Trash {#S14}
+
+- **Do:** In `28 Sep Ha copy check`, choose **Delete run**, tick its Results folder, read the review and confirm. Then open Project `NGC 7000 HOO` and read the Ha goal.
 - **Expect:**
-  - The run reads Abandoned, and the stage rail shows it as Abandoned. It is kept read-only: the exclusion and the Review matches change are refused, each naming Abandoned. The notes edit goes through, and the run still reads Abandoned.
-  - **Clean up** is offered as a separate action. It shows that the run's preparation created no entries and offers nothing to remove, because the run has no preparation revision.
-  - The OIII goal's "in project" and "captured" numbers are unchanged, because the 24 Sep frames still count once through `NGC7000-HOO-Siril`, which is not Abandoned.
-- **Expect (negative):** Abandoning removes no file and changes no other run's membership or quality state.
-- **Trace:** RES-FR-07, RES-FR-09 · PRJ-FR-04, PRJ-FR-20 · STO-FR-01, PREP-FR-14 · D-W64, D-W66, D-W71
-
-### S14 — Reopen the abandoned run {#S14}
-
-- **Do:** Choose **Reopen** on `24 Sep flat check`.
-- **Expect:** The run is open again, back at Calibrate, the stage it was in when it was abandoned. Its membership and the J23/S7a accepted flat assignment are unchanged, its notes keep the S13 edit, and edits are accepted again. The run offers no Clean up.
-- **Expect (negative):** Reopening creates no membership revision and moves no file.
-- **Trace:** RES-FR-09 · VSEL-FR-17 · STO-FR-01 · D-W64, D-W71
+  - The review lists the run record and both prepared folders, `Scratch/Processing/NGC 7000 HOO/28 Sep Ha copy check/` (56 copies) and `28 Sep Ha copy check (rev 2)/` (55 copies). Each is named as staying in place, because `Scratch` has no OS Trash.
+  - The review lists the ticked Results folder `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/`, with the two J26/P8 stacks, as going to the OS Trash.
+  - After confirming, that Results folder and its two stacks are newly in the OS Trash. The run leaves the Project's stage rail, and the summary names both `Scratch` folders with their paths as left in place.
+  - The Ha goal's "in project" and "captured" numbers are unchanged, because the 28 Sep frames are still candidates and still count once through `NGC7000-HOO-Siril`.
+- **Expect (negative):** No copy on `Scratch` is removed, and no permanent-delete fallback is offered. No 28 Sep capture, library quality decision or other run changes.
+- **Trace:** RES-FR-10 · RES-AC-19 · STO-FR-05, STO-FR-17 · STO-AC-24 · PRJ-FR-04, PRJ-FR-20 · PREP-FR-14 · root FR-009, FR-019 · D-W66, D-W72
 
 ## Success criteria
 
@@ -154,19 +155,17 @@ user also abandons a run and reopens it. Done means:
 - SC6: A Complete run refuses membership edits until Reopen and accepts a notes edit and a Result acceptance. It still reads Complete after reviewed cleanup (S3, S8).
 - SC7: Trashing 35 symlinks leaves 100% of the 26 Sep captures and the `extra/` copy matching P6 (S11).
 - SC8: An entry whose bytes changed after review is removed 0 times (S8).
-- SC9: The abandoned run accepts 0 membership or calibration edits until reopened and accepts 1 notes edit, and the OIII "in project" and "captured" numbers change by 0 (S13). Reopening returns it to Calibrate with 0 changes to its decisions (S14).
-- SC10: Clean up is offered on the Abandoned run (S13) and on 0 runs that are neither Complete nor Abandoned (S12, S14).
+- SC9: Delete run on `NGC7000-HOO-Siril` is refused, names exactly 1 run, `NGC7000 HOO combine`, and moves 0 files (S13).
+- SC10: Deleting `28 Sep Ha copy check` sends exactly 1 folder holding 2 files to the OS Trash, leaves all 111 `Scratch` copies in place, and changes the Ha "in project" and "captured" numbers by 0 (S14).
 
 ## Known gaps
 
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs, the decisions D09, D16 and D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
 - G2: Out of scope for this journey: Direct-source Clean up needs a prepared Direct-source run, and no journey prepares one yet. That Clean up shows that preparation created no entries and offers nothing to remove (PREP-AC-20, STO-AC-02). Blocks readiness until covered.
-- G3: Out of scope for this journey: removing replaced prepared entries before the run is Complete or Abandoned (STO-FR-10, D09) is not exercised. Blocks readiness until covered by a step or a journey.
-- G5: Out of scope for this journey: removing a rig or subject used only by an Abandoned run (PRJ-FR-02, PRJ-AC-25) is not exercised. Neither is the refused Reopen of that run until both are back on the Project (RES-FR-09). J20/S9 covers the refusal while a run that is not Abandoned uses them, and runs that are not Abandoned also use the rig and subject of `24 Sep flat check`. Blocks readiness until covered by a step or a journey.
-- G6: Out of scope for this journey: accepting a Result on an Abandoned run without reopening it (RES-FR-07, RES-FR-09) is not exercised, because `24 Sep flat check` has no Result candidate. Blocks readiness until covered by a step or a journey.
+- G3: Out of scope for this journey: removing replaced prepared entries before the run is Complete (STO-FR-10, D09) is not exercised. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, S2, S3, S4, S5, S7, S8, S9, S10, S11, +S12, +S13, +S14 · behavior-change
-  Run Clean up lists only prepared links, clones and copies, and starts them selected. The Results folder, the originals and rejected frames are never listed, so the protected-product step and the duplicate step are retired (old ids 6 and 11a). Views are runs in the Project. A run can be reopened, or abandoned and reopened. An Abandoned run takes no membership or calibration change, keeps notes, Result acceptance and Clean up available, and Reopen returns it to the stage it was in (G4 retired, answered by D-W71).
-  Evidence: specs/071-storage-custody STO-FR-01, STO-FR-03, STO-AC-01, STO-AC-20; specs/069-application-handoff PREP-FR-14, PREP-AC-19; D-W26, D-W43, D-W64 at e4476231; D-W64 to D-W66, D-W70, D-W71; 070 RES-FR-01, RES-FR-07, RES-FR-09; 066 VSEL-FR-17; 065 PRJ-FR-02, PRJ-FR-04, PRJ-FR-20, PRJ-AC-25; 071 STO-FR-01, STO-FR-10, STO-FR-16; 069 PREP-FR-14 at d45a22ad · by: JourneysC (intent-gated)
+  Run Clean up lists only prepared links, clones and copies, and starts them selected. The Results folder, the originals and rejected frames are never listed, so the protected-product step and the duplicate step are retired (old ids 6 and 11a). Views are runs in the Project. A Complete run can be reopened, and a run that is no longer wanted is deleted: Delete run is refused while another run uses its Results, sends its prepared folders and a ticked Results folder to the OS Trash, and leaves in place what cannot go there (G4 retired, answered by D-W72).
+  Evidence: specs/071-storage-custody STO-FR-01, STO-FR-03, STO-AC-01, STO-AC-20. specs/069-application-handoff PREP-FR-14, PREP-AC-19. D-W26, D-W43 at e4476231. D-W66, D-W70, D-W72. 070 RES-FR-01, RES-FR-07, RES-FR-10, RES-AC-19, RES-AC-20. 066 VSEL-FR-17 and 065 PRJ-FR-04, PRJ-FR-20. 071 STO-FR-01, STO-FR-10, STO-FR-16, STO-FR-17, STO-AC-24 and 069 PREP-FR-14 · by: JourneysC (intent-gated)

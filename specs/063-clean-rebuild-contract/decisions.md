@@ -7,13 +7,13 @@ The [accepted Rust computation boundary](../../docs/adr/0003-use-rust-scientific
 
 ## Workflow redesign 2026-10-06
 
-On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W63, copied verbatim into the [workflow decisions log](workflow-decisions.md); round 6 added D-W44 through D-W63. Round 7 added D-W64 through D-W70, applied by default after the user said "continue please"; any of them can be reverted before the contract PR lands. D-W71 is a lead consistency default that follows from D-W64 and D-W65 and is likewise revertible. Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
+On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W63, copied verbatim into the [workflow decisions log](workflow-decisions.md); round 6 added D-W44 through D-W63. Round 7 proposed D-W64 through D-W71. On 2026-10-07 the user accepted D-W65, D-W66, D-W67 and D-W69 and answered the rest with D-W72 through D-W74: D-W72 replaces the run state of D-W64 and D-W71 with Delete run, D-W73 replaces D-W68, D-W74 extends D-W70, and D-W72 narrows D-W65 and D-W66. Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
 
 Stage model:
 
 1. A Project is the required container (D-W1). It holds subjects, rigs (optical trains) and goals (D-W9, D-W29, D-W37).
-2. Each processing run (View) belongs to exactly one Project and has one subject and one rig (D-W3, D-W8, D-W37). A run moves through Select, Review, Calibrate, Prepare, Results, Done and Clean up (D-W3, D-W26), or is marked Abandoned. An Abandoned run passes every gate a Complete run passes and stays read-only until Reopen returns it to its earlier stage (D-W64, D-W71). A mosaic subject creates a run group with one run per panel (D-W38).
-3. The user marks the Project Done, then uses its Done / Archive sheet for Archive and for moving rejected frames and processing intermediates to the OS Trash (D-W26, D-W43, D-W70). A Done Project can be Reopened, even after Archive (D-W46, D-W69).
+2. Each processing run (View) belongs to exactly one Project and has one subject and one rig (D-W3, D-W8, D-W37). A run moves through Select, Review, Calibrate, Prepare, Results, Done and Clean up (D-W3, D-W26). A run that is no longer wanted is deleted; Delete run moves its prepared folders, and its Results folder only when ticked, to the OS Trash and never touches library frames or quality decisions (D-W72). A mosaic subject creates a run group with one run per panel (D-W38).
+3. The user marks the Project Done, then uses its Done / Archive sheet for Archive and for moving rejected frames, processing intermediates and duplicate copies to the OS Trash (D-W26, D-W43, D-W70, D-W74). A Done Project can be Reopened, even after Archive (D-W46, D-W69).
 
 Candidates are derived from each session's confirmed Target and rig; members come only from run membership (D-W33, D-W34, D-W37). Goal progress shows "in project" and "captured", and "in project" never exceeds "captured" (D-W36, D-W66). Delivery order: contract amendment, then backend deltas, then the final UI (D-W28).
 
@@ -111,8 +111,8 @@ Owners: VSEL, PREP, RES, STO.
 - Manual inclusions stay pinned across every refresh. Refresh lists them with reason manual inclusion and never proposes removing them for falling outside the saved criteria; only an explicit user removal ends one.
 - Retry resumes recorded items, never filename-based inference.
 - Replaced prepared entries use reviewed STO cleanup even before Complete.
-- Mark Complete is blocked while an app-owned preparation or storage mutation affecting this run is Running. A Result is not required; Complete never implies an external job stopped or succeeded. Unrelated run operations do not block it. Amended by D-W71: Mark Abandoned is blocked the same way.
-- Creating a new membership or preparation revision of a Complete run requires explicit Reopen. Reviewed cleanup, identity-preserving archive reference repair, verified remap, annotations and Result acceptance remain available without reopening or changing membership. Amended by D-W64 and D-W71: an Abandoned run is likewise read-only and gets the same actions until Reopen returns it to the stage it was in.
+- Mark Complete is blocked while an app-owned preparation or storage mutation affecting this run is Running. A Result is not required; Complete never implies an external job stopped or succeeded. Unrelated run operations do not block it. Amended by D-W72: Delete run is blocked the same way, and also while one of the run's accepted Results is an input to another run.
+- Creating a new membership or preparation revision of a Complete run requires explicit Reopen. Reviewed cleanup, identity-preserving archive reference repair, verified remap, annotations and Result acceptance remain available without reopening or changing membership.
 
 ### D10
 
@@ -120,7 +120,7 @@ Owners: LIB, PRJ, VSEL.
 
 - Library quality and Project rejection are separate records. Library quality (P/X/U) is global; "Reject for this Project only" is a secondary, Project-scoped action (D-W42).
 - Project rejection never changes library usable totals; library quality never changes fixed run membership.
-- Explicitly linked sessions show captured, library-usable and Project-accepted totals separately. Superseded by D-W34, D-W36, D-W44, D-W64 and D-W66: a Project has no linked sessions. Each goal shows two labelled numbers. "in project" counts the frames in the saved memberships of the Project's runs that are not Abandoned, minus each run's exclusions and the frames rejected for the Project. "captured" counts all candidates plus run members, so "in project" never exceeds it.
+- Explicitly linked sessions show captured, library-usable and Project-accepted totals separately. Superseded by D-W34, D-W36, D-W44, D-W66 and D-W72: a Project has no linked sessions. Each goal shows two labelled numbers. "in project" counts the frames in the saved memberships of the Project's runs, minus each run's exclusions and the frames rejected for the Project. "captured" counts all candidates plus the members of the Project's existing runs, so "in project" never exceeds it.
 - Project-accepted totals count only library-Usable frames not rejected for that Project, and are the fixed basis for marking integration/frame-count goals met. Superseded by D-W36 and D-W42: "in project" is the only basis for goal met and for Home's Next action. A quality-bar goal can restrict counting to Usable frames (D-W29).
 - Exposure/equipment/calibration checks show evidence or unknown. Superseded by D-W29: the exposure-preference and equipment goals are dropped. Missing calibration and exposure mismatch are automatic warnings, not goals, and the mixed-equipment warning is gone because each run uses one rig (D-W37).
 - Reaching a goal does not close the Project. Only the user marks a Project Done (D-W26).

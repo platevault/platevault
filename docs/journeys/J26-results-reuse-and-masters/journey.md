@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [results, view-review, preparation, calibration, projects, targets]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 070-results-reuse, 068-calibration-inputs, 069-application-handoff, 071-storage-custody, D04, D05, D09, D13, D19, D-W4, D-W5, D-W8, D-W51, D-W55, D-W56, D-W64, D-W67, D-W70, D-W71, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/070-results-reuse/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-h-results-and-generated-masters]
+trace: [063-clean-rebuild-contract, 070-results-reuse, 068-calibration-inputs, 069-application-handoff, 071-storage-custody, D04, D05, D09, D13, D19, D-W4, D-W5, D-W8, D-W51, D-W55, D-W56, D-W67, D-W70, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/070-results-reuse/spec.md, specs/068-calibration-inputs/spec.md, specs/069-application-handoff/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-h-results-and-generated-masters]
 ---
 
 ## Goal
@@ -21,7 +21,7 @@ offered once in the Results step and is adopted into the calibration
 library from Calibration. Done means:
 - Three accepted products appear on the run, the Project and the Target with their actual lineage.
 - Every discovered candidate names the prepared revision it came from, also when two revisions share one Results folder.
-- The new run lists two product inputs and no raw integration. An accepted product of an Abandoned run is still offered.
+- The new run lists two product inputs and no raw integration. An accepted product of a Complete run in another Project and on another rig is offered.
 - The master is reusable only after explicit adoption and a verified durable copy.
 - An accepted product or adopted master whose bytes change is not offered for reuse.
 - Nothing is accepted, adopted or upgraded in lineage automatically.
@@ -34,7 +34,7 @@ library from Calibration. Done means:
 - P4: The J19/P5 manifest is available.
 - P5: A helper outside PlateVault saves a file's bytes and nanosecond mtime, then overwrites the file in place with a same-size variant whose pixel bytes differ and restores the saved mtime. The helper later restores the saved bytes and mtime.
 - P6: A fault control pauses adoption after the destination copy re-reads and verifies and before the master is registered (G4).
-- P7: An open Project `NGC 7000 SHO` (subject NGC 7000, rigs RedCat and Esprit) holds a run on rig Esprit with one accepted OIII linear product. That run was then marked Abandoned.
+- P7: An open Project `NGC 7000 SHO` (subject NGC 7000, rigs RedCat and Esprit) holds a Complete run on rig Esprit with one accepted OIII linear product.
 - P8: After J24, Siril processing of each prepared revision of `28 Sep Ha copy check` wrote one Ha stack, and nothing else, into `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/`: one stack from `28 Sep Ha copy check/` and one from `28 Sep Ha copy check (rev 2)/`. Each stack's FITS HISTORY names the prepared folder it was stacked from (G6).
 
 ## Steps
@@ -90,9 +90,9 @@ library from Calibration. Done means:
 ### S4a — See products from another Project and rig {#S4a}
 
 - **Do:** In the same picker, read the group for Project `NGC 7000 SHO` without picking from it.
-- **Expect:** The P7 OIII product is offered with its originating run, Project `NGC 7000 SHO`, and the label rig Esprit. Its originating run reads Abandoned, and the product is offered like any other accepted product.
+- **Expect:** The P7 OIII product is offered with its originating run, Project `NGC 7000 SHO`, and the label rig Esprit. Its originating run reads Complete, and the product is offered like any other accepted product.
 - **Expect (negative):** No raw Esprit session is offered in this run's inputs. `NGC7000 HOO combine` still lists exactly two product inputs.
-- **Trace:** flow H3a · RES-FR-05, RES-FR-09 · RES-AC-13, RES-AC-14, RES-AC-17 · D-W8, D-W56, D-W64, D-W71 · G3
+- **Trace:** flow H3a · RES-FR-05 · RES-AC-13, RES-AC-14 · D-W8, D-W56 · G3
 
 ### S5 — Choose a profile for product inputs {#S5}
 
@@ -187,7 +187,7 @@ library from Calibration. Done means:
 
 - SC1: At S1 the growing file reads Pending, 0 candidates read accepted, and 0 files from inside the run folder are listed. At S1a both P8 stacks name their revision, 1 and 2, from 1 Results folder.
 - SC2: **Attach Result** is visible on the Results step, and the attached file reads User-linked (S2). 0 lineage values change on acceptance (S3, S3a).
-- SC3: `NGC7000 HOO combine` has exactly 2 product inputs and 0 raw session integration. The Project gains 0 members from them (S4, S4a). The Abandoned run's P7 product is offered (S4a).
+- SC3: `NGC7000 HOO combine` has exactly 2 product inputs and 0 raw session integration. The Project gains 0 members from them (S4, S4a). The P7 product of the other Project's Esprit run is offered (S4a).
 - SC4: Product-input support is either listed or refused by name, never converted (S5).
 - SC5: Same-stat drift is flagged for review, and the drifted product is offered for reuse 0 times (S7). After S7a it is offered again with 0 new acceptances.
 - SC6: The master is offered exactly once in the Results step and returns 0 times after Dismiss. It is offered to 0 runs before adoption (S8). It is registered only after a verified copy, and its source remains (S9).
@@ -208,5 +208,5 @@ library from Calibration. Done means:
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, +S1a, S2, S4, +S4a, S6, S7, S8, S8a, S9, S9a, S9b · behavior-change
-  Results are discovered in the sibling `<Run> Results/` folder, one folder for every revision, and each candidate records its revision. Attach Result is a visible action on the Results step. Reuse is through a new run's Results input filter, across Projects and rigs, and includes products of an Abandoned run. Intermediates are never trashed from the Results step. The new master is offered once in the Results step, with Dismiss.
-  Evidence: specs/070-results-reuse RES-FR-01, RES-FR-02, RES-FR-05, RES-AC-01, RES-AC-13, RES-AC-14, RES-AC-15; specs/068-calibration-inputs CAL-FR-06, CAL-AC-12; D-W4, D-W55, D-W56, D-W67 at e4476231; D-W64, D-W67, D-W70, D-W71; 070 RES-FR-01, RES-FR-05, RES-FR-09, RES-AC-16, RES-AC-17; 069 PREP-FR-07; 071 STO-FR-16 at d45a22ad · by: JourneysC (intent-gated)
+  Results are discovered in the sibling `<Run> Results/` folder, one folder for every revision, and each candidate records its revision. Attach Result is a visible action on the Results step. Reuse is through a new run's Results input filter, across Projects and rigs. Intermediates are never trashed from the Results step. The new master is offered once in the Results step, with Dismiss.
+  Evidence: specs/070-results-reuse RES-FR-01, RES-FR-02, RES-FR-05, RES-AC-01, RES-AC-13, RES-AC-14, RES-AC-15. specs/068-calibration-inputs CAL-FR-06, CAL-AC-12. D-W4, D-W55, D-W56, D-W67 at e4476231. D-W67, D-W70. 070 RES-FR-01, RES-FR-05, RES-AC-16, 069 PREP-FR-07 and 071 STO-FR-16 · by: JourneysC (intent-gated)

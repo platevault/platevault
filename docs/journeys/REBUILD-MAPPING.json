@@ -29,7 +29,7 @@
     },
     {
       "old": "J06",
-      "successor": "J27 for run Clean up of prepared entries; J34 for rejected raw frames and processing intermediates, offered only on the Done / Archive sheet (STO-FR-14, STO-FR-16)",
+      "successor": "J27 for run Clean up of prepared entries; J34 for rejected raw frames, processing intermediates and a Done Project's duplicate copies, offered only on the Done / Archive sheet (STO-FR-14, STO-FR-16)",
       "recommendation": "Deprecate with pointers to J27 and J34 once intent is recorded. Whole-library raw-sub reclaim outside a Done Project has no successor."
     },
     {
@@ -106,7 +106,7 @@
       "negativesAtTrustPoints": "pass (all 19; every mutation, deletion, transfer, trash, patch, and quality step has an Expect (negative))",
       "actorsSurfacesInterfacesTrace": "pass (all 19 fill actors, surfaces, interfaces and trace; README lists the rebuild surface keys, including home, import, view-review and done-archive-sheet)",
       "preconditionsEstablishable": "fail where a G entry names an unresolved implementation qualification",
-      "errorBranchesScoped": "pass only together with the G entries that scope acceptance scenarios no step observes (J19/G6-G7, J20/G4-G5, J21/G4, J22/G3-G4, J25/G4, J26/G3, J27/G5, J28/G6, J31/G3, J33/G4, J35/G3 and J35/G5: LIB-AC-03, LIB-AC-12, LIB-AC-13, PRJ-AC-25, VSEL-AC-12, VSEL-AC-13, VSEL-AC-17, PIX-AC-08, PIX-AC-12, PIX-AC-13, RES-AC-12, STO-AC-12, STO-AC-14, STO-IMP-AC-03, PLAN-TGT-AC-06, PLAN-TGT-AC-07, PLAN-TGT-AC-08); each of those entries blocks readiness",
+      "errorBranchesScoped": "pass only together with the G entries that scope acceptance scenarios no step observes (J19/G6-G7, J20/G4, J21/G4, J22/G3-G4, J25/G4, J26/G3, J28/G6, J31/G3, J33/G4, J35/G3 and J35/G5: LIB-AC-03, LIB-AC-12, LIB-AC-13, VSEL-AC-12, VSEL-AC-13, VSEL-AC-17, PIX-AC-08, PIX-AC-12, PIX-AC-13, RES-AC-12, STO-AC-12, STO-AC-14, STO-IMP-AC-03, PLAN-TGT-AC-06, PLAN-TGT-AC-07, PLAN-TGT-AC-08); each of those entries blocks readiness",
       "statusOutcome": "All 19 rebuild journeys (J14, J15, J18 to J29, J31 to J35) remain status: draft. The not-validated gap in each (G1, or J15/G4) says the rebuilt application does not exist and nothing has been validated. Promotion needs a fresh validation run in which every step passes. J30 is retired (status: deprecated, successor J31) and has no readiness entry."
     },
     "perJourney": [
@@ -148,8 +148,7 @@
         "id": "J20",
         "blocking": [
           "G3 observing-sites pane and label (J15/G8)",
-          "G4 resolver enrichment and failure (LIB-AC-12)",
-          "G5 removing a rig or subject used only by an Abandoned run (PRJ-AC-25) not exercised"
+          "G4 resolver enrichment and failure (LIB-AC-12)"
         ]
       },
       {
@@ -180,8 +179,7 @@
           "G2 Siril handoff and input-write probe (D04)",
           "G3 per-item input-mode changes not exercised",
           "G4 Cancel/Pause phases unspecified",
-          "G5 fault control pausing Prepare between snapshot and success",
-          "G6 whether an override Results parent keeps the `<Project>/` level"
+          "G5 fault control pausing Prepare between snapshot and success"
         ]
       },
       {
@@ -205,9 +203,7 @@
         "id": "J27",
         "blocking": [
           "G2 Direct-source Clean up not exercised",
-          "G3 removing replaced entries before the run is Complete or Abandoned (STO-FR-10) not exercised",
-          "G5 removing a rig or subject used only by an Abandoned run (PRJ-AC-25) not exercised",
-          "G6 accepting a Result on an Abandoned run without reopening (RES-FR-07, RES-FR-09) not exercised"
+          "G3 removing replaced entries before the run is Complete (STO-FR-10) not exercised"
         ]
       },
       {
@@ -250,14 +246,13 @@
         "blocking": [
           "G2 WBPP capability probe (D04); no named control for naming a mosaic or entering panel centres and rotation",
           "G3 panel-assignment geometry tolerance (D-W38) not fixed",
-          "G4 Cancel/Pause of Prepare all, all panels failing, cleanup of the previous group folder, placing an unplaced candidate on a panel run and RES-AC-12 with no group Result not exercised",
+          "G4 Cancel/Pause of Prepare all, all panels failing, cleanup of the previous group folder and RES-AC-12 with no group Result not exercised",
           "G5 how a discovered Result's prepared revision is decided (RES-FR-01, RES-AC-16)"
         ]
       },
       {
         "id": "J34",
         "blocking": [
-          "G2 whether the intermediates offer's N counts the adopted master's generated source (STO-FR-16)",
           "G3 archive transfer failures, interruption and reference repair belong to J28",
           "G4 Tool-recorded input lineage for F-res (P4)",
           "G5 approving the restore of an Archived session after Reopen (STO-FR-13) not exercised"

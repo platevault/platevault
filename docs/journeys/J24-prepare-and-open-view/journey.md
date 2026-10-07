@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [preparation, view-review, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 069-application-handoff, 070-results-reuse, D02, D04, D09, D13, D15, D19, D-W3, D-W5, D-W49, D-W51, D-W64, D-W67, D-W71, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-f-prepare-and-open-the-view]
+trace: [063-clean-rebuild-contract, 069-application-handoff, 070-results-reuse, D02, D04, D09, D13, D15, D19, D-W3, D-W5, D-W49, D-W51, D-W67, D-W72, specs/063-clean-rebuild-contract/decisions.md, specs/063-clean-rebuild-contract/workflow-decisions.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-f-prepare-and-open-the-view]
 ---
 
 ## Goal
@@ -22,7 +22,7 @@ Done means:
 - `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril/` reads Prepared only after its 208 entries match the confirmed membership.
 - Results are recorded at `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril Results/`.
 - Siril opens on that preparation, and quitting Siril leaves the run not Complete.
-- A partial preparation names its blocked inputs and offers no verified Open. Retry completes only the recorded items. While Prepare runs, the run can be neither completed nor abandoned.
+- A partial preparation names its blocked inputs and offers no verified Open. Retry completes only the recorded items. While Prepare runs, the run can be neither completed nor deleted.
 - A new preparation revision goes to a new `(rev 2)` folder, leaves the first folder unchanged, and sends its Results to the run's one Results folder.
 
 ## Preconditions
@@ -147,14 +147,14 @@ Done means:
 
 ### S15 — Prepare with blocked inputs {#S15}
 
-- **Do:** Confirm membership in **Review preparation**. Remove read permission from three 28 Sep source frames and click **Prepare run**. While it runs, click **Mark processing complete** and then **Abandon run** in this run. Then click **Mark processing complete** in `24 Sep flat check` (J23/S7).
+- **Do:** Confirm membership in **Review preparation**. Remove read permission from three 28 Sep source frames and click **Prepare run**. While it runs, click **Mark processing complete** and then **Delete run** in this run. Then click **Mark processing complete** in `24 Sep flat check` (J23/S7).
 - **Expect:**
-  - In `28 Sep Ha copy check`, **Mark processing complete** and **Abandon run** are each refused, and each refusal names this run's running preparation.
+  - In `28 Sep Ha copy check`, **Mark processing complete** and **Delete run** are each refused, and each refusal names this run's running preparation.
   - The unrelated `24 Sep flat check` is not blocked and reads Complete.
   - The outcome reads Partial, with 53 prepared and 3 blocked entries, each blocked entry named with its path.
   - The choices are **Retry** for the journaled blocked entries, **Review preparation again**, and keeping the partial run unchanged.
-- **Expect (negative):** No verified Open is offered. The three sources are untouched. `28 Sep Ha copy check` reads neither Complete nor Abandoned.
-- **Trace:** flow F5 failure branch, cross-flow "Partial preparation" · PREP-FR-09 · PREP-AC-05 · RES-FR-07, RES-FR-09 · RES-AC-07, RES-AC-18 · root FR-004 · D09, D-W71
+- **Expect (negative):** No verified Open is offered. The three sources are untouched. `28 Sep Ha copy check` is not Complete, and the run and its folders still exist.
+- **Trace:** flow F5 failure branch, cross-flow "Partial preparation" · PREP-FR-09 · PREP-AC-05 · RES-FR-07, RES-FR-10 · RES-AC-07, RES-AC-20 · root FR-004, FR-009 · D09, D-W72
 
 ### S15a — Retry into source drift {#S15a}
 
@@ -193,7 +193,7 @@ Done means:
 - SC9: The drifted P7 item reads Prepared 0 times while its source differs from its snapshot (S15a), and the manifest equals P6 after S16.
 - SC10: Siril launches 0 times while the P8 entry differs from its snapshot (S10a), and it launches after the S11 re-verification.
 - SC11: Revision 2 lands in a new `(rev 2)` folder, with 55 entries. The first folder still holds its 56 entries, and both revisions share one Results folder (S17).
-- SC12: While Prepare runs, **Mark processing complete** and **Abandon run** are each refused with the running preparation named, and `28 Sep Ha copy check` reads Abandoned 0 times (S15).
+- SC12: While Prepare runs, **Mark processing complete** and **Delete run** are each refused with the running preparation named, and `28 Sep Ha copy check` and its folders still exist after S15.
 
 ## Known gaps
 
@@ -206,5 +206,5 @@ Done means:
 ## Delta log
 
 - **Δ2** 2026-10-06 · S1, S4, S6, S7, S8, S9, S10, S12, S13, S14, S15, +S17 · behavior-change
-  Views are processing runs in a Project. A run prepares to `<output>/<Project>/<Run>/`, Results go to the sibling `<Run> Results/`, and each new revision gets a `(rev 2)` folder that shares that one Results folder. The check runs are created in the Project, and their pickers start with every candidate selected. A running preparation refuses Abandon run exactly as it refuses Mark processing complete.
-  Evidence: specs/069-application-handoff PREP-FR-06, PREP-FR-07, PREP-FR-11, PREP-AC-01, PREP-AC-21; D-W3, D-W49, D-W51, D-W67 at e4476231; D-W64, D-W67, D-W71; 069 PREP-FR-06, PREP-FR-07, PREP-FR-11 and PREP-AC-21 as amended; 070 RES-FR-07, RES-FR-09, RES-AC-18 at d45a22ad · by: JourneysC (intent-gated)
+  Views are processing runs in a Project. A run prepares to `<output>/<Project>/<Run>/`, Results go to the sibling `<Run> Results/`, and each new revision gets a `(rev 2)` folder that shares that one Results folder. The check runs are created in the Project, and their pickers start with every candidate selected. A running preparation refuses Delete run exactly as it refuses Mark processing complete.
+  Evidence: specs/069-application-handoff PREP-FR-06, PREP-FR-07, PREP-FR-11, PREP-AC-01, PREP-AC-21. D-W3, D-W49, D-W51, D-W67 at e4476231. D-W67, D-W72. 069 PREP-FR-06, PREP-FR-07, PREP-FR-11 and PREP-AC-21 as amended. 070 RES-FR-07, RES-FR-10, RES-AC-20 · by: JourneysC (intent-gated)

@@ -67,12 +67,20 @@
 
 ## Round 7 (2026-10-06): recommendations applied by default after the user said "continue please"; any of them can be reverted before the contract PR lands
 - D-W64: A run can be marked Abandoned. An Abandoned run is kept read-only, its frames stop counting "in project", and it can be Reopened.
-- D-W65: A rig cannot be removed from a Project while any run that is not Abandoned uses it. Under D-W45, a session stops being a candidate only when its own rig or Target changes.
+- D-W65: A rig cannot be removed from a Project while any run that is not Abandoned uses it. Under D-W45, a member of a run that is not Abandoned stops being a candidate only when its own rig or Target changes. Removing a subject or rig that no run uses, or that only an Abandoned run uses, takes the matching sessions out of the candidates. Reopening an Abandoned run is refused while its subject or rig is not on the Project, and the refusal names each missing item.
 - D-W66: "Captured" means candidates plus run members, so "in project" never exceeds "captured" (refines D-W36).
 - D-W67: A mosaic group's new prepared revision goes to <Mosaic> (rev 2)/ with Panel N/ folders inside it. <Run> Results/ is one folder shared by all revisions of the run; each discovered Result records the revision it came from.
 - D-W68: Results in <Mosaic> Results/ are assigned to a panel by a Panel N/ subfolder or by evidence from the processing tool (header or file name). Otherwise the user places them.
 - D-W69: A Project can be Reopened after Archive. Archived sessions show as Archived until the user restores them; reopening moves no files.
 - D-W70: The Project Done / Archive sheet also offers "Move N processing intermediates to Trash (size)". Final Results and adopted masters are kept, and the D-W43 trash rules apply.
 - D-W71 (lead consistency default, follows from D-W64/D-W65; revertible): Abandoned behaves like Complete for every gate. Mark Abandoned is blocked while an operation is Running. An Abandoned run gets Clean up. Reopen returns the run to the stage it was in. Its accepted Results stay reusable as inputs, and its members still count as "captured". The trash refusal reads "a prepared revision of a run that is neither Complete nor Abandoned". A subject, like a rig, cannot be removed while a run that is not Abandoned uses it.
+
+## Round 7 answered by the user (2026-10-07)
+The user accepted D-W65, D-W66, D-W67 and D-W69 and changed the others. The entries below supersede D-W64, D-W68 and D-W71, and they narrow D-W65, D-W66 and D-W70. Every "Abandoned" rule above is dead.
+- D-W72 (replaces D-W64 and D-W71): No Abandoned state. A run that is no longer wanted is deleted. **Delete run** is refused while an operation is Running, and refused while one of its accepted Results is an input to another run. It shows what goes: the run record, its prepared folders (moved to the OS Trash) and, only when ticked, its Results folder (also to the OS Trash). Library frames and quality decisions are never touched. After deletion its members stop counting "in project" and "captured", unless they are still candidates. There is no in-app undo; Put back in the OS Trash restores files only. Mark Done asks the user to complete or delete each open run.
+- D-W65 (narrowed by D-W72): A rig or subject cannot be removed from a Project while any run uses it. A run member stops being a candidate only when its own rig or Target changes.
+- D-W66 (narrowed by D-W72): "Captured" means candidates plus members of the Project's existing runs.
+- D-W73 (replaces D-W68): Panels are set explicitly when the mosaic run group is created. Each panel run writes to its own Results folder, `<Mosaic>/Panel N Results/`, so a Result's panel is known from where it was written. The assembled mosaic goes to `<Mosaic> Results/` as the group Result. There is no header or file-name inference.
+- D-W74 (extends D-W70): The Done / Archive sheet also offers "Move N duplicate copies to Trash (size)". These are byte-identical (SHA-256) extra physical copies of the Project's frames. One copy is always kept: the copy in Captures or Calibration library storage, otherwise the copy in the earliest-registered location. Each copy is rehashed before it moves, and the D-W43 trash rules apply.
 
 Sources: the legacy facts are in legacy-frontend-facts.md.

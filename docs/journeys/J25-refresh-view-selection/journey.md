@@ -7,26 +7,24 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [view-review, indexing, sessions, locations, results, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, D02, D08, D09, D16, D19, D-W34, D-W45, D-W64, D-W66, D-W71, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-g-refresh-an-existing-view]
+trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 066-view-selection, 069-application-handoff, 070-results-reuse, 071-storage-custody, D02, D08, D09, D16, D19, D-W34, D-W45, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/064-library-inventory/spec.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, specs/069-application-handoff/spec.md, specs/070-results-reuse/spec.md, specs/071-storage-custody/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-g-refresh-an-existing-view]
 ---
 
 ## Goal
 
 After new captures arrive, the prepared processing run `NGC7000-HOO-Siril`
 offers "Add 2 new sessions". The user meets the Reopen prompt on the Complete
-run and again after marking the run Abandoned. The user then compares the new
-candidates against the saved membership, accepts one addition, declines
-another, and keeps a member that no longer matches the subject. The prepared
-folder stays untouched under the external application.
+run, then compares the new candidates against the saved membership, accepts
+one addition, declines another, and keeps a member that no longer matches the
+subject. The prepared folder stays untouched under the external application.
 
 Done means: the refresh lists each added session with its reason, keeps the
 run's exclusions, flags the re-confirmed 26 Sep session "no longer matches
-subject", and shows an unreadable member as Unavailable. The Abandoned run
-is read-only, its frames leave "in project" and still count "captured", and
-each Reopen returns the run to Prepare. The accepted change is saved as
-a new membership revision that survives restart and needs its own
-preparation review. The prepared revision's 208 entries are unchanged
-throughout. Frames of an added session copied to two locations count once.
+subject", and shows an unreadable member as Unavailable. Reopen returns the
+run to Prepare. The accepted change is saved as a new membership revision that
+survives restart and needs its own preparation review. The prepared revision's
+208 entries are unchanged throughout. Frames of an added session copied to two
+locations count once.
 
 ## Preconditions
 
@@ -70,7 +68,7 @@ throughout. Frames of an added session copied to two locations count once.
 - **Do:** Click **Add 2 new sessions** again and choose **Reopen**.
 - **Expect:** The run is back at Prepare, the stage it was in when it was marked Complete, and its prepared revision and saved membership revision 2 are unchanged. The refresh diff opens against revision 2. It lists both new sessions as added, each with the reason `Target NGC 7000 on RedCat`. 18 Sep reads **Unavailable**. 26 Sep is flagged **no longer matches subject**, with an offer to remove it. The six 30 Sep exclusions stay recorded.
 - **Expect (negative):** 18 Sep is not listed as removed, and 26 Sep is not removed. Membership is unchanged until a change is accepted.
-- **Trace:** flow G · VSEL-FR-12, VSEL-FR-17 · VSEL-AC-06, VSEL-AC-20, VSEL-AC-24 · root edge "Refresh never removes an offline member" · D-W34, D-W45, D-W64, D-W71
+- **Trace:** flow G · VSEL-FR-12, VSEL-FR-17 · VSEL-AC-06, VSEL-AC-20, VSEL-AC-24 · root edge "Refresh never removes an offline member" · D-W34, D-W45
 
 ### S4 — Keep the run unchanged {#S4}
 
@@ -78,16 +76,6 @@ throughout. Frames of an added session copied to two locations count once.
 - **Expect:** The run reads saved membership revision 2 with 208 lights / 17h 20m and no proposed revision.
 - **Expect (negative):** The prepared entries still equal the P1 listing.
 - **Trace:** flow G · VSEL-FR-12
-
-### S4a — Abandon the run and reopen it {#S4a}
-
-- **Do:** In `NGC7000-HOO-Siril`, choose **Abandon run**. Open Project `NGC 7000 HOO` and read the Ha and OIII goals. In the run, try **Exclude from run** on an included frame and try **Save run**. Click **Add 2 new sessions** and decline Reopen. Click it again, choose **Reopen**, keep the run unchanged, and read the goals again.
-- **Expect:**
-  - The run reads Abandoned on the stage rail, and **Clean up** is offered as a separate action. Ha and OIII "in project" fall, because the run's frames stop counting there. Ha and OIII "captured" are unchanged.
-  - The exclusion and the save are refused, each naming Abandoned. **Add 2 new sessions** asks for Reopen first, and after declining, the run still reads Abandoned.
-  - After Reopen the run is back at Prepare, the stage it was in when it was abandoned, and the refresh diff opens against revision 2. The run offers no Clean up, and both goals read their values from before this step.
-- **Expect (negative):** No file is removed and no cleanup starts. Saved membership revision 2 and the prepared entries (P1 listing) are unchanged throughout. No goal shows "in project" above "captured".
-- **Trace:** flow G · VSEL-FR-17, RES-FR-09, PRJ-FR-04, PRJ-FR-21, STO-FR-01 · VSEL-AC-26, RES-AC-17, PRJ-AC-24 · D-W64, D-W66, D-W71
 
 ### S5 — Accept one change and decline the others {#S5}
 
@@ -119,22 +107,21 @@ throughout. Frames of an added session copied to two locations count once.
 
 ## Success criteria
 
-- SC1: The prepared revision's entries equal the P1 listing at S1, S2b, S3, S4, S4a, S5 and S6.
+- SC1: The prepared revision's entries equal the P1 listing at S1, S2b, S3, S4, S5 and S6.
 - SC2: S3 lists exactly 2 added sessions, each with a reason, 6 retained exclusions, 18 Sep as Unavailable and 26 Sep as no longer matching the subject, with 0 removals.
 - SC3: At S2b the Complete run accepts 0 membership changes until Reopen.
 - SC4: After S5 saved revision 3 contains the new Ha session's 10 frames once each, does not contain the new OIII session, still contains 26 Sep, persists across restart, and reads as needing review before preparation.
 - SC5: After S1 captured Ha has risen by exactly 0h 50m and each new Ha frame lists 2 physical copies; after S7 captured Ha is unchanged and the changed frame reads as conflicting copies.
-- SC6: While the run is Abandoned (S4a), Ha and OIII "in project" fall, "captured" changes by 0, 0 membership edits are accepted, and **Add 2 new sessions** opens 0 refresh diffs until Reopen. After Reopen the run is at Prepare and both goals read their earlier values.
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults set in decisions D02, D08, D09, D16 and D19 and workflow decisions D-W34, D-W45, D-W64, D-W66 and D-W71. No implementation has been validated against them.
-- G2: Out of scope for this journey: preparing revision 3 into `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril (rev 2)/`, with both revisions sending their Results to `NGC7000-HOO-Siril Results/` (D09, PREP-FR-07, PREP-AC-21), and cleanup of the replaced entries before the run is Complete or Abandoned (STO-FR-10) are not exercised. Blocks readiness until covered by a step or a journey.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs and the defaults set in decisions D02, D08, D09, D16 and D19 and workflow decisions D-W34, D-W45 and D-W66. No implementation has been validated against them.
+- G2: Out of scope for this journey: preparing revision 3 into `Work/Processing/NGC 7000 HOO/NGC7000-HOO-Siril (rev 2)/`, with both revisions sending their Results to `NGC7000-HOO-Siril Results/` (D09, PREP-FR-07, PREP-AC-21), and cleanup of the replaced entries before the run is Complete (STO-FR-10) are not exercised. Blocks readiness until covered by a step or a journey.
 - G3: Out of scope for this journey: path repair after an archive transfer is distinct from refresh and is exercised in J28/S8.
 - G4: Out of scope for this journey: Refresh while the external application is running on the prepared revision (VSEL-AC-12) is not exercised, and no member is a manual inclusion, so the D09 pinning of manual inclusions is not observed. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 
-- **Δ2** 2026-10-06 · S1, S3, S4, S5, +S2a, +S2b, +S4a, +S5a · behavior-change
-  The run offers "Add N new sessions" for new candidates. A Complete or Abandoned run asks for Reopen first, and Reopen returns it to the stage it was in. An Abandoned run is read-only and leaves "in project" while "captured" holds. A member whose Target is re-confirmed stays and is flagged "no longer matches subject" with an offer to remove it. Saving adds a membership revision that feeds "in project".
-  Evidence: specs/066-view-selection VSEL-FR-12, VSEL-FR-17, VSEL-AC-06, VSEL-AC-20, VSEL-AC-24; specs/070-results-reuse RES-FR-07, RES-AC-08; workflow decisions D-W34, D-W45, D-W66; D-W64, D-W71; 066 VSEL-FR-17, VSEL-AC-26; 070 RES-FR-09, RES-AC-17; 065 PRJ-FR-04, PRJ-FR-21, PRJ-AC-24; 071 STO-FR-01, STO-FR-10; 069 PREP-FR-07 at d45a22ad; rig name `RedCat` from J15 · by: journey-scribe (intent-gated)
+- **Δ2** 2026-10-06 · S1, S3, S4, S5, +S2a, +S2b, +S5a · behavior-change
+  The run offers "Add N new sessions" for new candidates. A Complete run asks for Reopen first, and Reopen returns it to the stage it was in. A member whose Target is re-confirmed stays and is flagged "no longer matches subject" with an offer to remove it. Saving adds a membership revision that feeds "in project".
+  Evidence: specs/066-view-selection VSEL-FR-12, VSEL-FR-17, VSEL-AC-06, VSEL-AC-20, VSEL-AC-24. specs/070-results-reuse RES-FR-07, RES-AC-08. Workflow decisions D-W34, D-W45, D-W66. 065 PRJ-FR-04, PRJ-FR-21, 071 STO-FR-10 and 069 PREP-FR-07. Rig name `RedCat` from J15 · by: journey-scribe (intent-gated)

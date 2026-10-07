@@ -7,7 +7,7 @@ last_reviewed: 2026-10-03
 actors: [primary-user]
 surfaces: [view-review, sessions, projects]
 interfaces: [desktop-ui, desktop-ui-macos]
-trace: [063-clean-rebuild-contract, 065-project-goals, 066-view-selection, D01, D02, D08, D-W3, D-W33, D-W34, D-W37, D-W49, D-W50, D-W64, D-W66, specs/063-clean-rebuild-contract/decisions.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-c-select-sessions-for-a-view]
+trace: [063-clean-rebuild-contract, 065-project-goals, 066-view-selection, D01, D02, D08, D-W3, D-W33, D-W34, D-W37, D-W49, D-W50, D-W66, D-W72, specs/063-clean-rebuild-contract/decisions.md, specs/065-project-goals/spec.md, specs/066-view-selection/spec.md, docs/reviews/2026-10-03-product-flow-and-journeys.md#journey-c-select-sessions-for-a-view]
 ---
 
 ## Goal
@@ -34,9 +34,9 @@ unresolved member. Project `NGC 7000 HOO` then counts those five sessions
 ### S1 — Orient in the run workspace {#S1}
 
 - **Do:** Move along the run's pipeline rail through Select, Review, Calibrate and Prepare, then return to Select. Toggle **Sky coverage** on and off.
-- **Expect:** The rail lists Select, Review, Calibrate, Prepare, Results and Done for this run. Each later step opens and names what it still needs: Prepare names the unsaved membership and the profile that is not chosen. Every step shows the same selection. **Sky coverage** shows and hides a linked spatial view. Every step also offers **Abandon run**, which this journey does not use.
+- **Expect:** The rail lists Select, Review, Calibrate, Prepare, Results and Done for this run. Each later step opens and names what it still needs: Prepare names the unsaved membership and the profile that is not chosen. Every step shows the same selection. **Sky coverage** shows and hides a linked spatial view. Every step also offers **Delete run**, which this journey does not use.
 - **Expect (negative):** No Next/Back wizard gates movement between steps. Moving between steps saves no revision, creates no folder on disk and starts no measurement.
-- **Trace:** flow C1 · VSEL-FR-02 · RES-FR-09 · D-W3, D-W64
+- **Trace:** flow C1 · VSEL-FR-02 · RES-FR-10 · D-W3, D-W72
 
 ### S2 — Read the run's fixed identity {#S2}
 
@@ -104,7 +104,7 @@ unresolved member. Project `NGC 7000 HOO` then counts those five sessions
 
 ## Known gaps
 
-- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs at d45a22ad and the defaults set in decisions D01, D02 and D08 and workflow decisions D-W3, D-W33, D-W34, D-W37, D-W49, D-W50, D-W64 and D-W66. No implementation has been validated against them.
+- G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs at d45a22ad and the defaults set in decisions D01, D02 and D08 and workflow decisions D-W3, D-W33, D-W34, D-W37, D-W49, D-W50, D-W66 and D-W72. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: the footprint overlap used for ordering (D01) has no fixed value. The S3 fixture geometry must order the footprint sessions by an unambiguous margin once the value is chosen. Blocks readiness.
 - G3: Out of scope for this journey: D08 stale-overwrite refusal with reload/review needs a second concurrent writer and is not exercised. Blocks readiness until covered by a step or a journey.
 - G4: Out of scope for this journey: choosing one subject among several (VSEL-AC-17) is not exercised. Blocks readiness until covered by a step or a journey. Starting a run from a Target in no Project (VSEL-AC-16) is covered by J14/S3 to J14/S5.
@@ -113,4 +113,4 @@ unresolved member. Project `NGC 7000 HOO` then counts those five sessions
 
 - **Δ2** 2026-10-06 · S1 to S9 · behavior-change
   The View becomes processing run `NGC7000-HOO-Siril` in Project `NGC 7000 HOO`, with a fixed subject and rig. Every available Target-and-rig candidate starts selected, replacing geometric preselection and manual inclusion; the standalone View is gone, and Save run feeds "in project".
-  Evidence: specs/066-view-selection VSEL-FR-01 to VSEL-FR-03, VSEL-FR-16, VSEL-AC-01, VSEL-AC-18, specs/065-project-goals PRJ-AC-10 and workflow decisions D-W3, D-W33, D-W37, D-W49, D-W50. D-W64 and D-W66 with VSEL-FR-02, RES-FR-09, PRJ-FR-04, PRJ-FR-21 and root FR-023 at d45a22ad. Rig names `RedCat` and `Esprit` from J15, OIII goal 12h from J20/S4 · by: journey-scribe (intent-gated)
+  Evidence: specs/066-view-selection VSEL-FR-01 to VSEL-FR-03, VSEL-FR-16, VSEL-AC-01, VSEL-AC-18, specs/065-project-goals PRJ-AC-10 and workflow decisions D-W3, D-W33, D-W37, D-W49, D-W50. D-W66 and D-W72 with VSEL-FR-02, RES-FR-10, PRJ-FR-04, PRJ-FR-21 and root FR-023. Rig names `RedCat` and `Esprit` from J15, OIII goal 12h from J20/S4 · by: journey-scribe (intent-gated)

@@ -79,9 +79,9 @@
       "flowStep": "C1",
       "owner": "066-view-selection",
       "journeyStep": "J21/S1, J21/S2",
-      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02; 070-results-reuse RES-FR-09; D-W3, D-W8, D-W50, D-W64",
+      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02; 070-results-reuse RES-FR-10; D-W3, D-W8, D-W50, D-W72",
       "action": "Move along the run's pipeline rail through Select, Review, Calibrate and Prepare, toggle Sky coverage, and read the run header.",
-      "expect": "Every step shows the same selection, names what it still needs and offers Abandon run. The header shows the run name, Project, subject, rig and profile Not chosen, with the subject and rig fixed.",
+      "expect": "Every step shows the same selection, names what it still needs and offers Delete run. The header shows the run name, Project, subject, rig and profile Not chosen, with the subject and rig fixed.",
       "negative": "No wizard gates movement between steps. Moving saves no revision, creates no folder and starts no measurement, and no control moves the run to another Project."
     },
     {
@@ -313,7 +313,7 @@
       "flowStep": "H3a",
       "owner": "070-results-reuse",
       "journeyStep": "J26/S4, J26/S4a, J26/S5, J26/S6, J26/S7, J26/S7a",
-      "spec": "070-results-reuse RES-FR-04, RES-FR-05, RES-FR-09, RES-AC-04, RES-AC-05, RES-AC-09, RES-AC-13, RES-AC-14, RES-AC-17; D04, D-W4, D-W8, D-W56, D-W64",
+      "spec": "070-results-reuse RES-FR-04, RES-FR-05, RES-AC-04, RES-AC-05, RES-AC-09, RES-AC-13, RES-AC-14; D04, D-W4, D-W8, D-W56",
       "action": "Create a run in the Project from accepted Results through its input filters, read another Project's product from another rig, choose a profile, prepare and open the product run, then change an accepted product in place with its size and mtime preserved and restore it.",
       "expect": "The picker groups products by originating Project and run with kind, subject, rig, path, availability and lineage. The run lists two product inputs apart from raw sessions, and an unsupported product kind is refused by name. The rehash flags the changed product as drifted and the picker stops offering it until the bytes are restored.",
       "negative": "No raw integration is added and the Project gains no members. Nothing is converted, combined or replaced silently, equal size and mtime never stand in for content, and a drifted product is not offered or re-accepted."
@@ -474,29 +474,29 @@
     {
       "flowStep": "Projects surface (Project page with stage rail and planning)",
       "owner": "065-project-goals",
-      "journeyStep": "J20/S3, J20/S7, J20/S8, J20/S9, J14/S6, J27/S13, J29/S12",
-      "spec": "065-project-goals PRJ-FR-02, PRJ-FR-04, PRJ-FR-07, PRJ-FR-08, PRJ-FR-09, PRJ-FR-20, PRJ-AC-06; 072-observing-plans PLAN-FR-09, PLAN-FR-10; D-W7, D-W16, D-W37, D-W60, D-W64, D-W65, D-W66, D-W71",
-      "action": "Open the Project page, read its candidates, planning and stage rail, and open the Planner. Try to remove the run's rig and subject and a rig no run uses, rename the Project, and later abandon a run.",
-      "expect": "The page shows subjects, rigs, goals, candidates with their reasons, members, and each run on the stage rail, including Abandoned. Planning lists windows for the Project's own subjects, and Open in Planner opens Targets with the Project context. Removing a rig or subject that a run that is not Abandoned uses is refused naming the run, and removing an unused rig succeeds.",
+      "journeyStep": "J20/S3, J20/S7, J20/S8, J20/S9, J14/S6, J27/S14, J29/S12, J34/S2",
+      "spec": "065-project-goals PRJ-FR-02, PRJ-FR-04, PRJ-FR-07, PRJ-FR-08, PRJ-FR-09, PRJ-FR-20, PRJ-AC-06, PRJ-AC-25; 072-observing-plans PLAN-FR-09, PLAN-FR-10; D-W7, D-W16, D-W37, D-W60, D-W65, D-W66, D-W72",
+      "action": "Open the Project page, read its candidates, planning and stage rail, and open the Planner. Try to remove the run's rig and subject and a rig no run uses, rename the Project, and later delete a run.",
+      "expect": "The page shows subjects, rigs, goals, candidates with their reasons, members, and each run on the stage rail; a deleted run leaves the rail. Planning lists windows for the Project's own subjects, and Open in Planner opens Targets with the Project context. Removing a rig or subject that any run uses is refused naming each run that uses it, and removing an unused rig succeeds.",
       "negative": "The page offers no action that assigns a session to the Project, and a refused removal changes neither the Project nor the run. Renaming keeps the subject, the run and the Target link."
     },
     {
       "flowStep": "Home dashboard",
       "owner": "065-project-goals",
       "journeyStep": "J32/S1–S11, J19/S6, J19/S9a",
-      "spec": "065-project-goals PRJ-FR-04, PRJ-FR-05, PRJ-FR-17, PRJ-FR-18, PRJ-FR-19, PRJ-FR-20, PRJ-FR-21, PRJ-AC-03, PRJ-AC-18, PRJ-AC-19, PRJ-AC-20, PRJ-AC-22, PRJ-AC-23; 067-frame-review PIX-FR-18; 072-observing-plans PLAN-FR-11; D-W35, D-W36, D-W39, D-W48, D-W63, D-W64, D-W66, D-W71",
+      "spec": "065-project-goals PRJ-FR-04, PRJ-FR-05, PRJ-FR-17, PRJ-FR-18, PRJ-FR-19, PRJ-FR-20, PRJ-FR-21, PRJ-AC-03, PRJ-AC-18, PRJ-AC-19, PRJ-AC-20, PRJ-AC-22, PRJ-AC-23; 067-frame-review PIX-FR-18; 072-observing-plans PLAN-FR-11; D-W35, D-W36, D-W39, D-W48, D-W63, D-W66",
       "action": "Launch PlateVault and read Home's top line and six sections, follow each Project's Next action, act on New sessions needing work, read Tonight and Target status, toggle Show done, and watch a rescan in Running work.",
       "expect": "Home opens first with its top line and its six sections in order. Each Project shows its goals as in project and captured, its runs' stages and the first Next rule that applies, and Next moves as work is done. Done Projects appear only with Show done on.",
-      "negative": "No row says not in a run, no goal shows in project above captured or reads met from its captured value, and no Next names an Abandoned run. Reading Home and following its actions writes, moves or trashes no file."
+      "negative": "No row says not in a run, and no goal shows in project above captured or reads met from its captured value. Reading Home and following its actions writes, moves or trashes no file."
     },
     {
       "flowStep": "Project Done / Archive sheet",
       "owner": "065-project-goals",
       "journeyStep": "J34/S1–S12, J28/S1",
-      "spec": "065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-20, PRJ-AC-15, PRJ-AC-16, PRJ-AC-17, PRJ-AC-21, PRJ-AC-27, PRJ-AC-28; 064-library-inventory LIB-FR-18, LIB-AC-19; 071-storage-custody STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-AC-17, STO-AC-18, STO-AC-19, STO-AC-21, STO-AC-22; D19, D-W26, D-W43, D-W46, D-W64, D-W69, D-W70",
-      "action": "Mark the Project Done while runs are open, abandon or complete each one, then use the sheet's three separate offers: move the rejected frames to Trash, move the processing intermediates to Trash, and Archive. Reopen the Project after Archive.",
-      "expect": "Mark Done names every run that is neither Complete nor Abandoned. Once each is resolved the sheet opens with Archive and the two Trash offers, each listing refused items with their reasons, and each runs as its own reviewed approval. Trashed frames read Trashed and leave every list and total, and Reopen returns the Project to open with its archived sessions shown as Archived.",
-      "negative": "No file moves until an offer is approved, and nothing is permanently deleted. Accepted Results, adopted masters, Project-only rejects and changed items are never trashed, and Reopen moves no file."
+      "spec": "065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-20, PRJ-AC-15, PRJ-AC-16, PRJ-AC-17, PRJ-AC-21, PRJ-AC-27, PRJ-AC-28, PRJ-AC-30; 064-library-inventory LIB-FR-18, LIB-AC-19; 071-storage-custody STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-AC-17, STO-AC-18, STO-AC-19, STO-AC-21, STO-AC-22, STO-AC-23; 070-results-reuse RES-FR-10; D19, D-W26, D-W43, D-W46, D-W69, D-W70, D-W72, D-W74",
+      "action": "Mark the Project Done while runs are open, delete or complete each one, then use the sheet's four separate offers: move the rejected frames, the processing intermediates and the duplicate copies to Trash, and Archive. Reopen the Project after Archive.",
+      "expect": "Mark Done names every run that is not Complete. Once each is resolved the sheet opens with Archive and the three Trash offers, each listing refused items with their reasons, and each runs as its own reviewed approval. Trashed frames read Trashed and leave every list and total except the fixed memberships of the Complete runs that hold them, and Reopen returns the Project to open with its archived sessions shown as Archived.",
+      "negative": "No file moves until an offer is approved, and nothing is permanently deleted. Accepted Results, adopted masters, Project-only rejects and changed items are never trashed, every frame keeps one copy, and Reopen moves no file."
     },
     {
       "flowStep": "Settings > Goal templates",
@@ -538,9 +538,9 @@
       "flowStep": "Run workspace host for the Select, Review, Calibrate and Prepare steps",
       "owner": "066-view-selection",
       "journeyStep": "J21/S1, J21/S2, J22/S1",
-      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02; 067-frame-review PIX-FR-10; 070-results-reuse RES-FR-09; D-W3, D-W13, D-W64",
+      "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02; 067-frame-review PIX-FR-10; 070-results-reuse RES-FR-10; D-W3, D-W13, D-W72",
       "action": "Move along the run's pipeline rail through Select, Review, Calibrate and Prepare and open the Review step.",
-      "expect": "The rail lists Select, Review, Calibrate, Prepare, Results and Done for this run, every step shows the same selection and offers Abandon run, and a later step names what it still needs. Review opens frame review inside the run.",
+      "expect": "The rail lists Select, Review, Calibrate, Prepare, Results and Done for this run, every step shows the same selection and offers Delete run, and a later step names what it still needs. Review opens frame review inside the run.",
       "negative": "No wizard gates movement, and moving between steps saves no revision and creates no folder."
     },
     {
@@ -553,21 +553,21 @@
       "negative": "No run exists outside a Project, no whole-mosaic run is offered, and cancelling creates no run."
     },
     {
-      "flowStep": "Add N new sessions (refresh), including Reopen of a Complete or Abandoned run",
+      "flowStep": "Add N new sessions (refresh), including Reopen of a Complete run",
       "owner": "066-view-selection",
-      "journeyStep": "J25/S1, J25/S2b, J25/S3, J25/S5, J27/S14",
-      "spec": "066-view-selection VSEL-FR-12, VSEL-FR-17, VSEL-AC-06, VSEL-AC-20; 070-results-reuse RES-FR-07, RES-FR-09, RES-AC-08; D-W34, D-W64",
-      "action": "Index two new candidate sessions, choose Add 2 new sessions on a Complete run, decline Reopen, then Reopen and accept one addition. Separately, Reopen an Abandoned run.",
-      "expect": "The run shows Add 2 new sessions and asks for Reopen first while Complete; after Reopen the refresh diff lists both sessions as added with reasons. A reopened Abandoned run returns to the stage it held and accepts edits again.",
+      "journeyStep": "J25/S1, J25/S2b, J25/S3, J25/S5",
+      "spec": "066-view-selection VSEL-FR-12, VSEL-FR-17, VSEL-AC-06, VSEL-AC-20; 070-results-reuse RES-FR-07, RES-AC-08; D-W34",
+      "action": "Index two new candidate sessions, choose Add 2 new sessions on a Complete run, decline Reopen, then Reopen and accept one addition.",
+      "expect": "The run shows Add 2 new sessions and asks for Reopen first while Complete; after Reopen the refresh diff lists both sessions as added with reasons.",
       "negative": "Declining Reopen leaves the run Complete with its membership unchanged, and Reopen creates no membership revision and moves no file."
     },
     {
       "flowStep": "Mosaic run group: panel assignment, shared setup, Review all",
       "owner": "066-view-selection",
       "journeyStep": "J33/S2, J33/S3, J33/S4, J33/S5, J33/S6",
-      "spec": "066-view-selection VSEL-FR-07, VSEL-FR-08, VSEL-FR-15, VSEL-FR-16, VSEL-FR-18, VSEL-FR-19, VSEL-AC-21, VSEL-AC-22; 067-frame-review PIX-FR-17, PIX-AC-18; 065-project-goals PRJ-FR-04; D-W38, D-W41",
-      "action": "Start a run on the mosaic subject, read panel coverage, assign the flagged sessions to panels, set the shared setup once and save, then open Review all.",
-      "expect": "One panel run per panel is created, sessions join a panel by pointing, and flagged sessions wait for the user's choice. The shared setup shows on every panel run, each panel run saves its own revision, and Review all lists every panel's frames with a Panel column.",
+      "spec": "066-view-selection VSEL-FR-07, VSEL-FR-08, VSEL-FR-15, VSEL-FR-16, VSEL-FR-18, VSEL-FR-19, VSEL-AC-21, VSEL-AC-22; 067-frame-review PIX-FR-17, PIX-AC-18; 065-project-goals PRJ-FR-04; D-W38, D-W41, D-W73",
+      "action": "Start a run on the mosaic subject and confirm its panels, read panel coverage, assign the flagged sessions to panels, set the shared setup once and save, then open Review all.",
+      "expect": "After the user confirms the panels, one panel run per panel is created, sessions join a panel by pointing, and flagged sessions wait for the user's choice. The shared setup shows on every panel run, each panel run saves its own revision, and Review all lists every panel's frames with a Panel column.",
       "negative": "No whole-mosaic run is offered, no session joins a panel without pointing or a user choice, and assigning a panel changes no header or Target."
     },
     {
@@ -664,16 +664,16 @@
       "flowStep": "Run group: Prepare all and the panel folder layout",
       "owner": "069-application-handoff",
       "journeyStep": "J33/S8, J33/S9, J33/S10, J33/S13",
-      "spec": "069-application-handoff PREP-FR-06, PREP-FR-07, PREP-FR-12, PREP-FR-13, PREP-AC-16, PREP-AC-17, PREP-AC-18; D-W38, D-W41, D-W51, D-W67",
+      "spec": "069-application-handoff PREP-FR-06, PREP-FR-07, PREP-FR-12, PREP-FR-13, PREP-AC-16, PREP-AC-17, PREP-AC-18; D-W38, D-W41, D-W51, D-W67, D-W73",
       "action": "Review Prepare all for the mosaic run group, prepare it with a blocked panel, Retry and Open the group folder, then reprepare one panel's new membership revision.",
-      "expect": "The review lists one Panel N folder per panel run under the group folder, the sibling Mosaic Results folder, each panel's entry count and calibration choices, and the shared profile, mode and policy once. Open on the group folder re-verifies every panel before launch. The reprepare proposes a Mosaic (rev 2) folder with a Panel N folder for every panel and keeps the one Results folder.",
-      "negative": "No whole-mosaic run is offered and Results never go inside the group folder. The previous group folder is not reused, replaced or cleared and stays until its cleanup is approved."
+      "expect": "The review lists one Panel N folder per panel run under the group folder, each panel run's Panel N Results folder beside it, the group's sibling Mosaic Results folder, each panel's entry count and calibration choices, and the shared profile, mode and policy once. Open on the group folder re-verifies every panel before launch. The reprepare proposes a Mosaic (rev 2) folder with a Panel N folder for every panel and keeps each panel's one Results folder.",
+      "negative": "No whole-mosaic run is offered, no Results folder is inside a prepared Panel N folder, and the group Results folder is outside the group folder. The previous group folder is not reused, replaced or cleared and stays until its cleanup is approved."
     },
     {
       "flowStep": "The prepared-entry record that a Complete run's Clean up lists (PV-STO runs Clean up, steps I2 to I5)",
       "owner": "069-application-handoff",
       "journeyStep": "J24/S9, J24/S17, J27/S4, J27/S8, J27/S10, J27/S11",
-      "spec": "069-application-handoff PREP-FR-09, PREP-FR-11, PREP-FR-14, PREP-AC-19, PREP-AC-21; 071-storage-custody STO-FR-01, STO-FR-05, STO-AC-01; D-W26, D-W43, D-W67, D-W71",
+      "spec": "069-application-handoff PREP-FR-09, PREP-FR-11, PREP-FR-14, PREP-AC-19, PREP-AC-21; 071-storage-custody STO-FR-01, STO-FR-05, STO-AC-01; D-W26, D-W43, D-W67",
       "action": "Prepare a run and a second revision, mark the runs Complete, and open Clean up on a hardlink run, a two-revision copy run and a symlink run, then send entries to the Trash.",
       "expect": "Each preparation revision records the links, clones and copies it created. Clean up lists exactly those entries, one group per type and revision, and after removal the run records which prepared entries were removed and which remain.",
       "negative": "Original sources, Direct-source paths, library frames, the Results folder and files the preparation did not create are never listed."
@@ -697,29 +697,29 @@
       "negative": "No candidate is accepted automatically, and no file appearing in the folder is treated as proof that it came from the full selection."
     },
     {
-      "flowStep": "Run group Results: panel discovery, user placement of unplaced candidates and the optional group Result",
+      "flowStep": "Run group Results: per-panel Results folders and the optional group Result",
       "owner": "070-results-reuse",
       "journeyStep": "J33/S11, J33/S12, J33/S14, J33/S15",
-      "spec": "070-results-reuse RES-FR-01, RES-FR-02, RES-FR-04, RES-FR-08, RES-AC-11, RES-AC-12; D-W38, D-W67, D-W68",
-      "action": "Save panel images into the Panel N folders of the group's Results folder, a panel image named by panel, and an assembled image with no panel evidence. Open the group's Results step, place the unplaced candidate, accept a panel Result and a group Result, discover a Result from a later revision, and complete each panel run.",
-      "expect": "Each panel run lists the candidates from its own Panel N folder or with tool evidence naming its panel, each naming the group revision it came from. A candidate with neither evidence is listed as unplaced until the user places it on a panel run or on the group, where it becomes a group Result candidate of kind Assembled mosaic. Every panel run can complete with its own Results.",
-      "negative": "Nothing inside the prepared group folder is discovered and nothing is accepted automatically. Accepting the group Result changes no panel run, and no panel run waits for a group Result."
+      "spec": "070-results-reuse RES-FR-01, RES-FR-02, RES-FR-04, RES-FR-08, RES-AC-11, RES-AC-12; D-W38, D-W67, D-W73",
+      "action": "Save panel images into each panel run's Panel N Results folder, including one whose file name names another panel, a stray file inside a prepared Panel N folder, and an assembled image into the group's Mosaic Results folder. Open the group's Results step, accept a panel Result and a group Result, discover a Result from a later revision, and complete each panel run.",
+      "expect": "Each panel run lists exactly the candidates in its own Panel N Results folder, each naming the group revision it came from, whatever a file's name says. The assembled image in the Mosaic Results folder is a group Result candidate of kind Assembled mosaic. Every panel run can complete with its own Results.",
+      "negative": "Nothing inside a prepared Panel N folder is discovered, no candidate is listed as unplaced, and nothing is accepted automatically. Accepting the group Result changes no panel run, and no panel run waits for a group Result."
     },
     {
-      "flowStep": "Mark Abandoned and Reopen of an Abandoned run",
+      "flowStep": "Delete run",
       "owner": "070-results-reuse",
-      "journeyStep": "J24/S15, J25/S4a, J26/S4a, J27/S13, J27/S14, J34/S2",
-      "spec": "070-results-reuse RES-FR-07, RES-FR-09, RES-AC-17, RES-AC-18; 065-project-goals PRJ-FR-04, PRJ-FR-14, PRJ-FR-20, PRJ-AC-24; 066-view-selection VSEL-FR-17, VSEL-AC-26; D-W64, D-W71",
-      "action": "Try Abandon run while the run's preparation is running. Abandon a run at Prepare and another open run, try membership edits, Add N new sessions and a Review matches change, read the Project's goals, then Reopen. Separately, abandon an open run from the Mark Done prompt.",
-      "expect": "Abandon run is refused while an app-owned preparation affecting the run is running, naming it, as Mark processing complete is. Otherwise the run reads Abandoned and stays read-only, Add N new sessions asks for Reopen first, Clean up is offered separately, its frames stop counting in project but still count captured, and its accepted Results stay offered in other runs' Results pickers. Reopen returns the run to the stage it held when it was abandoned with its decisions unchanged.",
-      "negative": "Abandoning removes no file and changes no other run's membership or quality state. Reopening creates no membership revision and moves no file."
+      "journeyStep": "J21/S1, J24/S15, J27/S13, J27/S14, J34/S2",
+      "spec": "070-results-reuse RES-FR-05, RES-FR-07, RES-FR-10, RES-AC-19, RES-AC-20; 065-project-goals PRJ-FR-04, PRJ-FR-14, PRJ-FR-20, PRJ-AC-29; 071-storage-custody STO-FR-17, STO-AC-24; D-W66, D-W72",
+      "action": "Try Delete run while the run's preparation is running and while another run uses the run's accepted Results. Delete a run on a location without Trash with its Results folder ticked, read the Project's goals, and delete an open run from the Mark Done prompt.",
+      "expect": "Delete run is refused while an app-owned preparation affecting the run is running, naming it, as Mark processing complete is, and while another run uses one of its accepted Results, naming each such run. Otherwise the review lists the run record, its prepared folders and its Results folder, which goes only when ticked. After confirming, the files go to the OS Trash, anything that cannot go there is named and left in place, and the run leaves the stage rail. Its members stop counting in project and captured unless they are still candidates.",
+      "negative": "Deleting never touches library frames or quality decisions, never deletes permanently and has no in-app undo, and a refused Delete run moves no file."
     },
     {
       "flowStep": "Cross-flow: Cleanup/Trash failure",
       "owner": "071-storage-custody",
-      "journeyStep": "J27/S8, J27/S10, J34/S6, J34/S9",
-      "spec": "071-storage-custody STO-FR-05, STO-FR-15, STO-FR-16, STO-AC-03, STO-AC-09, STO-AC-15, STO-AC-19, STO-AC-21; D19, D-W43, D-W70",
-      "action": "Send cleanup entries to the Trash after a retained original changes, on a location without safe Trash, and move rejected frames and processing intermediates to the Trash after one item changes in place.",
+      "journeyStep": "J27/S8, J27/S10, J27/S14, J34/S6, J34/S9, J34/S9a",
+      "spec": "071-storage-custody STO-FR-05, STO-FR-15, STO-FR-16, STO-FR-17, STO-AC-03, STO-AC-09, STO-AC-15, STO-AC-19, STO-AC-21, STO-AC-23, STO-AC-24; D19, D-W43, D-W70, D-W72, D-W74",
+      "action": "Send cleanup entries to the Trash after a retained original changes, on a location without safe Trash, delete a run whose prepared folders sit there, and move rejected frames, processing intermediates and duplicate copies to the Trash after one item changes in place.",
       "expect": "Each refused item is named with its reason in an exact partial summary, and the unsupported location offers Keep files and Reveal location. Items that pass re-verification go to the OS Trash.",
       "negative": "Refused items stay in place, and no permanent-delete fallback is offered."
     },
@@ -742,13 +742,22 @@
       "negative": "Showing a transfer or a duplicate candidate never authorizes removal."
     },
     {
-      "flowStep": "Done / Archive custody: the verified archive transfer, the OS Trash moves of rejected frames and processing intermediates, and the reviewed restore of archived sessions, executing the offers of the PV-PRJ Done / Archive sheet",
+      "flowStep": "Done / Archive custody: the verified archive transfer, the OS Trash moves of rejected frames, processing intermediates and duplicate copies, and the reviewed restore of archived sessions, executing the offers of the PV-PRJ Done / Archive sheet",
       "owner": "071-storage-custody",
-      "journeyStep": "J34/S5, J34/S6, J34/S9, J34/S10, J34/S11, J34/S12a, J28/S1",
-      "spec": "071-storage-custody STO-FR-04, STO-FR-06, STO-FR-07, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-AC-17, STO-AC-19, STO-AC-21, STO-AC-22; 065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-AC-17, PRJ-AC-28; 064-library-inventory LIB-FR-18; D19, D-W26, D-W43, D-W46, D-W69, D-W70",
-      "action": "Review Archive, move the rejected frames and then the processing intermediates to the Trash with one item changed in place, put a frame back, approve Archive, and after Reopen read an archived session's restore review.",
-      "expect": "Each approved offer runs as its own reviewed custody step with per-item outcomes and an exact summary, and every custody refusal is listed with its reason. The adopted master's generated source moves with the intermediates as a verified duplicate naming the kept copy. Archive keeps sessions another open Project's run uses and transfers the rest by the naming templates. After Reopen archived sessions still read Archived, and restoring one opens a reviewed transfer.",
-      "negative": "No file moves before an offer is approved, accepted Results, adopted masters, unknown files and prepared entries are never trashed, and nothing is permanently deleted. Reopening moves no file."
+      "journeyStep": "J34/S5, J34/S6, J34/S9, J34/S9a, J34/S10, J34/S11, J34/S12a, J28/S1",
+      "spec": "071-storage-custody STO-FR-04, STO-FR-06, STO-FR-07, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-AC-17, STO-AC-19, STO-AC-21, STO-AC-22, STO-AC-23; 065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-AC-17, PRJ-AC-28, PRJ-AC-30; 064-library-inventory LIB-FR-18; D19, D-W26, D-W43, D-W46, D-W69, D-W70, D-W74",
+      "action": "Review Archive, move the rejected frames, the processing intermediates and the duplicate copies to the Trash with one item changed in place, put a frame back, approve Archive, and after Reopen read an archived session's restore review.",
+      "expect": "Each approved offer runs as its own reviewed custody step with per-item outcomes and an exact summary, and every custody refusal is listed with its reason. The adopted master's generated source moves with the intermediates as a verified duplicate naming the kept copy, and each duplicate copy moves only after it and its kept copy re-verify. Archive keeps sessions another open Project's run uses and transfers the rest by the naming templates. After Reopen archived sessions still read Archived, and restoring one opens a reviewed transfer.",
+      "negative": "No file moves before an offer is approved, accepted Results, adopted masters, kept copies, unknown files and prepared entries are never trashed, and nothing is permanently deleted. Reopening moves no file."
+    },
+    {
+      "flowStep": "Delete run custody: moving a deleted run's prepared folders, and its Results folder when ticked, to the OS Trash",
+      "owner": "071-storage-custody",
+      "journeyStep": "J27/S14, J34/S2",
+      "spec": "071-storage-custody STO-FR-04, STO-FR-05, STO-FR-17, STO-AC-24; 070-results-reuse RES-FR-10, RES-AC-19; D19, D-W72",
+      "action": "Delete a run whose prepared folders sit on a location without OS Trash, with its Results folder ticked, and delete a run that has no preparation revision.",
+      "expect": "The review names each item that cannot go to the OS Trash with its reason. After confirming, every other item goes to the OS Trash, and the summary names every item left in place with its path.",
+      "negative": "No item is permanently deleted, no link target is followed, and no library frame or quality decision changes."
     },
     {
       "flowStep": "Import: source, preview, Copy or Move, summary, saved sources and Import new",
