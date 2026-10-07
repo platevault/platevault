@@ -22,14 +22,16 @@ then picks up each panel's Results from that panel's own Results folder and an
 assembled mosaic from the group's Results folder. Done means the four panel
 runs hold 40, 30, 30 and 20 lights. They are prepared under
 `Work/Processing/Veil Mosaic HOO/Veil Mosaic/Panel 1/` to `Panel 4/`, and each
-panel run's Results come only from its own `Veil Mosaic/Panel N Results/`
-folder. A re-prepared Panel 2 revision lands in a new `Veil Mosaic (rev 2)/`
-folder with its own `Panel N/` folders, while the first folder stays
-unchanged. Panel 2's Results of both revisions come from the one
-`Veil Mosaic/Panel 2 Results/` folder, and each names the revision it came
-from. The assembled image saved to `Veil Mosaic Results/` is the group Result
-candidate and is accepted with lineage Unknown. No panel run's status,
-membership or revision changes because of another panel or the group Result.
+panel run's Results come only from its own `Veil Mosaic Results/Panel N/`
+folder. Every Results folder sits outside the group folder `Veil Mosaic/` that
+PixInsight loads. A re-prepared Panel 2 revision lands in a new
+`Veil Mosaic (rev 2)/` folder with its own `Panel N/` folders, while the first
+folder stays unchanged. Panel 2's Results of both revisions come from the one
+`Veil Mosaic Results/Panel 2/` folder, and each names the revision it came
+from. The assembled image saved to `Veil Mosaic Results/Assembled/` is the
+group Result candidate and is accepted with lineage Unknown. No panel run's
+status, membership or revision changes because of another panel or the group
+Result.
 
 ## Preconditions
 
@@ -52,7 +54,7 @@ membership or revision changes because of another panel or the group Result.
 - P5: PixInsight is installed. Its WBPP profile is configured in PlateVault with recorded evidence that it reads input folders and never writes into its input files (D04).
 - P6: `Work/Processing` exists on `Astro-T7`, writable, with free space for the four panels' links.
 - P7: Two named 12 Aug frames, Q1 and Q2, whose read permission the user can remove and restore.
-- P8: Test images kept outside PlateVault: one per panel for the `Panel N Results/` folders, `Panel4_OIII_drizzle.xisf`, whose file name names Panel 4, `Veil_HOO_mosaic.xisf`, and `stray.xisf`.
+- P8: Test images kept outside PlateVault: one per panel for the `Veil Mosaic Results/Panel N/` folders, `Panel4_OIII_drizzle.xisf`, whose file name names Panel 4, `Veil_HOO_mosaic.xisf`, and `stray.xisf`.
 
 ## Steps
 
@@ -108,8 +110,8 @@ membership or revision changes because of another panel or the group Result.
 ### S8 — Review Prepare all {#S8}
 
 - **Do:** Click **Prepare all**. Choose `Work/Processing` as the parent folder. Read the review.
-- **Expect:** The review lists `Work/Processing/Veil Mosaic HOO/Veil Mosaic/Panel 1/` to `Panel 4/`. It lists each panel run's Results folder, `Veil Mosaic/Panel 1 Results/` to `Panel 4 Results/`, and the group Results folder `Work/Processing/Veil Mosaic HOO/Veil Mosaic Results/`. Each panel shows its entry count, covering 40, 30, 30 and 20 lights, and its own calibration choices. Panel 3 is named with its exception. Profile WBPP, input mode Linked and calibration policy automatic appear once, with one total footprint and the free space.
-- **Expect (negative):** Nothing is created under `Work/Processing` before approval. The group Results folder is not inside `Veil Mosaic/`, and no `Panel N Results/` folder is inside a prepared `Panel N/` folder.
+- **Expect:** The review lists `Work/Processing/Veil Mosaic HOO/Veil Mosaic/Panel 1/` to `Panel 4/`. It lists each panel run's Results folder, `Work/Processing/Veil Mosaic HOO/Veil Mosaic Results/Panel 1/` to `Panel 4/`, and the group Results folder `Veil Mosaic Results/Assembled/`. Each panel shows its entry count, covering 40, 30, 30 and 20 lights, and its own calibration choices. Panel 3 is named with its exception. Profile WBPP, input mode Linked and calibration policy automatic appear once, with one total footprint and the free space.
+- **Expect (negative):** Nothing is created under `Work/Processing` before approval. No Results folder is inside the group folder `Veil Mosaic/` or a prepared `Panel N/` folder.
 - **Trace:** Run group: Prepare all and the panel folder layout · PREP-FR-06, PREP-FR-07, PREP-FR-12 · PREP-AC-16 · D-W38, D-W41, D-W51, D-W73
 
 ### S9 — Prepare all with a blocked panel {#S9}
@@ -122,16 +124,16 @@ membership or revision changes because of another panel or the group Result.
 ### S10 — Retry the blocked panel {#S10}
 
 - **Do:** Restore read permission on Q1 and Q2. Click **Retry** on Panel 2. Then click **Open** on the group folder and quit PixInsight.
-- **Expect:** Panel 2 reads Prepared, and the group reads Prepared. **Open** on the group folder appears, re-verifies every panel's entries, and launches PixInsight on `Work/Processing/Veil Mosaic HOO/Veil Mosaic/`. The launch is recorded separately from processing.
-- **Expect (negative):** Retry does not re-create Panels 1, 3 and 4. Quitting PixInsight marks no panel run Complete.
+- **Expect:** Panel 2 reads Prepared, and the group reads Prepared. **Open** on the group folder appears, re-verifies every panel's entries, and launches PixInsight on `Work/Processing/Veil Mosaic HOO/Veil Mosaic/`, which holds only the four `Panel N/` folders. The launch is recorded separately from processing.
+- **Expect (negative):** Retry does not re-create Panels 1, 3 and 4. Quitting PixInsight marks no panel run Complete. The folder PixInsight loads holds no Results folder, so a later pass never reads a panel's own output as input.
 - **Trace:** Run group: Prepare all and the panel folder layout · PREP-FR-10, PREP-FR-12, PREP-FR-13 · D-W38, D-W51
 
 ### S11 — Discover panel Results and the group candidate {#S11}
 
-- **Do:** Outside PlateVault, copy one P8 panel image into each of `Veil Mosaic/Panel 1 Results/` to `Panel 4 Results/`. Copy `Panel4_OIII_drizzle.xisf` into `Veil Mosaic/Panel 2 Results/`, `Veil_HOO_mosaic.xisf` into `Veil Mosaic Results/`, and `stray.xisf` into `Veil Mosaic/Panel 1/`. Open the group's **Results** step.
+- **Do:** Outside PlateVault, copy one P8 panel image into each of `Veil Mosaic Results/Panel 1/` to `Panel 4/`. Copy `Panel4_OIII_drizzle.xisf` into `Veil Mosaic Results/Panel 2/`, `Veil_HOO_mosaic.xisf` into `Veil Mosaic Results/Assembled/`, and `stray.xisf` into `Veil Mosaic/Panel 1/`. Open the group's **Results** step.
 - **Expect:**
-  - Each panel run lists exactly the candidates in its own `Panel N Results/` folder. Panel 2 lists `Panel4_OIII_drizzle.xisf` too, because it was written to Panel 2's folder.
-  - The group lists `Veil_HOO_mosaic.xisf` from `Veil Mosaic Results/` as a group Result candidate of kind Assembled mosaic.
+  - Each panel run lists exactly the candidates in its own `Veil Mosaic Results/Panel N/` folder. Panel 2 lists `Panel4_OIII_drizzle.xisf` too, because it was written to Panel 2's folder.
+  - The group lists `Veil_HOO_mosaic.xisf` from `Veil Mosaic Results/Assembled/` as a group Result candidate of kind Assembled mosaic.
   - Each discovered Result names the group preparation it came from, `Veil Mosaic`. **Attach Result** is visible beside the discovered list.
 - **Expect (negative):** `stray.xisf` is not discovered. Panel 4 does not list `Panel4_OIII_drizzle.xisf`, whatever its file name says, and no candidate is listed as unplaced. Nothing is accepted automatically.
 - **Trace:** Run group Results: per-panel Results folders and the optional group Result · RES-FR-01, RES-FR-02, RES-FR-08 · RES-AC-11 · D-W4, D-W51, D-W67, D-W73
@@ -146,14 +148,14 @@ membership or revision changes because of another panel or the group Result.
 ### S13 — Re-prepare one panel into a new group folder {#S13}
 
 - **Do:** Record a listing (path, inode, size) of `Veil Mosaic/` outside PlateVault. In Panel 2, choose **Exclude from run** for Q2 and click **Save run**. Click **Prepare** on Panel 2, read the review, and approve.
-- **Expect:** Panel 2 reads saved membership revision 2 with 29 lights. The review proposes the new group folder `Work/Processing/Veil Mosaic HOO/Veil Mosaic (rev 2)/`, with a `Panel N/` folder inside it for every panel run, `Panel 1/` to `Panel 4/`. It names `Veil Mosaic/Panel 2 Results/` as Panel 2's unchanged Results folder, which serves both revisions. After approval, `Veil Mosaic (rev 2)/Panel 2/` holds 29 lights and every panel reads Prepared.
-- **Expect (negative):** `Veil Mosaic/` and its `Panel N/` folders equal the recorded listing, and no existing folder is reused or cleared. The previous group folder stays until the user approves its cleanup. No second Results folder is proposed.
+- **Expect:** Panel 2 reads saved membership revision 2 with 29 lights. The review proposes the new group folder `Work/Processing/Veil Mosaic HOO/Veil Mosaic (rev 2)/`, with a `Panel N/` folder inside it for every panel run, `Panel 1/` to `Panel 4/`. It names `Veil Mosaic Results/Panel 2/` as Panel 2's unchanged Results folder, which serves both revisions. After approval, `Veil Mosaic (rev 2)/Panel 2/` holds 29 lights and every panel reads Prepared.
+- **Expect (negative):** `Veil Mosaic/` and its `Panel N/` folders equal the recorded listing, and no existing folder is reused or cleared. The previous group folder stays until the user approves its cleanup. No second Results folder is proposed, and none is inside `Veil Mosaic (rev 2)/`.
 - **Trace:** Run group: Prepare all and the panel folder layout · PREP-FR-06, PREP-FR-07, PREP-FR-11, PREP-FR-13 · PREP-AC-18 · D-W51, D-W67, D-W73
 
 ### S14 — Discover a Result from the new revision {#S14}
 
-- **Do:** Outside PlateVault, copy a second P8 panel image into `Veil Mosaic/Panel 2 Results/`. Open the group's **Results** step again.
-- **Expect:** Panel 2 lists the new candidate, naming `Veil Mosaic (rev 2)` as the preparation it came from. The S11 candidates, in the same `Panel 2 Results/` folder, still name `Veil Mosaic`. The group Result accepted at S12 is unchanged.
+- **Do:** Outside PlateVault, copy a second P8 panel image into `Veil Mosaic Results/Panel 2/`. Open the group's **Results** step again.
+- **Expect:** Panel 2 lists the new candidate, naming `Veil Mosaic (rev 2)` as the preparation it came from. The S11 candidates, in the same `Veil Mosaic Results/Panel 2/` folder, still name `Veil Mosaic`. The group Result accepted at S12 is unchanged.
 - **Expect (negative):** No candidate is discovered inside `Veil Mosaic (rev 2)/`, and no other panel lists the new candidate.
 - **Trace:** Run group Results: per-panel Results folders and the optional group Result · RES-FR-01, RES-FR-08 · RES-AC-16 · D-W67, D-W73 · G5
 
@@ -171,7 +173,7 @@ membership or revision changes because of another panel or the group Result.
 - SC3: At S6 marking Q1 changes exactly 1 frame's quality and 1 panel draft; the Panel 2 filter lists exactly 30 frames.
 - SC4: At S7 the Panel 3 exception changes 0 assignments in Panels 1, 2 and 4.
 - SC5: At S9 the group reads Partial with exactly Panel 2 Partial and 2 blocked items, and the group-folder Open is absent; after S10 the group reads Prepared.
-- SC6: At S11 `stray.xisf` is discovered 0 times, `Panel4_OIII_drizzle.xisf` is listed under Panel 2 only, 0 candidates are unplaced, and exactly 1 group Result candidate is listed; S12 changes 0 panel statuses, memberships or revisions.
+- SC6: At S11 `stray.xisf` is discovered 0 times, `Panel4_OIII_drizzle.xisf` is listed under Panel 2 only, 0 candidates are unplaced, and exactly 1 group Result candidate is listed, from `Veil Mosaic Results/Assembled/`. All 6 discovered files sit outside `Veil Mosaic/`. S12 changes 0 panel statuses, memberships or revisions.
 - SC7: After S13 `Veil Mosaic/` equals its recorded listing and `Veil Mosaic (rev 2)/` holds 4 panel folders.
 
 ## Known gaps
@@ -179,7 +181,7 @@ membership or revision changes because of another panel or the group Result.
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs, decisions D04 and D19, and workflow decisions D-W29, D-W38, D-W41, D-W51, D-W55, D-W67 and D-W73. No implementation has been validated against them.
 - G2: Unresolved implementation qualification: the WBPP profile's capability probe (D04) and the folder input it uses are not qualified, and the flow names no control for naming a mosaic subject or entering panel centres and rotation (S1). Blocks readiness.
 - G3: Unresolved implementation qualification: the panel-assignment geometry rule (pointing inside a panel's centre-and-rotation footprint, D-W38) has no fixed tolerance. The P3 panel definitions must place each P2 session by an unambiguous margin once the rule is chosen. Blocks readiness.
-- G4: Out of scope for this journey: Cancel or Pause of Prepare all, a group whose every panel fails, cleanup of the previous `Veil Mosaic/` folder, and a run group with no group Result (RES-AC-12 in its stated form) are not exercised. Blocks readiness until covered by a step or a journey.
+- G4: Out of scope for this journey: Cancel or Pause of Prepare all, a group whose every panel fails, cleanup of the previous `Veil Mosaic/` folder (which must leave `Veil Mosaic Results/` in place), and a run group with no group Result (RES-AC-12 in its stated form) are not exercised. Blocks readiness until covered by a step or a journey.
 - G5: Unresolved product question: RES-FR-01 and RES-AC-16 require each discovered Result to record the prepared revision it came from, but do not say how PlateVault decides it. S14 assumes that a file which appears after the rev 2 preparation names rev 2. Blocks readiness.
 
 ## Delta log

@@ -38,7 +38,7 @@ Done means:
   - `Ha deep` is open and Prepared. Its prepared revision explicitly includes one library-Unusable 28 Sep frame, F-prep, and leaves F-res and F-ab out.
   - F-res, F-prep and F-ab are library Unusable. Like every 28 Sep frame, each is a member of `NGC7000-HOO-Siril` with a prepared hardlink in `NGC7000-HOO-Siril/`. No other run holds F-ab.
 - P5: The open Project `NGC 7000 SHO` from J26/P7 has 18, 28 and 30 Sep as candidates, and none of its runs includes them.
-- P6: `Scratch/Captures` is registered and indexed as a Captures location. It holds a byte copy of one of the five Unusable 30 Sep frames, F-dup. `Scratch` has no OS Trash.
+- P6: `Scratch/Captures` is registered and indexed as a Captures location after `Astro-T7/Captures`. It holds a byte copy of one of the five Unusable 30 Sep frames, F-dup. `Scratch` has no OS Trash.
 - P7: The J27/P7 helper is available. F-drift, one of the other Unusable 30 Sep frames, is its target in S6. One registered intermediate is its target in S9.
 - P8: `NGC7000-HOO-Siril Results/` holds 416 recognized intermediates from J26/P1 (208 calibrated and 208 registered). It also holds the generated source of the master flat that J26/S9 adopted into `Astro-T7/Calibration`. No other run of the Project has a recognized intermediate in its Results folder.
 - P9: A disposable writable volume `Archive` has free space for the Project's sessions.

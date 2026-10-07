@@ -675,8 +675,8 @@
       "journeyStep": "J33/S8, J33/S9, J33/S10, J33/S13",
       "spec": "069-application-handoff PREP-FR-06, PREP-FR-07, PREP-FR-12, PREP-FR-13, PREP-AC-16, PREP-AC-17, PREP-AC-18; D-W38, D-W41, D-W51, D-W67, D-W73",
       "action": "Review Prepare all for the mosaic run group, prepare it with a blocked panel, Retry and Open the group folder, then reprepare one panel's new membership revision.",
-      "expect": "The review lists one Panel N folder per panel run under the group folder, each panel run's Panel N Results folder beside it, the group's sibling Mosaic Results folder, each panel's entry count and calibration choices, and the shared profile, mode and policy once. Open on the group folder re-verifies every panel before launch. The reprepare proposes a Mosaic (rev 2) folder with a Panel N folder for every panel and keeps each panel's one Results folder.",
-      "negative": "No whole-mosaic run is offered, no Results folder is inside a prepared Panel N folder, and the group Results folder is outside the group folder. The previous group folder is not reused, replaced or cleared and stays until its cleanup is approved."
+      "expect": "The review lists one Panel N folder per panel run under the group folder, each panel run's Results folder Mosaic Results/Panel N, the group's Results folder Mosaic Results/Assembled, each panel's entry count and calibration choices, and the shared profile, mode and policy once. Open on the group folder re-verifies every panel before launch, and the folder it hands to the application holds only the Panel N folders. The reprepare proposes a Mosaic (rev 2) folder with a Panel N folder for every panel and keeps each panel's one Results folder.",
+      "negative": "No whole-mosaic run is offered, and no Results folder is inside the group folder, a later group folder or a prepared Panel N folder, so the application never reads its own output as input. The previous group folder is not reused, replaced or cleared and stays until its cleanup is approved."
     },
     {
       "flowStep": "The prepared-entry record that a Complete run's Clean up lists (PV-STO runs Clean up, steps I2 to I5)",
@@ -710,9 +710,9 @@
       "owner": "070-results-reuse",
       "journeyStep": "J33/S11, J33/S12, J33/S14, J33/S15",
       "spec": "070-results-reuse RES-FR-01, RES-FR-02, RES-FR-04, RES-FR-08, RES-AC-11, RES-AC-12; D-W38, D-W67, D-W73",
-      "action": "Save panel images into each panel run's Panel N Results folder, including one whose file name names another panel, a stray file inside a prepared Panel N folder, and an assembled image into the group's Mosaic Results folder. Open the group's Results step, accept a panel Result and a group Result, discover a Result from a later revision, and complete each panel run.",
-      "expect": "Each panel run lists exactly the candidates in its own Panel N Results folder, each naming the group revision it came from, whatever a file's name says. The assembled image in the Mosaic Results folder is a group Result candidate of kind Assembled mosaic. Every panel run can complete with its own Results.",
-      "negative": "Nothing inside a prepared Panel N folder is discovered, no candidate is listed as unplaced, and nothing is accepted automatically. Accepting the group Result changes no panel run, and no panel run waits for a group Result."
+      "action": "Save panel images into each panel run's Mosaic Results/Panel N folder, including one whose file name names another panel, a stray file inside a prepared Panel N folder, and an assembled image into the group's Mosaic Results/Assembled folder. Open the group's Results step, accept a panel Result and a group Result, discover a Result from a later revision, and complete each panel run.",
+      "expect": "Each panel run lists exactly the candidates in its own Mosaic Results/Panel N folder, each naming the group revision it came from, whatever a file's name says. The assembled image in Mosaic Results/Assembled is a group Result candidate of kind Assembled mosaic. Every panel run can complete with its own Results.",
+      "negative": "Nothing inside the prepared group folder is discovered, no candidate is listed as unplaced, and nothing is accepted automatically. Accepting the group Result changes no panel run, and no panel run waits for a group Result."
     },
     {
       "flowStep": "Move run to Trash, Restore and Empty Trash",
