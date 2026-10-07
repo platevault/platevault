@@ -14,11 +14,11 @@ mod support;
 
 use persistence_library::{Catalog, SessionQuery, SourceProbe};
 use platevault_model::{
-    Asset, AssociationState, DraftEdit, Equipment, LibraryError, MemberReason, MemberState,
-    Membership, NewView, Project, ProjectInput, Provenance, Quality, RefreshItem, RefreshItemKind,
-    RefreshReview, RefreshState, RejectScope, RejectionMark, ReviewMark, ScanFile, ScanObservation,
-    ScanProgress, ScanState, SelectionReason, Session, SessionChoiceState, SubjectInput,
-    TargetRecord, ViewCriteria, ViewRecord,
+    Asset, AssociationState, CalibrationPolicy, DraftEdit, Equipment, LibraryError, MemberReason,
+    MemberState, Membership, NewView, Project, ProjectInput, Provenance, Quality, RefreshItem,
+    RefreshItemKind, RefreshReview, RefreshState, RejectScope, RejectionMark, ReviewMark, ScanFile,
+    ScanObservation, ScanProgress, ScanState, SelectionReason, Session, SessionChoiceState,
+    SubjectInput, TargetRecord, ViewCriteria, ViewRecord,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -372,6 +372,38 @@ async fn trashed_or_complete_run_refuses_discard() {
     refused(&error, "reopen");
     let kept = world.catalog.view(complete).await.unwrap();
     assert_eq!(kept.draft.map(|draft| draft.draft_revision), Some(complete_draft));
+}
+
+#[tokio::test]
+async fn never_saved_run_with_calibration_policy_discards_without_orphans() {
+    let world = world().await;
+    let project = world.project(&[world.redcat.id], &[&world.ngc7000]).await;
+    let run = world.run(&project, world.redcat.id, "HOO").await;
+    let draft = run.draft.unwrap().draft_revision;
+    let id = run.view.id;
+    let plan =
+        world.catalog.set_calibration_policy(id, 0, CalibrationPolicy::Manual).await.unwrap();
+    assert_eq!(plan.revision, 1, "the policy write records the run's calibration plan");
+
+    assert!(world.catalog.discard_view_draft(id, draft).await.unwrap().is_none());
+    assert_eq!(kind(&world.catalog.view(id).await.unwrap_err()), "not_found");
+    let mut conn =
+        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&world.fx.db))
+            .await
+            .unwrap();
+    for table in ["views", "view_revisions", "view_refresh_reviews", "calibration_plans"] {
+        let column = if table == "views" { "id" } else { "view_id" };
+        let statement = format!("SELECT COUNT(*) FROM {table} WHERE {column} = '{id}'");
+        let (rows,): (i64,) =
+            sqlx::query_as(sqlx::AssertSqlSafe(statement)).fetch_one(&mut conn).await.unwrap();
+        assert_eq!(rows, 0, "{table} keeps no row of the discarded run");
+    }
+    let (decisions,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM calibration_decisions")
+        .fetch_one(&mut conn)
+        .await
+        .unwrap();
+    assert_eq!(decisions, 0);
+    conn.close().await.unwrap();
 }
 
 #[tokio::test]

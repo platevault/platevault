@@ -340,10 +340,15 @@ impl Catalog {
             let draft = require_draft(conn, id, expected_draft).await?;
             delete_revision_rows(conn, draft.row).await?;
             if view.revision == 0 {
-                sqlx::query("DELETE FROM views WHERE id = ?1")
-                    .bind(id.to_string())
-                    .execute(&mut *conn)
-                    .await?;
+                // A never-saved run has no committed revision, so it holds no
+                // calibration decision or refresh review; a policy write
+                // still records its calibration plan.
+                for statement in [
+                    "DELETE FROM calibration_plans WHERE view_id = ?1",
+                    "DELETE FROM views WHERE id = ?1",
+                ] {
+                    sqlx::query(statement).bind(id.to_string()).execute(&mut *conn).await?;
+                }
                 None
             } else {
                 Some(load_record(conn, id).await?)
