@@ -32,6 +32,8 @@ mod volume;
 pub use volume::*;
 mod view;
 pub use view::*;
+pub mod import;
+pub use import::*;
 
 pub type Revision = u64;
 
