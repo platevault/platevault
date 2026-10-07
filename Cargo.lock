@@ -4779,6 +4779,7 @@ dependencies = [
  "base64 0.22.1",
  "calibration_master_detect",
  "csv",
+ "fs4",
  "fs_pathsafe",
  "hex",
  "jiff",

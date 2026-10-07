@@ -66,6 +66,7 @@ const SCHEMA: &str = schema_modules![
     "measurements.sql",
     "frame_thumbnails.sql",
     "storage.sql",
+    "import.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -128,6 +129,7 @@ mod projects;
 
 pub use frame_thumbnails::{StoredThumbnail, ThumbnailBasis};
 pub use measurements::{FrameRecordBasis, ImportReviewInput};
+mod import;
 mod storage;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.

@@ -206,6 +206,11 @@ struct Night {
     notes: Vec<String>,
 }
 
+/// The observing night sessions are keyed by, for naming templates' `{date}`.
+pub(crate) fn observing_night(meta: &CaptureMetadata) -> Option<Date> {
+    night(meta).value.map(|(date, _)| date)
+}
+
 /// Header-derived observing night; never consults the clock.
 ///
 /// Precedence: `DATE-LOC` with a time of day (local noon boundary), then

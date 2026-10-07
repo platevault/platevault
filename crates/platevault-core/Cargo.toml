@@ -26,6 +26,8 @@ hex.workspace = true
 unicode-normalization.workspace = true
 csv.workspace = true
 base64 = "0.22.1"
+# Import previews each destination volume's free space (STO-IMP-FR-03).
+fs4 = { version = "1.1.0", default-features = false, features = ["sync"] }
 simbad-resolver = "0.5.0"
 skymath = "0.7.2"
 target-match = "0.5.1"
