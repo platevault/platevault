@@ -4,6 +4,7 @@
 //! Measurement runs, cached records, contained reads and reviewed imports in
 //! the library catalog (spec 067: PIX-FR-01/06/07/08, PIX-AC-01/04,
 //! PV-PIX-SC-03).
+#![cfg(unix)]
 #![allow(clippy::too_many_lines)]
 
 mod support;

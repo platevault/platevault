@@ -10,7 +10,7 @@
 
 mod support;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -202,6 +202,20 @@ impl Shelf {
         conn.close().await.unwrap();
         rows
     }
+
+    /// The cached rows as (asset id, decoded at).
+    async fn thumbnail_decodes(&self) -> Vec<(String, String)> {
+        let url = format!("sqlite://{}?mode=ro", self.database.display());
+        let mut conn = sqlx::SqliteConnection::connect(&url).await.unwrap();
+        let rows = sqlx::query_as(
+            "SELECT asset_id, decoded_at FROM frame_thumbnails ORDER BY asset_id, decoded_at",
+        )
+        .fetch_all(&mut conn)
+        .await
+        .unwrap();
+        conn.close().await.unwrap();
+        rows
+    }
 }
 
 /// Request until no thumbnail reads Pending.
@@ -242,6 +256,16 @@ fn rewrite_in_place_keeping_stats(path: &Path, seed: u64, index: usize) {
     assert_eq!(rewritten.modified().unwrap(), original.modified().unwrap());
 }
 
+/// Make `path` unreadable, returning the permissions to restore.
+#[cfg(unix)]
+fn lock_read(path: &Path) -> std::fs::Permissions {
+    let readable = std::fs::metadata(path).unwrap().permissions();
+    let mut locked = readable.clone();
+    std::os::unix::fs::PermissionsExt::set_mode(&mut locked, 0o000);
+    std::fs::set_permissions(path, locked).unwrap();
+    readable
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn thumbnail_cached_by_sha_and_redecoded_on_change() {
     let mut shelf = Shelf::new(|root| write_star_frames(root, 2)).await;
@@ -268,16 +292,14 @@ async fn thumbnail_cached_by_sha_and_redecoded_on_change() {
     let again = ready(shelf.review().thumbnails(&ids).await.unwrap());
     assert_eq!(again, cached);
 
-    // Reopening shows the cached thumbnails without decoding the frames:
-    // even with the source unreadable, nothing reads Pending or Unreadable.
+    // Reopening shows the cached thumbnails without decoding the frames. On
+    // Unix the source is unreadable meanwhile, so a decode could not succeed.
     shelf.reopen().await;
-    let path = shelf.path(0);
-    let readable = std::fs::metadata(&path).unwrap().permissions();
-    let mut locked = readable.clone();
-    std::os::unix::fs::PermissionsExt::set_mode(&mut locked, 0o000);
-    std::fs::set_permissions(&path, locked).unwrap();
+    #[cfg(unix)]
+    let readable = lock_read(&shelf.path(0));
     let reopened = shelf.review().thumbnails(&ids).await.unwrap();
-    std::fs::set_permissions(&path, readable).unwrap();
+    #[cfg(unix)]
+    std::fs::set_permissions(shelf.path(0), readable).unwrap();
     assert_eq!(ready(reopened), cached);
 
     // A digest change: bytes rewritten in place under equal size and mtime.
@@ -401,4 +423,75 @@ async fn histogram_bins_linear_plane_independent_of_stretch() {
     assert_eq!(thumbnail.image.applied_stretch.kind, StretchKind::Auto);
     let reopened = review.open_frame(asset).await.unwrap();
     assert_eq!(reopened.planes[0].statistics, *statistics, "the histogram never follows a stretch");
+}
+
+/// Clients that keep requesting thumbnails while the decodes run, and after,
+/// get one decode per frame and digest: each frame's row is written once, and
+/// every Ready answer carries that decode.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn repeated_thumbnail_requests_store_one_decode_per_digest() {
+    const CLIENTS: usize = 8;
+    const SETTLED_CALLS: usize = 200;
+    let shelf = Shelf::new(|root| write_star_frames(root, 6)).await;
+    let ids = shelf.assets();
+    let clients: Vec<_> = (0..CLIENTS)
+        .map(|_| {
+            let library = Arc::clone(shelf.library());
+            let ids = ids.clone();
+            tokio::spawn(async move {
+                let mut seen: BTreeMap<Uuid, BTreeSet<String>> = BTreeMap::new();
+                let mut settled_calls = 0;
+                while settled_calls < SETTLED_CALLS {
+                    let entries = library.frame_review().thumbnails(&ids).await.unwrap();
+                    let mut all_ready = true;
+                    for entry in entries {
+                        match entry.state {
+                            ThumbnailState::Ready { thumbnail } => {
+                                seen.entry(entry.asset_id)
+                                    .or_default()
+                                    .insert(thumbnail.decoded_at);
+                            }
+                            ThumbnailState::Pending => all_ready = false,
+                            other => panic!("{}: {other:?}", entry.asset_id),
+                        }
+                    }
+                    if all_ready {
+                        settled_calls += 1;
+                    }
+                    tokio::task::yield_now().await;
+                }
+                seen
+            })
+        })
+        .collect();
+    let mut seen: BTreeMap<Uuid, BTreeSet<String>> = BTreeMap::new();
+    tokio::time::timeout(Duration::from_secs(60), async {
+        for client in clients {
+            for (asset, decodes) in client.await.unwrap() {
+                seen.entry(asset).or_default().extend(decodes);
+            }
+        }
+    })
+    .await
+    .expect("every client settles");
+    // A redundant decode still running would replace a row within this time.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    for entry in shelf.review().thumbnails(&ids).await.unwrap() {
+        let ThumbnailState::Ready { thumbnail } = entry.state else {
+            panic!("{}: {:?}", entry.asset_id, entry.state);
+        };
+        seen.entry(entry.asset_id).or_default().insert(thumbnail.decoded_at);
+    }
+    assert_eq!(seen.len(), ids.len());
+    for (asset, decodes) in &seen {
+        assert_eq!(decodes.len(), 1, "{asset} was decoded more than once: {decodes:?}");
+    }
+    let mut expected: Vec<(String, String)> = seen
+        .iter()
+        .map(|(asset, decodes)| (asset.to_string(), decodes.first().unwrap().clone()))
+        .collect();
+    expected.sort();
+    let mut rows = shelf.thumbnail_decodes().await;
+    rows.sort();
+    assert_eq!(rows, expected, "one row per frame, written by its one decode");
 }

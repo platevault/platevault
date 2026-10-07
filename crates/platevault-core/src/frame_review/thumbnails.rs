@@ -181,7 +181,8 @@ impl FrameReview {
     }
 }
 
-/// Decode plane 0 through a verified contained read, render it and cache it.
+/// Decode plane 0 through a verified contained read, render it and cache it,
+/// unless the asset already holds a current thumbnail.
 async fn decode_thumbnail(
     work: &Arc<ThumbnailWork>,
     catalog: &Catalog,
@@ -191,6 +192,14 @@ async fn decode_thumbnail(
         Arc::clone(&work.decodes).acquire_owned().await.map_err(|_| LibraryError::Canceled)?;
     if work.stopped.load(Ordering::Acquire) {
         return Err(LibraryError::Canceled);
+    }
+    // The request that queued this decode read the catalog before it claimed
+    // the asset, so a decode that settled in between may already have stored
+    // the current thumbnail. Re-read under the claim: a frame and digest are
+    // decoded once.
+    let bases = catalog.thumbnail_bases(&[decode.asset_id]).await?;
+    if bases.iter().any(|basis| basis.thumbnail.is_some()) {
+        return Ok(());
     }
     let container = decode.container;
     let canceled = Arc::clone(work);

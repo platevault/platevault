@@ -293,7 +293,7 @@ mod platform {
             ) {
                 Ok(()) => {
                     let _ = sync_folder(&files);
-                    let _ = sync_folder(source.parent().unwrap_or(Path::new("/")));
+                    let _ = sync_folder(source.parent().unwrap_or_else(|| Path::new("/")));
                     return Ok(());
                 }
                 Err(rustix::io::Errno::EXIST) => {
