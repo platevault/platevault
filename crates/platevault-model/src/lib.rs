@@ -14,6 +14,8 @@ use uuid::Uuid;
 
 pub mod naming;
 pub use naming::*;
+pub mod rig;
+pub use rig::*;
 
 pub type Revision = u64;
 
@@ -934,6 +936,10 @@ pub struct Equipment {
     pub telescope: Option<String>,
     pub focal_length_mm: Option<f64>,
     pub pixel_size_um: Option<f64>,
+    pub sensor_width_px: Option<u32>,
+    pub sensor_height_px: Option<u32>,
+    /// Mono or OSC, from the camera; `None` while unknown.
+    pub color_kind: Option<ColorKind>,
     pub decision_revision: Revision,
     pub state: AssociationState,
     pub provenance: Provenance,

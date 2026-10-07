@@ -8,5 +8,6 @@ pub mod inventory;
 pub mod library;
 pub mod model;
 pub mod naming;
+pub mod rig;
 pub mod targets;
 pub use model::*;

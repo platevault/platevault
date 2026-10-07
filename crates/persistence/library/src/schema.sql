@@ -254,6 +254,10 @@ CREATE TABLE IF NOT EXISTS equipment (
     telescope TEXT,
     focal_length_mm REAL,
     pixel_size_um REAL,
+    sensor_width_px INTEGER CHECK (sensor_width_px > 0),
+    sensor_height_px INTEGER CHECK (sensor_height_px > 0),
+    -- Mono or OSC comes from the camera; NULL while unknown.
+    color_kind TEXT CHECK (color_kind IN ('mono', 'osc')),
     state TEXT NOT NULL,
     provenance TEXT NOT NULL,
     decision_revision INTEGER NOT NULL CHECK (decision_revision > 0),

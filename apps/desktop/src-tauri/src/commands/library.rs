@@ -16,9 +16,9 @@ use platevault_core::grouping::group_assets;
 use platevault_core::library::{ConfirmedCorrection, InventoryProbe, Library, LibrarySession};
 use platevault_core::targets::{user_target, TargetQuery, TargetSearchHit, UserTargetInput};
 use platevault_core::{
-    Asset, Association, AssociationState, CorrectionInput, Equipment, ErrorResponse, ExpectedAsset,
-    ExpectedSession, LibraryError, Location, LocationRole, NativePath, Provenance, Quality,
-    RemapReview, RetireReview, Revision, ScanOperation, TargetCandidate, TargetCone,
+    Asset, Association, AssociationState, ColorKind, CorrectionInput, Equipment, ErrorResponse,
+    ExpectedAsset, ExpectedSession, LibraryError, Location, LocationRole, NativePath, Provenance,
+    Quality, RemapReview, RetireReview, Revision, ScanOperation, TargetCandidate, TargetCone,
     TargetCoverage, TargetRecord,
 };
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,7 @@ use uuid::Uuid;
 type Reply<T> = Result<T, ErrorResponse>;
 
 /// Stable wire failure for `identity`, keeping any scope the error carries.
-fn fail(identity: Option<Uuid>) -> impl FnOnce(LibraryError) -> ErrorResponse {
+pub(crate) fn fail(identity: Option<Uuid>) -> impl FnOnce(LibraryError) -> ErrorResponse {
     move |error| report(&error, identity, None)
 }
 
@@ -79,6 +79,9 @@ pub struct EquipmentInput {
     pub telescope: Option<String>,
     pub focal_length_mm: Option<f64>,
     pub pixel_size_um: Option<f64>,
+    pub sensor_width_px: Option<u32>,
+    pub sensor_height_px: Option<u32>,
+    pub color_kind: Option<ColorKind>,
 }
 
 /// Register a read-only location; nothing is scanned or modified.
@@ -336,6 +339,9 @@ pub async fn library_save_equipment(
         telescope: equipment.telescope,
         focal_length_mm: equipment.focal_length_mm,
         pixel_size_um: equipment.pixel_size_um,
+        sensor_width_px: equipment.sensor_width_px,
+        sensor_height_px: equipment.sensor_height_px,
+        color_kind: equipment.color_kind,
         decision_revision: expected_revision.unwrap_or_default(),
         state: AssociationState::Confirmed,
         provenance: Provenance::User,
