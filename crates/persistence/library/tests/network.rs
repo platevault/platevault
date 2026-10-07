@@ -6,6 +6,7 @@
 //! A location on a share the OS mounted is flagged as a network volume. An
 //! unmount mid-rehash reads Offline and keeps completed hashes; the next scan
 //! resumes with the remaining files and never hashes the completed ones again.
+#![cfg(unix)]
 
 mod support;
 
