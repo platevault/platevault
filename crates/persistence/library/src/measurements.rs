@@ -390,7 +390,7 @@ pub async fn recover_interrupted(conn: &mut SqliteConnection) -> Result<()> {
     Ok(())
 }
 
-fn validity(
+pub fn validity(
     asset: &Asset,
     record: Option<&MeasurementRecord>,
     method: &MeasurementMethod,
@@ -635,7 +635,7 @@ async fn store_record(conn: &mut SqliteConnection, record: &MeasurementRecord) -
     Ok(())
 }
 
-async fn latest_records(
+pub async fn latest_records(
     conn: &mut SqliteConnection,
     ids: &BTreeSet<Uuid>,
     method_name: &str,

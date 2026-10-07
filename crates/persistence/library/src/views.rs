@@ -726,7 +726,7 @@ async fn location_state(conn: &mut SqliteConnection, id: Uuid) -> Result<(String
     Ok((row.try_get("name")?, reason))
 }
 
-async fn read_membership(
+pub async fn read_membership(
     conn: &mut SqliteConnection,
     id: Uuid,
     membership: Membership,

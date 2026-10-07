@@ -302,6 +302,20 @@ impl GoalSpec {
         !matches!(self, Self::QualityBar { .. })
     }
 
+    /// Whether `in_project` meets this integration or frame-count goal. Goal
+    /// met reads "in project" only (D-W36); a quality bar is never met.
+    #[must_use]
+    pub fn met_by(&self, in_project: &GoalTally) -> bool {
+        match self {
+            Self::Integration { goal_seconds, .. } => {
+                Microseconds::from_whole_seconds(*goal_seconds)
+                    .is_some_and(|goal| in_project.seconds >= goal)
+            }
+            Self::FrameCount { goal_frames, .. } => in_project.frames >= *goal_frames,
+            Self::QualityBar { .. } => false,
+        }
+    }
+
     #[must_use]
     pub fn identity(&self) -> GoalIdentity {
         let key = match self {
@@ -624,6 +638,94 @@ pub struct ProjectDetail {
     pub project: Project,
     pub candidates: Vec<ProjectCandidate>,
     pub rejections: Vec<ProjectRejection>,
+}
+
+// ---------------------------------------------------------------------------
+// Progress
+// ---------------------------------------------------------------------------
+
+/// The frames of one goal's subject, panel and channel, each content-identical
+/// frame once (PRJ-FR-04). Light frames count in `frames` and their known
+/// exposure in `seconds`; an unknown value is counted apart, never as zero.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalTally {
+    pub frames: u64,
+    pub seconds: Microseconds,
+    /// Light frames in `frames` whose exposure is unknown; they add no seconds.
+    pub unknown_exposure_frames: u64,
+    /// Frames whose image type is unknown; never in `frames`.
+    pub unknown_image_type_frames: u64,
+}
+
+impl GoalTally {
+    /// Count one frame by its image type (`None` when unknown) and exposure.
+    /// A frame known not to be a light counts nowhere.
+    pub fn count(&mut self, light: Option<bool>, exposure: Option<Microseconds>) {
+        match light {
+            Some(false) => {}
+            None => self.unknown_image_type_frames += 1,
+            Some(true) => {
+                self.frames += 1;
+                match exposure {
+                    Some(exposure) => self.seconds = self.seconds.saturating_add(exposure),
+                    None => self.unknown_exposure_frames += 1,
+                }
+            }
+        }
+    }
+}
+
+/// Progress of one integration or frame-count goal as two labelled numbers,
+/// "in project" and "captured" (PRJ-FR-04, PRJ-FR-21, D-W36, D-W66).
+/// `in_project` never exceeds `captured`, and `met` reads `in_project` only.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalProgress {
+    pub goal: ProjectGoal,
+    /// The latest saved memberships of the Project's runs outside its Trash,
+    /// minus each run's exclusions, frames rejected for this Project, Trashed
+    /// frames, frames whose bytes changed since their run chose them and
+    /// frames a quality bar does not admit. A member stays after it stops
+    /// being a candidate (D-W45).
+    pub in_project: GoalTally,
+    /// The candidates on the goal's subject plus the members of those runs,
+    /// Trashed frames aside (D-W66, D-W72).
+    pub captured: GoalTally,
+    pub met: bool,
+    /// The quality bars of the goal's subject or panel; a frame counts in
+    /// project only when every one admits it.
+    pub quality_bars: Vec<QualityCriterion>,
+    /// Frames otherwise in project that a bar cannot judge because the
+    /// measurement it needs is missing; they count toward no goal.
+    pub unknown_for_bar: u64,
+}
+
+/// An automatic warning per subject and channel, read from calibration-matching
+/// evidence (PRJ-FR-11, CAL-FR-12, D-W29). It is never a goal and never blocks
+/// a run.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+pub enum ProjectWarning {
+    /// The subject's candidate lights in `channel` find darks that differ from
+    /// them only in exposure: every dark not incompatible on another criterion
+    /// has another exposure. Exposures are canonical decimal seconds, ascending.
+    ExposureMismatch {
+        subject_id: Uuid,
+        channel: Option<String>,
+        light_exposures: Vec<String>,
+        dark_exposures: Vec<String>,
+    },
+}
+
+/// A Project's goal progress, in goal order, and its warnings at its revision.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectProgress {
+    pub project_id: Uuid,
+    pub revision: Revision,
+    pub goals: Vec<GoalProgress>,
+    pub warnings: Vec<ProjectWarning>,
 }
 
 const HOUR: u64 = 3600;
