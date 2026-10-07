@@ -189,6 +189,17 @@ async fn settled_frame(progress: &mut broadcast::Receiver<MeasurementProgress>, 
     .expect("a frame must settle");
 }
 
+/// Poll the durable state until `asset` is no longer Pending in the run.
+async fn until_settled(review: &FrameReview, asset: Uuid) {
+    tokio::time::timeout(Duration::from_secs(120), async {
+        while review.frame_states(&[asset]).await.unwrap()[0].state == FrameStateKind::Pending {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the frame must settle");
+}
+
 /// A library over one generated root, with the SHA-256 of every file.
 struct Indexed {
     temp: tempfile::TempDir,
@@ -385,6 +396,10 @@ async fn frame_states_come_from_the_catalog_and_a_run_queues_only_frames_without
     order.extend(queued.iter().copied().filter(|id| *id != priority));
     let moved = order[order.len() - 1];
     let previewed = order[order.len() - 2];
+    // The workers are spawned tasks; until one takes the queue the priority
+    // frame is only at its head, and prioritize puts `moved` ahead of every
+    // queued frame. Prioritize only once the priority frame was dequeued.
+    until_settled(review, priority).await;
     let prioritized = review.prioritize(second.operation_id, &[moved]).await.unwrap();
     assert_eq!(prioritized.operation_id, second.operation_id);
 
