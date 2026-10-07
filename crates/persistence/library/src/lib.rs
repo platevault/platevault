@@ -57,6 +57,7 @@ macro_rules! schema_modules {
 #[rustfmt::skip]
 const SCHEMA: &str = schema_modules![
     "schema.sql",
+    "calibration.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -93,6 +94,12 @@ macro_rules! asset_sql {
         )
     };
 }
+
+mod calibration;
+
+pub use calibration::{
+    CalibrationInputDetail, CalibrationInputSummary, InputCopy, InputGroup, InputMember, InputQuery,
+};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -335,7 +342,8 @@ type AssociationIndex = HashMap<(Uuid, &'static str), Association>;
 impl Catalog {
     /// Open or create a clean catalog file with one durable writer and separate readers.
     ///
-    /// Interrupted Running scans are recorded Partial with their scope incomplete.
+    /// Interrupted Running scans are recorded Partial with their scope incomplete,
+    /// and Running master adoptions are recorded Interrupted.
     ///
     /// # Errors
     /// `PersistenceFailure` when the file cannot be opened or WAL/FULL/foreign-key
@@ -2183,6 +2191,7 @@ async fn recover_interrupted(conn: &mut SqliteConnection) -> Result<()> {
         finalize_operation(&mut txn, op.id, ScanState::Partial, &op.progress, &[], &incomplete)
             .await?;
     }
+    calibration::recover_adoptions(&mut txn).await?;
     txn.commit().await?;
     Ok(())
 }
