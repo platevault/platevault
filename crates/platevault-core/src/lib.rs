@@ -5,19 +5,19 @@
 
 pub mod calendar;
 pub mod calibration;
-pub mod frame_review;
 pub mod custody;
+pub mod frame_review;
 pub mod grouping;
 pub mod inventory;
 pub mod library;
 pub mod model;
 pub mod naming;
-pub mod rig;
 pub mod notifier;
 pub mod observing_plans;
 pub mod planning;
-pub mod reminders;
 pub mod projects;
+pub mod reminders;
+pub mod rig;
 pub mod subframe_csv;
 pub mod targets;
 pub use model::*;
