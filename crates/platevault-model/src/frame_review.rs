@@ -787,7 +787,8 @@ pub struct CutoutRequest {
 
 /// A rendered display tile: base64 8-bit gray values and, when any sample is
 /// masked, base64 category codes (0 valid, 1 NaN, 2 +Inf, 3 -Inf, 4 BLANK,
-/// 5 saturated). Memory-only; never stored.
+/// 5 saturated). Preview tiles are memory-only; only a [`FrameThumbnail`]'s
+/// image is cached.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewTile {
@@ -803,7 +804,7 @@ pub struct PreviewTile {
 }
 
 /// Valid-sample statistics of one plane in plane units.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaneSummary {
     pub valid: u64,
@@ -811,6 +812,10 @@ pub struct PlaneSummary {
     pub max: Option<f64>,
     pub median: Option<f64>,
     pub mad: Option<f64>,
+    /// Counts of the valid samples in equal bins over `[min, max]` of the
+    /// linear plane (the last bin holds `max`); empty without valid samples.
+    /// A display stretch never changes it (PIX-FR-03).
+    pub histogram: Vec<u32>,
 }
 
 /// One previewable plane.
@@ -841,6 +846,45 @@ pub struct FramePreview {
     pub planes: Vec<PlanePreview>,
     /// Whether the decoded digest equals the valid record's basis.
     pub matches_record: bool,
+}
+
+/// A cached, display-only decode of a frame (PIX-FR-12, D-W40): plane 0 under
+/// the auto display stretch, fit within the thumbnail side. It is bound to the
+/// SHA-256 of the bytes it was decoded from and the observation they were read
+/// under, and is never an input to measurement.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameThumbnail {
+    pub asset_id: Uuid,
+    pub sha256: String,
+    pub fingerprint: ObservationFingerprint,
+    pub image: PreviewTile,
+    pub decoded_at: String,
+}
+
+/// A frame's thumbnail as frame review shows it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum ThumbnailState {
+    /// Cached for the frame's current observation and recorded digest.
+    Ready { thumbnail: Box<FrameThumbnail> },
+    /// Not decoded for the current bytes yet; a decode is under way.
+    Pending,
+    /// The decode failed, with the failure's kind and message: never a blank
+    /// or substitute image.
+    Unreadable { reason: String, message: String },
+    /// Not thumbnailed: a Retired or Trashed frame, or an unavailable copy
+    /// without a cached thumbnail, named by its availability.
+    Unavailable { reason: String },
+}
+
+/// One requested frame's thumbnail state.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThumbnailEntry {
+    pub asset_id: Uuid,
+    #[serde(flatten)]
+    pub state: ThumbnailState,
 }
 
 /// A sample's validity category.

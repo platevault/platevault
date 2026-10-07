@@ -58,6 +58,7 @@ macro_rules! schema_modules {
 const SCHEMA: &str = schema_modules![
     "schema.sql",
     "measurements.sql",
+    "frame_thumbnails.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -95,8 +96,10 @@ macro_rules! asset_sql {
     };
 }
 
+mod frame_thumbnails;
 mod measurements;
 
+pub use frame_thumbnails::{StoredThumbnail, ThumbnailBasis};
 pub use measurements::{FrameRecordBasis, ImportReviewInput};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.

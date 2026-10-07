@@ -41,6 +41,8 @@ use crate::{
     StarRecord, StarState, StarWarning, StoredNumber, Stretch, StretchKind, TileRequest, Units,
 };
 
+mod thumbnails;
+
 /// Memory budget of the frames the measurement workers decode and measure at
 /// once, in MiB, charged per frame from its header (R14).
 const DECODE_BUDGET_MIB: u32 = 1024;
@@ -56,12 +58,13 @@ fn method() -> MeasurementMethod {
     MeasurementMethod::new(measure::METHOD.name, measure::METHOD.version)
 }
 
-/// Measurement runs, previews, star diagnostics and imports for the
-/// library's catalog. Dropping it stops the workers without settling their
+/// Measurement runs, previews, thumbnails, star diagnostics and imports for
+/// the library's catalog. Dropping it stops the workers without settling their
 /// run, as an exit does; the next open marks that run Interrupted.
 pub struct FrameReview {
     shared: Arc<Shared>,
     previews: StdMutex<PreviewCache>,
+    thumbnails: Arc<thumbnails::ThumbnailWork>,
 }
 
 /// State the measurement workers share with the service.
@@ -107,6 +110,7 @@ impl Drop for FrameReview {
     fn drop(&mut self) {
         self.shared.shutdown.store(true, Ordering::Release);
         self.shared.abort.store(true, Ordering::Release);
+        self.thumbnails.stop();
     }
 }
 
@@ -128,6 +132,7 @@ impl FrameReview {
                 workers,
             }),
             previews: StdMutex::new(PreviewCache::default()),
+            thumbnails: Arc::default(),
         }
     }
 
@@ -918,13 +923,15 @@ fn read_export(path: &Path) -> Result<(Vec<u8>, String), LibraryError> {
 // Preview cache
 // ---------------------------------------------------------------------------
 
-/// A decoded frame with the statistics and mask counts of every plane.
+/// A decoded frame with the statistics, mask counts and linear histogram of
+/// every plane.
 struct Decoded {
     asset: Asset,
     sha256: String,
     fingerprint: ObservationFingerprint,
     image: px::DecodedImage,
     statistics: Vec<(PlaneStatistics, px::MaskCounts)>,
+    histograms: Vec<Vec<u32>>,
     bytes: usize,
 }
 
@@ -934,17 +941,23 @@ impl Decoded {
         if image.planes.is_empty() {
             return Err(LibraryError::MetadataUnreadable("the image has no plane".into()));
         }
-        let statistics = image
+        let statistics: Vec<_> = image
             .planes
             .iter()
             .map(|plane| (display::statistics(plane), plane.mask_counts()))
+            .collect();
+        let histograms = image
+            .planes
+            .iter()
+            .zip(&statistics)
+            .map(|(plane, (stats, _))| display::histogram(plane, stats))
             .collect();
         let bytes = image
             .planes
             .iter()
             .map(|plane| plane.samples.len() * plane.samples.format().bytes())
             .sum();
-        Ok(Self { asset, sha256, fingerprint, image, statistics, bytes })
+        Ok(Self { asset, sha256, fingerprint, image, statistics, histograms, bytes })
     }
 
     fn plane(&self, index: u32) -> Result<(&px::Plane, &PlaneStatistics), LibraryError> {
@@ -988,8 +1001,9 @@ impl Decoded {
             .planes
             .iter()
             .zip(&self.statistics)
+            .zip(&self.histograms)
             .enumerate()
-            .map(|(index, (plane, (statistics, masks)))| PlanePreview {
+            .map(|(index, ((plane, (statistics, masks)), histogram))| PlanePreview {
                 index: u32::try_from(index).unwrap_or(u32::MAX),
                 basis: plane_basis(&plane.kind),
                 masks: mask_counts(*masks),
@@ -999,6 +1013,7 @@ impl Decoded {
                     max: statistics.max,
                     median: statistics.median,
                     mad: statistics.mad,
+                    histogram: histogram.clone(),
                 },
             })
             .collect();

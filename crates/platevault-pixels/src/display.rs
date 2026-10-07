@@ -30,6 +30,10 @@ pub const MAX_SAMPLE_SIDE: u32 = 64;
 pub const AUTO_SHADOWS_SIGMA: f64 = -2.8;
 /// Auto stretch: the median maps to this fraction of full scale.
 pub const AUTO_TARGET_BACKGROUND: f64 = 0.25;
+/// Bins of a plane histogram.
+pub const HISTOGRAM_BINS: usize = 256;
+/// Longest side of a thumbnail, in rendered samples.
+pub const THUMBNAIL_SIDE: u32 = 256;
 
 /// A requested display stretch: linear in plane units, or a midtones
 /// transfer in normalized units over the plane's valid range.
@@ -101,6 +105,57 @@ pub fn statistics(plane: &Plane) -> PlaneStatistics {
     let median = median_in_place(&mut values);
     let mad = median.and_then(|median| mad_in_place(&mut values, median));
     PlaneStatistics { valid: values.len() as u64, min, max, median, mad }
+}
+
+/// Counts of the valid samples [`statistics`] reads, in [`HISTOGRAM_BINS`]
+/// equal bins over `[min, max]` in plane units. The last bin holds `max`, a
+/// constant plane counts in bin 0 and a plane without valid samples has an
+/// empty histogram. Only the linear samples are read: no stretch is an input.
+#[must_use]
+pub fn histogram(plane: &Plane, stats: &PlaneStatistics) -> Vec<u32> {
+    let (Some(min), Some(max)) = (stats.min, stats.max) else {
+        return Vec::new();
+    };
+    let span = max - min;
+    let mut bins = vec![0_u32; HISTOGRAM_BINS];
+    for index in 0..plane.len() {
+        if let (value, Category::Valid) = plane.value_at(index) {
+            let bin = if span > 0.0 {
+                ((value - min) / span * HISTOGRAM_BINS as f64) as usize
+            } else {
+                0
+            };
+            let count = &mut bins[bin.min(HISTOGRAM_BINS - 1)];
+            *count = count.saturating_add(1);
+        }
+    }
+    bins
+}
+
+/// The whole plane at the smallest level whose grid fits [`THUMBNAIL_SIDE`]
+/// on both axes, rendered under `stretch` as a [`DisplayTile`]: display-only,
+/// with no conversion back to a plane.
+///
+/// # Errors
+///
+/// `InvalidRegion` for a plane whose level-8 grid exceeds a tile side.
+pub fn render_thumbnail(
+    plane: &Plane,
+    stats: &PlaneStatistics,
+    stretch: &Stretch,
+) -> Result<DisplayTile, PixelError> {
+    let grid = |level: u8| {
+        let block = 1_u32 << level;
+        (plane.width.div_ceil(block), plane.height.div_ceil(block))
+    };
+    let level = (0..=MAX_LEVEL)
+        .find(|level| {
+            let (width, height) = grid(*level);
+            width <= THUMBNAIL_SIDE && height <= THUMBNAIL_SIDE
+        })
+        .unwrap_or(MAX_LEVEL);
+    let (width, height) = grid(level);
+    render_tile(plane, stats, Region { x: 0, y: 0, width, height }, level, stretch)
 }
 
 /// The midtones transfer function `((m - 1) x) / ((2m - 1) x - m)`.

@@ -17,7 +17,7 @@ use platevault_core::library::Library;
 use platevault_core::{
     ConfirmedImport, CutoutRequest, FrameDetail, FramePreview, FrameStars, FrameState,
     ImportReview, MeasurementProgress, MeasurementRun, NativePath, PreviewTile, RegionsRequest,
-    RowResolution, SampleRequest, SampleValue, StarCutouts, Stretch, TileRequest,
+    RowResolution, SampleRequest, SampleValue, StarCutouts, Stretch, ThumbnailEntry, TileRequest,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
@@ -321,4 +321,19 @@ pub async fn pix_confirm_import(
 ) -> Reply<ConfirmedImport> {
     let review = library.frame_review();
     review.confirm_import(review_id, &resolutions).await.map_err(fail(Some(review_id)))
+}
+
+/// One thumbnail state per asset in request order. Thumbnails cached for the
+/// frame's current bytes come from the catalog without reading the source;
+/// others read `pending` while they decode, so clients request again. Starts
+/// no measurement and changes no library record.
+///
+/// # Errors
+/// `NotFound` for an unknown asset; `InvalidInput` for an asset listed twice.
+#[tauri::command]
+pub async fn pix_thumbnails(
+    library: State<'_, Arc<Library>>,
+    assets: Vec<Uuid>,
+) -> Reply<Vec<ThumbnailEntry>> {
+    library.frame_review().thumbnails(&assets).await.map_err(fail(None))
 }
