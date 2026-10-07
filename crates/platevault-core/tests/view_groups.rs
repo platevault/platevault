@@ -349,6 +349,7 @@ async fn group_creates_one_run_per_confirmed_panel_no_whole_mosaic() {
     // Each panel run stays tied to its panel: discarding a never-saved panel
     // run's draft removes nothing.
     let error = world.library.catalog().discard_view_draft(p2.view.id, 1).await.unwrap_err();
+    assert_eq!(kind(&error), "invalid_input", "refused before the write: {error}");
     assert!(error.to_string().contains("run group"), "{error}");
     assert_eq!(world.library.catalog().list_views(&query).await.unwrap().len(), 3);
     assert!(world.draft_selected(p2.view.id).await.is_empty());

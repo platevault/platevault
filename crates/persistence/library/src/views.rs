@@ -320,7 +320,8 @@ impl Catalog {
     ///
     /// # Errors
     /// `Conflict` carrying the current draft revision for a stale
-    /// `expected_draft`; `NotFound` for an unknown run.
+    /// `expected_draft`; `InvalidInput` for a never-saved panel run, which
+    /// stays in its run group (VSEL-FR-18); `NotFound` for an unknown run.
     pub async fn discard_view_draft(
         &self,
         id: Uuid,
@@ -328,6 +329,12 @@ impl Catalog {
     ) -> Result<Option<ViewRecord>> {
         let record = write_txn!(self, |conn| {
             let view = load_view(conn, id).await?;
+            if let (0, Some(group)) = (view.revision, view.group_id) {
+                return Err(invalid(format!(
+                    "run {id} is a panel run of run group {group}: it was never saved, and \
+                     discarding its draft cannot remove it from the group"
+                )));
+            }
             let draft = require_draft(conn, id, expected_draft).await?;
             delete_revision_rows(conn, draft.row).await?;
             if view.revision == 0 {
