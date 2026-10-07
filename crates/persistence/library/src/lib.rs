@@ -57,6 +57,7 @@ macro_rules! schema_modules {
 #[rustfmt::skip]
 const SCHEMA: &str = schema_modules![
     "schema.sql",
+    "rigs.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -93,6 +94,8 @@ macro_rules! asset_sql {
         )
     };
 }
+
+mod rigs;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -4881,6 +4884,9 @@ fn validate_equipment(equipment: &Equipment) -> Result<()> {
     if !positive(equipment.focal_length_mm) || !positive(equipment.pixel_size_um) {
         return Err(LibraryError::InvalidInput("equipment dimensions must be positive".into()));
     }
+    if equipment.sensor_width_px == Some(0) || equipment.sensor_height_px == Some(0) {
+        return Err(LibraryError::InvalidInput("sensor size must be positive".into()));
+    }
     Ok(())
 }
 
@@ -4891,10 +4897,14 @@ async fn upsert_equipment(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO equipment (id, name, camera, telescope, focal_length_mm, pixel_size_um, \
-         state, provenance, decision_revision, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT (id) DO UPDATE SET \
+         sensor_width_px, sensor_height_px, color_kind, state, provenance, decision_revision, \
+         updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13) \
+         ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, camera = excluded.camera, telescope = excluded.telescope, \
          focal_length_mm = excluded.focal_length_mm, pixel_size_um = excluded.pixel_size_um, \
+         sensor_width_px = excluded.sensor_width_px, sensor_height_px = excluded.sensor_height_px, \
+         color_kind = excluded.color_kind, \
          state = excluded.state, provenance = excluded.provenance, \
          decision_revision = excluded.decision_revision, updated_at = excluded.updated_at",
     )
@@ -4904,6 +4914,9 @@ async fn upsert_equipment(
     .bind(equipment.telescope.as_deref())
     .bind(equipment.focal_length_mm)
     .bind(equipment.pixel_size_um)
+    .bind(equipment.sensor_width_px)
+    .bind(equipment.sensor_height_px)
+    .bind(equipment.color_kind.as_ref().map(to_text).transpose()?)
     .bind(to_text(&equipment.state)?)
     .bind(to_json(&equipment.provenance)?)
     .bind(db_revision(decision_revision)?)
@@ -4926,6 +4939,13 @@ async fn load_equipment(conn: &mut SqliteConnection, id: Uuid) -> Result<Equipme
         telescope: row.try_get("telescope")?,
         focal_length_mm: row.try_get("focal_length_mm")?,
         pixel_size_um: row.try_get("pixel_size_um")?,
+        sensor_width_px: row.try_get("sensor_width_px")?,
+        sensor_height_px: row.try_get("sensor_height_px")?,
+        color_kind: row
+            .try_get::<Option<String>, _>("color_kind")?
+            .as_deref()
+            .map(from_text)
+            .transpose()?,
         decision_revision: revision(row.try_get("decision_revision")?)?,
         state: from_text(&row.try_get::<String, _>("state")?)?,
         provenance: from_json(&row.try_get::<String, _>("provenance")?)?,

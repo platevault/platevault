@@ -12,6 +12,9 @@ use metadata_core::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+pub mod rig;
+pub use rig::*;
+
 pub type Revision = u64;
 
 #[derive(Debug, thiserror::Error)]
@@ -931,6 +934,10 @@ pub struct Equipment {
     pub telescope: Option<String>,
     pub focal_length_mm: Option<f64>,
     pub pixel_size_um: Option<f64>,
+    pub sensor_width_px: Option<u32>,
+    pub sensor_height_px: Option<u32>,
+    /// Mono or OSC, from the camera; `None` while unknown.
+    pub color_kind: Option<ColorKind>,
     pub decision_revision: Revision,
     pub state: AssociationState,
     pub provenance: Provenance,

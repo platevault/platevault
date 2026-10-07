@@ -115,6 +115,9 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         // storage
         // import
         // planning
+        crate::commands::rigs::rig_filters_get,
+        crate::commands::rigs::rig_filters_save,
+        crate::commands::rigs::rig_unknown_filters,
         // targets
         // home
     ]);
