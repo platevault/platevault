@@ -222,3 +222,9 @@ upsert_install_intent
 # get_plan_by_row_id: available for ic9h.20 resume/recovery flow that needs to
 # load a plan by its integer row_id from the apply-loop context.
 get_plan_by_row_id
+
+# Spec 072 public pure APIs (astro-plan-htvso): night_spans is the unrounded
+# qualification entry point the astroplan reference test drives; due_reminders
+# is the pure due rule the scheduler applies through its Schedule internals.
+due_reminders
+night_spans

@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 use uuid::Uuid;
 
-type Reply<T> = Result<T, ErrorResponse>;
+pub(super) type Reply<T> = Result<T, ErrorResponse>;
 
 /// Stable wire failure for `identity`, keeping any scope the error carries.
 pub(crate) fn fail(identity: Option<Uuid>) -> impl FnOnce(LibraryError) -> ErrorResponse {

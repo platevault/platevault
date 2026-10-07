@@ -82,6 +82,11 @@ tokio = { workspace = true }
 uuid = { workspace = true }
 futures-util = { workspace = true }
 
+# Spec 072 R13: the macOS reminder adapter reads UNUserNotificationCenter
+# through the dedicated FFI crate, never the notification plugin.
+[target.'cfg(target_os = "macos")'.dependencies]
+platevault_notify_macos = { path = "../../../crates/platevault-notify-macos" }
+
 [dev-dependencies]
 # The `test` feature gates the `tauri::test` module (mock runtime, IPC
 # helpers). Only dev-dependencies pull it in so release builds stay clean.

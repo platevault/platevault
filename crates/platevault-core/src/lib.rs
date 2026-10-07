@@ -3,11 +3,16 @@
 
 //! Local-first library records and lossless application contracts.
 
+pub mod calendar;
 pub mod grouping;
 pub mod inventory;
 pub mod library;
 pub mod model;
 pub mod naming;
 pub mod rig;
+pub mod notifier;
+pub mod observing_plans;
+pub mod planning;
+pub mod reminders;
 pub mod targets;
 pub use model::*;

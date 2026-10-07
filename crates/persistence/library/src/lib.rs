@@ -59,6 +59,7 @@ const SCHEMA: &str = schema_modules![
     "schema.sql",
     "naming.sql",
     "rigs.sql",
+    "planning.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -98,6 +99,8 @@ macro_rules! asset_sql {
 
 mod naming;
 mod rigs;
+mod planning;
+pub use planning::{DeliveryClaim, DeliveryOutcome, SubscriptionWrite, PLANNING_SETTINGS_ID};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -358,6 +361,7 @@ impl Catalog {
         let mut writer = connect_writer(&writer_options).await?;
         install_schema(&mut writer).await?;
         recover_interrupted(&mut writer).await?;
+        planning::recover_sending(&mut writer).await?;
         let readers = SqlitePoolOptions::new()
             .max_connections(READER_CONNECTIONS)
             .connect_with(base.read_only(true))

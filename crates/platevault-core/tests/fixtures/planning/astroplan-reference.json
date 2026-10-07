@@ -1,0 +1,3390 @@
+{
+ "cases": [
+  {
+   "case": "backyard_autumn",
+   "criteria": {
+    "darkness": "astronomical",
+    "minAltitudeDeg": 30.0,
+    "minDurationMinutes": 60,
+    "moon": {
+     "kind": "min_separation",
+     "minSeparationDeg": 30.0
+    }
+   },
+   "nights": [
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-21T01:08:55Z",
+       "startUtc": "2026-10-20T12:16:08Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-21T04:21:41Z",
+       "startUtc": "2026-10-20T18:27:32Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-21T10:00:00Z",
+       "startUtc": "2026-10-20T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-20T14:42:00Z",
+       "startUtc": "2026-10-20T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-21T10:00:00Z",
+       "startUtc": "2026-10-21T00:03:47Z"
+      }
+     ],
+     "moonIllumination": 0.711545,
+     "moonPhaseAngleDeg": 64.9701,
+     "moonWaxing": true,
+     "night": "2026-10-20",
+     "nightEndUtc": "2026-10-21T10:00:00Z",
+     "nightStartUtc": "2026-10-20T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-21T10:00:00Z",
+       "startUtc": "2026-10-20T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-21T01:08:55Z",
+       "peakAltitudeDeg": 82.3489,
+       "peakInterior": true,
+       "startUtc": "2026-10-20T18:27:32Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-22T01:04:59Z",
+       "startUtc": "2026-10-21T12:12:12Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-22T04:23:21Z",
+       "startUtc": "2026-10-21T18:25:33Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-22T10:00:00Z",
+       "startUtc": "2026-10-21T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-21T14:54:49Z",
+       "startUtc": "2026-10-21T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-22T10:00:00Z",
+       "startUtc": "2026-10-22T01:20:39Z"
+      }
+     ],
+     "moonIllumination": 0.797792,
+     "moonPhaseAngleDeg": 53.4457,
+     "moonWaxing": true,
+     "night": "2026-10-21",
+     "nightEndUtc": "2026-10-22T10:00:00Z",
+     "nightStartUtc": "2026-10-21T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-22T10:00:00Z",
+       "startUtc": "2026-10-21T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-22T01:04:59Z",
+       "peakAltitudeDeg": 82.3491,
+       "peakInterior": true,
+       "startUtc": "2026-10-21T18:25:33Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-23T01:01:03Z",
+       "startUtc": "2026-10-22T12:08:17Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-23T04:25:00Z",
+       "startUtc": "2026-10-22T18:23:36Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-23T10:00:00Z",
+       "startUtc": "2026-10-22T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-22T15:06:18Z",
+       "startUtc": "2026-10-22T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-23T10:00:00Z",
+       "startUtc": "2026-10-23T02:38:30Z"
+      }
+     ],
+     "moonIllumination": 0.874004,
+     "moonPhaseAngleDeg": 41.5819,
+     "moonWaxing": true,
+     "night": "2026-10-22",
+     "nightEndUtc": "2026-10-23T10:00:00Z",
+     "nightStartUtc": "2026-10-22T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-23T10:00:00Z",
+       "startUtc": "2026-10-22T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-23T01:01:03Z",
+       "peakAltitudeDeg": 82.3492,
+       "peakInterior": true,
+       "startUtc": "2026-10-22T18:23:36Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-24T00:57:07Z",
+       "startUtc": "2026-10-23T12:04:21Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-24T04:26:38Z",
+       "startUtc": "2026-10-23T18:21:41Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-24T10:00:00Z",
+       "startUtc": "2026-10-23T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-23T15:17:35Z",
+       "startUtc": "2026-10-23T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-24T10:00:00Z",
+       "startUtc": "2026-10-24T03:58:32Z"
+      }
+     ],
+     "moonIllumination": 0.935719,
+     "moonPhaseAngleDeg": 29.3737,
+     "moonWaxing": true,
+     "night": "2026-10-23",
+     "nightEndUtc": "2026-10-24T10:00:00Z",
+     "nightStartUtc": "2026-10-23T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-24T10:00:00Z",
+       "startUtc": "2026-10-23T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-24T00:57:07Z",
+       "peakAltitudeDeg": 82.3492,
+       "peakInterior": true,
+       "startUtc": "2026-10-23T18:21:41Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-25T00:53:11Z",
+       "startUtc": "2026-10-24T12:00:25Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-25T04:28:16Z",
+       "startUtc": "2026-10-24T18:19:47Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-25T11:00:00Z",
+       "startUtc": "2026-10-24T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-24T15:29:50Z",
+       "startUtc": "2026-10-24T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-25T11:00:00Z",
+       "startUtc": "2026-10-25T05:22:03Z"
+      }
+     ],
+     "moonIllumination": 0.978971,
+     "moonPhaseAngleDeg": 16.6762,
+     "moonWaxing": true,
+     "night": "2026-10-24",
+     "nightEndUtc": "2026-10-25T11:00:00Z",
+     "nightStartUtc": "2026-10-24T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-25T11:00:00Z",
+       "startUtc": "2026-10-24T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-25T00:53:11Z",
+       "peakAltitudeDeg": 82.3493,
+       "peakInterior": true,
+       "startUtc": "2026-10-24T18:19:47Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-26T00:49:15Z",
+       "startUtc": "2026-10-25T11:56:29Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-26T04:29:54Z",
+       "startUtc": "2026-10-25T18:17:55Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-26T11:00:00Z",
+       "startUtc": "2026-10-25T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-25T15:44:25Z",
+       "startUtc": "2026-10-25T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-26T11:00:00Z",
+       "startUtc": "2026-10-26T06:49:47Z"
+      }
+     ],
+     "moonIllumination": 0.997865,
+     "moonPhaseAngleDeg": 5.2969,
+     "moonWaxing": true,
+     "night": "2026-10-25",
+     "nightEndUtc": "2026-10-26T11:00:00Z",
+     "nightStartUtc": "2026-10-25T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-26T11:00:00Z",
+       "startUtc": "2026-10-25T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-26T00:49:15Z",
+       "peakAltitudeDeg": 82.3494,
+       "peakInterior": true,
+       "startUtc": "2026-10-25T18:17:55Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-27T00:45:19Z",
+       "startUtc": "2026-10-26T11:52:33Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-27T04:31:31Z",
+       "startUtc": "2026-10-26T18:16:05Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-27T11:00:00Z",
+       "startUtc": "2026-10-26T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-26T16:03:23Z",
+       "startUtc": "2026-10-26T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-27T11:00:00Z",
+       "startUtc": "2026-10-27T08:20:28Z"
+      }
+     ],
+     "moonIllumination": 0.989774,
+     "moonPhaseAngleDeg": 11.6079,
+     "moonWaxing": false,
+     "night": "2026-10-26",
+     "nightEndUtc": "2026-10-27T11:00:00Z",
+     "nightStartUtc": "2026-10-26T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-27T11:00:00Z",
+       "startUtc": "2026-10-26T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-27T00:45:19Z",
+       "peakAltitudeDeg": 82.3494,
+       "peakInterior": true,
+       "startUtc": "2026-10-26T18:16:05Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-28T00:41:23Z",
+       "startUtc": "2026-10-27T11:48:37Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-28T04:33:08Z",
+       "startUtc": "2026-10-27T18:14:17Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-28T11:00:00Z",
+       "startUtc": "2026-10-27T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-27T16:29:55Z",
+       "startUtc": "2026-10-27T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-28T11:00:00Z",
+       "startUtc": "2026-10-28T09:49:12Z"
+      }
+     ],
+     "moonIllumination": 0.954456,
+     "moonPhaseAngleDeg": 24.6445,
+     "moonWaxing": false,
+     "night": "2026-10-27",
+     "nightEndUtc": "2026-10-28T11:00:00Z",
+     "nightStartUtc": "2026-10-27T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-28T11:00:00Z",
+       "startUtc": "2026-10-27T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-28T00:41:23Z",
+       "peakAltitudeDeg": 82.3495,
+       "peakInterior": true,
+       "startUtc": "2026-10-27T18:14:17Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-29T00:37:27Z",
+       "startUtc": "2026-10-28T11:44:41Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-29T04:34:45Z",
+       "startUtc": "2026-10-28T18:12:31Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-29T11:00:00Z",
+       "startUtc": "2026-10-28T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-28T17:08:42Z",
+       "startUtc": "2026-10-28T11:00:00Z"
+      }
+     ],
+     "moonIllumination": 0.893439,
+     "moonPhaseAngleDeg": 38.1053,
+     "moonWaxing": false,
+     "night": "2026-10-28",
+     "nightEndUtc": "2026-10-29T11:00:00Z",
+     "nightStartUtc": "2026-10-28T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-29T11:00:00Z",
+       "startUtc": "2026-10-28T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-29T00:37:27Z",
+       "peakAltitudeDeg": 82.3452,
+       "peakInterior": false,
+       "startUtc": "2026-10-28T18:12:31Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-30T00:33:31Z",
+       "startUtc": "2026-10-29T11:40:45Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-30T04:36:21Z",
+       "startUtc": "2026-10-29T18:10:47Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-30T11:00:00Z",
+       "startUtc": "2026-10-29T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-29T18:04:34Z",
+       "startUtc": "2026-10-29T11:07:15Z"
+      }
+     ],
+     "moonIllumination": 0.810543,
+     "moonPhaseAngleDeg": 51.6045,
+     "moonWaxing": false,
+     "night": "2026-10-29",
+     "nightEndUtc": "2026-10-30T11:00:00Z",
+     "nightStartUtc": "2026-10-29T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-30T11:00:00Z",
+       "startUtc": "2026-10-29T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-30T00:33:31Z",
+       "peakAltitudeDeg": 82.3253,
+       "peakInterior": false,
+       "startUtc": "2026-10-29T18:10:47Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-31T00:29:35Z",
+       "startUtc": "2026-10-30T11:36:49Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-31T04:37:56Z",
+       "startUtc": "2026-10-30T18:09:05Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-31T11:00:00Z",
+       "startUtc": "2026-10-30T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-30T19:18:01Z",
+       "startUtc": "2026-10-30T12:07:16Z"
+      }
+     ],
+     "moonIllumination": 0.711294,
+     "moonPhaseAngleDeg": 65.0019,
+     "moonWaxing": false,
+     "night": "2026-10-30",
+     "nightEndUtc": "2026-10-31T11:00:00Z",
+     "nightStartUtc": "2026-10-30T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-31T11:00:00Z",
+       "startUtc": "2026-10-30T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-31T00:29:35Z",
+       "peakAltitudeDeg": 82.2874,
+       "peakInterior": false,
+       "startUtc": "2026-10-30T18:09:05Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-01T00:25:40Z",
+       "startUtc": "2026-10-31T11:32:53Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-01T04:39:32Z",
+       "startUtc": "2026-10-31T18:07:24Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-01T11:00:00Z",
+       "startUtc": "2026-10-31T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-31T20:42:40Z",
+       "startUtc": "2026-10-31T12:49:00Z"
+      }
+     ],
+     "moonIllumination": 0.60209,
+     "moonPhaseAngleDeg": 78.2185,
+     "moonWaxing": false,
+     "night": "2026-10-31",
+     "nightEndUtc": "2026-11-01T11:00:00Z",
+     "nightStartUtc": "2026-10-31T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-01T11:00:00Z",
+       "startUtc": "2026-10-31T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-01T00:25:40Z",
+       "peakAltitudeDeg": 82.2305,
+       "peakInterior": false,
+       "startUtc": "2026-10-31T18:07:24Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-02T00:21:44Z",
+       "startUtc": "2026-11-01T11:28:57Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-02T04:41:07Z",
+       "startUtc": "2026-11-01T18:05:46Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-02T11:00:00Z",
+       "startUtc": "2026-11-01T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-01T22:10:10Z",
+       "startUtc": "2026-11-01T13:17:21Z"
+      }
+     ],
+     "moonIllumination": 0.48942,
+     "moonPhaseAngleDeg": 91.2125,
+     "moonWaxing": false,
+     "night": "2026-11-01",
+     "nightEndUtc": "2026-11-02T11:00:00Z",
+     "nightStartUtc": "2026-11-01T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-02T11:00:00Z",
+       "startUtc": "2026-11-01T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-02T00:21:44Z",
+       "peakAltitudeDeg": 82.1552,
+       "peakInterior": false,
+       "startUtc": "2026-11-01T18:05:46Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-03T00:17:48Z",
+       "startUtc": "2026-11-02T11:25:01Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-03T04:42:41Z",
+       "startUtc": "2026-11-02T18:04:10Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-03T11:00:00Z",
+       "startUtc": "2026-11-02T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-02T23:35:34Z",
+       "startUtc": "2026-11-02T13:37:21Z"
+      }
+     ],
+     "moonIllumination": 0.379313,
+     "moonPhaseAngleDeg": 103.9677,
+     "moonWaxing": false,
+     "night": "2026-11-02",
+     "nightEndUtc": "2026-11-03T11:00:00Z",
+     "nightStartUtc": "2026-11-02T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-03T11:00:00Z",
+       "startUtc": "2026-11-02T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-03T00:17:48Z",
+       "peakAltitudeDeg": 82.0607,
+       "peakInterior": false,
+       "startUtc": "2026-11-02T18:04:10Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-04T00:13:52Z",
+       "startUtc": "2026-11-03T11:21:05Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-04T04:44:15Z",
+       "startUtc": "2026-11-03T18:02:36Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-04T11:00:00Z",
+       "startUtc": "2026-11-03T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-04T00:57:34Z",
+       "startUtc": "2026-11-03T13:52:31Z"
+      }
+     ],
+     "moonIllumination": 0.277034,
+     "moonPhaseAngleDeg": 116.483,
+     "moonWaxing": false,
+     "night": "2026-11-03",
+     "nightEndUtc": "2026-11-04T11:00:00Z",
+     "nightStartUtc": "2026-11-03T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-04T11:00:00Z",
+       "startUtc": "2026-11-03T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-04T00:13:52Z",
+       "peakAltitudeDeg": 81.9466,
+       "peakInterior": false,
+       "startUtc": "2026-11-03T18:02:36Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-05T00:09:56Z",
+       "startUtc": "2026-11-04T11:17:09Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-05T04:45:48Z",
+       "startUtc": "2026-11-04T18:01:04Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-05T11:00:00Z",
+       "startUtc": "2026-11-04T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-05T02:16:50Z",
+       "startUtc": "2026-11-04T14:05:03Z"
+      }
+     ],
+     "moonIllumination": 0.186958,
+     "moonPhaseAngleDeg": 128.7618,
+     "moonWaxing": false,
+     "night": "2026-11-04",
+     "nightEndUtc": "2026-11-05T11:00:00Z",
+     "nightStartUtc": "2026-11-04T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-05T11:00:00Z",
+       "startUtc": "2026-11-04T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-05T00:09:56Z",
+       "peakAltitudeDeg": 81.8136,
+       "peakInterior": false,
+       "startUtc": "2026-11-04T18:01:04Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-06T00:06:00Z",
+       "startUtc": "2026-11-05T11:13:13Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-06T04:47:21Z",
+       "startUtc": "2026-11-05T17:59:34Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-06T11:00:00Z",
+       "startUtc": "2026-11-05T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-06T03:34:40Z",
+       "startUtc": "2026-11-05T14:16:25Z"
+      }
+     ],
+     "moonIllumination": 0.11252,
+     "moonPhaseAngleDeg": 140.8015,
+     "moonWaxing": false,
+     "night": "2026-11-05",
+     "nightEndUtc": "2026-11-06T11:00:00Z",
+     "nightStartUtc": "2026-11-05T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-06T11:00:00Z",
+       "startUtc": "2026-11-05T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-06T00:06:00Z",
+       "peakAltitudeDeg": 81.6607,
+       "peakInterior": false,
+       "startUtc": "2026-11-05T17:59:34Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-07T00:02:04Z",
+       "startUtc": "2026-11-06T11:09:18Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-07T04:48:54Z",
+       "startUtc": "2026-11-06T17:58:06Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-07T11:00:00Z",
+       "startUtc": "2026-11-06T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-07T04:52:19Z",
+       "startUtc": "2026-11-06T14:27:47Z"
+      }
+     ],
+     "moonIllumination": 0.056189,
+     "moonPhaseAngleDeg": 152.5759,
+     "moonWaxing": false,
+     "night": "2026-11-06",
+     "nightEndUtc": "2026-11-07T11:00:00Z",
+     "nightStartUtc": "2026-11-06T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-07T11:00:00Z",
+       "startUtc": "2026-11-06T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-07T00:02:04Z",
+       "peakAltitudeDeg": 81.4891,
+       "peakInterior": false,
+       "startUtc": "2026-11-06T17:58:06Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-07T23:58:08Z",
+       "startUtc": "2026-11-07T11:05:22Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-08T04:50:26Z",
+       "startUtc": "2026-11-07T17:56:41Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-08T11:00:00Z",
+       "startUtc": "2026-11-07T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-08T06:10:25Z",
+       "startUtc": "2026-11-07T14:40:18Z"
+      }
+     ],
+     "moonIllumination": 0.01947,
+     "moonPhaseAngleDeg": 163.9581,
+     "moonWaxing": false,
+     "night": "2026-11-07",
+     "nightEndUtc": "2026-11-08T11:00:00Z",
+     "nightStartUtc": "2026-11-07T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-08T11:00:00Z",
+       "startUtc": "2026-11-07T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-07T23:58:08Z",
+       "peakAltitudeDeg": 81.2983,
+       "peakInterior": false,
+       "startUtc": "2026-11-07T17:56:41Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-08T23:54:12Z",
+       "startUtc": "2026-11-08T11:01:26Z"
+      },
+      {
+       "endUtc": "2026-11-09T11:00:00Z",
+       "startUtc": "2026-11-09T10:57:30Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-09T04:51:57Z",
+       "startUtc": "2026-11-08T17:55:18Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-09T11:00:00Z",
+       "startUtc": "2026-11-08T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-09T07:28:25Z",
+       "startUtc": "2026-11-08T14:55:19Z"
+      }
+     ],
+     "moonIllumination": 0.002923,
+     "moonPhaseAngleDeg": 173.8017,
+     "moonWaxing": false,
+     "night": "2026-11-08",
+     "nightEndUtc": "2026-11-09T11:00:00Z",
+     "nightStartUtc": "2026-11-08T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-09T11:00:00Z",
+       "startUtc": "2026-11-08T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-08T23:54:12Z",
+       "peakAltitudeDeg": 81.0891,
+       "peakInterior": false,
+       "startUtc": "2026-11-08T17:55:18Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-09T23:50:16Z",
+       "startUtc": "2026-11-09T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-10T11:00:00Z",
+       "startUtc": "2026-11-10T10:53:34Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-10T04:53:28Z",
+       "startUtc": "2026-11-09T17:53:57Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-10T11:00:00Z",
+       "startUtc": "2026-11-09T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-10T08:43:58Z",
+       "startUtc": "2026-11-09T15:14:42Z"
+      }
+     ],
+     "moonIllumination": 0.006241,
+     "moonPhaseAngleDeg": 170.938,
+     "moonWaxing": true,
+     "night": "2026-11-09",
+     "nightEndUtc": "2026-11-10T11:00:00Z",
+     "nightStartUtc": "2026-11-09T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-10T11:00:00Z",
+       "startUtc": "2026-11-09T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-09T23:50:16Z",
+       "peakAltitudeDeg": 80.8618,
+       "peakInterior": false,
+       "startUtc": "2026-11-09T17:53:57Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-10T23:46:20Z",
+       "startUtc": "2026-11-10T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-11T11:00:00Z",
+       "startUtc": "2026-11-11T10:49:38Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-11T04:54:58Z",
+       "startUtc": "2026-11-10T17:52:38Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-11T11:00:00Z",
+       "startUtc": "2026-11-10T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-11T09:52:51Z",
+       "startUtc": "2026-11-10T15:41:03Z"
+      }
+     ],
+     "moonIllumination": 0.028382,
+     "moonPhaseAngleDeg": 160.6024,
+     "moonWaxing": true,
+     "night": "2026-11-10",
+     "nightEndUtc": "2026-11-11T11:00:00Z",
+     "nightStartUtc": "2026-11-10T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-11T11:00:00Z",
+       "startUtc": "2026-11-10T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-10T23:46:20Z",
+       "peakAltitudeDeg": 80.6165,
+       "peakInterior": false,
+       "startUtc": "2026-11-10T17:52:38Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-11T23:42:24Z",
+       "startUtc": "2026-11-11T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-12T11:00:00Z",
+       "startUtc": "2026-11-12T10:45:42Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-12T04:56:28Z",
+       "startUtc": "2026-11-11T17:51:22Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-12T11:00:00Z",
+       "startUtc": "2026-11-11T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-12T10:50:23Z",
+       "startUtc": "2026-11-11T16:17:33Z"
+      }
+     ],
+     "moonIllumination": 0.067748,
+     "moonPhaseAngleDeg": 149.8261,
+     "moonWaxing": true,
+     "night": "2026-11-11",
+     "nightEndUtc": "2026-11-12T11:00:00Z",
+     "nightStartUtc": "2026-11-11T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-12T11:00:00Z",
+       "startUtc": "2026-11-11T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-11T23:42:24Z",
+       "peakAltitudeDeg": 80.354,
+       "peakInterior": false,
+       "startUtc": "2026-11-11T17:51:22Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-12T23:38:28Z",
+       "startUtc": "2026-11-12T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-13T11:00:00Z",
+       "startUtc": "2026-11-13T10:41:46Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-13T04:57:57Z",
+       "startUtc": "2026-11-12T17:50:08Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-13T11:00:00Z",
+       "startUtc": "2026-11-12T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-13T11:00:00Z",
+       "startUtc": "2026-11-12T17:06:36Z"
+      }
+     ],
+     "moonIllumination": 0.122383,
+     "moonPhaseAngleDeg": 139.0459,
+     "moonWaxing": true,
+     "night": "2026-11-12",
+     "nightEndUtc": "2026-11-13T11:00:00Z",
+     "nightStartUtc": "2026-11-12T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-13T11:00:00Z",
+       "startUtc": "2026-11-12T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-12T23:38:28Z",
+       "peakAltitudeDeg": 80.0749,
+       "peakInterior": false,
+       "startUtc": "2026-11-12T17:50:08Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-13T23:34:32Z",
+       "startUtc": "2026-11-13T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-14T11:00:00Z",
+       "startUtc": "2026-11-14T10:37:50Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-14T04:59:25Z",
+       "startUtc": "2026-11-13T17:48:56Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-14T11:00:00Z",
+       "startUtc": "2026-11-13T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-13T11:34:22Z",
+       "startUtc": "2026-11-13T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-14T11:00:00Z",
+       "startUtc": "2026-11-13T18:07:41Z"
+      }
+     ],
+     "moonIllumination": 0.190142,
+     "moonPhaseAngleDeg": 128.2954,
+     "moonWaxing": true,
+     "night": "2026-11-13",
+     "nightEndUtc": "2026-11-14T11:00:00Z",
+     "nightStartUtc": "2026-11-13T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-14T11:00:00Z",
+       "startUtc": "2026-11-13T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-13T23:34:32Z",
+       "peakAltitudeDeg": 79.7795,
+       "peakInterior": false,
+       "startUtc": "2026-11-13T17:48:56Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-14T23:30:36Z",
+       "startUtc": "2026-11-14T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-15T11:00:00Z",
+       "startUtc": "2026-11-15T10:33:54Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-15T05:00:52Z",
+       "startUtc": "2026-11-14T17:47:47Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-15T11:00:00Z",
+       "startUtc": "2026-11-14T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-14T12:06:09Z",
+       "startUtc": "2026-11-14T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-15T11:00:00Z",
+       "startUtc": "2026-11-14T19:17:08Z"
+      }
+     ],
+     "moonIllumination": 0.268808,
+     "moonPhaseAngleDeg": 117.541,
+     "moonWaxing": true,
+     "night": "2026-11-14",
+     "nightEndUtc": "2026-11-15T11:00:00Z",
+     "nightStartUtc": "2026-11-14T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-15T11:00:00Z",
+       "startUtc": "2026-11-14T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-14T23:30:36Z",
+       "peakAltitudeDeg": 79.4681,
+       "peakInterior": false,
+       "startUtc": "2026-11-14T17:47:47Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-15T23:26:41Z",
+       "startUtc": "2026-11-15T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-16T11:00:00Z",
+       "startUtc": "2026-11-16T10:29:58Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-16T05:02:19Z",
+       "startUtc": "2026-11-15T17:46:40Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-16T11:00:00Z",
+       "startUtc": "2026-11-15T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-15T12:29:04Z",
+       "startUtc": "2026-11-15T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-16T11:00:00Z",
+       "startUtc": "2026-11-15T20:30:36Z"
+      }
+     ],
+     "moonIllumination": 0.356125,
+     "moonPhaseAngleDeg": 106.7233,
+     "moonWaxing": true,
+     "night": "2026-11-15",
+     "nightEndUtc": "2026-11-16T11:00:00Z",
+     "nightStartUtc": "2026-11-15T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-16T11:00:00Z",
+       "startUtc": "2026-11-15T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-15T23:26:41Z",
+       "peakAltitudeDeg": 79.1415,
+       "peakInterior": false,
+       "startUtc": "2026-11-15T17:46:40Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-16T23:22:45Z",
+       "startUtc": "2026-11-16T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-17T11:00:00Z",
+       "startUtc": "2026-11-17T10:26:02Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-17T05:03:45Z",
+       "startUtc": "2026-11-16T17:45:36Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-17T11:00:00Z",
+       "startUtc": "2026-11-16T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-16T12:46:11Z",
+       "startUtc": "2026-11-16T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-17T11:00:00Z",
+       "startUtc": "2026-11-16T21:45:12Z"
+      }
+     ],
+     "moonIllumination": 0.44974,
+     "moonPhaseAngleDeg": 95.7692,
+     "moonWaxing": true,
+     "night": "2026-11-16",
+     "nightEndUtc": "2026-11-17T11:00:00Z",
+     "nightStartUtc": "2026-11-16T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-17T11:00:00Z",
+       "startUtc": "2026-11-16T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-16T23:22:45Z",
+       "peakAltitudeDeg": 78.8001,
+       "peakInterior": false,
+       "startUtc": "2026-11-16T17:45:36Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-17T23:18:49Z",
+       "startUtc": "2026-11-17T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-18T11:00:00Z",
+       "startUtc": "2026-11-18T10:22:06Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-18T05:05:10Z",
+       "startUtc": "2026-11-17T17:44:34Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-18T11:00:00Z",
+       "startUtc": "2026-11-17T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-17T12:59:50Z",
+       "startUtc": "2026-11-17T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-18T11:00:00Z",
+       "startUtc": "2026-11-17T22:59:54Z"
+      }
+     ],
+     "moonIllumination": 0.547064,
+     "moonPhaseAngleDeg": 84.5988,
+     "moonWaxing": true,
+     "night": "2026-11-17",
+     "nightEndUtc": "2026-11-18T11:00:00Z",
+     "nightStartUtc": "2026-11-17T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-18T11:00:00Z",
+       "startUtc": "2026-11-17T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-17T23:18:49Z",
+       "peakAltitudeDeg": 78.4445,
+       "peakInterior": false,
+       "startUtc": "2026-11-17T17:44:34Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-18T23:14:53Z",
+       "startUtc": "2026-11-18T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-19T11:00:00Z",
+       "startUtc": "2026-11-19T10:18:10Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-19T05:06:34Z",
+       "startUtc": "2026-11-18T17:43:35Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-19T11:00:00Z",
+       "startUtc": "2026-11-18T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-18T13:11:36Z",
+       "startUtc": "2026-11-18T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-19T11:00:00Z",
+       "startUtc": "2026-11-19T00:15:03Z"
+      }
+     ],
+     "moonIllumination": 0.645079,
+     "moonPhaseAngleDeg": 73.1326,
+     "moonWaxing": true,
+     "night": "2026-11-18",
+     "nightEndUtc": "2026-11-19T11:00:00Z",
+     "nightStartUtc": "2026-11-18T11:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-19T11:00:00Z",
+       "startUtc": "2026-11-18T11:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-18T23:14:53Z",
+       "peakAltitudeDeg": 78.0749,
+       "peakInterior": false,
+       "startUtc": "2026-11-18T17:43:35Z"
+      }
+     ]
+    }
+   ],
+   "site": "backyard"
+  },
+  {
+   "case": "second_autumn",
+   "criteria": {
+    "darkness": "astronomical",
+    "minAltitudeDeg": 30.0,
+    "minDurationMinutes": 60,
+    "moon": {
+     "kind": "min_separation",
+     "minSeparationDeg": 30.0
+    }
+   },
+   "nights": [
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-20T22:59:10Z",
+       "startUtc": "2026-10-20T11:57:25Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-21T03:11:26Z",
+       "startUtc": "2026-10-20T17:08:38Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-21T09:00:00Z",
+       "startUtc": "2026-10-20T09:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-20T12:49:01Z",
+       "startUtc": "2026-10-20T09:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-21T09:00:00Z",
+       "startUtc": "2026-10-20T23:19:05Z"
+      }
+     ],
+     "moonIllumination": 0.707795,
+     "moonPhaseAngleDeg": 65.4436,
+     "moonWaxing": true,
+     "night": "2026-10-20",
+     "nightEndUtc": "2026-10-21T09:00:00Z",
+     "nightStartUtc": "2026-10-20T09:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-21T09:00:00Z",
+       "startUtc": "2026-10-20T09:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-20T22:59:10Z",
+       "peakAltitudeDeg": 83.5404,
+       "peakInterior": true,
+       "startUtc": "2026-10-20T17:08:38Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-21T22:55:14Z",
+       "startUtc": "2026-10-21T11:53:29Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-22T03:12:21Z",
+       "startUtc": "2026-10-21T17:07:23Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-22T09:00:00Z",
+       "startUtc": "2026-10-21T09:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-21T13:14:47Z",
+       "startUtc": "2026-10-21T09:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-22T09:00:00Z",
+       "startUtc": "2026-10-22T00:22:16Z"
+      }
+     ],
+     "moonIllumination": 0.794369,
+     "moonPhaseAngleDeg": 53.9324,
+     "moonWaxing": true,
+     "night": "2026-10-21",
+     "nightEndUtc": "2026-10-22T09:00:00Z",
+     "nightStartUtc": "2026-10-21T09:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-22T09:00:00Z",
+       "startUtc": "2026-10-21T09:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-21T22:55:14Z",
+       "peakAltitudeDeg": 83.5403,
+       "peakInterior": true,
+       "startUtc": "2026-10-21T17:07:23Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-22T22:51:18Z",
+       "startUtc": "2026-10-22T11:49:33Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-23T03:13:16Z",
+       "startUtc": "2026-10-22T17:06:10Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-23T09:00:00Z",
+       "startUtc": "2026-10-22T09:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-22T13:39:01Z",
+       "startUtc": "2026-10-22T09:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-23T09:00:00Z",
+       "startUtc": "2026-10-23T01:26:23Z"
+      }
+     ],
+     "moonIllumination": 0.871085,
+     "moonPhaseAngleDeg": 42.0833,
+     "moonWaxing": true,
+     "night": "2026-10-22",
+     "nightEndUtc": "2026-10-23T09:00:00Z",
+     "nightStartUtc": "2026-10-22T09:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-23T09:00:00Z",
+       "startUtc": "2026-10-22T09:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-22T22:51:18Z",
+       "peakAltitudeDeg": 83.5401,
+       "peakInterior": true,
+       "startUtc": "2026-10-22T17:06:10Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-23T22:47:22Z",
+       "startUtc": "2026-10-23T11:45:37Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-24T03:14:11Z",
+       "startUtc": "2026-10-23T17:04:58Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-24T09:00:00Z",
+       "startUtc": "2026-10-23T09:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-23T14:03:05Z",
+       "startUtc": "2026-10-23T09:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-24T09:00:00Z",
+       "startUtc": "2026-10-24T02:32:21Z"
+      }
+     ],
+     "moonIllumination": 0.933498,
+     "moonPhaseAngleDeg": 29.8886,
+     "moonWaxing": true,
+     "night": "2026-10-23",
+     "nightEndUtc": "2026-10-24T09:00:00Z",
+     "nightStartUtc": "2026-10-23T09:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-24T09:00:00Z",
+       "startUtc": "2026-10-23T09:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-23T22:47:22Z",
+       "peakAltitudeDeg": 83.5399,
+       "peakInterior": true,
+       "startUtc": "2026-10-23T17:04:58Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-24T22:43:26Z",
+       "startUtc": "2026-10-24T11:41:41Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-25T03:15:06Z",
+       "startUtc": "2026-10-24T17:03:48Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-25T10:00:00Z",
+       "startUtc": "2026-10-24T09:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-24T14:28:23Z",
+       "startUtc": "2026-10-24T09:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-25T10:00:00Z",
+       "startUtc": "2026-10-25T03:41:10Z"
+      }
+     ],
+     "moonIllumination": 0.977655,
+     "moonPhaseAngleDeg": 17.1937,
+     "moonWaxing": true,
+     "night": "2026-10-24",
+     "nightEndUtc": "2026-10-25T10:00:00Z",
+     "nightStartUtc": "2026-10-24T09:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-25T10:00:00Z",
+       "startUtc": "2026-10-24T09:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-24T22:43:26Z",
+       "peakAltitudeDeg": 83.5401,
+       "peakInterior": true,
+       "startUtc": "2026-10-24T17:03:48Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-25T22:39:30Z",
+       "startUtc": "2026-10-25T11:37:46Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-26T03:16:01Z",
+       "startUtc": "2026-10-25T17:02:38Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-26T10:00:00Z",
+       "startUtc": "2026-10-25T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-25T14:56:33Z",
+       "startUtc": "2026-10-25T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-26T10:00:00Z",
+       "startUtc": "2026-10-26T04:53:29Z"
+      }
+     ],
+     "moonIllumination": 0.997616,
+     "moonPhaseAngleDeg": 5.5971,
+     "moonWaxing": true,
+     "night": "2026-10-25",
+     "nightEndUtc": "2026-10-26T10:00:00Z",
+     "nightStartUtc": "2026-10-25T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-26T10:00:00Z",
+       "startUtc": "2026-10-25T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-25T22:39:30Z",
+       "peakAltitudeDeg": 83.5402,
+       "peakInterior": true,
+       "startUtc": "2026-10-25T17:02:38Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-26T22:35:34Z",
+       "startUtc": "2026-10-26T11:33:50Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-27T03:16:56Z",
+       "startUtc": "2026-10-26T17:01:31Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-27T10:00:00Z",
+       "startUtc": "2026-10-26T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-26T15:29:34Z",
+       "startUtc": "2026-10-26T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-27T10:00:00Z",
+       "startUtc": "2026-10-27T06:08:50Z"
+      }
+     ],
+     "moonIllumination": 0.990656,
+     "moonPhaseAngleDeg": 11.0941,
+     "moonWaxing": false,
+     "night": "2026-10-26",
+     "nightEndUtc": "2026-10-27T10:00:00Z",
+     "nightStartUtc": "2026-10-26T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-27T10:00:00Z",
+       "startUtc": "2026-10-26T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-26T22:35:34Z",
+       "peakAltitudeDeg": 83.5403,
+       "peakInterior": true,
+       "startUtc": "2026-10-26T17:01:31Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-27T22:31:38Z",
+       "startUtc": "2026-10-27T11:29:54Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-28T03:17:51Z",
+       "startUtc": "2026-10-27T17:00:24Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-28T10:00:00Z",
+       "startUtc": "2026-10-27T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-27T16:09:47Z",
+       "startUtc": "2026-10-27T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-28T10:00:00Z",
+       "startUtc": "2026-10-28T07:24:44Z"
+      }
+     ],
+     "moonIllumination": 0.95646,
+     "moonPhaseAngleDeg": 24.088,
+     "moonWaxing": false,
+     "night": "2026-10-27",
+     "nightEndUtc": "2026-10-28T10:00:00Z",
+     "nightStartUtc": "2026-10-27T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-28T10:00:00Z",
+       "startUtc": "2026-10-27T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-27T22:31:38Z",
+       "peakAltitudeDeg": 83.5404,
+       "peakInterior": true,
+       "startUtc": "2026-10-27T17:00:24Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-28T22:27:42Z",
+       "startUtc": "2026-10-28T11:25:58Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-29T03:18:46Z",
+       "startUtc": "2026-10-28T16:59:19Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-29T10:00:00Z",
+       "startUtc": "2026-10-28T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-28T16:59:28Z",
+       "startUtc": "2026-10-28T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-29T10:00:00Z",
+       "startUtc": "2026-10-29T08:36:40Z"
+      }
+     ],
+     "moonIllumination": 0.896451,
+     "moonPhaseAngleDeg": 37.5424,
+     "moonWaxing": false,
+     "night": "2026-10-28",
+     "nightEndUtc": "2026-10-29T10:00:00Z",
+     "nightStartUtc": "2026-10-28T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-29T10:00:00Z",
+       "startUtc": "2026-10-28T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-28T22:27:42Z",
+       "peakAltitudeDeg": 83.5229,
+       "peakInterior": false,
+       "startUtc": "2026-10-28T16:59:19Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-29T22:23:46Z",
+       "startUtc": "2026-10-29T11:22:02Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-30T03:19:42Z",
+       "startUtc": "2026-10-29T16:58:16Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-30T10:00:00Z",
+       "startUtc": "2026-10-29T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-29T17:59:35Z",
+       "startUtc": "2026-10-29T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-10-30T10:00:00Z",
+       "startUtc": "2026-10-30T09:39:55Z"
+      }
+     ],
+     "moonIllumination": 0.814366,
+     "moonPhaseAngleDeg": 51.0434,
+     "moonWaxing": false,
+     "night": "2026-10-29",
+     "nightEndUtc": "2026-10-30T10:00:00Z",
+     "nightStartUtc": "2026-10-29T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-30T10:00:00Z",
+       "startUtc": "2026-10-29T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-29T22:23:46Z",
+       "peakAltitudeDeg": 83.4615,
+       "peakInterior": false,
+       "startUtc": "2026-10-29T16:58:16Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-30T22:19:50Z",
+       "startUtc": "2026-10-30T11:18:06Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-10-31T03:20:37Z",
+       "startUtc": "2026-10-30T16:57:14Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-10-31T10:00:00Z",
+       "startUtc": "2026-10-30T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-30T19:08:18Z",
+       "startUtc": "2026-10-30T10:00:00Z"
+      }
+     ],
+     "moonIllumination": 0.715674,
+     "moonPhaseAngleDeg": 64.4469,
+     "moonWaxing": false,
+     "night": "2026-10-30",
+     "nightEndUtc": "2026-10-31T10:00:00Z",
+     "nightStartUtc": "2026-10-30T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-10-31T10:00:00Z",
+       "startUtc": "2026-10-30T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-30T22:19:50Z",
+       "peakAltitudeDeg": 83.3553,
+       "peakInterior": false,
+       "startUtc": "2026-10-30T16:57:14Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-10-31T22:15:54Z",
+       "startUtc": "2026-10-31T11:14:10Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-01T03:21:32Z",
+       "startUtc": "2026-10-31T16:56:13Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-01T10:00:00Z",
+       "startUtc": "2026-10-31T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-10-31T20:21:26Z",
+       "startUtc": "2026-10-31T10:32:12Z"
+      }
+     ],
+     "moonIllumination": 0.606753,
+     "moonPhaseAngleDeg": 77.6721,
+     "moonWaxing": false,
+     "night": "2026-10-31",
+     "nightEndUtc": "2026-11-01T10:00:00Z",
+     "nightStartUtc": "2026-10-31T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-01T10:00:00Z",
+       "startUtc": "2026-10-31T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-10-31T22:15:54Z",
+       "peakAltitudeDeg": 83.2054,
+       "peakInterior": false,
+       "startUtc": "2026-10-31T16:56:13Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-01T22:11:58Z",
+       "startUtc": "2026-11-01T11:10:14Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-02T03:22:28Z",
+       "startUtc": "2026-11-01T16:55:14Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-02T10:00:00Z",
+       "startUtc": "2026-11-01T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-01T21:34:38Z",
+       "startUtc": "2026-11-01T11:14:18Z"
+      }
+     ],
+     "moonIllumination": 0.494103,
+     "moonPhaseAngleDeg": 90.6758,
+     "moonWaxing": false,
+     "night": "2026-11-01",
+     "nightEndUtc": "2026-11-02T10:00:00Z",
+     "nightStartUtc": "2026-11-01T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-02T10:00:00Z",
+       "startUtc": "2026-11-01T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-01T22:11:58Z",
+       "peakAltitudeDeg": 83.0132,
+       "peakInterior": false,
+       "startUtc": "2026-11-01T16:55:14Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-02T22:08:02Z",
+       "startUtc": "2026-11-02T11:06:18Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-03T03:23:23Z",
+       "startUtc": "2026-11-02T16:54:17Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-03T10:00:00Z",
+       "startUtc": "2026-11-02T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-02T22:45:28Z",
+       "startUtc": "2026-11-02T11:48:32Z"
+      }
+     ],
+     "moonIllumination": 0.383778,
+     "moonPhaseAngleDeg": 103.441,
+     "moonWaxing": false,
+     "night": "2026-11-02",
+     "nightEndUtc": "2026-11-03T10:00:00Z",
+     "nightStartUtc": "2026-11-02T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-03T10:00:00Z",
+       "startUtc": "2026-11-02T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-02T22:08:02Z",
+       "peakAltitudeDeg": 82.7812,
+       "peakInterior": false,
+       "startUtc": "2026-11-02T16:54:17Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-03T22:04:06Z",
+       "startUtc": "2026-11-03T11:02:22Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-04T03:24:19Z",
+       "startUtc": "2026-11-03T16:53:21Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-04T10:00:00Z",
+       "startUtc": "2026-11-03T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-03T23:53:21Z",
+       "startUtc": "2026-11-03T12:17:25Z"
+      }
+     ],
+     "moonIllumination": 0.281079,
+     "moonPhaseAngleDeg": 115.9662,
+     "moonWaxing": false,
+     "night": "2026-11-03",
+     "nightEndUtc": "2026-11-04T10:00:00Z",
+     "nightStartUtc": "2026-11-03T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-04T10:00:00Z",
+       "startUtc": "2026-11-03T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-03T22:04:06Z",
+       "peakAltitudeDeg": 82.5118,
+       "peakInterior": false,
+       "startUtc": "2026-11-03T16:53:21Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-04T22:00:11Z",
+       "startUtc": "2026-11-04T10:58:26Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-05T03:25:15Z",
+       "startUtc": "2026-11-04T16:52:27Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-05T10:00:00Z",
+       "startUtc": "2026-11-04T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-05T00:58:56Z",
+       "startUtc": "2026-11-04T12:43:02Z"
+      }
+     ],
+     "moonIllumination": 0.19042,
+     "moonPhaseAngleDeg": 128.2549,
+     "moonWaxing": false,
+     "night": "2026-11-04",
+     "nightEndUtc": "2026-11-05T10:00:00Z",
+     "nightStartUtc": "2026-11-04T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-05T10:00:00Z",
+       "startUtc": "2026-11-04T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-04T22:00:11Z",
+       "peakAltitudeDeg": 82.2079,
+       "peakInterior": false,
+       "startUtc": "2026-11-04T16:52:27Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-05T21:56:15Z",
+       "startUtc": "2026-11-05T10:54:30Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-06T03:26:10Z",
+       "startUtc": "2026-11-05T16:51:35Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-06T10:00:00Z",
+       "startUtc": "2026-11-05T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-06T02:03:13Z",
+       "startUtc": "2026-11-05T13:07:07Z"
+      }
+     ],
+     "moonIllumination": 0.115273,
+     "moonPhaseAngleDeg": 140.3048,
+     "moonWaxing": false,
+     "night": "2026-11-05",
+     "nightEndUtc": "2026-11-06T10:00:00Z",
+     "nightStartUtc": "2026-11-05T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-06T10:00:00Z",
+       "startUtc": "2026-11-05T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-05T21:56:15Z",
+       "peakAltitudeDeg": 81.8722,
+       "peakInterior": false,
+       "startUtc": "2026-11-05T16:51:35Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-06T21:52:19Z",
+       "startUtc": "2026-11-06T10:50:34Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-07T03:27:06Z",
+       "startUtc": "2026-11-06T16:50:44Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-07T10:00:00Z",
+       "startUtc": "2026-11-06T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-07T03:07:11Z",
+       "startUtc": "2026-11-06T13:31:08Z"
+      }
+     ],
+     "moonIllumination": 0.058152,
+     "moonPhaseAngleDeg": 152.0915,
+     "moonWaxing": false,
+     "night": "2026-11-06",
+     "nightEndUtc": "2026-11-07T10:00:00Z",
+     "nightStartUtc": "2026-11-06T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-07T10:00:00Z",
+       "startUtc": "2026-11-06T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-06T21:52:19Z",
+       "peakAltitudeDeg": 81.5076,
+       "peakInterior": false,
+       "startUtc": "2026-11-06T16:50:44Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-07T21:48:23Z",
+       "startUtc": "2026-11-07T10:46:38Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-08T03:28:02Z",
+       "startUtc": "2026-11-07T16:49:55Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-08T10:00:00Z",
+       "startUtc": "2026-11-07T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-08T04:11:22Z",
+       "startUtc": "2026-11-07T13:56:25Z"
+      }
+     ],
+     "moonIllumination": 0.020598,
+     "moonPhaseAngleDeg": 163.4968,
+     "moonWaxing": false,
+     "night": "2026-11-07",
+     "nightEndUtc": "2026-11-08T10:00:00Z",
+     "nightStartUtc": "2026-11-07T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-08T10:00:00Z",
+       "startUtc": "2026-11-07T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-07T21:48:23Z",
+       "peakAltitudeDeg": 81.1165,
+       "peakInterior": false,
+       "startUtc": "2026-11-07T16:49:55Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-08T21:44:27Z",
+       "startUtc": "2026-11-08T10:42:42Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-09T03:28:58Z",
+       "startUtc": "2026-11-08T16:49:07Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-09T10:00:00Z",
+       "startUtc": "2026-11-08T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-09T05:15:39Z",
+       "startUtc": "2026-11-08T14:24:22Z"
+      }
+     ],
+     "moonIllumination": 0.003211,
+     "moonPhaseAngleDeg": 173.5032,
+     "moonWaxing": false,
+     "night": "2026-11-08",
+     "nightEndUtc": "2026-11-09T10:00:00Z",
+     "nightStartUtc": "2026-11-08T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-09T10:00:00Z",
+       "startUtc": "2026-11-08T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-08T21:44:27Z",
+       "peakAltitudeDeg": 80.701,
+       "peakInterior": false,
+       "startUtc": "2026-11-08T16:49:07Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-09T21:40:31Z",
+       "startUtc": "2026-11-09T10:38:47Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-10T03:29:53Z",
+       "startUtc": "2026-11-09T16:48:22Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-10T10:00:00Z",
+       "startUtc": "2026-11-09T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-10T06:18:55Z",
+       "startUtc": "2026-11-09T14:56:23Z"
+      }
+     ],
+     "moonIllumination": 0.005717,
+     "moonPhaseAngleDeg": 171.3271,
+     "moonWaxing": true,
+     "night": "2026-11-09",
+     "nightEndUtc": "2026-11-10T10:00:00Z",
+     "nightStartUtc": "2026-11-09T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-10T10:00:00Z",
+       "startUtc": "2026-11-09T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-09T21:40:31Z",
+       "peakAltitudeDeg": 80.2635,
+       "peakInterior": false,
+       "startUtc": "2026-11-09T16:48:22Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-10T21:36:35Z",
+       "startUtc": "2026-11-10T10:34:51Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-11T03:30:49Z",
+       "startUtc": "2026-11-10T16:47:38Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-11T10:00:00Z",
+       "startUtc": "2026-11-10T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-11T07:19:14Z",
+       "startUtc": "2026-11-10T15:33:51Z"
+      }
+     ],
+     "moonIllumination": 0.027103,
+     "moonPhaseAngleDeg": 161.0487,
+     "moonWaxing": true,
+     "night": "2026-11-10",
+     "nightEndUtc": "2026-11-11T10:00:00Z",
+     "nightStartUtc": "2026-11-10T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-11T10:00:00Z",
+       "startUtc": "2026-11-10T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-10T21:36:35Z",
+       "peakAltitudeDeg": 79.8059,
+       "peakInterior": false,
+       "startUtc": "2026-11-10T16:47:38Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-11T21:32:39Z",
+       "startUtc": "2026-11-11T10:30:55Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-12T03:31:45Z",
+       "startUtc": "2026-11-11T16:46:55Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-12T10:00:00Z",
+       "startUtc": "2026-11-11T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-12T08:14:22Z",
+       "startUtc": "2026-11-11T16:17:44Z"
+      }
+     ],
+     "moonIllumination": 0.065788,
+     "moonPhaseAngleDeg": 150.2759,
+     "moonWaxing": true,
+     "night": "2026-11-11",
+     "nightEndUtc": "2026-11-12T10:00:00Z",
+     "nightStartUtc": "2026-11-11T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-12T10:00:00Z",
+       "startUtc": "2026-11-11T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-11T21:32:39Z",
+       "peakAltitudeDeg": 79.33,
+       "peakInterior": false,
+       "startUtc": "2026-11-11T16:46:55Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-12T21:28:43Z",
+       "startUtc": "2026-11-12T10:26:59Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-13T03:32:40Z",
+       "startUtc": "2026-11-12T16:46:15Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-13T10:00:00Z",
+       "startUtc": "2026-11-12T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-13T09:02:43Z",
+       "startUtc": "2026-11-12T17:08:07Z"
+      }
+     ],
+     "moonIllumination": 0.119829,
+     "moonPhaseAngleDeg": 139.4944,
+     "moonWaxing": true,
+     "night": "2026-11-12",
+     "nightEndUtc": "2026-11-13T10:00:00Z",
+     "nightStartUtc": "2026-11-12T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-13T10:00:00Z",
+       "startUtc": "2026-11-12T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-12T21:28:43Z",
+       "peakAltitudeDeg": 78.837,
+       "peakInterior": false,
+       "startUtc": "2026-11-12T16:46:15Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-13T21:24:47Z",
+       "startUtc": "2026-11-13T10:23:03Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-14T03:33:36Z",
+       "startUtc": "2026-11-13T16:45:36Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-14T10:00:00Z",
+       "startUtc": "2026-11-13T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-14T09:43:56Z",
+       "startUtc": "2026-11-13T18:03:54Z"
+      }
+     ],
+     "moonIllumination": 0.187085,
+     "moonPhaseAngleDeg": 128.7431,
+     "moonWaxing": true,
+     "night": "2026-11-13",
+     "nightEndUtc": "2026-11-14T10:00:00Z",
+     "nightStartUtc": "2026-11-13T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-14T10:00:00Z",
+       "startUtc": "2026-11-13T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-13T21:24:47Z",
+       "peakAltitudeDeg": 78.3283,
+       "peakInterior": false,
+       "startUtc": "2026-11-13T16:45:36Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-14T21:20:51Z",
+       "startUtc": "2026-11-14T10:19:07Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-15T03:34:31Z",
+       "startUtc": "2026-11-14T16:44:59Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-15T10:00:00Z",
+       "startUtc": "2026-11-14T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-15T10:00:00Z",
+       "startUtc": "2026-11-14T19:03:13Z"
+      }
+     ],
+     "moonIllumination": 0.265342,
+     "moonPhaseAngleDeg": 117.9899,
+     "moonWaxing": true,
+     "night": "2026-11-14",
+     "nightEndUtc": "2026-11-15T10:00:00Z",
+     "nightStartUtc": "2026-11-14T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-15T10:00:00Z",
+       "startUtc": "2026-11-14T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-14T21:20:51Z",
+       "peakAltitudeDeg": 77.8052,
+       "peakInterior": false,
+       "startUtc": "2026-11-14T16:44:59Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-15T21:16:55Z",
+       "startUtc": "2026-11-15T10:15:11Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-16T03:35:26Z",
+       "startUtc": "2026-11-15T16:44:24Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-16T10:00:00Z",
+       "startUtc": "2026-11-15T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-15T10:18:46Z",
+       "startUtc": "2026-11-15T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-16T10:00:00Z",
+       "startUtc": "2026-11-15T20:04:11Z"
+      }
+     ],
+     "moonIllumination": 0.352344,
+     "moonPhaseAngleDeg": 107.1762,
+     "moonWaxing": true,
+     "night": "2026-11-15",
+     "nightEndUtc": "2026-11-16T10:00:00Z",
+     "nightStartUtc": "2026-11-15T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-16T10:00:00Z",
+       "startUtc": "2026-11-15T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-15T21:16:55Z",
+       "peakAltitudeDeg": 77.2684,
+       "peakInterior": false,
+       "startUtc": "2026-11-15T16:44:24Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-16T21:12:59Z",
+       "startUtc": "2026-11-16T10:11:15Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-17T03:36:21Z",
+       "startUtc": "2026-11-16T16:43:50Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-17T10:00:00Z",
+       "startUtc": "2026-11-16T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-16T10:48:34Z",
+       "startUtc": "2026-11-16T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-17T10:00:00Z",
+       "startUtc": "2026-11-16T21:05:34Z"
+      }
+     ],
+     "moonIllumination": 0.445746,
+     "moonPhaseAngleDeg": 96.2293,
+     "moonWaxing": true,
+     "night": "2026-11-16",
+     "nightEndUtc": "2026-11-17T10:00:00Z",
+     "nightStartUtc": "2026-11-16T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-17T10:00:00Z",
+       "startUtc": "2026-11-16T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-16T21:12:59Z",
+       "peakAltitudeDeg": 76.719,
+       "peakInterior": false,
+       "startUtc": "2026-11-16T16:43:50Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-17T21:09:03Z",
+       "startUtc": "2026-11-17T10:07:19Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-18T03:37:16Z",
+       "startUtc": "2026-11-17T16:43:19Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-18T10:00:00Z",
+       "startUtc": "2026-11-17T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-17T11:14:51Z",
+       "startUtc": "2026-11-17T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-18T10:00:00Z",
+       "startUtc": "2026-11-17T22:07:01Z"
+      }
+     ],
+     "moonIllumination": 0.542972,
+     "moonPhaseAngleDeg": 85.0696,
+     "moonWaxing": true,
+     "night": "2026-11-17",
+     "nightEndUtc": "2026-11-18T10:00:00Z",
+     "nightStartUtc": "2026-11-17T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-18T10:00:00Z",
+       "startUtc": "2026-11-17T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-17T21:09:03Z",
+       "peakAltitudeDeg": 76.1577,
+       "peakInterior": false,
+       "startUtc": "2026-11-17T16:43:19Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-11-18T21:05:07Z",
+       "startUtc": "2026-11-18T10:03:23Z"
+      },
+      {
+       "endUtc": "2026-11-19T10:00:00Z",
+       "startUtc": "2026-11-19T09:59:27Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-11-19T03:38:11Z",
+       "startUtc": "2026-11-18T16:42:49Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-11-19T10:00:00Z",
+       "startUtc": "2026-11-18T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-11-18T11:39:04Z",
+       "startUtc": "2026-11-18T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-11-19T10:00:00Z",
+       "startUtc": "2026-11-18T23:08:55Z"
+      }
+     ],
+     "moonIllumination": 0.641026,
+     "moonPhaseAngleDeg": 73.6172,
+     "moonWaxing": true,
+     "night": "2026-11-18",
+     "nightEndUtc": "2026-11-19T10:00:00Z",
+     "nightStartUtc": "2026-11-18T10:00:00Z",
+     "separated": [
+      {
+       "endUtc": "2026-11-19T10:00:00Z",
+       "startUtc": "2026-11-18T10:00:00Z"
+      }
+     ],
+     "windows": [
+      {
+       "endUtc": "2026-11-18T21:05:07Z",
+       "peakAltitudeDeg": 75.5852,
+       "peakInterior": false,
+       "startUtc": "2026-11-18T16:42:49Z"
+      }
+     ]
+    }
+   ],
+   "site": "second"
+  },
+  {
+   "case": "never_dark",
+   "criteria": {
+    "darkness": "astronomical",
+    "minAltitudeDeg": 30.0,
+    "minDurationMinutes": 60,
+    "moon": {
+     "kind": "none"
+    }
+   },
+   "nights": [
+    {
+     "above": [
+      {
+       "endUtc": "2026-06-21T09:08:33Z",
+       "startUtc": "2026-06-20T20:15:53Z"
+      }
+     ],
+     "dark": [],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-06-21T10:00:00Z",
+       "startUtc": "2026-06-20T10:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-06-20T10:05:21Z",
+       "startUtc": "2026-06-20T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-06-21T10:00:00Z",
+       "startUtc": "2026-06-20T23:08:14Z"
+      }
+     ],
+     "moonIllumination": 0.397394,
+     "moonPhaseAngleDeg": 101.8419,
+     "moonWaxing": true,
+     "night": "2026-06-20",
+     "nightEndUtc": "2026-06-21T10:00:00Z",
+     "nightStartUtc": "2026-06-20T10:00:00Z",
+     "windows": []
+    }
+   ],
+   "site": "backyard"
+  },
+  {
+   "case": "always_dark",
+   "criteria": {
+    "darkness": "civil",
+    "minAltitudeDeg": 30.0,
+    "minDurationMinutes": 60,
+    "moon": {
+     "kind": "none"
+    }
+   },
+   "nights": [
+    {
+     "above": [
+      {
+       "endUtc": "2026-12-21T11:00:00Z",
+       "startUtc": "2026-12-20T11:00:00Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-12-21T11:00:00Z",
+       "startUtc": "2026-12-20T11:00:00Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-12-21T11:00:00Z",
+       "startUtc": "2026-12-20T11:00:00Z"
+      }
+     ],
+     "moonDown": [],
+     "moonIllumination": 0.862392,
+     "moonPhaseAngleDeg": 43.549,
+     "moonWaxing": true,
+     "night": "2026-12-20",
+     "nightEndUtc": "2026-12-21T11:00:00Z",
+     "nightStartUtc": "2026-12-20T11:00:00Z",
+     "windows": [
+      {
+       "endUtc": "2026-12-21T11:00:00Z",
+       "peakAltitudeDeg": 56.2183,
+       "peakInterior": true,
+       "startUtc": "2026-12-20T11:00:00Z"
+      }
+     ]
+    }
+   ],
+   "site": "polar"
+  },
+  {
+   "case": "set_then_rise",
+   "criteria": {
+    "darkness": "astronomical",
+    "minAltitudeDeg": 15.0,
+    "minDurationMinutes": 30,
+    "moon": {
+     "kind": "none"
+    }
+   },
+   "nights": [
+    {
+     "above": [
+      {
+       "endUtc": "2027-01-15T21:46:59Z",
+       "startUtc": "2027-01-15T11:00:00Z"
+      },
+      {
+       "endUtc": "2027-01-16T11:00:00Z",
+       "startUtc": "2027-01-16T04:09:56Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2027-01-16T05:38:29Z",
+       "startUtc": "2027-01-15T17:59:05Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2027-01-16T11:00:00Z",
+       "startUtc": "2027-01-15T11:00:00Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2027-01-16T10:26:42Z",
+       "startUtc": "2027-01-16T00:49:36Z"
+      }
+     ],
+     "moonIllumination": 0.512081,
+     "moonPhaseAngleDeg": 88.6154,
+     "moonWaxing": true,
+     "night": "2027-01-15",
+     "nightEndUtc": "2027-01-16T11:00:00Z",
+     "nightStartUtc": "2027-01-15T11:00:00Z",
+     "windows": [
+      {
+       "endUtc": "2027-01-15T21:46:59Z",
+       "peakAltitudeDeg": 41.8282,
+       "peakInterior": false,
+       "startUtc": "2027-01-15T17:59:05Z"
+      },
+      {
+       "endUtc": "2027-01-16T05:38:29Z",
+       "peakAltitudeDeg": 23.8126,
+       "peakInterior": false,
+       "startUtc": "2027-01-16T04:09:56Z"
+      }
+     ]
+    }
+   ],
+   "site": "backyard"
+  },
+  {
+   "case": "spring_forward",
+   "criteria": {
+    "darkness": "astronomical",
+    "minAltitudeDeg": 20.0,
+    "minDurationMinutes": 30,
+    "moon": {
+     "kind": "below_horizon"
+    }
+   },
+   "nights": [
+    {
+     "above": [
+      {
+       "endUtc": "2026-03-26T16:17:28Z",
+       "startUtc": "2026-03-26T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-27T11:00:00Z",
+       "startUtc": "2026-03-27T00:27:04Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-03-27T03:28:27Z",
+       "startUtc": "2026-03-26T20:00:48Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-03-27T11:00:00Z",
+       "startUtc": "2026-03-27T03:25:10Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-03-27T11:00:00Z",
+       "startUtc": "2026-03-27T03:25:10Z"
+      }
+     ],
+     "moonIllumination": 0.630211,
+     "moonPhaseAngleDeg": 74.9048,
+     "moonWaxing": true,
+     "night": "2026-03-26",
+     "nightEndUtc": "2026-03-27T11:00:00Z",
+     "nightStartUtc": "2026-03-26T11:00:00Z",
+     "windows": [
+      {
+       "endUtc": "2026-03-27T03:28:27Z",
+       "peakAltitudeDeg": 42.7957,
+       "peakInterior": false,
+       "startUtc": "2026-03-27T03:25:10Z"
+      }
+     ]
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-03-27T16:13:32Z",
+       "startUtc": "2026-03-27T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-28T11:00:00Z",
+       "startUtc": "2026-03-28T00:23:08Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-03-28T03:25:40Z",
+       "startUtc": "2026-03-27T20:02:59Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-03-27T11:14:47Z",
+       "startUtc": "2026-03-27T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-28T11:00:00Z",
+       "startUtc": "2026-03-28T03:50:53Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-03-27T11:14:47Z",
+       "startUtc": "2026-03-27T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-28T11:00:00Z",
+       "startUtc": "2026-03-28T03:50:53Z"
+      }
+     ],
+     "moonIllumination": 0.733507,
+     "moonPhaseAngleDeg": 62.1593,
+     "moonWaxing": true,
+     "night": "2026-03-27",
+     "nightEndUtc": "2026-03-28T11:00:00Z",
+     "nightStartUtc": "2026-03-27T11:00:00Z",
+     "windows": []
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-03-28T16:09:36Z",
+       "startUtc": "2026-03-28T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-29T10:00:00Z",
+       "startUtc": "2026-03-29T00:19:12Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-03-29T03:22:51Z",
+       "startUtc": "2026-03-28T20:05:12Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-03-28T12:40:42Z",
+       "startUtc": "2026-03-28T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-29T10:00:00Z",
+       "startUtc": "2026-03-29T04:09:03Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-03-28T12:40:42Z",
+       "startUtc": "2026-03-28T11:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-29T10:00:00Z",
+       "startUtc": "2026-03-29T04:09:03Z"
+      }
+     ],
+     "moonIllumination": 0.822245,
+     "moonPhaseAngleDeg": 49.8725,
+     "moonWaxing": true,
+     "night": "2026-03-28",
+     "nightEndUtc": "2026-03-29T10:00:00Z",
+     "nightStartUtc": "2026-03-28T11:00:00Z",
+     "windows": []
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-03-29T16:05:40Z",
+       "startUtc": "2026-03-29T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-30T10:00:00Z",
+       "startUtc": "2026-03-30T00:15:16Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-03-30T03:20:02Z",
+       "startUtc": "2026-03-29T20:07:25Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-03-29T14:04:29Z",
+       "startUtc": "2026-03-29T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-30T10:00:00Z",
+       "startUtc": "2026-03-30T04:22:48Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-03-29T14:04:29Z",
+       "startUtc": "2026-03-29T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-30T10:00:00Z",
+       "startUtc": "2026-03-30T04:22:48Z"
+      }
+     ],
+     "moonIllumination": 0.895158,
+     "moonPhaseAngleDeg": 37.785,
+     "moonWaxing": true,
+     "night": "2026-03-29",
+     "nightEndUtc": "2026-03-30T10:00:00Z",
+     "nightStartUtc": "2026-03-29T10:00:00Z",
+     "windows": []
+    },
+    {
+     "above": [
+      {
+       "endUtc": "2026-03-30T16:01:44Z",
+       "startUtc": "2026-03-30T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-31T10:00:00Z",
+       "startUtc": "2026-03-31T00:11:20Z"
+      }
+     ],
+     "dark": [
+      {
+       "endUtc": "2026-03-31T03:17:11Z",
+       "startUtc": "2026-03-30T20:09:40Z"
+      }
+     ],
+     "moonAllowed": [
+      {
+       "endUtc": "2026-03-30T15:25:00Z",
+       "startUtc": "2026-03-30T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-31T10:00:00Z",
+       "startUtc": "2026-03-31T04:34:08Z"
+      }
+     ],
+     "moonDown": [
+      {
+       "endUtc": "2026-03-30T15:25:00Z",
+       "startUtc": "2026-03-30T10:00:00Z"
+      },
+      {
+       "endUtc": "2026-03-31T10:00:00Z",
+       "startUtc": "2026-03-31T04:34:08Z"
+      }
+     ],
+     "moonIllumination": 0.95067,
+     "moonPhaseAngleDeg": 25.6653,
+     "moonWaxing": true,
+     "night": "2026-03-30",
+     "nightEndUtc": "2026-03-31T10:00:00Z",
+     "nightStartUtc": "2026-03-30T10:00:00Z",
+     "windows": []
+    }
+   ],
+   "site": "backyard"
+  }
+ ],
+ "generator": "generate_reference.py",
+ "method": "astroplan Observer altaz, pressure 0 (geometric, no refraction), 1-minute samples with linear crossing interpolation",
+ "sites": {
+  "backyard": {
+   "elevationM": 5.0,
+   "latitudeDeg": 52.09,
+   "longitudeDeg": 5.12,
+   "name": "Backyard",
+   "timeZone": "Europe/Amsterdam"
+  },
+  "polar": {
+   "elevationM": 10.0,
+   "latitudeDeg": 78.22,
+   "longitudeDeg": 15.65,
+   "name": "Longyearbyen",
+   "timeZone": "Arctic/Longyearbyen"
+  },
+  "second": {
+   "elevationM": 100.0,
+   "latitudeDeg": 37.98,
+   "longitudeDeg": 23.73,
+   "name": "Athens",
+   "timeZone": "Europe/Athens"
+  }
+ },
+ "target": {
+  "decDeg": 44.33,
+  "designation": "NGC 7000",
+  "raDeg": 314.75
+ },
+ "toleranceSeconds": 180,
+ "tools": {
+  "astroplan": "0.10.1",
+  "astropy": "8.0.1",
+  "astropy-iers-data": "0.2026.10.5.1.0.7",
+  "numpy": "2.5.3",
+  "pyerfa": "2.0.1.5",
+  "tzdata": "2026.5"
+ }
+}

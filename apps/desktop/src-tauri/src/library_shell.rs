@@ -4,8 +4,11 @@
 //! Isolated rebuilt library shell (spec 064): its own Tauri runtime over the
 //! clean catalog.
 //!
-//! It boots only [`Library`] and the [`crate::commands::library`] IPC surface,
-//! with the catalog in its own data directory. The one window is labelled
+//! It boots only [`Library`] and the [`crate::commands::library`] and
+//! [`crate::commands::observing_plans`] IPC surfaces, with the catalog in its
+//! own data directory. The dialog and opener plugins serve the planning
+//! handlers' Rust calls, and the platform reminder notifier with the system
+//! clock is attached before any command runs. The one window is labelled
 //! `library`, so it holds `capabilities/library.json` (plus the dev bridge
 //! grant with `dev-tools`) and none of the legacy `default.json`. Nothing from
 //! the legacy composition root runs here: no `AppState`, legacy database,
@@ -73,7 +76,8 @@ const RETAINED_FINISHED: usize = 256;
 /// # Errors
 /// Every startup failure: a refused bridge address, invalid provider
 /// configuration, an unusable data directory, a catalog that cannot be opened
-/// (including a foreign or legacy database) or the Tauri runtime itself.
+/// (including a foreign or legacy database), reminder subscriptions that
+/// cannot be read when the notifier attaches, or the Tauri runtime itself.
 pub fn run() -> Result<(), Box<dyn Error>> {
     let provider = provider_config()?;
     // One labelled block per feature. A feature adds its handlers under its own
@@ -122,9 +126,24 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::rigs::rig_filters_get,
         crate::commands::rigs::rig_filters_save,
         crate::commands::rigs::rig_unknown_filters,
+        crate::commands::observing_plans::planning_list_sites,
+        crate::commands::observing_plans::planning_save_site,
+        crate::commands::observing_plans::planning_set_default_site,
+        crate::commands::observing_plans::planning_compute_windows,
+        crate::commands::observing_plans::planning_set_planned,
+        crate::commands::observing_plans::planning_review_reminders,
+        crate::commands::observing_plans::planning_enable_reminders,
+        crate::commands::observing_plans::planning_disable_reminders,
+        crate::commands::observing_plans::planning_reminder_status,
+        crate::commands::observing_plans::planning_open_notification_settings,
+        crate::commands::observing_plans::planning_review_calendar_export,
+        crate::commands::observing_plans::planning_export_calendar,
         // targets
         // home
     ]);
+    // The planning handlers call these through their Rust APIs, which need no
+    // grant; window `library` holds only `capabilities/library.json`.
+    let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);
 
@@ -139,6 +158,10 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         online_provider = provider.is_some(),
         "library catalog opened"
     );
+    let notifier = crate::library_notifier::platform_notifier();
+    let clock = Arc::new(platevault_core::notifier::SystemClock);
+    tauri::async_runtime::block_on(library.attach_notifier(notifier, clock))
+        .map_err(|error| format!("cannot attach the reminder notifier: {error}"))?;
     ProgressBridge::spawn(app.handle().clone(), Arc::clone(&library));
     app.manage(library);
     app.run(|_, _| {});

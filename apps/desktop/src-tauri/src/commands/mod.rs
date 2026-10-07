@@ -38,6 +38,7 @@ pub mod log;
 pub mod manifests;
 pub mod naming;
 pub mod native;
+pub mod observing_plans;
 pub mod onboarding;
 pub mod patterns;
 pub mod plan_apply;

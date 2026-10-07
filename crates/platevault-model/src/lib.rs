@@ -16,6 +16,8 @@ pub mod naming;
 pub use naming::*;
 pub mod rig;
 pub use rig::*;
+mod planning;
+pub use planning::*;
 
 pub type Revision = u64;
 
@@ -27,6 +29,14 @@ pub enum LibraryError {
     NotFound(String),
     #[error("revision conflict for {id}; current revision {current}")]
     Conflict { id: Uuid, current: Revision, successors: Vec<Uuid> },
+    /// A selected window `key` is not among the windows recomputed at `site`;
+    /// `current` is its Target's revision. The wire kind is `conflict`.
+    #[error(
+        "window {key} at site {site} is not among the recomputed windows; Target {} is at \
+         revision {current}",
+        .key.target_id()
+    )]
+    WindowConflict { key: WindowKey, site: String, current: Revision },
     #[error("filesystem identity conflict: {0}")]
     IdentityConflict(String),
     #[error("access denied: {0}")]
@@ -91,7 +101,9 @@ impl LibraryError {
         let (kind, retry) = match self {
             Self::InvalidInput(_) => ("invalid_input", RetryAction::Review),
             Self::NotFound(_) => ("not_found", RetryAction::Retry),
-            Self::Conflict { .. } => ("conflict", RetryAction::Review),
+            Self::Conflict { .. } | Self::WindowConflict { .. } => {
+                ("conflict", RetryAction::Review)
+            }
             Self::IdentityConflict(_) => ("identity_conflict", RetryAction::Review),
             Self::AccessDenied(_) => ("access_denied", RetryAction::Retry),
             Self::SourceUnavailable(_) => ("source_unavailable", RetryAction::Retry),
@@ -106,6 +118,9 @@ impl LibraryError {
         let (identity, current_revision, successors) = match self {
             Self::Conflict { id, current, successors } => {
                 (Some(*id), Some(*current), successors.clone())
+            }
+            Self::WindowConflict { key, current, .. } => {
+                (Some(key.target_id()), Some(*current), Vec::new())
             }
             _ => (identity, None, Vec::new()),
         };
