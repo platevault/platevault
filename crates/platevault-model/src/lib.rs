@@ -26,6 +26,8 @@ mod frame_review;
 pub use frame_review::*;
 pub mod storage;
 pub use storage::*;
+mod view;
+pub use view::*;
 
 pub type Revision = u64;
 

@@ -21,6 +21,7 @@ use crate::projects::ProjectReferences;
 use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
 };
+use crate::view_selection::ViewReferences;
 use crate::{
     AssetReference, AssociationKind, AssociationState, Availability, FileIdentity, LibraryError,
     Location, LocationRole, NativePath, ObservationFingerprint, ReferenceKind, RemapReview,
@@ -110,7 +111,7 @@ impl persistence_library::SourceProbe for InventoryProbe {
 
 impl Library {
     /// Open a fresh-schema catalog and load the offline target dataset, with the
-    /// catalog's Projects registered as a reference source. Interrupted scan
+    /// catalog's Projects and runs registered as reference sources. Interrupted scan
     /// recovery is owned by the catalog.
     ///
     /// # Errors
@@ -127,6 +128,8 @@ impl Library {
             Mutex::new(crate::observing_plans::PlanningRuntime::new(Arc::clone(&catalog)));
         let projects: Arc<dyn AssetReferences> =
             Arc::new(ProjectReferences { catalog: Arc::clone(&catalog) });
+        let views: Arc<dyn AssetReferences> =
+            Arc::new(ViewReferences { catalog: Arc::clone(&catalog) });
         let frame_review = FrameReview::new(Arc::clone(&catalog));
         Ok(Arc::new(Self {
             catalog,
@@ -136,7 +139,7 @@ impl Library {
             saved_targets: Mutex::new(None),
             progress,
             planning,
-            references: tokio::sync::RwLock::new(vec![projects]),
+            references: tokio::sync::RwLock::new(vec![projects, views]),
             frame_review,
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
