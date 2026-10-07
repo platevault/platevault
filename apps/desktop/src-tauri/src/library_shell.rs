@@ -76,7 +76,11 @@ const RETAINED_FINISHED: usize = 256;
 /// (including a foreign or legacy database) or the Tauri runtime itself.
 pub fn run() -> Result<(), Box<dyn Error>> {
     let provider = provider_config()?;
+    // One labelled block per feature. A feature adds its handlers under its own
+    // label only, by full path (`crate::commands::<feature>::<handler>`), so
+    // features register without touching each other's lines or the imports.
     let builder = tauri::Builder::default().invoke_handler(tauri::generate_handler![
+        // library (064)
         ipc::library_register_location,
         ipc::library_list_locations,
         ipc::library_start_scan,
@@ -102,6 +106,17 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ipc::library_review_retire_location,
         ipc::library_retire_location,
         ipc::library_list_operations,
+        // projects
+        // runs
+        // frame review
+        // calibration
+        // preparation
+        // results
+        // storage
+        // import
+        // planning
+        // targets
+        // home
     ]);
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);
