@@ -91,6 +91,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ipc::library_scan_status,
         ipc::library_cancel_scan,
         ipc::library_list_sessions,
+        ipc::library_trashed_assets,
         ipc::library_session,
         ipc::library_preview_metadata,
         ipc::library_confirm_metadata,

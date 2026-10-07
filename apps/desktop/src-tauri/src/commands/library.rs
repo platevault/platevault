@@ -11,7 +11,10 @@
 
 use std::sync::Arc;
 
-use persistence_library::{CorrectionPreview, LocationFailure, SessionQuery, SessionSummary};
+use persistence_library::{
+    CorrectionPreview, LocationFailure, SessionFilter, SessionQuery, SessionSummary, TrashedAsset,
+    TrashedQuery,
+};
 use platevault_core::grouping::group_assets;
 use platevault_core::library::{ConfirmedCorrection, InventoryProbe, Library, LibrarySession};
 use platevault_core::targets::{user_target, TargetQuery, TargetSearchHit, UserTargetInput};
@@ -153,7 +156,9 @@ pub async fn library_cancel_scan(
     library.cancel_scan(operation_id).await.map_err(fail(Some(operation_id)))
 }
 
-/// Session summaries, newest night first; browsing measures nothing.
+/// Session summaries, newest night first; browsing measures nothing. Sessions
+/// lists light sessions of Captures locations; `filter` `trashed` lists the
+/// sessions holding Trashed frames, summarized over those frames (LIB-FR-16/18).
 ///
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
@@ -162,16 +167,34 @@ pub async fn library_list_sessions(
     library: State<'_, Arc<Library>>,
     location_id: Option<Uuid>,
     include_superseded: Option<bool>,
+    filter: Option<SessionFilter>,
     offset: u32,
     limit: u32,
 ) -> Reply<Vec<SessionSummary>> {
     let query = SessionQuery {
         location_id,
         include_superseded: include_superseded.unwrap_or(false),
+        filter,
         offset,
         limit,
     };
     library.catalog().list_sessions(&query).await.map_err(fail(location_id))
+}
+
+/// The Sessions "Trashed" filter's frames, newest trash first: each kept record
+/// with its last-observed metadata and the operation that trashed it (LIB-FR-18).
+///
+/// # Errors
+/// `PersistenceFailure` when the catalog cannot be read.
+#[tauri::command]
+pub async fn library_trashed_assets(
+    library: State<'_, Arc<Library>>,
+    session_id: Option<Uuid>,
+    offset: u32,
+    limit: u32,
+) -> Reply<Vec<TrashedAsset>> {
+    let query = TrashedQuery { session_id, offset, limit };
+    library.catalog().trashed_assets(&query).await.map_err(fail(session_id))
 }
 
 /// Session assets, observed/effective metadata, associations, lineage and
