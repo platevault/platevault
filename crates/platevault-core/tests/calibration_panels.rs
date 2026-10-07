@@ -607,3 +607,51 @@ async fn group_lists_readiness_per_panel() {
         assert_eq!(world.plan(panel.number).await.policy, CalibrationPolicy::Manual);
     }
 }
+
+/// CAL-FR-11, VSEL-FR-19: a Complete panel run keeps its setup when the
+/// group's changes, as its own policy write is refused: the group reports it
+/// refused and leaves its policy and calibration plan untouched, while every
+/// other panel takes the policy and its plan revision moves by one.
+#[tokio::test]
+async fn group_setup_refuses_complete_panel_and_leaves_it_unchanged() {
+    let world = world(&lights(), &two_flat_sets()).await;
+    world.save_all().await;
+    for number in 1..=3 {
+        world.assign(number).await;
+    }
+    world.library.mark_view_complete(world.run(2)).await.unwrap();
+    let mut before = Vec::new();
+    for number in 1..=3 {
+        before.push(world.plan(number).await);
+    }
+    let complete = world.catalog().view(world.run(2)).await.unwrap().view;
+
+    let setup = GroupSetup { calibration_policy: CalibrationPolicy::Manual, ..world.group.setup };
+    let outcome = world
+        .library
+        .set_view_group_setup(world.group.id, world.group.revision, &setup)
+        .await
+        .unwrap();
+    assert_eq!(outcome.group.setup, setup);
+    let results: Vec<(u32, bool)> = outcome
+        .panels
+        .iter()
+        .map(|panel| (panel.number, matches!(panel.result, PanelResult::Applied)))
+        .collect();
+    assert_eq!(results, vec![(1, true), (2, false), (3, true)], "{outcome:#?}");
+    let PanelResult::Refused { reason } = &outcome.panels[1].result else {
+        panic!("Panel 2 is Complete: {:?}", outcome.panels[1].result);
+    };
+    assert!(reason.contains("Complete"), "{reason}");
+
+    assert_eq!(world.catalog().view(world.run(2)).await.unwrap().view, complete, "untouched");
+    assert_eq!(world.plan(2).await, before[1], "Panel 2's plan is unchanged");
+    for number in [1, 3] {
+        let plan = world.plan(number).await;
+        let earlier = &before[number as usize - 1];
+        assert_eq!(plan.policy, CalibrationPolicy::Manual, "Panel {number}");
+        assert_eq!(plan.plan_revision, earlier.plan_revision + 1, "Panel {number}");
+    }
+    let group = world.library.calibration_group_readiness(world.group.id).await.unwrap();
+    assert_eq!(group.policy, CalibrationPolicy::Manual);
+}

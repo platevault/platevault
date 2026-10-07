@@ -239,8 +239,11 @@ impl Catalog {
 
     /// Set the shared setup of run group `id` (VSEL-FR-18, VSEL-AC-22): the
     /// group takes it, and so does every panel run outside the Project's
-    /// Trash. A panel run in the Trash keeps its own setup and is reported
-    /// refused; no panel's outcome changes another panel or any status.
+    /// Trash that is not Complete. A panel run in the Trash or Complete keeps
+    /// its own setup and calibration plan and is reported refused, as its own
+    /// calibration writes are; no panel's outcome changes another panel or
+    /// any status. A policy change moves each changed panel's calibration
+    /// plan revision in the same transaction.
     ///
     /// # Errors
     /// `Conflict` for a stale `expected` revision; `NotFound` for an unknown
@@ -275,6 +278,12 @@ impl Catalog {
                         reason: format!(
                             "Panel {number} is in the Project's Trash and keeps its setup; \
                              restore it first"
+                        ),
+                    }
+                } else if view.completion == RunCompletion::Complete {
+                    PanelResult::Refused {
+                        reason: format!(
+                            "Panel {number} is Complete and keeps its setup; reopen it first"
                         ),
                     }
                 } else if takes && !changed {
