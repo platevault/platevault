@@ -13,12 +13,13 @@ trace: [063-clean-rebuild-contract, 064-library-inventory, 065-project-goals, 06
 ## Goal
 
 The user finishes Project `NGC 7000 HOO`. First every open run is completed
-or deleted, then the Project is marked Done. From its Done / Archive sheet
-the user moves the Project's library-Unusable frames, its processing
-intermediates and its duplicate copies to the OS Trash and archives its
-sessions. Afterwards the user puts one frame back and reopens the Project.
+or moved to the Project's Trash, then the Project is marked Done. From its
+Done / Archive sheet the user empties the Project's Trash, moves the Project's
+library-Unusable frames, its processing intermediates and its duplicate copies
+to the OS Trash, and archives its sessions. Afterwards the user puts one frame
+back and reopens the Project.
 Done means:
-- Mark Done waited until every run was Complete.
+- Mark Done waited until every run outside the Project's Trash was Complete. Moving a run to the Trash and emptying it moved no file and changed no goal number.
 - The trash offers covered only what they may cover. A frame in a Complete run's prepared revision was offered, the adopted master's generated source went only as a verified duplicate of the kept library copy, and every frame kept one copy. No Project-only reject, refused frame, accepted Result or adopted library master reached the Trash, and every refusal was listed with its reason. Nothing was permanently deleted.
 - The Trashed frames counted nowhere and showed only under the Sessions "Trashed" filter and, marked "Trashed", in the fixed membership of every Complete run that holds them.
 - Archive kept the session another open Project's run uses.
@@ -26,7 +27,7 @@ Done means:
 
 ## Preconditions
 
-- P1: Fresh replay of J23, J24, J26, J27/S1 to J27/S3, and J27/S12 to J27/S14. J25, J27/S4 to J27/S11, J27/P3 and J27/P6 are not run, so `NGC7000-HOO-Siril` still holds its 208 prepared hardlinks. J27/S14 deleted `28 Sep Ha copy check` together with its Results folder. The runs of Project `NGC 7000 HOO` are then:
+- P1: Fresh replay of J23, J24, J26, J27/S1 to J27/S3, and J27/S12 to J27/S14b. J25, J27/S4 to J27/S11, J27/P3 and J27/P6 are not run, so `NGC7000-HOO-Siril` still holds its 208 prepared hardlinks, and the J27/S14 stage rail has no `26 Sep symlink check`. J27/S14b emptied `28 Sep Ha copy check` from the Project's Trash together with its Results folder. The Project's Trash list is empty, and the runs of Project `NGC 7000 HOO` are then:
   - `NGC7000-HOO-Siril`: Complete.
   - `24 Sep flat check`: open, back at Calibrate after J27/S12, with no preparation revision.
   - `NGC7000 HOO combine`: open, not Complete.
@@ -49,25 +50,32 @@ Done means:
 ### S1 — Mark Done with open runs {#S1}
 
 - **Do:** On the Project page of `NGC 7000 HOO`, choose **Mark Done**.
-- **Expect:** PlateVault names `24 Sep flat check` and `NGC7000 HOO combine` as runs that are not Complete, and asks the user to complete or delete each one. The Project stays open.
+- **Expect:** PlateVault names `24 Sep flat check` and `NGC7000 HOO combine` as runs that are not Complete, and asks the user to complete each one or move it to Trash. The Project stays open.
 - **Expect (negative):** No Done / Archive sheet opens, and no file moves.
 - **Trace:** PRJ-FR-14 · PRJ-AC-21 · D-W46, D-W72
 
-### S2 — Delete the flat check run {#S2}
+### S2 — Move the flat check run to Trash {#S2}
 
-- **Do:** In the prompt, choose **Delete run** for `24 Sep flat check`, read the review and confirm. Read the Project's OIII goal.
-- **Expect:** The review lists only the run record, because the run has no preparation revision and no Results folder. After confirming, `24 Sep flat check` leaves the Project's stage rail. The prompt still names `NGC7000 HOO combine`, and the Project stays open. The OIII goal's "in project" and "captured" numbers are unchanged, because the 24 Sep frames still count through `NGC7000-HOO-Siril`.
-- **Expect (negative):** Deleting moves no file and changes no frame's library quality or any other run.
-- **Trace:** PRJ-FR-04, PRJ-FR-14, PRJ-FR-20 · RES-FR-10 · root FR-009, FR-022 · D-W46, D-W66, D-W72
+- **Do:** In the prompt, choose **Move run to Trash** for `24 Sep flat check`. Read the Project's stage rail, its Trash list and its OIII goal.
+- **Expect:** `24 Sep flat check` leaves the Project's stage rail, and the Trash list shows it at Calibrate with **Restore** and **Empty Trash**. The prompt still names `NGC7000 HOO combine`, and the Project stays open. The OIII goal's "in project" and "captured" numbers are unchanged, because the 24 Sep frames still count through `NGC7000-HOO-Siril`.
+- **Expect (negative):** Moving the run to Trash opens no review, moves no file, and changes no frame's library quality or any other run.
+- **Trace:** PRJ-FR-04, PRJ-FR-14, PRJ-FR-20 · RES-FR-10 · RES-AC-19 · root FR-009, FR-022 · D-W46, D-W66, D-W72
 
 ### S3 — Complete the last run and mark the Project Done {#S3}
 
 - **Do:** Choose **Mark processing complete** for `NGC7000 HOO combine`, then choose **Mark Done** again.
 - **Expect:**
-  - The Project reads Done, and its Done / Archive sheet opens with four offers, each a separate approval: **Archive**, `Move 7 rejected frames to Trash (size)`, `Move 417 processing intermediates to Trash (size)` and `Move 2 duplicate copies to Trash (size)`. The 417 are the 416 P8 intermediates and the adopted master's generated source. The 2 are the P11 copies of D-1 and D-2.
+  - The Project reads Done, and its Done / Archive sheet opens with five offers, each a separate approval: **Archive**, `Move 7 rejected frames to Trash (size)`, `Move 417 processing intermediates to Trash (size)`, `Move 2 duplicate copies to Trash (size)` and **Empty Trash** for the one run in the Project's Trash, `24 Sep flat check`. The 417 are the 416 P8 intermediates and the adopted master's generated source. The 2 are the P11 copies of D-1 and D-2.
   - Home lists the Project among its Projects only when **Show done** is on.
 - **Expect (negative):** No file moves until the user approves an offer.
-- **Trace:** Done / Archive sheet · PRJ-FR-14, PRJ-FR-15, PRJ-FR-20 · PRJ-AC-15 · STO-FR-13, STO-FR-14, STO-FR-16 · root FR-021, FR-022 · D-W26, D-W46, D-W48, D-W70, D-W74
+- **Trace:** Done / Archive sheet · PRJ-FR-14, PRJ-FR-15, PRJ-FR-20 · PRJ-AC-15 · STO-FR-13, STO-FR-14, STO-FR-16 · root FR-021, FR-022 · D-W26, D-W46, D-W48, D-W70, D-W72, D-W74
+
+### S3a — Empty the Project's Trash {#S3a}
+
+- **Do:** On the sheet, choose **Empty Trash**, read the review and confirm. Then open the Project's Trash list and read the OIII goal.
+- **Expect:** The review lists only the run record of `24 Sep flat check`, because the run has no preparation revision and no Results folder, so it offers no Results folder to tick. After confirming, the Trash list is empty, the sheet drops its **Empty Trash** offer, and nothing offers to restore `24 Sep flat check`. The OIII goal's numbers are unchanged.
+- **Expect (negative):** No file moves, and the Trash inventory gains no entry. No frame's library quality or any other run changes, and the other four offers are unchanged.
+- **Trace:** Done / Archive sheet · PRJ-FR-14, PRJ-FR-20 · PRJ-AC-15 · RES-FR-10 · RES-AC-22 · STO-FR-17 · root FR-009 · D-W72
 
 ### S4 — Read the rejected-frames offer {#S4}
 
@@ -169,7 +177,7 @@ Done means:
 - **Do:** On the Project page, choose **Reopen**. Then list `Astro-T7` and `Archive` and compare them with the S11 result.
 - **Expect:**
   - The Project reads open, and Home lists it again without **Show done**.
-  - Its runs keep their states: `NGC7000-HOO-Siril` and `NGC7000 HOO combine` are Complete, and the deleted runs `24 Sep flat check` and `28 Sep Ha copy check` do not return. Its goals and members are unchanged.
+  - Its runs keep their states: `NGC7000-HOO-Siril` and `NGC7000 HOO combine` are Complete, and `24 Sep flat check` and `28 Sep Ha copy check`, emptied from the Project's Trash, do not return. The Trash list is empty, and its goals and members are unchanged.
   - 18, 24, 26 and 30 Sep still read Archived at their `Archive/NGC7000` paths, each with a restore offer.
 - **Expect (negative):** Reopening moves no file: both listings equal their state after S11. No Trashed frame returns.
 - **Trace:** Done / Archive sheet · PRJ-FR-14, PRJ-FR-20 · PRJ-AC-21, PRJ-AC-27 · STO-FR-13 · STO-AC-22 · D-W46, D-W69
@@ -183,7 +191,7 @@ Done means:
 
 ## Success criteria
 
-- SC1: Mark Done opens the sheet 0 times while a run is open (S1, S2). It opens exactly once after every run is Complete (S3).
+- SC1: Mark Done opens the sheet 0 times while a run outside the Project's Trash is open (S1, S2). It opens exactly once after every such run is Complete, with Empty Trash offered for exactly 1 run (S3). Moving that run to Trash and emptying it moves 0 files and changes the OIII numbers by 0 (S2, S3a).
 - SC2: The rejected-frames offer counts exactly 7 frames, including 1 in a Complete run's prepared revision. It lists exactly 3 refusals with reasons and includes 0 Project-only rejects (S4).
 - SC3: Exactly 6 frames reach the OS Trash. 0 refused or drifted frames, 0 prepared entries and 0 files are permanently deleted (S6).
 - SC4: The Trashed frames appear in 0 pickers, candidate lists, frame reviews, goals or totals. They show only under the Trashed filter (6 frames) and, marked "Trashed", in the fixed memberships of `NGC7000-HOO-Siril` (3 frames) and `Ha deep v1` (1 frame) (S7, S8).

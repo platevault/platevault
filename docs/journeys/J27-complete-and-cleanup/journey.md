@@ -1,6 +1,6 @@
 ---
 id: J27
-title: Complete a processing run, clean up its prepared entries, reopen a run and delete one
+title: Complete a processing run, clean up its prepared entries, reopen a run, and trash and restore one
 version: 2
 status: draft
 last_reviewed: 2026-10-03
@@ -16,12 +16,12 @@ The user records that a processing run is finished, whether it has an
 accepted Result. Clean up then sends the run's prepared entries (links,
 clones and copies) to the OS Trash. The run's Results folder, the
 originals, accepted products and masters stay out of Clean up entirely. The
-user also reopens a run and deletes one. Done means:
+user also reopens a run, moves one to the Project's Trash, restores it, and empties it from the Trash. Done means:
 - Both runs read Complete, and completing them removed nothing.
 - Clean up listed only prepared entries and removed only the reviewed selection, to the OS Trash, without following link targets.
 - An entry that may hold the last copy of a capture was refused.
 - A location without safe Trash refused removal, with no permanent-delete fallback.
-- Delete run was refused while another run used the run's accepted Results. Deleting a run on a location without Trash left its prepared folders in place and named them, sent its ticked Results folder to the OS Trash, and changed no goal number.
+- Move run to Trash was refused while another run used the run's accepted Results. Moving a run to the Project's Trash moved no file and changed no goal number, and Restore brought it back unchanged. Emptying it from the Trash on a location without OS Trash left its prepared folders in place and named them, and sent its ticked Results folder to the OS Trash.
 
 ## Preconditions
 
@@ -127,23 +127,40 @@ user also reopens a run and deletes one. Done means:
 - **Expect (negative):** Reopening removes no file and does not create a membership revision. Clean up is not offered, because the run is not Complete.
 - **Trace:** RES-FR-07 · RES-AC-08 · VSEL-FR-17 · PREP-FR-14, STO-FR-01 · D09
 
-### S13 — Try to delete a run whose Results another run uses {#S13}
+### S13 — Try to trash a run whose Results another run uses {#S13}
 
-- **Do:** In `NGC7000-HOO-Siril`, choose **Delete run**.
-- **Expect:** Delete run is refused, and the refusal names `NGC7000 HOO combine`, which uses the run's accepted Ha and OIII stacks as inputs (J26/S4). The run still reads Complete.
+- **Do:** In `NGC7000-HOO-Siril`, choose **Move run to Trash**.
+- **Expect:** Move run to Trash is refused, and the refusal names `NGC7000 HOO combine`, which uses the run's accepted Ha and OIII stacks as inputs (J26/S4). The run still reads Complete and stays on the stage rail.
 - **Expect (negative):** No file moves, and the run's membership, prepared folder and Results folder are unchanged.
 - **Trace:** RES-FR-05, RES-FR-10 · RES-AC-20 · root FR-009 · D-W72
 
-### S14 — Delete a run on a location without Trash {#S14}
+### S14 — Move a run to the Project's Trash {#S14}
 
-- **Do:** In `28 Sep Ha copy check`, choose **Delete run**, tick its Results folder, read the review and confirm. Then open Project `NGC 7000 HOO` and read the Ha goal.
+- **Do:** In `28 Sep Ha copy check`, choose **Move run to Trash**. Then open Project `NGC 7000 HOO`, read its stage rail and the Ha goal, and open its Trash list.
+- **Expect:**
+  - The stage rail lists `NGC7000-HOO-Siril`, `24 Sep flat check`, `26 Sep symlink check` and `NGC7000 HOO combine`. `28 Sep Ha copy check` is not on it, and neither Home nor any run picker lists it.
+  - The Trash list shows `28 Sep Ha copy check` at Done, with **Restore** and **Empty Trash** for it, and **Empty Trash** for the whole list.
+  - The Ha goal's "in project" and "captured" numbers are unchanged, because the 28 Sep frames are still candidates and still count once through `NGC7000-HOO-Siril`.
+- **Expect (negative):** No file moves: both `Scratch` folders keep their 111 copies, and the Results folder keeps both J26/P8 stacks. No review opens, and no 28 Sep capture, library quality decision or other run changes.
+- **Trace:** RES-FR-10 · RES-AC-19 · PRJ-FR-04, PRJ-FR-20 · PREP-FR-14 · root FR-009, FR-022 · D-W66, D-W72
+
+### S14a — Restore the run {#S14a}
+
+- **Do:** In the Project's Trash list, choose **Restore** on `28 Sep Ha copy check`, and open the run.
+- **Expect:** The run is back on the stage rail at Done and reads Complete. It lists both membership revisions and both preparation revisions, `28 Sep Ha copy check/` with 56 copies and `28 Sep Ha copy check (rev 2)/` with 55. Its Results step lists both J26/P8 stacks as candidates, naming revisions 1 and 2. The Trash list is empty.
+- **Expect (negative):** Restore moves no file, reopens nothing and saves no new revision. The Ha goal's numbers still read as they did before S14.
+- **Trace:** RES-FR-10 · RES-AC-21 · PRJ-FR-20 · root FR-009 · D-W72
+
+### S14b — Empty the run from the Trash on a location without OS Trash {#S14b}
+
+- **Do:** Choose **Move run to Trash** on `28 Sep Ha copy check` again. In the Trash list, choose **Empty Trash** on it, tick its Results folder, read the review and confirm.
 - **Expect:**
   - The review lists the run record and both prepared folders, `Scratch/Processing/NGC 7000 HOO/28 Sep Ha copy check/` (56 copies) and `28 Sep Ha copy check (rev 2)/` (55 copies). Each is named as staying in place, because `Scratch` has no OS Trash.
   - The review lists the ticked Results folder `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/`, with the two J26/P8 stacks, as going to the OS Trash.
-  - After confirming, that Results folder and its two stacks are newly in the OS Trash. The run leaves the Project's stage rail, and the summary names both `Scratch` folders with their paths as left in place.
-  - The Ha goal's "in project" and "captured" numbers are unchanged, because the 28 Sep frames are still candidates and still count once through `NGC7000-HOO-Siril`.
+  - After confirming, that Results folder and its two stacks are newly in the OS Trash. The run leaves the Trash list and offers no Restore, and the summary names both `Scratch` folders with their paths as left in place.
+  - The Ha goal's "in project" and "captured" numbers are still unchanged.
 - **Expect (negative):** No copy on `Scratch` is removed, and no permanent-delete fallback is offered. No 28 Sep capture, library quality decision or other run changes.
-- **Trace:** RES-FR-10 · RES-AC-19 · STO-FR-05, STO-FR-17 · STO-AC-24 · PRJ-FR-04, PRJ-FR-20 · PREP-FR-14 · root FR-009, FR-019 · D-W66, D-W72
+- **Trace:** RES-FR-10 · RES-AC-22 · STO-FR-05, STO-FR-17 · STO-AC-24 · PRJ-FR-04, PRJ-FR-20 · PREP-FR-14 · root FR-009, FR-019 · D-W66, D-W72
 
 ## Success criteria
 
@@ -155,8 +172,9 @@ user also reopens a run and deletes one. Done means:
 - SC6: A Complete run refuses membership edits until Reopen and accepts a notes edit and a Result acceptance. It still reads Complete after reviewed cleanup (S3, S8).
 - SC7: Trashing 35 symlinks leaves 100% of the 26 Sep captures and the `extra/` copy matching P6 (S11).
 - SC8: An entry whose bytes changed after review is removed 0 times (S8).
-- SC9: Delete run on `NGC7000-HOO-Siril` is refused, names exactly 1 run, `NGC7000 HOO combine`, and moves 0 files (S13).
-- SC10: Deleting `28 Sep Ha copy check` sends exactly 1 folder holding 2 files to the OS Trash, leaves all 111 `Scratch` copies in place, and changes the Ha "in project" and "captured" numbers by 0 (S14).
+- SC9: Move run to Trash on `NGC7000-HOO-Siril` is refused, names exactly 1 run, `NGC7000 HOO combine`, and moves 0 files (S13).
+- SC10: Moving `28 Sep Ha copy check` to the Project's Trash moves 0 files, leaves 4 runs on the stage rail and changes the Ha "in project" and "captured" numbers by 0. Restore returns it at Done with 2 membership revisions, 2 preparation revisions and 2 Results candidates (S14, S14a).
+- SC11: Emptying `28 Sep Ha copy check` from the Trash sends exactly 1 folder holding 2 files to the OS Trash, leaves all 111 `Scratch` copies in place, and changes the Ha numbers by 0 (S14b).
 
 ## Known gaps
 
@@ -166,6 +184,6 @@ user also reopens a run and deletes one. Done means:
 
 ## Delta log
 
-- **Δ2** 2026-10-06 · S1, S2, S3, S4, S5, S7, S8, S9, S10, S11, +S12, +S13, +S14 · behavior-change
-  Run Clean up lists only prepared links, clones and copies, and starts them selected. The Results folder, the originals and rejected frames are never listed, so the protected-product step and the duplicate step are retired (old ids 6 and 11a). Views are runs in the Project. A Complete run can be reopened, and a run that is no longer wanted is deleted: Delete run is refused while another run uses its Results, sends its prepared folders and a ticked Results folder to the OS Trash, and leaves in place what cannot go there (G4 retired, answered by D-W72).
-  Evidence: specs/071-storage-custody STO-FR-01, STO-FR-03, STO-AC-01, STO-AC-20. specs/069-application-handoff PREP-FR-14, PREP-AC-19. D-W26, D-W43 at e4476231. D-W66, D-W70, D-W72. 070 RES-FR-01, RES-FR-07, RES-FR-10, RES-AC-19, RES-AC-20. 066 VSEL-FR-17 and 065 PRJ-FR-04, PRJ-FR-20. 071 STO-FR-01, STO-FR-10, STO-FR-16, STO-FR-17, STO-AC-24 and 069 PREP-FR-14 · by: JourneysC (intent-gated)
+- **Δ2** 2026-10-06 · S1, S2, S3, S4, S5, S7, S8, S9, S10, S11, +S12, +S13, +S14, +S14a, +S14b · behavior-change
+  Run Clean up lists only prepared links, clones and copies, and starts them selected. The Results folder, the originals and rejected frames are never listed, so the protected-product step and the duplicate step are retired (old ids 6 and 11a). Views are runs in the Project. A Complete run can be reopened, and a run that is no longer wanted goes to the Project's Trash. Move run to Trash is refused while another run uses its Results and moves no file. Restore brings the run back unchanged, and Empty Trash sends its prepared folders and a ticked Results folder to the OS Trash and leaves in place what cannot go there (G4 retired, answered by D-W72).
+  Evidence: specs/071-storage-custody STO-FR-01, STO-FR-03, STO-AC-01, STO-AC-20. specs/069-application-handoff PREP-FR-14, PREP-AC-19. D-W26, D-W43 at e4476231. D-W66, D-W70, D-W72. 070 RES-FR-01, RES-FR-07, RES-FR-10, RES-AC-19 to RES-AC-22. 066 VSEL-FR-17 and 065 PRJ-FR-04, PRJ-FR-20. 071 STO-FR-01, STO-FR-10, STO-FR-16, STO-FR-17, STO-AC-24 and 069 PREP-FR-14 · by: JourneysC (intent-gated)

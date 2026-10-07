@@ -81,7 +81,7 @@
       "journeyStep": "J21/S1, J21/S2",
       "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02; 070-results-reuse RES-FR-10; D-W3, D-W8, D-W50, D-W72",
       "action": "Move along the run's pipeline rail through Select, Review, Calibrate and Prepare, toggle Sky coverage, and read the run header.",
-      "expect": "Every step shows the same selection, names what it still needs and offers Delete run. The header shows the run name, Project, subject, rig and profile Not chosen, with the subject and rig fixed.",
+      "expect": "Every step shows the same selection, names what it still needs and offers Move run to Trash. The header shows the run name, Project, subject, rig and profile Not chosen, with the subject and rig fixed.",
       "negative": "No wizard gates movement between steps. Moving saves no revision, creates no folder and starts no measurement, and no control moves the run to another Project."
     },
     {
@@ -476,9 +476,18 @@
       "owner": "065-project-goals",
       "journeyStep": "J20/S3, J20/S7, J20/S8, J20/S9, J14/S6, J27/S14, J29/S12, J34/S2",
       "spec": "065-project-goals PRJ-FR-02, PRJ-FR-04, PRJ-FR-07, PRJ-FR-08, PRJ-FR-09, PRJ-FR-20, PRJ-AC-06, PRJ-AC-25; 072-observing-plans PLAN-FR-09, PLAN-FR-10; D-W7, D-W16, D-W37, D-W60, D-W65, D-W66, D-W72",
-      "action": "Open the Project page, read its candidates, planning and stage rail, and open the Planner. Try to remove the run's rig and subject and a rig no run uses, rename the Project, and later delete a run.",
-      "expect": "The page shows subjects, rigs, goals, candidates with their reasons, members, and each run on the stage rail; a deleted run leaves the rail. Planning lists windows for the Project's own subjects, and Open in Planner opens Targets with the Project context. Removing a rig or subject that any run uses is refused naming each run that uses it, and removing an unused rig succeeds.",
+      "action": "Open the Project page, read its candidates, planning and stage rail, and open the Planner. Try to remove the run's rig and subject and a rig no run uses, rename the Project, and later move a run to the Project's Trash.",
+      "expect": "The page shows subjects, rigs, goals, candidates with their reasons, members, and each run on the stage rail; a run moved to the Project's Trash leaves the rail. Planning lists windows for the Project's own subjects, and Open in Planner opens Targets with the Project context. Removing a rig or subject that any run uses is refused naming each run that uses it, and removing an unused rig succeeds.",
       "negative": "The page offers no action that assigns a session to the Project, and a refused removal changes neither the Project nor the run. Renaming keeps the subject, the run and the Target link."
+    },
+    {
+      "flowStep": "Project Trash list",
+      "owner": "065-project-goals",
+      "journeyStep": "J27/S14, J27/S14a, J27/S14b, J34/S2, J34/S3a, J34/S12",
+      "spec": "065-project-goals PRJ-FR-04, PRJ-FR-14, PRJ-FR-20, PRJ-AC-15, PRJ-AC-29; 070-results-reuse RES-FR-10, RES-AC-19, RES-AC-21, RES-AC-22; D-W72",
+      "action": "Move a run to the Project's Trash and open the Trash list. Restore the run, move it again and empty it from the list, then empty the Trash from the Done / Archive sheet.",
+      "expect": "The Trash list shows each run in the Project's Trash with its stage, and offers Restore and Empty Trash for it plus Empty Trash for every run in it. A run in the list appears nowhere else, and Restore returns it to the stage rail unchanged. After Empty Trash the list no longer shows it.",
+      "negative": "Opening the list, moving a run to it and Restore move no file, and an emptied run never returns, even after Reopen."
     },
     {
       "flowStep": "Home dashboard",
@@ -493,9 +502,9 @@
       "flowStep": "Project Done / Archive sheet",
       "owner": "065-project-goals",
       "journeyStep": "J34/S1–S12, J28/S1",
-      "spec": "065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-20, PRJ-AC-15, PRJ-AC-16, PRJ-AC-17, PRJ-AC-21, PRJ-AC-27, PRJ-AC-28, PRJ-AC-30; 064-library-inventory LIB-FR-18, LIB-AC-19; 071-storage-custody STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-AC-17, STO-AC-18, STO-AC-19, STO-AC-21, STO-AC-22, STO-AC-23; 070-results-reuse RES-FR-10; D19, D-W26, D-W43, D-W46, D-W69, D-W70, D-W72, D-W74",
-      "action": "Mark the Project Done while runs are open, delete or complete each one, then use the sheet's four separate offers: move the rejected frames, the processing intermediates and the duplicate copies to Trash, and Archive. Reopen the Project after Archive.",
-      "expect": "Mark Done names every run that is not Complete. Once each is resolved the sheet opens with Archive and the three Trash offers, each listing refused items with their reasons, and each runs as its own reviewed approval. Trashed frames read Trashed and leave every list and total except the fixed memberships of the Complete runs that hold them, and Reopen returns the Project to open with its archived sessions shown as Archived.",
+      "spec": "065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-FR-16, PRJ-FR-20, PRJ-AC-15, PRJ-AC-16, PRJ-AC-17, PRJ-AC-21, PRJ-AC-27, PRJ-AC-28, PRJ-AC-30; 064-library-inventory LIB-FR-18, LIB-AC-19; 071-storage-custody STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-FR-17, STO-AC-17, STO-AC-18, STO-AC-19, STO-AC-21, STO-AC-22, STO-AC-23; 070-results-reuse RES-FR-10, RES-AC-22; D19, D-W26, D-W43, D-W46, D-W69, D-W70, D-W72, D-W74",
+      "action": "Mark the Project Done while runs are open, complete each one or move it to the Project's Trash, then use the sheet's five separate offers: empty the Project's Trash, move the rejected frames, the processing intermediates and the duplicate copies to Trash, and Archive. Reopen the Project after Archive.",
+      "expect": "Mark Done names every run outside the Project's Trash that is not Complete. Once each is resolved the sheet opens with Archive, the three Trash offers and, while the Project's Trash holds runs, Empty Trash. Each offer lists refused items with their reasons and runs as its own reviewed approval. Trashed frames read Trashed and leave every list and total except the fixed memberships of the Complete runs that hold them, and Reopen returns the Project to open with its archived sessions shown as Archived.",
       "negative": "No file moves until an offer is approved, and nothing is permanently deleted. Accepted Results, adopted masters, Project-only rejects and changed items are never trashed, every frame keeps one copy, and Reopen moves no file."
     },
     {
@@ -540,7 +549,7 @@
       "journeyStep": "J21/S1, J21/S2, J22/S1",
       "spec": "066-view-selection VSEL-FR-01, VSEL-FR-02; 067-frame-review PIX-FR-10; 070-results-reuse RES-FR-10; D-W3, D-W13, D-W72",
       "action": "Move along the run's pipeline rail through Select, Review, Calibrate and Prepare and open the Review step.",
-      "expect": "The rail lists Select, Review, Calibrate, Prepare, Results and Done for this run, every step shows the same selection and offers Delete run, and a later step names what it still needs. Review opens frame review inside the run.",
+      "expect": "The rail lists Select, Review, Calibrate, Prepare, Results and Done for this run, every step shows the same selection and offers Move run to Trash, and a later step names what it still needs. Review opens frame review inside the run.",
       "negative": "No wizard gates movement, and moving between steps saves no revision and creates no folder."
     },
     {
@@ -706,20 +715,20 @@
       "negative": "Nothing inside a prepared Panel N folder is discovered, no candidate is listed as unplaced, and nothing is accepted automatically. Accepting the group Result changes no panel run, and no panel run waits for a group Result."
     },
     {
-      "flowStep": "Delete run",
+      "flowStep": "Move run to Trash, Restore and Empty Trash",
       "owner": "070-results-reuse",
-      "journeyStep": "J21/S1, J24/S15, J27/S13, J27/S14, J34/S2",
-      "spec": "070-results-reuse RES-FR-05, RES-FR-07, RES-FR-10, RES-AC-19, RES-AC-20; 065-project-goals PRJ-FR-04, PRJ-FR-14, PRJ-FR-20, PRJ-AC-29; 071-storage-custody STO-FR-17, STO-AC-24; D-W66, D-W72",
-      "action": "Try Delete run while the run's preparation is running and while another run uses the run's accepted Results. Delete a run on a location without Trash with its Results folder ticked, read the Project's goals, and delete an open run from the Mark Done prompt.",
-      "expect": "Delete run is refused while an app-owned preparation affecting the run is running, naming it, as Mark processing complete is, and while another run uses one of its accepted Results, naming each such run. Otherwise the review lists the run record, its prepared folders and its Results folder, which goes only when ticked. After confirming, the files go to the OS Trash, anything that cannot go there is named and left in place, and the run leaves the stage rail. Its members stop counting in project and captured unless they are still candidates.",
-      "negative": "Deleting never touches library frames or quality decisions, never deletes permanently and has no in-app undo, and a refused Delete run moves no file."
+      "journeyStep": "J21/S1, J24/S15, J27/S13, J27/S14, J27/S14a, J27/S14b, J34/S2, J34/S3a",
+      "spec": "070-results-reuse RES-FR-05, RES-FR-07, RES-FR-10, RES-AC-19, RES-AC-20, RES-AC-21, RES-AC-22; 065-project-goals PRJ-FR-04, PRJ-FR-14, PRJ-FR-20, PRJ-AC-29; 071-storage-custody STO-FR-17, STO-AC-24; D-W66, D-W72",
+      "action": "Try Move run to Trash while the run's preparation is running and while another run uses the run's accepted Results. Move a Complete run on a location without OS Trash to the Project's Trash, read the Project's goals, Restore it, move it again and empty it from the Trash with its Results folder ticked. Move an open run to Trash from the Mark Done prompt and empty it from the Done / Archive sheet.",
+      "expect": "Move run to Trash is refused while an app-owned preparation affecting the run is running, naming it, as Mark processing complete is, and while another run uses one of its accepted Results, naming each such run. Otherwise the run leaves the stage rail, Home and every picker and shows only in the Project's Trash list, and its members stop counting in project and captured unless they are still candidates. Restore brings it back with its membership revisions, preparation revisions, Results and stage. Empty Trash reviews the run record, its prepared folders and its Results folder, which goes only when ticked. After confirming, the files go to the OS Trash, and anything that cannot go there is named and left in place.",
+      "negative": "Moving a run to Trash and restoring it move no file. Nothing touches library frames or quality decisions or deletes permanently, a refused Move run to Trash changes nothing, and after Empty Trash the run cannot be restored."
     },
     {
       "flowStep": "Cross-flow: Cleanup/Trash failure",
       "owner": "071-storage-custody",
-      "journeyStep": "J27/S8, J27/S10, J27/S14, J34/S6, J34/S9, J34/S9a",
+      "journeyStep": "J27/S8, J27/S10, J27/S14b, J34/S6, J34/S9, J34/S9a",
       "spec": "071-storage-custody STO-FR-05, STO-FR-15, STO-FR-16, STO-FR-17, STO-AC-03, STO-AC-09, STO-AC-15, STO-AC-19, STO-AC-21, STO-AC-23, STO-AC-24; D19, D-W43, D-W70, D-W72, D-W74",
-      "action": "Send cleanup entries to the Trash after a retained original changes, on a location without safe Trash, delete a run whose prepared folders sit there, and move rejected frames, processing intermediates and duplicate copies to the Trash after one item changes in place.",
+      "action": "Send cleanup entries to the Trash after a retained original changes, on a location without safe Trash, empty a run whose prepared folders sit there from the Project's Trash, and move rejected frames, processing intermediates and duplicate copies to the Trash after one item changes in place.",
       "expect": "Each refused item is named with its reason in an exact partial summary, and the unsupported location offers Keep files and Reveal location. Items that pass re-verification go to the OS Trash.",
       "negative": "Refused items stay in place, and no permanent-delete fallback is offered."
     },
@@ -751,11 +760,11 @@
       "negative": "No file moves before an offer is approved, accepted Results, adopted masters, kept copies, unknown files and prepared entries are never trashed, and nothing is permanently deleted. Reopening moves no file."
     },
     {
-      "flowStep": "Delete run custody: moving a deleted run's prepared folders, and its Results folder when ticked, to the OS Trash",
+      "flowStep": "Empty Trash custody: moving the prepared folders of a run emptied from the Project's Trash, and its Results folder when ticked, to the OS Trash",
       "owner": "071-storage-custody",
-      "journeyStep": "J27/S14, J34/S2",
-      "spec": "071-storage-custody STO-FR-04, STO-FR-05, STO-FR-17, STO-AC-24; 070-results-reuse RES-FR-10, RES-AC-19; D19, D-W72",
-      "action": "Delete a run whose prepared folders sit on a location without OS Trash, with its Results folder ticked, and delete a run that has no preparation revision.",
+      "journeyStep": "J27/S14b, J34/S3a",
+      "spec": "071-storage-custody STO-FR-04, STO-FR-05, STO-FR-17, STO-AC-24; 070-results-reuse RES-FR-10, RES-AC-22; 065-project-goals PRJ-FR-14; D19, D-W72",
+      "action": "From the Project's Trash, empty a run whose prepared folders sit on a location without OS Trash, with its Results folder ticked, and from the Done / Archive sheet empty a run that has no preparation revision.",
       "expect": "The review names each item that cannot go to the OS Trash with its reason. After confirming, every other item goes to the OS Trash, and the summary names every item left in place with its path.",
       "negative": "No item is permanently deleted, no link target is followed, and no library frame or quality decision changes."
     },

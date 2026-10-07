@@ -34,7 +34,7 @@ unresolved member. Project `NGC 7000 HOO` then counts those five sessions
 ### S1 — Orient in the run workspace {#S1}
 
 - **Do:** Move along the run's pipeline rail through Select, Review, Calibrate and Prepare, then return to Select. Toggle **Sky coverage** on and off.
-- **Expect:** The rail lists Select, Review, Calibrate, Prepare, Results and Done for this run. Each later step opens and names what it still needs: Prepare names the unsaved membership and the profile that is not chosen. Every step shows the same selection. **Sky coverage** shows and hides a linked spatial view. Every step also offers **Delete run**, which this journey does not use.
+- **Expect:** The rail lists Select, Review, Calibrate, Prepare, Results and Done for this run. Each later step opens and names what it still needs: Prepare names the unsaved membership and the profile that is not chosen. Every step shows the same selection. **Sky coverage** shows and hides a linked spatial view. Every step also offers **Move run to Trash**, which this journey does not use.
 - **Expect (negative):** No Next/Back wizard gates movement between steps. Moving between steps saves no revision, creates no folder on disk and starts no measurement.
 - **Trace:** flow C1 · VSEL-FR-02 · RES-FR-10 · D-W3, D-W72
 
