@@ -57,6 +57,7 @@ macro_rules! schema_modules {
 #[rustfmt::skip]
 const SCHEMA: &str = schema_modules![
     "schema.sql",
+    "projects.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -93,6 +94,8 @@ macro_rules! asset_sql {
         )
     };
 }
+
+mod projects;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

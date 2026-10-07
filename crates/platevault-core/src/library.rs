@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::grouping::group_assets;
 use crate::inventory;
+use crate::projects::ProjectReferences;
 use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
 };
@@ -105,8 +106,9 @@ impl persistence_library::SourceProbe for InventoryProbe {
 }
 
 impl Library {
-    /// Open a fresh-schema catalog and load the offline target dataset.
-    /// Interrupted scan recovery is owned by the catalog.
+    /// Open a fresh-schema catalog and load the offline target dataset, with the
+    /// catalog's Projects registered as a reference source. Interrupted scan
+    /// recovery is owned by the catalog.
     ///
     /// # Errors
     /// Returns catalog persistence, seed validation or provider configuration errors.
@@ -118,6 +120,8 @@ impl Library {
         let targets = blocking(TargetIndex::bundled).await?;
         let provider = provider.map(SimbadTargetResolver::simbad).transpose()?;
         let (progress, _) = broadcast::channel(128);
+        let projects: Arc<dyn AssetReferences> =
+            Arc::new(ProjectReferences { catalog: Arc::clone(&catalog) });
         Ok(Arc::new(Self {
             catalog,
             targets: Arc::new(targets),
@@ -125,7 +129,7 @@ impl Library {
             scans: Mutex::new(HashMap::new()),
             saved_targets: Mutex::new(None),
             progress,
-            references: tokio::sync::RwLock::new(Vec::new()),
+            references: tokio::sync::RwLock::new(vec![projects]),
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         }))
