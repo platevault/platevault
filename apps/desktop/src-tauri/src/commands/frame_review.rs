@@ -15,9 +15,11 @@ use std::sync::Arc;
 
 use platevault_core::library::Library;
 use platevault_core::{
-    ConfirmedImport, CutoutRequest, FrameDetail, FramePreview, FrameStars, FrameState,
-    ImportReview, MeasurementProgress, MeasurementRun, NativePath, PreviewTile, RegionsRequest,
-    RowResolution, SampleRequest, SampleValue, StarCutouts, Stretch, ThumbnailEntry, TileRequest,
+    ConfirmedImport, CutoutRequest, DisplayName, FrameDetail, FramePreview, FrameStars, FrameState,
+    ImportReview, MeasurementProgress, MeasurementRun, NameTemplate, NativePath, PreviewTile,
+    RegionsRequest, ReviewContext, ReviewFilter, ReviewList, ReviewMark, ReviewMarked, ReviewSort,
+    Revision, RowResolution, SampleRequest, SampleValue, StarCutouts, Stretch, ThumbnailEntry,
+    TileRequest,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
@@ -336,4 +338,73 @@ pub async fn pix_thumbnails(
     assets: Vec<Uuid>,
 ) -> Reply<Vec<ThumbnailEntry>> {
     library.frame_review().thumbnails(&assets).await.map_err(fail(None))
+}
+
+const fn context_id(context: ReviewContext) -> Uuid {
+    match context {
+        ReviewContext::Run { view_id } => view_id,
+        ReviewContext::ProjectCandidates { project_id } => project_id,
+    }
+}
+
+/// Review frames over a run's Review step or a Project's candidate sessions
+/// (PIX-FR-18): the frames `filter` admits with their two-level labels,
+/// sorted (capture order by default) and named by `names` (the file name by
+/// default), with per-label counts over the whole context. Trashed frames
+/// are never listed or counted. Starts no measurement and reads no source.
+///
+/// # Errors
+/// `NotFound` for an unknown run or Project; `InvalidInput` for a run in the
+/// Project's Trash or a display template the naming resolver refuses.
+#[tauri::command]
+pub async fn pix_review_list(
+    library: State<'_, Arc<Library>>,
+    context: ReviewContext,
+    filter: ReviewFilter,
+    sort: Option<ReviewSort>,
+    names: Option<NameTemplate>,
+) -> Reply<ReviewList> {
+    library
+        .frame_review()
+        .review_list(context, filter, &sort.unwrap_or_default(), &names.unwrap_or_default())
+        .await
+        .map_err(fail(Some(context_id(context))))
+}
+
+/// Frame names under a display template with their absolute paths; display
+/// only, no file is renamed (PIX-FR-16).
+///
+/// # Errors
+/// `InvalidInput` for a refused template, an asset listed twice or a Trashed
+/// frame; `NotFound` for an unknown asset.
+#[tauri::command]
+pub async fn pix_display_names(
+    library: State<'_, Arc<Library>>,
+    assets: Vec<Uuid>,
+    names: NameTemplate,
+) -> Reply<Vec<DisplayName>> {
+    library.frame_review().display_names(&assets, &names).await.map_err(fail(None))
+}
+
+/// One P, X, U, Reject for this Project only or Clear Project reject. In an
+/// open run it goes through the run's Review step, moving the draft member in
+/// the same transaction; otherwise it writes the library or Project-only
+/// decision alone.
+///
+/// # Errors
+/// `Conflict` for a stale draft, asset or Project decision; `InvalidInput`
+/// for a run in the Trash, a non-member, or a Retired or Trashed copy;
+/// `IdentityConflict` when a P or X mark finds changed bytes.
+#[tauri::command]
+pub async fn pix_review_mark(
+    library: State<'_, Arc<Library>>,
+    context: ReviewContext,
+    expected_draft_revision: Revision,
+    mark: ReviewMark,
+) -> Reply<ReviewMarked> {
+    library
+        .frame_review()
+        .review_mark(context, expected_draft_revision, &mark)
+        .await
+        .map_err(fail(Some(context_id(context))))
 }

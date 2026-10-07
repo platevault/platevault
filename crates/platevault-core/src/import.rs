@@ -1427,7 +1427,10 @@ async fn destination_writability(
 /// The header frame type: a calibration frame or master by the calibration
 /// rules (IMAGETYP, stack count, then a labelled name inference), else a
 /// single light by IMAGETYP. Anything else is Unclassified.
-fn classify(metadata: &CaptureMetadata, relative_path: &NativePath) -> Option<NamingFrameType> {
+pub(crate) fn classify(
+    metadata: &CaptureMetadata,
+    relative_path: &NativePath,
+) -> Option<NamingFrameType> {
     if let Some(found) = Rules.classify(metadata, relative_path) {
         let master = found.master.is_some();
         return Some(match (found.kind, master) {
@@ -1458,7 +1461,10 @@ const fn image_type_text(frame_type: NamingFrameType) -> &'static str {
 }
 
 /// What the nine naming tokens resolve from; absent values take fallbacks.
-fn naming_metadata(metadata: &CaptureMetadata, frame_type: NamingFrameType) -> NamingMetadata {
+pub(crate) fn naming_metadata(
+    metadata: &CaptureMetadata,
+    frame_type: NamingFrameType,
+) -> NamingMetadata {
     let number = |value: Option<f64>| {
         value.filter(|value| value.is_finite()).map(|value| (value + 0.0).to_string())
     };

@@ -30,17 +30,19 @@ use uuid::Uuid;
 use crate::library::{blocking, InventoryProbe};
 use crate::subframe_csv;
 use crate::{
-    reasons, AppliedStretch, Asset, CfaEvidence, CfaSource, ConfirmedImport, CutoutRequest,
-    DecodedBasis, FrameDetail, FramePreview, FrameStars, FrameState, ImageFormat, ImportBasis,
-    ImportCandidate, ImportFormat, ImportReview, ImportSource, ImportedValue, InputBasis,
-    LibraryError, MaskCounts, MeasurementMethod, MeasurementOutcome, MeasurementProgress,
-    MeasurementRecord, MeasurementRun, MetricId, MetricValue, NativePath, ObservationFingerprint,
-    PlaneBasis, PlanePreview, PlaneSummary, PreviewTile, RecordValidity, RegionsRequest, RowMatch,
-    RowResolution, RunIssue, RunState, SampleCategory, SampleFormat, SampleNumber, SampleRequest,
-    SampleValue, SaturationBasis, SaturationSource, Scaling, StarCutouts, StarModel, StarReason,
-    StarRecord, StarState, StarWarning, StoredNumber, Stretch, StretchKind, TileRequest, Units,
+    reasons, AppliedStretch, Asset, Availability, CfaEvidence, CfaSource, ConfirmedImport,
+    CutoutRequest, DecodedBasis, FrameDetail, FramePreview, FrameStars, FrameState, ImageFormat,
+    ImportBasis, ImportCandidate, ImportFormat, ImportReview, ImportSource, ImportedValue,
+    InputBasis, LibraryError, MaskCounts, MeasurementMethod, MeasurementOutcome,
+    MeasurementProgress, MeasurementRecord, MeasurementRun, MetricId, MetricValue, NativePath,
+    ObservationFingerprint, PlaneBasis, PlanePreview, PlaneSummary, PreviewTile, RecordValidity,
+    RegionsRequest, RowMatch, RowResolution, RunIssue, RunState, SampleCategory, SampleFormat,
+    SampleNumber, SampleRequest, SampleValue, SaturationBasis, SaturationSource, Scaling,
+    StarCutouts, StarModel, StarReason, StarRecord, StarState, StarWarning, StoredNumber, Stretch,
+    StretchKind, TileRequest, Units,
 };
 
+mod review_list;
 mod thumbnails;
 
 /// Memory budget of the frames the measurement workers decode and measure at
@@ -157,12 +159,14 @@ impl FrameReview {
 
     /// Queue every asset without a valid record or a current failure, the
     /// `priority` assets first, then request order. While a run is Running
-    /// the frames join it and that run is returned.
+    /// the frames join it and that run is returned. A Trashed frame is never
+    /// measured or counted (D-W43), so a request naming one is refused whole.
     ///
     /// # Errors
-    /// `InvalidInput` for an empty request, a priority asset outside it or an
-    /// asset listed twice; `NotFound` for an unknown asset; `Conflict` while
-    /// the Running run is being canceled or failed; `PersistenceFailure`.
+    /// `InvalidInput` for an empty request, a priority asset outside it, an
+    /// asset listed twice or a Trashed frame; `NotFound` for an unknown asset;
+    /// `Conflict` while the Running run is being canceled or failed;
+    /// `PersistenceFailure`.
     pub async fn start_measurement(
         &self,
         assets: &[Uuid],
@@ -180,6 +184,14 @@ impl FrameReview {
             )));
         }
         let records = self.shared.catalog.frame_records(assets, &self.shared.method).await?;
+        if let Some(trashed) =
+            records.iter().find(|basis| basis.asset.availability == Availability::Trashed)
+        {
+            return Err(LibraryError::InvalidInput(format!(
+                "asset {} is in the Trash and is never measured",
+                trashed.asset.id
+            )));
+        }
         let by_id: HashMap<Uuid, &FrameRecordBasis> =
             records.iter().map(|basis| (basis.asset.id, basis)).collect();
         let mut seen = HashSet::new();

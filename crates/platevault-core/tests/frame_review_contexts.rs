@@ -83,7 +83,7 @@ fn ngc7000() -> TargetCandidate {
     }
 }
 
-/// Two Projects on NGC 7000 with the RedCat, each with one run, over one
+/// Two Projects on NGC 7000 with the `RedCat`, each with one run, over one
 /// indexed root: four NGC 7000 Ha frames and one M 81 frame.
 struct World {
     _temp: tempfile::TempDir,
@@ -600,23 +600,23 @@ async fn display_template_renames_nothing() {
     let world = World::new().await;
     let before = world.assets().await;
     let list = world.list(world.run_a(), ReviewFilter::All).await;
-    let names: Vec<&str> = list.frames.iter().map(|frame| frame.display.name.as_str()).collect();
-    assert_eq!(names, vec!["Ha_001.fits", "Ha_002.fits", "Ha_003.fits", "Ha_004.fits"]);
+    let listed: Vec<&str> = list.frames.iter().map(|frame| frame.display.name.as_str()).collect();
+    assert_eq!(listed, vec!["Ha_001.fits", "Ha_002.fits", "Ha_003.fits", "Ha_004.fits"]);
     for (frame, relative) in list.frames.iter().zip(NGC) {
         assert_eq!(frame.display.path, NativePath::from_path(&world.root.join(relative)));
         assert!(frame.display.fallbacks.is_empty());
     }
 
     let tokens = NameTemplate::Tokens { template: "{filter}_{exposure}s".into() };
-    let named = world.review().display_names(&world.frames, &tokens).await.unwrap();
-    assert_eq!(named.iter().map(|name| name.asset_id).collect::<Vec<_>>(), world.frames);
-    assert!(named.iter().all(|name| name.name == "Ha_300s" && name.fallbacks.is_empty()));
+    let rendered = world.review().display_names(&world.frames, &tokens).await.unwrap();
+    assert_eq!(rendered.iter().map(|name| name.asset_id).collect::<Vec<_>>(), world.frames);
+    assert!(rendered.iter().all(|name| name.name == "Ha_300s" && name.fallbacks.is_empty()));
 
     let fallback = NameTemplate::Tokens { template: "{filter}_{gain}".into() };
-    let named = world.review().display_names(&world.frames[..1], &fallback).await.unwrap();
-    assert_eq!(named[0].name, "Ha_unknown-gain");
+    let defaulted = world.review().display_names(&world.frames[..1], &fallback).await.unwrap();
+    assert_eq!(defaulted[0].name, "Ha_unknown-gain");
     assert_eq!(
-        named[0].fallbacks.iter().map(|used| used.token.as_str()).collect::<Vec<_>>(),
+        defaulted[0].fallbacks.iter().map(|used| used.token.as_str()).collect::<Vec<_>>(),
         vec!["gain"]
     );
 

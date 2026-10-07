@@ -166,6 +166,9 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::frame_review::pix_import_review,
         crate::commands::frame_review::pix_confirm_import,
         crate::commands::frame_review::pix_thumbnails,
+        crate::commands::frame_review::pix_review_list,
+        crate::commands::frame_review::pix_display_names,
+        crate::commands::frame_review::pix_review_mark,
         // calibration
         // preparation
         // results
