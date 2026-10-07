@@ -23,8 +23,9 @@ use platevault_model::{
     CalibrationPolicy, CalibrationReadiness, CalibrationRules, CalibrationViewBasis,
     CalibrationViewPlan, CandidateEvaluation, CandidateRef, DecisionItem, ErrorResponse,
     ExpectedAsset, InputKind, InputRef, LibraryError, LightGroupKey, Location, MemberState,
-    NativePath, ObservationFingerprint, ProjectCalibrationEvidence, Requirement, RequirementKey,
-    Resolution, Revision, RunCompletion, SubjectChannelEvidence, UnresolvedReason, Verdict, View,
+    NativePath, ObservationFingerprint, ProjectCalibrationEvidence, ProjectWarning, Requirement,
+    RequirementKey, Resolution, Revision, RunCompletion, SubjectChannelEvidence, UnresolvedReason,
+    Verdict, View,
 };
 use serde::Serialize;
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
@@ -398,6 +399,90 @@ impl Catalog {
         project: Uuid,
         rules: &R,
     ) -> Result<ProjectCalibrationEvidence> {
+        let (order, by_rig) = self.project_rig_requirements(project, rules).await?;
+        let mut rows: Vec<SubjectChannelEvidence> = Vec::new();
+        for RigRequirements { subject_id, rig_id, requirements } in by_rig {
+            for requirement in requirements {
+                let channel = requirement.light_group.channel.clone();
+                let index = rows
+                    .iter()
+                    .position(|row| row.subject_id == subject_id && row.channel == channel)
+                    .unwrap_or_else(|| {
+                        rows.push(SubjectChannelEvidence {
+                            subject_id,
+                            channel,
+                            rig_ids: Vec::new(),
+                            light_session_ids: Vec::new(),
+                            missing: Vec::new(),
+                            exposure_mismatch: false,
+                            light_exposures: Vec::new(),
+                            dark_exposures: Vec::new(),
+                        });
+                        rows.len() - 1
+                    });
+                merge_evidence(&mut rows[index], rig_id, &requirement);
+            }
+        }
+        rows.sort_by(|a, b| {
+            subject_position(&order, a.subject_id)
+                .cmp(&subject_position(&order, b.subject_id))
+                .then_with(|| a.channel.cmp(&b.channel))
+        });
+        Ok(ProjectCalibrationEvidence { project_id: project, rows })
+    }
+
+    /// The exposure-mismatch warnings of a Project's candidate sessions, one
+    /// per subject, rig and channel with a mismatching dark requirement
+    /// (PRJ-FR-11, [`Requirement::exposure_mismatch`]). Each rig's candidates
+    /// are matched as that rig's run would be, so one rig's darks never hide
+    /// or raise another rig's warning. By subject order, then channel with
+    /// `None` last, then rig. Assigns, writes and hashes nothing.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project.
+    pub async fn project_exposure_warnings<R: CalibrationRules + ?Sized>(
+        &self,
+        project: Uuid,
+        rules: &R,
+    ) -> Result<Vec<ProjectWarning>> {
+        let (order, by_rig) = self.project_rig_requirements(project, rules).await?;
+        let mut warnings = Vec::new();
+        for RigRequirements { subject_id, rig_id, requirements } in by_rig {
+            let mut channels: BTreeMap<Option<String>, (BTreeSet<String>, BTreeSet<String>)> =
+                BTreeMap::new();
+            for requirement in requirements.iter().filter(|r| r.exposure_mismatch()) {
+                let (light, dark) = requirement.mismatched_exposures();
+                let entry = channels.entry(requirement.light_group.channel.clone()).or_default();
+                entry.0.extend(light);
+                entry.1.extend(dark);
+            }
+            warnings.extend(channels.into_iter().map(|(channel, (light, dark))| {
+                ProjectWarning::ExposureMismatch {
+                    subject_id,
+                    rig_id,
+                    channel,
+                    light_exposures: ascending(light),
+                    dark_exposures: ascending(dark),
+                }
+            }));
+        }
+        let key = |warning: &ProjectWarning| match warning {
+            ProjectWarning::ExposureMismatch { subject_id, channel, .. } => {
+                (subject_position(&order, *subject_id), channel.is_none(), channel.clone())
+            }
+        };
+        warnings.sort_by_key(key);
+        Ok(warnings)
+    }
+
+    /// The calibration requirements of each subject's candidate lights per
+    /// Project rig, matched as that rig's run would be, with the subjects in
+    /// candidate order. One snapshot; nothing is assigned or hashed.
+    async fn project_rig_requirements<R: CalibrationRules + ?Sized>(
+        &self,
+        project: Uuid,
+        rules: &R,
+    ) -> Result<(Vec<Uuid>, Vec<RigRequirements>)> {
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
         projects::require_project(&mut snapshot, project).await?;
@@ -420,48 +505,29 @@ impl Catalog {
         }
         snapshot.rollback().await?;
 
-        let mut rows: Vec<SubjectChannelEvidence> = Vec::new();
-        for ((subject_id, rig_id), lights) in by_rig {
-            let basis = CalibrationViewBasis {
-                view_id: Uuid::nil(),
-                view_revision: 0,
-                plan: CalibrationPlan {
-                    policy: CalibrationPolicy::Manual,
-                    ..CalibrationPlan::unplanned(Uuid::nil())
-                },
-                lights,
-                candidates: candidates.clone(),
-                decisions: Vec::new(),
-            };
-            for requirement in rules.plan(&basis).requirements {
-                let channel = requirement.light_group.channel.clone();
-                let index = rows
-                    .iter()
-                    .position(|row| row.subject_id == subject_id && row.channel == channel)
-                    .unwrap_or_else(|| {
-                        rows.push(SubjectChannelEvidence {
-                            subject_id,
-                            channel,
-                            rig_ids: Vec::new(),
-                            light_session_ids: Vec::new(),
-                            missing: Vec::new(),
-                            exposure_mismatch: false,
-                            light_exposures: Vec::new(),
-                            dark_exposures: Vec::new(),
-                        });
-                        rows.len() - 1
-                    });
-                merge_evidence(&mut rows[index], rig_id, &requirement);
-            }
-        }
-        let order: Vec<Uuid> = found.iter().map(|candidate| candidate.subject_id).collect();
-        rows.sort_by(|a, b| {
-            let position = |id| order.iter().position(|subject| *subject == id);
-            position(a.subject_id)
-                .cmp(&position(b.subject_id))
-                .then_with(|| a.channel.cmp(&b.channel))
-        });
-        Ok(ProjectCalibrationEvidence { project_id: project, rows })
+        let requirements = by_rig
+            .into_iter()
+            .map(|((subject_id, rig_id), lights)| {
+                let basis = CalibrationViewBasis {
+                    view_id: Uuid::nil(),
+                    view_revision: 0,
+                    plan: CalibrationPlan {
+                        policy: CalibrationPolicy::Manual,
+                        ..CalibrationPlan::unplanned(Uuid::nil())
+                    },
+                    lights,
+                    candidates: candidates.clone(),
+                    decisions: Vec::new(),
+                };
+                RigRequirements {
+                    subject_id,
+                    rig_id,
+                    requirements: rules.plan(&basis).requirements,
+                }
+            })
+            .collect();
+        let order = found.iter().map(|candidate| candidate.subject_id).collect();
+        Ok((order, requirements))
     }
 
     /// Accept (`reason` absent) or except (`reason` present) a batch of items.
@@ -599,6 +665,29 @@ impl Catalog {
             rules.plan(&basis)
         }))
     }
+}
+
+/// The calibration requirements of one subject's candidate lights on one
+/// Project rig.
+struct RigRequirements {
+    subject_id: Uuid,
+    rig_id: Uuid,
+    requirements: Vec<Requirement>,
+}
+
+/// Where `subject` stands in the Project's candidate order.
+fn subject_position(order: &[Uuid], subject: Uuid) -> Option<usize> {
+    order.iter().position(|id| *id == subject)
+}
+
+/// Canonical decimal seconds in ascending value.
+fn ascending(values: BTreeSet<String>) -> Vec<String> {
+    let mut values: Vec<String> = values.into_iter().collect();
+    values.sort_by(|left, right| match (left.parse::<f64>(), right.parse::<f64>()) {
+        (Ok(left), Ok(right)) => left.total_cmp(&right),
+        _ => left.cmp(right),
+    });
+    values
 }
 
 /// Fold one rig's requirement into its subject and channel row.

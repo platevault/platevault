@@ -701,17 +701,19 @@ pub struct GoalProgress {
     pub unknown_for_bar: u64,
 }
 
-/// An automatic warning per subject and channel, read from calibration-matching
-/// evidence (PRJ-FR-11, CAL-FR-12, D-W29). It is never a goal and never blocks
-/// a run.
+/// An automatic warning per subject, rig and channel, read from
+/// calibration-matching evidence (PRJ-FR-11, CAL-FR-12, D-W29). It is never a
+/// goal and never blocks a run.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum ProjectWarning {
-    /// The subject's candidate lights in `channel` find darks that differ from
-    /// them only in exposure: every dark not incompatible on another criterion
-    /// has another exposure. Exposures are canonical decimal seconds, ascending.
+    /// The subject's candidate lights on `rig_id` in `channel`, matched as
+    /// that rig's run would be, find darks that differ from them only in
+    /// exposure: every dark not incompatible on another criterion has another
+    /// exposure. Exposures are canonical decimal seconds, ascending.
     ExposureMismatch {
         subject_id: Uuid,
+        rig_id: Uuid,
         channel: Option<String>,
         light_exposures: Vec<String>,
         dark_exposures: Vec<String>,

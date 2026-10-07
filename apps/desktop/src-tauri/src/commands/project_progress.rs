@@ -23,8 +23,8 @@ use super::library::{fail, Reply};
 /// The Project's goal progress, in goal order, and its warnings. Read-only.
 ///
 /// # Errors
-/// `NotFound` for an unknown Project; `Conflict` when a candidate session
-/// changed during the read, so the caller reads again.
+/// `NotFound` for an unknown Project; `PersistenceFailure` when the catalog
+/// cannot be read.
 #[tauri::command]
 pub async fn project_progress(
     library: State<'_, Arc<Library>>,

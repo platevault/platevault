@@ -14,13 +14,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
     builtin_goal_templates, validate_goals, validate_project_name, validate_rigs,
-    validate_subjects, ApplicableQuality, Asset, AssetReference, Availability, ExpectedSession,
-    GoalIdentity, GoalInput, GoalProgress, GoalSpec, GoalTally, GoalTemplate, GoalTemplateInput,
-    LibraryError, MeasurementMethod, MeasurementOutcome, MeasurementRecord, MemberBasis,
-    MemberState, Membership, MetricId, MetricState, Microseconds, PanelInput, Project,
-    ProjectCandidate, ProjectDetail, ProjectGoal, ProjectInput, ProjectQuery, ProjectRejection,
-    ProjectState, ProjectSubject, ProjectSummary, QualityCriterion, RecordValidity, ReferenceKind,
-    RejectionMark, Revision, SubjectInput, SubjectPanel,
+    validate_subjects, ApplicableQuality, Asset, AssetReference, Availability, GoalIdentity,
+    GoalInput, GoalProgress, GoalSpec, GoalTally, GoalTemplate, GoalTemplateInput, LibraryError,
+    MeasurementMethod, MeasurementOutcome, MeasurementRecord, MemberBasis, MemberState, Membership,
+    MetricId, MetricState, Microseconds, PanelInput, Project, ProjectCandidate, ProjectDetail,
+    ProjectGoal, ProjectInput, ProjectQuery, ProjectRejection, ProjectState, ProjectSubject,
+    ProjectSummary, QualityCriterion, RecordValidity, ReferenceKind, RejectionMark, Revision,
+    SubjectInput, SubjectPanel,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
@@ -1072,33 +1072,22 @@ async fn latest_rejections(
 // Progress (PRJ-FR-03, PRJ-FR-04, D-W36, D-W44, D-W45, D-W66, D-W72)
 // ---------------------------------------------------------------------------
 
-/// The light sessions of one subject and channel among a Project's candidates,
-/// as calibration matching expects them.
-#[derive(Clone, Debug)]
-pub struct CandidateChannel {
-    pub subject_id: Uuid,
-    pub channel: Option<String>,
-    pub sessions: Vec<ExpectedSession>,
-}
-
-/// A Project's goal progress and its candidates' light channels, read from
-/// one catalog snapshot at the Project's revision.
+/// A Project's goal progress, read from one catalog snapshot at the
+/// Project's revision.
 #[derive(Clone, Debug)]
 pub struct ProgressBasis {
     pub project_id: Uuid,
     pub revision: Revision,
     /// One row per integration or frame-count goal, in goal order.
     pub goals: Vec<GoalProgress>,
-    /// By subject, then channel, `None` last.
-    pub candidate_channels: Vec<CandidateChannel>,
 }
 
 impl Catalog {
-    /// Goal progress of Project `id` (PRJ-FR-04) with the light channels of its
-    /// candidate sessions, from one catalog snapshot. "in project" reads the
-    /// latest saved revision of each run outside the Project's Trash; a
-    /// median-FWHM bar reads the latest `method` record that is valid for the
-    /// frame's current bytes (PIX R12). Hashes, measures and writes nothing.
+    /// Goal progress of Project `id` (PRJ-FR-04) from one catalog snapshot.
+    /// "in project" reads the latest saved revision of each run outside the
+    /// Project's Trash; a median-FWHM bar reads the latest `method` record
+    /// that is valid for the frame's current bytes (PIX R12). Hashes,
+    /// measures and writes nothing.
     ///
     /// # Errors
     /// `NotFound` for an unknown Project; `PersistenceFailure` when the
@@ -1178,23 +1167,10 @@ async fn progress_basis(
             frames[index].holdings.push(Holding { counts, ..holding });
         }
     }
-    let mut channels: BTreeMap<(Uuid, Option<String>), BTreeMap<Uuid, ExpectedSession>> =
-        BTreeMap::new();
     for candidate in &candidates {
         for asset in &candidate.asset_ids {
             let Some(&index) = of_asset.get(asset) else { continue };
-            let frame = &mut frames[index];
-            frame.candidate_of.insert(candidate.subject_id);
-            if frame.light == Some(true) {
-                channels.entry((candidate.subject_id, frame.channel.clone())).or_default().insert(
-                    candidate.session_id,
-                    ExpectedSession {
-                        session_id: candidate.session_id,
-                        grouping_revision: candidate.grouping_revision,
-                        decision_revision: candidate.decision_revision,
-                    },
-                );
-            }
+            frames[index].candidate_of.insert(candidate.subject_id);
         }
     }
     let goals = project
@@ -1203,27 +1179,7 @@ async fn progress_basis(
         .filter(|goal| goal.goal.counts_frames())
         .map(|goal| goal_progress(&project.goals, goal, &frames))
         .collect();
-    let mut candidate_channels: Vec<CandidateChannel> = channels
-        .into_iter()
-        .map(|((subject_id, channel), sessions)| CandidateChannel {
-            subject_id,
-            channel,
-            sessions: sessions.into_values().collect(),
-        })
-        .collect();
-    candidate_channels.sort_by(|left, right| {
-        let position = |subject| project.subjects.iter().position(|s| s.id == subject);
-        position(left.subject_id)
-            .cmp(&position(right.subject_id))
-            .then_with(|| left.channel.is_none().cmp(&right.channel.is_none()))
-            .then_with(|| left.channel.cmp(&right.channel))
-    });
-    Ok(ProgressBasis {
-        project_id: project.id,
-        revision: project.revision,
-        goals,
-        candidate_channels,
-    })
+    Ok(ProgressBasis { project_id: project.id, revision: project.revision, goals })
 }
 
 /// Every member of the latest saved revision of each run of `project` outside
