@@ -31,8 +31,13 @@ const M81: &str = "m81/L_001.fits";
 const LIBRARY: QualityLabel = QualityLabel::Rejected { scope: LabelScope::Library };
 const THIS_PROJECT: QualityLabel = QualityLabel::Rejected { scope: LabelScope::ThisProject };
 
+/// `relative` with the platform's separators, as the scanner builds it.
+fn native(relative: &str) -> PathBuf {
+    relative.split('/').collect()
+}
+
 fn write_frame(root: &Path, relative: &str, object: &str, filter: &str, minute: usize) {
-    let path = root.join(relative);
+    let path = root.join(native(relative));
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let object = format!("'{object}'");
     let filter = format!("'{filter}'");
@@ -112,7 +117,11 @@ impl World {
         let manifest = NGC
             .iter()
             .chain([&M81])
-            .map(|relative| (root.join(relative), support::digest(&root.join(relative))))
+            .map(|relative| root.join(native(relative)))
+            .map(|path| {
+                let digest = support::digest(&path);
+                (path, digest)
+            })
             .collect();
         let library = Library::open(&temp.path().join("library.sqlite"), None).await.unwrap();
         let location = library
@@ -126,14 +135,15 @@ impl World {
         let started = library.start_scan(location.id, None).await.unwrap();
         terminal(&library, started.id).await;
         let catalog = library.catalog();
-        let ids: BTreeMap<String, Uuid> = catalog
+        let ids: BTreeMap<NativePath, Uuid> = catalog
             .location_assets(location.id)
             .await
             .unwrap()
             .into_iter()
-            .map(|asset| (asset.relative_path.display(), asset.id))
+            .map(|asset| (asset.relative_path, asset.id))
             .collect();
-        let frames: Vec<Uuid> = NGC.iter().map(|relative| ids[*relative]).collect();
+        let id = |relative: &str| ids[&NativePath::from_path(&native(relative))];
+        let frames: Vec<Uuid> = NGC.into_iter().map(id).collect();
         let target = catalog.save_target(&ngc7000(), None).await.unwrap().candidate.id;
         let rig = catalog.save_equipment(&rig(), None).await.unwrap().id;
         for summary in catalog.list_sessions(&SessionQuery::default()).await.unwrap() {
@@ -153,7 +163,7 @@ impl World {
             library,
             location: location.id,
             frames,
-            m81: ids[M81],
+            m81: id(M81),
             target,
             run_a,
             run_b,
@@ -502,7 +512,7 @@ async fn review_step_reject_removes_from_draft() {
 async fn trashed_frame_not_listed_counted_measured_or_thumbnailed() {
     let world = World::new().await;
     let trashed = world.frames[3];
-    let path = world.root.join(NGC[3]);
+    let path = world.root.join(native(NGC[3]));
     let frame = TrashedFrame {
         asset_id: trashed,
         sha256: support::digest(&path),
@@ -603,7 +613,7 @@ async fn display_template_renames_nothing() {
     let listed: Vec<&str> = list.frames.iter().map(|frame| frame.display.name.as_str()).collect();
     assert_eq!(listed, vec!["Ha_001.fits", "Ha_002.fits", "Ha_003.fits", "Ha_004.fits"]);
     for (frame, relative) in list.frames.iter().zip(NGC) {
-        assert_eq!(frame.display.path, NativePath::from_path(&world.root.join(relative)));
+        assert_eq!(frame.display.path, NativePath::from_path(&world.root.join(native(relative))));
         assert!(frame.display.fallbacks.is_empty());
     }
 
