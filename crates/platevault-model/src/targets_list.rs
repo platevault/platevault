@@ -13,7 +13,8 @@ use time::Date;
 use uuid::Uuid;
 
 use crate::{
-    Band, Catalogue, LibraryError, NightMoon, PlanCriteria, Revision, SiteBasis, TargetCandidate,
+    Band, Catalogue, FieldOfView, LibraryError, NightMoon, PlanCriteria, Revision, SiteBasis,
+    TargetCandidate,
 };
 
 time::serde::format_description!(iso_date, Date, "[year]-[month]-[day]");
@@ -38,7 +39,8 @@ pub enum TargetsShow {
     Browse,
 }
 
-/// The built-in presets (PLAN-TGT-FR-09). The app offers no "Avoid tonight".
+/// The built-in presets (PLAN-TGT-FR-09, PLAN-TGT-FR-12). The app offers no
+/// "Avoid tonight".
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BuiltinPreset {
@@ -47,17 +49,52 @@ pub enum BuiltinPreset {
     EmissionNebulaeHa,
     GalaxiesDarkSky,
     PlanetaryNebulaeOiii,
+    /// Offered only with a rig selected.
+    MosaicCandidates,
+    /// Offered only with a rig selected.
+    FitsNicely,
 }
 
 impl BuiltinPreset {
     /// Every built-in preset, in menu order.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 7] = [
         Self::BestTonightBroadband,
         Self::NarrowbandMoonUp,
         Self::EmissionNebulaeHa,
         Self::GalaxiesDarkSky,
         Self::PlanetaryNebulaeOiii,
+        Self::MosaicCandidates,
+        Self::FitsNicely,
     ];
+
+    /// Whether the preset is offered only with a rig selected (PLAN-TGT-FR-12).
+    #[must_use]
+    pub const fn needs_rig(self) -> bool {
+        matches!(self, Self::MosaicCandidates | Self::FitsNicely)
+    }
+
+    /// Whether the preset is hidden when the selected rigs pass no Ha, SII or
+    /// OIII (PLAN-TGT-FR-13).
+    #[must_use]
+    pub const fn needs_narrowband(self) -> bool {
+        matches!(
+            self,
+            Self::NarrowbandMoonUp | Self::EmissionNebulaeHa | Self::PlanetaryNebulaeOiii
+        )
+    }
+
+    /// Whether the preset is offered for the selected rigs and the bands they
+    /// capture together. With no rig selected every preset except the
+    /// rig-only ones is offered.
+    #[must_use]
+    pub fn offered(self, rig_selected: bool, bands: &[Band]) -> bool {
+        if self.needs_rig() {
+            return rig_selected;
+        }
+        !(rig_selected
+            && self.needs_narrowband()
+            && !bands.iter().any(|band| matches!(band, Band::Ha | Band::Sii | Band::Oiii)))
+    }
 
     /// The menu name.
     #[must_use]
@@ -68,6 +105,8 @@ impl BuiltinPreset {
             Self::EmissionNebulaeHa => "Emission nebulae Ha",
             Self::GalaxiesDarkSky => "Galaxies dark sky",
             Self::PlanetaryNebulaeOiii => "Planetary nebulae OIII",
+            Self::MosaicCandidates => "Mosaic candidates",
+            Self::FitsNicely => "Fits nicely",
         }
     }
 
@@ -86,6 +125,8 @@ impl BuiltinPreset {
                 "Galaxies with Img time above zero while the Moon is below the horizon."
             }
             Self::PlanetaryNebulaeOiii => "Planetary nebulae with OIII viable.",
+            Self::MosaicCandidates => "Targets that need 2 or more panels on a selected rig.",
+            Self::FitsNicely => "Targets covering 25% to 90% of a selected rig's field.",
         }
     }
 
@@ -99,7 +140,9 @@ impl BuiltinPreset {
             Self::NarrowbandMoonUp
             | Self::EmissionNebulaeHa
             | Self::GalaxiesDarkSky
-            | Self::PlanetaryNebulaeOiii => None,
+            | Self::PlanetaryNebulaeOiii
+            | Self::MosaicCandidates
+            | Self::FitsNicely => None,
         }
     }
 }
@@ -155,6 +198,24 @@ pub struct TargetsQuery {
     /// Rows after `offset`; absent lists every remaining row.
     #[serde(default)]
     pub limit: Option<u32>,
+    /// The rigs Fit and the Filters strip are for (absent: no rig).
+    #[serde(default)]
+    pub rigs: RigSelection,
+}
+
+/// The toolbar's rig selector (PLAN-TGT-FR-11): no rig (the default), one rig
+/// from Settings > Equipment, or "this Project's rigs" in a Project's context.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
+pub enum RigSelection {
+    #[default]
+    None,
+    Rig {
+        equipment_id: Uuid,
+    },
+    Project {
+        project_id: Uuid,
+    },
 }
 
 impl TargetsQuery {
@@ -296,7 +357,7 @@ pub struct TargetRow {
     pub lunar_separation_deg: Option<f64>,
     pub img_time_minutes: Option<u32>,
     pub img_time_zero_reason: Option<ImgTimeZeroReason>,
-    /// All seven bands; empty when unknown.
+    /// The Filters strip's bands (the page's `bands`); empty when unknown.
     pub bands: Vec<BandState>,
     pub recommendation: Option<Recommendation>,
     #[serde(with = "iso_date::option")]
@@ -304,6 +365,108 @@ pub struct TargetRow {
     pub unknown_reason: Option<PlanningUnknownReason>,
     pub sessions: u32,
     pub captured: Vec<ChannelIntegration>,
+    /// One Fit per selected rig, in the page's `rigs` order; empty with no rig.
+    pub fit: Vec<RigFit>,
+}
+
+// ---------------------------------------------------------------------------
+// Rigs and Fit
+// ---------------------------------------------------------------------------
+
+/// Coverage at or above which a Target that fits one field reads "fits".
+pub const FIT_MIN_COVERAGE: f64 = 0.25;
+/// Coverage at or below which a fitting Target fits nicely.
+pub const FITS_NICELY_MAX_COVERAGE: f64 = 0.90;
+
+/// A selected rig as the Targets page plans for it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TargetsRig {
+    pub equipment_id: Uuid,
+    pub name: String,
+    /// Bands the rig captures, in [`Band`] order.
+    pub bands: Vec<Band>,
+    /// `None` when the sensor size, pixel size or focal length is unknown.
+    pub field_of_view: Option<FieldOfView>,
+}
+
+/// Why Fit reads "-".
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FitUnknownReason {
+    /// The Target has no catalogued angular size.
+    SizeUnknown,
+    /// The rig's field of view is unknown.
+    FieldOfViewUnknown,
+}
+
+impl FitUnknownReason {
+    /// The reason shown beside "-".
+    #[must_use]
+    pub const fn text(self) -> &'static str {
+        match self {
+            Self::SizeUnknown => "Size unknown",
+            Self::FieldOfViewUnknown => "Field of view unknown",
+        }
+    }
+}
+
+/// A Target's fit in one rig's field (PLAN-TGT-FR-11). `coverage` is the
+/// Target's major axis as a share of the field's shorter side.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case", rename_all_fields = "camelCase")]
+pub enum Fit {
+    /// Fits one field with coverage of at least 25%.
+    Fits { coverage: f64 },
+    /// Needs a grid of `panels` fields, at least 2.
+    Panels { coverage: f64, panels: u32 },
+    /// Fits one field with coverage below 25%.
+    Tiny { coverage: f64 },
+    /// Reads "-" with the reason.
+    Unknown { reason: FitUnknownReason },
+}
+
+impl Fit {
+    /// What the Fit column reads: "fits", "N panels", "tiny" or "-".
+    #[must_use]
+    pub fn label(&self) -> String {
+        match self {
+            Self::Fits { .. } => "fits".into(),
+            Self::Panels { panels, .. } => format!("{panels} panels"),
+            Self::Tiny { .. } => "tiny".into(),
+            Self::Unknown { .. } => "-".into(),
+        }
+    }
+
+    /// The reason shown beside "-"; `None` for a known fit.
+    #[must_use]
+    pub const fn reason(&self) -> Option<FitUnknownReason> {
+        match self {
+            Self::Unknown { reason } => Some(*reason),
+            Self::Fits { .. } | Self::Panels { .. } | Self::Tiny { .. } => None,
+        }
+    }
+
+    /// Mosaic candidates: 2 or more panels.
+    #[must_use]
+    pub const fn is_mosaic_candidate(&self) -> bool {
+        matches!(self, Self::Panels { .. })
+    }
+
+    /// Fits nicely: coverage of 25% to 90%.
+    #[must_use]
+    pub fn fits_nicely(&self) -> bool {
+        matches!(self, Self::Fits { coverage } if *coverage <= FITS_NICELY_MAX_COVERAGE)
+    }
+}
+
+/// One rig's Fit for a row, labeled with the rig name.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RigFit {
+    pub equipment_id: Uuid,
+    pub rig_name: String,
+    pub fit: Fit,
 }
 
 /// What a page's planning values were computed for.
@@ -332,6 +495,11 @@ pub struct TargetsPage {
     /// Rows before paging.
     pub total: u32,
     pub rows: Vec<TargetRow>,
+    /// The selected rigs, in selector order; empty with no rig.
+    pub rigs: Vec<TargetsRig>,
+    /// The Filters strip: all seven bands with no rig, else the union of the
+    /// bands the selected rigs capture, in [`Band`] order.
+    pub bands: Vec<Band>,
 }
 
 // ---------------------------------------------------------------------------
