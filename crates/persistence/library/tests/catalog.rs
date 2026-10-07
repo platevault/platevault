@@ -24,7 +24,7 @@ use platevault_model::{
     ScanProgress, ScanState, Session, VolumeIdentity,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
-use sqlx::Connection;
+use sqlx::{Column, Connection, Row};
 use support::*;
 use uuid::Uuid;
 
@@ -3045,4 +3045,60 @@ async fn schema_version_mismatch_is_refused() {
     let objects = schema_objects(&mut conn).await;
     assert!(objects.iter().any(|(_, name, _)| name == "assets_pending"), "schema applied again");
     conn.close().await.unwrap();
+}
+
+/// `live_assets` is the one predicate that keeps Trashed frames out of queries
+/// and totals (LIB-FR-18): every `assets` row and column except rows whose
+/// stored availability is the model's `Trashed` encoding. A Trashed row still
+/// reads back as its catalog record.
+#[tokio::test]
+async fn live_assets_excludes_trashed_rows() {
+    let fx = Fixture::new();
+    let names = ["night1/Ha_001.fits", "night1/Ha_002.fits", "night1/Ha_003.fits"];
+    for name in names {
+        fx.write(name, name.as_bytes());
+    }
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &names).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let trashed = by_name(&assets, "Ha_002.fits").id;
+    catalog.close().await.unwrap();
+
+    // No catalog write trashes a frame yet, so store the model's encoding directly.
+    let encoding = serde_json::to_value(Availability::Trashed).unwrap();
+    let mut conn = raw_connection(&fx.db).await;
+    sqlx::query("UPDATE assets SET availability = ?1 WHERE id = ?2")
+        .bind(encoding.as_str().unwrap())
+        .bind(trashed.to_string())
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    let all: BTreeSet<String> = sqlx::query_scalar("SELECT id FROM assets")
+        .fetch_all(&mut conn)
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+    let live: BTreeSet<String> = sqlx::query_scalar("SELECT id FROM live_assets")
+        .fetch_all(&mut conn)
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+    assert_eq!(all.len(), names.len());
+    let mut expected = all.clone();
+    expected.remove(&trashed.to_string());
+    assert_eq!(live, expected, "every row but the Trashed one");
+    let columns = |row: &sqlx::sqlite::SqliteRow| {
+        row.columns().iter().map(|column| column.name().to_owned()).collect::<Vec<_>>()
+    };
+    let table = sqlx::query("SELECT * FROM assets LIMIT 1").fetch_one(&mut conn).await.unwrap();
+    let view = sqlx::query("SELECT * FROM live_assets LIMIT 1").fetch_one(&mut conn).await.unwrap();
+    assert_eq!(columns(&view), columns(&table), "the view keeps every assets column");
+    conn.close().await.unwrap();
+
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    assert_eq!(catalog.asset(trashed).await.unwrap().availability, Availability::Trashed);
+    catalog.close().await.unwrap();
 }
