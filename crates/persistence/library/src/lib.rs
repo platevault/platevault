@@ -63,6 +63,8 @@ const SCHEMA: &str = schema_modules![
     "calibration.sql",
     "trash.sql",
     "projects.sql",
+    "measurements.sql",
+    "frame_thumbnails.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -120,6 +122,11 @@ pub use calibration::{
 mod trash;
 pub use trash::{TrashEpisode, TrashedAsset, TrashedFrame, TrashedQuery};
 mod projects;
+mod frame_thumbnails;
+mod measurements;
+
+pub use frame_thumbnails::{StoredThumbnail, ThumbnailBasis};
+pub use measurements::{FrameRecordBasis, ImportReviewInput};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -396,6 +403,7 @@ impl Catalog {
         install_schema(&mut writer).await?;
         recover_interrupted(&mut writer).await?;
         planning::recover_sending(&mut writer).await?;
+        measurements::recover_interrupted(&mut writer).await?;
         let readers = SqlitePoolOptions::new()
             .max_connections(READER_CONNECTIONS)
             .connect_with(base.read_only(true))
@@ -6457,6 +6465,130 @@ fn hash_contained(
     Ok(hex::encode(hasher.finalize()))
 }
 
+/// What a consumer read from a contained source: its value, the asset as
+/// loaded, the SHA-256 of every byte of the file and the fingerprint observed
+/// around the read with that digest.
+#[derive(Clone, Debug)]
+pub struct ContainedRead<T> {
+    pub value: T,
+    pub asset: Asset,
+    pub sha256: String,
+    pub fingerprint: ObservationFingerprint,
+}
+
+impl Catalog {
+    /// Stream one asset's source to `consume` through the no-follow contained
+    /// open, hashing every byte it reads and any unread remainder. The read is
+    /// of the recorded file (D19): the probe must still observe the asset's
+    /// recorded observation, the opened handle must carry its recorded volume,
+    /// file id, size and nanosecond mtime before and after the read, and
+    /// `require_unchanged_contained` must hold once it ends. Bytes rewritten
+    /// in place under equal stats are read and reported by their current
+    /// digest; a file swapped in with equal stats is refused. Writes no row and
+    /// never calls `verify_digest`.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown asset; `SourceUnavailable` for a Retired or
+    /// Trashed asset or an unreadable source; `IdentityConflict` when the root, a
+    /// folder or the file differs from the recorded observation around the read;
+    /// `InvalidInput` for a link; any error `consume` returns. No value is
+    /// returned on error.
+    pub async fn open_contained<P, T, F>(
+        &self,
+        asset_id: Uuid,
+        probe: P,
+        consume: F,
+    ) -> Result<ContainedRead<T>>
+    where
+        P: SourceProbe,
+        T: Send + 'static,
+        F: FnOnce(&mut dyn Read) -> Result<T> + Send + 'static,
+    {
+        let (asset, location) = {
+            let mut conn = self.reader().await?;
+            let asset = load_asset(&mut conn, asset_id).await?;
+            let location = load_location(&mut conn, asset.location_id).await?;
+            (asset, location)
+        };
+        let refused = match asset.availability {
+            Availability::Retired => Some("the asset's location is retired"),
+            Availability::Trashed => Some("the asset is in the Trash"),
+            _ => None,
+        };
+        if let Some(reason) = refused {
+            return Err(scoped(
+                LibraryError::SourceUnavailable(reason.into()),
+                location.path,
+                Some(asset_id),
+            ));
+        }
+        let relative = asset.relative_path.relative_path()?;
+        let root = SourceRoot::new(location)?;
+        let recorded = asset.fingerprint.clone();
+        let (value, sha256, fingerprint) = blocking(move || {
+            read_contained_source(&root, &relative, &recorded, &probe, consume)
+                .map_err(|error| scoped(error, root.source(&relative), Some(asset_id)))
+        })
+        .await?;
+        Ok(ContainedRead { value, asset, sha256, fingerprint })
+    }
+}
+
+/// Verify the root and require the probe to observe the `recorded` file, open
+/// it without following links, require the handle to be that file, pass a
+/// hashing reader to `consume` and hash the remainder. Then require the handle
+/// unchanged, the folder chain unchanged, the path still naming the recorded
+/// file and the root unchanged.
+fn read_contained_source<P, T, F>(
+    root: &SourceRoot,
+    relative: &Path,
+    recorded: &ObservationFingerprint,
+    probe: &P,
+    consume: F,
+) -> Result<(T, String, ObservationFingerprint)>
+where
+    P: SourceProbe,
+    F: FnOnce(&mut dyn Read) -> Result<T>,
+{
+    root.verify(probe)?;
+    let path = root.path.join(relative);
+    let mut observed = probe.fingerprint(&path)?;
+    if !fingerprint_matches(&observed, recorded) {
+        return Err(changed_source(root, relative));
+    }
+    let (mut file, chain) = open_contained(root, relative)?;
+    require_recorded_handle(root, relative, &file, recorded)?;
+    let mut hasher = Sha256::new();
+    let value = {
+        let mut reader = HashingReader { inner: &mut file, hasher: &mut hasher };
+        let value = consume(&mut reader)?;
+        std::io::copy(&mut reader, &mut std::io::sink())
+            .map_err(|error| LibraryError::from_io(&path, &error))?;
+        value
+    };
+    require_recorded_handle(root, relative, &file, recorded)?;
+    chain.verify_unchanged()?;
+    require_unchanged_contained(root, relative, recorded)?;
+    root.verify(probe)?;
+    let sha256 = hex::encode(hasher.finalize());
+    observed.content_sha256 = Some(sha256.clone());
+    Ok((value, sha256, observed))
+}
+
+/// Hashes exactly the bytes read through it.
+struct HashingReader<'a> {
+    inner: &'a mut std::fs::File,
+    hasher: &'a mut Sha256,
+}
+
+impl Read for HashingReader<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.inner.read(buffer)?;
+        self.hasher.update(&buffer[..read]);
+        Ok(read)
+    }
+}
+
 /// In-transaction recheck that a contained source is still the verified file:
 /// on the recorded volume, with the recorded file id on the opened handle and the
 /// verified size and nanosecond mtime. A replacement with equal stats is refused.
@@ -6466,12 +6598,23 @@ fn require_unchanged_contained(
     fingerprint: &ObservationFingerprint,
 ) -> Result<()> {
     let (file, chain) = open_contained(root, relative)?;
+    chain.verify_unchanged()?;
+    require_recorded_handle(root, relative, &file, fingerprint)
+}
+
+/// The opened handle is the recorded file: on the recorded volume, with the
+/// recorded file id and the recorded size and nanosecond mtime.
+fn require_recorded_handle(
+    root: &SourceRoot,
+    relative: &Path,
+    file: &std::fs::File,
+    fingerprint: &ObservationFingerprint,
+) -> Result<()> {
     let metadata = file
         .metadata()
         .map_err(|error| LibraryError::from_io(&root.path.join(relative), &error))?;
-    chain.verify_unchanged()?;
     if same_volume(&fingerprint.identity.volume, &root.location.identity.volume)
-        && handle_matches(&file, &metadata, &fingerprint.identity)
+        && handle_matches(file, &metadata, &fingerprint.identity)
         && stat_matches(&metadata, fingerprint.size_bytes, fingerprint.modified_ns)
     {
         Ok(())

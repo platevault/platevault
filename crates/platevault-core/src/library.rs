@@ -14,6 +14,7 @@ use serde::Serialize;
 use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
 
+use crate::frame_review::FrameReview;
 use crate::grouping::group_assets;
 use crate::inventory;
 use crate::projects::ProjectReferences;
@@ -55,6 +56,7 @@ pub struct Library {
     progress: broadcast::Sender<ScanOperation>,
     references: tokio::sync::RwLock<Vec<Arc<dyn AssetReferences>>>,
     pub(crate) planning: Mutex<crate::observing_plans::PlanningRuntime>,
+    frame_review: FrameReview,
     /// Test-only: the next N assessments are refused as if a concurrent writer
     /// had committed between the session read and the record.
     #[cfg(test)]
@@ -125,6 +127,7 @@ impl Library {
             Mutex::new(crate::observing_plans::PlanningRuntime::new(Arc::clone(&catalog)));
         let projects: Arc<dyn AssetReferences> =
             Arc::new(ProjectReferences { catalog: Arc::clone(&catalog) });
+        let frame_review = FrameReview::new(Arc::clone(&catalog));
         Ok(Arc::new(Self {
             catalog,
             targets: Arc::new(targets),
@@ -134,6 +137,7 @@ impl Library {
             progress,
             planning,
             references: tokio::sync::RwLock::new(vec![projects]),
+            frame_review,
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         }))
@@ -142,6 +146,12 @@ impl Library {
     #[must_use]
     pub fn catalog(&self) -> &Catalog {
         &self.catalog
+    }
+
+    /// Measurement runs, previews, star diagnostics and imports (spec 067).
+    #[must_use]
+    pub const fn frame_review(&self) -> &FrameReview {
+        &self.frame_review
     }
 
     #[must_use]

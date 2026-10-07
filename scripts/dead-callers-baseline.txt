@@ -228,3 +228,9 @@ get_plan_by_row_id
 # is the pure due rule the scheduler applies through its Schedule internals.
 due_reminders
 night_spans
+# astro-plan-7cd80: quantize, set_integer, write_xisf: platevault_pixels::fixtures writers behind
+# the test-only `fixtures` feature (spec 067); no release build enables it, so
+# only qualification and integration tests call them.
+quantize
+set_integer
+write_xisf

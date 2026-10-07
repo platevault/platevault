@@ -5,6 +5,7 @@ members = [
   "crates/platevault-core",
   "crates/platevault-model",
   "crates/platevault-notify-macos",
+  "crates/platevault-pixels",
   "crates/persistence/library",
   "crates/app/cache",
   "crates/app/calibration",

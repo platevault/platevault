@@ -28,6 +28,7 @@ pub mod dev;
 pub mod envelope;
 pub mod equipment;
 pub mod firstrun;
+pub mod frame_review;
 pub mod inbox;
 pub mod ingestion;
 pub mod inventory;
