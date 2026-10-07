@@ -4343,9 +4343,12 @@ fn asset_from_row(row: &SqliteRow) -> Result<Asset> {
     let stored: Availability = from_text(&row.try_get::<String, _>("availability")?)?;
     let location: Availability = from_text(&row.try_get::<String, _>("location_availability")?)?;
     let lifecycle: LocationLifecycle = from_text(&row.try_get::<String, _>("location_lifecycle")?)?;
-    // A retired location's copies read Retired, never Missing; the stored state
+    // A Trashed copy reads Trashed whatever its location reads: the user moved it
+    // to the OS Trash, so that wins even over a retired location. Otherwise a
+    // retired location's copies read Retired, never Missing; the stored state
     // stays as their last observation.
     let availability = match (lifecycle, location, stored) {
+        (_, _, Availability::Trashed) => Availability::Trashed,
         (LocationLifecycle::Retired, _, _) => Availability::Retired,
         (_, Availability::Available, stored) | (_, _, stored @ Availability::Missing) => stored,
         (_, location, _) => location,

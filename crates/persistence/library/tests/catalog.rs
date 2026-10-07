@@ -3102,3 +3102,59 @@ async fn live_assets_excludes_trashed_rows() {
     assert_eq!(catalog.asset(trashed).await.unwrap().availability, Availability::Trashed);
     catalog.close().await.unwrap();
 }
+
+/// The user moved a Trashed frame to the OS Trash, so its stored state wins over
+/// whatever its location reads: in an Offline location and in a Retired one it
+/// still reads Trashed, while its untrashed siblings read Offline and Retired.
+#[tokio::test]
+async fn a_trashed_asset_reads_trashed_in_an_offline_or_retired_location() {
+    let fx = Fixture::new();
+    let names = ["Ha_001.fits", "Ha_002.fits"];
+    let nas = fx.temp.path().join("NAS");
+    std::fs::create_dir_all(&nas).unwrap();
+    for name in names {
+        fx.write(name, format!("T7 {name}").as_bytes());
+        std::fs::write(nas.join(name), format!("NAS {name}")).unwrap();
+    }
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let offline = catalog.register_location(&fx.registration()).await.unwrap();
+    let retired = catalog.register_location(&registration_at(&nas)).await.unwrap();
+    scan(&catalog, &fx, &offline, &names).await;
+    scan_at(&catalog, &retired, &nas, &names).await;
+    let in_offline = catalog.location_assets(offline.id).await.unwrap();
+    let in_retired = catalog.location_assets(retired.id).await.unwrap();
+    let trashed = [by_name(&in_offline, "Ha_001.fits").id, by_name(&in_retired, "Ha_001.fits").id];
+    let siblings = [by_name(&in_offline, "Ha_002.fits").id, by_name(&in_retired, "Ha_002.fits").id];
+    catalog.close().await.unwrap();
+
+    // No catalog write trashes a frame yet, so store the model's encoding directly.
+    let encoding = serde_json::to_value(Availability::Trashed).unwrap();
+    let mut conn = raw_connection(&fx.db).await;
+    for id in trashed {
+        sqlx::query("UPDATE assets SET availability = ?1 WHERE id = ?2")
+            .bind(encoding.as_str().unwrap())
+            .bind(id.to_string())
+            .execute(&mut conn)
+            .await
+            .unwrap();
+    }
+    sqlx::query("UPDATE locations SET availability = 'offline' WHERE id = ?1")
+        .bind(offline.id.to_string())
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE locations SET lifecycle = 'retired' WHERE id = ?1")
+        .bind(retired.id.to_string())
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    conn.close().await.unwrap();
+
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    for id in trashed {
+        assert_eq!(catalog.asset(id).await.unwrap().availability, Availability::Trashed);
+    }
+    assert_eq!(catalog.asset(siblings[0]).await.unwrap().availability, Availability::Offline);
+    assert_eq!(catalog.asset(siblings[1]).await.unwrap().availability, Availability::Retired);
+    catalog.close().await.unwrap();
+}
