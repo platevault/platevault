@@ -300,11 +300,16 @@ async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
 }
 
 /// Wait for the terminal event of scan `id`, published after scan-time work.
+///
+/// On Windows every root check and every duplicate-copy rehash of a scan runs
+/// a PowerShell CIM volume query, so a scan beside duplicate copies makes about
+/// sixteen. While measurement tests ran their own queries beside this suite, CI
+/// saw ~2 s per query and such a scan pass 20 s; the budget keeps a 3x margin.
 async fn published_terminal(
     progress: &mut tokio::sync::broadcast::Receiver<ScanOperation>,
     id: Uuid,
 ) -> ScanOperation {
-    tokio::time::timeout(Duration::from_secs(20), async {
+    tokio::time::timeout(Duration::from_secs(120), async {
         loop {
             let operation = progress.recv().await.unwrap();
             if operation.id == id && operation.state != ScanState::Running {
