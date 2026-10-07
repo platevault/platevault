@@ -34,6 +34,8 @@ mod view;
 pub use view::*;
 pub mod import;
 pub use import::*;
+mod targets_list;
+pub use targets_list::*;
 
 pub type Revision = u64;
 

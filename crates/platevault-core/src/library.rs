@@ -169,6 +169,11 @@ impl Library {
         self.targets.candidate(id)
     }
 
+    /// The bundled seed index, for the Targets list's Browse and search.
+    pub(crate) fn target_index(&self) -> &TargetIndex {
+        &self.targets
+    }
+
     /// Review replacement paths without changing originals or registered paths.
     ///
     /// # Errors
@@ -407,7 +412,7 @@ impl Library {
         Ok(LibrarySession { detail, target_assessments })
     }
 
-    async fn saved_targets(&self) -> Result<Arc<Vec<TargetCandidate>>, LibraryError> {
+    pub(crate) async fn saved_targets(&self) -> Result<Arc<Vec<TargetCandidate>>, LibraryError> {
         const PAGE: u32 = 1000;
         let mut cached = self.saved_targets.lock().await;
         let generation = self.catalog.target_generation().await?;
