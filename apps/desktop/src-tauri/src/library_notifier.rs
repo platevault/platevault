@@ -63,6 +63,7 @@ impl Notifier for Unavailable {
     }
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn submit_outcome(result: Result<(), String>) -> SubmitOutcome {
     match result {
         Ok(()) => SubmitOutcome::Submitted,

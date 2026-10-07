@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Durable rig filter lists (spec 072 PLAN-EQ-FR-01, PLAN-EQ-FR-06).
+#![cfg(unix)]
 
 mod support;
 
