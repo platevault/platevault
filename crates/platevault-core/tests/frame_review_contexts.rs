@@ -191,7 +191,7 @@ impl World {
 
     async fn list(&self, context: ReviewContext, filter: ReviewFilter) -> ReviewList {
         self.review()
-            .review_list(context, filter, &ReviewSort::default(), &NameTemplate::FileName)
+            .review_list(context, filter, None, &ReviewSort::default(), &NameTemplate::FileName)
             .await
             .unwrap()
     }
@@ -584,6 +584,7 @@ async fn project_candidates_context_filtered_unreviewed() {
         .review_list(
             unknown,
             ReviewFilter::Unreviewed,
+            None,
             &ReviewSort::default(),
             &NameTemplate::FileName,
         )
@@ -623,7 +624,7 @@ async fn display_template_renames_nothing() {
     let by_name = ReviewSort { key: ReviewSortKey::Name, direction: SortDirection::Desc };
     let sorted = world
         .review()
-        .review_list(world.run_a(), ReviewFilter::All, &by_name, &NameTemplate::FileName)
+        .review_list(world.run_a(), ReviewFilter::All, None, &by_name, &NameTemplate::FileName)
         .await
         .unwrap();
     let mut reversed = world.frames.clone();
@@ -631,7 +632,7 @@ async fn display_template_renames_nothing() {
     assert_eq!(ids(&sorted), reversed);
     let tokened = world
         .review()
-        .review_list(world.run_a(), ReviewFilter::All, &by_name, &tokens)
+        .review_list(world.run_a(), ReviewFilter::All, None, &by_name, &tokens)
         .await
         .unwrap();
     assert!(tokened.frames.iter().all(|frame| frame.display.name == "Ha_300s"));

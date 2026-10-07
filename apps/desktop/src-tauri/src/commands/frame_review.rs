@@ -343,30 +343,41 @@ pub async fn pix_thumbnails(
 const fn context_id(context: ReviewContext) -> Uuid {
     match context {
         ReviewContext::Run { view_id } => view_id,
+        ReviewContext::ViewGroup { group_id } => group_id,
         ReviewContext::ProjectCandidates { project_id } => project_id,
     }
 }
 
-/// Review frames over a run's Review step or a Project's candidate sessions
-/// (PIX-FR-18): the frames `filter` admits with their two-level labels,
-/// sorted (capture order by default) and named by `names` (the file name by
-/// default), with per-label counts over the whole context. Trashed frames
-/// are never listed or counted. Starts no measurement and reads no source.
+/// Review frames over a run's Review step, a run group's Review all or a
+/// Project's candidate sessions (PIX-FR-17, PIX-FR-18): the frames `filter`
+/// and the Panel filter `panel_id` admit with their two-level labels and, in
+/// Review all, their panel, sorted (capture order by default) and named by
+/// `names` (the file name by default), with per-label counts over the frames
+/// the Panel filter admits. Trashed frames are never listed or counted.
+/// Starts no measurement and reads no source.
 ///
 /// # Errors
-/// `NotFound` for an unknown run or Project; `InvalidInput` for a run in the
-/// Project's Trash or a display template the naming resolver refuses.
+/// `NotFound` for an unknown run, run group or Project; `InvalidInput` for a
+/// run in the Project's Trash, a Panel filter naming no listed panel, or a
+/// display template the naming resolver refuses.
 #[tauri::command]
 pub async fn pix_review_list(
     library: State<'_, Arc<Library>>,
     context: ReviewContext,
     filter: ReviewFilter,
+    panel_id: Option<Uuid>,
     sort: Option<ReviewSort>,
     names: Option<NameTemplate>,
 ) -> Reply<ReviewList> {
     library
         .frame_review()
-        .review_list(context, filter, &sort.unwrap_or_default(), &names.unwrap_or_default())
+        .review_list(
+            context,
+            filter,
+            panel_id,
+            &sort.unwrap_or_default(),
+            &names.unwrap_or_default(),
+        )
         .await
         .map_err(fail(Some(context_id(context))))
 }
@@ -389,12 +400,14 @@ pub async fn pix_display_names(
 /// One P, X, U, Reject for this Project only or Clear Project reject. In an
 /// open run it goes through the run's Review step, moving the draft member in
 /// the same transaction; otherwise it writes the library or Project-only
-/// decision alone.
+/// decision alone. In a run group's Review all it routes through the frame's
+/// panel run, against that run's draft revision.
 ///
 /// # Errors
 /// `Conflict` for a stale draft, asset or Project decision; `InvalidInput`
-/// for a run in the Trash, a non-member, or a Retired or Trashed copy;
-/// `IdentityConflict` when a P or X mark finds changed bytes.
+/// for a run in the Trash, a non-member, a Review all frame no single panel
+/// run holds, or a Retired or Trashed copy; `IdentityConflict` when a P or X
+/// mark finds changed bytes.
 #[tauri::command]
 pub async fn pix_review_mark(
     library: State<'_, Arc<Library>>,

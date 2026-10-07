@@ -1,12 +1,14 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Frame review lists (spec 067 PIX-FR-14, PIX-FR-18, D-W42, D-W43): the
-//! logical captures (D16) of a run's membership or of a Project's candidate
-//! sessions, read in one catalog snapshot. Each capture comes with the copy it
-//! is reviewed through, its applicable quality and the listed Project's latest
-//! Project-only decisions. Trashed copies are never listed, so a capture whose
-//! copies are all Trashed is left out. Reads no source and writes nothing.
+//! Frame review lists (spec 067 PIX-FR-14, PIX-FR-17, PIX-FR-18, D-W41,
+//! D-W42, D-W43): the logical captures (D16) of a run's membership, of every
+//! panel run of a run group, or of a Project's candidate sessions, read in one
+//! catalog snapshot. Each capture comes with the copy it is reviewed through,
+//! its applicable quality, the listed Project's latest Project-only decisions
+//! and, in a run group, its panel run. Trashed copies are never listed, so a
+//! capture whose copies are all Trashed is left out. Reads no source and
+//! writes nothing.
 
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap};
@@ -14,12 +16,14 @@ use std::path::PathBuf;
 
 use platevault_model::{
     ApplicableQuality, Asset, Availability, LibraryError, MemberReason, MemberState, Membership,
-    NativePath, ProjectDecision, ReviewContext, ReviewMember, ReviewRun, RunCompletion,
+    NativePath, ProjectDecision, ReviewContext, ReviewMember, ReviewPanel, ReviewPanelRun,
+    ReviewRun, RunCompletion,
 };
 use sqlx::sqlite::SqliteConnection;
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
+use super::view_groups::panel_number;
 use super::{
     asset_from_row, from_json, from_text, json_ids, load_assets, load_location, parse_uuid,
     projects, revision, CaptureView, Catalog, Result,
@@ -45,13 +49,17 @@ pub struct ReviewCapture {
     pub other_copies: Vec<Uuid>,
     /// A run's member holding the capture.
     pub member: Option<ReviewMember>,
+    /// In a run group, the panel run whose membership holds the capture.
+    pub panel: Option<ReviewPanel>,
 }
 
-/// A review context's Project, its run and its live captures.
+/// A review context's Project, its run or panel runs and its live captures.
 #[derive(Clone, Debug)]
 pub struct ReviewBasis {
     pub project_id: Uuid,
     pub run: Option<ReviewRun>,
+    /// A run group's panel runs outside the Trash, by panel number.
+    pub panels: Vec<ReviewPanelRun>,
     pub captures: Vec<ReviewCapture>,
 }
 
@@ -65,23 +73,64 @@ pub struct ReviewAsset {
 impl Catalog {
     /// The context's live captures from one catalog snapshot. A run lists the
     /// members of its draft while it is open and has one, else of its latest
-    /// committed revision; a Project lists its candidate sessions' frames.
+    /// committed revision; a run group lists each panel run outside the Trash
+    /// that way, by panel number; a Project lists its candidate sessions'
+    /// frames.
     ///
     /// # Errors
-    /// `NotFound` for an unknown run or Project; `InvalidInput` for a run in
-    /// the Project's Trash; `PersistenceFailure` when the catalog cannot be
-    /// read.
+    /// `NotFound` for an unknown run, run group or Project; `InvalidInput` for
+    /// a run in the Project's Trash; `PersistenceFailure` when the catalog
+    /// cannot be read.
     pub async fn review_basis(&self, context: ReviewContext) -> Result<ReviewBasis> {
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
         let basis = match context {
             ReviewContext::Run { view_id } => run_basis(&mut snapshot, view_id).await?,
+            ReviewContext::ViewGroup { group_id } => group_basis(&mut snapshot, group_id).await?,
             ReviewContext::ProjectCandidates { project_id } => {
                 candidates_basis(&mut snapshot, project_id).await?
             }
         };
         snapshot.rollback().await?;
         Ok(basis)
+    }
+
+    /// The panel run of run group `group` whose listed membership holds copy
+    /// `asset`: the run a Review all mark of that frame routes through.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown run group; `InvalidInput` when no panel run
+    /// outside the Trash, or more than one, lists the copy.
+    pub async fn review_group_run(&self, group: Uuid, asset: Uuid) -> Result<Uuid> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let mut holding = Vec::new();
+        for panel in group_panels(&mut snapshot, group).await?.1 {
+            let Some(row) = listed_run(&mut snapshot, panel.view_id).await?.row else {
+                continue;
+            };
+            let held: Option<i64> = sqlx::query_scalar(
+                "SELECT 1 FROM view_member_copies WHERE revision_row = ?1 AND asset_id = ?2",
+            )
+            .bind(row)
+            .bind(asset.to_string())
+            .fetch_optional(&mut *snapshot)
+            .await?;
+            if held.is_some() {
+                holding.push(panel.view_id);
+            }
+        }
+        snapshot.rollback().await?;
+        match holding.as_slice() {
+            [run] => Ok(*run),
+            [] => Err(LibraryError::InvalidInput(format!(
+                "asset {asset} is a member of no panel run of run group {group}"
+            ))),
+            _ => Err(LibraryError::InvalidInput(format!(
+                "asset {asset} is a member of more than one panel run of run group {group}; \
+                 mark it in its panel run's Review step"
+            ))),
+        }
     }
 
     /// Each asset in request order with its absolute path.
@@ -142,7 +191,69 @@ struct RunMember {
     copies: Vec<Uuid>,
 }
 
+/// The membership a run's Review step lists: the run and the revision row it
+/// reads, if any.
+struct ListedRun {
+    project_id: Uuid,
+    run: ReviewRun,
+    row: Option<i64>,
+}
+
 async fn run_basis(conn: &mut SqliteConnection, id: Uuid) -> Result<ReviewBasis> {
+    let ListedRun { project_id, run, row } = listed_run(conn, id).await?;
+    let captures = run_captures(conn, project_id, row, None).await?;
+    Ok(ReviewBasis { project_id, run: Some(run), panels: Vec::new(), captures })
+}
+
+/// Every panel run of run group `group` outside the Trash, by panel number,
+/// each listed as its own Review step lists it; each capture names its panel.
+async fn group_basis(conn: &mut SqliteConnection, group: Uuid) -> Result<ReviewBasis> {
+    let (project_id, group_panels) = group_panels(conn, group).await?;
+    let mut panels = Vec::with_capacity(group_panels.len());
+    let mut captures = Vec::new();
+    for panel in group_panels {
+        let ListedRun { run, row, .. } = listed_run(conn, panel.view_id).await?;
+        captures.extend(run_captures(conn, project_id, row, Some(panel)).await?);
+        panels.push(ReviewPanelRun { panel_id: panel.panel_id, number: panel.number, run });
+    }
+    Ok(ReviewBasis { project_id, run: None, panels, captures })
+}
+
+/// Run group `group`'s Project and its panel runs outside the Trash, by panel
+/// number; a panel run in the Trash has no Review step.
+async fn group_panels(
+    conn: &mut SqliteConnection,
+    group: Uuid,
+) -> Result<(Uuid, Vec<ReviewPanel>)> {
+    let project: String = sqlx::query_scalar("SELECT project_id FROM view_groups WHERE id = ?1")
+        .bind(group.to_string())
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or_else(|| LibraryError::NotFound(format!("run group {group}")))?;
+    let rows = sqlx::query(
+        "SELECT v.id, v.panel_id, p.number FROM views v \
+         JOIN subject_panels p ON p.id = v.panel_id \
+         WHERE v.group_id = ?1 AND v.trashed_at IS NULL ORDER BY p.number",
+    )
+    .bind(group.to_string())
+    .fetch_all(&mut *conn)
+    .await?;
+    let panels = rows
+        .iter()
+        .map(|row| {
+            Ok(ReviewPanel {
+                panel_id: parse_uuid(&row.try_get::<String, _>("panel_id")?)?,
+                number: panel_number(row.try_get("number")?)?,
+                view_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok((parse_uuid(&project)?, panels))
+}
+
+/// The run's Review step membership: its draft while it is open and has one,
+/// else its latest committed revision.
+async fn listed_run(conn: &mut SqliteConnection, id: Uuid) -> Result<ListedRun> {
     let row =
         sqlx::query("SELECT project_id, completion, trashed_at, revision FROM views WHERE id = ?1")
             .bind(id.to_string())
@@ -187,7 +298,18 @@ async fn run_basis(conn: &mut SqliteConnection, id: Uuid) -> Result<ReviewBasis>
         None => (None, Membership::Draft, 0),
     };
     let run = ReviewRun { view_id: id, completion, membership, draft_revision };
-    let members = match revision_row {
+    Ok(ListedRun { project_id, run, row: revision_row })
+}
+
+/// The live captures of revision row `row` of a run of `project_id`, each in
+/// `panel` when the run is a listed panel run.
+async fn run_captures(
+    conn: &mut SqliteConnection,
+    project_id: Uuid,
+    row: Option<i64>,
+    panel: Option<ReviewPanel>,
+) -> Result<Vec<ReviewCapture>> {
+    let members = match row {
         Some(row) => run_members(conn, row).await?,
         None => Vec::new(),
     };
@@ -212,9 +334,12 @@ async fn run_basis(conn: &mut SqliteConnection, id: Uuid) -> Result<ReviewBasis>
         };
         let quality = captures_of.quality(captures_of.key(asset));
         let member = Some(member);
-        captures.push(listing.capture(conn, &present, asset, quality, session_id, member).await?);
+        let mut capture =
+            listing.capture(conn, &present, asset, quality, session_id, member).await?;
+        capture.panel = panel;
+        captures.push(capture);
     }
-    Ok(ReviewBasis { project_id, run: Some(run), captures })
+    Ok(captures)
 }
 
 /// The members of revision row `row`, each with its recorded copies, by key.
@@ -272,7 +397,7 @@ async fn candidates_basis(conn: &mut SqliteConnection, project: Uuid) -> Result<
         let session_id = session_of[&asset.id];
         captures.push(listing.capture(conn, &present, asset, quality, session_id, None).await?);
     }
-    Ok(ReviewBasis { project_id: project, run: None, captures })
+    Ok(ReviewBasis { project_id: project, run: None, panels: Vec::new(), captures })
 }
 
 /// What every capture of one listing reads beside its copies: the listed
@@ -312,6 +437,7 @@ impl Listing {
             quality,
             other_copies: present.iter().map(|copy| copy.id).filter(|id| *id != asset.id).collect(),
             member,
+            panel: None,
             asset: asset.clone(),
         })
     }

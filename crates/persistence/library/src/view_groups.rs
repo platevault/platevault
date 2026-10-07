@@ -499,7 +499,7 @@ async fn subject_panels(conn: &mut SqliteConnection, subject: Uuid) -> Result<Ve
     .collect()
 }
 
-fn panel_number(value: i64) -> Result<u32> {
+pub fn panel_number(value: i64) -> Result<u32> {
     u32::try_from(value)
         .map_err(|_| LibraryError::PersistenceFailure(format!("corrupt panel number {value}")))
 }
