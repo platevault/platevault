@@ -190,8 +190,16 @@ impl Library {
         role: LocationRole,
     ) -> Result<Location, LibraryError> {
         let root = path.to_path_buf()?;
-        let identity = blocking(move || inventory::observe_root_identity(&root)).await?;
-        self.catalog.register_location(&LocationRegistration { name, path, role, identity }).await
+        let observed = blocking(move || inventory::observe_root(&root)).await?;
+        self.catalog
+            .register_location(&LocationRegistration {
+                name,
+                path,
+                role,
+                identity: observed.identity,
+                volume_kind: observed.volume_kind,
+            })
+            .await
     }
 
     /// Restore a location only when its registered volume and folder still match.

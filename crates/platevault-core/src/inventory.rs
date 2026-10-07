@@ -47,32 +47,53 @@ use metadata_xisf::XisfExtractor;
 use crate::{
     Availability, CaptureMetadata, FileIdentity, ImageFormat, LibraryError, Location, NativePath,
     ObservationFingerprint, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOptions,
-    ScanProgress, ScanState, VolumeIdentity,
+    ScanProgress, ScanState, VolumeIdentity, VolumeKind,
 };
 
 use identity::Stamp;
 
-/// Observe the remount-stable identity of a folder for registration.
+/// A folder observed for registration: its identity and the kind of volume it
+/// is on.
+#[derive(Clone, Debug)]
+pub struct ObservedRoot {
+    pub identity: FileIdentity,
+    pub volume_kind: VolumeKind,
+}
+
+/// Observe a folder for registration: its remount-stable identity and whether
+/// it is on a local, removable or network volume (LIB-FR-01).
 ///
 /// # Errors
 /// `SourceUnavailable`/`AccessDenied` when the root cannot be inspected,
-/// `InvalidInput` for a relative path, `..`, a link or a junction root, and
+/// `InvalidInput` for an SMB or URL address (refused before any file system
+/// access), a relative path, `..`, a link or a junction root, and
 /// `IdentityConflict` when the volume or the root folder ID cannot be
 /// qualified on this host and filesystem.
+pub fn observe_root(root: &Path) -> Result<ObservedRoot, LibraryError> {
+    identity::observe(root).map(|observation| ObservedRoot {
+        identity: observation.identity,
+        volume_kind: observation.kind,
+    })
+}
+
+/// Observe the remount-stable identity of a folder.
+///
+/// # Errors
+/// As [`observe_root`].
 pub fn observe_root_identity(root: &Path) -> Result<FileIdentity, LibraryError> {
-    identity::observe(root).map(|observation| observation.identity)
+    observe_root(root).map(|observed| observed.identity)
 }
 
 /// Re-observe a registered root and refuse it unless it is the registered
 /// volume and folder. Intended inside final reconciliation transactions.
 ///
 /// # Errors
-/// As [`observe_root_identity`], plus `IdentityConflict` on any mismatch.
+/// As [`observe_root_identity`], plus `IdentityConflict` on any mismatch, and
+/// `SourceUnavailable` for a network location whose share is not mounted.
 pub fn validate_location_root(location: &Location) -> Result<FileIdentity, LibraryError> {
     let root = location.path.to_path_buf().map_err(|error| locate(error, location))?;
     let observed = identity::observe(&root).map_err(|error| locate(error, location))?;
-    identity::compare(&location.identity, &observed.identity, &root)
-        .map_err(|error| locate(error, location))?;
+    identity::compare(location, &observed, &root).map_err(|error| locate(error, location))?;
     Ok(observed.identity)
 }
 
@@ -128,9 +149,7 @@ pub fn scan(
     let scope =
         scope_path(options.relative_scope.as_ref()).map_err(|error| locate(error, location))?;
     let anchor = identity::observe(&root)
-        .and_then(|observed| {
-            identity::compare(&location.identity, &observed.identity, &root).map(|()| observed)
-        })
+        .and_then(|observed| identity::compare(location, &observed, &root).map(|()| observed))
         .map_err(|error| locate(error, location))?;
     let scope_folder =
         enter_scope(&root, &scope, &anchor.stamp).map_err(|error| locate(error, location))?;
@@ -319,9 +338,9 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
         }
         // Full remount-stable revalidation plus same-session continuity guard
         // the final batch and the completeness claim.
-        if let Err(error) = identity::observe(self.root).and_then(|observed| {
-            identity::compare(&self.location.identity, &observed.identity, self.root)
-        }) {
+        if let Err(error) = identity::observe(self.root)
+            .and_then(|observed| identity::compare(self.location, &observed, self.root))
+        {
             return Err(Halt::RootLost(root_issue(&error)));
         }
         if self.pending.files.is_empty() && self.pending.issues.is_empty() {
@@ -605,10 +624,26 @@ impl<F: FnMut(ScanBatch) -> Result<(), LibraryError>> Walk<'_, F> {
                     || !meta.is_dir()
                     || identity::stamp(&meta) != self.root_stamp =>
             {
-                Err(Halt::RootLost(ScanIssue {
-                    relative_path: root,
-                    reason: "location root was replaced during the scan".into(),
-                    availability: Availability::IdentityConflict,
+                // An unmounted share leaves its mount point folder behind on a
+                // local volume: the share is offline, not replaced (LIB-FR-19).
+                let unmounted = meta.is_dir()
+                    && !fs_pathsafe::is_link_or_junction_metadata(&meta)
+                    && self.location.volume_kind == VolumeKind::Network
+                    && identity::observe(self.root).is_ok_and(|observed| {
+                        identity::share_unmounted(self.location.volume_kind, observed.kind)
+                    });
+                Err(Halt::RootLost(if unmounted {
+                    ScanIssue {
+                        relative_path: root,
+                        reason: format!("{} during the scan", identity::SHARE_UNMOUNTED),
+                        availability: Availability::Offline,
+                    }
+                } else {
+                    ScanIssue {
+                        relative_path: root,
+                        reason: "location root was replaced during the scan".into(),
+                        availability: Availability::IdentityConflict,
+                    }
                 }))
             }
             Ok(_) => Ok(()),

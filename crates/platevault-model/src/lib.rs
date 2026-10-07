@@ -26,6 +26,8 @@ mod frame_review;
 pub use frame_review::*;
 pub mod storage;
 pub use storage::*;
+mod volume;
+pub use volume::*;
 
 pub type Revision = u64;
 
@@ -442,6 +444,8 @@ pub struct Location {
     pub availability: Availability,
     pub last_observed_at: Option<String>,
     pub lifecycle: LocationLifecycle,
+    /// The kind of volume the root was registered on (LIB-FR-01).
+    pub volume_kind: VolumeKind,
 }
 
 /// Serialization adapter over the canonical `metadata_core` extractor contract.
@@ -834,6 +838,18 @@ pub struct ScanProgress {
     /// Duplicate candidates whose digest this scan bound so far.
     #[serde(default)]
     pub duplicates_verified: u64,
+    /// Decided frames, and copies carrying a decided copy's digest, this scan
+    /// set out to rehash (D19). A scan resuming an interrupted rehash counts
+    /// only the remaining files (LIB-FR-19).
+    #[serde(default)]
+    pub rehash_total: u64,
+    /// Of those, the rehashes this scan completed so far.
+    #[serde(default)]
+    pub rehashed: u64,
+    /// Rehashes an interrupted earlier scan completed that this scan keeps
+    /// instead of hashing those files again (LIB-FR-19).
+    #[serde(default)]
+    pub rehash_kept: u64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

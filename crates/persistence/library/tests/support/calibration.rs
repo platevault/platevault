@@ -123,6 +123,7 @@ pub async fn location_at(
             path: NativePath::from_path(&root),
             role,
             identity: folder_identity(&root).unwrap(),
+            volume_kind: platevault_model::VolumeKind::Local,
         })
         .await
         .unwrap();

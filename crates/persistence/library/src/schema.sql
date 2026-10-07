@@ -31,6 +31,13 @@ CREATE TABLE IF NOT EXISTS locations (
     -- Retired through a reviewed Retire location: history only, never reselected,
     -- rescanned or remapped, and no longer an overlap for registration.
     lifecycle TEXT NOT NULL DEFAULT 'active' CHECK (lifecycle IN ('active', 'retired')),
+    -- The kind of volume the root was registered on (LIB-FR-01). While a network
+    -- location's share is unmounted it reads Offline, never Missing (LIB-FR-19).
+    volume_kind TEXT NOT NULL CHECK (volume_kind IN ('local', 'removable', 'network')),
+    -- When the location's latest rehash of decided assets (D19) began. A scan that
+    -- finds one still verification pending resumes that rehash: what it completed
+    -- since then is kept and only the remaining files are hashed (LIB-FR-19).
+    rehash_started_at TEXT,
     created_at TEXT NOT NULL
 ) STRICT;
 
