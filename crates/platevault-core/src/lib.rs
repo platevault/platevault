@@ -16,6 +16,7 @@ pub mod naming;
 pub mod notifier;
 pub mod observing_plans;
 pub mod planning;
+pub mod project_progress;
 pub mod projects;
 pub mod reminders;
 pub mod rig;

@@ -48,6 +48,7 @@ pub mod plans;
 pub mod preferences;
 pub mod prepared_views;
 pub mod project_goals;
+pub mod project_progress;
 pub mod projects;
 pub mod protection;
 pub mod recovery;

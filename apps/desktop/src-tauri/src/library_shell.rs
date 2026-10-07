@@ -126,6 +126,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::project_goals::goal_template_list,
         crate::commands::project_goals::goal_template_save,
         crate::commands::project_goals::goal_template_delete,
+        crate::commands::project_progress::project_progress,
         // runs
         crate::commands::view_selection::view_create,
         crate::commands::view_selection::view_list,

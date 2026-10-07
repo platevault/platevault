@@ -127,6 +127,7 @@ pub use trash::{TrashEpisode, TrashedAsset, TrashedFrame, TrashedQuery};
 mod frame_thumbnails;
 mod measurements;
 mod projects;
+pub use projects::{CandidateChannel, ProgressBasis};
 
 pub use frame_thumbnails::{StoredThumbnail, ThumbnailBasis};
 pub use measurements::{FrameRecordBasis, ImportReviewInput};
