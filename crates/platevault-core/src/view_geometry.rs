@@ -127,7 +127,7 @@ fn field_of_view(frame: &FrameEvidence, equipment: Option<&Equipment>) -> Option
 /// The `width`×`height` rectangle around `centre` turned by `angle_deg` east of
 /// north, in the orientation `Membership::Rotated` uses, unprojected from the
 /// tangent plane into a footprint with direct parity.
-fn rectangle(
+pub(crate) fn rectangle(
     centre: SkyPoint,
     (width_deg, height_deg): (f64, f64),
     angle_deg: f64,

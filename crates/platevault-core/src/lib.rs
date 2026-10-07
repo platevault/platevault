@@ -25,5 +25,6 @@ pub mod subframe_csv;
 pub mod targets;
 pub mod targets_list;
 pub mod view_geometry;
+pub mod view_groups;
 pub mod view_selection;
 pub use model::*;
