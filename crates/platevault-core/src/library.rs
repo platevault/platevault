@@ -53,6 +53,7 @@ pub struct Library {
     scans: Mutex<HashMap<Uuid, ScanControl>>,
     progress: broadcast::Sender<ScanOperation>,
     references: tokio::sync::RwLock<Vec<Arc<dyn AssetReferences>>>,
+    pub(crate) planning: Mutex<crate::observing_plans::PlanningRuntime>,
     /// Test-only: the next N assessments are refused as if a concurrent writer
     /// had committed between the session read and the record.
     #[cfg(test)]
@@ -118,6 +119,8 @@ impl Library {
         let targets = blocking(TargetIndex::bundled).await?;
         let provider = provider.map(SimbadTargetResolver::simbad).transpose()?;
         let (progress, _) = broadcast::channel(128);
+        let planning =
+            Mutex::new(crate::observing_plans::PlanningRuntime::new(Arc::clone(&catalog)));
         Ok(Arc::new(Self {
             catalog,
             targets: Arc::new(targets),
@@ -126,6 +129,7 @@ impl Library {
             saved_targets: Mutex::new(None),
             progress,
             references: tokio::sync::RwLock::new(Vec::new()),
+            planning,
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         }))
@@ -726,7 +730,7 @@ impl Library {
     }
 }
 
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, LibraryError> + Send + 'static,
 ) -> Result<T, LibraryError> {
     tokio::task::spawn_blocking(work).await.map_err(|error| {
