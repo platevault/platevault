@@ -8,7 +8,17 @@ Scope: all PRs produced by this rebuild
 
 Only one feature specification enters product implementation at a time. Draft specifications and unresolved decisions may be prepared ahead of it. Clarification and analysis artifacts must be complete before implementation; the user's 2026-10-04 authorization resolves every human-approval gate without signoff.
 
-The lead selects the next eligible feature from actual artifact dependencies. The first user-visible path is library indexing, session inspection, standalone View selection, and exact external-tool handoff. No empty application shell is an independently accepted milestone.
+The lead selects the next eligible feature from actual artifact dependencies. The first user-visible path is library indexing, session inspection, a Project with one subject and one rig, a processing run's selection inside it, and exact external-tool handoff (D-W1). No empty application shell is an independently accepted milestone.
+
+## Workflow redesign sequencing
+
+The 2026-10-06 [workflow redesign](decisions.md#workflow-redesign-2026-10-06) lands in three steps, in this order (D-W28):
+
+1. Amend the contract: the specifications and journeys change in one PR.
+2. Deliver the backend deltas that the amended contract needs on top of the already implemented feature backends.
+3. Build the final UI from the harness tokens.
+
+Each step follows the assessment and evidence rules below.
 
 ## Fan out within the active specification
 
@@ -27,7 +37,7 @@ Each PR must have:
 1. Independent code review against its exact head and actual base. Review covers correctness, safety, regressions, test quality, and maintainability.
 2. A Sniff run against the same immutable head/base range. The run uses installed analyzers through the Sniff intake and authorized recipes; missing tools are explicit coverage gaps.
 
-Sniff does not replace code review. Code review does not replace Sniff. Full Sniff findings receive the prescribed challenge pass. A documentation-only PR still records its applicable assessment and coverage; it must not claim that absent code analyzers ran.
+Sniff and code review are separate gates, and each needs its own record. Full Sniff findings receive the prescribed challenge pass. A documentation-only PR records its applicable assessment and coverage, and reports only the code analyzers that ran.
 
 Sniff is a read-only exact-head audit and plan assessment. It neither approves nor applies refactors. Any refactor outside the requested feature needs separate explicit approval; a Sniff finding alone does not expand implementation scope.
 

@@ -5,15 +5,27 @@ Authority: the user approved conservative product defaults and, on 2026-10-04, a
 
 The [accepted Rust computation boundary](../../docs/adr/0003-use-rust-scientific-execution-and-a-clean-local-catalog-for-the-platevault-rebuild.md), generated from decision `astro-plan-trutg`, governs specs 063 through 072 and supersedes historical ADR-0001. The retained frontend-astronomy decision records the earlier spec-044 boundary.
 
+## Workflow redesign 2026-10-06
+
+On 2026-10-06 the user settled the workflow redesign as decisions D-W1 through D-W63, copied verbatim into the [workflow decisions log](workflow-decisions.md); round 6 added D-W44 through D-W63. Round 7 proposed D-W64 through D-W71. On 2026-10-07 the user accepted D-W65, D-W66, D-W67 and D-W69 and answered the rest with D-W72 through D-W74: D-W72 replaces the run state of D-W64 and D-W71 with a soft delete to the Project's Trash, D-W73 replaces D-W68, D-W74 extends D-W70, and D-W72 narrows D-W65 and D-W66. Where a D-W decision contradicts an entry below, the entry names the superseding decision and the D-W decision governs. A D-W entry that the log itself marks superseded is void; the decision that supersedes it applies.
+
+Stage model:
+
+1. A Project is the required container (D-W1). It holds subjects, rigs (optical trains) and goals (D-W9, D-W29, D-W37).
+2. Each processing run (View) belongs to exactly one Project and has one subject and one rig (D-W3, D-W8, D-W37). A run moves through Select, Review, Calibrate, Prepare, Results, Done and Clean up (D-W3, D-W26). A run that is no longer wanted is moved to the Project's Trash, where it is hidden and can be restored unchanged. Only Empty Trash removes it: its prepared folders, and its Results folder only when ticked, go to the OS Trash, and library frames and quality decisions are never touched (D-W72). A mosaic subject creates a run group with one run per panel (D-W38).
+3. The user marks the Project Done, then uses its Done / Archive sheet for Archive, for moving rejected frames, processing intermediates and duplicate copies to the OS Trash, and for emptying the Project's Trash (D-W26, D-W43, D-W70, D-W72, D-W74). A Done Project can be Reopened, even after Archive (D-W46, D-W69).
+
+Candidates are derived from each session's confirmed Target and rig; members come only from run membership (D-W33, D-W34, D-W37). Goal progress shows "in project" and "captured", and "in project" never exceeds "captured" (D-W36, D-W66). Delivery order: contract amendment, then backend deltas, then the final UI (D-W28).
+
 ## Decision register
 
 ### D01
 
 Owners: LIB, PRJ, VSEL.
 
-- Geometric preselection requires confirmed framing, equipment, pointing, orientation and footprint overlap.
+- Geometric preselection requires confirmed framing, equipment, pointing, orientation and footprint overlap. Superseded by D-W33 and D-W37: a candidate is a session whose confirmed Target is a Project subject and whose rig is a Project rig. Geometry does not decide candidacy; it orders suggestions and assigns mosaic panels (D-W38).
 - Unknown evidence is listed for manual selection, never treated as zero distance.
-- Standalone session selection remains explicit; an OBJECT label does not assign a Target or supply coordinates.
+- Standalone session selection remains explicit; an OBJECT label does not assign a Target or supply coordinates. Superseded in part by D-W1 and D-W8: there is no standalone selection, because every run belongs to a Project. An OBJECT label still assigns no Target and supplies no coordinates, so a session without a confirmed Target is never a candidate.
 - Angular separation may order suggestions but never decides eligibility alone.
 
 ### D02
@@ -25,6 +37,7 @@ Owners: VSEL, PREP.
 - Review preparation explicitly confirms exact membership.
 - No automatic quality action follows.
 - The worked 208-frame fixture has confirmed remaining membership.
+- Amended by D-W49 and D-W54: a run's picker starts with every available candidate selected. Rejecting a frame in the run's Review step removes it from the draft with the reason "Rejected", and un-rejecting restores it.
 
 ### D03
 
@@ -54,7 +67,7 @@ Owners: PREP, RES.
 Owners: CAL, STO.
 
 - Adoption requires an explicit durable calibration-library destination.
-- Copy and re-read/hash verification precede registering an adopted master; the generated source remains until separately reviewed cleanup.
+- Copy and re-read/hash verification precede registering an adopted master; the generated source remains until separately reviewed cleanup. Amended by D-W70: that reviewed cleanup is the Project Done / Archive sheet's "Move N processing intermediates to Trash (size)", which keeps adopted masters and follows the D-W43 trash rules (STO-FR-16).
 - Adoption review records the candidate's identity and SHA-256. The copied bytes, the destination re-read and the source immediately before registration must all match that digest; any mismatch blocks adoption and registers nothing.
 - An existing entry at the destination path blocks adoption and is never overwritten; the path is checked again immediately before writing.
 - No master becomes reusable merely by discovery.
@@ -82,7 +95,7 @@ Owners: PLAN.
 
 Owners: LIB, VSEL.
 
-- View drafts have explicit Save and durable revisions.
+- Run drafts have explicit Save and durable revisions.
 - Unsaved or failed writes remain visibly unsaved with Retry.
 - Optimistic revision checks refuse stale overwrites and offer reload/review.
 - Acknowledgment is not durable success.
@@ -92,25 +105,25 @@ Owners: LIB, VSEL.
 
 Owners: VSEL, PREP, RES, STO.
 
-- Refresh proposes a membership revision. Accepting changes and choosing Save View commits them as a new reviewed membership revision that survives restart; it never mutates an existing prepared revision or an external application's inputs.
+- Refresh proposes a membership revision. Accepting changes and choosing Save run commits them as a new reviewed membership revision that survives restart; it never mutates an existing prepared revision or an external application's inputs.
 - Reprepare needs review.
-- Every new preparation revision is materialized in a new reviewed View folder. An existing prepared folder is never replaced, reused or cleared in place (PREP-FR-06).
+- Every new preparation revision is materialized in a new reviewed run folder, such as `<Run> (rev 2)/`, and a mosaic group's in `<Mosaic> (rev 2)/` with its `Panel N/` folders (D-W51, D-W67). An existing prepared folder is never replaced, reused or cleared in place (PREP-FR-06).
 - Manual inclusions stay pinned across every refresh. Refresh lists them with reason manual inclusion and never proposes removing them for falling outside the saved criteria; only an explicit user removal ends one.
 - Retry resumes recorded items, never filename-based inference.
 - Replaced prepared entries use reviewed STO cleanup even before Complete.
-- Mark Complete is blocked while an app-owned preparation or storage mutation affecting this View is Running. A Result is not required; Complete never implies an external job stopped or succeeded. Unrelated View operations do not block it.
-- Creating a new membership or preparation revision of a Complete View requires explicit Reopen. Reviewed cleanup, identity-preserving archive/filing reference repair, verified remap, annotations and Result acceptance remain available without reopening or changing membership.
+- Mark Complete is blocked while an app-owned preparation or storage mutation affecting this run is Running. A Result is not required; Complete never implies an external job stopped or succeeded. Unrelated run operations do not block it. Amended by D-W72: Move run to Trash is blocked the same way, and also while one of the run's accepted Results is an input to another run.
+- Creating a new membership or preparation revision of a Complete run requires explicit Reopen. Reviewed cleanup, identity-preserving archive reference repair, verified remap, annotations and Result acceptance remain available without reopening or changing membership.
 
 ### D10
 
 Owners: LIB, PRJ, VSEL.
 
-- Library quality and Project rejection are separate records.
-- Project rejection never changes library usable totals; library quality never changes fixed View membership.
-- Explicitly linked sessions show captured, library-usable and Project-accepted totals separately.
-- Project-accepted totals count only library-Usable frames not rejected for that Project, and are the fixed basis for marking integration/frame-count goals met.
-- Exposure/equipment/calibration checks show evidence or unknown.
-- Reaching a goal does not close the Project.
+- Library quality and Project rejection are separate records. Library quality (P/X/U) is global; "Reject for this Project only" is a secondary, Project-scoped action (D-W42).
+- Project rejection never changes library usable totals; library quality never changes fixed run membership.
+- Explicitly linked sessions show captured, library-usable and Project-accepted totals separately. Superseded by D-W34, D-W36, D-W44, D-W66 and D-W72: a Project has no linked sessions. Each goal shows two labelled numbers. "in project" counts the frames in the saved memberships of the Project's runs outside its Trash, minus each run's exclusions and the frames rejected for the Project. "captured" counts all candidates plus the members of those runs, so "in project" never exceeds it.
+- Project-accepted totals count only library-Usable frames not rejected for that Project, and are the fixed basis for marking integration/frame-count goals met. Superseded by D-W36 and D-W42: "in project" is the only basis for goal met and for Home's Next action. A quality-bar goal can restrict counting to Usable frames (D-W29).
+- Exposure/equipment/calibration checks show evidence or unknown. Superseded by D-W29: the exposure-preference and equipment goals are dropped. Missing calibration and exposure mismatch are automatic warnings, not goals, and the mixed-equipment warning is gone because each run uses one rig (D-W37).
+- Reaching a goal does not close the Project. Only the user marks a Project Done (D-W26).
 
 ### D11
 
@@ -119,15 +132,15 @@ Owners: LIB.
 - Equipment definitions are explicit camera/optical-train records with confirmed versus observed evidence.
 - Identity remap requires verified byte identity and location/volume evidence; same names or a reused mount path are insufficient.
 - Offline evidence remains last-observed, not current verification.
-- A location that cannot be re-verified leaves the library only through a reviewed Retire location that changes no file. Its copies read Retired, never Missing, leave integration totals and stay named unresolved in fixed Views. Reselect is refused afterwards, but registering the same folder again is allowed; its new assets inherit no retired quality decision, association or correction.
+- A location that cannot be re-verified leaves the library only through a reviewed Retire location that changes no file. Its copies read Retired, never Missing, leave integration totals and stay named unresolved in fixed runs. Reselect is refused afterwards, but registering the same folder again is allowed; its new assets inherit no retired quality decision, association or correction.
 
 ### D12
 
 Owners: PRJ, VSEL.
 
-- A Project may contain explicit target coordinates and user-defined panel footprints.
-- Session linkage is an explicit association, not a by-product of proximity or a shared name.
-- Automatic panel coverage needs the same qualified geometry as D01.
+- A Project may contain explicit target coordinates and user-defined panel footprints. Amended by D-W9 and D-W38: a Project holds several subjects (Targets or mosaics) at any separation, and a mosaic subject defines its panels by centre and rotation.
+- Session linkage is an explicit association, not a by-product of proximity or a shared name. Superseded by D-W33 and D-W34: nothing is assigned at the Project level. Candidates are derived from confirmed Target and rig, and sessions are explicitly assigned only to runs, as each run's revisioned membership.
+- Automatic panel coverage needs the same qualified geometry as D01. Superseded by D-W38: each session is assigned to a panel by its pointing, checked against the panel centre; ambiguous or off-panel sessions are flagged for the user.
 
 ### D13
 
@@ -136,12 +149,14 @@ Owners: CAL, PREP.
 - Calibration matching compares camera, dimensions, binning, gain/offset and recorded image type; dark exposure and flat channel/optical-train evidence are required where relevant.
 - Missing or conflicting evidence is unknown/incompatible, never silently compatible.
 - Automatic temperature tolerance is not guessed; any tolerance must be shown and fixture-qualified.
-- Suggestions require explicit acceptance before handoff.
+- Suggestions require explicit acceptance before handoff. Superseded by D-W5: calibration is automatic by default. Fully compatible matches are assigned automatically, recorded with identity and SHA-256 and re-verified at Prepare; only unknown or incompatible criteria need an explicit choice. The step shows a readiness line, with the full requirement table behind "Review matches".
 - Scoped exceptions require reasons and never rewrite evidence.
 
 ### D14
 
 Owners: STO.
+
+Superseded by D-W11: "File into library" is dropped, and with it reviewed filing. Import (Copy or Move) and Archive remain, and both use the naming templates of D-W20. The collision rule (block, never overwrite) and the rule that no renaming patches headers carry over to them, and the rule that a source is kept until its destination verifies carries into Import Move (STO-IMP-FR-04). The filing entries below are kept for traceability.
 
 - Reviewed filing uses a user-chosen destination and previews every relative path.
 - Default naming retains original basenames; collisions block, never overwrite.
@@ -153,17 +168,17 @@ Owners: STO.
 Owners: LIB, VSEL, PREP.
 
 - Catalog corrections can cover grouping metadata such as filter, exposure and equipment, with original evidence retained.
-- A correction creates a new grouping revision; old session identities and fixed View asset membership remain traceable and unchanged.
+- A correction creates a new grouping revision; old session identities and fixed run asset membership remain traceable and unchanged.
 - Header corrections are delivered only through verified isolated patched Copy/Clone or supported tool configuration.
 
 ### D16
 
 Owners: LIB, VSEL, STO.
 
-- Storage shows registered locations and availability, View footprints, archive transfers, and library-wide duplicate candidates based on content identity.
+- Storage shows registered locations and availability, run footprints, archive transfers, and library-wide duplicate candidates based on content identity.
 - Candidate display does not authorize disposal.
-- Content-identical copies count once in totals and View membership while every physical copy stays registered and protected.
-- Whole-library duplicate removal and application-managed restore remain outside View cleanup.
+- Content-identical copies count once in totals and run membership while every physical copy stays registered and protected.
+- Whole-library duplicate removal and application-managed restore remain outside run Clean up.
 
 ### D17
 
@@ -185,7 +200,7 @@ Owners: LIB, PLAN.
 
 Owners: LIB, PRJ, VSEL, PIX, CAL, PREP, RES, STO, PLAN.
 
-- PlateVault counts a recorded file toward a decision- or proof-bound total, or assigns, opens, prepares, reuses, cleans, archives, files or retires it as a source after archive or filing, only against a recorded identity and SHA-256 basis. The basis is recorded when the user reviews, inspects or accepts the file, or when an operation starts and snapshots it. Bases include quality decisions, cached measurements, logical-capture proof, remap reviews, inspected and accepted products, adoption reviews and adopted masters, calibration assignments, retained-original and kept-copy proof, and cleanup, archive and filing plans.
+- PlateVault counts a recorded file toward a decision- or proof-bound total only against a recorded identity and SHA-256 basis. The same holds when it assigns, opens, prepares, reuses, cleans, archives, imports or trashes the file, or retires it as a source after archive or Import Move. The basis is recorded when the user reviews, inspects or accepts the file, or when an operation starts and snapshots it. Bases include quality decisions, cached measurements, logical-capture proof, remap reviews, inspected and accepted products, adoption reviews and adopted masters, calibration assignments, retained-original and kept-copy proof, and cleanup, archive, Import and trash plans. Filing is withdrawn (D-W11, D-W43).
 - An observation that nothing ties to the value it supports stays labelled unverified, such as the import-time digest of a measurement matched only by file name. It detects later drift but never makes the value verified.
 - Immediately before each effect other than a count, the current identity and SHA-256 must match every basis that applies. Equal size and mtime never substitute. A count uses each item's last completed verification, at review, inspection, acceptance, readable rescan or reuse, and labels its verification time. Displaying a total starts no rehash, and an item reads verification pending, outside applicable totals, while a started rehash runs.
 - A mismatch blocks that item and names the drift. The basis stays as history beside the current bytes, and nothing is launched, registered, overwritten, removed or retired. Counts exclude the item from applicable totals instead of blocking.

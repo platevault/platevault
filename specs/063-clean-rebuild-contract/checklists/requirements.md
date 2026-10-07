@@ -11,16 +11,19 @@ Feature: [Specification](../spec.md)
 
 ## Requirement coverage
 
-- [x] All 44 interaction steps have one primary feature owner across the 12 journeys.
+- [x] All 44 interaction steps have one primary feature owner across the 12 journeys, and the redesign surfaces (Home, Project page, Done / Archive sheet, Import, Targets list) have one owner each.
 - [x] Negative scenarios cover input custody, uncertainty, exact handoff, quality scope, completion, and cleanup.
 - [x] Open choices have named consuming feature owners.
 - [x] Existing uncommitted work and the archived reference remain outside destructive actions.
-- [x] Independent cross-feature requirements review passed after M1 through M13, R1 through R9 and C1 corrections; implementation readiness is not certified.
+- [x] Independent cross-feature requirements review of the pre-redesign text passed after M1 through M13, R1 through R9 and C1 corrections; implementation readiness is not certified.
 - [x] Conservative product defaults are encoded in D01 through D19 under the user-authorized autonomous run.
+- [x] The 2026-10-06 workflow decisions D-W1 through D-W71 and the 2026-10-07 answers D-W72 through D-W74 are copied verbatim into the repository, and every D01 to D19 entry they contradict names its superseding decision.
+- [x] Changed and added requirements end with their D-W tag; the cross-spec flow states the Project, run stage and Project Done / Archive model.
+- [ ] Independent requirements review of the 2026-10-06 workflow amendment has not yet run.
 
 ## Feature readiness
 
 - [x] The user's all-human-gate waiver is quoted in the autonomous objective and decision register; native gates cite the resolution decision.
 - [ ] Planning and analysis artifacts are verified before product implementation.
 
-The root is a shared contract. PV-LIB owns the usable navigation and catalog trust rules. Product implementation still requires each feature's research, plan, contracts, tasks and analysis; the human approval waiver does not certify those artifacts.
+The root is a shared contract. PV-LIB owns the usable navigation and catalog trust rules; PV-PRJ owns Home. Product implementation still requires each feature's research, plan, contracts, tasks and analysis; the human approval waiver does not certify those artifacts.
