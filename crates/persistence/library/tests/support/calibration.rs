@@ -339,15 +339,16 @@ impl CalibrationRules for TestRules {
     fn plan(&self, basis: &CalibrationViewBasis) -> CalibrationViewPlan {
         self.seen.lock().push(basis.clone());
         let mut requirements = Vec::new();
-        for light in basis.lights.iter().filter(|light| !light.product) {
+        for group in platevault_model::light_groups(&basis.lights) {
             for &kind in &basis.plan.required_kinds {
-                requirements.push(test_requirement(self, basis, light, kind));
+                requirements.push(test_requirement(self, basis, &group, kind));
             }
         }
         CalibrationViewPlan {
             view_id: basis.view_id,
             view_revision: basis.view_revision,
             plan_revision: basis.plan.revision,
+            policy: basis.plan.policy,
             required_kinds: basis.plan.required_kinds.clone(),
             requirements,
         }
@@ -356,26 +357,29 @@ impl CalibrationRules for TestRules {
 
 /// One requirement of `light` for `kind`: every candidate evaluated, reusable
 /// ones ranked compatible first, and the first available compatible one
-/// preselected. The catalog tests of this module record no decision.
+/// preselected, evaluated against the group's first session. The catalog
+/// tests of this module record no decision.
 fn test_requirement(
     rules: &TestRules,
     basis: &CalibrationViewBasis,
-    light: &platevault_model::LightBasis,
+    group: &platevault_model::LightGroup<'_>,
     kind: InputKind,
 ) -> Requirement {
-    let session = &light.evidence;
+    let session = &group.lights[0].evidence;
     let mut requirement = Requirement {
-        light_session_id: session.session_id,
-        grouping_revision: session.grouping_revision,
+        light_group: group.key.clone(),
+        light_session_ids: group.session_ids(),
+        light_asset_ids: group.asset_ids(),
         kind,
-        state: RequirementState::Unresolved,
+        state: RequirementState::NeedsReview,
         reason: None,
         preselected: None,
+        automatic: None,
         candidates: Vec::new(),
         unadopted: Vec::new(),
         effective: None,
     };
-    if !light.light_type_known {
+    if !group.key.light_type_known {
         requirement.reason = Some(UnresolvedReason::LightTypeUnknown);
         return requirement;
     }

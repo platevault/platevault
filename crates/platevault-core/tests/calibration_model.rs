@@ -130,12 +130,17 @@ fn the_handoff_projects_only_accepted_and_excepted_assignments() {
         modified_ns: 1,
         content_sha256: Some("ab".repeat(32)),
     };
+    let group = |session: u128| platevault_core::LightGroupKey {
+        channel: Some(format!("s{session}")),
+        light_type_known: true,
+        ..platevault_core::LightGroupKey::default()
+    };
     let decision = |session: u128, kind, resolution, reason: Option<&str>| CalibrationDecision {
         id: Uuid::from_u128(session * 10),
         view_id: Uuid::from_u128(1),
         view_revision: 1,
-        light_session_id: Uuid::from_u128(session),
-        grouping_revision: 1,
+        light_group: group(session),
+        light_session_ids: [Uuid::from_u128(session)].into(),
         light_asset_ids: [Uuid::from_u128(session + 100)].into(),
         kind,
         resolution,
@@ -154,12 +159,14 @@ fn the_handoff_projects_only_accepted_and_excepted_assignments() {
     };
     let requirement =
         |session: u128, kind, state, reason, effective: Option<CalibrationDecision>| Requirement {
-            light_session_id: Uuid::from_u128(session),
-            grouping_revision: 1,
+            light_group: group(session),
+            light_session_ids: vec![Uuid::from_u128(session)],
+            light_asset_ids: [Uuid::from_u128(session + 100)].into(),
             kind,
             state,
             reason,
             preselected: None,
+            automatic: None,
             candidates: Vec::new(),
             unadopted: Vec::new(),
             effective: effective.map(|decision| EffectiveDecision {
@@ -186,7 +193,7 @@ fn the_handoff_projects_only_accepted_and_excepted_assignments() {
     let unknown = requirement(
         4,
         InputKind::Flat,
-        RequirementState::Unresolved,
+        RequirementState::NeedsReview,
         Some(UnresolvedReason::CriterionUnknown),
         None,
     );
@@ -194,12 +201,14 @@ fn the_handoff_projects_only_accepted_and_excepted_assignments() {
         view_id: Uuid::from_u128(1),
         view_revision: 1,
         plan_revision: 2,
+        policy: platevault_core::CalibrationPolicy::Automatic,
         required_kinds: vec![InputKind::Dark, InputKind::Flat],
         requirements,
     };
     let open = plan(vec![accepted.clone(), excepted.clone(), suggested, unknown]).handoff();
     assert!(!open.ready);
-    let assigned: Vec<_> = open.assignments.iter().map(|a| (a.light_session_id, a.kind)).collect();
+    let assigned: Vec<_> =
+        open.assignments.iter().map(|a| (a.light_session_ids[0], a.kind)).collect();
     assert_eq!(
         assigned,
         [(Uuid::from_u128(2), InputKind::Dark), (Uuid::from_u128(3), InputKind::Flat)]
@@ -208,7 +217,7 @@ fn the_handoff_projects_only_accepted_and_excepted_assignments() {
     assert_eq!(open.assignments[0].inputs.len(), 1);
     assert_eq!(open.assignments[0].decided_at_revision, 1);
     let unresolved: Vec<_> =
-        open.unresolved.iter().map(|u| (u.light_session_id, u.kind, u.reason)).collect();
+        open.unresolved.iter().map(|u| (u.light_session_ids[0], u.kind, u.reason)).collect();
     assert_eq!(
         unresolved,
         [

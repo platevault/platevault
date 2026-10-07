@@ -67,6 +67,7 @@ const SCHEMA: &str = schema_modules![
     "frame_thumbnails.sql",
     "storage.sql",
     "views.sql",
+    "calibration_decisions.sql",
     "import.sql",
     "targets_list.sql",
     "view_groups.sql",

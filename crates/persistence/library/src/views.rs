@@ -2342,7 +2342,7 @@ fn header_of(row: &SqliteRow, view_id: Uuid) -> Result<ViewRevisionHeader> {
 }
 
 /// The row id and header of committed `revision`.
-async fn committed_header(
+pub async fn committed_header(
     conn: &mut SqliteConnection,
     id: Uuid,
     revision: Revision,
@@ -2422,7 +2422,7 @@ async fn load_choices(conn: &mut SqliteConnection, row: i64) -> Result<Vec<Sessi
         .collect()
 }
 
-async fn load_members(conn: &mut SqliteConnection, row: i64) -> Result<Vec<ViewMember>> {
+pub async fn load_members(conn: &mut SqliteConnection, row: i64) -> Result<Vec<ViewMember>> {
     let rows =
         sqlx::query("SELECT * FROM view_members WHERE revision_row = ?1 ORDER BY member_key")
             .bind(row)

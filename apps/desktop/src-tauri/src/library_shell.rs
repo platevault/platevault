@@ -183,6 +183,24 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::frame_review::pix_confirm_import,
         crate::commands::frame_review::pix_thumbnails,
         // calibration
+        crate::commands::calibration_inputs::calibration_list_inputs,
+        crate::commands::calibration_inputs::calibration_input,
+        crate::commands::calibration_inputs::calibration_match,
+        crate::commands::calibration_inputs::calibration_view_plan,
+        crate::commands::calibration_inputs::calibration_readiness,
+        crate::commands::calibration_inputs::calibration_handoff,
+        crate::commands::calibration_inputs::calibration_set_required_kinds,
+        crate::commands::calibration_inputs::calibration_set_policy,
+        crate::commands::calibration_inputs::calibration_assign,
+        crate::commands::calibration_inputs::calibration_accept,
+        crate::commands::calibration_inputs::calibration_record_exception,
+        crate::commands::calibration_inputs::calibration_exclude,
+        crate::commands::calibration_inputs::calibration_withdraw,
+        crate::commands::calibration_inputs::calibration_project_evidence,
+        crate::commands::calibration_inputs::calibration_review_adoption,
+        crate::commands::calibration_inputs::calibration_adopt,
+        crate::commands::calibration_inputs::calibration_list_adoptions,
+        crate::commands::calibration_inputs::calibration_custody_facts,
         // preparation
         // results
         // storage

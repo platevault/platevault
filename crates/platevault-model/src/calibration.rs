@@ -18,8 +18,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    Availability, CaptureMetadata, ErrorResponse, ExpectedAsset, FileIdentity, LibraryError,
-    NativePath, ObservationFingerprint, Revision,
+    Availability, CalibrationPolicy, CaptureMetadata, ErrorResponse, ExpectedAsset, FileIdentity,
+    LibraryError, NativePath, ObservationFingerprint, Revision,
 };
 
 fn invalid(message: String) -> LibraryError {
@@ -494,6 +494,11 @@ pub struct InputState {
     pub excluded_members: u64,
     /// The raw-set Session was superseded by a regroup, or the master's location retired.
     pub superseded: bool,
+    /// An adopted master whose library copy last hashed against a different
+    /// digest than its adoption recorded (CAL-AC-10). It is never assigned,
+    /// suggested or accepted while it reads drifted.
+    #[serde(default)]
+    pub drifted: bool,
 }
 
 impl InputState {
@@ -534,6 +539,83 @@ pub struct LightBasis {
     pub product: bool,
 }
 
+/// The key of a run's light group (CAL-FR-09, CAL-FR-10): the light sessions
+/// that share settings, channel and geometry. The camera is not part of it,
+/// because a run uses one rig (D-W37). `None` is the unknown value, never a
+/// default.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LightGroupKey {
+    pub exposure: Option<String>,
+    pub gain: Option<String>,
+    pub offset: Option<String>,
+    pub set_temperature: Option<String>,
+    /// The filter.
+    pub channel: Option<String>,
+    /// `<width>x<height>`.
+    pub dimensions: Option<String>,
+    /// `<x>x<y>`.
+    pub binning: Option<String>,
+    /// `false` for sessions whose own type is unknown; they never share a
+    /// group with known lights.
+    pub light_type_known: bool,
+}
+
+impl LightGroupKey {
+    #[must_use]
+    pub fn of(light: &LightBasis) -> Self {
+        let capture = &light.evidence.capture;
+        let value = |field| capture.get(field).map(|v| v.value.clone());
+        let pair = |a, b| Some(format!("{}x{}", value(a)?, value(b)?));
+        Self {
+            exposure: value(EvidenceField::Exposure),
+            gain: value(EvidenceField::Gain),
+            offset: value(EvidenceField::Offset),
+            set_temperature: value(EvidenceField::SetTemperature),
+            channel: value(EvidenceField::Filter),
+            dimensions: pair(EvidenceField::Width, EvidenceField::Height),
+            binning: pair(EvidenceField::BinningX, EvidenceField::BinningY),
+            light_type_known: light.light_type_known,
+        }
+    }
+}
+
+/// One light group of a committed revision: its sessions in id order.
+#[derive(Clone, Debug)]
+pub struct LightGroup<'a> {
+    pub key: LightGroupKey,
+    pub lights: Vec<&'a LightBasis>,
+}
+
+impl LightGroup<'_> {
+    #[must_use]
+    pub fn session_ids(&self) -> Vec<Uuid> {
+        self.lights.iter().map(|light| light.evidence.session_id).collect()
+    }
+
+    /// Every included member copy of every session of the group.
+    #[must_use]
+    pub fn asset_ids(&self) -> BTreeSet<Uuid> {
+        self.lights.iter().flat_map(|light| light.included_assets.iter().copied()).collect()
+    }
+}
+
+/// The light groups of `lights` in key order; products carry no requirement.
+#[must_use]
+pub fn light_groups(lights: &[LightBasis]) -> Vec<LightGroup<'_>> {
+    let mut groups: BTreeMap<LightGroupKey, Vec<&LightBasis>> = BTreeMap::new();
+    for light in lights.iter().filter(|light| !light.product) {
+        groups.entry(LightGroupKey::of(light)).or_default().push(light);
+    }
+    groups
+        .into_iter()
+        .map(|(key, mut lights)| {
+            lights.sort_by_key(|light| light.evidence.session_id);
+            LightGroup { key, lights }
+        })
+        .collect()
+}
+
 /// Everything the pure planner reads, gathered in one catalog snapshot.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -541,22 +623,28 @@ pub struct CalibrationViewBasis {
     pub view_id: Uuid,
     pub view_revision: Revision,
     pub plan: CalibrationPlan,
+    /// One light per included session; for a run each carries the run's rig
+    /// as its Confirmed Equipment.
     pub lights: Vec<LightBasis>,
     pub candidates: Vec<InputCandidate>,
-    /// The effective (latest) decision per light Session and kind, any View revision.
+    /// The latest decision per light group and kind, any run revision,
+    /// withdrawals included.
     pub decisions: Vec<CalibrationDecision>,
 }
 
 // ── Plans and decisions ──────────────────────────────────────────────────────
 
-/// A View's calibration plan. A View without a row reads revision 0 with the
-/// default kinds dark and flat.
+/// A run's calibration plan: the kinds it requires and its policy (D-W55).
+/// A run without a plan row reads revision 0 with the default kinds dark and
+/// flat; the policy is the run's own setting.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalibrationPlan {
     pub view_id: Uuid,
     pub revision: Revision,
     pub required_kinds: Vec<InputKind>,
+    #[serde(default)]
+    pub policy: CalibrationPolicy,
     pub updated_at: Option<String>,
 }
 
@@ -567,17 +655,32 @@ impl CalibrationPlan {
             view_id,
             revision: 0,
             required_kinds: InputKind::DEFAULT_REQUIRED.to_vec(),
+            policy: CalibrationPolicy::Automatic,
             updated_at: None,
         }
     }
 }
 
+/// How a requirement was resolved. `automatic` is the match the product
+/// assigned; `accepted` is the user's choice in Review matches, a replacement
+/// of an automatic assignment included; `excluded` takes the requirement out
+/// without an input; `withdrawn` ends the previous decision.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Resolution {
+    Automatic,
     Accepted,
     Exception,
+    Excluded,
     Withdrawn,
+}
+
+impl Resolution {
+    /// The resolutions that name an input and bind its hashed files.
+    #[must_use]
+    pub const fn binds_input(self) -> bool {
+        matches!(self, Self::Automatic | Self::Accepted | Self::Exception)
+    }
 }
 
 /// One handed-off file: `assetId` for a raw-set member, `masterId` for an
@@ -594,22 +697,24 @@ pub struct CalibrationInputFile {
     pub fingerprint: ObservationFingerprint,
 }
 
-/// An append-only decision row; the latest per View, light Session and kind is effective.
+/// An append-only decision row; the latest per run, light group and kind is effective.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalibrationDecision {
     pub id: Uuid,
     pub view_id: Uuid,
-    /// The committed View revision the decision was made at.
+    /// The committed membership revision the decision was made at.
     pub view_revision: Revision,
-    pub light_session_id: Uuid,
-    pub grouping_revision: Revision,
-    /// The light Session's exact included asset IDs at that revision.
+    pub light_group: LightGroupKey,
+    /// The group's light sessions at that revision.
+    pub light_session_ids: BTreeSet<Uuid>,
+    /// The group's exact included asset IDs at that revision.
     pub light_asset_ids: BTreeSet<Uuid>,
     pub kind: InputKind,
     pub resolution: Resolution,
-    /// `None` for a withdrawal.
+    /// `None` for an exclusion or a withdrawal.
     pub input: Option<InputRef>,
+    /// Every file the input binds, each with the SHA-256 hashed for it.
     pub inputs: Vec<CalibrationInputFile>,
     /// The criteria snapshot the decision was made on.
     pub criteria: Vec<CriterionResult>,
@@ -618,13 +723,119 @@ pub struct CalibrationDecision {
     pub decided_at: String,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+/// One requirement's resolution request: a light group, a kind and an input.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecisionItem {
+    pub light_group: LightGroupKey,
+    pub kind: InputKind,
+    pub input: InputRef,
+}
+
+impl DecisionItem {
+    /// Validate a batch of decision items.
+    ///
+    /// # Errors
+    /// `InvalidInput` naming `items` for an empty batch or a requirement named
+    /// twice, and naming `input` for a nil identity.
+    pub fn validate(items: &[Self]) -> Result<(), LibraryError> {
+        if items.is_empty() {
+            return Err(invalid("items is empty".into()));
+        }
+        let mut seen = BTreeSet::new();
+        for item in items {
+            if item.input.id().is_nil() {
+                return Err(invalid("input names a nil identity".into()));
+            }
+            if !seen.insert((&item.light_group, item.kind)) {
+                return Err(invalid(format!(
+                    "items name {} for one light group twice",
+                    item.kind.as_str()
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// One requirement of a run: a light group and a kind.
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequirementKey {
+    pub light_group: LightGroupKey,
+    pub kind: InputKind,
+}
+
+impl RequirementKey {
+    /// Validate a batch of requirement keys.
+    ///
+    /// # Errors
+    /// `InvalidInput` naming `items` for an empty batch or a requirement named twice.
+    pub fn validate(items: &[Self]) -> Result<(), LibraryError> {
+        if items.is_empty() {
+            return Err(invalid("items is empty".into()));
+        }
+        let mut seen = BTreeSet::new();
+        if let Some(twice) = items.iter().find(|item| !seen.insert(*item)) {
+            return Err(invalid(format!(
+                "items name {} for one light group twice",
+                twice.kind.as_str()
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// Validate a scoped exception's or an exclusion's reason: trimmed and never blank.
+///
+/// # Errors
+/// `InvalidInput` naming `reason` when it is empty or whitespace only.
+pub fn exception_reason(reason: &str) -> Result<String, LibraryError> {
+    let reason = reason.trim();
+    if reason.is_empty() {
+        return Err(invalid("reason is blank; an exception needs a reason".into()));
+    }
+    Ok(reason.to_owned())
+}
+
+/// A requirement's state in the run's requirement table (CAL-FR-09).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RequirementState {
+    /// The single fully compatible top input, assigned automatically.
+    Automatic,
+    /// A fully compatible top input not assigned: the policy is off, matching
+    /// has not run yet, or the user withdrew the previous decision.
     Suggested,
+    /// The user's fully compatible choice.
     Accepted,
+    /// The user's choice with a scoped exception and its reason.
     Excepted,
-    Unresolved,
+    /// Explicitly taken out by the user.
+    Excluded,
+    /// No single fully compatible input is assigned: unknown, incompatible,
+    /// missing, tied or drifted, or a decision that no longer applies.
+    NeedsReview,
+}
+
+impl RequirementState {
+    /// Automatic or Accepted: the group has a fully compatible assignment.
+    #[must_use]
+    pub const fn matched(self) -> bool {
+        matches!(self, Self::Automatic | Self::Accepted)
+    }
+
+    /// How far the state is from resolved: a group reads its least resolved requirement.
+    const fn rank(self) -> u8 {
+        match self {
+            Self::NeedsReview => 0,
+            Self::Suggested => 1,
+            Self::Excepted => 2,
+            Self::Excluded => 3,
+            Self::Accepted => 4,
+            Self::Automatic => 5,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -638,6 +849,11 @@ pub enum UnresolvedReason {
     InputEvidenceChanged,
     InputUnavailable,
     LightTypeUnknown,
+    /// Two or more fully compatible inputs rank equal: no single top input.
+    RankingTie,
+    /// The only fully compatible input is an adopted master that drifted
+    /// from its adoption digest.
+    MasterDrifted,
 }
 
 /// A candidate evaluated against one requirement.
@@ -646,8 +862,11 @@ pub enum UnresolvedReason {
 pub struct CandidateEvaluation {
     pub candidate: CandidateRef,
     pub kind: InputKind,
+    /// Every criterion across the group's sessions: compatible only when it is
+    /// for every session.
     pub evaluation: Evaluation,
-    /// Absolute night distance in days; `None` when either night is unknown.
+    /// The largest absolute night distance in days to any session of the
+    /// group; `None` when any night is unknown.
     pub night_distance_days: Option<u32>,
     pub state: InputState,
     pub preselected: bool,
@@ -666,22 +885,81 @@ pub struct EffectiveDecision {
     pub applicable: bool,
 }
 
-/// One light Session of a committed View revision paired with one required kind.
+/// One light group of a committed run revision paired with one required kind.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Requirement {
-    pub light_session_id: Uuid,
-    pub grouping_revision: Revision,
+    pub light_group: LightGroupKey,
+    /// The group's light sessions in id order.
+    pub light_session_ids: Vec<Uuid>,
+    /// The group's included members at this revision.
+    pub light_asset_ids: BTreeSet<Uuid>,
     pub kind: InputKind,
     pub state: RequirementState,
     pub reason: Option<UnresolvedReason>,
-    /// The preselected suggestion; it reads suggested until accepted.
+    /// The single fully compatible top input; it reads suggested until assigned.
     pub preselected: Option<CandidateRef>,
-    /// Reusable candidates in R10 order.
+    /// The input the automatic match records: the preselected input while the
+    /// policy is automatic and no decision holds the group's current members.
+    pub automatic: Option<InputRef>,
+    /// Reusable candidates of the run's camera in R10 order.
     pub candidates: Vec<CandidateEvaluation>,
     /// Detected masters awaiting adoption; never preselected.
     pub unadopted: Vec<CandidateEvaluation>,
     pub effective: Option<EffectiveDecision>,
+}
+
+impl Requirement {
+    #[must_use]
+    pub fn key(&self) -> RequirementKey {
+        RequirementKey { light_group: self.light_group.clone(), kind: self.kind }
+    }
+
+    /// Missing calibration (PRJ-FR-11): no listed input is fully compatible.
+    #[must_use]
+    pub fn missing_input(&self) -> bool {
+        !self.candidates.iter().any(|c| c.evaluation.verdict == Verdict::Compatible)
+    }
+
+    /// The dark candidates whose only possible incompatibility is exposure,
+    /// with their exposure rows.
+    fn exposure_rows(&self) -> Vec<&CriterionResult> {
+        if self.kind != InputKind::Dark {
+            return Vec::new();
+        }
+        self.candidates
+            .iter()
+            .filter(|c| {
+                c.evaluation.criteria.iter().all(|row| {
+                    row.criterion == CriterionId::Exposure || row.verdict != Verdict::Incompatible
+                })
+            })
+            .filter_map(|c| {
+                c.evaluation.criteria.iter().find(|row| row.criterion == CriterionId::Exposure)
+            })
+            .collect()
+    }
+
+    /// Exposure mismatch (PRJ-FR-11): among the darks with no incompatible
+    /// criterion other than exposure there is at least one, and every one of
+    /// them has an incompatible exposure.
+    #[must_use]
+    pub fn exposure_mismatch(&self) -> bool {
+        let rows = self.exposure_rows();
+        !rows.is_empty() && rows.iter().all(|row| row.verdict == Verdict::Incompatible)
+    }
+
+    /// The light and dark exposures of an exposure mismatch, canonical text.
+    #[must_use]
+    pub fn mismatched_exposures(&self) -> (BTreeSet<String>, BTreeSet<String>) {
+        if !self.exposure_mismatch() {
+            return (BTreeSet::new(), BTreeSet::new());
+        }
+        let rows = self.exposure_rows();
+        let light = rows.iter().filter_map(|row| row.light_value.clone()).collect();
+        let dark = rows.iter().filter_map(|row| row.input_value.clone()).collect();
+        (light, dark)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -690,26 +968,30 @@ pub struct CalibrationViewPlan {
     pub view_id: Uuid,
     pub view_revision: Revision,
     pub plan_revision: Revision,
+    pub policy: CalibrationPolicy,
     pub required_kinds: Vec<InputKind>,
+    /// By light group, then kind.
     pub requirements: Vec<Requirement>,
 }
 
 /// A requirement PREP cannot prepare yet, with its reason.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnresolvedRequirement {
-    pub light_session_id: Uuid,
+    pub light_group: LightGroupKey,
+    pub light_session_ids: Vec<Uuid>,
     pub kind: InputKind,
     pub reason: UnresolvedReason,
 }
 
-/// An accepted or excepted requirement as PREP reads it.
+/// An automatic, accepted or excepted requirement as PREP reads it.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HandoffAssignment {
     /// The effective decision's identity.
     pub id: Uuid,
-    pub light_session_id: Uuid,
+    pub light_group: LightGroupKey,
+    pub light_session_ids: Vec<Uuid>,
     pub kind: InputKind,
     pub form: InputForm,
     pub resolution: Resolution,
@@ -717,6 +999,18 @@ pub struct HandoffAssignment {
     pub criteria: Vec<CriterionResult>,
     pub reason: Option<String>,
     pub inputs: Vec<CalibrationInputFile>,
+}
+
+/// A requirement the user excluded: PREP prepares the group without that kind.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffExclusion {
+    /// The effective decision's identity.
+    pub id: Uuid,
+    pub light_group: LightGroupKey,
+    pub light_session_ids: Vec<Uuid>,
+    pub kind: InputKind,
+    pub reason: Option<String>,
 }
 
 /// The PREP read: suggestions never appear as assignments.
@@ -728,27 +1022,94 @@ pub struct CalibrationHandoff {
     pub plan_revision: Revision,
     pub ready: bool,
     pub assignments: Vec<HandoffAssignment>,
+    pub excluded: Vec<HandoffExclusion>,
     pub unresolved: Vec<UnresolvedRequirement>,
 }
 
+/// One light group on the readiness line, read as its least resolved requirement.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupReadiness {
+    pub light_group: LightGroupKey,
+    pub light_session_ids: Vec<Uuid>,
+    pub state: RequirementState,
+    /// Why the group needs review, from its first requirement that does.
+    pub reason: Option<UnresolvedReason>,
+}
+
+/// The Calibrate step's readiness line (CAL-FR-09): light groups matched
+/// (automatic or accepted), suggested, needing review, excepted and excluded.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationReadiness {
+    pub view_id: Uuid,
+    pub view_revision: Revision,
+    pub plan_revision: Revision,
+    pub groups: Vec<GroupReadiness>,
+    pub matched: u64,
+    pub suggested: u64,
+    pub needs_review: u64,
+    pub excepted: u64,
+    pub excluded: u64,
+    /// Every group matched, excepted or excluded.
+    pub ready: bool,
+}
+
+/// The run blocker calibration feeds (Home's blocked run, PRJ-AC-23): groups
+/// that still need a review or an acceptance.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationNeedsReview {
+    pub view_id: Uuid,
+    pub view_revision: Revision,
+    pub groups: u64,
+}
+
+impl CalibrationReadiness {
+    /// `Some` while any group needs review or a suggestion awaits acceptance.
+    #[must_use]
+    pub const fn needs_review_blocker(&self) -> Option<CalibrationNeedsReview> {
+        let groups = self.needs_review + self.suggested;
+        if groups == 0 {
+            return None;
+        }
+        Some(CalibrationNeedsReview {
+            view_id: self.view_id,
+            view_revision: self.view_revision,
+            groups,
+        })
+    }
+}
+
+fn count(items: usize) -> u64 {
+    u64::try_from(items).unwrap_or(u64::MAX)
+}
+
 impl CalibrationViewPlan {
-    /// Project accepted and excepted assignments plus every unresolved entry; a
-    /// suggested requirement reads `suggestion_unaccepted`. Ready only when no
-    /// requirement is suggested or unresolved.
+    /// Project automatic, accepted and excepted assignments, exclusions and
+    /// every unresolved entry; a suggested requirement reads
+    /// `suggestion_unaccepted`. Ready only when nothing is unresolved.
     #[must_use]
     pub fn handoff(&self) -> CalibrationHandoff {
         let mut assignments = Vec::new();
+        let mut excluded = Vec::new();
         let mut unresolved = Vec::new();
         for requirement in &self.requirements {
             let unresolved_as = |reason| UnresolvedRequirement {
-                light_session_id: requirement.light_session_id,
+                light_group: requirement.light_group.clone(),
+                light_session_ids: requirement.light_session_ids.clone(),
                 kind: requirement.kind,
                 reason,
             };
-            match (requirement.state, &requirement.effective) {
-                (RequirementState::Accepted | RequirementState::Excepted, Some(effective))
-                    if effective.applicable =>
-                {
+            let applicable =
+                requirement.effective.as_ref().filter(|effective| effective.applicable);
+            match (requirement.state, applicable) {
+                (
+                    RequirementState::Automatic
+                    | RequirementState::Accepted
+                    | RequirementState::Excepted,
+                    Some(effective),
+                ) => {
                     let decision = &effective.decision;
                     let Some(input) = decision.input else {
                         unresolved.push(unresolved_as(UnresolvedReason::NoCandidate));
@@ -756,7 +1117,8 @@ impl CalibrationViewPlan {
                     };
                     assignments.push(HandoffAssignment {
                         id: decision.id,
-                        light_session_id: decision.light_session_id,
+                        light_group: requirement.light_group.clone(),
+                        light_session_ids: requirement.light_session_ids.clone(),
                         kind: decision.kind,
                         form: input.form(),
                         resolution: decision.resolution,
@@ -766,6 +1128,13 @@ impl CalibrationViewPlan {
                         inputs: decision.inputs.clone(),
                     });
                 }
+                (RequirementState::Excluded, Some(effective)) => excluded.push(HandoffExclusion {
+                    id: effective.decision.id,
+                    light_group: requirement.light_group.clone(),
+                    light_session_ids: requirement.light_session_ids.clone(),
+                    kind: requirement.kind,
+                    reason: effective.decision.reason.clone(),
+                }),
                 (RequirementState::Suggested, _) => {
                     unresolved.push(unresolved_as(UnresolvedReason::SuggestionUnaccepted));
                 }
@@ -780,9 +1149,100 @@ impl CalibrationViewPlan {
             plan_revision: self.plan_revision,
             ready: unresolved.is_empty(),
             assignments,
+            excluded,
             unresolved,
         }
     }
+
+    /// The readiness line: each light group reads its least resolved requirement.
+    #[must_use]
+    pub fn readiness(&self) -> CalibrationReadiness {
+        let mut groups: Vec<GroupReadiness> = Vec::new();
+        for requirement in &self.requirements {
+            let needs = (requirement.state == RequirementState::NeedsReview)
+                .then(|| requirement.reason.unwrap_or(UnresolvedReason::NoCandidate));
+            match groups.iter_mut().find(|group| group.light_group == requirement.light_group) {
+                Some(group) => {
+                    if requirement.state.rank() < group.state.rank() {
+                        group.state = requirement.state;
+                    }
+                    group.reason = group.reason.or(needs);
+                }
+                None => groups.push(GroupReadiness {
+                    light_group: requirement.light_group.clone(),
+                    light_session_ids: requirement.light_session_ids.clone(),
+                    state: requirement.state,
+                    reason: needs,
+                }),
+            }
+        }
+        let with = |test: fn(RequirementState) -> bool| {
+            count(groups.iter().filter(|group| test(group.state)).count())
+        };
+        let matched = with(RequirementState::matched);
+        let suggested = with(|state| state == RequirementState::Suggested);
+        let needs_review = with(|state| state == RequirementState::NeedsReview);
+        let excepted = with(|state| state == RequirementState::Excepted);
+        let excluded = with(|state| state == RequirementState::Excluded);
+        CalibrationReadiness {
+            view_id: self.view_id,
+            view_revision: self.view_revision,
+            plan_revision: self.plan_revision,
+            ready: needs_review == 0 && suggested == 0,
+            groups,
+            matched,
+            suggested,
+            needs_review,
+            excepted,
+            excluded,
+        }
+    }
+}
+
+/// One requirement the automatic match could not assign, with the refusal of
+/// reading its top input.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockedRequirement {
+    pub requirement: RequirementKey,
+    pub error: ErrorResponse,
+}
+
+/// What one automatic match did: the requirements it assigned, the adopted
+/// masters it found drifted, and the requirements whose top input could not
+/// be read. The plan is the run's plan after it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CalibrationAssignment {
+    pub plan: CalibrationViewPlan,
+    pub assigned: Vec<RequirementKey>,
+    pub drifted: Vec<Uuid>,
+    pub blocked: Vec<BlockedRequirement>,
+}
+
+/// Calibration-matching evidence of a Project's candidate sessions for one
+/// subject and channel (CAL-FR-12, PRJ-FR-11). It assigns nothing.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubjectChannelEvidence {
+    pub subject_id: Uuid,
+    pub channel: Option<String>,
+    pub rig_ids: Vec<Uuid>,
+    pub light_session_ids: Vec<Uuid>,
+    /// The kinds some light group has no fully compatible input for.
+    pub missing: Vec<InputKind>,
+    /// Darks that differ only in exposure exist and none matches it.
+    pub exposure_mismatch: bool,
+    pub light_exposures: Vec<String>,
+    pub dark_exposures: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectCalibrationEvidence {
+    pub project_id: Uuid,
+    /// By subject order, then channel.
+    pub rows: Vec<SubjectChannelEvidence>,
 }
 
 // ── Master adoption ──────────────────────────────────────────────────────────
