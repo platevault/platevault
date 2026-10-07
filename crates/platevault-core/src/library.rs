@@ -135,7 +135,7 @@ impl Library {
         let views: Arc<dyn AssetReferences> =
             Arc::new(ViewReferences { catalog: Arc::clone(&catalog) });
         let frame_review = FrameReview::new(Arc::clone(&catalog));
-        Ok(Arc::new(Self {
+        let library = Arc::new(Self {
             catalog,
             targets: Arc::new(targets),
             provider,
@@ -148,7 +148,10 @@ impl Library {
             lifecycle: crate::run_lifecycle::RunLifecycle::default(),
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
-        }))
+        });
+        // PREP (069, U21): Running-preparation guard, run folders; interrupted revisions Paused.
+        crate::prepare::register(&library).await?;
+        Ok(library)
     }
 
     #[must_use]

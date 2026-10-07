@@ -205,6 +205,17 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::calibration_inputs::calibration_list_adoptions,
         crate::commands::calibration_inputs::calibration_custody_facts,
         // preparation
+        crate::commands::prepare::prepare_profiles,
+        crate::commands::prepare::prepare_profile_create,
+        crate::commands::prepare::prepare_profile_update,
+        crate::commands::prepare::prepare_review,
+        crate::commands::prepare::prepare_run,
+        crate::commands::prepare::prepare_retry,
+        crate::commands::prepare::prepare_stop,
+        crate::commands::prepare::prepare_list,
+        crate::commands::prepare::prepare_outcome,
+        crate::commands::prepare::prepare_blocker,
+        crate::commands::prepare::prepare_open,
         // results
         // storage
         // import

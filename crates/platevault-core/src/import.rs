@@ -1586,7 +1586,7 @@ async fn observe_source(path: &NativePath) -> Result<(PathBuf, FileIdentity), Li
 }
 
 /// Whether a folder can take new files, checked without writing anything.
-fn writability(root: &Path) -> Writability {
+pub(crate) fn writability(root: &Path) -> Writability {
     match fs::symlink_metadata(root) {
         Ok(metadata) if metadata.is_dir() && !is_link(&metadata) => platform_writability(root),
         Ok(_) => {
