@@ -12,6 +12,9 @@ use metadata_core::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+mod frame_review;
+pub use frame_review::*;
+
 pub type Revision = u64;
 
 #[derive(Debug, thiserror::Error)]

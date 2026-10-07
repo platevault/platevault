@@ -109,6 +109,22 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         // projects
         // runs
         // frame review
+        crate::commands::frame_review::pix_review_frames,
+        crate::commands::frame_review::pix_start_measurement,
+        crate::commands::frame_review::pix_prioritize_measurement,
+        crate::commands::frame_review::pix_measurement_status,
+        crate::commands::frame_review::pix_cancel_measurement,
+        crate::commands::frame_review::pix_list_measurement_runs,
+        crate::commands::frame_review::pix_open_frame,
+        crate::commands::frame_review::pix_preview_tile,
+        crate::commands::frame_review::pix_compare_regions,
+        crate::commands::frame_review::pix_sample_region,
+        crate::commands::frame_review::pix_frame_stars,
+        crate::commands::frame_review::pix_star_cutouts,
+        crate::commands::frame_review::pix_frame_detail,
+        crate::commands::frame_review::pix_review_import,
+        crate::commands::frame_review::pix_import_review,
+        crate::commands::frame_review::pix_confirm_import,
         // calibration
         // preparation
         // results
@@ -133,6 +149,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         "library catalog opened"
     );
     ProgressBridge::spawn(app.handle().clone(), Arc::clone(&library));
+    crate::commands::frame_review::spawn_measurement_bridge(app.handle().clone(), &library);
     app.manage(library);
     app.run(|_, _| {});
     Ok(())

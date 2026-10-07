@@ -14,6 +14,7 @@ use serde::Serialize;
 use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
 
+use crate::frame_review::FrameReview;
 use crate::grouping::group_assets;
 use crate::inventory;
 use crate::targets::{
@@ -53,6 +54,7 @@ pub struct Library {
     scans: Mutex<HashMap<Uuid, ScanControl>>,
     progress: broadcast::Sender<ScanOperation>,
     references: tokio::sync::RwLock<Vec<Arc<dyn AssetReferences>>>,
+    frame_review: FrameReview,
     /// Test-only: the next N assessments are refused as if a concurrent writer
     /// had committed between the session read and the record.
     #[cfg(test)]
@@ -118,6 +120,7 @@ impl Library {
         let targets = blocking(TargetIndex::bundled).await?;
         let provider = provider.map(SimbadTargetResolver::simbad).transpose()?;
         let (progress, _) = broadcast::channel(128);
+        let frame_review = FrameReview::new(Arc::clone(&catalog));
         Ok(Arc::new(Self {
             catalog,
             targets: Arc::new(targets),
@@ -126,6 +129,7 @@ impl Library {
             saved_targets: Mutex::new(None),
             progress,
             references: tokio::sync::RwLock::new(Vec::new()),
+            frame_review,
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         }))
@@ -134,6 +138,12 @@ impl Library {
     #[must_use]
     pub fn catalog(&self) -> &Catalog {
         &self.catalog
+    }
+
+    /// Measurement runs, previews, star diagnostics and imports (spec 067).
+    #[must_use]
+    pub const fn frame_review(&self) -> &FrameReview {
+        &self.frame_review
     }
 
     #[must_use]
@@ -726,7 +736,7 @@ impl Library {
     }
 }
 
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, LibraryError> + Send + 'static,
 ) -> Result<T, LibraryError> {
     tokio::task::spawn_blocking(work).await.map_err(|error| {
