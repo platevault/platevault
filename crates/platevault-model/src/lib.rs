@@ -26,6 +26,8 @@ mod frame_review;
 pub use frame_review::*;
 pub mod storage;
 pub use storage::*;
+mod catalogue;
+pub use catalogue::*;
 
 pub type Revision = u64;
 
@@ -914,6 +916,12 @@ pub struct TargetCandidate {
     pub coordinates: Option<SkyCoordinates>,
     pub provenance: Provenance,
     pub provider_id: Option<String>,
+    /// Catalogued angular size; `None` when no catalogue records one.
+    #[serde(default)]
+    pub angular_size: Option<AngularSize>,
+    /// Bundled-catalogue entries this object is listed under.
+    #[serde(default)]
+    pub catalogues: Vec<CatalogueMembership>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

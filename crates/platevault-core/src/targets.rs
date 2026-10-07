@@ -17,7 +17,7 @@
 //! records alike.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -35,8 +35,8 @@ use target_match::{
 use uuid::Uuid;
 
 use crate::{
-    AssociationState, CaptureMetadata, EvidenceItem, LibraryError, Provenance, SkyCoordinates,
-    TargetAlias, TargetCandidate, TargetCone,
+    AngularSize, AssociationState, CaptureMetadata, Catalogue, CatalogueMembership, EvidenceItem,
+    LibraryError, Provenance, SkyCoordinates, TargetAlias, TargetCandidate, TargetCone,
 };
 
 /// Namespace seed for seed and provider target ids (`UUIDv5` of the designation).
@@ -67,7 +67,17 @@ struct SeedAsset {
     version: u32,
     generated_at: String,
     source: String,
+    /// Caldwell cross-ID table: Caldwell is not a SIMBAD designation, so the
+    /// seed builder resolves each C1–C109 object to its SIMBAD oid.
+    #[serde(default)]
+    caldwell: Vec<SeedCaldwell>,
     entries: Vec<SeedEntry>,
+}
+
+#[derive(Deserialize)]
+struct SeedCaldwell {
+    number: u32,
+    simbad_oid: i64,
 }
 
 #[derive(Deserialize)]
@@ -78,7 +88,17 @@ struct SeedEntry {
     object_type: ObjectType,
     ra_deg: f64,
     dec_deg: f64,
+    /// SIMBAD `galdim_*`; `null` when SIMBAD records no major axis.
+    #[serde(default)]
+    angular_size: Option<SeedAngularSize>,
     aliases: Vec<SeedAlias>,
+}
+
+#[derive(Deserialize)]
+struct SeedAngularSize {
+    major_arcmin: f64,
+    minor_arcmin: Option<f64>,
+    pa_deg: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -110,6 +130,65 @@ struct SeedRecord {
     object_type: ObjectType,
     coordinates: Option<SkyCoordinates>,
     aliases: Vec<ResolvedAlias>,
+    angular_size: Option<AngularSize>,
+    catalogues: Vec<CatalogueMembership>,
+}
+
+/// Alias prefixes that list an object in a bundled catalogue, in the
+/// collapsed single-space form the seed stores.
+const CATALOGUE_PREFIXES: [(&str, Catalogue); 7] = [
+    ("M ", Catalogue::Messier),
+    ("NGC ", Catalogue::Ngc),
+    ("IC ", Catalogue::Ic),
+    ("SH 2-", Catalogue::Sharpless),
+    ("LBN ", Catalogue::Lbn),
+    ("LDN ", Catalogue::Ldn),
+    ("Barnard ", Catalogue::Barnard),
+];
+
+/// The catalogue entry an alias names, if any.
+///
+/// Only whole-object designations count: `NGC 1750 2316` (a star in a
+/// cluster) and `M 81*` (a nucleus) list nothing. A single component letter
+/// is kept (`NGC 2237A`, `LDN 1204A`, `SH 2-127 A`), as is the LBN
+/// Galactic-coordinate form (`LBN 169.02-15.54`), which has no number.
+fn alias_membership(alias: &str) -> Option<CatalogueMembership> {
+    let (catalogue, rest) = CATALOGUE_PREFIXES
+        .iter()
+        .find_map(|&(prefix, c)| Some((c, alias.strip_prefix(prefix)?)))?;
+    let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+    if digits == 0 {
+        return None;
+    }
+    let (digits, suffix) = rest.split_at(digits);
+    let letter = |s: &str| s.len() == 1 && s.bytes().all(|b| b.is_ascii_alphabetic());
+    let numbered = match catalogue {
+        Catalogue::Ngc | Catalogue::Ic | Catalogue::Ldn | Catalogue::Barnard => {
+            suffix.is_empty() || letter(suffix)
+        }
+        Catalogue::Sharpless => suffix.is_empty() || suffix.strip_prefix(' ').is_some_and(letter),
+        Catalogue::Messier | Catalogue::Lbn | Catalogue::Caldwell => suffix.is_empty(),
+    };
+    let number = if numbered {
+        Some(digits.parse().ok()?)
+    } else if catalogue == Catalogue::Lbn && galactic_name(rest) {
+        None
+    } else {
+        return None;
+    };
+    Some(CatalogueMembership { catalogue, designation: alias.to_owned(), number })
+}
+
+/// `169.02-15.54`: Galactic longitude, then signed latitude, both decimal.
+fn galactic_name(text: &str) -> bool {
+    let Some(split) = text.find(['+', '-']) else { return false };
+    let (l, b) = text.split_at(split);
+    let decimal = |s: &str| s.contains('.') && s.parse::<f64>().is_ok_and(f64::is_finite);
+    decimal(l) && decimal(&b[1..])
+}
+
+fn membership_order(m: &CatalogueMembership) -> (Catalogue, u32, &str) {
+    (m.catalogue, m.number.unwrap_or(u32::MAX), &m.designation)
 }
 
 /// A position handed to `target-match`; `index` points back into the caller's slice.
@@ -331,6 +410,7 @@ pub struct TargetIndex {
     provenance: SeedProvenance,
     seed_provenance: Provenance,
     records: Vec<SeedRecord>,
+    by_id: HashMap<Uuid, usize>,
     positions: Matcher<Positioned>,
 }
 
@@ -339,7 +419,8 @@ impl TargetIndex {
     ///
     /// # Errors
     /// `InvalidInput` when the asset is not a seed document, an entry has no
-    /// searchable designation, or two entries share a designation.
+    /// searchable designation, two entries share a designation, or a Caldwell
+    /// cross-ID names no seed object or repeats a number.
     pub fn bundled() -> Result<Self, LibraryError> {
         Self::from_seed_json(SEED_JSON)
     }
@@ -349,17 +430,21 @@ impl TargetIndex {
         let sha256 = hex::encode(Sha256::digest(bytes));
         let dataset = format!("bundled-seed/v{}/sha256:{}", asset.version, &sha256[..16]);
         let ns = namespace(TARGET_ID_NAMESPACE);
-        let mut ids = HashSet::with_capacity(asset.entries.len());
+        let mut by_id = HashMap::with_capacity(asset.entries.len());
+        let mut record_of_oid = HashMap::with_capacity(asset.entries.len());
         let mut records = Vec::with_capacity(asset.entries.len());
         let mut positions = Vec::with_capacity(asset.entries.len());
         let mut alias_count = 0;
         for entry in asset.entries {
             let record = seed_record(&ns, entry)?;
-            if !ids.insert(record.id) {
+            if by_id.insert(record.id, records.len()).is_some() {
                 return Err(LibraryError::InvalidInput(format!(
                     "duplicate seed designation {:?}",
                     record.designation
                 )));
+            }
+            if let Some(oid) = record.simbad_oid {
+                record_of_oid.insert(oid, records.len());
             }
             if let Some(position) =
                 record.coordinates.as_ref().and_then(|c| match_position(c.ra_deg, c.dec_deg))
@@ -368,6 +453,26 @@ impl TargetIndex {
             }
             alias_count += record.aliases.len();
             records.push(record);
+        }
+        let mut caldwell_numbers = HashSet::with_capacity(asset.caldwell.len());
+        for row in asset.caldwell {
+            let index = record_of_oid
+                .get(&row.simbad_oid)
+                .copied()
+                .filter(|_| caldwell_numbers.insert(row.number));
+            let Some(index) = index else {
+                return Err(LibraryError::InvalidInput(format!(
+                    "Caldwell {} repeats or names no seed object (oid {})",
+                    row.number, row.simbad_oid
+                )));
+            };
+            let catalogues = &mut records[index].catalogues;
+            catalogues.push(CatalogueMembership {
+                catalogue: Catalogue::Caldwell,
+                designation: format!("Caldwell {}", row.number),
+                number: Some(row.number),
+            });
+            catalogues.sort_by(|a, b| membership_order(a).cmp(&membership_order(b)));
         }
         Ok(Self {
             provenance: SeedProvenance {
@@ -381,6 +486,7 @@ impl TargetIndex {
             },
             seed_provenance: Provenance::Seed { dataset },
             records,
+            by_id,
             positions: Matcher::from_objects(positions),
         })
     }
@@ -394,7 +500,54 @@ impl TargetIndex {
     /// Seed target by stable id.
     #[must_use]
     pub fn candidate(&self, id: Uuid) -> Option<TargetCandidate> {
-        self.records.iter().find(|r| r.id == id).map(|r| self.materialize(r))
+        self.by_id.get(&id).map(|&index| self.materialize(&self.records[index]))
+    }
+
+    /// Seed targets listed in any of `catalogues` (PLAN-TGT-FR-02).
+    ///
+    /// Rows order by their first listing among the chosen catalogues, in
+    /// [`Catalogue`] order and then by catalogue number; unnumbered entries
+    /// (LBN Galactic-coordinate names) follow the numbered ones. With no
+    /// catalogue chosen the list is empty.
+    #[must_use]
+    pub fn browse(&self, catalogues: &[Catalogue]) -> Vec<TargetCandidate> {
+        let mut rows: Vec<(_, &SeedRecord)> = self
+            .records
+            .iter()
+            .filter_map(|record| {
+                let key = record
+                    .catalogues
+                    .iter()
+                    .filter(|m| catalogues.contains(&m.catalogue))
+                    .map(membership_order)
+                    .min()?;
+                Some((key, record))
+            })
+            .collect();
+        rows.sort_by(|(a, x), (b, y)| a.cmp(b).then_with(|| x.designation.cmp(&y.designation)));
+        rows.into_iter().map(|(_, record)| self.materialize(record)).collect()
+    }
+
+    /// Fill a saved candidate's catalogue facts from the seed record it
+    /// shares an id with. The catalog stores user and provider decisions, not
+    /// bundled reference data, so a saved seed target reads back without its
+    /// angular size and catalogue listings until it passes through here.
+    /// Facts the candidate already carries are kept.
+    pub fn attach_catalogue_facts(&self, candidate: &mut TargetCandidate) {
+        let Some(&index) = self.by_id.get(&candidate.id) else { return };
+        let record = &self.records[index];
+        if candidate.angular_size.is_none() {
+            candidate.angular_size = record.angular_size;
+        }
+        if candidate.catalogues.is_empty() {
+            candidate.catalogues.clone_from(&record.catalogues);
+        }
+    }
+
+    fn with_catalogue_facts(&self, candidate: &TargetCandidate) -> TargetCandidate {
+        let mut candidate = candidate.clone();
+        self.attach_catalogue_facts(&mut candidate);
+        candidate
     }
 
     fn materialize(&self, record: &SeedRecord) -> TargetCandidate {
@@ -416,6 +569,8 @@ impl TargetIndex {
             coordinates: record.coordinates.clone(),
             provenance: self.seed_provenance.clone(),
             provider_id: record.simbad_oid.map(|oid| oid.to_string()),
+            angular_size: record.angular_size,
+            catalogues: record.catalogues.clone(),
         }
     }
 
@@ -452,7 +607,7 @@ impl TargetIndex {
             .map(|hit| TargetSearchHit {
                 candidate: match hit.source {
                     HitSource::Seed(index) => self.materialize(&self.records[index]),
-                    HitSource::Saved(index) => saved[index].clone(),
+                    HitSource::Saved(index) => self.with_catalogue_facts(&saved[index]),
                 },
                 matched_alias: hit.text.map(|t| t.alias.to_owned()),
                 rank: hit.text.map(|t| t.rank),
@@ -532,7 +687,7 @@ impl TargetIndex {
                 && (candidate.aliases.iter().any(|a| keys.contains(&a.normalized))
                     || candidate_position(candidate).is_some_and(in_any_field))
             {
-                candidates.push(candidate.clone());
+                candidates.push(self.with_catalogue_facts(candidate));
             }
         }
         let mut seed_indices: BTreeSet<usize> = BTreeSet::new();
@@ -591,6 +746,12 @@ fn seed_record(ns: &Uuid, entry: SeedEntry) -> Result<SeedRecord, LibraryError> 
     }
     let located = validated_coordinates(entry.ra_deg, entry.dec_deg)
         .filter(|_| match_position(entry.ra_deg, entry.dec_deg).is_some());
+    let angular_size =
+        entry.angular_size.map(|size| seed_angular_size(&designation, &size)).transpose()?;
+    let mut catalogues: Vec<CatalogueMembership> =
+        aliases.iter().filter_map(|a| alias_membership(&a.alias)).collect();
+    catalogues.sort_by(|a, b| membership_order(a).cmp(&membership_order(b)));
+    catalogues.dedup();
     Ok(SeedRecord {
         id: target_id_from_designation(ns, &designation),
         simbad_oid: entry.simbad_oid,
@@ -599,6 +760,30 @@ fn seed_record(ns: &Uuid, entry: SeedEntry) -> Result<SeedRecord, LibraryError> 
         object_type: entry.object_type,
         coordinates: located,
         aliases,
+        angular_size,
+        catalogues,
+    })
+}
+
+/// A seed size is either absent or a positive finite major axis with an
+/// optional positive minor axis and a position angle in `[0, 360]`.
+fn seed_angular_size(
+    designation: &str,
+    size: &SeedAngularSize,
+) -> Result<AngularSize, LibraryError> {
+    let positive = |v: f64| v.is_finite() && v > 0.0;
+    if !positive(size.major_arcmin)
+        || size.minor_arcmin.is_some_and(|v| !positive(v))
+        || size.pa_deg.is_some_and(|v| !(0.0..=360.0).contains(&v))
+    {
+        return Err(LibraryError::InvalidInput(format!(
+            "seed entry {designation:?} has an invalid angular size"
+        )));
+    }
+    Ok(AngularSize {
+        major_arcmin: size.major_arcmin,
+        minor_arcmin: size.minor_arcmin,
+        pa_deg: size.pa_deg,
     })
 }
 
@@ -693,6 +878,8 @@ pub fn user_target(input: &UserTargetInput) -> Result<TargetCandidate, LibraryEr
         coordinates,
         provenance: Provenance::User,
         provider_id: None,
+        angular_size: None,
+        catalogues: Vec::new(),
     })
 }
 
@@ -841,6 +1028,8 @@ fn provider_candidate(ns: &Uuid, target: &CachedTarget) -> Result<TargetCandidat
         coordinates: validated_coordinates(target.ra_deg, target.dec_deg),
         provenance,
         provider_id,
+        angular_size: None,
+        catalogues: Vec::new(),
     })
 }
 

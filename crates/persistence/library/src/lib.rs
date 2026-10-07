@@ -5055,6 +5055,8 @@ async fn load_target(conn: &mut SqliteConnection, id: Uuid) -> Result<TargetReco
             coordinates,
             provenance: from_json(&row.try_get::<String, _>("provenance")?)?,
             provider_id: row.try_get("provider_id")?,
+            angular_size: None,
+            catalogues: Vec::new(),
         },
         decision_revision: revision(row.try_get("decision_revision")?)?,
     })
@@ -6979,6 +6981,8 @@ mod tests {
             coordinates: None,
             provenance: Provenance::User,
             provider_id: None,
+            angular_size: None,
+            catalogues: Vec::new(),
         }
     }
 

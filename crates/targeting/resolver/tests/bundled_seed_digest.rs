@@ -23,7 +23,7 @@ const SEED_JSON: &[u8] =
 const SEED_E2E_JSON: &[u8] =
     include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../assets/seed/seed-e2e.json"));
 
-const SEED_JSON_SHA256: &str = "aa442354ca1f36cd0f56acea209ae19390c479e9affe94e10fd135d09313365a";
+const SEED_JSON_SHA256: &str = "7e53eb625231e67888cc1d87d752672d35fc048a5780cff82a10dfeea22299fe";
 
 const SEED_E2E_JSON_SHA256: &str =
     "ec41a79461c76693dbfa67b7526f7178d059f62b931696a0317b0829ab545c9f";

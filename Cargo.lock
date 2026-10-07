@@ -5715,8 +5715,11 @@ name = "seed-builder"
 version = "0.1.0"
 dependencies = [
  "domain_core",
+ "hex",
  "reqwest",
+ "serde",
  "serde_json",
+ "sha2 0.10.9",
  "targeting_resolver",
 ]
 

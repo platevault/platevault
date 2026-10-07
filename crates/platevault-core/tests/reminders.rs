@@ -196,6 +196,8 @@ fn candidate(designation: &str, ra_deg: f64, dec_deg: f64) -> TargetCandidate {
         coordinates: Some(SkyCoordinates { ra_deg, dec_deg, frame: "icrs".into() }),
         provenance: Provenance::User,
         provider_id: None,
+        angular_size: None,
+        catalogues: Vec::new(),
     }
 }
 

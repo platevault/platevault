@@ -10,8 +10,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock};
 
 use platevault_core::{
-    AssociationState, CaptureMetadata, EvidenceItem, LibraryError, Provenance, SkyCoordinates,
-    TargetAlias, TargetCandidate, TargetCone,
+    AngularSize, AssociationState, CaptureMetadata, Catalogue, CatalogueMembership, EvidenceItem,
+    LibraryError, Provenance, SkyCoordinates, TargetAlias, TargetCandidate, TargetCone,
 };
 use simbad_resolver::identity::{namespace, target_id_from_designation};
 use simbad_resolver::{RANK_EXACT, RANK_PREFIX};
@@ -65,13 +65,13 @@ fn bundled_seed_reports_the_pinned_dataset_and_its_real_counts() {
     let provenance = index().provenance();
     assert_eq!(
         provenance.sha256,
-        "aa442354ca1f36cd0f56acea209ae19390c479e9affe94e10fd135d09313365a"
+        "7e53eb625231e67888cc1d87d752672d35fc048a5780cff82a10dfeea22299fe"
     );
-    assert_eq!(provenance.dataset, "bundled-seed/v1/sha256:aa442354ca1f36cd");
-    assert_eq!(provenance.version, 1);
-    assert_eq!(provenance.generated_at, "2026-07-14T08:05:52.025066447Z");
+    assert_eq!(provenance.dataset, "bundled-seed/v2/sha256:7e53eb625231e678");
+    assert_eq!(provenance.version, 2);
+    assert_eq!(provenance.generated_at, "2026-10-07T15:27:42.918477Z");
     assert!(provenance.source.starts_with("SIMBAD TAP (CDS"), "{}", provenance.source);
-    assert_eq!((provenance.target_count, provenance.alias_count), (13_073, 16_460));
+    assert_eq!((provenance.target_count, provenance.alias_count), (16_514, 21_107));
 
     let reloaded = TargetIndex::bundled().unwrap();
     let ngc7000 = seed("NGC 7000");
@@ -528,4 +528,44 @@ fn session_candidates_put_the_qualified_target_first_without_inventing_others() 
     assert!(states.contains(&("NGC 7000", &AssociationState::NeedsReview)), "{states:?}");
     assert!(states.contains(&("IC 5070", &AssociationState::NeedsReview)), "{states:?}");
     assert!(candidates.iter().all(|a| a.state != AssociationState::Suggested), "{states:?}");
+}
+
+#[test]
+fn saved_seed_targets_read_with_the_seed_catalogue_facts() {
+    let seed_ngc7000 = index()
+        .browse(&[Catalogue::Caldwell])
+        .into_iter()
+        .find(|c| c.designation == "NGC 7000")
+        .expect("NGC 7000 is Caldwell 20");
+    assert!(seed_ngc7000.catalogues.contains(&CatalogueMembership {
+        catalogue: Catalogue::Caldwell,
+        designation: "Caldwell 20".into(),
+        number: Some(20),
+    }));
+
+    // The catalog stores decisions, not reference data: a saved seed target
+    // reads back without size or listings, and the index restores them.
+    let saved =
+        TargetCandidate { angular_size: None, catalogues: Vec::new(), ..seed_ngc7000.clone() };
+    let hit = index().search(&text("NGC 7000", 1), std::slice::from_ref(&saved)).unwrap().remove(0);
+    assert_eq!(hit.candidate, seed_ngc7000);
+
+    let mut sized = TargetCandidate {
+        angular_size: Some(AngularSize { major_arcmin: 120.0, minor_arcmin: None, pa_deg: None }),
+        ..saved
+    };
+    index().attach_catalogue_facts(&mut sized);
+    assert_eq!(sized.angular_size.map(|s| s.major_arcmin), Some(120.0), "own facts are kept");
+    assert_eq!(sized.catalogues, seed_ngc7000.catalogues);
+
+    let mut user = user_target(&UserTargetInput {
+        designation: "My nebula".into(),
+        aliases: Vec::new(),
+        common_name: None,
+        object_type: ObjectType::EmissionNebula,
+        coordinates: None,
+    })
+    .unwrap();
+    index().attach_catalogue_facts(&mut user);
+    assert!(user.catalogues.is_empty() && user.angular_size.is_none());
 }

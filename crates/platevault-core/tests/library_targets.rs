@@ -160,7 +160,14 @@ async fn saved_provider_and_edited_records_replace_the_warm_seed_record_with_the
 
     assert!(hit(&library.search_targets(&cone(M31_PROVIDER, 0.2)).await.unwrap(), m31).is_none());
     let moved = library.search_targets(&cone((15.0, 35.0), 0.2)).await.unwrap();
-    assert_eq!(hit(&moved, m31).unwrap().candidate, edited);
+    // The catalog stores the decision; the bundled catalogue facts of the
+    // shared seed id (size, listings) are restored on read.
+    let expected = TargetCandidate {
+        angular_size: seed.candidate.angular_size,
+        catalogues: seed.candidate.catalogues.clone(),
+        ..edited
+    };
+    assert_eq!(hit(&moved, m31).unwrap().candidate, expected);
     let own = library.search_targets(&text("my andromeda", 5)).await.unwrap();
     assert_eq!(ids(&own), [m31]);
 }
