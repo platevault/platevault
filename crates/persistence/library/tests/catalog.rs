@@ -2831,7 +2831,8 @@ async fn coverage_counts_every_imagetyp_recognised_as_a_light_frame() {
         .iter()
         .map(|summary| expected_session(&summary.session))
         .collect();
-    assert_eq!(sessions.len(), frames.len());
+    // The dark session is in no Sessions list (LIB-FR-16) and counts nowhere.
+    assert_eq!(sessions.len(), frames.len() - 1);
     let saved = catalog.save_target(&target("NGC 7000", "ngc 7000"), None).await.unwrap();
     catalog.associate_target(&sessions, saved.candidate.id).await.unwrap();
 

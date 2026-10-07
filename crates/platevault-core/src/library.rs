@@ -462,6 +462,7 @@ impl Library {
                 .list_sessions(&SessionQuery {
                     location_id: Some(location_id),
                     include_superseded: false,
+                    filter: None,
                     offset,
                     limit: 1000,
                 })
