@@ -7,17 +7,39 @@
 //! Every fact carries the no-follow fingerprint the catalog recorded.
 
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
     Asset, AssetReference, Availability, CalibrationRules, CandidateRef, CustodyFact, CustodyKind,
     LocationLifecycle, MasterKeptCopy, ReferenceKind,
 };
-use sqlx::Connection;
+use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::{inventory, load_masters};
-use crate::{load_assets, load_location, Catalog, Result};
+use crate::{json_ids, load_assets, load_location, parse_uuid, revision, Catalog, Result};
+
+/// Runs whose effective (latest, not withdrawn) decision per light group and
+/// kind holds an asked asset as a light member or a hashed input, with the
+/// run's latest committed name and its plan revision.
+const DECISION_REFERENCES: &str = "\
+    WITH asked(id) AS (SELECT value FROM json_each(?1)), \
+    effective AS (SELECT d.view_id, d.light_asset_ids, d.inputs FROM calibration_decisions d \
+        WHERE d.resolution != 'withdrawn' AND d.rowid = (SELECT MAX(e.rowid) \
+        FROM calibration_decisions e WHERE e.view_id = d.view_id \
+        AND e.light_group = d.light_group AND e.kind = d.kind)), \
+    held(view_id, asset_id) AS ( \
+        SELECT f.view_id, l.value FROM effective f, json_each(f.light_asset_ids) l \
+        WHERE l.value IN (SELECT id FROM asked) \
+        UNION SELECT f.view_id, json_extract(i.value, '$.assetId') \
+        FROM effective f, json_each(f.inputs) i \
+        WHERE json_extract(i.value, '$.assetId') IN (SELECT id FROM asked)) \
+    SELECT h.view_id, h.asset_id, coalesce(p.revision, 0) AS revision, c.name AS name \
+    FROM held h JOIN views v ON v.id = h.view_id \
+    LEFT JOIN calibration_plans p ON p.view_id = h.view_id \
+    JOIN view_revisions c ON c.view_id = v.id AND c.revision = v.revision \
+        AND c.state = 'committed' \
+    ORDER BY h.view_id, h.asset_id";
 
 impl Catalog {
     /// The calibration files STO keeps in protected Keep: candidate masters,
@@ -114,8 +136,10 @@ impl Catalog {
     }
 
     /// The calibration records holding any of `assets`, kind Calibration: each
-    /// adopted master whose source or indexed destination is asked, at the
-    /// master revision.
+    /// run whose effective decisions hold them as light members or hashed
+    /// inputs, at its plan revision, and each adopted master whose source or
+    /// indexed destination is asked, at the master revision. A withdrawn
+    /// decision names nothing.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
@@ -128,10 +152,33 @@ impl Catalog {
         }
         let mut conn = self.reader().await?;
         let mut snapshot = conn.begin().await?;
+        let rows = sqlx::query(DECISION_REFERENCES)
+            .bind(json_ids(assets)?)
+            .fetch_all(&mut *snapshot)
+            .await?;
         let masters = load_masters(&mut snapshot).await?;
         snapshot.rollback().await?;
 
-        let mut references = Vec::new();
+        let mut runs: BTreeMap<Uuid, AssetReference> = BTreeMap::new();
+        for row in &rows {
+            let id = parse_uuid(&row.try_get::<String, _>("view_id")?)?;
+            let asset = parse_uuid(&row.try_get::<String, _>("asset_id")?)?;
+            if let Some(reference) = runs.get_mut(&id) {
+                reference.asset_ids.push(asset);
+                continue;
+            }
+            runs.insert(
+                id,
+                AssetReference {
+                    kind: ReferenceKind::Calibration,
+                    id,
+                    name: row.try_get("name")?,
+                    revision: revision(row.try_get("revision")?)?,
+                    asset_ids: vec![asset],
+                },
+            );
+        }
+        let mut references: Vec<AssetReference> = runs.into_values().collect();
         for master in masters {
             let held: BTreeSet<Uuid> = [master.provenance.source.asset_id, master.asset_id]
                 .into_iter()

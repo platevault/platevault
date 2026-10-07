@@ -67,6 +67,7 @@ const SCHEMA: &str = schema_modules![
     "frame_thumbnails.sql",
     "storage.sql",
     "views.sql",
+    "calibration_decisions.sql",
     "import.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s

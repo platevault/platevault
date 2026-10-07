@@ -3,24 +3,26 @@
 
 //! Calibration inputs (spec 068): Tier 1 calibration rows in the clean catalog.
 //!
-//! Raw sets, detected candidates and evaluations are recomputed on read from one
-//! reader snapshot and never stored; reads hash nothing. The product rules
-//! arrive as a [`CalibrationRules`] implementation, the way the grouping
-//! callback does, so the semantics stay pure and outside storage.
+//! Raw sets, detected candidates, evaluations, requirement states and the
+//! handoff are recomputed on read from one reader snapshot and never stored;
+//! reads hash nothing. The product rules arrive as a [`CalibrationRules`]
+//! implementation, the way the grouping callback does, so the semantics stay
+//! pure and outside storage.
 
 mod adoption;
 mod contained_write;
 mod custody;
+mod decisions;
 mod inventory;
 
 use std::collections::BTreeSet;
 
 use platevault_model::{
     AdoptedMaster, ApplicableQuality, AssociationKind, AssociationState, Availability,
-    CalibrationPlan, CalibrationRules, CalibrationViewBasis, CandidateRef, CaptureEvidence,
-    CaptureKey, EvidenceField, ExpectedSession, InputForm, InputKind, InputState, LibraryError,
-    LightBasis, LightEvidence, MasterEvidence, MasterOrigin, MasterProvenance, NativePath,
-    ObservationFingerprint, Requirement,
+    CalibrationPlan, CalibrationPolicy, CalibrationRules, CalibrationViewBasis, CandidateRef,
+    CaptureEvidence, CaptureKey, EvidenceField, ExpectedSession, InputForm, InputKind, InputState,
+    LibraryError, LightBasis, LightEvidence, MasterEvidence, MasterOrigin, MasterProvenance,
+    NativePath, ObservationFingerprint, Requirement,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
@@ -179,9 +181,9 @@ impl Catalog {
         })
     }
 
-    /// Per light Session and kind, every listed candidate with its criteria and
-    /// the preselected one, for these current Sessions. Takes no View and
-    /// writes nothing.
+    /// Per light group and kind of these current Sessions, every listed
+    /// candidate with its criteria and the single top input. Takes no run,
+    /// assigns nothing and writes nothing.
     ///
     /// # Errors
     /// `Conflict` (with successors) for a stale or superseded Session;
@@ -207,6 +209,7 @@ impl Catalog {
             view_revision: 0,
             plan: CalibrationPlan {
                 required_kinds: kinds,
+                policy: CalibrationPolicy::Manual,
                 ..CalibrationPlan::unplanned(Uuid::nil())
             },
             lights,

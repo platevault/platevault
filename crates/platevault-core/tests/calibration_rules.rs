@@ -235,8 +235,8 @@ fn flats_need_the_same_channel_and_a_known_optical_train() {
     );
     assert_eq!(
         criterion(&other_equipment.criteria, CriterionId::OpticalTrain).verdict,
-        Verdict::Unknown,
-        "a different association without headers proves nothing"
+        Verdict::Incompatible,
+        "a different Confirmed Equipment is another optical train (CAL-AC-14)"
     );
 
     let header = rules.evaluate(InputKind::Flat, &light_side(None), &with_kind(&flat, None));
@@ -313,6 +313,7 @@ fn available(members: u64) -> InputState {
         available_members: members,
         excluded_members: 0,
         superseded: false,
+        drifted: false,
     }
 }
 
@@ -410,20 +411,36 @@ fn each_requirement_preselects_one_available_compatible_candidate_in_r10_order()
     assert_eq!(
         order,
         [21, 22, 20, 19, 18].map(Uuid::from_u128),
-        "night distance, unknown nights last, ties by ID; incompatible after compatible"
+        "night distance, unknown nights last, list order by ID; incompatible after compatible"
     );
     assert_eq!(requirement.candidates[0].night_distance_days, Some(1));
     assert_eq!(requirement.candidates[3].night_distance_days, None);
+    // D-W5: 21 and 22 rank equal (one day each, both raw sets): no single top input.
+    assert_eq!(requirement.state, RequirementState::NeedsReview);
+    assert_eq!(requirement.reason, Some(UnresolvedReason::RankingTie));
+    assert_eq!(requirement.preselected, None);
+    assert_eq!(requirement.automatic, None);
+    assert!(requirement.candidates.iter().all(|c| !c.preselected));
+    assert!(requirement.effective.is_none());
+    assert_eq!(plan.handoff().assignments.len(), 0);
+
+    // Without the tie the nearest night is the single top input.
+    let single = rules.plan(&basis(
+        vec![light_basis(1, &light_meta, "2026-09-18@date-loc-noon")],
+        vec![
+            raw_set(21, InputKind::Dark, &dark, Some("2026-09-19@date-loc-noon")),
+            raw_set(20, InputKind::Dark, &dark, Some("2026-09-28@date-loc-noon")),
+        ],
+        vec![InputKind::Dark],
+    ));
+    let requirement = &single.requirements[0];
     assert_eq!(requirement.state, RequirementState::Suggested);
-    assert_eq!(requirement.reason, None);
     assert_eq!(
         requirement.preselected,
         Some(CandidateRef::RawSet { session_id: Uuid::from_u128(21), grouping_revision: 1 })
     );
-    assert!(requirement.candidates[0].preselected);
     assert_eq!(requirement.candidates.iter().filter(|c| c.preselected).count(), 1);
     assert!(requirement.effective.is_none(), "a suggestion is never accepted");
-    assert_eq!(plan.handoff().assignments.len(), 0);
 
     // Ties put adopted masters before raw sets: both nights unknown.
     let tie = rules.plan(&basis(
@@ -487,7 +504,7 @@ fn unavailable_and_unadopted_candidates_are_never_preselected() {
         }],
         vec![InputKind::Dark],
     ));
-    assert_eq!(only_offline.requirements[0].state, RequirementState::Unresolved);
+    assert_eq!(only_offline.requirements[0].state, RequirementState::NeedsReview);
     assert_eq!(only_offline.requirements[0].reason, Some(UnresolvedReason::InputUnavailable));
 }
 
@@ -512,34 +529,39 @@ fn unresolved_reasons_name_what_blocks_each_requirement() {
     let states: Vec<_> = plan
         .requirements
         .iter()
-        .map(|r| (r.light_session_id.as_u128(), r.kind, r.state, r.reason))
+        .map(|r| (r.light_session_ids[0].as_u128(), r.kind, r.state, r.reason))
         .collect();
     assert_eq!(
         states,
         [
-            (1, InputKind::Dark, RequirementState::Unresolved, Some(UnresolvedReason::NoCandidate)),
-            (
-                1,
-                InputKind::Flat,
-                RequirementState::Unresolved,
-                Some(UnresolvedReason::CriterionUnknown)
-            ),
             (
                 2,
                 InputKind::Dark,
-                RequirementState::Unresolved,
+                RequirementState::NeedsReview,
                 Some(UnresolvedReason::LightTypeUnknown)
             ),
             (
                 2,
                 InputKind::Flat,
-                RequirementState::Unresolved,
+                RequirementState::NeedsReview,
                 Some(UnresolvedReason::LightTypeUnknown)
             ),
+            (
+                1,
+                InputKind::Dark,
+                RequirementState::NeedsReview,
+                Some(UnresolvedReason::NoCandidate)
+            ),
+            (
+                1,
+                InputKind::Flat,
+                RequirementState::NeedsReview,
+                Some(UnresolvedReason::CriterionUnknown)
+            ),
         ],
-        "a product makes no requirement"
+        "an unknown-type light is its own light group; a product makes no requirement"
     );
-    let flat = &plan.requirements[1];
+    let flat = &plan.requirements[3];
     assert_eq!(flat.preselected, None);
     assert_eq!(flat.candidates[0].evaluation.blocking(), [CriterionId::OpticalTrain]);
 
@@ -576,8 +598,8 @@ fn decision(
         id: Uuid::from_u128(900),
         view_id: Uuid::from_u128(500),
         view_revision: 1,
-        light_session_id: light.evidence.session_id,
-        grouping_revision: light.evidence.grouping_revision,
+        light_group: platevault_core::LightGroupKey::of(light),
+        light_session_ids: [light.evidence.session_id].into(),
         light_asset_ids: light.included_assets.clone(),
         kind,
         resolution,
@@ -637,7 +659,7 @@ fn decisions_apply_to_a_later_revision_only_while_their_basis_holds() {
     let mut changed = lights.clone();
     changed[0].included_assets.remove(&Uuid::from_u128(1001));
     let membership = at_revision_two(changed, vec![candidate.clone()], accepted.clone());
-    assert_eq!(membership.requirements[0].state, RequirementState::Unresolved);
+    assert_eq!(membership.requirements[0].state, RequirementState::NeedsReview);
     assert_eq!(membership.requirements[0].reason, Some(UnresolvedReason::LightMembershipChanged));
     assert!(!membership.requirements[0].effective.as_ref().unwrap().applicable);
     assert!(!membership.handoff().ready);

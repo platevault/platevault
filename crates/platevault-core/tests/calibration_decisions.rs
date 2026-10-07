@@ -190,7 +190,8 @@ fn expected_session(session: &Session) -> ExpectedSession {
 }
 
 struct World {
-    temp: tempfile::TempDir,
+    /// Keeps the fixture folder alive for the test.
+    _temp: tempfile::TempDir,
     library: Arc<Library>,
     captures: Location,
     calibration: Location,
@@ -272,7 +273,7 @@ async fn world(
         other_rig: esprit,
         project,
         run: Uuid::nil(),
-        temp,
+        _temp: temp,
     };
     for path in [HA_LIGHTS[0], OIII_LIGHTS[0]] {
         let session = world.session_at(&locations[0].0, path).await;
@@ -299,6 +300,7 @@ impl World {
         self.library.catalog()
     }
 
+    #[allow(clippy::unused_self)]
     fn root(&self, location: &Location) -> PathBuf {
         location.path.to_path_buf().unwrap()
     }
@@ -313,10 +315,23 @@ impl World {
             .unwrap()
     }
 
+    /// The session holding the frame at `path`: a light from the Sessions
+    /// list, a calibration frame through its raw set (Sessions lists lights only).
     async fn session_at(&self, location: &Location, path: &str) -> Session {
         let asset = self.asset_at(location, path).await.id;
         let summaries = self.catalog().list_sessions(&SessionQuery::default()).await.unwrap();
-        summaries.into_iter().map(|s| s.session).find(|s| s.asset_ids.contains(&asset)).unwrap()
+        if let Some(session) =
+            summaries.into_iter().map(|s| s.session).find(|s| s.asset_ids.contains(&asset))
+        {
+            return session;
+        }
+        let inputs = self
+            .library
+            .calibration_inputs(&persistence_library::InputQuery::default())
+            .await
+            .unwrap();
+        let raw = inputs.iter().find(|input| input.member_assets.contains(&asset)).unwrap();
+        self.catalog().session(raw.input.id()).await.unwrap().summary.session
     }
 
     async fn plan(&self, revision: Revision) -> CalibrationViewPlan {
@@ -693,7 +708,16 @@ async fn other_camera_not_candidate_other_train_incompatible() {
     }
     for channel in ["Ha", "OIII"] {
         let flats = row(&plan, channel, InputKind::Flat);
-        let [candidate] = flats.candidates.as_slice() else { panic!("{flats:#?}") };
+        let same_channel: Vec<_> = flats
+            .candidates
+            .iter()
+            .filter(|c| {
+                c.evaluation.criteria.iter().any(|row| {
+                    row.criterion == CriterionId::Channel && row.verdict == Verdict::Compatible
+                })
+            })
+            .collect();
+        let [candidate] = same_channel.as_slice() else { panic!("{flats:#?}") };
         let train = candidate
             .evaluation
             .criteria
@@ -804,6 +828,7 @@ async fn adopted_master_drift_blocks_assignment() {
     master.image_type = Some("Master Dark".into());
     master.stack_count = Some(30);
     let world = world(&calibration, &[(MASTER_SOURCE.to_owned(), master)]).await;
+    std::fs::create_dir_all(world.root(&world.calibration).join("masters")).unwrap();
     let source = world.asset_at(&world.results, MASTER_SOURCE).await;
     let review = world
         .library
