@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability set for the desktop app. Grants the main window (and spec-020 multi-window children, label `alm-win-*`), plus the handoff-07 `splash` window, the ability to invoke the spec 002 lifecycle commands, create additional webview windows, set the engine zoom level (spec 055 Phase 4), close/show/focus windows (splash closing itself and revealing `main` once boot-ready fires), plus tauri-specta's built-in event registration.",
+  "description": "Default capability set for the legacy desktop app. Grants the main window (and spec-020 multi-window children, label `alm-win-*`), plus the handoff-07 `splash` window, the ability to invoke the spec 002 lifecycle commands, create additional webview windows, set the engine zoom level (spec 055 Phase 4), close/show/focus windows (splash closing itself and revealing `main` once boot-ready fires), plus tauri-specta's built-in event registration. The isolated library shell's `library` window is not listed; `library.json` holds its grants.",
   "windows": ["main", "alm-win-*", "splash"],
   "permissions": [
     "core:default",
