@@ -68,6 +68,8 @@ fn target(coordinates: Option<SkyCoordinates>) -> TargetRecord {
             coordinates,
             provenance: Provenance::User,
             provider_id: None,
+            angular_size: None,
+            catalogues: Vec::new(),
         },
         decision_revision: 2,
     }

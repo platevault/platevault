@@ -210,6 +210,8 @@ pub fn target(designation: &str, alias: &str) -> TargetCandidate {
         }),
         provenance: Provenance::User,
         provider_id: None,
+        angular_size: None,
+        catalogues: Vec::new(),
     }
 }
 
