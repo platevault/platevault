@@ -91,17 +91,29 @@ impl Catalog {
     /// Store a thumbnail and drop the asset's other thumbnails in one commit,
     /// when the observation it was decoded under is still the asset's current
     /// one and the asset is neither Retired nor Trashed. Returns whether it was
-    /// stored: a source that changed after it was read stores nothing.
+    /// stored: a source that changed after it was read stores nothing, and a
+    /// current row for the same digest is kept as written by its first decode.
     ///
     /// # Errors
     /// `NotFound` for an unknown asset; `PersistenceFailure`.
     pub async fn store_thumbnail(&self, thumbnail: &StoredThumbnail) -> Result<bool> {
         let fingerprint = to_json(&thumbnail.fingerprint)?;
         let stretch = to_json(&thumbnail.stretch)?;
+        let asset_id = thumbnail.asset_id.to_string();
         let stored = write_txn!(self, |conn| {
             let asset = load_asset(conn, thumbnail.asset_id).await?;
-            if current(&asset, thumbnail) {
-                let asset_id = thumbnail.asset_id.to_string();
+            let existing: Option<String> = sqlx::query_scalar(
+                "SELECT fingerprint FROM frame_thumbnails WHERE asset_id = ?1 AND sha256 = ?2",
+            )
+            .bind(&asset_id)
+            .bind(&thumbnail.sha256)
+            .fetch_optional(&mut *conn)
+            .await?;
+            let kept = existing
+                .map(|recorded| from_json::<ObservationFingerprint>(&recorded))
+                .transpose()?
+                .is_some_and(|recorded| fingerprint_matches(&asset.fingerprint, &recorded));
+            if current(&asset, thumbnail) && !kept {
                 sqlx::query("DELETE FROM frame_thumbnails WHERE asset_id = ?1 AND sha256 <> ?2")
                     .bind(&asset_id)
                     .bind(&thumbnail.sha256)
