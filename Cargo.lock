@@ -4672,6 +4672,7 @@ dependencies = [
  "metadata_core",
  "metadata_fits",
  "metadata_xisf",
+ "patterns",
  "persistence_library",
  "platevault_model",
  "serde",

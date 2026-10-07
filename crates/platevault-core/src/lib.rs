@@ -7,5 +7,6 @@ pub mod grouping;
 pub mod inventory;
 pub mod library;
 pub mod model;
+pub mod naming;
 pub mod targets;
 pub use model::*;

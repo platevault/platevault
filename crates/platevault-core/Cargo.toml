@@ -11,6 +11,7 @@ metadata_core = { path = "../metadata/core" }
 metadata_fits = { path = "../metadata/fits" }
 metadata_xisf = { path = "../metadata/xisf" }
 fs_pathsafe = { path = "../fs/pathsafe" }
+patterns = { path = "../patterns" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

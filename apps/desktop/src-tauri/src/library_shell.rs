@@ -114,6 +114,10 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         // results
         // storage
         // import
+        crate::commands::naming::naming_get,
+        crate::commands::naming::naming_save,
+        crate::commands::naming::naming_restore_defaults,
+        crate::commands::naming::naming_preview,
         // planning
         // targets
         // home

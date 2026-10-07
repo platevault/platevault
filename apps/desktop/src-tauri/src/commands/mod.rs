@@ -36,6 +36,7 @@ pub mod library;
 pub mod lifecycle;
 pub mod log;
 pub mod manifests;
+pub mod naming;
 pub mod native;
 pub mod onboarding;
 pub mod patterns;
