@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PlateVault Library",
-  "identifier": "dev.astro-plan.astro-library-manager",
+  "identifier": "dev.astro-plan.astro-library-manager.library-dev",
   "build": {
     "frontendDist": "../../dist",
     "devUrl": "http://localhost:5173"
@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "label": "main",
+        "label": "library",
         "title": "PlateVault Library (rebuild, dev bridge)",
         "width": 1280,
         "height": 820,

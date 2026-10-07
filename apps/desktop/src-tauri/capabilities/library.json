@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "library",
+  "description": "Grants the isolated rebuilt library shell's window (label `library`, spec 064) the core defaults. The shell registers no other plugin its webview calls; a feature that registers one adds that plugin's grants here. `default.json` names only the legacy windows, so its dialogs, opener, window and webview control, updater and process grants never reach this window.",
+  "windows": ["library"],
+  "permissions": ["core:default"]
+}

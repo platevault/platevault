@@ -6,272 +6,27 @@
 //! the probe reads actual no-follow file and folder metadata.
 #![cfg(unix)]
 
+mod support;
+
 use std::collections::{BTreeMap, BTreeSet};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
 
 use persistence_library::{
     Catalog, LocationReferences, LocationRegistration, SessionQuery, SourceProbe,
-    SuggestedAssociation,
+    SuggestedAssociation, SCHEMA_VERSION,
 };
 use platevault_model::{
     ApplicableQuality, Asset, AssetReference, Association, AssociationKind, AssociationState,
-    Availability, CaptureKey, CaptureMetadata, CorrectionInput, EvidenceItem, ExpectedAsset,
-    ExpectedSession, FileIdentity, GroupingResult, ImageFormat, LibraryError, Location,
-    LocationLifecycle, LocationRole, NativePath, ObservationFingerprint, PathSensitivity,
-    Provenance, Quality, ReferenceKind, RemapBlockReason, RetryAction, Revision, ScanBatch,
-    ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress, ScanState, Session,
-    SessionCandidate, TargetAlias, TargetCandidate, VolumeIdentity,
+    Availability, CorrectionInput, EvidenceItem, ExpectedSession, FileIdentity, GroupingResult,
+    ImageFormat, LibraryError, Location, LocationLifecycle, LocationRole, NativePath,
+    ObservationFingerprint, PathSensitivity, Provenance, Quality, ReferenceKind, RemapBlockReason,
+    RetryAction, Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation,
+    ScanProgress, ScanState, Session, VolumeIdentity,
 };
-use sha2::{Digest, Sha256};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
+use sqlx::{Column, Connection, Row};
+use support::*;
 use uuid::Uuid;
-
-fn volume() -> VolumeIdentity {
-    VolumeIdentity {
-        filesystem: "apfs".into(),
-        stable_id: Some("0F1E2D3C-test-volume".into()),
-        file_ids_stable: true,
-        case: PathSensitivity::Sensitive,
-        normalization: PathSensitivity::Sensitive,
-    }
-}
-
-fn io_error(path: &Path, error: &std::io::Error) -> LibraryError {
-    LibraryError::from_io(path, error)
-}
-
-fn file_fingerprint(path: &Path) -> Result<ObservationFingerprint, LibraryError> {
-    let metadata = std::fs::symlink_metadata(path).map_err(|error| io_error(path, &error))?;
-    if !metadata.file_type().is_file() {
-        return Err(LibraryError::InvalidInput("not a regular file".into()));
-    }
-    let modified = metadata.modified().map_err(|error| io_error(path, &error))?;
-    let modified_ns =
-        i128::try_from(modified.duration_since(UNIX_EPOCH).unwrap().as_nanos()).unwrap();
-    Ok(ObservationFingerprint {
-        identity: FileIdentity { volume: volume(), file_id: Some(metadata.ino().to_string()) },
-        size_bytes: metadata.len(),
-        modified_ns,
-        content_sha256: None,
-    })
-}
-
-fn folder_identity(path: &Path) -> Result<FileIdentity, LibraryError> {
-    let metadata = std::fs::symlink_metadata(path).map_err(|error| io_error(path, &error))?;
-    if !metadata.is_dir() {
-        return Err(LibraryError::IdentityConflict("root is not a folder".into()));
-    }
-    Ok(FileIdentity { volume: volume(), file_id: Some(metadata.ino().to_string()) })
-}
-
-/// Real no-follow probe of the fixture volume.
-#[derive(Clone)]
-struct DiskProbe;
-
-impl SourceProbe for DiskProbe {
-    fn fingerprint(&self, path: &Path) -> Result<ObservationFingerprint, LibraryError> {
-        file_fingerprint(path)
-    }
-    fn root_identity(&self, location: &Location) -> Result<FileIdentity, LibraryError> {
-        folder_identity(&location.path.to_path_buf()?)
-    }
-}
-
-/// Simple behavioral grouping: frame type, filter, exposure and camera.
-fn group(assets: &[Asset]) -> GroupingResult {
-    let mut sessions: BTreeMap<String, Vec<Uuid>> = BTreeMap::new();
-    for asset in assets {
-        let m = &asset.effective;
-        let key =
-            format!("{:?}|{:?}|{:?}|{:?}", m.image_type, m.filter, m.exposure_seconds, m.camera);
-        sessions.entry(key).or_default().push(asset.id);
-    }
-    GroupingResult {
-        sessions: sessions
-            .into_iter()
-            .map(|(key, mut asset_ids)| {
-                asset_ids.sort_unstable();
-                SessionCandidate {
-                    key: CaptureKey(key),
-                    asset_ids,
-                    provisional: Vec::new(),
-                    date_basis: Some("2026-09-12".into()),
-                }
-            })
-            .collect(),
-    }
-}
-
-fn metadata_for(relative: &str) -> CaptureMetadata {
-    let filter = if relative.contains("OIII") { "OIII" } else { "Ha" };
-    CaptureMetadata {
-        image_type: Some(if relative.contains("Dark") { "DARK" } else { "LIGHT" }.into()),
-        filter: Some(filter.into()),
-        exposure_seconds: Some(300.0),
-        camera: Some("ASI2600MM".into()),
-        date_local: Some("2026-09-12T23:00:00".into()),
-        ..CaptureMetadata::default()
-    }
-}
-
-fn sha_of(path: &Path) -> String {
-    hex::encode(Sha256::digest(std::fs::read(path).unwrap()))
-}
-
-/// Names, sizes and SHA-256 of every file below `root`.
-fn tree(root: &Path) -> BTreeMap<PathBuf, (u64, String)> {
-    let mut files = BTreeMap::new();
-    let mut pending = vec![root.to_path_buf()];
-    while let Some(dir) = pending.pop() {
-        for entry in std::fs::read_dir(&dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                pending.push(path);
-            } else {
-                let size = std::fs::metadata(&path).unwrap().len();
-                files.insert(path.strip_prefix(root).unwrap().to_path_buf(), (size, sha_of(&path)));
-            }
-        }
-    }
-    files
-}
-
-struct Fixture {
-    temp: tempfile::TempDir,
-    db: PathBuf,
-    root: PathBuf,
-}
-
-impl Fixture {
-    fn new() -> Self {
-        let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().join("Astro-T7").join("Captures");
-        std::fs::create_dir_all(&root).unwrap();
-        Self { db: temp.path().join("catalog.sqlite"), root, temp }
-    }
-    fn write(&self, relative: &str, bytes: &[u8]) {
-        let path = self.root.join(relative);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, bytes).unwrap();
-    }
-    fn registration(&self) -> LocationRegistration {
-        LocationRegistration {
-            name: "Astro-T7/Captures".into(),
-            path: NativePath::from_path(&self.root),
-            role: LocationRole::Captures,
-            identity: folder_identity(&self.root).unwrap(),
-        }
-    }
-    fn scan_file(&self, relative: &str) -> ScanFile {
-        ScanFile {
-            relative_path: NativePath::from_path(Path::new(relative)),
-            fingerprint: file_fingerprint(&self.root.join(relative)).unwrap(),
-            format: ImageFormat::Fits,
-            metadata: metadata_for(relative),
-        }
-    }
-}
-
-fn root_scope() -> NativePath {
-    NativePath::UnixBytes(Vec::new())
-}
-
-fn kind(error: &LibraryError) -> String {
-    error.response(None, None).kind
-}
-
-fn expected(asset: &Asset) -> ExpectedAsset {
-    ExpectedAsset {
-        asset_id: asset.id,
-        decision_revision: asset.decision_revision,
-        fingerprint: asset.fingerprint.clone(),
-    }
-}
-
-fn expected_session(session: &Session) -> ExpectedSession {
-    ExpectedSession {
-        session_id: session.id,
-        grouping_revision: session.grouping_revision,
-        decision_revision: session.decision_revision,
-    }
-}
-
-fn target(designation: &str, alias: &str) -> TargetCandidate {
-    TargetCandidate {
-        id: Uuid::new_v4(),
-        designation: designation.into(),
-        aliases: vec![TargetAlias {
-            text: designation.into(),
-            normalized: alias.into(),
-            kind: "designation".into(),
-            provenance: Provenance::User,
-        }],
-        common_name: None,
-        object_type: "nebula".into(),
-        coordinates: Some(platevault_model::SkyCoordinates {
-            ra_deg: 314.75,
-            dec_deg: 44.33,
-            frame: "ICRS".into(),
-        }),
-        provenance: Provenance::User,
-        provider_id: None,
-    }
-}
-
-async fn scan_with(
-    catalog: &Catalog,
-    fx: &Fixture,
-    location: &Location,
-    files: &[&str],
-    issues: Vec<ScanIssue>,
-    state: ScanState,
-) -> ScanOperation {
-    let operation = catalog.begin_scan(location.id, None).await.unwrap();
-    let files: Vec<ScanFile> = files.iter().map(|relative| fx.scan_file(relative)).collect();
-    let root = DiskProbe.root_identity(location).unwrap();
-    let progress = ScanProgress {
-        discovered: files.len() as u64,
-        metadata_read: files.len() as u64,
-        ..ScanProgress::default()
-    };
-    let batch =
-        ScanBatch { files: files.clone(), issues: issues.clone(), progress: progress.clone() };
-    catalog.apply_scan_batch(operation.id, &root, &batch, group).await.unwrap();
-    let terminal = matches!(state, ScanState::Completed | ScanState::Partial);
-    let observation = ScanObservation {
-        location_id: location.id,
-        root_identity: root,
-        incomplete_scopes: issues.iter().map(|issue| issue.relative_path.clone()).collect(),
-        files,
-        issues,
-        complete_scopes: if terminal { vec![root_scope()] } else { Vec::new() },
-        progress,
-        state,
-    };
-    catalog
-        .finish_scan(
-            operation.id,
-            &observation,
-            |location| DiskProbe.root_identity(location),
-            group,
-        )
-        .await
-        .unwrap()
-}
-
-async fn scan(
-    catalog: &Catalog,
-    fx: &Fixture,
-    location: &Location,
-    files: &[&str],
-) -> ScanOperation {
-    scan_with(catalog, fx, location, files, Vec::new(), ScanState::Completed).await
-}
-
-fn by_name<'a>(assets: &'a [Asset], name: &str) -> &'a Asset {
-    assets.iter().find(|asset| asset.relative_path.display().ends_with(name)).unwrap()
-}
 
 #[tokio::test]
 async fn writer_connection_reports_actual_wal_full_and_fullfsync() {
@@ -3231,4 +2986,175 @@ async fn duplicate_verification_stops_at_cancel_and_keeps_each_bound_digest() {
     assert_stamped_when_hashed(&catalog, &[&t7, &nas_location]).await;
     assert!(catalog.duplicate_verification_work(operation).await.unwrap().is_empty());
     assert_eq!((tree(&fx.root), tree(&nas)), before, "sources unchanged");
+}
+
+/// Plain connection to a closed fixture catalog, for rows and schema state no
+/// public catalog write produces.
+async fn raw_connection(db: &Path) -> SqliteConnection {
+    SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(db)).await.unwrap()
+}
+
+async fn recorded_version(conn: &mut SqliteConnection) -> i64 {
+    sqlx::query_scalar("SELECT value FROM catalog_meta WHERE key = 'schema_version'")
+        .fetch_one(conn)
+        .await
+        .unwrap()
+}
+
+async fn schema_objects(conn: &mut SqliteConnection) -> Vec<(String, String, String)> {
+    sqlx::query_as("SELECT type, name, coalesce(sql, '') FROM sqlite_master ORDER BY type, name")
+        .fetch_all(conn)
+        .await
+        .unwrap()
+}
+
+/// One `SCHEMA_VERSION` covers every schema module. A catalog recording any
+/// other version, older or newer, is refused with the documented error before
+/// any module's DDL touches it, and the file is left as it was. Recorded back at
+/// `SCHEMA_VERSION`, the same file opens and the schema is applied again.
+#[tokio::test]
+async fn schema_version_mismatch_is_refused() {
+    let fx = Fixture::new();
+    Catalog::open(&fx.db).await.unwrap().close().await.unwrap();
+    let mut conn = raw_connection(&fx.db).await;
+    assert_eq!(recorded_version(&mut conn).await, SCHEMA_VERSION, "a new catalog records it");
+    // Without this index, any re-applied schema DDL would show.
+    sqlx::query("DROP INDEX assets_pending").execute(&mut conn).await.unwrap();
+    for version in [SCHEMA_VERSION - 1, SCHEMA_VERSION + 1] {
+        sqlx::query("UPDATE catalog_meta SET value = ?1 WHERE key = 'schema_version'")
+            .bind(version)
+            .execute(&mut conn)
+            .await
+            .unwrap();
+        let before = schema_objects(&mut conn).await;
+        let error = Catalog::open(&fx.db).await.err().expect("a mismatched catalog is refused");
+        assert_eq!(kind(&error), "invalid_input", "{error}");
+        assert_eq!(
+            error.to_string(),
+            format!("invalid input: unsupported catalog schema version {version}")
+        );
+        assert_eq!(schema_objects(&mut conn).await, before, "no schema DDL ran");
+        assert_eq!(recorded_version(&mut conn).await, version, "the version is left as it was");
+    }
+    sqlx::query("UPDATE catalog_meta SET value = ?1 WHERE key = 'schema_version'")
+        .bind(SCHEMA_VERSION)
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    Catalog::open(&fx.db).await.unwrap().close().await.unwrap();
+    let objects = schema_objects(&mut conn).await;
+    assert!(objects.iter().any(|(_, name, _)| name == "assets_pending"), "schema applied again");
+    conn.close().await.unwrap();
+}
+
+/// `live_assets` is the one predicate that keeps Trashed frames out of queries
+/// and totals (LIB-FR-18): every `assets` row and column except rows whose
+/// stored availability is the model's `Trashed` encoding. A Trashed row still
+/// reads back as its catalog record.
+#[tokio::test]
+async fn live_assets_excludes_trashed_rows() {
+    let fx = Fixture::new();
+    let names = ["night1/Ha_001.fits", "night1/Ha_002.fits", "night1/Ha_003.fits"];
+    for name in names {
+        fx.write(name, name.as_bytes());
+    }
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let location = catalog.register_location(&fx.registration()).await.unwrap();
+    scan(&catalog, &fx, &location, &names).await;
+    let assets = catalog.location_assets(location.id).await.unwrap();
+    let trashed = by_name(&assets, "Ha_002.fits").id;
+    catalog.close().await.unwrap();
+
+    // No catalog write trashes a frame yet, so store the model's encoding directly.
+    let encoding = serde_json::to_value(Availability::Trashed).unwrap();
+    let mut conn = raw_connection(&fx.db).await;
+    sqlx::query("UPDATE assets SET availability = ?1 WHERE id = ?2")
+        .bind(encoding.as_str().unwrap())
+        .bind(trashed.to_string())
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    let all: BTreeSet<String> = sqlx::query_scalar("SELECT id FROM assets")
+        .fetch_all(&mut conn)
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+    let live: BTreeSet<String> = sqlx::query_scalar("SELECT id FROM live_assets")
+        .fetch_all(&mut conn)
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+    assert_eq!(all.len(), names.len());
+    let mut expected = all.clone();
+    expected.remove(&trashed.to_string());
+    assert_eq!(live, expected, "every row but the Trashed one");
+    let columns = |row: &sqlx::sqlite::SqliteRow| {
+        row.columns().iter().map(|column| column.name().to_owned()).collect::<Vec<_>>()
+    };
+    let table = sqlx::query("SELECT * FROM assets LIMIT 1").fetch_one(&mut conn).await.unwrap();
+    let view = sqlx::query("SELECT * FROM live_assets LIMIT 1").fetch_one(&mut conn).await.unwrap();
+    assert_eq!(columns(&view), columns(&table), "the view keeps every assets column");
+    conn.close().await.unwrap();
+
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    assert_eq!(catalog.asset(trashed).await.unwrap().availability, Availability::Trashed);
+    catalog.close().await.unwrap();
+}
+
+/// The user moved a Trashed frame to the OS Trash, so its stored state wins over
+/// whatever its location reads: in an Offline location and in a Retired one it
+/// still reads Trashed, while its untrashed siblings read Offline and Retired.
+#[tokio::test]
+async fn a_trashed_asset_reads_trashed_in_an_offline_or_retired_location() {
+    let fx = Fixture::new();
+    let names = ["Ha_001.fits", "Ha_002.fits"];
+    let nas = fx.temp.path().join("NAS");
+    std::fs::create_dir_all(&nas).unwrap();
+    for name in names {
+        fx.write(name, format!("T7 {name}").as_bytes());
+        std::fs::write(nas.join(name), format!("NAS {name}")).unwrap();
+    }
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    let offline = catalog.register_location(&fx.registration()).await.unwrap();
+    let retired = catalog.register_location(&registration_at(&nas)).await.unwrap();
+    scan(&catalog, &fx, &offline, &names).await;
+    scan_at(&catalog, &retired, &nas, &names).await;
+    let in_offline = catalog.location_assets(offline.id).await.unwrap();
+    let in_retired = catalog.location_assets(retired.id).await.unwrap();
+    let trashed = [by_name(&in_offline, "Ha_001.fits").id, by_name(&in_retired, "Ha_001.fits").id];
+    let siblings = [by_name(&in_offline, "Ha_002.fits").id, by_name(&in_retired, "Ha_002.fits").id];
+    catalog.close().await.unwrap();
+
+    // No catalog write trashes a frame yet, so store the model's encoding directly.
+    let encoding = serde_json::to_value(Availability::Trashed).unwrap();
+    let mut conn = raw_connection(&fx.db).await;
+    for id in trashed {
+        sqlx::query("UPDATE assets SET availability = ?1 WHERE id = ?2")
+            .bind(encoding.as_str().unwrap())
+            .bind(id.to_string())
+            .execute(&mut conn)
+            .await
+            .unwrap();
+    }
+    sqlx::query("UPDATE locations SET availability = 'offline' WHERE id = ?1")
+        .bind(offline.id.to_string())
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE locations SET lifecycle = 'retired' WHERE id = ?1")
+        .bind(retired.id.to_string())
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    conn.close().await.unwrap();
+
+    let catalog = Catalog::open(&fx.db).await.unwrap();
+    for id in trashed {
+        assert_eq!(catalog.asset(id).await.unwrap().availability, Availability::Trashed);
+    }
+    assert_eq!(catalog.asset(siblings[0]).await.unwrap().availability, Availability::Offline);
+    assert_eq!(catalog.asset(siblings[1]).await.unwrap().availability, Availability::Retired);
+    catalog.close().await.unwrap();
 }

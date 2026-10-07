@@ -144,6 +144,11 @@ CREATE INDEX IF NOT EXISTS assets_session_size_start
     ON assets (session_id, size_bytes, capture_start, location_id);
 CREATE INDEX IF NOT EXISTS assets_pending ON assets (location_id) WHERE verification_pending = 1;
 
+-- Every asset except Trashed ones (LIB-FR-18), with every assets column: the one
+-- predicate a query or total reads instead of assets to leave Trashed frames out.
+CREATE VIEW IF NOT EXISTS live_assets AS
+    SELECT * FROM assets WHERE availability <> 'trashed';
+
 -- Recorded proof that two copies in different locations are one logical capture
 -- (D16): they were byte-identical when one of them diverged, or they were an
 -- unambiguous duplicate-candidate pair. Joins never rest on a bare size/start match.

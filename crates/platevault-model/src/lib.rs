@@ -348,6 +348,10 @@ pub enum Availability {
     /// A copy of a retired location: history only. It is never offered as an
     /// input, counted as available or included in any integration total.
     Retired,
+    /// A frame moved to the OS Trash (LIB-FR-18): its record, identity, digest,
+    /// last-observed metadata and quality history are kept, and every query and
+    /// total excludes it. The catalog's `live_assets` view leaves these rows out.
+    Trashed,
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

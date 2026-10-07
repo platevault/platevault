@@ -5,10 +5,12 @@
 //! clean catalog.
 //!
 //! It boots only [`Library`] and the [`crate::commands::library`] IPC surface,
-//! with the catalog in its own data directory. Nothing from the legacy
-//! composition root runs here: no `AppState`, legacy database, bootstrap job,
-//! watcher or legacy command registration. The legacy code stays archivable and
-//! is never booted by this binary.
+//! with the catalog in its own data directory. The one window is labelled
+//! `library`, so it holds `capabilities/library.json` (plus the dev bridge
+//! grant with `dev-tools`) and none of the legacy `default.json`. Nothing from
+//! the legacy composition root runs here: no `AppState`, legacy database,
+//! bootstrap job, watcher or legacy command registration. The legacy code stays
+//! archivable and is never booted by this binary.
 //!
 //! In `dev-tools` (debug-only) builds the MCP bridge always starts, bound to IPv4
 //! loopback, and the webview loads the hosted dev URL so the bridge has a page
@@ -45,7 +47,9 @@ use crate::commands::library as ipc;
 
 /// Catalog directory override, used verbatim.
 pub const DATA_DIR_ENV: &str = "PV_LIBRARY_DATA_DIR";
-/// Catalog directory under the platform app-data directory by default.
+/// Catalog directory under the platform app-data directory by default. That
+/// directory follows the config identifier, and `library-dev` has its own, so
+/// a `dev-tools` build never opens the shipped library shell's catalog.
 pub const DATA_SUBDIR: &str = "library-rebuild";
 /// Catalog database file inside the data directory.
 pub const CATALOG_FILE: &str = "catalog.sqlite";
@@ -72,7 +76,11 @@ const RETAINED_FINISHED: usize = 256;
 /// (including a foreign or legacy database) or the Tauri runtime itself.
 pub fn run() -> Result<(), Box<dyn Error>> {
     let provider = provider_config()?;
+    // One labelled block per feature. A feature adds its handlers under its own
+    // label only, by full path (`crate::commands::<feature>::<handler>`), so
+    // features register without touching each other's lines or the imports.
     let builder = tauri::Builder::default().invoke_handler(tauri::generate_handler![
+        // library (064)
         ipc::library_register_location,
         ipc::library_list_locations,
         ipc::library_start_scan,
@@ -98,6 +106,17 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ipc::library_review_retire_location,
         ipc::library_retire_location,
         ipc::library_list_operations,
+        // projects
+        // runs
+        // frame review
+        // calibration
+        // preparation
+        // results
+        // storage
+        // import
+        // planning
+        // targets
+        // home
     ]);
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);
@@ -424,6 +443,67 @@ mod tests {
             "127.000.000.001",
         ] {
             assert!(loopback_bind(Some(refused)).is_err(), "{refused} must be refused");
+        }
+    }
+}
+
+/// The window each library context creates holds `capabilities/library.json`
+/// and, with `dev-tools`, the dev bridge. The legacy `default.json` grants its
+/// windows more, and none of that reaches the library window.
+#[cfg(test)]
+mod window_grants {
+    use tauri::ipc::Origin;
+
+    use super::context;
+
+    /// `capabilities/library.json`: the core defaults.
+    const LIBRARY: [&str; 1] = ["plugin:event|listen"];
+    /// `capabilities/dev/mcp-bridge.json`, compiled in only with `dev-tools`.
+    const DEV_BRIDGE: [&str; 3] = [
+        "plugin:mcp-bridge|execute_js",
+        "plugin:mcp-bridge|execute_command",
+        "plugin:mcp-bridge|start_ipc_monitor",
+    ];
+    /// Granted to the legacy `main` window by `default.json` only.
+    const LEGACY_ONLY: [&str; 13] = [
+        "plugin:dialog|open",
+        "plugin:dialog|save",
+        "plugin:dialog|message",
+        "plugin:opener|open_path",
+        "plugin:opener|reveal_item_in_dir",
+        "plugin:webview|create_webview_window",
+        "plugin:webview|set_webview_zoom",
+        "plugin:window|close",
+        "plugin:window|show",
+        "plugin:window|set_focus",
+        "plugin:updater|check",
+        "plugin:process|restart",
+        "plugin:window-state|restore_state",
+    ];
+
+    #[test]
+    fn the_library_window_holds_only_the_library_grants() {
+        let mut context = context();
+        let windows = &context.config().app.windows;
+        assert_eq!(windows.len(), 1, "the library shell creates one window");
+        let label = windows[0].label.clone();
+        let authority = context.runtime_authority_mut();
+        let granted = |command: &str, window: &str| {
+            authority.resolve_access(command, window, window, &Origin::Local).is_some()
+        };
+        for command in LIBRARY {
+            assert!(granted(command, &label), "window {label} must hold {command}");
+        }
+        for command in DEV_BRIDGE {
+            assert_eq!(
+                granted(command, &label),
+                cfg!(feature = "dev-tools"),
+                "window {label}: {command}"
+            );
+        }
+        for command in LEGACY_ONLY {
+            assert!(granted(command, "main"), "default.json grants window main {command}");
+            assert!(!granted(command, &label), "window {label} must not hold {command}");
         }
     }
 }
