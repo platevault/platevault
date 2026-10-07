@@ -2,16 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Calibration decisions of a processing run (spec 068 as amended by D-W5,
-//! D-W37 and D-W55; R11 to R14): the required kinds and the policy, the
-//! automatic match with its adopted-master drift check, the user's accept
+//! D-W37, D-W41 and D-W55; R11 to R14): the required kinds and the policy,
+//! the automatic match with its adopted-master drift check, the user's accept
 //! (a replacement included), exception, exclusion and withdrawal, the plan,
-//! readiness and PREP reads, and the Project evidence.
+//! readiness and PREP reads, a run group's readiness per panel, and the
+//! Project evidence.
 //!
-//! Decisions are keyed by light group and kind. Every write names the latest
-//! committed membership revision of a run outside the Trash that is not
-//! Complete and the current plan revision, and moves the plan revision by
-//! exactly one. Input files are hashed off the writer lock before a decision
-//! binds them, and the write re-checks each one; reads hash nothing.
+//! Decisions are keyed by run, light group and kind. A panel run of a run
+//! group is a run of its own, so its assignments, readiness, exceptions and
+//! exclusions are its own and never reach another panel; its policy is the
+//! group's (CAL-FR-11). Every write names the latest committed membership
+//! revision of a run outside the Trash that is not Complete and the current
+//! plan revision, and moves the plan revision by exactly one. Input files are
+//! hashed off the writer lock before a decision binds them, and the write
+//! re-checks each one; reads hash nothing.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
@@ -22,9 +26,10 @@ use platevault_model::{
     CalibrationDecision, CalibrationHandoff, CalibrationInputFile, CalibrationPlan,
     CalibrationPolicy, CalibrationReadiness, CalibrationRules, CalibrationViewBasis,
     CalibrationViewPlan, CandidateEvaluation, CandidateRef, DecisionItem, ErrorResponse,
-    ExpectedAsset, InputKind, InputRef, LibraryError, LightGroupKey, Location, MemberState,
-    NativePath, ObservationFingerprint, ProjectCalibrationEvidence, Requirement, RequirementKey,
-    Resolution, Revision, RunCompletion, SubjectChannelEvidence, UnresolvedReason, Verdict, View,
+    ExpectedAsset, GroupCalibrationReadiness, InputKind, InputRef, LibraryError, LightGroupKey,
+    Location, MemberState, NativePath, ObservationFingerprint, PanelCalibrationReadiness,
+    ProjectCalibrationEvidence, Requirement, RequirementKey, Resolution, Revision, RunCompletion,
+    SubjectChannelEvidence, UnresolvedReason, Verdict, View,
 };
 use serde::Serialize;
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
@@ -33,6 +38,7 @@ use uuid::Uuid;
 
 use super::inventory::{self, Listed};
 use super::{light_basis, load_master};
+use crate::view_groups::{group_runs, load_group, PanelRun};
 use crate::views::{committed_header, load_members, load_view};
 use crate::{
     blocking, check_expected_assets, conflict, current_digest, db_revision, from_json, from_text,
@@ -74,6 +80,48 @@ impl Catalog {
         rules: &R,
     ) -> Result<CalibrationReadiness> {
         Ok(self.calibration_view_plan(view, revision, rules).await?.readiness())
+    }
+
+    /// A run group's calibration (CAL-FR-11, PREP-FR-12): the one policy its
+    /// panel runs share and, by panel number, each panel run's readiness line
+    /// of its latest committed membership revision; a panel run never saved
+    /// reads none. Each line reads that panel run's own decisions only. One
+    /// snapshot; hashes nothing.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown run group.
+    pub async fn calibration_group_readiness<R: CalibrationRules + ?Sized>(
+        &self,
+        group: Uuid,
+        rules: &R,
+    ) -> Result<GroupCalibrationReadiness> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let record = load_group(&mut snapshot, group).await?;
+        let runs = group_runs(&mut snapshot, group).await?;
+        let listed = inventory::list_inputs(&mut snapshot, rules).await?;
+        let mut panels = Vec::with_capacity(runs.len());
+        for PanelRun { number, panel_id, view } in runs {
+            let readiness = if view.revision == 0 {
+                None
+            } else {
+                let basis = basis_with(&mut snapshot, &view, view.revision, &listed, rules).await?;
+                Some(rules.plan(&basis).readiness())
+            };
+            panels.push(PanelCalibrationReadiness {
+                panel_id,
+                number,
+                view_id: view.id,
+                readiness,
+            });
+        }
+        snapshot.rollback().await?;
+        Ok(GroupCalibrationReadiness {
+            group_id: record.id,
+            group_revision: record.revision,
+            policy: record.setup.calibration_policy,
+            panels,
+        })
     }
 
     /// The PREP read: automatic, accepted and excepted assignments with their
@@ -120,11 +168,13 @@ impl Catalog {
     }
 
     /// Turn the run's automatic assignment on or off (D-W55). Turning it off
-    /// keeps every recorded decision; matching then only suggests.
+    /// keeps every recorded decision; matching then only suggests. A panel
+    /// run takes its run group's policy from the group's setup (CAL-FR-11).
     ///
     /// # Errors
-    /// `InvalidInput` for a run in the Trash or Complete; `NotFound` for an
-    /// unknown run; `Conflict` for a stale plan revision.
+    /// `InvalidInput` for a panel run of a run group or a run in the Trash or
+    /// Complete; `NotFound` for an unknown run; `Conflict` for a stale plan
+    /// revision.
     pub async fn set_calibration_policy(
         &self,
         view: Uuid,
@@ -133,6 +183,12 @@ impl Catalog {
     ) -> Result<CalibrationPlan> {
         Ok(write_txn!(self, |conn| {
             let run = load_view(conn, view).await?;
+            if let Some(group) = run.group_id {
+                return Err(LibraryError::InvalidInput(format!(
+                    "run {view} is a panel run of run group {group}, which shares one \
+                     calibration policy; change it in the group's setup"
+                )));
+            }
             require_open_run(&run)?;
             let plan = load_plan(conn, &run).await?;
             require_revision(view, plan.revision, expected)?;
@@ -713,6 +769,19 @@ pub async fn view_basis<R: CalibrationRules + ?Sized>(
     revision: Revision,
     rules: &R,
 ) -> Result<(CalibrationViewBasis, Vec<Listed>)> {
+    let listed = inventory::list_inputs(conn, rules).await?;
+    let basis = basis_with(conn, run, revision, &listed, rules).await?;
+    Ok((basis, listed))
+}
+
+/// [`view_basis`] over inputs `listed` once for several runs.
+async fn basis_with<R: CalibrationRules + ?Sized>(
+    conn: &mut SqliteConnection,
+    run: &View,
+    revision: Revision,
+    listed: &[Listed],
+    rules: &R,
+) -> Result<CalibrationViewBasis> {
     let (row, _) = committed_header(conn, run.id, revision).await?;
     let mut included: BTreeMap<Uuid, BTreeSet<Uuid>> = BTreeMap::new();
     for member in load_members(conn, row).await? {
@@ -730,25 +799,23 @@ pub async fn view_basis<R: CalibrationRules + ?Sized>(
             lights.push(light);
         }
     }
-    let listed = inventory::list_inputs(conn, rules).await?;
     let decisions = latest_decisions(conn, run.id).await?;
     let drifted = drifted_masters(conn).await?;
     let mut candidates: Vec<_> = listed.iter().map(Listed::candidate).collect();
-    candidates.extend(inventory::unlisted_inputs(conn, &decisions, &listed, rules).await?);
+    candidates.extend(inventory::unlisted_inputs(conn, &decisions, listed, rules).await?);
     for candidate in &mut candidates {
         if let CandidateRef::Master { master_id, .. } = candidate.candidate {
             candidate.state.drifted = drifted.contains(&master_id);
         }
     }
-    let basis = CalibrationViewBasis {
+    Ok(CalibrationViewBasis {
         view_id: run.id,
         view_revision: revision,
         plan: load_plan(conn, run).await?,
         lights,
         candidates,
         decisions,
-    };
-    Ok((basis, listed))
+    })
 }
 
 /// The run's calibration plan with its policy; revision 0 with dark and flat
@@ -771,6 +838,17 @@ pub async fn load_plan(conn: &mut SqliteConnection, run: &View) -> Result<Calibr
         },
     };
     Ok(CalibrationPlan { policy: run.calibration_policy, ..plan })
+}
+
+/// The run group's policy change reached panel run `run` (CAL-FR-11): its
+/// plan revision moves by one, as for every policy change.
+pub async fn group_policy_changed(
+    conn: &mut SqliteConnection,
+    run: &View,
+    updated_at: &str,
+) -> Result<()> {
+    let plan = load_plan(conn, run).await?;
+    write_plan(conn, run.id, plan.revision + 1, &plan.required_kinds, updated_at).await
 }
 
 /// The latest decision per light group and kind of `view`, any revision.

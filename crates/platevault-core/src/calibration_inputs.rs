@@ -15,8 +15,8 @@ use crate::{
     AdoptionDestination, AdoptionOperation, AdoptionReview, AdoptionSource, AdoptionState,
     CalibrationAssignment, CalibrationHandoff, CalibrationPlan, CalibrationPolicy,
     CalibrationReadiness, CalibrationViewPlan, CandidateRef, CustodyFact, DecisionItem,
-    ExpectedSession, InputKind, LibraryError, ProjectCalibrationEvidence, Requirement,
-    RequirementKey, Revision,
+    ExpectedSession, GroupCalibrationReadiness, InputKind, LibraryError,
+    ProjectCalibrationEvidence, Requirement, RequirementKey, Revision,
 };
 
 impl Library {
@@ -78,6 +78,18 @@ impl Library {
         self.catalog().calibration_readiness(view, revision, &Rules).await
     }
 
+    /// A run group's shared calibration policy and each panel run's readiness
+    /// line, by panel number (CAL-FR-11, PREP-FR-12).
+    ///
+    /// # Errors
+    /// See [`persistence_library::Catalog::calibration_group_readiness`].
+    pub async fn calibration_group_readiness(
+        &self,
+        group: Uuid,
+    ) -> Result<GroupCalibrationReadiness, LibraryError> {
+        self.catalog().calibration_group_readiness(group, &Rules).await
+    }
+
     /// The PREP read of committed run revision `revision`.
     ///
     /// # Errors
@@ -104,7 +116,8 @@ impl Library {
         self.catalog().set_required_kinds(view, revision, expected, kinds).await
     }
 
-    /// Turn the run's automatic assignment on or off.
+    /// Turn the run's automatic assignment on or off; a panel run takes its
+    /// run group's policy from the group's setup.
     ///
     /// # Errors
     /// See [`persistence_library::Catalog::set_calibration_policy`].

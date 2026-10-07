@@ -191,6 +191,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::calibration_inputs::calibration_match,
         crate::commands::calibration_inputs::calibration_view_plan,
         crate::commands::calibration_inputs::calibration_readiness,
+        crate::commands::calibration_inputs::calibration_group_readiness,
         crate::commands::calibration_inputs::calibration_handoff,
         crate::commands::calibration_inputs::calibration_set_required_kinds,
         crate::commands::calibration_inputs::calibration_set_policy,
