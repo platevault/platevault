@@ -1136,9 +1136,16 @@ fn assert_names_every_reference(
         (ReferenceKind::Project, project.as_u128()),
     ];
     assert_eq!(referenced, expected);
+    // Adopted masters (068) are consulted too, so a location holding a
+    // master's source copies can never be retired without naming it.
     assert_eq!(
         review.consulted,
-        [ReferenceKind::View, ReferenceKind::Project, ReferenceKind::Result]
+        [
+            ReferenceKind::View,
+            ReferenceKind::Project,
+            ReferenceKind::Result,
+            ReferenceKind::Calibration
+        ]
     );
     assert!(
         review.statement.contains("deletes, moves or modifies no file"),

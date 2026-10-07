@@ -17,7 +17,7 @@ use uuid::Uuid;
 use crate::frame_review::FrameReview;
 use crate::grouping::group_assets;
 use crate::inventory;
-use crate::projects::ProjectReferences;
+use crate::projects::{CalibrationReferences, ProjectReferences};
 use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
 };
@@ -127,6 +127,8 @@ impl Library {
             Mutex::new(crate::observing_plans::PlanningRuntime::new(Arc::clone(&catalog)));
         let projects: Arc<dyn AssetReferences> =
             Arc::new(ProjectReferences { catalog: Arc::clone(&catalog) });
+        let calibration: Arc<dyn AssetReferences> =
+            Arc::new(CalibrationReferences { catalog: Arc::clone(&catalog) });
         let frame_review = FrameReview::new(Arc::clone(&catalog));
         Ok(Arc::new(Self {
             catalog,
@@ -136,7 +138,7 @@ impl Library {
             saved_targets: Mutex::new(None),
             progress,
             planning,
-            references: tokio::sync::RwLock::new(vec![projects]),
+            references: tokio::sync::RwLock::new(vec![projects, calibration]),
             frame_review,
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
