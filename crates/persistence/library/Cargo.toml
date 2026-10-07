@@ -16,12 +16,13 @@ time.workspace = true
 sha2.workspace = true
 hex.workspace = true
 skymath = "0.7.2"
+tempfile.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 winapi-util = "0.1.11"
 
 [dev-dependencies]
-tempfile.workspace = true
+parking_lot = "0.12"
 
 [lints]
 workspace = true

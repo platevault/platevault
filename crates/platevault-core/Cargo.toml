@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 platevault_model = { path = "../platevault-model" }
 persistence_library = { path = "../persistence/library" }
+calibration_master_detect = { path = "../calibration/master-detect" }
 metadata_core = { path = "../metadata/core" }
 metadata_fits = { path = "../metadata/fits" }
 metadata_xisf = { path = "../metadata/xisf" }

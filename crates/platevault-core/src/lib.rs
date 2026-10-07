@@ -4,6 +4,7 @@
 //! Local-first library records and lossless application contracts.
 
 pub mod calendar;
+pub mod calibration;
 pub mod grouping;
 pub mod inventory;
 pub mod library;
