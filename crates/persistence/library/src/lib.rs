@@ -68,6 +68,7 @@ const SCHEMA: &str = schema_modules![
     "storage.sql",
     "views.sql",
     "import.sql",
+    "view_groups.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -134,6 +135,8 @@ mod import;
 mod storage;
 mod views;
 pub use views::{CandidateBasis, CandidateSession, ChoiceBasis, MembershipBasis};
+mod view_groups;
+pub use view_groups::{GroupCandidates, ViewGroupBasis};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -148,6 +148,10 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::view_selection::view_review_mark,
         crate::commands::view_selection::view_revision,
         crate::commands::view_selection::project_members,
+        crate::commands::view_groups::view_group_create,
+        crate::commands::view_groups::view_group_detail,
+        crate::commands::view_groups::view_group_assign_panel,
+        crate::commands::view_groups::view_group_set_setup,
         // frame review
         crate::commands::frame_review::pix_review_frames,
         crate::commands::frame_review::pix_start_measurement,

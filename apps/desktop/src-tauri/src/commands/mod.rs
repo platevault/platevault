@@ -62,4 +62,5 @@ pub mod target_favourites;
 pub mod target_lookup;
 pub mod target_management;
 pub mod tools;
+pub mod view_groups;
 pub mod view_selection;

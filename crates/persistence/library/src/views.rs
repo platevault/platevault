@@ -138,7 +138,7 @@ impl Catalog {
     pub async fn create_view(&self, input: &NewView) -> Result<ViewRecord> {
         input.validate()?;
         let record = write_txn!(self, |conn| {
-            let target_id = run_subject(conn, input.project_id, input.subject_id).await?;
+            let target_id = run_subject(conn, input.project_id, input.subject_id, false).await?;
             require_project_rig(conn, input.project_id, input.rig_id).await?;
             let id = Uuid::new_v4();
             let at = now()?;
@@ -542,16 +542,18 @@ const VIEW_REFERENCES: &str = "\
     WHERE m.asset_id IN (SELECT value FROM json_each(?1)) ORDER BY v.id, m.asset_id";
 
 /// The run's candidate sessions on `conn`'s snapshot, in candidate order: the
-/// Project's candidates whose subject and rig are the run's.
+/// Project's candidates whose subject and rig are the run's, and for a panel
+/// run only those its group assigned to its panel.
 async fn run_candidates(conn: &mut SqliteConnection, view: &View) -> Result<Vec<Uuid>> {
-    Ok(projects::candidates(conn, view.project_id)
+    let candidates = projects::candidates(conn, view.project_id)
         .await?
         .into_iter()
         .filter(|candidate| {
             candidate.subject_id == view.subject_id && candidate.rig_id == view.rig_id
         })
         .map(|candidate| candidate.session_id)
-        .collect())
+        .collect();
+    super::view_groups::panel_candidates(conn, view, candidates).await
 }
 
 /// The run's candidates its committed revision row `row` neither chose (nor
@@ -587,7 +589,8 @@ async fn new_candidates(conn: &mut SqliteConnection, view: &View, row: i64) -> R
 
 async fn read_candidate_basis(conn: &mut SqliteConnection, id: Uuid) -> Result<CandidateBasis> {
     let view = load_view(conn, id).await?;
-    let target_id = run_subject(conn, view.project_id, view.subject_id).await?;
+    let target_id =
+        run_subject(conn, view.project_id, view.subject_id, view.panel_id.is_some()).await?;
     let target = load_target(conn, target_id).await?;
     let framing = FramingTarget {
         target_id,
@@ -629,7 +632,7 @@ async fn read_candidate_basis(conn: &mut SqliteConnection, id: Uuid) -> Result<C
 
 /// One logical capture with every recorded copy, keyed like a member: the
 /// smallest copy id. The evidence is the session's own copy.
-fn candidate_capture(
+pub fn candidate_capture(
     view: &CaptureView,
     key: &str,
     present: &[&Asset],
@@ -654,7 +657,7 @@ fn candidate_capture(
 }
 
 /// The member observations a refresh addition binds (R11).
-fn assessed_members(assets: &[Asset]) -> AssessedMembers {
+pub fn assessed_members(assets: &[Asset]) -> AssessedMembers {
     AssessedMembers {
         observations: assets.iter().map(|a| (a.id, a.fingerprint.clone())).collect(),
         decisions: assets.iter().map(|a| (a.id, a.decision_revision)).collect(),
@@ -1239,7 +1242,7 @@ fn require_live(view: &View) -> Result<()> {
 
 /// A run whose membership may change: outside the Trash and not Complete. A
 /// Complete run accepts no membership change until it is reopened (VSEL-FR-17).
-fn require_open(view: &View) -> Result<()> {
+pub fn require_open(view: &View) -> Result<()> {
     require_live(view)?;
     if view.completion == RunCompletion::Complete {
         return Err(invalid(format!(
@@ -1589,9 +1592,15 @@ async fn regroup(conn: &mut SqliteConnection, row: i64, item: &RefreshItem) -> R
 // Subjects, rigs and choices
 // ---------------------------------------------------------------------------
 
-/// The Target of subject `subject` of `project`, refusing a mosaic subject:
-/// a run on a mosaic subject is a panel run of a run group (D-W38).
-async fn run_subject(conn: &mut SqliteConnection, project: Uuid, subject: Uuid) -> Result<Uuid> {
+/// The Target of subject `subject` of `project`. A mosaic subject takes only
+/// panel runs of a run group and a single-Target subject only single runs
+/// (D-W38), so `panel_run` says which one the caller reads or writes.
+pub async fn run_subject(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    subject: Uuid,
+    panel_run: bool,
+) -> Result<Uuid> {
     projects::require_project(conn, project).await?;
     let row = sqlx::query(
         "SELECT target_id, mosaic FROM project_subjects WHERE id = ?1 AND project_id = ?2",
@@ -1603,16 +1612,23 @@ async fn run_subject(conn: &mut SqliteConnection, project: Uuid, subject: Uuid) 
     .ok_or_else(|| {
         LibraryError::NotFound(format!("subject {subject} is not a subject of project {project}"))
     })?;
-    if row.try_get::<i64, _>("mosaic")? == 1 {
-        return Err(invalid(format!(
+    match (row.try_get::<i64, _>("mosaic")? == 1, panel_run) {
+        (true, false) => Err(invalid(format!(
             "subject {subject} is a mosaic: a run on it is a run group, one run per panel"
-        )));
+        ))),
+        (false, true) => Err(invalid(format!(
+            "subject {subject} is a single Target: a run group needs a mosaic subject"
+        ))),
+        _ => parse_uuid(&row.try_get::<String, _>("target_id")?),
     }
-    parse_uuid(&row.try_get::<String, _>("target_id")?)
 }
 
 /// Refuse a rig that is not one of the Project's rigs.
-async fn require_project_rig(conn: &mut SqliteConnection, project: Uuid, rig: Uuid) -> Result<()> {
+pub async fn require_project_rig(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    rig: Uuid,
+) -> Result<()> {
     let listed: Option<i64> = sqlx::query_scalar(
         "SELECT 1 FROM project_rigs WHERE project_id = ?1 AND equipment_id = ?2",
     )
@@ -1682,7 +1698,7 @@ pub async fn refuse_if_used(
 
 /// Choose `session` in draft `row` with `reason`, adding each of its logical
 /// captures once under D02. Members already in the draft keep their state.
-async fn select_session(
+pub async fn select_session(
     conn: &mut SqliteConnection,
     row: i64,
     session: &Session,
@@ -1805,7 +1821,7 @@ async fn recorded_copies(conn: &mut SqliteConnection, row: i64) -> Result<BTreeS
 
 /// Remove the choice of `session` and its members: a criteria-based choice
 /// becomes an explicit session exclusion, a manual inclusion goes (R13).
-async fn deselect_session(conn: &mut SqliteConnection, row: i64, session: Uuid) -> Result<()> {
+pub async fn deselect_session(conn: &mut SqliteConnection, row: i64, session: Uuid) -> Result<()> {
     let reason: Option<String> = sqlx::query_scalar(
         "SELECT reason FROM view_session_choices \
          WHERE revision_row = ?1 AND session_id = ?2 AND state = 'selected'",
@@ -1982,7 +1998,7 @@ async fn select_expected(
 /// The draft row an edit applies to, after checking `expected_draft`: the
 /// existing draft one revision further, or a copy of the latest committed
 /// revision at draft revision 1.
-async fn begin_edit(
+pub async fn begin_edit(
     conn: &mut SqliteConnection,
     view: &View,
     expected_draft: Revision,
@@ -2093,7 +2109,7 @@ fn view_from_row(row: &SqliteRow) -> Result<View> {
     })
 }
 
-async fn load_view(conn: &mut SqliteConnection, id: Uuid) -> Result<View> {
+pub async fn load_view(conn: &mut SqliteConnection, id: Uuid) -> Result<View> {
     let row = sqlx::query("SELECT * FROM views WHERE id = ?1")
         .bind(id.to_string())
         .fetch_optional(&mut *conn)
@@ -2177,7 +2193,7 @@ async fn draft_header(
     .transpose()
 }
 
-async fn load_record(conn: &mut SqliteConnection, id: Uuid) -> Result<ViewRecord> {
+pub async fn load_record(conn: &mut SqliteConnection, id: Uuid) -> Result<ViewRecord> {
     let view = load_view(conn, id).await?;
     let revision = if view.revision == 0 {
         None
