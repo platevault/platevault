@@ -20,7 +20,7 @@ use platevault_model::{
     MemberState, Membership, MetricId, MetricState, Microseconds, PanelInput, Project,
     ProjectCandidate, ProjectDetail, ProjectGoal, ProjectInput, ProjectQuery, ProjectRejection,
     ProjectState, ProjectSubject, ProjectSummary, QualityCriterion, RecordValidity, ReferenceKind,
-    RejectionMark, Revision, SubjectInput, SubjectPanel,
+    RejectionMark, Revision, RunStage, SubjectInput, SubjectPanel,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
@@ -236,7 +236,8 @@ impl Catalog {
     }
 
     /// Project summaries by name, optionally only those with `target_id` as a
-    /// subject. No candidate or progress is computed.
+    /// subject. Done Projects are listed only with `show_done` (D-W48). No
+    /// candidate or progress is computed.
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
@@ -246,13 +247,14 @@ impl Catalog {
             "SELECT p.id, p.name, p.state, p.revision, \
              (SELECT count(*) FROM project_rigs r WHERE r.project_id = p.id) AS rigs, \
              (SELECT count(*) FROM project_goals g WHERE g.project_id = p.id) AS goals \
-             FROM projects p WHERE ?1 IS NULL OR EXISTS (SELECT 1 FROM project_subjects s \
-             WHERE s.project_id = p.id AND s.target_id = ?1) \
+             FROM projects p WHERE (?1 IS NULL OR EXISTS (SELECT 1 FROM project_subjects s \
+             WHERE s.project_id = p.id AND s.target_id = ?1)) AND (?4 OR p.state = 'open') \
              ORDER BY p.name, p.id LIMIT ?2 OFFSET ?3",
         )
         .bind(query.target_id.map(|id| id.to_string()))
         .bind(i64::from(if query.limit == 0 { MAX_PAGE } else { query.limit.min(MAX_PAGE) }))
         .bind(i64::from(query.offset))
+        .bind(query.show_done)
         .fetch_all(&mut *conn)
         .await?;
         let mut summaries = Vec::with_capacity(rows.len());
@@ -1438,6 +1440,128 @@ fn admits(bars: &[QualityCriterion], frame: &Frame) -> Option<bool> {
         }
     }
     (!unknown).then_some(true)
+}
+
+// ---------------------------------------------------------------------------
+// State (PRJ-FR-14, PRJ-FR-20, D-W26, D-W46, D-W48, D-W69, D-W72)
+// ---------------------------------------------------------------------------
+
+impl Catalog {
+    /// The user's Mark Done: the open Project becomes Done. Refused while any
+    /// run outside the Project's Trash is not Complete, naming each with its
+    /// stage so the user completes it or moves it to the Trash. Meeting the
+    /// goals never marks a Project Done; only this write does. Moves no file.
+    ///
+    /// # Errors
+    /// `Conflict` for a stale revision; `NotFound` for an unknown Project;
+    /// `InvalidInput` naming each run that is not Complete, or for a Project
+    /// already Done.
+    pub async fn mark_project_done(&self, id: Uuid, expected: Revision) -> Result<Project> {
+        let project = write_txn!(self, |conn| {
+            let next = next_project_revision(conn, id, expected).await?;
+            let (name, state) = project_state(conn, id).await?;
+            if state == ProjectState::Done {
+                return Err(LibraryError::InvalidInput(format!(
+                    "Project '{name}' is already Done"
+                )));
+            }
+            let open = open_runs(conn, id).await?;
+            if !open.is_empty() {
+                return Err(LibraryError::InvalidInput(format!(
+                    "Project '{name}' cannot be marked Done until every run outside its Trash \
+                     is Complete; for each, complete it or move it to the Trash: {}",
+                    open.join("; ")
+                )));
+            }
+            set_state(conn, id, ProjectState::Done, Some(&now()?)).await?;
+            commit_revision(conn, id, next).await?;
+            load_project(conn, id).await?
+        });
+        Ok(project)
+    }
+
+    /// Reopen a Done Project, even after Archive: it is open again with its
+    /// subjects, rigs, goals, runs and members unchanged. Moves no file;
+    /// archived sessions stay Archived until the user restores them.
+    ///
+    /// # Errors
+    /// `Conflict` for a stale revision; `NotFound` for an unknown Project;
+    /// `InvalidInput` for a Project that is open.
+    pub async fn reopen_project(&self, id: Uuid, expected: Revision) -> Result<Project> {
+        let project = write_txn!(self, |conn| {
+            let next = next_project_revision(conn, id, expected).await?;
+            let (name, state) = project_state(conn, id).await?;
+            if state == ProjectState::Open {
+                return Err(LibraryError::InvalidInput(format!("Project '{name}' is not Done")));
+            }
+            set_state(conn, id, ProjectState::Open, None).await?;
+            commit_revision(conn, id, next).await?;
+            load_project(conn, id).await?
+        });
+        Ok(project)
+    }
+}
+
+/// The Project's name and state.
+async fn project_state(conn: &mut SqliteConnection, id: Uuid) -> Result<(String, ProjectState)> {
+    let row = sqlx::query("SELECT name, state FROM projects WHERE id = ?1")
+        .bind(id.to_string())
+        .fetch_optional(&mut *conn)
+        .await?
+        .ok_or_else(|| LibraryError::NotFound(format!("project {id}")))?;
+    Ok((row.try_get("name")?, from_text(&row.try_get::<String, _>("state")?)?))
+}
+
+async fn set_state(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    state: ProjectState,
+    done_at: Option<&str>,
+) -> Result<()> {
+    sqlx::query("UPDATE projects SET state = ?2, done_at = ?3 WHERE id = ?1")
+        .bind(id.to_string())
+        .bind(to_text(&state)?)
+        .bind(done_at)
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
+/// Each run of the Project outside its Trash that is not Complete, as
+/// `run 'name' (id) at Stage`, by name. A run's name is its latest
+/// revision's, else its draft's.
+async fn open_runs(conn: &mut SqliteConnection, project: Uuid) -> Result<Vec<String>> {
+    let rows = sqlx::query(
+        "SELECT v.id, v.stage, coalesce(c.name, d.name) AS name FROM views v \
+         LEFT JOIN view_revisions c ON c.view_id = v.id AND c.revision = v.revision \
+         LEFT JOIN view_revisions d ON d.view_id = v.id AND d.state = 'draft' \
+         WHERE v.project_id = ?1 AND v.trashed_at IS NULL AND v.completion != 'complete' \
+         ORDER BY name, v.id",
+    )
+    .bind(project.to_string())
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut runs = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let name: Option<String> = row.try_get("name")?;
+        let id: String = row.try_get("id")?;
+        let stage = stage_name(from_text(&row.try_get::<String, _>("stage")?)?);
+        runs.push(format!("run '{}' ({id}) at {stage}", name.unwrap_or_default()));
+    }
+    Ok(runs)
+}
+
+/// The stage as the Project page's stage rail names it (PRJ-FR-20).
+const fn stage_name(stage: RunStage) -> &'static str {
+    match stage {
+        RunStage::Select => "Select",
+        RunStage::Review => "Review",
+        RunStage::Calibrate => "Calibrate",
+        RunStage::Prepare => "Prepare",
+        RunStage::Results => "Results",
+        RunStage::Done => "Done",
+        RunStage::CleanUp => "Clean up",
+    }
 }
 
 #[cfg(test)]
