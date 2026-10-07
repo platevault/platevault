@@ -94,7 +94,7 @@ The user chooses a planning site, reviews observing windows, and explicitly opts
 
 ### User Story 6 - Work Projects from the Home dashboard (Priority: P1)
 
-The user opens Home, sees every Project with its goal progress, stage and one Next action, and acts on new sessions that need a Target, belong to no Project, are unreviewed or are ready to add to a run (D-W7, D-W39).
+The user opens Home, sees every Project with its goal progress, stage and one Next action, and acts on new sessions that need a Target, belong to no Project, are unreviewed or are ready to add to a run (D-W35, D-W39).
 
 **Why this priority**: Home is the control panel for capture and processing. It must show what to do next without hiding the library.
 
@@ -112,7 +112,7 @@ The user opens Home, sees every Project with its goal progress, stage and one Ne
 - Missing OBJECT never substitutes for missing coordinates or controls capture identity. A session without a confirmed Target is never a candidate; Home lists it under "need a Target". (D-W33, D-W35)
 - Unknown geometry does not become zero distance or automatic inclusion. Geometry never decides candidacy; it orders candidates and assigns mosaic panels. (D-W33, D-W38)
 - A session captured with a rig the Project does not list is not a candidate, even when its confirmed Target is a subject. (D-W37)
-- A Trashed frame disappears from candidates, run pickers, frame review, goals, totals and Home. The Sessions "Trashed" filter shows it, and so does the fixed membership of a run that was Complete when the frame was trashed, marked "Trashed". (D-W43, D-W52)
+- A Trashed frame disappears from candidates, run pickers, frame review, goals, totals and Home. The Sessions "Trashed" filter shows it, and so does the fixed membership of a run that was Complete or Abandoned when the frame was trashed, marked "Trashed". (D-W43, D-W52, D-W71)
 - Failed catalog writes remain visibly unsaved with Retry.
 - Start acknowledgments do not imply durable operation success.
 - Refresh never removes an offline member as though it were absent.
@@ -132,7 +132,7 @@ The user opens Home, sees every Project with its goal progress, stage and one Ne
 - **FR-006**: Library quality (P/X/U, global), run exclusions, and "Reject for this Project only" MUST have explicit scopes. A Project-only reject MUST NOT change library quality, other Projects or run membership. Measurements MUST NOT make those decisions automatically. (D-W42)
 - **FR-007**: Pixel review MUST retain scientific input semantics and invalid-sample evidence. Measurement MUST use linear samples independently of display stretch.
 - **FR-008**: Measurements MUST identify method, units, source, and input basis. Failed fits MUST remain failures; imported values MUST NOT silently replace built-in values.
-- **FR-009**: Observed artifacts, accepted Results, reusable masters, and a run's Complete MUST remain separate states. Complete MUST require neither a Result nor Clean up. A run MAY be marked Abandoned instead. Abandoned MUST pass every gate Complete passes, and an Abandoned run MUST stay read-only until Reopen returns it to the stage it was in. (D-W26, D-W64, D-W71)
+- **FR-009**: Observed artifacts, accepted Results, reusable masters, and a run's Complete MUST remain separate states. Complete MUST require neither a Result nor Clean up. A run MAY be marked Abandoned instead. Abandoned MUST pass every gate Complete passes, and an Abandoned run MUST stay read-only until Reopen returns it to the stage it was in. Reopen of an Abandoned run MUST be refused while its subject or rig is not on the Project, and the refusal MUST name the one to add back. (D-W26, D-W50, D-W64, D-W65, D-W71)
 - **FR-010**: A run's Clean up MUST operate on approved run-scoped entries (prepared links, clones and copies) through OS Trash. Unsafe or unavailable Trash MUST retain affected files without permanent deletion. Trashing rejected capture frames or processing intermediates MUST NOT be part of a run's Clean up; only the Project's Done / Archive sheet offers it. (D-W26, D-W43, D-W70)
 - **FR-011**: Archive MUST verify destinations and affected references before source retirement. Interruption MUST preserve recoverable phases and fixed membership. Project Archive MUST keep every session that is a member of a run in another Project not marked Done; being another Project's candidate MUST NOT count. Reviewed filing is withdrawn with "File into library": Import (PV-STO) replaces it, and Import Move MUST keep each source until its destination verifies. (D-W11, D-W26, D-W46)
 - **FR-012**: Failed writes and incomplete operations MUST remain visible. Unknown, unreadable, and offline evidence MUST NOT be represented as absence or success.
@@ -151,9 +151,9 @@ The user opens Home, sees every Project with its goal progress, stage and one Ne
   5. Target status.
   6. Running work.
 
-  Its top line MUST read "N sessions need a Target · M not in any Project". Done Projects MUST stay hidden behind a "Show done" filter. PV-PRJ owns the section contents and the Next rule. (D-W7, D-W27, D-W35, D-W39, D-W48)
-- **FR-021**: Moving rejected frames to the OS Trash MUST be offered only from a Done Project's Done / Archive sheet. It MUST cover only that Project's library-Unusable candidate frames, MUST exclude Project-only rejects, MUST list refused frames with their reason, and MUST NOT permanently delete. A Trashed record MUST stay for traceability. It MUST appear only under the Sessions "Trashed" filter and, marked "Trashed", in the fixed membership of a run that was Complete when the frame was trashed. The same sheet MUST also offer "Move N processing intermediates to Trash (size)" under the same trash rules, keeping final Results and adopted masters. (D-W43, D-W52, D-W70)
-- **FR-022**: Each run MUST move through the stages Select, Review, Calibrate, Prepare, Results, Done and Clean up. At any stage the user MAY mark the run Abandoned instead, which keeps it read-only and gives it Clean up until Reopen. The Project page MUST show a stage rail with each run's stage, Abandoned included. The Project itself MUST end with Done, then Archive. (D-W3, D-W7, D-W26, D-W64, D-W71)
+  Its top line MUST read "N sessions need a Target · M not in any Project". Done Projects MUST stay hidden behind a "Show done" filter. PV-PRJ owns the section contents and the Next rule. (D-W27, D-W35, D-W39, D-W48)
+- **FR-021**: Moving rejected frames to the OS Trash MUST be offered only from a Done Project's Done / Archive sheet. It MUST cover only that Project's library-Unusable candidate frames, MUST exclude Project-only rejects, MUST list refused frames with their reason, and MUST NOT permanently delete. A Trashed record MUST stay for traceability. It MUST appear only under the Sessions "Trashed" filter and, marked "Trashed", in the fixed membership of a run that was Complete or Abandoned when the frame was trashed. The same sheet MUST also offer "Move N processing intermediates to Trash (size)" under the same trash rules, keeping final Results and adopted masters. (D-W43, D-W52, D-W70, D-W71)
+- **FR-022**: Each run's stage MUST be one of Select, Review, Calibrate, Prepare, Results, Done or Clean up, and Clean up MUST be offered, never required. At any stage the user MAY mark the run Abandoned instead, which keeps it read-only and offers it Clean up until Reopen. The Project page MUST show a stage rail with each run's stage, Abandoned included. A Project MUST end with Done; Archive MUST be offered after Done and MUST NOT be required. (D-W3, D-W7, D-W26, D-W64, D-W71)
 - **FR-023**: The interface MUST call a View a "processing run". It MUST label goal progress "in project" and "captured", MUST NOT say "not in a run", and MUST never show an "in project" value above its "captured" value. (D-W3, D-W36, D-W66)
 
 ### Feature ownership

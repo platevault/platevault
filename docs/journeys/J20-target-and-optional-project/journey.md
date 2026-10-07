@@ -93,7 +93,7 @@ and start the first processing run from the Project page. Done means:
 - **Do:** Return to the Project page and try to remove rig `RedCat`, then subject NGC 7000. Then remove rig `Esprit` and add it back.
 - **Expect:** Removing `RedCat` is refused, and the refusal names the run `NGC7000-HOO-Siril`, which is at Select and not Abandoned. Removing subject NGC 7000 is refused the same way and names the same run. Removing `Esprit`, which no run uses, succeeds: the other-camera session stops being a candidate, is a member of no run, and Ha captured reads 9h15 again. Adding `Esprit` back restores the seventh candidate and Ha captured 12h35.
 - **Expect (negative):** The refused removals change neither the Project's subjects and rigs nor the run's subject, rig or picker.
-- **Trace:** Projects surface · PRJ-FR-02, PRJ-FR-04 · PRJ-AC-06, PRJ-AC-25 · 065 edge case "Removing a subject or a rig is refused while any run that is not Abandoned uses it" · D-W37, D-W65, D-W66, D-W71
+- **Trace:** Projects surface · PRJ-FR-02, PRJ-FR-04 · PRJ-AC-06, PRJ-AC-25 · 065 edge cases "Removing a subject or a rig is refused while any run that is not Abandoned uses it" and "Removing a subject or rig that no run, or only an Abandoned run, uses takes the matching sessions out of the candidates" · D-W37, D-W65, D-W66, D-W71
 
 ## Success criteria
 
@@ -110,7 +110,7 @@ and start the first processing run from the Project page. Done means:
 - G2: Out of scope for this journey: mosaic subjects (panels by centre and rotation, run groups) are covered by J33, not here.
 - G3: Unresolved implementation qualification: J15/S6 and J15/S7 save the P2 sites, but J15/G8 records that the flow names no Settings pane or label for observing sites. Blocks readiness.
 - G4: Out of scope for this journey: external resolver enrichment of a saved target, its provider provenance and a resolver failure (LIB-AC-12, D18) are not exercised. Blocks readiness until covered by a step or a journey.
-- G5: Out of scope for this journey: removing a rig or subject used only by an Abandoned run succeeds (PRJ-AC-25), but no run here is Abandoned, so that branch is not exercised. Blocks readiness until covered by a step or a journey.
+- G5: Out of scope for this journey: removing a rig or subject used only by an Abandoned run succeeds (PRJ-AC-25). Reopen of that run is then refused until both are back on the Project (RES-FR-09). No run here is Abandoned, so neither branch is exercised. Blocks readiness until covered by a step or a journey.
 
 ## Delta log
 

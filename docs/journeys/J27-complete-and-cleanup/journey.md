@@ -26,7 +26,7 @@ user also abandons a run and reopens it. Done means:
 ## Preconditions
 
 - P1: Fresh replay of J24 and J26 (J25 not run). Siril is not running. `NGC7000-HOO-Siril Results/` also holds one file PlateVault does not recognize.
-- P2: From J24/S16 and J24/S17, `28 Sep Ha copy check` is Prepared on `Scratch`, which has no OS Trash. Revision 1 holds 56 copies and revision 2 holds 55. The run has no accepted Result. Its Results folder `Work/Outputs/28 Sep Ha copy check Results/` holds the two unaccepted J26/P8 stacks.
+- P2: From J24/S16 and J24/S17, `28 Sep Ha copy check` is Prepared on `Scratch`, which has no OS Trash. Revision 1 holds 56 copies and revision 2 holds 55. The run has no accepted Result. Its Results folder `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/` holds the two unaccepted J26/P8 stacks.
 - P3: In an isolated test OS account or disposable VM containing only these generated fixtures, unlink one named 30 Sep capture directly from its generated source folder, without using or emptying the OS Trash. Its prepared hardlink in `NGC7000-HOO-Siril/` becomes the fixture's last copy. Record the exact fixture path and its pre-unlink hash. Real libraries and unrelated Trash contents are outside this setup.
 - P4: Record a baseline inventory of the isolated account's Trash without deleting anything. Also record a manifest of the remaining captures, every file in `NGC7000-HOO-Siril Results/`, and the adopted master. Trash checks compare only this journey's newly added entries against that baseline.
 - P5: A second final image saved by the user outside the run, at `Work/Finals/NGC7000-HOO-crop.tif`.
@@ -108,7 +108,7 @@ user also abandons a run and reopens it. Done means:
 
 - **Do:** In `28 Sep Ha copy check`, click **Clean up**, keep both preselected groups, review, and confirm **Send selected entries to Trash**.
 - **Expect:** Clean up lists the 56 copies of revision 1 and the 55 copies of revision 2 in separate groups. Trash support reads unsupported for `Scratch`, all 111 copies are refused, and **Keep files** and **Reveal location** are offered.
-- **Expect (negative):** No permanent-delete fallback is offered, and no copy is removed. Neither J26/P8 stack nor any other file in `Work/Outputs/28 Sep Ha copy check Results/` is listed.
+- **Expect (negative):** No permanent-delete fallback is offered, and no copy is removed. Neither J26/P8 stack nor any other file in `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/` is listed.
 - **Trace:** flow I4, I5, cross-flow "Cleanup/Trash failure" · STO-FR-01, STO-FR-04, STO-FR-05 · STO-AC-03 · PREP-FR-11 · root FR-010 · D-W51
 
 ### S11 — Remove symlink entries {#S11}
@@ -162,7 +162,7 @@ user also abandons a run and reopens it. Done means:
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs, the decisions D09, D16 and D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
 - G2: Out of scope for this journey: Direct-source Clean up needs a prepared Direct-source run, and no journey prepares one yet. That Clean up shows that preparation created no entries and offers nothing to remove (PREP-AC-20, STO-AC-02). Blocks readiness until covered.
 - G3: Out of scope for this journey: removing replaced prepared entries before the run is Complete or Abandoned (STO-FR-10, D09) is not exercised. Blocks readiness until covered by a step or a journey.
-- G5: Out of scope for this journey: removing a rig or subject used only by an Abandoned run (PRJ-FR-02, PRJ-AC-25) is not exercised. J20/S9 covers the refusal while a run that is not Abandoned uses them, and runs that are not Abandoned also use the rig and subject of `24 Sep flat check`. Blocks readiness until covered by a step or a journey.
+- G5: Out of scope for this journey: removing a rig or subject used only by an Abandoned run (PRJ-FR-02, PRJ-AC-25) is not exercised. Neither is the refused Reopen of that run until both are back on the Project (RES-FR-09). J20/S9 covers the refusal while a run that is not Abandoned uses them, and runs that are not Abandoned also use the rig and subject of `24 Sep flat check`. Blocks readiness until covered by a step or a journey.
 - G6: Out of scope for this journey: accepting a Result on an Abandoned run without reopening it (RES-FR-07, RES-FR-09) is not exercised, because `24 Sep flat check` has no Result candidate. Blocks readiness until covered by a step or a journey.
 
 ## Delta log

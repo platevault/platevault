@@ -30,7 +30,7 @@ work. Done means:
 
   | Project | Subject | Rig | Goals | Progress | Runs |
   | --- | --- | --- | --- | --- | --- |
-  | `NGC 7000 HOO` | NGC 7000 | `RedCat` | Ha 10h, OIII 10h | Ha 6h10 in project · 9h15 captured; OIII 4h00 in project · 4h00 captured | `NGC7000-HOO-Siril` waits at Calibrate with calibration needing review |
+  | `NGC 7000 HOO` | NGC 7000 | `RedCat` | Ha 10h, OIII 10h | Ha 6h10 in project · 9h15 captured; OIII 4h00 in project · 14h35 captured | `NGC7000-HOO-Siril` waits at Calibrate with calibration needing review |
   | `Veil Mosaic HOO` | mosaic `Veil Mosaic`, Panels 1 to 4 | `RedCat` | Ha 10h and OIII 10h per panel | 0h00 in project for every panel | none |
   | `M 31 OSC` | M 31 | `Esprit` | OSC broadband 10h | 3h00 in project · 4h30 captured | `M31-OSC-Siril` at Prepare with a failed preparation |
   | `IC 1396 Ha` | IC 1396 | `RedCat` | Ha 5h | 5h20 in project · 6h40 captured | `IC1396-Ha-Siril` Complete; `IC1396-Ha-test` marked Abandoned at Prepare after a failed preparation, holding only sessions that `IC1396-Ha-Siril` also holds |
@@ -38,11 +38,12 @@ work. Done means:
 
 - P3: Sessions needing work:
   - `2 Oct OIII`: 48 frames, all Unreviewed. It is a member of `NGC7000-HOO-Siril`.
+  - `12 Sep`, `24 Sep`, `26 Sep` and `30 Sep`, the worked example's OIII sessions: 127 frames, reviewed, candidates of `NGC 7000 HOO`, and members of none of its runs.
   - `1 Oct Ha`: reviewed, a candidate of `IC 1396 Ha`, and a member of none of its runs.
-  - `4 Oct M 33`: reviewed, with confirmed Target M 33 on rig `RedCat`, and a candidate of no Project.
+  - `4 Oct M 33`: reviewed, with confirmed Target M 33 on rig `RedCat`, a candidate of no Project and a member of no run.
   - `3 Oct` (OBJECT `Cygnus field`, conflicting pointing) and `5 Oct` (no OBJECT, no pointing): no confirmed Target.
 
-  Every other frame in the catalog is reviewed.
+  `NGC7000-HOO-Siril` holds the worked example's Ha sessions `18 Sep` and `28 Sep` (111 frames) and `2 Oct OIII`. Its saved membership includes 74 of those Ha frames and all 48 `2 Oct OIII` frames. Every other candidate of an open Project is a member of one of that Project's runs, and every other frame in the catalog is reviewed.
 - P4: My targets holds ★ M 33. M 45 is not ★.
 - P5: A manifest (relative path, size, SHA-256) of every file under the registered locations, recorded outside PlateVault before S1.
 
@@ -65,7 +66,7 @@ work. Done means:
 
 - **Do:** Read each Project row.
 - **Expect:** Exactly four Projects are listed, each with its goals, its runs' stages and one Next action.
-  - `NGC 7000 HOO` reads `Ha 6h10 in project · 9h15 captured · goal 10h` and `OIII 4h00 in project · 4h00 captured · goal 10h`. Its stage shows `NGC7000-HOO-Siril` at Calibrate, and Next reads **Review 48 new frames**.
+  - `NGC 7000 HOO` reads `Ha 6h10 in project · 9h15 captured · goal 10h` and `OIII 4h00 in project · 14h35 captured · goal 10h`. Its stage shows `NGC7000-HOO-Siril` at Calibrate, and Next reads **Review 48 new frames**.
   - `Veil Mosaic HOO` shows Ha and OIII goals for each of Panels 1 to 4, each at 0h00 in project. Next reads **Plan tonight**.
   - `M 31 OSC` reads `3h00 in project · 4h30 captured · goal 10h`. Next names the run `M31-OSC-Siril` at Prepare.
   - `IC 1396 Ha` reads `5h20 in project · 6h40 captured · goal 5h` with "Goal met". Its stage shows `IC1396-Ha-Siril` Complete and `IC1396-Ha-test` Abandoned, and Next reads **Start a processing run**.
@@ -99,7 +100,7 @@ work. Done means:
   - Needs a Target lists `3 Oct` and `5 Oct`.
   - Not in a Project lists `4 Oct M 33`, offering **Create Project** and **Add to Project**.
   - Unreviewed is empty after S4.
-  - Ready to add to a run lists `1 Oct Ha` under `IC 1396 Ha`.
+  - Ready to add to a run lists `12 Sep`, `24 Sep`, `26 Sep` and `30 Sep` under `NGC 7000 HOO`, and `1 Oct Ha` under `IC 1396 Ha`.
 
   Each row has a one-click action. The new Project opens prefilled with subject M 33 and rig `RedCat`. Back on Home, the top line reads `2 sessions need a Target · 0 not in any Project`. Projects lists `M 33` with Next **Start a processing run**, and `4 Oct M 33` moves to Ready to add to a run.
 - **Expect (negative):** Creating the Project assigns `4 Oct M 33` to no run.

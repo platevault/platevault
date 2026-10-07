@@ -742,12 +742,12 @@
       "negative": "Showing a transfer or a duplicate candidate never authorizes removal."
     },
     {
-      "flowStep": "Project Done / Archive sheet: Archive, Move rejected frames to Trash, Move processing intermediates to Trash, and Reopen after Archive",
+      "flowStep": "Done / Archive custody: the verified archive transfer, the OS Trash moves of rejected frames and processing intermediates, and the reviewed restore of archived sessions, executing the offers of the PV-PRJ Done / Archive sheet",
       "owner": "071-storage-custody",
-      "journeyStep": "J34/S3, J34/S4, J34/S5, J34/S6, J34/S9, J34/S10, J34/S11, J34/S12, J34/S12a, J28/S1",
-      "spec": "071-storage-custody STO-FR-06, STO-FR-07, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-AC-17, STO-AC-18, STO-AC-19, STO-AC-21, STO-AC-22; 065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-AC-15, PRJ-AC-16, PRJ-AC-17, PRJ-AC-27, PRJ-AC-28; 064-library-inventory LIB-FR-18; D19, D-W26, D-W43, D-W46, D-W69, D-W70",
-      "action": "Mark the Project Done and read the sheet's three offers. Read the rejected-frames offer, review Archive, move the rejected frames and then the processing intermediates to the Trash with one item changed in place, put a frame back, approve Archive, Reopen the Project and read an archived session's restore review.",
-      "expect": "The sheet offers Archive, Move N rejected frames to Trash (size) and Move N processing intermediates to Trash (size) as separate approvals, each listing refused items with reasons; frames in an Abandoned run's prepared revision are included, and an adopted master's generated source is offered only as a verified duplicate naming the kept copy. Archive keeps sessions another open Project's run uses and transfers the rest by the naming templates. After Reopen the runs keep their states, archived sessions still read Archived, and restoring one opens a reviewed transfer.",
+      "journeyStep": "J34/S5, J34/S6, J34/S9, J34/S10, J34/S11, J34/S12a, J28/S1",
+      "spec": "071-storage-custody STO-FR-04, STO-FR-06, STO-FR-07, STO-FR-13, STO-FR-14, STO-FR-15, STO-FR-16, STO-AC-17, STO-AC-19, STO-AC-21, STO-AC-22; 065-project-goals PRJ-FR-14, PRJ-FR-15, PRJ-AC-17, PRJ-AC-28; 064-library-inventory LIB-FR-18; D19, D-W26, D-W43, D-W46, D-W69, D-W70",
+      "action": "Review Archive, move the rejected frames and then the processing intermediates to the Trash with one item changed in place, put a frame back, approve Archive, and after Reopen read an archived session's restore review.",
+      "expect": "Each approved offer runs as its own reviewed custody step with per-item outcomes and an exact summary, and every custody refusal is listed with its reason. The adopted master's generated source moves with the intermediates as a verified duplicate naming the kept copy. Archive keeps sessions another open Project's run uses and transfers the rest by the naming templates. After Reopen archived sessions still read Archived, and restoring one opens a reviewed transfer.",
       "negative": "No file moves before an offer is approved, accepted Results, adopted masters, unknown files and prepared entries are never trashed, and nothing is permanently deleted. Reopening moves no file."
     },
     {

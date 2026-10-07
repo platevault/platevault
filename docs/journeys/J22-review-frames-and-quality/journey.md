@@ -132,8 +132,8 @@ source file.
 
 ### S11a — Cull with hotkeys {#S11a}
 
-- **Do:** In the table make F1 current and press **X**. Press **⌘3**, then **⌘1**. Make F1 current again. Turn auto-advance off and press **P**, then **Shift+P**. Turn auto-advance back on.
-- **Expect:** **X** applies at once: F1 reads Rejected with scope Library, and F2 becomes current. The draft holds 207 lights and lists F1 with the reason "Rejected". NGC 7000 usable Ha reads 9h 10m. **⌘3** lists only F1, and **⌘1** lists every frame. With auto-advance off, **P** makes F1 Picked again, F1 stays current, and the draft holds 208 lights with NGC 7000 usable Ha 9h 15m. **Shift+P** keeps F1 Picked and makes F2 current.
+- **Do:** In the table make F1 current and press **X**. Press **⌥3**, then **⌥1**. Make F1 current again. Turn auto-advance off and press **P**, then **Shift+P**. Turn auto-advance back on.
+- **Expect:** **X** applies at once: F1 reads Rejected with scope Library, and F2 becomes current. The draft holds 207 lights and lists F1 with the reason "Rejected". NGC 7000 usable Ha reads 9h 10m. **⌥3** lists only F1, and **⌥1** lists every frame. With auto-advance off, **P** makes F1 Picked again, F1 stays current, and the draft holds 208 lights with NGC 7000 usable Ha 9h 15m. **Shift+P** keeps F1 Picked and makes F2 current.
 - **Expect (negative):** No mark asks for confirmation. Saved membership revision 2 is unchanged throughout.
 - **Trace:** flow D5 · PIX-FR-13, PIX-FR-14 · VSEL-FR-15 · PIX-AC-12, VSEL-AC-23 · D-W14, D-W42, D-W53, D-W54
 
@@ -153,8 +153,8 @@ source file.
 
 ### S13 — Mark the excluded frames in the grid {#S13}
 
-- **Do:** Show excluded rows and press **G**. Select the six excluded 30 Sep frames and press **X**. Then select only the first of them, press **U**, and choose **Reject for this Project only** from its frame menu. Press **⌘3**. Return to the table view. Leave the Review step and open it again in the grid.
-- **Expect:** All six read Rejected with scope Library after **X**, and NGC 7000 Unreviewed OIII integration falls by 0h 30m. After **U** and the Project reject, the first frame reads Rejected with scope This Project and its library quality is Unreviewed. **⌘3** lists exactly the six frames, with five labelled Library and one labelled This Project. The table keeps the same selection, current frame, filter and sort as the grid. On reopening, the grid shows the cached thumbnails with no pending state.
+- **Do:** Show excluded rows and press **G**. Select the six excluded 30 Sep frames and press **X**. Then select only the first of them, press **U**, and choose **Reject for this Project only** from its frame menu. Press **⌥3**. Return to the table view. Leave the Review step and open it again in the grid.
+- **Expect:** All six read Rejected with scope Library after **X**, and NGC 7000 Unreviewed OIII integration falls by 0h 30m. After **U** and the Project reject, the first frame reads Rejected with scope This Project and its library quality is Unreviewed. **⌥3** lists exactly the six frames, with five labelled Library and one labelled This Project. The table keeps the same selection, current frame, filter and sort as the grid. On reopening, the grid shows the cached thumbnails with no pending state.
 - **Expect (negative):** The draft still holds 208 lights, and NGC 7000 usable integration and the Project's "in project" and "captured" values are unchanged. No mark asks for confirmation.
 - **Trace:** flow D5 · PIX-FR-11, PIX-FR-12, PIX-FR-13, PIX-FR-14 · VSEL-FR-15 · PIX-AC-16 · PRJ-FR-04 · D10, D-W40, D-W42, D-W54, D-W66
 

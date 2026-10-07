@@ -19,7 +19,7 @@ intermediates to the OS Trash and archives its sessions. Afterwards the
 user puts one frame back and reopens the Project. Done means:
 - Mark Done waited until no run was open.
 - The trash offers covered only what they may cover. A frame in an Abandoned run's prepared revision was offered, and the adopted master's generated source went only as a verified duplicate of the kept library copy. No Project-only reject, refused frame, accepted Result or adopted library master reached the Trash, and every refusal was listed with its reason. Nothing was permanently deleted.
-- The Trashed frames counted nowhere and showed only under the Sessions "Trashed" filter and, marked "Trashed", in the Complete run's membership.
+- The Trashed frames counted nowhere and showed only under the Sessions "Trashed" filter and, marked "Trashed", in the memberships of the Complete run and the Abandoned run that hold them.
 - Archive kept the session another open Project's run uses.
 - Reopening returned the Project to open with its runs, goals and members unchanged, and it moved no file. The archived sessions still read Archived at their archive paths, and restoring one opens a reviewed transfer.
 
@@ -42,7 +42,7 @@ user puts one frame back and reopens the Project. Done means:
 - P7: The J27/P7 helper is available. F-drift, one of the other Unusable 30 Sep frames, is its target in S6. One registered intermediate is its target in S9.
 - P8: `NGC7000-HOO-Siril Results/` holds 416 recognized intermediates from J26/P1 (208 calibrated and 208 registered). It also holds the generated source of the master flat that J26/S9 adopted into `Astro-T7/Calibration`. No other run of the Project has a recognized intermediate in its Results folder.
 - P9: A disposable writable volume `Archive` has free space for the Project's sessions.
-- P10: The isolated account's Trash inventory is recorded as in J27/P4. So are a manifest of the Project's captures, of every file in `NGC7000-HOO-Siril Results/` and `Work/Outputs/28 Sep Ha copy check Results/`, and of the adopted master, plus directory listings of `Astro-T7` and `Archive`.
+- P10: The isolated account's Trash inventory is recorded as in J27/P4. So are a manifest of the Project's captures, of every file in `NGC7000-HOO-Siril Results/` and `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/`, and of the adopted master, plus directory listings of `Astro-T7` and `Archive`.
 
 ## Steps
 
@@ -64,7 +64,7 @@ user puts one frame back and reopens the Project. Done means:
 
 - **Do:** Choose **Mark processing complete** for `NGC7000 HOO combine`, then choose **Mark Done** again.
 - **Expect:**
-  - The Project reads Done, and its Done / Archive sheet opens with three offers, each a separate approval: **Archive**, `Move 7 rejected frames to Trash (size)` and `Move 416 processing intermediates to Trash (size)`.
+  - The Project reads Done, and its Done / Archive sheet opens with three offers, each a separate approval: **Archive**, `Move 7 rejected frames to Trash (size)` and `Move 417 processing intermediates to Trash (size)`. The 417 are the 416 P8 intermediates and the adopted master's generated source.
   - Home lists the Project among its Projects only when **Show done** is on.
 - **Expect (negative):** No file moves until the user approves an offer.
 - **Trace:** Done / Archive sheet · PRJ-FR-14, PRJ-FR-15, PRJ-FR-20 · PRJ-AC-15 · STO-FR-13, STO-FR-14, STO-FR-16 · root FR-022 · D-W26, D-W46, D-W48, D-W70
@@ -107,15 +107,15 @@ user puts one frame back and reopens the Project. Done means:
 
 ### S7 — Confirm the Trashed frames are hidden {#S7}
 
-- **Do:** Read the 18, 28 and 30 Sep rows in Sessions and the Captured column of Target NGC 7000. Read the "captured" goal numbers of `NGC 7000 SHO`, start a run there and read its session picker, and open frame review on its 30 Sep candidate session. Open `NGC7000-HOO-Siril`'s fixed membership. Then rescan `Astro-T7/Captures`.
+- **Do:** Read the 18, 28 and 30 Sep rows in Sessions and the Captured column of Target NGC 7000. Read the "captured" goal numbers of `NGC 7000 SHO`, start a run there and read its session picker, and open frame review on its 30 Sep candidate session. Open `NGC7000-HOO-Siril`'s fixed membership and the membership of the Abandoned run `Ha deep trial`. Then rescan `Astro-T7/Captures`.
 - **Expect:**
   - Sessions shows 2 fewer frames for 18 Sep, 1 fewer for 28 Sep and 3 fewer for 30 Sep.
   - Target NGC 7000's Captured falls by Ha 0h 15m and OIII 0h 15m.
   - In `NGC 7000 SHO`, OIII "captured" falls by 0h 15m, and the picker and frame review leave the three 30 Sep frames out.
-  - `NGC7000-HOO-Siril`'s fixed membership still lists the two 18 Sep frames and F-ab, marked "Trashed".
+  - `NGC7000-HOO-Siril`'s fixed membership still lists the two 18 Sep frames and F-ab, marked "Trashed". The read-only membership of `Ha deep trial` still lists F-ab, marked "Trashed".
   - The rescan reports none of the six frames Missing.
 - **Expect (negative):** No Trashed frame is offered by any picker, counted in any goal or total, measured or thumbnailed in frame review, or shown on Home.
-- **Trace:** LIB-FR-18 · LIB-AC-19 · PRJ-FR-09, PRJ-FR-16 · VSEL-AC-25 · PIX-AC-19 · PLAN-TGT-FR-08 · D-W43, D-W52, D-W66
+- **Trace:** LIB-FR-18 · LIB-AC-19 · PRJ-FR-09, PRJ-FR-16 · VSEL-AC-25 · PIX-AC-19 · PLAN-TGT-FR-08 · root FR-021 · D-W43, D-W52, D-W66, D-W71
 
 ### S8 — Find the frames under the Trashed filter {#S8}
 
@@ -126,15 +126,15 @@ user puts one frame back and reopens the Project. Done means:
 
 ### S9 — Move the processing intermediates to Trash {#S9}
 
-- **Do:** On the sheet, approve `Move 416 processing intermediates to Trash` and read the review. With the P7 helper, overwrite one listed intermediate in place. Then confirm.
+- **Do:** On the sheet, approve `Move 417 processing intermediates to Trash` and read the review. With the P7 helper, overwrite one listed intermediate in place. Then confirm.
 - **Expect:**
-  - The review lists the 416 recognized intermediates in `NGC7000-HOO-Siril Results/`. It also lists the adopted master's generated source as a verified duplicate that names the kept library copy in `Astro-T7/Calibration`.
-  - It keeps the accepted Ha and OIII stacks and the adopted library master. The log, the unrecognized file and every unaccepted candidate are not offered, including the two J26/P8 stacks in `Work/Outputs/28 Sep Ha copy check Results/`.
-  - The summary names 415 intermediates and the generated source moved to the OS Trash, and the overwritten intermediate refused with drift named and left in place.
+  - The review lists the 416 recognized intermediates in `NGC7000-HOO-Siril Results/`. As the 417th item it lists the adopted master's generated source, a verified duplicate that names the kept library copy in `Astro-T7/Calibration`.
+  - It keeps the accepted Ha and OIII stacks and the adopted library master. The log, the unrecognized file and every unaccepted candidate are not offered, including the two J26/P8 stacks in `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/`.
+  - The summary names 416 items moved to the OS Trash under that one approval, 415 intermediates and the generated source, and the overwritten intermediate refused with drift named and left in place.
 - **Expect (negative):**
   - No accepted Result, adopted library master, log, unrecognized file, unaccepted candidate or prepared entry reaches the Trash. Each still matches P10.
   - Nothing is permanently deleted.
-- **Trace:** Done / Archive sheet · PRJ-FR-15 · PRJ-AC-28 · STO-FR-04, STO-FR-15, STO-FR-16 · STO-AC-21 · CAL-FR-06, CAL-FR-07 · RES-FR-01, RES-FR-04 · root FR-021 · D19, D-W43, D-W70 · G2
+- **Trace:** Done / Archive sheet · PRJ-FR-15 · PRJ-AC-28 · STO-FR-04, STO-FR-15, STO-FR-16 · STO-AC-21 · CAL-FR-06, CAL-FR-07 · RES-FR-01, RES-FR-04 · root FR-021 · D19, D-W43, D-W70
 
 ### S10 — Put one frame back {#S10}
 
@@ -175,7 +175,7 @@ user puts one frame back and reopens the Project. Done means:
 - SC1: Mark Done opens the sheet 0 times while a run is open (S1, S2). It opens exactly once after every run is Complete or Abandoned (S3).
 - SC2: The rejected-frames offer counts exactly 7 frames, including 1 in an Abandoned run's prepared revision. It lists exactly 3 refusals with reasons and includes 0 Project-only rejects (S4).
 - SC3: Exactly 6 frames reach the OS Trash. 0 refused or drifted frames, 0 prepared entries and 0 files are permanently deleted (S6).
-- SC4: The Trashed frames appear in 0 pickers, candidate lists, frame reviews, goals or totals. They show only under the Trashed filter (6 frames) and, marked "Trashed", in `NGC7000-HOO-Siril`'s membership (3 frames) (S7, S8).
+- SC4: The Trashed frames appear in 0 pickers, candidate lists, frame reviews, goals or totals. They show only under the Trashed filter (6 frames) and, marked "Trashed", in `NGC7000-HOO-Siril`'s membership (3 frames) and `Ha deep trial`'s membership (1 frame) (S7, S8).
 - SC5: Exactly 415 intermediates and 1 generated source, listed as a verified duplicate of the kept library copy, reach the OS Trash. 0 accepted Results and 0 adopted library masters do (S9).
 - SC6: Put back plus rescan returns 1 frame as Unusable, and the Trashed filter then lists 5 (S10).
 - SC7: Archive keeps 28 Sep and transfers 4 sessions, including 30 Sep, which is only another Project's candidate (S5, S11).
@@ -184,7 +184,6 @@ user puts one frame back and reopens the Project. Done means:
 ## Known gaps
 
 - G1: Not validated: the rebuilt application does not exist. Product behavior follows the specs, decision D19 set by the authorized autonomous run, and the user's workflow decisions cited above. No implementation has been validated against them.
-- G2: Unresolved product question: STO-FR-16, PRJ-AC-28 and STO-AC-21 do not say whether N counts the adopted master's generated source, or whether approval moves it with the intermediates. STO-AC-21 counts only the recognized intermediates. S3 and S9 assume that N counts the 416 recognized intermediates and that approval also moves the verified duplicate. Blocks readiness.
 - G3: Out of scope for this journey: archive transfer failures, interruption and reference repair are J28's. J28 forks from S5. Blocks readiness until J28 covers them.
 - G4: Unresolved implementation qualification: P4 needs Tool-recorded input lineage from a processing tool for F-res. No profile has qualified how that evidence is captured. Blocks readiness.
 - G5: Out of scope for this journey: approving the restore of an Archived session after Reopen (STO-FR-13) is not exercised, because S12a stops at the review. Blocks readiness until covered by a step or a journey.

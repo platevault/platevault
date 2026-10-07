@@ -141,9 +141,9 @@ Done means:
 ### S14 — Choose patched copies and another Results parent {#S14}
 
 - **Do:** Choose **Copy** with isolated patched copies for the 28 Sep correction. Click **Change Results location...** and choose `Work/Outputs`.
-- **Expect:** The review shows a full-copy footprint, the patched effective focal length for every copy, and Results location `Work/Outputs/28 Sep Ha copy check Results/`.
-- **Expect (negative):** Results are not written to `Work/Outputs` itself or inside the run folder.
-- **Trace:** flow E4, F3 · PREP-FR-03, PREP-FR-07 · D15, D-W51 · G6
+- **Expect:** The review shows a full-copy footprint, the patched effective focal length for every copy, and Results location `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/`.
+- **Expect (negative):** Results are not written to `Work/Outputs` itself, to `Work/Outputs/28 Sep Ha copy check Results/` without the Project level, or inside the run folder.
+- **Trace:** flow E4, F3 · PREP-FR-03, PREP-FR-07 · D15, D-W51
 
 ### S15 — Prepare with blocked inputs {#S15}
 
@@ -175,7 +175,7 @@ Done means:
 - **Do:** In `28 Sep Ha copy check`, choose **Exclude from run** on one 28 Sep frame and save the run. Click **Review preparation**, confirm, and click **Prepare run**.
 - **Expect:**
   - The review proposes a new run folder, `Scratch/Processing/NGC 7000 HOO/28 Sep Ha copy check (rev 2)/`.
-  - The review keeps the Results location `Work/Outputs/28 Sep Ha copy check Results/`, shared by both revisions.
+  - The review keeps the Results location `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/`, shared by both revisions.
   - Revision 2 ends Prepared with 55 entries. The run lists both preparation revisions.
 - **Expect (negative):** The first folder `28 Sep Ha copy check/` keeps its 56 entries unchanged. No existing folder is reused, replaced or cleared, and no second Results folder is proposed for revision 2. The excluded frame's library quality is unchanged.
 - **Trace:** flow F5 · PREP-FR-06, PREP-FR-07, PREP-FR-11 · PREP-AC-12, PREP-AC-21 · VSEL-FR-15 · D09, D-W51, D-W67
@@ -183,7 +183,7 @@ Done means:
 ## Success criteria
 
 - SC1: Prepared appears only when all 208 entries match the confirmed membership (S9). Every Prepare ends in exactly one of Prepared, Partial, Failed, Canceled or Paused.
-- SC2: The run folder is `<parent>/NGC 7000 HOO/<run>/`, and its Results folder is a sibling outside it, in S6 and S7 and again in S13 and S14.
+- SC2: The run folder is `<parent>/NGC 7000 HOO/<run>/`, and its Results folder is a sibling outside it in S6 and S7 and again in S13. After the S14 override the Results folder is `Work/Outputs/NGC 7000 HOO/<run> Results/`, still outside the run folder.
 - SC3: `keep.txt` and its folder are unchanged (S4), and no drive is substituted silently (S5).
 - SC4: The capture and calibration manifest equals P6 after S9 and after S16. Prepare changes 0 quality states.
 - SC5: The partial outcome reports exactly 53 prepared and 3 blocked, with no verified Open (S15). After Retry the run reads 56 Prepared (S16).
@@ -202,7 +202,6 @@ Done means:
 - G3: Out of scope for this journey: per-item input-mode changes within one preparation (D04, PREP-FR-08) are not exercised. Blocks readiness until covered by a step or a journey.
 - G4: Unresolved implementation qualification: the specs do not say which preparation phases offer Cancel or Pause "where safe". The Canceled and Paused outcomes are not exercised. Blocks readiness.
 - G5: Unresolved implementation qualification: no fault control yet pauses Prepare between a source snapshot and terminal success (P7), and S15a depends on it. Blocks readiness.
-- G6: Unresolved product question: PREP-FR-07 says an override parent "gets the run's Results folder under it". It does not say whether the `<Project>/` level is kept there. S14 assumes `Work/Outputs/<Run> Results/`. Blocks readiness.
 
 ## Delta log
 

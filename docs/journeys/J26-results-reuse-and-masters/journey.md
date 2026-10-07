@@ -35,7 +35,7 @@ library from Calibration. Done means:
 - P5: A helper outside PlateVault saves a file's bytes and nanosecond mtime, then overwrites the file in place with a same-size variant whose pixel bytes differ and restores the saved mtime. The helper later restores the saved bytes and mtime.
 - P6: A fault control pauses adoption after the destination copy re-reads and verifies and before the master is registered (G4).
 - P7: An open Project `NGC 7000 SHO` (subject NGC 7000, rigs RedCat and Esprit) holds a run on rig Esprit with one accepted OIII linear product. That run was then marked Abandoned.
-- P8: After J24, Siril processing of each prepared revision of `28 Sep Ha copy check` wrote one Ha stack, and nothing else, into `Work/Outputs/28 Sep Ha copy check Results/`: one stack from `28 Sep Ha copy check/` and one from `28 Sep Ha copy check (rev 2)/`. Each stack's FITS HISTORY names the prepared folder it was stacked from (G6).
+- P8: After J24, Siril processing of each prepared revision of `28 Sep Ha copy check` wrote one Ha stack, and nothing else, into `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/`: one stack from `28 Sep Ha copy check/` and one from `28 Sep Ha copy check (rev 2)/`. Each stack's FITS HISTORY names the prepared folder it was stacked from (G6).
 
 ## Steps
 
@@ -52,7 +52,7 @@ library from Calibration. Done means:
 ### S1a — Tell two revisions apart in one Results folder {#S1a}
 
 - **Do:** Open the Results step of `28 Sep Ha copy check`.
-- **Expect:** Both P8 stacks are listed as candidates from `Work/Outputs/28 Sep Ha copy check Results/`. The stack from `28 Sep Ha copy check/` names preparation revision 1, and the stack from `28 Sep Ha copy check (rev 2)/` names revision 2.
+- **Expect:** Both P8 stacks are listed as candidates from `Work/Outputs/NGC 7000 HOO/28 Sep Ha copy check Results/`. The stack from `28 Sep Ha copy check/` names preparation revision 1, and the stack from `28 Sep Ha copy check (rev 2)/` names revision 2.
 - **Expect (negative):** Neither stack reads accepted. Nothing is discovered inside either prepared folder, and no second Results folder is listed for revision 2.
 - **Trace:** flow H1 · RES-FR-01, PREP-FR-07 · RES-AC-16 · D-W67 · G6
 
