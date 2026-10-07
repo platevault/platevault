@@ -16,7 +16,7 @@ use platevault_model::{
     GroupingResult, ImageFormat, LibraryError, Location, LocationRole, NativePath,
     ObservationFingerprint, PathSensitivity, Provenance, ScanBatch, ScanFile, ScanIssue,
     ScanObservation, ScanOperation, ScanProgress, ScanState, Session, SessionCandidate,
-    TargetAlias, TargetCandidate, VolumeIdentity,
+    TargetAlias, TargetCandidate, VolumeIdentity, VolumeKind,
 };
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -155,6 +155,7 @@ impl Fixture {
             path: NativePath::from_path(&self.root),
             role: LocationRole::Captures,
             identity: folder_identity(&self.root).unwrap(),
+            volume_kind: VolumeKind::Local,
         }
     }
     pub fn scan_file(&self, relative: &str) -> ScanFile {
