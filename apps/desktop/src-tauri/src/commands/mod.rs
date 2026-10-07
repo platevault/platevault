@@ -55,6 +55,7 @@ pub mod review;
 pub mod rigs;
 pub mod roots;
 pub mod search;
+pub mod session_filters;
 pub mod sessions;
 pub mod settings;
 pub mod status;

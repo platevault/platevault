@@ -34,6 +34,8 @@ mod view;
 pub use view::*;
 pub mod import;
 pub use import::*;
+mod session_filters;
+pub use session_filters::*;
 
 pub type Revision = u64;
 

@@ -112,6 +112,11 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ipc::library_review_retire_location,
         ipc::library_retire_location,
         ipc::library_list_operations,
+        // session filters (064 LIB-FR-17, 065 PRJ-FR-19)
+        crate::commands::session_filters::library_session_filter_counts,
+        crate::commands::session_filters::project_prefill_from_session,
+        crate::commands::session_filters::project_preview_session_addition,
+        crate::commands::session_filters::project_add_session,
         // projects
         crate::commands::project_goals::project_create,
         crate::commands::project_goals::project_update,
