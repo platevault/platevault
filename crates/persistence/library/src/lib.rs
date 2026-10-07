@@ -43,8 +43,25 @@ use uuid::Uuid;
 
 type Result<T, E = LibraryError> = std::result::Result<T, E>;
 
-const SCHEMA: &str = include_str!("schema.sql");
-const SCHEMA_VERSION: i64 = 6;
+/// Join schema module files in order, each followed by a newline so a file
+/// ending in a `--` comment cannot swallow the next file's first statement.
+macro_rules! schema_modules {
+    ($($file:literal),+ $(,)?) => {
+        concat!($(include_str!($file), "\n"),+)
+    };
+}
+
+/// The catalog schema, applied in this order on every open: `schema.sql` holds
+/// `catalog_meta` and the spec 064 library tables, and each feature module
+/// appends its own idempotent `<feature>.sql`, one file per line.
+#[rustfmt::skip]
+const SCHEMA: &str = schema_modules![
+    "schema.sql",
+];
+/// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
+/// `catalog_meta` row. There are no migrations: a catalog recording any other
+/// version is refused before any module's DDL runs.
+pub const SCHEMA_VERSION: i64 = 6;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;

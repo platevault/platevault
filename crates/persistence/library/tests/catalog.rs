@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use persistence_library::{
     Catalog, LocationReferences, LocationRegistration, SessionQuery, SourceProbe,
-    SuggestedAssociation,
+    SuggestedAssociation, SCHEMA_VERSION,
 };
 use platevault_model::{
     ApplicableQuality, Asset, AssetReference, Association, AssociationKind, AssociationState,
@@ -23,6 +23,8 @@ use platevault_model::{
     RetryAction, Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation,
     ScanProgress, ScanState, Session, VolumeIdentity,
 };
+use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
+use sqlx::Connection;
 use support::*;
 use uuid::Uuid;
 
@@ -2984,4 +2986,63 @@ async fn duplicate_verification_stops_at_cancel_and_keeps_each_bound_digest() {
     assert_stamped_when_hashed(&catalog, &[&t7, &nas_location]).await;
     assert!(catalog.duplicate_verification_work(operation).await.unwrap().is_empty());
     assert_eq!((tree(&fx.root), tree(&nas)), before, "sources unchanged");
+}
+
+/// Plain connection to a closed fixture catalog, for rows and schema state no
+/// public catalog write produces.
+async fn raw_connection(db: &Path) -> SqliteConnection {
+    SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(db)).await.unwrap()
+}
+
+async fn recorded_version(conn: &mut SqliteConnection) -> i64 {
+    sqlx::query_scalar("SELECT value FROM catalog_meta WHERE key = 'schema_version'")
+        .fetch_one(conn)
+        .await
+        .unwrap()
+}
+
+async fn schema_objects(conn: &mut SqliteConnection) -> Vec<(String, String, String)> {
+    sqlx::query_as("SELECT type, name, coalesce(sql, '') FROM sqlite_master ORDER BY type, name")
+        .fetch_all(conn)
+        .await
+        .unwrap()
+}
+
+/// One `SCHEMA_VERSION` covers every schema module. A catalog recording any
+/// other version, older or newer, is refused with the documented error before
+/// any module's DDL touches it, and the file is left as it was. Recorded back at
+/// `SCHEMA_VERSION`, the same file opens and the schema is applied again.
+#[tokio::test]
+async fn schema_version_mismatch_is_refused() {
+    let fx = Fixture::new();
+    Catalog::open(&fx.db).await.unwrap().close().await.unwrap();
+    let mut conn = raw_connection(&fx.db).await;
+    assert_eq!(recorded_version(&mut conn).await, SCHEMA_VERSION, "a new catalog records it");
+    // Without this index, any re-applied schema DDL would show.
+    sqlx::query("DROP INDEX assets_pending").execute(&mut conn).await.unwrap();
+    for version in [SCHEMA_VERSION - 1, SCHEMA_VERSION + 1] {
+        sqlx::query("UPDATE catalog_meta SET value = ?1 WHERE key = 'schema_version'")
+            .bind(version)
+            .execute(&mut conn)
+            .await
+            .unwrap();
+        let before = schema_objects(&mut conn).await;
+        let error = Catalog::open(&fx.db).await.err().expect("a mismatched catalog is refused");
+        assert_eq!(kind(&error), "invalid_input", "{error}");
+        assert_eq!(
+            error.to_string(),
+            format!("invalid input: unsupported catalog schema version {version}")
+        );
+        assert_eq!(schema_objects(&mut conn).await, before, "no schema DDL ran");
+        assert_eq!(recorded_version(&mut conn).await, version, "the version is left as it was");
+    }
+    sqlx::query("UPDATE catalog_meta SET value = ?1 WHERE key = 'schema_version'")
+        .bind(SCHEMA_VERSION)
+        .execute(&mut conn)
+        .await
+        .unwrap();
+    Catalog::open(&fx.db).await.unwrap().close().await.unwrap();
+    let objects = schema_objects(&mut conn).await;
+    assert!(objects.iter().any(|(_, name, _)| name == "assets_pending"), "schema applied again");
+    conn.close().await.unwrap();
 }
