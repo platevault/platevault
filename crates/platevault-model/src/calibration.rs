@@ -958,10 +958,11 @@ pub enum CustodyKind {
     GeneratedSource,
 }
 
-/// The verified kept copy of a retained generated source.
+/// The verified kept copy of a retained generated source: the adopted master
+/// that holds the same bytes. Distinct from the storage journal's `KeptCopy`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct KeptCopy {
+pub struct MasterKeptCopy {
     pub master_id: Uuid,
     pub location_id: Uuid,
     pub relative_path: NativePath,
@@ -983,7 +984,7 @@ pub struct CustodyFact {
     pub relative_path: NativePath,
     pub fingerprint: ObservationFingerprint,
     #[serde(default)]
-    pub kept_copy: Option<KeptCopy>,
+    pub kept_copy: Option<MasterKeptCopy>,
 }
 
 // ── Rules ────────────────────────────────────────────────────────────────────

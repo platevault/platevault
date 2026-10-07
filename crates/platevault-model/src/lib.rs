@@ -24,6 +24,8 @@ mod project;
 pub use project::*;
 mod frame_review;
 pub use frame_review::*;
+pub mod storage;
+pub use storage::*;
 
 pub type Revision = u64;
 

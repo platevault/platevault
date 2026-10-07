@@ -11,7 +11,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use platevault_model::{
     Asset, AssetReference, Availability, CalibrationRules, CandidateRef, CustodyFact, CustodyKind,
-    KeptCopy, LocationLifecycle, ReferenceKind,
+    LocationLifecycle, MasterKeptCopy, ReferenceKind,
 };
 use sqlx::Connection;
 use uuid::Uuid;
@@ -102,7 +102,7 @@ impl Catalog {
                 location_id: source.location_id,
                 relative_path: source.relative_path.clone(),
                 fingerprint: source.fingerprint.clone(),
-                kept_copy: Some(KeptCopy {
+                kept_copy: Some(MasterKeptCopy {
                     master_id: master.id,
                     location_id: master.location_id,
                     relative_path: master.relative_path.clone(),

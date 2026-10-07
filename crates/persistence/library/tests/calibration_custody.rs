@@ -18,7 +18,7 @@ use calibration_support::*;
 use persistence_library::{Catalog, InputQuery, LocationReferences};
 use platevault_model::{
     AdoptedMaster, AdoptionDestination, AdoptionSource, Asset, AssetReference, Availability,
-    CustodyFact, CustodyKind, KeptCopy, Location, LocationRole, NativePath, ReferenceKind,
+    CustodyFact, CustodyKind, Location, LocationRole, MasterKeptCopy, NativePath, ReferenceKind,
 };
 use support::*;
 use uuid::Uuid;
@@ -153,7 +153,7 @@ fn source_fact(source: &Asset, master: &AdoptedMaster) -> CustodyFact {
         location_id: source.location_id,
         relative_path: source.relative_path.clone(),
         fingerprint: source.fingerprint.clone(),
-        kept_copy: Some(KeptCopy {
+        kept_copy: Some(MasterKeptCopy {
             master_id: master.id,
             location_id: master.location_id,
             relative_path: master.relative_path.clone(),

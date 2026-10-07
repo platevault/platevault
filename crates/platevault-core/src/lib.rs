@@ -6,6 +6,7 @@
 pub mod calendar;
 pub mod calibration;
 pub mod frame_review;
+pub mod custody;
 pub mod grouping;
 pub mod inventory;
 pub mod library;
