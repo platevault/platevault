@@ -112,6 +112,19 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ipc::library_retire_location,
         ipc::library_list_operations,
         // projects
+        crate::commands::project_goals::project_create,
+        crate::commands::project_goals::project_update,
+        crate::commands::project_goals::project_set_subjects,
+        crate::commands::project_goals::project_set_rigs,
+        crate::commands::project_goals::project_set_goals,
+        crate::commands::project_goals::project_apply_goal_template,
+        crate::commands::project_goals::project_set_rejection,
+        crate::commands::project_goals::project_list,
+        crate::commands::project_goals::project_detail,
+        crate::commands::project_goals::project_candidates,
+        crate::commands::project_goals::goal_template_list,
+        crate::commands::project_goals::goal_template_save,
+        crate::commands::project_goals::goal_template_delete,
         // runs
         // frame review
         // calibration

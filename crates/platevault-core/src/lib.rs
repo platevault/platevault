@@ -15,5 +15,6 @@ pub mod notifier;
 pub mod observing_plans;
 pub mod planning;
 pub mod reminders;
+pub mod projects;
 pub mod targets;
 pub use model::*;

@@ -62,6 +62,7 @@ const SCHEMA: &str = schema_modules![
     "planning.sql",
     "calibration.sql",
     "trash.sql",
+    "projects.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -118,6 +119,7 @@ pub use calibration::{
 };
 mod trash;
 pub use trash::{TrashEpisode, TrashedAsset, TrashedFrame, TrashedQuery};
+mod projects;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
