@@ -48,6 +48,8 @@ mod home;
 pub use home::*;
 mod results;
 pub use results::*;
+mod done_archive;
+pub use done_archive::*;
 
 pub type Revision = u64;
 

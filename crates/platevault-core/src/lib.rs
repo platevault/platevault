@@ -7,6 +7,7 @@ pub mod calendar;
 pub mod calibration;
 pub mod calibration_inputs;
 pub mod custody;
+pub mod done_archive;
 pub mod frame_review;
 pub mod grouping;
 pub mod home;

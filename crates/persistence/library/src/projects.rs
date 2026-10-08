@@ -1043,7 +1043,7 @@ pub async fn candidates(
 }
 
 /// The latest Project-only decision of each asset outside the Trash, by asset.
-async fn latest_rejections(
+pub async fn latest_rejections(
     conn: &mut SqliteConnection,
     project: Uuid,
 ) -> Result<Vec<ProjectRejection>> {
