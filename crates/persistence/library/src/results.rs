@@ -702,13 +702,14 @@ async fn path_recorded(conn: &mut SqliteConnection, path: &NativePath) -> Result
 
 /// The recorded Results or prepared folder holding `path`, if any: a run's
 /// revision, a panel run's `Panel N/`, a run group's group folder, or any
-/// Results folder.
+/// Results folder, as chosen or as it resolved when Prepare made it.
 async fn containing_folder(conn: &mut SqliteConnection, path: &Path) -> Result<Option<PathBuf>> {
     let recorded = load_recorded_folders(conn).await?;
     for folder in recorded.results.iter().chain(&recorded.prepared) {
-        let folder = folder.to_path_buf()?;
-        if path.starts_with(&folder) {
-            return Ok(Some(folder));
+        let chosen = folder.path.to_path_buf()?;
+        let canonical = folder.canonical.as_ref().map(NativePath::to_path_buf).transpose()?;
+        if path.starts_with(&chosen) || canonical.is_some_and(|place| path.starts_with(place)) {
+            return Ok(Some(chosen));
         }
     }
     Ok(None)

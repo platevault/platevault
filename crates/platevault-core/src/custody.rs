@@ -426,7 +426,10 @@ fn path_of(path: &NativePath) -> Result<PathBuf, ItemReason> {
 /// Write `cards` into the isolated entry at `path` while it still holds
 /// `identity`: a patched Copy or Clone the preparation itself wrote, never
 /// an original or a link (PREP-FR-03). A card already holding its patched
-/// bytes is written unchanged, so a resumed item patches again safely.
+/// bytes is written unchanged, so a resumed item patches again safely. A
+/// clone carries its source's mode, which may lack owner write (an archive
+/// at 0444): the handle proven to be the entry grants it for the patch and
+/// gives the mode back afterwards.
 pub(crate) fn patch_entry(
     path: &Path,
     identity: &FileIdentity,
@@ -449,15 +452,47 @@ pub(crate) fn patch_entry(
         return Err(foreign());
     }
     let probed = inventory::probe_fingerprint(path).map_err(|_| foreign())?;
-    let mut file = fs::OpenOptions::new().write(true).open(path).map_err(failed)?;
-    if !same_identity(&probed.identity, identity) || !handle_is(&file, &inspected, identity) {
+    let held = File::open(path).map_err(failed)?;
+    if !same_identity(&probed.identity, identity) || !handle_is(&held, &inspected, identity) {
         return Err(foreign());
     }
-    for card in cards {
-        file.seek(SeekFrom::Start(card.offset)).map_err(failed)?;
-        file.write_all(&card.patched).map_err(failed)?;
+    let mode = held.metadata().map_err(failed)?.permissions();
+    let writable = owner_writable(&mode);
+    if let Some(writable) = &writable {
+        held.set_permissions(writable.clone()).map_err(failed)?;
     }
-    file.sync_all().map_err(failed)
+    let written = (|| {
+        let mut file = fs::OpenOptions::new().write(true).open(path).map_err(failed)?;
+        if !handle_is(&file, &inspected, identity) {
+            return Err(foreign());
+        }
+        for card in cards {
+            file.seek(SeekFrom::Start(card.offset)).map_err(failed)?;
+            file.write_all(&card.patched).map_err(failed)?;
+        }
+        file.sync_all().map_err(failed)
+    })();
+    let restored = match writable {
+        Some(_) => held.set_permissions(mode).map_err(failed),
+        None => Ok(()),
+    };
+    written.and(restored)
+}
+
+/// `mode` with owner write added, or `None` when it already has it.
+#[cfg(unix)]
+fn owner_writable(mode: &fs::Permissions) -> Option<fs::Permissions> {
+    use std::os::unix::fs::PermissionsExt;
+    (mode.mode() & 0o200 == 0).then(|| fs::Permissions::from_mode(mode.mode() | 0o200))
+}
+
+#[cfg(not(unix))]
+fn owner_writable(mode: &fs::Permissions) -> Option<fs::Permissions> {
+    mode.readonly().then(|| {
+        let mut writable = mode.clone();
+        writable.set_readonly(false);
+        writable
+    })
 }
 
 /// D19 for an isolated patched entry (PREP-FR-09): re-read, it still holds

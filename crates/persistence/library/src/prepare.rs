@@ -64,6 +64,11 @@ pub struct NewPreparation {
     pub output: NativePath,
     pub folder: NativePath,
     pub results_folder: NativePath,
+    /// `folder` and `results_folder` resolved when Prepare made them: the
+    /// containment checks use these, so a symlinked parent retargeted later
+    /// never moves them (PREP-FR-07). Display and Open keep the chosen form.
+    pub canonical_folder: Option<NativePath>,
+    pub canonical_results: Option<NativePath>,
     pub entries: Vec<NewPreparedEntry>,
 }
 
@@ -88,8 +93,16 @@ pub struct PreparationRecord {
 /// check (PREP-FR-06): prepared folders and Results folders.
 #[derive(Clone, Debug, Default)]
 pub struct RecordedFolders {
-    pub prepared: Vec<NativePath>,
-    pub results: Vec<NativePath>,
+    pub prepared: Vec<RecordedFolder>,
+    pub results: Vec<RecordedFolder>,
+}
+
+/// One recorded folder: the chosen form, and the form it resolved to when
+/// Prepare made it (`None` for a folder recorded without one).
+#[derive(Clone, Debug)]
+pub struct RecordedFolder {
+    pub path: NativePath,
+    pub canonical: Option<NativePath>,
 }
 
 /// A preparation revision read: its columns, then `$tail`.
@@ -501,6 +514,10 @@ pub struct NewPanelPreparation {
     pub folder: NativePath,
     /// The panel run's `<Mosaic> Results/Panel N/`.
     pub results_folder: NativePath,
+    /// `folder` and `results_folder` resolved when Prepare made them, as
+    /// [`NewPreparation::canonical_folder`] (PREP-FR-07).
+    pub canonical_folder: Option<NativePath>,
+    pub canonical_results: Option<NativePath>,
     pub entries: Vec<NewPreparedEntry>,
 }
 
@@ -519,6 +536,10 @@ pub struct NewGroupPreparation {
     pub folder: NativePath,
     /// `<Mosaic> Results/Assembled/`.
     pub assembled: NativePath,
+    /// `folder` and `assembled` resolved when Prepare made them, as
+    /// [`NewPreparation::canonical_folder`] (PREP-FR-07).
+    pub canonical_folder: Option<NativePath>,
+    pub canonical_assembled: Option<NativePath>,
     pub panels: Vec<NewPanelPreparation>,
 }
 
@@ -671,14 +692,15 @@ impl Catalog {
                 }
                 Some(_) => {}
                 None => {
-                    insert_results_folder(conn, Owner::Group(group.id), &input.assembled, &at)
-                        .await?;
+                    let owner = Owner::Group(group.id);
+                    let canonical = input.canonical_assembled.as_ref();
+                    insert_results_folder(conn, owner, &input.assembled, canonical, &at).await?;
                 }
             }
             sqlx::query(
                 "INSERT INTO group_preparations (id, group_id, n, profile_id, output, folder, \
-                 outcome, started_at, finished_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'running', ?7, \
-                 NULL)",
+                 canonical_folder, outcome, started_at, finished_at) VALUES (?1, ?2, ?3, ?4, ?5, \
+                 ?6, ?7, 'running', ?8, NULL)",
             )
             .bind(id.to_string())
             .bind(group.id.to_string())
@@ -686,6 +708,7 @@ impl Catalog {
             .bind(input.profile_id.to_string())
             .bind(to_json(&input.output)?)
             .bind(to_json(&input.folder)?)
+            .bind(input.canonical_folder.as_ref().map(to_json).transpose()?)
             .bind(&at)
             .execute(&mut *conn)
             .await?;
@@ -849,6 +872,8 @@ struct RevisionRow<'a> {
     output: &'a NativePath,
     folder: &'a NativePath,
     results_folder: &'a NativePath,
+    canonical_folder: Option<&'a NativePath>,
+    canonical_results: Option<&'a NativePath>,
     group: Option<Uuid>,
     entries: &'a [NewPreparedEntry],
 }
@@ -865,6 +890,8 @@ impl<'a> RevisionRow<'a> {
             output: &input.output,
             folder: &input.folder,
             results_folder: &input.results_folder,
+            canonical_folder: input.canonical_folder.as_ref(),
+            canonical_results: input.canonical_results.as_ref(),
             group: None,
             entries: &input.entries,
         }
@@ -881,6 +908,8 @@ impl<'a> RevisionRow<'a> {
             output: &group.output,
             folder: &panel.folder,
             results_folder: &panel.results_folder,
+            canonical_folder: panel.canonical_folder.as_ref(),
+            canonical_results: panel.canonical_results.as_ref(),
             group: Some(id),
             entries: &panel.entries,
         }
@@ -934,15 +963,18 @@ async fn require_next(
         None => {
             let owner =
                 if row.group.is_some() { Owner::Panel(view.id) } else { Owner::Run(view.id) };
-            insert_results_folder(conn, owner, row.results_folder, at).await
+            insert_results_folder(conn, owner, row.results_folder, row.canonical_results, at).await
         }
     }
 }
 
+/// Record a Results folder: its chosen form, shown and opened, and the form
+/// it resolved to when Prepare made it, which containment uses (PREP-FR-07).
 async fn insert_results_folder(
     conn: &mut SqliteConnection,
     owner: Owner,
     path: &NativePath,
+    canonical: Option<&NativePath>,
     at: &str,
 ) -> Result<()> {
     let (view, group, kind) = match owner {
@@ -951,14 +983,15 @@ async fn insert_results_folder(
         Owner::Group(group) => (None, Some(group), "assembled"),
     };
     sqlx::query(
-        "INSERT INTO results_folders (id, view_id, group_id, kind, path, created_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO results_folders (id, view_id, group_id, kind, path, canonical_path, \
+         created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
     )
     .bind(Uuid::new_v4().to_string())
     .bind(view.map(|id| id.to_string()))
     .bind(group.map(|id| id.to_string()))
     .bind(kind)
     .bind(to_json(path)?)
+    .bind(canonical.map(to_json).transpose()?)
     .bind(at)
     .execute(&mut *conn)
     .await?;
@@ -974,9 +1007,9 @@ async fn insert_revision(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO preparation_revisions (id, view_id, n, membership_revision, profile_id, \
-         mode, link, output, folder, results_folder, state, reason, group_preparation_id, \
-         started_at, finished_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'running', \
-         NULL, ?11, ?12, NULL)",
+         mode, link, output, folder, canonical_folder, results_folder, state, reason, \
+         group_preparation_id, started_at, finished_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, \
+         ?9, ?10, ?11, 'running', NULL, ?12, ?13, NULL)",
     )
     .bind(id.to_string())
     .bind(row.view_id.to_string())
@@ -987,6 +1020,7 @@ async fn insert_revision(
     .bind(row.link.as_ref().map(to_text).transpose()?)
     .bind(to_json(row.output)?)
     .bind(to_json(row.folder)?)
+    .bind(row.canonical_folder.map(to_json).transpose()?)
     .bind(to_json(row.results_folder)?)
     .bind(row.group.map(|group| group.to_string()))
     .bind(at)
@@ -1258,21 +1292,31 @@ pub async fn load_results_folder(
 }
 
 /// Every recorded prepared folder (a run's revision, a panel run's `Panel N/`
-/// and a run group's group folder) and every recorded Results folder.
+/// and a run group's group folder) and every recorded Results folder, each
+/// with the form it resolved to when Prepare made it, if recorded.
 pub async fn load_recorded_folders(conn: &mut SqliteConnection) -> Result<RecordedFolders> {
-    let prepared: Vec<String> = sqlx::query_scalar(
-        "SELECT folder FROM (SELECT folder, started_at, id FROM preparation_revisions \
-         UNION ALL SELECT folder, started_at, id FROM group_preparations) \
-         ORDER BY started_at, id",
+    let prepared: Vec<(String, Option<String>)> = sqlx::query_as(
+        "SELECT folder, canonical_folder FROM (SELECT folder, canonical_folder, started_at, id \
+         FROM preparation_revisions UNION ALL SELECT folder, canonical_folder, started_at, id \
+         FROM group_preparations) ORDER BY started_at, id",
     )
     .fetch_all(&mut *conn)
     .await?;
-    let results: Vec<String> =
-        sqlx::query_scalar("SELECT path FROM results_folders").fetch_all(&mut *conn).await?;
-    Ok(RecordedFolders {
-        prepared: prepared.iter().map(|path| from_json(path)).collect::<Result<_>>()?,
-        results: results.iter().map(|path| from_json(path)).collect::<Result<_>>()?,
-    })
+    let results: Vec<(String, Option<String>)> =
+        sqlx::query_as("SELECT path, canonical_path FROM results_folders")
+            .fetch_all(&mut *conn)
+            .await?;
+    let folders = |rows: &[(String, Option<String>)]| -> Result<Vec<RecordedFolder>> {
+        rows.iter()
+            .map(|(path, canonical)| {
+                Ok(RecordedFolder {
+                    path: from_json(path)?,
+                    canonical: canonical.as_deref().map(from_json).transpose()?,
+                })
+            })
+            .collect()
+    };
+    Ok(RecordedFolders { prepared: folders(&prepared)?, results: folders(&results)? })
 }
 
 async fn load_entry(conn: &mut SqliteConnection, id: Uuid, seq: u32) -> Result<PreparedEntry> {

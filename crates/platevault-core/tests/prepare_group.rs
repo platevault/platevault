@@ -200,6 +200,48 @@ async fn group_layout_panels_under_mosaic_and_results_outside() {
     assert_eq!(path(&chosen.assembled), chosen_results.join("Assembled"));
 }
 
+/// PREP-FR-07: Prepare all records each folder as it made it, so containment
+/// never follows a symlinked parent retargeted later. After the link moves to
+/// another drive, a parent inside the earlier group folder, a panel run's
+/// `Panel N/`, its Results folder or the Assembled folder, chosen by its real
+/// path, is still refused.
+#[tokio::test]
+async fn retargeted_parent_keeps_group_folders_refused() {
+    let world = group_world().await;
+    let (drive_a, drive_b) = (world.temp.path().join("Drive A"), world.temp.path().join("Drive B"));
+    fs::create_dir_all(drive_a.join("Processing")).unwrap();
+    fs::create_dir_all(drive_b.join("Processing")).unwrap();
+    let astro = world.temp.path().join("Astro");
+    std::os::unix::fs::symlink(&drive_a, &astro).unwrap();
+    let profile = world.wbpp(QUIET).await;
+    let mut request = world.setup(&profile, InputMode::Copy).await;
+    request.output = Some(NativePath::from_path(&astro.join("Processing")));
+    let outcome = world.prepare_all(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.preparation.outcome, PreparationState::Prepared, "{outcome:#?}");
+    assert!(path(&outcome.preparation.folder).starts_with(&astro), "the chosen form is recorded");
+    assert!(path(&outcome.assembled).starts_with(&astro), "the chosen form is recorded");
+
+    fs::remove_file(&astro).unwrap();
+    std::os::unix::fs::symlink(&drive_b, &astro).unwrap();
+    let real = fs::canonicalize(drive_a.join("Processing")).unwrap().join(PROJECT);
+    let results = real.join(format!("{MOSAIC} Results"));
+    for inside in [
+        real.join(MOSAIC),
+        real.join(MOSAIC).join("Panel 1").join("Lights"),
+        results.join("Panel 2"),
+        results.join("Assembled"),
+    ] {
+        request.output = Some(NativePath::from_path(&inside));
+        let review = world.review(&request).await;
+        assert!(
+            matches!(review.location_check, LocationCheck::InsidePreparedFolder { .. }),
+            "{} inside the earlier folders: {:?}",
+            inside.display(),
+            review.location_check
+        );
+    }
+}
+
 /// PREP-FR-07/13, PREP-AC-16: the group Result's folder
 /// `<Mosaic> Results/Assembled/` is listed by review, created and recorded by
 /// Prepare all, kept by every later group revision, outside every group
@@ -224,8 +266,16 @@ async fn assembled_folder_listed() {
         Some(native.clone())
     );
     let recorded = world.catalog().recorded_preparation_folders().await.unwrap();
-    assert!(recorded.results.contains(&native), "{recorded:?}");
-    assert!(recorded.prepared.contains(&first.preparation.folder), "the group folder is recorded");
+    let holds = |folders: &[persistence_library::RecordedFolder], native: &NativePath| {
+        folders
+            .iter()
+            .any(|folder| folder.path == *native && folder.canonical.as_ref() == Some(native))
+    };
+    assert!(holds(&recorded.results, &native), "{recorded:?}");
+    assert!(
+        holds(&recorded.prepared, &first.preparation.folder),
+        "the group folder is recorded, with its canonical form"
+    );
 
     let second = world.prepare_all(&request, &Watch::quiet()).await;
     assert_eq!(second.preparation.n, 2);

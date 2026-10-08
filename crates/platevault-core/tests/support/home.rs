@@ -293,6 +293,8 @@ pub async fn running_preparation(world: &World) -> PreparationRevision {
         output: location.output,
         folder: location.folder,
         results_folder: location.results,
+        canonical_folder: None,
+        canonical_results: None,
         entries,
     };
     world.catalog().start_preparation(&input).await.unwrap().revision

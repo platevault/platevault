@@ -458,6 +458,8 @@ impl GroupWorld {
             output: location.output.clone(),
             folder: location.folder.clone(),
             assembled: location.assembled.clone(),
+            canonical_folder: None,
+            canonical_assembled: None,
             panels: review
                 .panels
                 .iter()
@@ -468,6 +470,8 @@ impl GroupWorld {
                     membership_revision: panel.membership_revision,
                     folder: place.folder.clone(),
                     results_folder: place.results.clone(),
+                    canonical_folder: None,
+                    canonical_results: None,
                     entries: vec![persistence_library::NewPreparedEntry {
                         member_key: panel.entries[0].member_key,
                         asset_id: panel.entries[0].asset_id,

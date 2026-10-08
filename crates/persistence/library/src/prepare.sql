@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS group_preparations (
     profile_id TEXT NOT NULL REFERENCES profiles (id),
     output TEXT NOT NULL,
     folder TEXT NOT NULL UNIQUE,
+    -- The folder as it resolved when Prepare all made it (PREP-FR-07).
+    canonical_folder TEXT,
     outcome TEXT NOT NULL CHECK (
         outcome IN ('running', 'prepared', 'partial', 'failed', 'canceled', 'paused')
     ),
@@ -56,6 +58,9 @@ CREATE TABLE IF NOT EXISTS preparation_revisions (
     -- The parent chosen for this revision: the next review's default.
     output TEXT NOT NULL,
     folder TEXT NOT NULL UNIQUE,
+    -- The folder as it resolved when Prepare made it: containment checks use
+    -- it, so a retargeted symlinked parent never moves it (PREP-FR-07).
+    canonical_folder TEXT,
     results_folder TEXT NOT NULL,
     state TEXT NOT NULL CHECK (
         state IN ('running', 'prepared', 'partial', 'failed', 'canceled', 'paused')
@@ -114,6 +119,8 @@ CREATE TABLE IF NOT EXISTS results_folders (
     group_id TEXT REFERENCES view_groups (id),
     kind TEXT NOT NULL CHECK (kind IN ('run', 'panel', 'assembled')),
     path TEXT NOT NULL UNIQUE,
+    -- The path as it resolved when Prepare made it (PREP-FR-07).
+    canonical_path TEXT,
     created_at TEXT NOT NULL,
     CHECK ((view_id IS NULL) <> (group_id IS NULL)),
     CHECK ((kind = 'assembled') = (group_id IS NOT NULL))

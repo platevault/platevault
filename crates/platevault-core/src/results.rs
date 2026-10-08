@@ -638,11 +638,13 @@ impl Library {
             ResultOwner::Group { .. } => Vec::new(),
         };
         let recorded = self.catalog().recorded_preparation_folders().await?;
+        // The walk starts at the chosen form, so it meets the other folders
+        // in theirs.
         let excluded = recorded
             .prepared
             .iter()
-            .chain(recorded.results.iter().filter(|path| **path != folder))
-            .map(NativePath::to_path_buf)
+            .chain(recorded.results.iter().filter(|recorded| recorded.path != folder))
+            .map(|recorded| recorded.path.to_path_buf())
             .collect::<Result<Vec<_>, _>>()?;
         let scan = blocking(move || Ok(discover(&basis, folder, revisions, &excluded))).await?;
         self.catalog().record_results_scan(&scan).await

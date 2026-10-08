@@ -147,7 +147,10 @@ fn holds(card: &[u8], keyword: &str) -> bool {
 ///
 /// # Errors
 /// Why the header cannot carry `changes`: no FITS header, a field without a
-/// keyword, a value that is no FITS value, or no room for an added card.
+/// keyword, a value that is no FITS value, no room for an added card, a
+/// long-string value continued on CONTINUE cards a patch would orphan, or a
+/// CHECKSUM or DATASUM a patch would leave stale. These are refused, never
+/// rewritten.
 pub fn plan(header: &[u8], changes: &[CorrectedField]) -> Result<Vec<Card>, String> {
     let cards: Vec<&[u8]> =
         header.as_chunks::<CARD>().0.iter().map(<[u8; CARD]>::as_slice).collect();
@@ -155,6 +158,12 @@ pub fn plan(header: &[u8], changes: &[CorrectedField]) -> Result<Vec<Card>, Stri
         return Err("it is not a FITS file".to_owned());
     }
     let end = cards.iter().position(|card| is_end(card)).ok_or("its header has no END card")?;
+    if let Some(keyword) = ["CHECKSUM", "DATASUM"]
+        .into_iter()
+        .find(|keyword| cards[..end].iter().any(|card| holds(card, keyword)))
+    {
+        return Err(format!("its header holds {keyword}, which a patched copy would leave stale"));
+    }
     let mut patched = Vec::new();
     let mut added = Vec::new();
     for change in changes {
@@ -170,6 +179,13 @@ pub fn plan(header: &[u8], changes: &[CorrectedField]) -> Result<Vec<Card>, Stri
             for (index, held) in
                 cards[..end].iter().enumerate().filter(|(_, held)| holds(held, keyword))
             {
+                if continued(held)
+                    || cards.get(index + 1).is_some_and(|next| next.starts_with(b"CONTINUE"))
+                {
+                    return Err(format!(
+                        "its {keyword} value continues on CONTINUE cards, which a patch would orphan"
+                    ));
+                }
                 patched.push(card_at(index, held, card));
                 found = true;
             }
@@ -200,6 +216,28 @@ pub fn plan(header: &[u8], changes: &[CorrectedField]) -> Result<Vec<Card>, Stri
     patched.sort_by_key(|card| card.offset);
     patched.dedup_by_key(|card| card.offset);
     Ok(patched)
+}
+
+/// Whether a card's string value ends in `&`: a FITS long string that the
+/// next CONTINUE card carries on.
+fn continued(card: &[u8]) -> bool {
+    let value = &card[10..];
+    let Some(rest) = value.trim_ascii_start().strip_prefix(b"'") else {
+        return false;
+    };
+    let mut text = Vec::new();
+    let mut bytes = rest.iter();
+    while let Some(&byte) = bytes.next() {
+        if byte == b'\'' {
+            if bytes.as_slice().first() == Some(&b'\'') {
+                bytes.next();
+            } else {
+                break;
+            }
+        }
+        text.push(byte);
+    }
+    text.trim_ascii_end().ends_with(b"&")
 }
 
 fn card_at(index: usize, held: &[u8], patched: [u8; CARD]) -> Card {
@@ -323,5 +361,27 @@ mod tests {
         let effective = CaptureMetadata { filter: Some("OIII".into()), ..observed.clone() };
         assert_eq!(corrected_fields(&observed, &effective), [change("filter", "Ha", "OIII")]);
         assert!(corrected_fields(&observed, &observed).is_empty());
+    }
+
+    /// A patch never orphans CONTINUE cards or leaves a checksum stale: it
+    /// is refused, naming why, so review names it.
+    #[test]
+    fn refuses_continued_strings_and_checksums() {
+        let simple = "SIMPLE  =                    T";
+        let naxis = "NAXIS   =                    2";
+        let object = change("object", "NGC 7000 North America Nebula", "NGC 7000");
+        let continued =
+            header(&[simple, naxis, "OBJECT  = 'NGC 7000 North America&'", "CONTINUE  ' Nebula'"]);
+        assert!(plan(&continued, std::slice::from_ref(&object)).unwrap_err().contains("CONTINUE"));
+        let ampersand = header(&[simple, naxis, "OBJECT  = 'NGC 7000&'           / name"]);
+        assert!(plan(&ampersand, std::slice::from_ref(&object)).unwrap_err().contains("CONTINUE"));
+        let followed = header(&[simple, naxis, "OBJECT  = 'NGC 7000'", "CONTINUE  'x'"]);
+        assert!(plan(&followed, &[object]).unwrap_err().contains("CONTINUE"));
+        for keyword in ["CHECKSUM", "DATASUM"] {
+            let card = format!("{keyword:<8}= '0'");
+            let summed = header(&[simple, naxis, "FILTER  = 'Ha      '", card.as_str()]);
+            let refusal = plan(&summed, &[change("filter", "Ha", "OIII")]).unwrap_err();
+            assert!(refusal.contains(keyword), "{refusal}");
+        }
     }
 }
