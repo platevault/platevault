@@ -91,6 +91,12 @@ fn native(path: &Path) -> NativePath {
     NativePath::from_path(path)
 }
 
+/// `path` with each `/` read as the platform separator, as the import records
+/// it (`\` on Windows).
+fn rel(path: &str) -> NativePath {
+    NativePath::from_path(&path.split('/').collect::<PathBuf>())
+}
+
 const CAMERA: &str = "'ZWO ASI2600MM Pro'";
 const TELESCOPE: &str = "'RedCat 51'";
 
@@ -266,7 +272,7 @@ fn item<'a>(operation: &'a ImportOperation, relative: &str) -> &'a ImportItem {
     operation
         .items
         .iter()
-        .find(|item| item.relative_path == native(Path::new(relative)))
+        .find(|item| item.relative_path == rel(relative))
         .unwrap_or_else(|| panic!("no item {relative}"))
 }
 
@@ -317,7 +323,7 @@ async fn preview_routes_lights_and_calibration_with_templated_paths() {
         assert_eq!(light.classification, Some(NamingFrameType::Light));
         assert_eq!(light.role, Some(LocationRole::Captures));
         assert_eq!(light.destination_location_id, Some(fixture.captures_id));
-        assert_eq!(destination_text(light), expected, "lights keep their basename");
+        assert_eq!(destination_text(light), rel(expected).display(), "lights keep their basename");
         assert!(light.fallbacks.is_empty(), "no fallback for a fully described light");
         assert_eq!(light.sha256.as_deref(), Some(digest(&card.join(relative)).as_str()));
     }
@@ -326,11 +332,11 @@ async fn preview_routes_lights_and_calibration_with_templated_paths() {
     assert_eq!(flat.classification, Some(NamingFrameType::Flat));
     assert_eq!(flat.role, Some(LocationRole::Calibration));
     assert_eq!(flat.destination_location_id, fixture.calibration_id);
-    assert_eq!(destination_text(flat), "flats/Ha/2026-04-12/flat_Ha_001.fits");
+    assert_eq!(destination_text(flat), rel("flats/Ha/2026-04-12/flat_Ha_001.fits").display());
     let dark = item(&preview, "darks/dark_300_001.fits");
     assert_eq!(dark.classification, Some(NamingFrameType::Dark));
     assert_eq!(dark.destination_location_id, fixture.calibration_id);
-    assert_eq!(destination_text(dark), "darks/300/dark_300_001.fits");
+    assert_eq!(destination_text(dark), rel("darks/300/dark_300_001.fits").display());
     for relative in ["untyped_001.fits", "untyped_002.fits"] {
         let held = item(&preview, relative);
         assert_eq!(held.phase, ImportItemPhase::Unclassified, "{relative}");
@@ -386,7 +392,7 @@ async fn unclassified_held_until_typed() {
     assert_eq!(a.user_type, Some(NamingFrameType::Flat));
     assert_eq!(a.phase, ImportItemPhase::Ready, "a typed frame routes and is offered");
     assert_eq!(a.destination_location_id, fixture.calibration_id);
-    assert_eq!(destination_text(a), "flats/nofilter/2026-04-12/frame_a.fits");
+    assert_eq!(destination_text(a), rel("flats/nofilter/2026-04-12/frame_a.fits").display());
     assert!(
         a.fallbacks.iter().any(|fallback| fallback.token == "filter"),
         "the preview names the fallback it used"
@@ -559,7 +565,8 @@ async fn collision_with_different_bytes_blocks_item() {
     let one = light(&card.join("light_001.fits"), Some("NGC7000"), "Ha", "2026-04-12T22:00:00");
     let two = light(&card.join("light_002.fits"), Some("NGC7000"), "Ha", "2026-04-12T22:05:00");
     light(&card.join("light_003.fits"), Some("NGC7000"), "Ha", "2026-04-12T22:10:00");
-    let folder = fixture.captures.join("NGC7000/Ha/2026-04-12/light");
+    let folder =
+        fixture.captures.join("NGC7000/Ha/2026-04-12/light".split('/').collect::<PathBuf>());
     fs::create_dir_all(&folder).unwrap();
     let occupant = folder.join("light_001.fits");
     fs::write(&occupant, b"a different frame that happens to share the name").unwrap();
@@ -596,7 +603,7 @@ async fn collision_with_different_bytes_blocks_item() {
     let moved_on = fixture.preview().await;
     let free = item(&moved_on, "light_001.fits");
     assert_eq!(free.phase, ImportItemPhase::Ready);
-    assert_eq!(destination_text(free), "NGC7000/2026-04-12/Ha/light_001.fits");
+    assert_eq!(destination_text(free), rel("NGC7000/2026-04-12/Ha/light_001.fits").display());
     assert_eq!(digest(&one), free.sha256.clone().unwrap());
 }
 
@@ -806,7 +813,10 @@ async fn imported_lights_appear_in_sessions_without_inbox() {
 
     let preview = fixture.preview().await;
     let mystery = item(&preview, "mystery_001.fits");
-    assert_eq!(destination_text(mystery), "unclassified/OIII/2026-04-12/light/mystery_001.fits");
+    assert_eq!(
+        destination_text(mystery),
+        rel("unclassified/OIII/2026-04-12/light/mystery_001.fits").display()
+    );
     assert_eq!(
         mystery.fallbacks,
         vec![NamingFallback { token: "target".into(), value: "unclassified".into() }],
