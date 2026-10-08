@@ -1598,7 +1598,49 @@ fn platform_writability(root: &Path) -> Writability {
     }
 }
 
-#[cfg(not(unix))]
+/// Open the folder itself for the rights the import uses below it (new files
+/// and new template folders). The open runs the folder's access check, and a
+/// write-protected volume refuses it, without writing anything. PlateVault
+/// enables no backup privilege, so the backup-semantics flag that lets a
+/// folder be opened bypasses no check.
+#[cfg(windows)]
+fn platform_writability(root: &Path) -> Writability {
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_ADD_FILE: u32 = 0x0002;
+    const FILE_ADD_SUBDIRECTORY: u32 = 0x0004;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    let opened = fs::OpenOptions::new()
+        .access_mode(FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(root)
+        .map(drop);
+    opened_writability(root, opened)
+}
+
+/// What opening a folder for new entries says about its writability: a
+/// refused access check, a write-protected volume or a folder gone since it
+/// was inspected is not writable; any other failure leaves it unknown.
+#[cfg(any(windows, test))]
+fn opened_writability(root: &Path, opened: std::io::Result<()>) -> Writability {
+    use std::io::ErrorKind;
+    match opened {
+        Ok(()) => Writability::Writable,
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::PermissionDenied | ErrorKind::ReadOnlyFilesystem | ErrorKind::NotFound
+            ) =>
+        {
+            Writability::NotWritable { detail: format!("{}: {error}", root.display()) }
+        }
+        Err(error) => Writability::Unknown {
+            detail: format!("{} could not be checked for writing: {error}", root.display()),
+        },
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 fn platform_writability(root: &Path) -> Writability {
     Writability::Unknown {
         detail: format!(
@@ -1856,4 +1898,26 @@ fn summarize(items: &[ImportItem]) -> ImportSummary {
         }
     }
     summary
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Error, ErrorKind};
+    use std::path::Path;
+
+    use super::{opened_writability, Writability};
+
+    #[test]
+    fn a_folder_refusing_new_entries_is_not_writable_and_an_unexplained_failure_unknown() {
+        let root = Path::new("Captures");
+        assert_eq!(opened_writability(root, Ok(())), Writability::Writable);
+        for kind in
+            [ErrorKind::PermissionDenied, ErrorKind::ReadOnlyFilesystem, ErrorKind::NotFound]
+        {
+            let refused = opened_writability(root, Err(Error::from(kind)));
+            assert!(matches!(refused, Writability::NotWritable { .. }), "{kind:?}: {refused:?}");
+        }
+        let unexplained = opened_writability(root, Err(Error::other("flags not supported")));
+        assert!(matches!(unexplained, Writability::Unknown { .. }), "{unexplained:?}");
+    }
 }

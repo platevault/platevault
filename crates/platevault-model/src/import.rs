@@ -295,8 +295,9 @@ pub enum Writability {
     NotWritable {
         detail: String,
     },
-    /// This platform offers no check that writes nothing; a failed write
-    /// still blocks only its item.
+    /// No check that writes nothing could answer: the platform has none, or
+    /// the Windows access check failed for a reason other than a refusal. A
+    /// failed write still blocks only its item.
     Unknown {
         detail: String,
     },
