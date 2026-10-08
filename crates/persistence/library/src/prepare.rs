@@ -1078,7 +1078,7 @@ async fn load_group_preparation(
 }
 
 /// The run group's recorded `Assembled/` folder, once Prepare all recorded it.
-pub(super) async fn load_assembled_folder(
+pub async fn load_assembled_folder(
     conn: &mut SqliteConnection,
     group: Uuid,
 ) -> Result<Option<NativePath>> {
@@ -1224,7 +1224,7 @@ async fn load_view_revisions(
 }
 
 /// The Results folder recorded for a run or panel run, shared by its revisions.
-pub(super) async fn load_results_folder(
+pub async fn load_results_folder(
     conn: &mut SqliteConnection,
     view: Uuid,
 ) -> Result<Option<NativePath>> {
@@ -1238,7 +1238,7 @@ pub(super) async fn load_results_folder(
 
 /// Every recorded prepared folder (a run's revision, a panel run's `Panel N/`
 /// and a run group's group folder) and every recorded Results folder.
-pub(super) async fn load_recorded_folders(conn: &mut SqliteConnection) -> Result<RecordedFolders> {
+pub async fn load_recorded_folders(conn: &mut SqliteConnection) -> Result<RecordedFolders> {
     let prepared: Vec<String> = sqlx::query_scalar(
         "SELECT folder FROM (SELECT folder, started_at, id FROM preparation_revisions \
          UNION ALL SELECT folder, started_at, id FROM group_preparations) \
