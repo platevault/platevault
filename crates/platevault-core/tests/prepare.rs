@@ -390,6 +390,8 @@ async fn closing_app_never_completes_run() {
                 path: NativePath::from_path(&world.output.join("pending.fits")),
                 source: Some(NativePath::from_path(&world.light(OIII_LIGHTS[0]))),
                 size_bytes: 1,
+                basis: None,
+                header_changes: Vec::new(),
                 blocked: None,
             }],
         })
@@ -406,4 +408,290 @@ async fn closing_app_never_completes_run() {
     assert_eq!(paused.state, PreparationState::Paused);
     assert_eq!(world.view().await.completion, RunCompletion::Open);
     world.library.mark_view_complete(world.run).await.unwrap();
+}
+
+/// PREP-FR-09, D19: Retry verifies each entry against the basis Prepare
+/// recorded, never one rebuilt from the run's current calibration. A dark
+/// blocked for drift whose assignment changed afterwards stays blocked,
+/// named as no longer in the reviewed selection, and the revision is never
+/// Prepared.
+#[tokio::test]
+async fn retry_keeps_entry_whose_basis_left_the_selection() {
+    let world = world().await;
+    let dark = world.calibration_file("darks/Dark_300s_001.fits");
+    overwrite_in_place(&dark);
+    let profile = world.siril(QUIET).await;
+    let outcome =
+        world.prepare(&world.request(&profile, InputMode::Copy, None), &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Partial, "{outcome:#?}");
+    assert_eq!(outcome.blocked[0].reason.as_ref().unwrap().code, ReasonCode::SourceDrift);
+    let recorded = outcome.blocked[0].basis.as_ref().expect("Prepare records the basis");
+    assert_eq!(recorded.origin, BasisOrigin::CalibrationAssignment);
+
+    let plan = world.library.calibration_view_plan(world.run, 1).await.unwrap();
+    let darks: Vec<RequirementKey> = plan
+        .requirements
+        .iter()
+        .filter(|requirement| requirement.kind == InputKind::Dark)
+        .map(Requirement::key)
+        .collect();
+    world
+        .library
+        .calibration_exclude(world.run, 1, plan.plan_revision, &darks, Some("darks re-shot"))
+        .await
+        .unwrap();
+    let retried =
+        world.library.retry_preparation(outcome.revision.id, &Watch::quiet()).await.unwrap();
+    assert_ne!(retried.revision.state, PreparationState::Prepared, "{retried:#?}");
+    // The drifted dark stays blocked; the dark prepared before the change
+    // leaves the selection too and is blocked at the terminal check.
+    assert_eq!(retried.blocked.len(), 2, "{retried:#?}");
+    for blocked in &retried.blocked {
+        assert_eq!(blocked.input, PreparedInput::Dark);
+        let reason = blocked.reason.as_ref().unwrap();
+        assert_eq!(reason.code, ReasonCode::SourceDrift);
+        assert!(
+            reason.detail.contains("no longer in the reviewed selection; review again"),
+            "{reason:?}"
+        );
+    }
+    assert!(retried
+        .blocked
+        .iter()
+        .any(|entry| entry.source.as_ref().map(path) == Some(dark.clone())));
+    assert!(!retried.offers.contains(&PreparationOffer::Open));
+}
+
+/// PREP-FR-06/10: the revision records the parent in the form the user
+/// chose and hands that form to the application; the canonical form only
+/// answers containment, so a parent inside the prepared folder is still
+/// refused when written another way.
+#[tokio::test]
+async fn chosen_parent_form_is_recorded() {
+    let world = world().await;
+    let linked = world.temp.path().join("Linked work");
+    std::os::unix::fs::symlink(world.output.parent().unwrap(), &linked).unwrap();
+    let chosen = linked.join("Processing");
+    let profile = world.siril(QUIET).await;
+    let mut request = world.request(&profile, InputMode::Copy, None);
+    request.output = Some(NativePath::from_path(&chosen));
+    let review = world.library.review_preparation(world.run, &request).await.unwrap();
+    let location = review.location.clone().unwrap();
+    assert_eq!(path(&location.output), chosen);
+    assert_eq!(path(&location.folder), chosen.join(PROJECT).join(RUN));
+    assert_eq!(path(&location.results), chosen.join(PROJECT).join(format!("{RUN} Results")));
+    let outcome = world.prepare(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    assert_eq!(path(&outcome.revision.output), chosen);
+    assert!(path(&outcome.revision.folder).starts_with(&chosen));
+    assert!(path(&outcome.revision.results_folder).starts_with(&chosen));
+    assert!(outcome.prepared.iter().all(|entry| path(&entry.path).starts_with(&chosen)));
+
+    let inside = fs::canonicalize(path(&outcome.revision.folder)).unwrap().join("Lights");
+    request.output = Some(NativePath::from_path(&inside));
+    let review = world.library.review_preparation(world.run, &request).await.unwrap();
+    assert!(
+        matches!(review.location_check, LocationCheck::InsidePreparedFolder { .. }),
+        "{:?}",
+        review.location_check
+    );
+}
+
+/// PREP-FR-03, PREP-AC-06, D15: review shows a confirmed FILTER correction
+/// next to the header value. Prepare waits for a choice; a patched Copy
+/// carries the catalog value in the copy's header only, differs from the
+/// source by that card alone and re-verifies at Open; the source is
+/// unchanged. Excluding the input leaves it out of the revision.
+#[tokio::test]
+async fn catalog_correction_patched_copy_or_excluded() {
+    let world = world().await;
+    let source = world.light(HA_LIGHTS[0]);
+    let original = fs::read(&source).unwrap();
+    let asset = world.correct(HA_LIGHTS[0], "filter", serde_json::json!("OIII")).await;
+    let profile = world.siril(QUIET).await;
+    let mut request = world.request(&profile, InputMode::Copy, None);
+    let review = world.library.review_preparation(world.run, &request).await.unwrap();
+    let [correction] = review.corrections.as_slice() else {
+        panic!("one corrected input: {:#?}", review.corrections);
+    };
+    assert_eq!(correction.asset_id, asset);
+    assert_eq!(path(&correction.source), source);
+    let [field] = correction.fields.as_slice() else { panic!("{correction:#?}") };
+    assert_eq!(
+        (field.field.as_str(), field.header.as_deref(), field.catalog.as_deref()),
+        ("filter", Some("Ha"), Some("OIII"))
+    );
+    assert_eq!(field.keywords, ["FILTER"]);
+    assert!(!correction.delivered);
+    assert!(correction.options.iter().all(|option| option.refusal.is_none()), "{correction:#?}");
+    assert!(review.refusals.iter().any(|r| r.contains("choose a patched Copy")), "{review:#?}");
+    let revision = world.membership_revision().await;
+    let error = world
+        .library
+        .prepare_run(world.run, &request, revision, &Watch::quiet())
+        .await
+        .unwrap_err();
+    refused(&error, "the application reads the header");
+
+    request.corrections.insert(asset, CorrectionChoice::Patch);
+    let review = world.library.review_preparation(world.run, &request).await.unwrap();
+    assert!(review.corrections[0].delivered);
+    assert!(review.refusals.is_empty(), "{:?}", review.refusals);
+    let outcome = world.prepare(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    let entry = outcome.prepared.iter().find(|e| e.asset_id == Some(asset)).unwrap();
+    assert_eq!(entry.header_changes.len(), 1);
+    let patched = fs::read(path(&entry.path)).unwrap();
+    assert_eq!(fs::read(&source).unwrap(), original, "the source is never written");
+    assert_eq!(patched.len(), original.len());
+    let differing: Vec<usize> =
+        (0..original.len()).filter(|i| patched[*i] != original[*i]).collect();
+    let card = original.chunks(80).position(|card| card.starts_with(b"FILTER  =")).unwrap();
+    assert!(differing.iter().all(|i| i / 80 == card), "only the FILTER card differs");
+    assert!(String::from_utf8_lossy(&patched[card * 80..card * 80 + 80])
+        .starts_with("FILTER  = 'OIII    '"));
+    let other = outcome.prepared.iter().find(|e| e.asset_id != Some(asset)).unwrap();
+    assert!(other.header_changes.is_empty());
+    assert_eq!(digest(&path(&other.path)), digest(&path(other.source.as_ref().unwrap())));
+    let opened = world.library.open_preparation(outcome.revision.id).await.unwrap();
+    assert!(matches!(opened, OpenOutcome::Launched { .. }), "{opened:?}");
+
+    request.corrections.insert(asset, CorrectionChoice::Exclude);
+    let review = world.library.review_preparation(world.run, &request).await.unwrap();
+    assert!(review.entries.iter().all(|entry| entry.asset_id != Some(asset)));
+    let outcome = world.prepare(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    assert!(outcome
+        .prepared
+        .iter()
+        .all(|entry| entry.source.as_ref().map(path) != Some(source.clone())));
+    let lights = outcome.prepared.iter().filter(|entry| entry.input == PreparedInput::Light);
+    assert_eq!(lights.count(), 3, "the three other lights");
+}
+
+/// PREP-FR-03, PREP-AC-06: Linked View never patches: the correction is
+/// listed as not delivered, a patch is refused naming why, and accepting
+/// the source value links the original unchanged.
+#[tokio::test]
+async fn catalog_correction_never_patches_links() {
+    let world = world().await;
+    let source = world.light(HA_LIGHTS[0]);
+    let before = digest(&source);
+    let asset = world.correct(HA_LIGHTS[0], "filter", serde_json::json!("OIII")).await;
+    let profile = world.siril(QUIET).await;
+    let mut request = world.request(&profile, InputMode::LinkedView, None);
+    request.corrections.insert(asset, CorrectionChoice::Patch);
+    let review = world.library.review_preparation(world.run, &request).await.unwrap();
+    let correction = &review.corrections[0];
+    assert!(!correction.delivered);
+    let patch = correction.options.iter().find(|o| o.choice == CorrectionChoice::Patch).unwrap();
+    assert!(patch.refusal.as_ref().unwrap().contains("never patched"), "{patch:?}");
+    assert!(review.refusals.iter().any(|r| r.contains("never patched")), "{:?}", review.refusals);
+    let revision = world.membership_revision().await;
+    let error = world
+        .library
+        .prepare_run(world.run, &request, revision, &Watch::quiet())
+        .await
+        .unwrap_err();
+    refused(&error, "links and Direct-source originals are never patched");
+
+    request.corrections.insert(asset, CorrectionChoice::AcceptSource);
+    let outcome = world.prepare(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    let entry = outcome.prepared.iter().find(|e| e.asset_id == Some(asset)).unwrap();
+    assert_eq!(entry.kind, PreparedEntryKind::Symlink);
+    assert!(entry.header_changes.is_empty());
+    assert_eq!(fs::read_link(path(&entry.path)).unwrap(), source);
+    assert_eq!(digest(&source), before);
+}
+
+/// PREP-FR-06/07: a run's first Results folder takes the chosen folder
+/// name, and a folder the catalog records for another run collides even
+/// when it is missing on disk: review names it `FolderExists`, Prepare
+/// refuses it as never reused, and another name resolves it.
+#[tokio::test]
+async fn recorded_results_folder_collision_named_and_resolved() {
+    let world = world().await;
+    let profile = world.siril(QUIET).await;
+    let view = world.view().await;
+    let other = world
+        .catalog()
+        .create_view(&NewView {
+            project_id: view.project_id,
+            subject_id: view.subject_id,
+            rig_id: view.rig_id,
+            name: "Other".into(),
+        })
+        .await
+        .unwrap()
+        .view
+        .id;
+    world.catalog().save_view(other, 0, 1).await.unwrap();
+    let project = world.output.join(PROJECT);
+    let taken_results = project.join(format!("{RUN} Results"));
+    let taken_folder = project.join("Other");
+    let recorded = world
+        .catalog()
+        .start_preparation(&persistence_library::NewPreparation {
+            view_id: other,
+            n: 1,
+            membership_revision: 1,
+            profile_id: profile.id,
+            mode: InputMode::Copy,
+            link: None,
+            output: NativePath::from_path(&world.output),
+            folder: NativePath::from_path(&taken_folder),
+            results_folder: NativePath::from_path(&taken_results),
+            entries: vec![persistence_library::NewPreparedEntry {
+                member_key: None,
+                asset_id: None,
+                master_id: None,
+                input: PreparedInput::Light,
+                kind: PreparedEntryKind::Copy,
+                path: NativePath::from_path(&taken_folder.join("Lights/a.fits")),
+                source: None,
+                size_bytes: 1,
+                basis: None,
+                header_changes: Vec::new(),
+                blocked: Some(ItemReason::new(ReasonCode::SourceUnavailable, "fixture")),
+            }],
+        })
+        .await
+        .unwrap();
+    world
+        .catalog()
+        .finish_preparation(recorded.revision.id, PreparationState::Failed, Some("fixture"))
+        .await
+        .unwrap();
+    assert!(!taken_results.exists() && !taken_folder.exists());
+
+    let mut request = world.request(&profile, InputMode::Copy, None);
+    let review = world.library.review_preparation(world.run, &request).await.unwrap();
+    assert_eq!(
+        review.location_check,
+        LocationCheck::FolderExists { folder: NativePath::from_path(&taken_results) }
+    );
+    let revision = world.membership_revision().await;
+    let error = world
+        .library
+        .prepare_run(world.run, &request, revision, &Watch::quiet())
+        .await
+        .unwrap_err();
+    refused(&error, "never reused");
+
+    request.folder_name = Some("Other".into());
+    let review = world.library.review_preparation(world.run, &request).await.unwrap();
+    assert_eq!(
+        review.location_check,
+        LocationCheck::FolderExists { folder: NativePath::from_path(&taken_folder) }
+    );
+
+    request.folder_name = Some(format!("{RUN} B"));
+    let review = world.library.review_preparation(world.run, &request).await.unwrap();
+    assert_eq!(review.location_check, LocationCheck::Ready);
+    let location = review.location.unwrap();
+    assert_eq!(path(&location.results), project.join(format!("{RUN} B Results")));
+    let outcome = world.prepare(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    assert_eq!(path(&outcome.revision.results_folder), project.join(format!("{RUN} B Results")));
 }

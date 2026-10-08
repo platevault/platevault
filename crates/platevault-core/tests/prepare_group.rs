@@ -25,6 +25,7 @@ use platevault_core::layout::{self, PanelPaths};
 use platevault_core::prepare::PrepareControl;
 use platevault_core::*;
 use prepare_support::{appears, digest, overwrite_in_place, restore_in_place, tree, Watch};
+use uuid::Uuid;
 
 const QUIET: &str = "exit 0";
 const MARK: &str = "echo launched >> \"$1/launched.txt\"";
@@ -189,6 +190,14 @@ async fn group_layout_panels_under_mosaic_and_results_outside() {
         layout::group_location(&world.output, PROJECT, MOSAIC, 3, None, &paths, None).unwrap();
     assert_eq!(path(&third.folder), world.group_folder(&format!("{MOSAIC} (rev 3)")));
     assert_eq!(path(&third.panels[0].results), results.join("Panel 1"));
+    // A group folder name the user chose names the Results recorded now too.
+    let chosen =
+        layout::group_location(&world.output, PROJECT, MOSAIC, 1, Some("Pass B"), &paths, None)
+            .unwrap();
+    let chosen_results = world.output.join(PROJECT).join("Pass B Results");
+    assert_eq!(path(&chosen.folder), world.group_folder("Pass B"));
+    assert_eq!(path(&chosen.panels[0].results), chosen_results.join("Panel 1"));
+    assert_eq!(path(&chosen.assembled), chosen_results.join("Assembled"));
 }
 
 /// PREP-FR-07/13, PREP-AC-16: the group Result's folder
@@ -460,4 +469,97 @@ async fn reprepare_panel_proposes_mosaic_rev2_with_all_panels() {
     assert_eq!(review.skipped.len(), 1);
     assert_eq!((review.skipped[0].number, review.skipped[0].view_id), (2, world.run(2)));
     assert_eq!(review.preparation_number, 3);
+}
+
+/// PREP-FR-09/12, D19: Retry of a Prepare all verifies each panel run's
+/// entries against the basis Prepare all recorded, never one rebuilt from
+/// the panel run's current calibration. Panel 1's drifted dark, whose
+/// assignment changed afterwards, stays blocked as no longer in the reviewed
+/// selection, and Panel 1 is never Prepared.
+#[tokio::test]
+async fn group_retry_keeps_the_recorded_basis() {
+    let world = group_world().await;
+    let profile = world.wbpp(QUIET).await;
+    let request = world.setup(&profile, InputMode::Copy).await;
+    let dark = path(&world.calibration.path).join("darks/Dark_300s_001.fits");
+    overwrite_in_place(&dark);
+    let outcome = world.prepare_all(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.preparation.outcome, PreparationState::Partial, "{outcome:#?}");
+    let is_dark = |entry: &&PreparedEntry| entry.source.as_ref().map(path) == Some(dark.clone());
+    let blocked = panel(&outcome, 1).blocked.iter().find(is_dark).expect("the dark is blocked");
+    assert_eq!(blocked.reason.as_ref().unwrap().code, ReasonCode::SourceDrift);
+    let recorded = blocked.basis.as_ref().expect("Prepare all records the basis");
+    assert_eq!(recorded.origin, BasisOrigin::CalibrationAssignment);
+
+    let run = world.run(1);
+    let plan = world.library.calibration_view_plan(run, 1).await.unwrap();
+    let darks: Vec<RequirementKey> = plan
+        .requirements
+        .iter()
+        .filter(|requirement| requirement.kind == InputKind::Dark)
+        .map(Requirement::key)
+        .collect();
+    world
+        .library
+        .calibration_exclude(run, 1, plan.plan_revision, &darks, Some("darks re-shot"))
+        .await
+        .unwrap();
+    let retried = world
+        .library
+        .retry_group_preparation(outcome.preparation.id, &Watch::quiet())
+        .await
+        .unwrap();
+    let first = panel(&retried, 1);
+    assert_ne!(first.revision.state, PreparationState::Prepared, "{retried:#?}");
+    assert!(first.blocked.iter().any(|entry| is_dark(&entry)), "{first:#?}");
+    for entry in first.blocked.iter().filter(|entry| entry.input == PreparedInput::Dark) {
+        let reason = entry.reason.as_ref().unwrap();
+        assert_eq!(reason.code, ReasonCode::SourceDrift);
+        assert!(
+            reason.detail.contains("no longer in the reviewed selection; review again"),
+            "{reason:?}"
+        );
+    }
+}
+
+/// PREP-FR-03/12, PREP-AC-06: a confirmed catalog correction of a Panel 2
+/// light is reviewed on Panel 2 only, Prepare all waits for a choice, and a
+/// patched Copy carries the catalog value in that panel's copy alone; the
+/// source is never written.
+#[tokio::test]
+async fn panel_correction_patched_in_its_copy_only() {
+    let world = group_world().await;
+    let profile = world.wbpp(QUIET).await;
+    let mut request = world.setup(&profile, InputMode::Copy).await;
+    let source = world.light(2, 1);
+    let original = fs::read(&source).unwrap();
+    let asset = world.correct(2, 1, "object", serde_json::json!("NGC 7000 P2")).await;
+    let review = world.review(&request).await;
+    for reviewed in &review.panels {
+        let expected: Vec<Uuid> = if reviewed.number == 2 { vec![asset] } else { Vec::new() };
+        let listed: Vec<Uuid> = reviewed.corrections.iter().map(|c| c.asset_id).collect();
+        assert_eq!(listed, expected, "Panel {}", reviewed.number);
+    }
+    assert!(
+        review
+            .refusals
+            .iter()
+            .any(|refusal| refusal.starts_with("Panel 2: ") && refusal.contains("patched Copy")),
+        "{:?}",
+        review.refusals
+    );
+
+    request.corrections.insert(asset, CorrectionChoice::Patch);
+    let outcome = world.prepare_all(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.preparation.outcome, PreparationState::Prepared, "{outcome:#?}");
+    let entry = panel(&outcome, 2).prepared.iter().find(|e| e.asset_id == Some(asset)).unwrap();
+    assert_eq!(entry.header_changes.len(), 1, "{entry:#?}");
+    assert_eq!(fs::read(&source).unwrap(), original, "the source is never written");
+    let patched = fs::read(path(&entry.path)).unwrap();
+    let card = original.chunks(80).position(|card| card.starts_with(b"OBJECT  =")).unwrap();
+    assert!(String::from_utf8_lossy(&patched[card * 80..card * 80 + 80])
+        .starts_with("OBJECT  = 'NGC 7000 P2'"));
+    for number in [1, 3] {
+        assert!(panel(&outcome, number).prepared.iter().all(|e| e.header_changes.is_empty()));
+    }
 }

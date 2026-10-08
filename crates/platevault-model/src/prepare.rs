@@ -13,6 +13,7 @@
 //! (D19). A blocked item never counts as prepared, and launching an
 //! application never marks the run Complete.
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -20,8 +21,8 @@ use uuid::Uuid;
 
 use crate::{
     CalibrationHandoff, CalibrationNeedsReview, CalibrationPolicy, EntryEvidence, InputKind,
-    InputMode, ItemReason, LibraryError, NativePath, PanelOutcome, Revision, RunStage, Writability,
-    WrittenCopy,
+    InputMode, ItemReason, LibraryError, NativePath, ObservationFingerprint, PanelOutcome,
+    Revision, RunStage, Writability, WrittenCopy,
 };
 
 fn invalid(message: impl Into<String>) -> LibraryError {
@@ -261,9 +262,102 @@ pub struct PrepareRequest {
     /// assumed root on first use.
     #[serde(default)]
     pub output: Option<NativePath>,
-    /// Another name for the `<Run>` folder when the proposed one exists.
+    /// Another name for the `<Run>` folder when the proposed one exists. On
+    /// the first revision it also names the Results folder `<name> Results`.
     #[serde(default)]
     pub folder_name: Option<String>,
+    /// How each corrected input's catalog correction reaches the application
+    /// (PREP-FR-03), by asset. Prepare is refused while one has no choice.
+    #[serde(default)]
+    pub corrections: BTreeMap<Uuid, CorrectionChoice>,
+}
+
+/// How a confirmed catalog correction of an input reaches the application
+/// (PREP-FR-03, D15).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CorrectionChoice {
+    /// An isolated Copy or Clone carries the catalog value in its header;
+    /// the source is never written.
+    Patch,
+    /// The application reads the source's header value: the correction is
+    /// not delivered.
+    AcceptSource,
+    /// The input is left out of this preparation.
+    Exclude,
+}
+
+/// One corrected field of an input: the catalog value next to the header
+/// value the application reads unless a patched copy carries the catalog one.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CorrectedField {
+    /// The capture field as the catalog names it, such as `filter`.
+    pub field: String,
+    /// The FITS keywords a patched copy writes; empty when `PlateVault`
+    /// patches no keyword for this field.
+    pub keywords: Vec<String>,
+    /// The value the source header holds.
+    pub header: Option<String>,
+    /// The confirmed catalog value.
+    pub catalog: Option<String>,
+}
+
+/// One choice for a corrected input, with why it is refused.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CorrectionOption {
+    pub choice: CorrectionChoice,
+    /// `None` when offered.
+    pub refusal: Option<String>,
+}
+
+/// One input with confirmed catalog corrections, as review shows it
+/// (PREP-FR-03, PREP-AC-06). Links and Direct-source originals are never
+/// patched: in those modes the correction is not delivered.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlannedCorrection {
+    pub member_key: Option<Uuid>,
+    pub asset_id: Uuid,
+    pub input: PreparedInput,
+    pub source: NativePath,
+    pub fields: Vec<CorrectedField>,
+    pub options: Vec<CorrectionOption>,
+    /// The user's choice; `None` until one is made.
+    pub choice: Option<CorrectionChoice>,
+    /// The application reads the catalog values: an offered patch is chosen.
+    /// Otherwise it reads the header values.
+    pub delivered: bool,
+}
+
+/// What an input's snapshot was planned against (D19).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BasisOrigin {
+    /// The confirmed membership's copy.
+    Membership,
+    /// The calibration assignment's input and digest.
+    CalibrationAssignment,
+}
+
+impl fmt::Display for BasisOrigin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Membership => "the confirmed membership",
+            Self::CalibrationAssignment => "its calibration assignment",
+        })
+    }
+}
+
+/// The basis an input's snapshot must match (D19): identity, size,
+/// modification time and digest as review planned the entry. Retry verifies
+/// against it, never against a basis rebuilt later.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceBasis {
+    pub fingerprint: ObservationFingerprint,
+    pub origin: BasisOrigin,
 }
 
 /// Where a preparation revision goes (PREP-FR-06/07).
@@ -409,6 +503,8 @@ pub struct PreparationReview {
     pub entries: Vec<PlannedEntry>,
     pub blocked: Vec<BlockedInput>,
     pub excluded: u64,
+    /// Every input with confirmed catalog corrections, with its choices.
+    pub corrections: Vec<PlannedCorrection>,
     pub calibration: CalibrationHandoff,
     pub operations: u64,
     pub footprint_bytes: u64,
@@ -502,6 +598,13 @@ pub struct PreparedEntry {
     pub path: NativePath,
     pub source: Option<NativePath>,
     pub size_bytes: u64,
+    /// What its snapshot must match, recorded when Prepare planned it (D19).
+    #[serde(default)]
+    pub basis: Option<SourceBasis>,
+    /// The reviewed header change an isolated patched Copy or Clone carries;
+    /// empty for every other entry (PREP-FR-03).
+    #[serde(default)]
+    pub header_changes: Vec<CorrectedField>,
     /// The source snapshot taken while it was prepared (D19).
     pub source_evidence: Option<EntryEvidence>,
     pub source_sha256: Option<String>,
@@ -696,6 +799,9 @@ pub struct PanelPreparationReview {
     pub entries: Vec<PlannedEntry>,
     pub blocked: Vec<BlockedInput>,
     pub excluded: u64,
+    /// Every input of the panel run with confirmed catalog corrections, with
+    /// its choices (PREP-FR-03); the group's request carries the choices.
+    pub corrections: Vec<PlannedCorrection>,
     /// The panel run's own calibration choices; `None` until it is first
     /// saved, as nothing is matched yet.
     pub calibration: Option<CalibrationHandoff>,

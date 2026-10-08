@@ -259,7 +259,8 @@ pub async fn unmatched_run(world: &World, stage: RunStage) -> Uuid {
 }
 
 /// Record a preparation revision of the world's run Running, as Prepare
-/// records it before writing any entry; nothing is written to disk.
+/// records it before writing any entry; nothing is written to disk and
+/// nothing settles, so no entry carries a basis.
 pub async fn running_preparation(world: &World) -> PreparationRevision {
     let profile = world.siril("exit 0").await;
     let request = world.request(&profile, InputMode::Copy, None);
@@ -277,6 +278,8 @@ pub async fn running_preparation(world: &World) -> PreparationRevision {
             path: entry.path.clone(),
             source: Some(entry.source.clone()),
             size_bytes: entry.size_bytes,
+            basis: None,
+            header_changes: Vec::new(),
             blocked: None,
         })
         .collect();

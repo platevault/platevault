@@ -7,15 +7,17 @@
 //! A run's first preparation revision goes to `<output>/<Project>/<Run>/`,
 //! each later one to `<Run> (rev N)/` beside it, and every revision shares the
 //! sibling `<Run> Results/` folder, outside every prepared folder, so the
-//! application never reads its own output as input. An override parent keeps
-//! the `<Project>/` level.
+//! application never reads its own output as input. A folder name the user
+//! chose for the first revision names its Results folder too. An override
+//! parent keeps the `<Project>/` level.
 //!
 //! A run group's first Prepare all goes to `<output>/<Project>/<Mosaic>/`,
 //! each later one to `<Mosaic> (rev N)/`, each holding only one `Panel N/`
 //! folder per panel run. Each panel run's Results go to
 //! `<Mosaic> Results/Panel N/` and the assembled mosaic to
 //! `<Mosaic> Results/Assembled/`, outside every group folder, and every group
-//! revision keeps them.
+//! revision keeps them. A group folder name the user chose for the first
+//! Prepare all names that Results folder too.
 
 use std::path::{Path, PathBuf};
 
@@ -59,7 +61,9 @@ pub fn results_folder_name(run: &str) -> String {
 /// Where revision `n` of run `run` in Project `project` goes under `output`.
 /// `folder_name` replaces the proposed `<Run>` or `<Run> (rev N)` name when
 /// the user chose another; `results` is the run's recorded Results folder,
-/// which every later revision keeps.
+/// which every later revision keeps. Without one, the Results folder takes
+/// the prepared folder's chosen name, `<folder_name> Results`, so another
+/// name also resolves a Results folder collision.
 ///
 /// # Errors
 /// `InvalidInput` for a name [`segment`] refuses, a relative `output`, or a
@@ -72,10 +76,10 @@ pub fn run_location(
     folder_name: Option<&str>,
     results: Option<&NativePath>,
 ) -> Result<RunLocation, LibraryError> {
-    let (project_dir, run, folder) = revision_folder(output, project, "run", run, n, folder_name)?;
+    let (project_dir, base, folder) = revision_folder(output, project, "run", run, n, folder_name)?;
     let results = match results {
         Some(recorded) => recorded.to_path_buf()?,
-        None => project_dir.join(results_folder_name(&run)),
+        None => project_dir.join(results_folder_name(&base)),
     };
     apart(&folder, &results)?;
     Ok(RunLocation {
@@ -106,7 +110,8 @@ pub struct PanelPaths<'a> {
 /// (`folder_name` when the user chose another) with one `Panel N/` per panel
 /// run, each panel run's `<Mosaic> Results/Panel N/` and the group's
 /// `<Mosaic> Results/Assembled/`. A recorded Results or Assembled folder is
-/// kept.
+/// kept; one recorded now lies in `<folder_name> Results/` when the user
+/// chose a group folder name, as for a run.
 ///
 /// # Errors
 /// `InvalidInput` for a name [`segment`] refuses, a relative `output`, or a
@@ -120,9 +125,9 @@ pub fn group_location(
     panels: &[PanelPaths<'_>],
     assembled: Option<&NativePath>,
 ) -> Result<GroupLocation, LibraryError> {
-    let (project_dir, mosaic, folder) =
+    let (project_dir, base, folder) =
         revision_folder(output, project, "run group", mosaic, n, folder_name)?;
-    let results_dir = project_dir.join(results_folder_name(&mosaic));
+    let results_dir = project_dir.join(results_folder_name(&base));
     let mut placed = Vec::with_capacity(panels.len());
     for panel in panels {
         let results = match panel.results {
@@ -150,8 +155,10 @@ pub fn group_location(
     })
 }
 
-/// The Project folder, the `<Name>` segment and the folder of revision `n`
-/// under `output`: `<Name>`, `<Name> (rev N)`, or the user's `folder_name`.
+/// The Project folder, the `<Name>` a Results folder recorded now takes and
+/// the folder of revision `n` under `output`: `<Name>`, `<Name> (rev N)`, or
+/// the user's `folder_name`, which then names the Results folder too, so
+/// another name also resolves a Results folder collision.
 fn revision_folder(
     output: &Path,
     project: &str,
@@ -168,11 +175,17 @@ fn revision_folder(
     }
     let project_dir = output.join(segment("Project", project)?);
     let name = segment(label, name)?;
-    let folder = match folder_name {
-        Some(chosen) => project_dir.join(segment("folder", chosen)?),
-        None => project_dir.join(revision_folder_name(&name, n)),
-    };
-    Ok((project_dir, name, folder))
+    Ok(match folder_name {
+        Some(chosen) => {
+            let chosen = segment("folder", chosen)?;
+            let folder = project_dir.join(&chosen);
+            (project_dir, chosen, folder)
+        }
+        None => {
+            let folder = project_dir.join(revision_folder_name(&name, n));
+            (project_dir, name, folder)
+        }
+    })
 }
 
 /// A prepared folder never is a Results folder, holds one or lies inside one.

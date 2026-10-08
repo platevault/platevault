@@ -199,15 +199,16 @@ async fn reviewed_imports_attach_beside_built_in_values_and_change_no_library_re
         .await
         .unwrap();
     assert_eq!(scan_to_end(&library, location.id).await.state, ScanState::Completed);
-    let ids: BTreeMap<String, Uuid> = library
+    // Fixture names use `/`; the scanner records native separators (`\` on Windows).
+    let ids: BTreeMap<NativePath, Uuid> = library
         .catalog()
         .location_assets(location.id)
         .await
         .unwrap()
         .into_iter()
-        .map(|asset| (asset.relative_path.display(), asset.id))
+        .map(|asset| (asset.relative_path, asset.id))
         .collect();
-    let id = |name: &str| ids[name];
+    let id = |name: &str| ids[&NativePath::from_path(&name.split('/').collect::<PathBuf>())];
     let scope: Vec<Uuid> = FRAMES.iter().map(|name| id(name)).collect();
     let review = library.frame_review();
 

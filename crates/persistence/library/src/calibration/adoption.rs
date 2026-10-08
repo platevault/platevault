@@ -1363,6 +1363,9 @@ mod tests {
         let lib = reopen(lib).await;
         let copy = lib.calibration_root.join("masters/master_flat_Ha.fit");
         let bytes = std::fs::read(&copy).unwrap();
+        // The deleted copy stays open so ext4/XFS cannot hand its inode to the
+        // replacement; that reuse is a documented residual not covered here.
+        let _held = std::fs::File::open(&copy).unwrap();
         std::fs::remove_file(&copy).unwrap();
         std::fs::write(&copy, &bytes).unwrap();
 

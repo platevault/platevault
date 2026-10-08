@@ -15,7 +15,8 @@
 //!   from the volume's `statfs` flags.
 //! - Linux: the freedesktop.org Trash, by a no-replace rename on the entry's
 //!   own device only. A cross-device or unsupported rename is refused; nothing
-//!   is copied and deleted.
+//!   is copied and deleted. A missing home Trash is created owner-only, with
+//!   its data home, as the Trash and base directory specifications ask.
 //! - Windows: the Shell Recycle Bin, after a bounded volume and Recycle Bin
 //!   policy query proves the drive keeps what it receives.
 
@@ -42,6 +43,20 @@ pub struct SystemTrash {
     #[cfg(windows)]
     bins:
         std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, Result<RecycleBin, String>>>,
+    /// The data home whose `Trash` is the home Trash; `None` reads
+    /// `$XDG_DATA_HOME`, then `$HOME/.local/share`.
+    #[cfg(target_os = "linux")]
+    data_home: Option<std::path::PathBuf>,
+}
+
+impl SystemTrash {
+    /// The host Trash with its freedesktop home Trash under `data_home`
+    /// instead of the user's, which a test or sandbox must leave untouched.
+    #[cfg(target_os = "linux")]
+    #[must_use]
+    pub fn with_data_home(data_home: std::path::PathBuf) -> Self {
+        Self { data_home: Some(data_home) }
+    }
 }
 
 impl OsTrash for SystemTrash {
@@ -50,7 +65,7 @@ impl OsTrash for SystemTrash {
     }
 
     fn move_to_trash(&self, entry: &Path) -> Result<(), String> {
-        platform::move_entry(entry)
+        platform::move_entry(self, entry)
     }
 }
 
@@ -188,7 +203,7 @@ mod platform {
         }
     }
 
-    pub(super) fn move_entry(entry: &Path) -> Result<(), String> {
+    pub(super) fn move_entry(_trash: &SystemTrash, entry: &Path) -> Result<(), String> {
         use trash::macos::{DeleteMethod, TrashContextExtMacos};
         // NSFileManager moves the entry itself and fails where a volume has no
         // Trash; the Finder method could prompt or delete immediately instead.
@@ -231,20 +246,33 @@ mod platform {
     struct TrashDir {
         path: PathBuf,
         device: u64,
+        /// The home Trash, whose missing data home may be created with it.
+        home: bool,
     }
 
-    pub(super) fn support(_trash: &SystemTrash, entry: &Path, _size_bytes: u64) -> TrashSupport {
-        match locate(entry) {
+    pub(super) fn support(trash: &SystemTrash, entry: &Path, _size_bytes: u64) -> TrashSupport {
+        match locate(trash, entry) {
             Ok(_) => TrashSupport::Supported,
             Err(refusal) => refusal,
         }
     }
 
-    pub(super) fn move_entry(entry: &Path) -> Result<(), String> {
-        let (source, trash) = locate(entry).map_err(|refusal| match refusal {
+    pub(super) fn move_entry(system: &SystemTrash, entry: &Path) -> Result<(), String> {
+        let (source, trash) = locate(system, entry).map_err(|refusal| match refusal {
             TrashSupport::Unsupported { detail, .. } => detail,
             TrashSupport::Supported => "no Trash folder".into(),
         })?;
+        if trash.home {
+            // The Trash specification creates a missing home Trash; the base
+            // directory specification creates a missing data home owner-only.
+            if let Some(data_home) = trash.path.parent() {
+                fs::DirBuilder::new()
+                    .recursive(true)
+                    .mode(0o700)
+                    .create(data_home)
+                    .map_err(|error| format!("{}: {error}", data_home.display()))?;
+            }
+        }
         let files = trash.path.join("files");
         let info = trash.path.join("info");
         for folder in [&trash.path, &files, &info] {
@@ -314,7 +342,7 @@ mod platform {
     }
 
     /// The entry with its folder resolved, and the Trash folder on its device.
-    fn locate(entry: &Path) -> Result<(PathBuf, TrashDir), TrashSupport> {
+    fn locate(system: &SystemTrash, entry: &Path) -> Result<(PathBuf, TrashDir), TrashSupport> {
         let unqualified = |detail: String| unsupported(TrashUnsupported::Unqualified, detail);
         let (Some(folder), Some(name)) = (entry.parent(), entry.file_name()) else {
             return Err(unqualified("the entry has no folder".into()));
@@ -331,9 +359,9 @@ mod platform {
             return Err(unsupported(TrashUnsupported::ReadOnly, "the volume is read-only"));
         }
         let source = folder.join(name);
-        if let Some(home) = home_trash() {
+        if let Some(home) = home_trash(system) {
             if device_of_nearest(&home) == Some(device) {
-                return Ok((source, TrashDir { path: home, device }));
+                return Ok((source, TrashDir { path: home, device, home: true }));
             }
         }
         let top = top_folder(&folder, device);
@@ -346,7 +374,10 @@ mod platform {
                 && sticky
                 && metadata.dev() == device
             {
-                return Ok((source, TrashDir { path: shared.join(uid.to_string()), device }));
+                return Ok((
+                    source,
+                    TrashDir { path: shared.join(uid.to_string()), device, home: false },
+                ));
             }
         }
         let own = top.join(format!(".Trash-{uid}"));
@@ -357,7 +388,7 @@ mod platform {
                     && metadata.uid() == uid
                     && metadata.dev() == device =>
             {
-                Ok((source, TrashDir { path: own, device }))
+                Ok((source, TrashDir { path: own, device, home: false }))
             }
             Ok(_) => Err(unsupported(
                 TrashUnsupported::NoTrash,
@@ -365,7 +396,7 @@ mod platform {
             )),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 if rustix::fs::access(&top, rustix::fs::Access::WRITE_OK).is_ok() {
-                    Ok((source, TrashDir { path: own, device }))
+                    Ok((source, TrashDir { path: own, device, home: false }))
                 } else {
                     Err(unsupported(
                         TrashUnsupported::NoTrash,
@@ -380,7 +411,10 @@ mod platform {
         }
     }
 
-    fn home_trash() -> Option<PathBuf> {
+    fn home_trash(system: &SystemTrash) -> Option<PathBuf> {
+        if let Some(data_home) = &system.data_home {
+            return Some(data_home.join("Trash"));
+        }
         let data = std::env::var_os("XDG_DATA_HOME")
             .map(PathBuf::from)
             .filter(|path| path.is_absolute())
@@ -564,7 +598,7 @@ $r | ConvertTo-Json -Compress"#;
         }
     }
 
-    pub(super) fn move_entry(entry: &Path) -> Result<(), String> {
+    pub(super) fn move_entry(_trash: &SystemTrash, entry: &Path) -> Result<(), String> {
         trash::delete(entry).map_err(|error| error.to_string())
     }
 
@@ -652,7 +686,7 @@ mod platform {
         unsupported(TrashUnsupported::NoTrash, "no OS Trash adapter exists for this platform")
     }
 
-    pub(super) fn move_entry(_entry: &Path) -> Result<(), String> {
+    pub(super) fn move_entry(_trash: &SystemTrash, _entry: &Path) -> Result<(), String> {
         Err("no OS Trash adapter exists for this platform".into())
     }
 }
@@ -717,5 +751,35 @@ mod tests {
     fn trashinfo_paths_escape_reserved_bytes() {
         assert_eq!(trashinfo_path(b"/data/M 31/a%b.fits"), "/data/M%2031/a%25b.fits");
         assert_eq!(trashinfo_path(&[b'/', 0xff]), "/%FF");
+    }
+
+    /// A missing home Trash, with the data home above it, is created
+    /// owner-only on the first move instead of refusing the move.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_missing_home_trash_is_created_owner_only() {
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(temp.path()).unwrap();
+        let data_home = root.join("home/.local/share");
+        let entry = root.join("light_001.fits");
+        std::fs::write(&entry, b"frame").unwrap();
+        let trash = SystemTrash::with_data_home(data_home.clone());
+
+        assert_eq!(reason(&trash.support(&entry, 5)), None);
+        trash.move_to_trash(&entry).unwrap();
+
+        let home = data_home.join("Trash");
+        for folder in [data_home, home.clone(), home.join("files"), home.join("info")] {
+            let mode = std::fs::metadata(&folder).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o700, "{}", folder.display());
+        }
+        assert!(std::fs::symlink_metadata(&entry).is_err(), "the entry left its folder");
+        assert_eq!(std::fs::read(home.join("files/light_001.fits")).unwrap(), b"frame");
+        let record = std::fs::read_to_string(home.join("info/light_001.fits.trashinfo")).unwrap();
+        let path = trashinfo_path(entry.as_os_str().as_bytes());
+        assert!(record.starts_with(&format!("[Trash Info]\nPath={path}\n")), "{record}");
     }
 }

@@ -9,6 +9,7 @@ pub mod calibration_inputs;
 pub mod custody;
 pub mod frame_review;
 pub mod grouping;
+mod header_patch;
 pub mod home;
 pub mod import;
 pub mod inventory;

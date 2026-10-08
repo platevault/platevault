@@ -68,6 +68,7 @@ fn lights() -> Vec<(String, CaptureMetadata)> {
             let mut metadata = train(meta("LIGHT", Some("Ha"), 300.0, night));
             metadata.ra_deg = Some(*ra);
             metadata.dec_deg = Some(*dec);
+            metadata.object = Some("NGC 7000".into());
             frames.push((light_path(*number, index), metadata));
         }
     }
@@ -128,7 +129,8 @@ fn group_by_night(assets: &[Asset]) -> GroupingResult {
     }
 }
 
-/// Write each file with bytes unique to its path and scan the location once.
+/// Write each file as a FITS header unique to its path, as `prepare_support`
+/// writes it, and scan the location once.
 async fn scan(
     library: &Library,
     location: &Location,
@@ -140,7 +142,7 @@ async fn scan(
     for (relative, metadata) in frames {
         let path = root.join(relative);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, format!("{relative}{}", " ".repeat(64))).unwrap();
+        fs::write(&path, super::prepare_support::fits(relative, metadata)).unwrap();
         files.push(ScanFile {
             relative_path: NativePath::from_path(Path::new(relative)),
             fingerprint: InventoryProbe.fingerprint(&path).unwrap(),
@@ -419,6 +421,7 @@ impl GroupWorld {
             link: None,
             output: Some(NativePath::from_path(&self.output)),
             folder_name: None,
+            corrections: std::collections::BTreeMap::new(),
         }
     }
 
@@ -437,7 +440,8 @@ impl GroupWorld {
     }
 
     /// What records the next Prepare all Running for the reviewed `request`
-    /// with `profile`: one Copy of each panel run's first light, none written.
+    /// with `profile`: one Copy of each panel run's first light, none written
+    /// and none settled, so none carries a basis.
     pub async fn running_input(
         &self,
         profile: &Profile,
@@ -473,11 +477,45 @@ impl GroupWorld {
                         path: panel.entries[0].path.clone(),
                         source: Some(panel.entries[0].source.clone()),
                         size_bytes: panel.entries[0].size_bytes,
+                        basis: None,
+                        header_changes: Vec::new(),
                         blocked: None,
                     }],
                 })
                 .collect(),
         }
+    }
+
+    /// Confirm a catalog correction of `field` of light `index` of panel
+    /// `number`, its file untouched, then match that panel run's
+    /// calibration again. Returns the corrected asset.
+    pub async fn correct(
+        &self,
+        number: u32,
+        index: u32,
+        field: &str,
+        value: serde_json::Value,
+    ) -> Uuid {
+        let asset = self
+            .catalog()
+            .location_assets(self.captures.id)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|asset| asset.relative_path.display() == light_path(number, index))
+            .unwrap();
+        let expected = ExpectedAsset {
+            asset_id: asset.id,
+            decision_revision: asset.decision_revision,
+            fingerprint: asset.fingerprint.clone(),
+        };
+        let correction = CorrectionInput { asset_id: asset.id, field: field.into(), value };
+        self.catalog()
+            .apply_correction_and_regroup(&[expected], &[correction], group_by_night)
+            .await
+            .unwrap();
+        self.assign(number, 1).await;
+        asset.id
     }
 
     /// `<output>/<Project>/<Mosaic>` or a later group folder.

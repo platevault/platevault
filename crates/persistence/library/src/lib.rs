@@ -77,7 +77,7 @@ const SCHEMA: &str = schema_modules![
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
 /// version is refused before any module's DDL runs.
-pub const SCHEMA_VERSION: i64 = 11;
+pub const SCHEMA_VERSION: i64 = 12;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;

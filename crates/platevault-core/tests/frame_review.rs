@@ -143,19 +143,32 @@ async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
     .expect("scan must publish its terminal state")
 }
 
-/// Poll the durable status until the run leaves Running.
+/// Poll the durable status until the run leaves Running, failing only once no
+/// frame has settled for two minutes.
+///
+/// Each frame's contained read probes the volume three times (root, file,
+/// root). On Windows a probe is a PowerShell CIM query bounded at 30 s, so a
+/// 100-frame run on a loaded runner outlasts any fixed total budget while still
+/// settling frame after frame; a worker settles its frame within 90 s or fails it.
 async fn finished(review: &FrameReview, run: Uuid) -> MeasurementRun {
-    tokio::time::timeout(Duration::from_secs(120), async {
-        loop {
-            let status = review.measurement_status(run).await.unwrap();
-            if status.state != RunState::Running {
-                return status;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+    const STALLED: Duration = Duration::from_secs(120);
+    let mut remaining = None;
+    let mut deadline = tokio::time::Instant::now() + STALLED;
+    loop {
+        let status = review.measurement_status(run).await.unwrap();
+        if status.state != RunState::Running {
+            return status;
         }
-    })
-    .await
-    .expect("the run must settle")
+        if remaining != Some(status.counters.remaining) {
+            remaining = Some(status.counters.remaining);
+            deadline = tokio::time::Instant::now() + STALLED;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the run must settle: no frame settled for {STALLED:?}: {status:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 }
 
 /// Wait until `run` publishes a settled frame.
@@ -174,6 +187,17 @@ async fn settled_frame(progress: &mut broadcast::Receiver<MeasurementProgress>, 
     })
     .await
     .expect("a frame must settle");
+}
+
+/// Poll the durable state until `asset` is no longer Pending in the run.
+async fn until_settled(review: &FrameReview, asset: Uuid) {
+    tokio::time::timeout(Duration::from_secs(120), async {
+        while review.frame_states(&[asset]).await.unwrap()[0].state == FrameStateKind::Pending {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the frame must settle");
 }
 
 /// A library over one generated root, with the SHA-256 of every file.
@@ -372,6 +396,10 @@ async fn frame_states_come_from_the_catalog_and_a_run_queues_only_frames_without
     order.extend(queued.iter().copied().filter(|id| *id != priority));
     let moved = order[order.len() - 1];
     let previewed = order[order.len() - 2];
+    // The workers are spawned tasks; until one takes the queue the priority
+    // frame is only at its head, and prioritize puts `moved` ahead of every
+    // queued frame. Prioritize only once the priority frame was dequeued.
+    until_settled(review, priority).await;
     let prioritized = review.prioritize(second.operation_id, &[moved]).await.unwrap();
     assert_eq!(prioritized.operation_id, second.operation_id);
 
