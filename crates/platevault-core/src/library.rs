@@ -151,6 +151,8 @@ impl Library {
         });
         // PREP (069, U21): Running-preparation guard, run folders; interrupted revisions Paused.
         crate::prepare::register(&library).await?;
+        // RES (070, U27): Result-input guard on Move run to Trash (RES-FR-10).
+        crate::results::register(&library).await;
         Ok(library)
     }
 

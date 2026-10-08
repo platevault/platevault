@@ -219,8 +219,27 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::prepare::prepare_outcome,
         crate::commands::prepare::prepare_blocker,
         crate::commands::prepare::prepare_open,
+        crate::commands::prepare::prepare_group_review,
+        crate::commands::prepare::prepare_group_run,
+        crate::commands::prepare::prepare_group_retry,
+        crate::commands::prepare::prepare_group_stop,
+        crate::commands::prepare::prepare_group_list,
+        crate::commands::prepare::prepare_group_outcome,
+        crate::commands::prepare::prepare_group_open,
         // results
+        crate::commands::results::results_list,
+        crate::commands::results::results_rescan,
+        crate::commands::results::results_attach,
+        crate::commands::results::results_accept,
+        crate::commands::results::results_accepted,
+        crate::commands::results::results_inputs,
+        crate::commands::results::view_create_with_products,
+        crate::commands::results::view_add_product_inputs,
+        crate::commands::results::view_product_inputs,
+        crate::commands::results::results_master_dismiss,
+        crate::commands::results::calibration_result_masters,
         // storage
+        crate::commands::storage::storage_overview,
         // import
         crate::commands::naming::naming_get,
         crate::commands::naming::naming_save,
@@ -265,6 +284,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::targets_list::targets_preset_rename,
         crate::commands::targets_list::targets_preset_delete,
         // home
+        crate::commands::home::home_dashboard,
     ]);
     // The planning handlers call these through their Rust APIs, which need no
     // grant; window `library` holds only `capabilities/library.json`.

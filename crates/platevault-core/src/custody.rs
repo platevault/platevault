@@ -204,7 +204,7 @@ fn entry_file_id(
 }
 
 /// Same volume, and the same file ID where the volume's IDs are stable.
-fn same_identity(observed: &FileIdentity, recorded: &FileIdentity) -> bool {
+pub(crate) fn same_identity(observed: &FileIdentity, recorded: &FileIdentity) -> bool {
     observed.volume == recorded.volume
         && (!recorded.volume.file_ids_stable || observed.file_id == recorded.file_id)
 }
@@ -345,7 +345,7 @@ const fn handle_is(_file: &File, _inspected: &Metadata, _identity: &FileIdentity
 
 /// Whether the reviewed entry is still at its path with its recorded
 /// identity, without reading its bytes.
-fn in_place(source: &EntryEvidence) -> bool {
+pub(crate) fn in_place(source: &EntryEvidence) -> bool {
     let Ok(path) = source.path.to_path_buf() else {
         return false;
     };

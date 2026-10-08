@@ -22,7 +22,7 @@ use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::contained_write::{self, Folder, InstallFailure, Temporary};
-use super::{inventory, load_master};
+use super::{inventory, load_master, offers};
 use crate::{
     blocking, check_expected_assets, conflict, current_digest, db_revision, from_json, from_text,
     load_location, now, parse_uuid, path_from_key, path_key, require_active, require_revision,
@@ -36,12 +36,16 @@ impl Catalog {
     /// The source is hashed off the writer lock against its expected
     /// observation; the destination folder must be a chain of real directories
     /// in an Active, online Calibration location with nothing at the target
-    /// path. No file is written and no library row changes.
+    /// path. No file is written and no library row changes. A Result source is
+    /// a generated master Results discovery offered (CAL-FR-06), dismissed or
+    /// not, reviewed at its offered digest below the registered location
+    /// holding it.
     ///
     /// # Errors
-    /// `InvalidInput` for an invalid destination path, a RES output before 070,
-    /// a source that is not a listed master candidate (a raw frame, an adopted
-    /// source or a Retired copy) or a destination that is not a Calibration
+    /// `InvalidInput` for an invalid destination path, a source that is not a
+    /// listed master candidate (a raw frame, an adopted source or a Retired
+    /// copy), a Result that is no offered master or lies outside every
+    /// registered location, or a destination that is not a Calibration
     /// location; `Conflict` for a stale source; `NotFound` for a missing folder;
     /// `SourceUnavailable` for an offline location; `IdentityConflict` scoped to
     /// an existing destination entry or a source that changed.
@@ -68,10 +72,7 @@ impl Catalog {
                 )));
             }
             AdoptionSource::Result { result_id } => {
-                return Err(LibraryError::InvalidInput(format!(
-                    "result {result_id} is a RES output; outputs become adoptable once results \
-                     discovery (070) records them"
-                )));
+                return self.review_result_adoption(*result_id, destination, relative, probe).await;
             }
         };
         let (asset, listed, source_location, target) = {
@@ -145,6 +146,83 @@ impl Catalog {
         write_txn!(self, |conn| {
             check_expected_assets(conn, std::slice::from_ref(expected)).await?;
             require_unadopted(conn, asset.id, &asset.relative_path).await?;
+            require_destination(&load_location(conn, destination.location_id).await?)?;
+            require_unregistered(conn, destination).await?;
+            insert_review(conn, &review).await?;
+        });
+        Ok(review)
+    }
+
+    /// Review adopting the generated master Result `result_id` (CAL-FR-06):
+    /// its offer at the Result's current digest, not yet adopted, is the
+    /// evidence; the bytes are hashed against the inspected fingerprint and
+    /// must still be the offered digest. The classification, observed header
+    /// and run origin come from the offer, bound to that digest.
+    async fn review_result_adoption<P: SourceProbe>(
+        &self,
+        result_id: Uuid,
+        destination: &AdoptionDestination,
+        relative: PathBuf,
+        probe: P,
+    ) -> Result<AdoptionReview> {
+        let (source, target) = {
+            let mut conn = self.reader().await?;
+            let mut snapshot = conn.begin().await?;
+            let source = offers::offered_source(&mut snapshot, result_id).await?;
+            let target = load_location(&mut snapshot, destination.location_id).await?;
+            snapshot.rollback().await?;
+            (source, target)
+        };
+        require_destination(&target)?;
+        let source_relative = source.relative_path.relative_path()?;
+        let source_root = SourceRoot::new(source.location.clone())?;
+        let target_root = SourceRoot::new(target)?;
+        let reviewed = source.fingerprint.clone();
+        let sha256 = blocking(move || {
+            verify_online(&target_root, &probe)?;
+            contained_write::require_vacant(&target_root, &relative)?;
+            source_root.verify(&probe)?;
+            let sha256 = current_digest(&source_root, &source_relative, &reviewed, &probe)
+                .map_err(|error| {
+                    scoped(error, source_root.source(&source_relative), Some(result_id))
+                })?;
+            source_root.verify(&probe)?;
+            Ok(sha256)
+        })
+        .await?;
+        let offer = source.offer;
+        if sha256 != offer.sha256 {
+            return Err(scoped(
+                LibraryError::IdentityConflict(
+                    "the master no longer hashes to its offered digest; rescan its run's Results"
+                        .into(),
+                ),
+                offer.path,
+                Some(result_id),
+            ));
+        }
+        let mut fingerprint = source.fingerprint;
+        fingerprint.content_sha256 = Some(sha256.clone());
+        let review = AdoptionReview {
+            id: Uuid::new_v4(),
+            revision: 1,
+            state: ReviewState::Open,
+            source: ReviewedSource {
+                asset_id: None,
+                result_id: Some(result_id),
+                location_id: source.location.id,
+                relative_path: source.relative_path,
+                fingerprint,
+                sha256,
+            },
+            classification: offer.classification,
+            observed: offer.observed,
+            origin: offer.origin,
+            destination: destination.clone(),
+            created_at: now()?,
+        };
+        write_txn!(self, |conn| {
+            offers::require_unadopted_offer(conn, offer.id).await?;
             require_destination(&load_location(conn, destination.location_id).await?)?;
             require_unregistered(conn, destination).await?;
             insert_review(conn, &review).await?;
@@ -813,6 +891,10 @@ async fn register(
     .bind(review.id.to_string())
     .execute(&mut *conn)
     .await?;
+    if let Some(result_id) = review.source.result_id {
+        offers::mark_adopted(conn, result_id, &review.source.sha256, &master.provenance.adopted_at)
+            .await?;
+    }
     let updated = sqlx::query(
         "UPDATE adoption_operations SET state = 'completed', phase = 'registered', \
          finished_at = ?1, master_id = ?2 WHERE id = ?3 AND state = 'running'",

@@ -1,9 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Application preparation (spec 069 PREP-FR-01..11, PREP-FR-14): profiles,
-//! input modes, the run and Results folder layout, preparation revisions and
-//! their entries, the outcome and Open.
+//! Application preparation (spec 069 PREP-FR-01..14): profiles, input modes,
+//! the run and Results folder layout, preparation revisions and their
+//! entries, the outcome and Open, and a run group's Prepare all.
 //!
 //! A preparation revision materializes one committed membership revision of a
 //! run in its own new folder, `<output>/<Project>/<Run>/` and then
@@ -20,8 +20,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    CalibrationHandoff, EntryEvidence, InputKind, InputMode, ItemReason, LibraryError, NativePath,
-    ObservationFingerprint, Revision, RunStage, Writability, WrittenCopy,
+    CalibrationHandoff, CalibrationNeedsReview, CalibrationPolicy, EntryEvidence, InputKind,
+    InputMode, ItemReason, LibraryError, NativePath, ObservationFingerprint, PanelOutcome,
+    ResultKind, Revision, RunStage, Writability, WrittenCopy,
 };
 
 fn invalid(message: impl Into<String>) -> LibraryError {
@@ -77,7 +78,8 @@ pub enum Capability {
     Layout,
     /// How it is configured: exact input lists passed at launch.
     Configuration,
-    /// The product inputs it reads (lights, darks, flats, bias).
+    /// The accepted products (Results) it reads as inputs, by kind
+    /// (RES-FR-05).
     ProductInput,
     /// Output it writes that RES recognizes.
     RecognizedOutput,
@@ -115,7 +117,7 @@ pub struct CapabilityProof {
 
 /// A profile's recorded capability evidence (D04). Nothing is claimed
 /// without a proof: read-only input needs an `Input` proof, an input list a
-/// `Configuration` proof.
+/// `Configuration` proof, and product inputs a `ProductInput` proof.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilityEvidence {
@@ -124,6 +126,14 @@ pub struct CapabilityEvidence {
     /// The application reads the exact input paths passed as `{inputs}`.
     #[serde(default)]
     pub input_list: bool,
+    /// The kinds of accepted product the application reads as inputs; a
+    /// product of any other kind is unsupported and never converted.
+    #[serde(default)]
+    pub product_kinds: Vec<ResultKind>,
+    /// The application reads raw frames and products in one run; without
+    /// it they are prepared in separate runs (RES-FR-05).
+    #[serde(default)]
+    pub mixed_inputs: bool,
     #[serde(default)]
     pub proofs: Vec<CapabilityProof>,
 }
@@ -139,6 +149,19 @@ impl CapabilityEvidence {
         Capability::ALL.into_iter().filter(|capability| !self.proves(*capability)).collect()
     }
 
+    /// Whether the application reads an accepted product of `kind` as an
+    /// input (D04, RES-FR-05): the kind is claimed with its proof.
+    #[must_use]
+    pub fn reads_product(&self, kind: &ResultKind) -> bool {
+        self.proves(Capability::ProductInput) && self.product_kinds.contains(kind)
+    }
+
+    /// Whether the application reads raw frames and products in one run.
+    #[must_use]
+    pub fn reads_mixed_inputs(&self) -> bool {
+        self.proves(Capability::ProductInput) && self.mixed_inputs
+    }
+
     /// # Errors
     /// `InvalidInput` for blank evidence, or a claim without its proof.
     pub fn validate(&self) -> Result<(), LibraryError> {
@@ -150,6 +173,11 @@ impl CapabilityEvidence {
         }
         if self.input_list && !self.proves(Capability::Configuration) {
             return Err(invalid("an input list needs recorded configuration evidence"));
+        }
+        if (self.mixed_inputs || !self.product_kinds.is_empty())
+            && !self.proves(Capability::ProductInput)
+        {
+            return Err(invalid("product inputs need recorded product-input evidence"));
         }
         Ok(())
     }
@@ -338,6 +366,9 @@ pub enum BasisOrigin {
     Membership,
     /// The calibration assignment's input and digest.
     CalibrationAssignment,
+    /// An accepted product's acceptance digest, as its rehash read it
+    /// (RES-FR-05).
+    ProductAcceptance,
 }
 
 impl fmt::Display for BasisOrigin {
@@ -345,6 +376,7 @@ impl fmt::Display for BasisOrigin {
         f.write_str(match self {
             Self::Membership => "the confirmed membership",
             Self::CalibrationAssignment => "its calibration assignment",
+            Self::ProductAcceptance => "its acceptance",
         })
     }
 }
@@ -422,6 +454,8 @@ pub enum PreparedInput {
     Bias,
     Dark,
     Flat,
+    /// An accepted product of another run, a product input (RES-FR-05).
+    Product,
 }
 
 impl From<InputKind> for PreparedInput {
@@ -728,4 +762,234 @@ pub enum PrepareStep {
     Continue,
     Cancel,
     Pause,
+}
+
+// ---------------------------------------------------------------------------
+// Run group: Prepare all (PREP-FR-07/12/13, D-W38, D-W73)
+// ---------------------------------------------------------------------------
+
+/// Where one panel run of a group preparation revision goes.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelLocation {
+    pub number: u32,
+    pub view_id: Uuid,
+    /// `Panel N/` inside the group folder.
+    pub folder: NativePath,
+    /// `<Mosaic> Results/Panel N/`, shared by every group revision, so a
+    /// Result's panel is known from where it was written.
+    pub results: NativePath,
+}
+
+/// Where a group preparation revision goes. The group folder holds only the
+/// `Panel N/` folders; every Results folder lies outside every group folder.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupLocation {
+    pub output: NativePath,
+    /// `<output>/<Project>/<Mosaic>/` first, then `<Mosaic> (rev N)/`.
+    pub folder: NativePath,
+    /// By panel number.
+    pub panels: Vec<PanelLocation>,
+    /// `<Mosaic> Results/Assembled/`: the group Result, the assembled mosaic.
+    pub assembled: NativePath,
+}
+
+/// A panel run's committed membership revision as a Prepare all review read it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelMembership {
+    pub view_id: Uuid,
+    pub membership_revision: Revision,
+}
+
+/// The selection a Prepare all review showed: Prepare all refuses another.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupPrepareBasis {
+    pub group_revision: Revision,
+    /// By panel number.
+    pub panels: Vec<PanelMembership>,
+}
+
+/// One panel run in the Prepare all review, with its own entries and
+/// calibration choices.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelPreparationReview {
+    pub number: u32,
+    pub panel_id: Uuid,
+    pub view_id: Uuid,
+    pub run_name: String,
+    /// The immutable committed selection Prepare all uses.
+    pub membership_revision: Revision,
+    pub draft_unsaved: bool,
+    /// The committed membership moved past the panel run's latest
+    /// preparation; repreparing it proposes a new group folder.
+    pub membership_changed: bool,
+    /// The panel run's own preparation revision number.
+    pub preparation_number: u32,
+    pub entries: Vec<PlannedEntry>,
+    pub blocked: Vec<BlockedInput>,
+    pub excluded: u64,
+    /// Every input of the panel run with confirmed catalog corrections, with
+    /// its choices (PREP-FR-03); the group's request carries the choices.
+    pub corrections: Vec<PlannedCorrection>,
+    /// The panel run's own calibration choices; `None` until it is first
+    /// saved, as nothing is matched yet.
+    pub calibration: Option<CalibrationHandoff>,
+    /// Set when the panel run's calibration needs review (CAL-FR-11).
+    pub calibration_review: Option<CalibrationNeedsReview>,
+    pub operations: u64,
+    pub footprint_bytes: u64,
+    /// Why this panel run refuses Prepare all as reviewed.
+    pub refusals: Vec<String>,
+}
+
+/// Review of Prepare all (PREP-FR-08/12, PREP-AC-16): one review over every
+/// panel run, the shared profile, input mode and calibration policy once,
+/// and one total footprint and free space. Read-only.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupPreparationReview {
+    pub group_id: Uuid,
+    pub group_revision: Revision,
+    pub project_name: String,
+    pub subject_name: String,
+    /// The `<Mosaic>` of the group and Results folders.
+    pub mosaic_name: String,
+    pub profile: Profile,
+    pub verified_profile: bool,
+    pub unproven: Vec<Capability>,
+    pub suggested_mode: InputMode,
+    pub mode: InputMode,
+    pub link: Option<LinkKind>,
+    pub modes: Vec<ModeOption>,
+    pub calibration_policy: CalibrationPolicy,
+    /// The group revision Prepare all writes: 1, then 2 for `<Mosaic> (rev 2)/`.
+    pub preparation_number: u32,
+    pub location: Option<GroupLocation>,
+    pub location_check: LocationCheck,
+    /// The panel runs Prepare all prepares, by panel number.
+    pub panels: Vec<PanelPreparationReview>,
+    /// Panel runs in the Project's Trash: listed, and skipped.
+    pub skipped: Vec<PanelOutcome>,
+    pub operations: u64,
+    pub footprint_bytes: u64,
+    pub free_bytes: Option<u64>,
+    pub writability: Option<Writability>,
+    /// Why Prepare all is refused as reviewed, the group's and every panel
+    /// run's; empty when it may run.
+    pub refusals: Vec<String>,
+}
+
+impl GroupPreparationReview {
+    /// The selection this review showed, for Prepare all.
+    #[must_use]
+    pub fn basis(&self) -> GroupPrepareBasis {
+        GroupPrepareBasis {
+            group_revision: self.group_revision,
+            panels: self
+                .panels
+                .iter()
+                .map(|panel| PanelMembership {
+                    view_id: panel.view_id,
+                    membership_revision: panel.membership_revision,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// A run group's Prepare all revision. Each panel run's own revision names it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupPreparation {
+    pub id: Uuid,
+    pub group_id: Uuid,
+    pub n: u32,
+    pub profile_id: Uuid,
+    pub output: NativePath,
+    pub folder: NativePath,
+    pub outcome: PreparationState,
+    pub started_at: String,
+    pub finished_at: Option<String>,
+}
+
+impl GroupPreparation {
+    /// `<Mosaic>` or `<Mosaic> (rev N)`: the group folder's own name.
+    #[must_use]
+    pub fn name(&self) -> String {
+        self.folder
+            .to_path_buf()
+            .ok()
+            .and_then(|path| path.file_name().map(|name| name.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| self.folder.display())
+    }
+
+    /// The group outcome (PREP-FR-12): Prepared when every panel run is
+    /// Prepared, else Canceled or Paused when that is the `stop` the user made
+    /// on Prepare all, else Failed when every panel run Failed, and Partial
+    /// otherwise. Canceled and Paused come only from `stop`: a panel run
+    /// canceled, paused or being retried on its own counts as neither
+    /// prepared nor failed. A `stop` other than Canceled or Paused is none.
+    #[must_use]
+    pub fn outcome_for(
+        stop: Option<PreparationState>,
+        panels: impl IntoIterator<Item = PreparationState>,
+    ) -> PreparationState {
+        let (mut any, mut prepared, mut failed) = (false, true, true);
+        for state in panels {
+            any = true;
+            prepared &= state == PreparationState::Prepared;
+            failed &= state == PreparationState::Failed;
+        }
+        let stop = stop
+            .filter(|stop| matches!(stop, PreparationState::Canceled | PreparationState::Paused));
+        match stop {
+            _ if any && prepared => PreparationState::Prepared,
+            Some(stop) => stop,
+            None if failed => PreparationState::Failed,
+            None => PreparationState::Partial,
+        }
+    }
+}
+
+/// One panel run's outcome of a group preparation revision.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelPreparationOutcome {
+    pub number: u32,
+    pub panel_id: Uuid,
+    /// Its own outcome and offers: Open on a verified panel run stays
+    /// available whatever the group reads.
+    pub outcome: PreparationOutcome,
+}
+
+/// The outcome of a group preparation revision: each panel run's outcome and
+/// what the group offers. Open on the group is offered only when every panel
+/// run is verified (PREP-FR-13).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupPreparationOutcome {
+    pub preparation: GroupPreparation,
+    /// By panel number.
+    pub panels: Vec<PanelPreparationOutcome>,
+    /// `<Mosaic> Results/Assembled/`, where the assembled mosaic is saved.
+    pub assembled: NativePath,
+    pub offers: Vec<PreparationOffer>,
+    /// The panel runs the Prepare all or Retry that ended here skipped, each
+    /// with why: in the Project's Trash (D-W75) or, on Retry, Complete. By
+    /// panel number; empty when this outcome is read later.
+    pub skipped: Vec<PanelOutcome>,
+}
+
+impl GroupPreparationOutcome {
+    /// Whether every panel run is verified: Prepared with nothing Open found
+    /// changed.
+    #[must_use]
+    pub fn every_panel_verified(panels: &[PanelPreparationOutcome]) -> bool {
+        !panels.is_empty()
+            && panels.iter().all(|panel| panel.outcome.offers.contains(&PreparationOffer::Open))
+    }
 }
