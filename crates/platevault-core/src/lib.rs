@@ -25,6 +25,7 @@ pub mod projects;
 pub mod reminders;
 pub mod rig;
 pub mod run_lifecycle;
+pub mod storage;
 pub mod subframe_csv;
 pub mod targets;
 pub mod targets_list;

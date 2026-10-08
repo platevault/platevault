@@ -62,6 +62,7 @@ pub mod session_filters;
 pub mod sessions;
 pub mod settings;
 pub mod status;
+pub mod storage;
 pub mod target_favourites;
 pub mod target_lookup;
 pub mod target_management;

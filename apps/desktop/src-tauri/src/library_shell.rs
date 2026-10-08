@@ -221,6 +221,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::prepare::prepare_open,
         // results
         // storage
+        crate::commands::storage::storage_overview,
         // import
         crate::commands::naming::naming_get,
         crate::commands::naming::naming_save,
