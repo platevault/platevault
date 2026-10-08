@@ -21,7 +21,7 @@ use platevault_model::{
     ImageFormat, LibraryError, Location, LocationLifecycle, LocationRole, NativePath,
     ObservationFingerprint, PathSensitivity, Provenance, Quality, ReferenceKind, RemapBlockReason,
     RetryAction, Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation,
-    ScanProgress, ScanState, Session, VolumeIdentity,
+    ScanProgress, ScanState, Session, VolumeIdentity, VolumeKind,
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::{Column, Connection, Row};
@@ -1330,6 +1330,7 @@ async fn overlapping_roots_on_the_same_volume_are_refused() {
             path: NativePath::from_path(&path),
             role: LocationRole::Calibration,
             identity: folder_identity(&path).unwrap(),
+            volume_kind: VolumeKind::Local,
         };
         let error = catalog.register_location(&registration).await.unwrap_err();
         assert_eq!(kind(&error), "identity_conflict", "{}", path.display());
@@ -1465,6 +1466,7 @@ fn registration_at(path: &Path) -> LocationRegistration {
         path: NativePath::from_path(path),
         role: LocationRole::Captures,
         identity: folder_identity(path).unwrap(),
+        volume_kind: VolumeKind::Local,
     }
 }
 

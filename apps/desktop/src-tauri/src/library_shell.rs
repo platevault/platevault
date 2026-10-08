@@ -78,6 +78,7 @@ const RETAINED_FINISHED: usize = 256;
 /// configuration, an unusable data directory, a catalog that cannot be opened
 /// (including a foreign or legacy database), reminder subscriptions that
 /// cannot be read when the notifier attaches, or the Tauri runtime itself.
+#[expect(clippy::too_many_lines, reason = "the handler list holds one labelled block per feature")]
 pub fn run() -> Result<(), Box<dyn Error>> {
     let provider = provider_config()?;
     // One labelled block per feature. A feature adds its handlers under its own
@@ -126,6 +127,27 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::project_goals::goal_template_save,
         crate::commands::project_goals::goal_template_delete,
         // runs
+        crate::commands::view_selection::view_create,
+        crate::commands::view_selection::view_list,
+        crate::commands::view_selection::view_detail,
+        crate::commands::view_selection::view_candidates,
+        crate::commands::view_selection::view_new_candidate_count,
+        crate::commands::view_selection::view_set_stage,
+        crate::commands::view_selection::view_rename,
+        crate::commands::view_selection::view_select_sessions,
+        crate::commands::view_selection::view_select_matching,
+        crate::commands::view_selection::view_deselect_sessions,
+        crate::commands::view_selection::view_clear_selection,
+        crate::commands::view_selection::view_set_frames,
+        crate::commands::view_selection::view_save,
+        crate::commands::view_selection::view_discard_draft,
+        crate::commands::view_selection::view_refresh,
+        crate::commands::view_selection::view_apply_refresh,
+        crate::commands::view_selection::view_quality_scope,
+        crate::commands::view_selection::view_apply_quality,
+        crate::commands::view_selection::view_review_mark,
+        crate::commands::view_selection::view_revision,
+        crate::commands::view_selection::project_members,
         // frame review
         crate::commands::frame_review::pix_review_frames,
         crate::commands::frame_review::pix_start_measurement,
@@ -153,6 +175,16 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::naming::naming_save,
         crate::commands::naming::naming_restore_defaults,
         crate::commands::naming::naming_preview,
+        crate::commands::import::import_sources_list,
+        crate::commands::import::import_source_save,
+        crate::commands::import::import_preview,
+        crate::commands::import::import_recheck,
+        crate::commands::import::import_set_type,
+        crate::commands::import::import_set_excluded,
+        crate::commands::import::import_choose_location,
+        crate::commands::import::import_start,
+        crate::commands::import::import_retry,
+        crate::commands::import::import_status,
         // planning
         crate::commands::rigs::rig_filters_get,
         crate::commands::rigs::rig_filters_save,

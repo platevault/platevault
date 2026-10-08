@@ -24,6 +24,7 @@ use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
+use super::views::{self, RunUse};
 use super::{
     conflict, db_revision, fingerprint_matches, from_json, from_text, json_ids, load_asset,
     load_equipment, load_target, next_revision, now, parse_uuid, require_decidable,
@@ -455,7 +456,7 @@ fn not_a_subject(project: Uuid, target: Uuid) -> LibraryError {
     LibraryError::NotFound(format!("Target {target} is not a subject of project {project}"))
 }
 
-async fn require_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Revision> {
+pub async fn require_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Revision> {
     let current: Option<i64> = sqlx::query_scalar("SELECT revision FROM projects WHERE id = ?1")
         .bind(id.to_string())
         .fetch_optional(&mut *conn)
@@ -531,7 +532,7 @@ fn panel_number(value: i64) -> Result<u32> {
 
 /// Keep each listed Target's subject and each listed panel number's panel,
 /// remove the rest with their goals, then remove each goal its subject's kind no
-/// longer takes.
+/// longer takes. A subject or panel any run uses is never removed (D-W65).
 async fn write_subjects(
     conn: &mut SqliteConnection,
     project: Uuid,
@@ -542,6 +543,11 @@ async fn write_subjects(
     }
     let stored = subject_rows(conn, project).await?;
     let listed: BTreeSet<Uuid> = subjects.iter().map(|subject| subject.target_id).collect();
+    for (target, removed) in stored.iter().filter(|(target, _)| !listed.contains(target)) {
+        let designation = load_target(conn, *target).await?.candidate.designation;
+        let what = format!("subject {designation}");
+        views::refuse_if_used(conn, project, RunUse::Subject, removed.id, &what).await?;
+    }
     for (_, removed) in stored.iter().filter(|(target, _)| !listed.contains(target)) {
         for statement in [
             "DELETE FROM project_goals WHERE subject_id = ?1",
@@ -568,7 +574,7 @@ async fn write_subjects(
         .execute(&mut *conn)
         .await?;
         let panels = kept.map(|row| row.panels.clone()).unwrap_or_default();
-        write_panels(conn, id, &panels, &subject.panels).await?;
+        write_panels(conn, project, id, &panels, &subject.panels).await?;
     }
     // Integration and frame-count goals of a mosaic subject name a panel.
     sqlx::query(
@@ -584,12 +590,15 @@ async fn write_subjects(
 
 async fn write_panels(
     conn: &mut SqliteConnection,
+    project: Uuid,
     subject: Uuid,
     stored: &BTreeMap<u32, Uuid>,
     panels: &[PanelInput],
 ) -> Result<()> {
     let listed: BTreeSet<u32> = panels.iter().map(|panel| panel.number).collect();
-    for (_, removed) in stored.iter().filter(|(number, _)| !listed.contains(number)) {
+    for (number, removed) in stored.iter().filter(|(number, _)| !listed.contains(number)) {
+        let what = format!("panel {number}");
+        views::refuse_if_used(conn, project, RunUse::Panel, *removed, &what).await?;
         for statement in [
             "DELETE FROM project_goals WHERE panel_id = ?1",
             "DELETE FROM subject_panels WHERE id = ?1",
@@ -617,17 +626,38 @@ async fn write_panels(
     Ok(())
 }
 
+/// Replace the rig list in order. A rig any run uses is never removed
+/// (D-W65); a kept rig keeps its row, so the runs on it stay valid.
 async fn write_rigs(conn: &mut SqliteConnection, project: Uuid, rig_ids: &[Uuid]) -> Result<()> {
     for rig in rig_ids {
         load_equipment(conn, *rig).await?;
     }
-    sqlx::query("DELETE FROM project_rigs WHERE project_id = ?1")
-        .bind(project.to_string())
-        .execute(&mut *conn)
-        .await?;
+    let stored: Vec<String> =
+        sqlx::query_scalar("SELECT equipment_id FROM project_rigs WHERE project_id = ?1")
+            .bind(project.to_string())
+            .fetch_all(&mut *conn)
+            .await?;
+    let listed: BTreeSet<Uuid> = rig_ids.iter().copied().collect();
+    let mut removed = Vec::new();
+    for rig in &stored {
+        let rig = parse_uuid(rig)?;
+        if !listed.contains(&rig) {
+            let what = format!("rig {}", load_equipment(conn, rig).await?.name);
+            views::refuse_if_used(conn, project, RunUse::Rig, rig, &what).await?;
+            removed.push(rig);
+        }
+    }
+    for rig in removed {
+        sqlx::query("DELETE FROM project_rigs WHERE project_id = ?1 AND equipment_id = ?2")
+            .bind(project.to_string())
+            .bind(rig.to_string())
+            .execute(&mut *conn)
+            .await?;
+    }
     for (position, rig) in (0_i64..).zip(rig_ids) {
         sqlx::query(
-            "INSERT INTO project_rigs (project_id, equipment_id, position) VALUES (?1, ?2, ?3)",
+            "INSERT INTO project_rigs (project_id, equipment_id, position) VALUES (?1, ?2, ?3) \
+             ON CONFLICT (project_id, equipment_id) DO UPDATE SET position = excluded.position",
         )
         .bind(project.to_string())
         .bind(rig.to_string())
@@ -1055,6 +1085,8 @@ mod tests {
             coordinates: None,
             provenance: Provenance::User,
             provider_id: None,
+            angular_size: None,
+            catalogues: Vec::new(),
         }
     }
 

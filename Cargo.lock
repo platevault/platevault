@@ -4779,6 +4779,7 @@ dependencies = [
  "base64 0.22.1",
  "calibration_master_detect",
  "csv",
+ "fs4",
  "fs_pathsafe",
  "hex",
  "jiff",
@@ -5715,8 +5716,11 @@ name = "seed-builder"
 version = "0.1.0"
 dependencies = [
  "domain_core",
+ "hex",
  "reqwest",
+ "serde",
  "serde_json",
+ "sha2 0.10.9",
  "targeting_resolver",
 ]
 

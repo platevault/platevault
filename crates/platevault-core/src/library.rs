@@ -21,6 +21,7 @@ use crate::projects::{CalibrationReferences, ProjectReferences};
 use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
 };
+use crate::view_selection::ViewReferences;
 use crate::{
     AssetReference, AssociationKind, AssociationState, Availability, FileIdentity, LibraryError,
     Location, LocationRole, NativePath, ObservationFingerprint, ReferenceKind, RemapReview,
@@ -110,7 +111,7 @@ impl persistence_library::SourceProbe for InventoryProbe {
 
 impl Library {
     /// Open a fresh-schema catalog and load the offline target dataset, with the
-    /// catalog's Projects registered as a reference source. Interrupted scan
+    /// catalog's Projects and runs registered as reference sources. Interrupted scan
     /// recovery is owned by the catalog.
     ///
     /// # Errors
@@ -129,6 +130,8 @@ impl Library {
             Arc::new(ProjectReferences { catalog: Arc::clone(&catalog) });
         let calibration: Arc<dyn AssetReferences> =
             Arc::new(CalibrationReferences { catalog: Arc::clone(&catalog) });
+        let views: Arc<dyn AssetReferences> =
+            Arc::new(ViewReferences { catalog: Arc::clone(&catalog) });
         let frame_review = FrameReview::new(Arc::clone(&catalog));
         Ok(Arc::new(Self {
             catalog,
@@ -138,7 +141,7 @@ impl Library {
             saved_targets: Mutex::new(None),
             progress,
             planning,
-            references: tokio::sync::RwLock::new(vec![projects, calibration]),
+            references: tokio::sync::RwLock::new(vec![projects, calibration, views]),
             frame_review,
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
@@ -192,8 +195,16 @@ impl Library {
         role: LocationRole,
     ) -> Result<Location, LibraryError> {
         let root = path.to_path_buf()?;
-        let identity = blocking(move || inventory::observe_root_identity(&root)).await?;
-        self.catalog.register_location(&LocationRegistration { name, path, role, identity }).await
+        let observed = blocking(move || inventory::observe_root(&root)).await?;
+        self.catalog
+            .register_location(&LocationRegistration {
+                name,
+                path,
+                role,
+                identity: observed.identity,
+                volume_kind: observed.volume_kind,
+            })
+            .await
     }
 
     /// Restore a location only when its registered volume and folder still match.
@@ -755,7 +766,10 @@ pub(crate) async fn blocking<T: Send + 'static>(
     })?
 }
 
-fn root_failure(error: &LibraryError) -> Option<Availability> {
+/// How a root that failed its identity check reads: Offline when it is gone,
+/// Unreadable when access is denied, `IdentityConflict` for another volume or
+/// folder; `None` for any other failure.
+pub(crate) fn root_failure(error: &LibraryError) -> Option<Availability> {
     match error {
         LibraryError::Context { error, .. } => root_failure(error),
         LibraryError::IdentityConflict(_) => Some(Availability::IdentityConflict),

@@ -277,6 +277,8 @@ impl Worked {
             }),
             provenance: Provenance::User,
             provider_id: None,
+            angular_size: None,
+            catalogues: Vec::new(),
         };
         let target = library.catalog().save_target(&target, None).await.unwrap();
         Self { temp, database, library, location: location.id, target, originals }

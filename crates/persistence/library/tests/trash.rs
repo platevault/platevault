@@ -442,6 +442,7 @@ async fn calibration_location_sessions_are_not_in_sessions() {
             path: NativePath::from_path(&calibration_root),
             role: LocationRole::Calibration,
             identity: folder_identity(&calibration_root).unwrap(),
+            volume_kind: platevault_model::VolumeKind::Local,
         })
         .await
         .unwrap();
@@ -512,6 +513,7 @@ async fn a_trashed_copy_never_joins_a_live_copy() {
             path: NativePath::from_path(&nas),
             role: LocationRole::Captures,
             identity: folder_identity(&nas).unwrap(),
+            volume_kind: platevault_model::VolumeKind::Local,
         })
         .await
         .unwrap();

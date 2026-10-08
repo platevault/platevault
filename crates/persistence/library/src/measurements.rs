@@ -1264,6 +1264,7 @@ mod tests {
                 path: NativePath::from_path(&root),
                 role: LocationRole::Captures,
                 identity: identity.clone(),
+                volume_kind: platevault_model::VolumeKind::Local,
             })
             .await
             .unwrap();

@@ -56,16 +56,29 @@ spellings differ (`M31` = `NGC 224` = `Andromeda Galaxy`).
 
 ## Bundled seed
 
-`assets/seed/seed.json` (~13k popular deep-sky objects, ~4.5 MB) is embedded via `include_bytes!` and
-loaded into the cache at **first run** (`seed::load_bundled_on_first_run`, guarded by `is_first_run`,
-one batched transaction). Built offline by `crates/tools/seed-builder`:
+`assets/seed/seed.json` (format v2, ~16.5k popular deep-sky objects, ~7.7 MB) is embedded via
+`include_bytes!` and loaded into the cache at **first run** (`seed::load_bundled_on_first_run`,
+guarded by `is_first_run`, one batched transaction). Each entry carries its SIMBAD
+`galdim_majaxis`/`galdim_minaxis`/`galdim_angle` as `angular_size` (`null` when SIMBAD records no
+major axis), and a top-level `caldwell` table maps C1–C109 to SIMBAD oids, since Caldwell is not a
+SIMBAD designation. `platevault_core::targets::TargetIndex` derives catalogue membership (Messier,
+NGC, IC, Caldwell, Sharpless, LBN, LDN, Barnard) from the aliases and that table. Built offline by
+`crates/tools/seed-builder`:
 
 - `cargo run -p seed-builder` — default `--popular`: NGC + IC + Messier + Caldwell + named + Sharpless +
-  Barnard + vdB + Abell-PN + Melotte, DSO-only (drops `otype=Other` stellar noise). ~13k objects.
-- `--full` — everything (≈56k / 19.5 MB; not recommended to ship).
+  LBN + LDN + Barnard + vdB + Abell-PN + Melotte, DSO-only (drops `otype=Other` stellar noise, but
+  keeps every Messier and Caldwell object).
+- `--full` — adds ACO and APG and keeps `otype=Other` rows (large; not recommended to ship).
 - `--ngc <N>` / `--slice` — small smoke build.
+- `--record <file>` writes the query/response transcript; `--replay <file>` rebuilds byte-identical
+  output from it with no network access.
 
-Network (SIMBAD CDS) is required only for the offline build, not at runtime first-run.
+Every build also writes `assets/seed/seed.manifest.json`: the asset SHA-256 and size, entry and
+Caldwell counts, the ADQL query templates and `LIKE` patterns, and SHA-256 digests of the executed
+queries, the responses and the transcript. `seed_digest_matches_manifest` (platevault-core) checks the
+committed asset against it.
+
+Network (SIMBAD CDS) is required only for a live seed build, never for building the app or at runtime.
 
 ## Settings
 
@@ -77,7 +90,9 @@ the setup wizard's repurposed step).
 
 - **Run the live SIMBAD test** (opt-in via env var, needs network):
   `PV_LIVE_SIMBAD=1 cargo test -p targeting_resolver --test simbad_live`.
-- **Regenerate the seed**: `cargo run -p seed-builder` (commits to `assets/seed/seed.json`).
+- **Regenerate the seed**: `cargo run -p seed-builder --release -- --record <transcript>` (writes
+  `assets/seed/seed.json` and `seed.manifest.json`), then update the pinned literal in
+  `crates/targeting/resolver/tests/bundled_seed_digest.rs`.
 - **Attribution** (FR-012): SIMBAD (CDS, Université de Strasbourg) + OpenNGC — shown in the settings
   Attribution section.
 

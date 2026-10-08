@@ -103,7 +103,7 @@ async fn real_composed_library_preserves_sources_quality_and_restart() {
     let m31 = targets.iter().find(|hit| hit.candidate.designation == "M 31").unwrap();
     assert_eq!(
         m31.candidate.provenance,
-        Provenance::Seed { dataset: "bundled-seed/v1/sha256:aa442354ca1f36cd".into() }
+        Provenance::Seed { dataset: "bundled-seed/v2/sha256:7e53eb625231e678".into() }
     );
     assert!(matches!(
         library.resolve_target("M31").await,
@@ -369,6 +369,8 @@ async fn same_stat_replacement_leaves_usable_totals_until_the_reviewed_bytes_ret
         coordinates: None,
         provenance: Provenance::User,
         provider_id: None,
+        angular_size: None,
+        catalogues: Vec::new(),
     };
     let target = catalog.save_target(&target, None).await.unwrap().candidate.id;
     let expected_session = ExpectedSession {
@@ -479,6 +481,8 @@ async fn byte_identical_copies_in_two_locations_are_one_logical_capture() {
         coordinates: None,
         provenance: Provenance::User,
         provider_id: None,
+        angular_size: None,
+        catalogues: Vec::new(),
     };
     let target = catalog.save_target(&target, None).await.unwrap().candidate.id;
     let expected_session = ExpectedSession {
@@ -704,6 +708,8 @@ async fn copied_library(temp: &tempfile::TempDir) -> (Arc<Library>, Vec<Location
         coordinates: None,
         provenance: Provenance::User,
         provider_id: None,
+        angular_size: None,
+        catalogues: Vec::new(),
     };
     let target = catalog.save_target(&target, None).await.unwrap().candidate.id;
     let expected = ExpectedSession {

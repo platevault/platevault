@@ -28,7 +28,7 @@ use platevault_model::{
     RemapBlock, RemapBlockReason, RemapItem, RemapReview, RetireAsset, RetireReview, RetireSession,
     Revision, ScanBatch, ScanFile, ScanIssue, ScanObservation, ScanOperation, ScanProgress,
     ScanState, Session, SessionCandidate, SessionLineage, TargetCandidate, TargetCone,
-    TargetCoverage, TargetRecord, VolumeIdentity,
+    TargetCoverage, TargetRecord, VolumeIdentity, VolumeKind, NETWORK_ADDRESS_REFUSED,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -66,11 +66,13 @@ const SCHEMA: &str = schema_modules![
     "measurements.sql",
     "frame_thumbnails.sql",
     "storage.sql",
+    "views.sql",
+    "import.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
 /// version is refused before any module's DDL runs.
-pub const SCHEMA_VERSION: i64 = 7;
+pub const SCHEMA_VERSION: i64 = 8;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -128,7 +130,10 @@ mod projects;
 
 pub use frame_thumbnails::{StoredThumbnail, ThumbnailBasis};
 pub use measurements::{FrameRecordBasis, ImportReviewInput};
+mod import;
 mod storage;
+mod views;
+pub use views::{CandidateBasis, CandidateSession, ChoiceBasis, MembershipBasis};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -164,6 +169,8 @@ pub struct LocationRegistration {
     pub role: LocationRole,
     /// Observed volume and root-folder identity of `path`.
     pub identity: FileIdentity,
+    /// The kind of volume `path` is on, observed with its identity.
+    pub volume_kind: VolumeKind,
 }
 
 /// Last recorded access failure of a location, kept until access is restored.
@@ -357,6 +364,8 @@ struct OperationRow {
     complete: Vec<NativePath>,
     incomplete: Vec<NativePath>,
     identity_verified: bool,
+    /// The operation began or resumed its rehash run (see `arm_verification`).
+    verification_armed: bool,
     revision: Revision,
     started_at: String,
     finished_at: Option<String>,
@@ -774,13 +783,8 @@ impl Catalog {
         }
         arm_verification(&mut txn, &op).await?;
         let changed = observe_batch(&mut txn, &op, &location, &files, &issues, &digests).await?;
-        sqlx::query(
-            "UPDATE scan_operations SET progress = ?1, revision = revision + 1 WHERE id = ?2",
-        )
-        .bind(to_json(&batch.progress)?)
-        .bind(op.id.to_string())
-        .execute(&mut *txn)
-        .await?;
+        let recorded = load_operation_row(&mut txn, op.id).await?.progress;
+        record_progress(&mut txn, op.id, &walked_progress(&recorded, &batch.progress)).await?;
         regroup(&mut txn, &changed.regroup, &mut grouping, Cause::Scan(op.id)).await?;
         invalidate_inferences(&mut txn, &changed.evidence).await?;
         mark_location_observed(&mut txn, location.id).await?;
@@ -933,10 +937,14 @@ impl Catalog {
     /// The reviewed asset is found exactly as the transaction will find it, including
     /// a single case/normalization variant on insensitive volumes; the live observed
     /// path is hashed. Ambiguous variants are refused in the transaction instead.
+    /// A rehash the location's unfinished run already completed is kept while the
+    /// observation is unchanged, so a resumed scan hashes only the remaining files
+    /// (LIB-FR-19).
     async fn decided_digests(&self, operation_id: Uuid, files: &[&ScanFile]) -> Result<DigestMap> {
         let mut conn = self.reader().await?;
         let op = load_operation_row(&mut conn, operation_id).await?;
         let location = load_location(&mut conn, op.location_id).await?;
+        let run = rehash_run(&mut conn, &op).await?;
         let mut work = Vec::new();
         for file in files.iter().copied() {
             let matched =
@@ -945,9 +953,11 @@ impl Catalog {
             let AssetMatch::Existing(asset) = &matched else {
                 continue;
             };
-            if asset.quality != Quality::Unreviewed
-                || asset.availability == Availability::Trashed
-                || aliased_copy(&mut conn, asset).await?
+            let trashed = asset.availability == Availability::Trashed;
+            let rehash = !trashed
+                && (asset.quality != Quality::Unreviewed || aliased_copy(&mut conn, asset).await?);
+            if trashed
+                || (rehash && !(rehash_kept(asset, run) && unchanged_observation(asset, file)))
             {
                 let key = path_key(&file.relative_path);
                 work.push((key, file.relative_path.clone(), file.fingerprint.clone()));
@@ -2347,7 +2357,16 @@ fn valid_reason(reason: &str) -> Result<&str> {
     Ok(reason)
 }
 
+/// An absolute folder path of a mounted volume. `PlateVault` mounts no share, so an
+/// SMB, NFS or URL address is refused (LIB-FR-19).
 fn require_absolute(path: &NativePath) -> Result<PathBuf> {
+    if path.is_network_address() {
+        return Err(scoped(
+            LibraryError::InvalidInput(NETWORK_ADDRESS_REFUSED.into()),
+            path.clone(),
+            None,
+        ));
+    }
     let native = path.to_path_buf().map_err(|error| scoped(error, path.clone(), None))?;
     if !native.is_absolute() {
         return Err(scoped(
@@ -2959,8 +2978,8 @@ async fn insert_location(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO locations (id, name, path_key, role, identity, volume_filesystem, \
-         volume_stable_id, decision_revision, availability, created_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, 'available', ?8)",
+         volume_stable_id, volume_kind, decision_revision, availability, created_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, 'available', ?9)",
     )
     .bind(id.to_string())
     .bind(name)
@@ -2969,6 +2988,7 @@ async fn insert_location(
     .bind(to_json(&input.identity)?)
     .bind(input.identity.volume.filesystem.as_str())
     .bind(input.identity.volume.stable_id.as_deref())
+    .bind(to_text(&input.volume_kind)?)
     .bind(now()?)
     .execute(&mut *conn)
     .await?;
@@ -3026,6 +3046,7 @@ fn location_from_row(row: &SqliteRow) -> Result<Location> {
         availability: from_text(&row.try_get::<String, _>("availability")?)?,
         last_observed_at: row.try_get("last_observed_at")?,
         lifecycle: from_text(&row.try_get::<String, _>("lifecycle")?)?,
+        volume_kind: from_text(&row.try_get::<String, _>("volume_kind")?)?,
     })
 }
 
@@ -3046,12 +3067,20 @@ async fn location_provisional(conn: &mut SqliteConnection, id: Uuid) -> Result<b
 }
 
 /// The first readable pass of an operation (its first verified batch, or its
-/// terminal pass) marks every decided live asset in its scope verification
-/// pending, and every live copy whose recorded digest carries a live decided
-/// copy's decision in another location. Each successful rehash in this operation
-/// clears the mark; a canceled scan or a failed rehash leaves it. Offline scans
-/// never get here, so offline inputs keep their last-observed quality. A Trashed
-/// frame is in the OS Trash, so it awaits no rehash (LIB-FR-18).
+/// terminal pass) begins or resumes the location's rehash run (D19) over every
+/// decided live asset in its scope, and every live copy whose recorded digest
+/// carries a live decided copy's decision in another location.
+///
+/// With none of the location's assets still verification pending, or once a
+/// scan of the whole location reached its end, a new run begins at the
+/// operation's start and marks each of them pending. Otherwise an interruption
+/// or unmount left the run unfinished and this operation resumes it
+/// (LIB-FR-19): an asset the run already rehashed is kept, and only the
+/// remaining ones are pending, so their count is what this scan sets out to
+/// hash. Each successful rehash clears the mark; a canceled scan or a failed
+/// rehash leaves it. Offline scans never get here, so offline inputs keep their
+/// last-observed quality. A Trashed frame is in the OS Trash, so it awaits no
+/// rehash (LIB-FR-18).
 async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Result<()> {
     let armed = sqlx::query(
         "UPDATE scan_operations SET verification_armed = 1 WHERE id = ?1 AND verification_armed = 0",
@@ -3063,9 +3092,18 @@ async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Res
     if armed == 0 {
         return Ok(());
     }
+    let run = unfinished_rehash(conn, op.location_id).await?;
+    if run.is_none() {
+        sqlx::query("UPDATE locations SET rehash_started_at = ?1 WHERE id = ?2")
+            .bind(&op.started_at)
+            .bind(op.location_id.to_string())
+            .execute(&mut *conn)
+            .await?;
+    }
     let key = path_key(&op.scope);
     let rows = sqlx::query(
-        "SELECT a.id, a.path_key FROM live_assets a WHERE a.location_id = ?1 \
+        "SELECT a.id, a.path_key, a.content_sha256, a.verification_pending, a.last_verified_at \
+         FROM live_assets a WHERE a.location_id = ?1 \
          AND a.availability <> 'missing' AND substr(a.path_key, 1, ?2) = ?3 \
          AND (a.quality <> 'unreviewed' OR (a.content_sha256 IS NOT NULL AND (EXISTS ( \
              SELECT 1 FROM live_assets d WHERE d.content_sha256 = a.content_sha256 \
@@ -3080,15 +3118,129 @@ async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Res
     .bind(key)
     .fetch_all(&mut *conn)
     .await?;
+    let mut progress =
+        ScanProgress { rehash_total: 0, rehashed: 0, rehash_kept: 0, ..op.progress.clone() };
     for row in &rows {
-        if within(&path_from_key(&row.try_get::<Vec<u8>, _>("path_key")?)?, &op.scope) {
+        if !within(&path_from_key(&row.try_get::<Vec<u8>, _>("path_key")?)?, &op.scope) {
+            continue;
+        }
+        let pending = row.try_get::<i64, _>("verification_pending")? == 1;
+        let digest: Option<String> = row.try_get("content_sha256")?;
+        let verified_at: Option<String> = row.try_get("last_verified_at")?;
+        if !pending && digest.is_some() && verified_since(verified_at.as_deref(), run) {
+            progress.rehash_kept += 1;
+            continue;
+        }
+        progress.rehash_total += 1;
+        if !pending {
             sqlx::query("UPDATE assets SET verification_pending = 1 WHERE id = ?1")
                 .bind(row.try_get::<String, _>("id")?)
                 .execute(&mut *conn)
                 .await?;
         }
     }
+    record_progress(conn, op.id, &progress).await
+}
+
+/// When the location's unfinished rehash run began: some of its assets are still
+/// verification pending since then, and no scan of the whole location reached
+/// its end since (LIB-FR-19).
+async fn unfinished_rehash(
+    conn: &mut SqliteConnection,
+    location_id: Uuid,
+) -> Result<Option<time::OffsetDateTime>> {
+    let pending: bool = sqlx::query_scalar(PENDING_IN_LOCATION)
+        .bind(location_id.to_string())
+        .fetch_one(&mut *conn)
+        .await?;
+    if pending {
+        rehash_started_at(conn, location_id).await
+    } else {
+        Ok(None)
+    }
+}
+
+/// When the location's latest rehash run began.
+async fn rehash_started_at(
+    conn: &mut SqliteConnection,
+    location_id: Uuid,
+) -> Result<Option<time::OffsetDateTime>> {
+    let started: Option<String> =
+        sqlx::query_scalar("SELECT rehash_started_at FROM locations WHERE id = ?1")
+            .bind(location_id.to_string())
+            .fetch_one(&mut *conn)
+            .await?;
+    Ok(started.as_deref().and_then(instant))
+}
+
+/// End the location's rehash run once a scan of its whole scope reached its end
+/// (Completed or Partial). A decided frame it could not hash stays pending, but
+/// the next scan begins a new run that rechecks every decided frame instead of
+/// keeping this run's rehashes (D19). Only a canceled, failed or root-lost scan,
+/// or a scan of a subtree, leaves the run for the next scan to resume
+/// (LIB-FR-19).
+async fn end_rehash_run(
+    conn: &mut SqliteConnection,
+    op: &OperationRow,
+    terminal: bool,
+) -> Result<()> {
+    if !terminal || !components(&op.scope).is_empty() {
+        return Ok(());
+    }
+    sqlx::query("UPDATE locations SET rehash_started_at = NULL WHERE id = ?1")
+        .bind(op.location_id.to_string())
+        .execute(&mut *conn)
+        .await?;
     Ok(())
+}
+
+/// The operation's incomplete scopes plus those the terminal observation adds.
+fn recorded_incomplete(
+    op: &OperationRow,
+    observation: &ScanObservation,
+) -> Result<Vec<NativePath>> {
+    let mut incomplete = op.incomplete.clone();
+    for scope in &observation.incomplete_scopes {
+        scope
+            .relative_path()
+            .map_err(|error| scoped(error, scope.clone(), Some(op.location_id)))?;
+        push_unique(&mut incomplete, scope.clone());
+    }
+    Ok(incomplete)
+}
+
+/// The rehash run an operation takes part in: the one it began or resumed once
+/// armed, and before that the unfinished run it is going to resume, if any.
+async fn rehash_run(
+    conn: &mut SqliteConnection,
+    op: &OperationRow,
+) -> Result<Option<time::OffsetDateTime>> {
+    if op.verification_armed {
+        rehash_started_at(conn, op.location_id).await
+    } else {
+        unfinished_rehash(conn, op.location_id).await
+    }
+}
+
+/// A rehash the current run already completed (LIB-FR-19): the asset is no longer
+/// pending and its digest was verified since the run began, so its bytes are not
+/// hashed again while its observation is unchanged.
+fn rehash_kept(asset: &Asset, run: Option<time::OffsetDateTime>) -> bool {
+    !asset.verification_pending
+        && asset.fingerprint.content_sha256.is_some()
+        && verified_since(asset.last_verified_at.as_deref(), run)
+}
+
+fn verified_since(verified_at: Option<&str>, run: Option<time::OffsetDateTime>) -> bool {
+    run.zip(verified_at.and_then(instant)).is_some_and(|(started, verified)| verified >= started)
+}
+
+/// The walk observed exactly the recorded evidence: format, metadata and a
+/// fingerprint whose recorded digest stands for otherwise identical stats.
+fn unchanged_observation(stored: &Asset, file: &ScanFile) -> bool {
+    fingerprint_matches(&stored.fingerprint, &file.fingerprint)
+        && stored.format == file.format
+        && stored.observed == file.metadata
 }
 
 // ---------------------------------------------------------------------------
@@ -3205,13 +3357,7 @@ where
     invalidate_inferences(conn, &changed.evidence).await?;
     mark_location_observed(conn, location.id).await?;
     let op = load_operation_row(conn, op.id).await?;
-    let mut incomplete = op.incomplete.clone();
-    for scope in &observation.incomplete_scopes {
-        scope
-            .relative_path()
-            .map_err(|error| scoped(error, scope.clone(), Some(op.location_id)))?;
-        push_unique(&mut incomplete, scope.clone());
-    }
+    let mut incomplete = recorded_incomplete(&op, observation)?;
     let terminal = matches!(observation.state, ScanState::Completed | ScanState::Partial);
     if !terminal {
         push_unique(&mut incomplete, op.scope.clone());
@@ -3234,6 +3380,7 @@ where
         reconcile_absence(conn, &op, &complete, &incomplete).await?;
     }
     let issues = load_issue_paths(conn, op.id).await?;
+    end_rehash_run(conn, &op, terminal).await?;
     let state = match observation.state {
         ScanState::Completed
             if !incomplete.is_empty() || !issues.is_empty() || complete.is_empty() =>
@@ -3242,7 +3389,7 @@ where
         }
         other => other,
     };
-    let progress = terminal_progress(&op, &observation.progress);
+    let progress = walked_progress(&op.progress, &observation.progress);
     finalize_operation(conn, op.id, state, &progress, &complete, &incomplete).await
 }
 
@@ -3261,15 +3408,19 @@ async fn finish_unverified(
         ScanState::Completed | ScanState::Partial => ScanState::Partial,
         other => other,
     };
-    let progress = terminal_progress(&op, &observation.progress);
+    let progress = walked_progress(&op.progress, &observation.progress);
     finalize_operation(conn, op.id, state, &progress, &[], &incomplete).await
 }
 
-/// The walk's terminal counts plus the duplicate verification this scan recorded.
-fn terminal_progress(op: &OperationRow, walked: &ScanProgress) -> ScanProgress {
+/// The walk's counts plus the hashing this operation recorded itself: duplicate
+/// verification and the rehash of decided assets (D19, LIB-FR-19).
+fn walked_progress(recorded: &ScanProgress, walked: &ScanProgress) -> ScanProgress {
     ScanProgress {
-        duplicate_candidates: op.progress.duplicate_candidates,
-        duplicates_verified: op.progress.duplicates_verified,
+        duplicate_candidates: recorded.duplicate_candidates,
+        duplicates_verified: recorded.duplicates_verified,
+        rehash_total: recorded.rehash_total,
+        rehashed: recorded.rehashed,
+        rehash_kept: recorded.rehash_kept,
         ..walked.clone()
     }
 }
@@ -3319,6 +3470,8 @@ async fn observe_batch(
     digests: &DigestMap,
 ) -> Result<BatchChanges> {
     let observed_at = now()?;
+    // Runs after `arm_verification`, so the operation has begun or resumed its run.
+    let run = rehash_started_at(conn, op.location_id).await?;
     let mut changed = BatchChanges::default();
     for file in files.iter().copied() {
         match digests.get(&path_key(&file.relative_path)) {
@@ -3332,7 +3485,7 @@ async fn observe_batch(
             }
             digest => {
                 let digest = digest.and_then(|digest| digest.as_ref().ok()).cloned();
-                let observed = ObservedFile { file, digest };
+                let observed = ObservedFile { file, digest, run };
                 match observe_file(conn, op, location, observed, &observed_at).await? {
                     Change::Unchanged => {}
                     Change::Inserted(id) => {
@@ -3359,6 +3512,8 @@ async fn observe_batch(
 struct ObservedFile<'a> {
     file: &'a ScanFile,
     digest: Option<String>,
+    /// When the rehash run this operation takes part in began.
+    run: Option<time::OffsetDateTime>,
 }
 
 enum Change {
@@ -3412,6 +3567,15 @@ async fn observe_file(
     match find_asset(conn, location, &file.relative_path, &fingerprint, op.id).await? {
         AssetMatch::Existing(stored) if stored.availability == Availability::Trashed => {
             observe_trashed(conn, op, *stored, file, fingerprint, observed_at).await
+        }
+        // A rehash the resumed run already completed stands for these unchanged
+        // bytes: they are not hashed again (LIB-FR-19).
+        AssetMatch::Existing(stored)
+            if fingerprint.content_sha256.is_none()
+                && rehash_kept(&stored, observed.run)
+                && unchanged_observation(&stored, file) =>
+        {
+            refresh_asset(conn, op, &stored, file, fingerprint, observed_at).await
         }
         AssetMatch::Existing(stored)
             if stored.quality != Quality::Unreviewed && fingerprint.content_sha256.is_none() =>
@@ -3571,7 +3735,7 @@ async fn refresh_asset(
         && stored.format == file.format
         && stored.observed == file.metadata;
     if unchanged {
-        clear_verified(conn, stored.id, &fingerprint, observed_at).await?;
+        clear_verified(conn, op.id, stored.id, &fingerprint, observed_at).await?;
         let mut retained = stored.fingerprint.clone();
         if retained.content_sha256.is_none() {
             retained.content_sha256 = fingerprint.content_sha256;
@@ -3622,24 +3786,44 @@ async fn refresh_asset(
     .execute(&mut *conn)
     .await?;
     insert_observation(conn, stored.id, op.id, sequence, &fingerprint, file, observed_at).await?;
-    clear_verified(conn, stored.id, &fingerprint, observed_at).await?;
+    clear_verified(conn, op.id, stored.id, &fingerprint, observed_at).await?;
     Ok(Change::Refreshed { id: stored.id, regroup: effective != stored.effective })
 }
 
 /// A content digest taken in this scan finishes the asset's pending rehash and
-/// is its last completed verification.
+/// is its last completed verification. Each pending rehash it finishes counts in
+/// the operation's progress.
 async fn clear_verified(
     conn: &mut SqliteConnection,
+    operation_id: Uuid,
     id: Uuid,
     fingerprint: &ObservationFingerprint,
     verified_at: &str,
 ) -> Result<()> {
-    if fingerprint.content_sha256.is_some() {
+    if fingerprint.content_sha256.is_none() {
+        return Ok(());
+    }
+    let finished = sqlx::query(
+        "UPDATE assets SET verification_pending = 0, last_verified_at = ?1 \
+         WHERE id = ?2 AND verification_pending = 1",
+    )
+    .bind(verified_at)
+    .bind(id.to_string())
+    .execute(&mut *conn)
+    .await?
+    .rows_affected();
+    if finished == 0 {
+        sqlx::query("UPDATE assets SET last_verified_at = ?1 WHERE id = ?2")
+            .bind(verified_at)
+            .bind(id.to_string())
+            .execute(&mut *conn)
+            .await?;
+    } else {
         sqlx::query(
-            "UPDATE assets SET verification_pending = 0, last_verified_at = ?1 WHERE id = ?2",
+            "UPDATE scan_operations SET progress = json_set(progress, '$.rehashed', \
+             coalesce(json_extract(progress, '$.rehashed'), 0) + 1) WHERE id = ?1",
         )
-        .bind(verified_at)
-        .bind(id.to_string())
+        .bind(operation_id.to_string())
         .execute(&mut *conn)
         .await?;
     }
@@ -3893,6 +4077,7 @@ async fn load_operation_row(conn: &mut SqliteConnection, id: Uuid) -> Result<Ope
         complete: from_json(&row.try_get::<String, _>("complete_scopes")?)?,
         incomplete: from_json(&row.try_get::<String, _>("incomplete_scopes")?)?,
         identity_verified: row.try_get::<i64, _>("identity_verified")? == 1,
+        verification_armed: row.try_get::<i64, _>("verification_armed")? == 1,
         revision: revision(row.try_get("revision")?)?,
         started_at: row.try_get("started_at")?,
         finished_at: row.try_get("finished_at")?,
@@ -5055,6 +5240,8 @@ async fn load_target(conn: &mut SqliteConnection, id: Uuid) -> Result<TargetReco
             coordinates,
             provenance: from_json(&row.try_get::<String, _>("provenance")?)?,
             provider_id: row.try_get("provider_id")?,
+            angular_size: None,
+            catalogues: Vec::new(),
         },
         decision_revision: revision(row.try_get("decision_revision")?)?,
     })
@@ -6979,6 +7166,8 @@ mod tests {
             coordinates: None,
             provenance: Provenance::User,
             provider_id: None,
+            angular_size: None,
+            catalogues: Vec::new(),
         }
     }
 
@@ -7118,6 +7307,7 @@ mod tests {
                     path: NativePath::from_path(&root),
                     role: LocationRole::Captures,
                     identity: identity.clone(),
+                    volume_kind: VolumeKind::Local,
                 })
                 .await
                 .unwrap();
@@ -7368,6 +7558,7 @@ mod tests {
                 volume: VolumeIdentity { file_ids_stable: true, ..plan_volume("search-vol") },
                 file_id: Some(inode.to_string()),
             },
+            volume_kind: VolumeKind::Local,
         }
     }
 

@@ -10,10 +10,14 @@ name = "seed-builder"
 path = "src/main.rs"
 
 [dependencies]
-# Offline one-time build tool (spec 035 T015): queries SIMBAD TAP + OpenNGC and
-# emits assets/seed/seed.json. Not part of the shipped app; build-time only.
+# Offline one-time build tool (spec 035 T015, spec 072): queries SIMBAD TAP and
+# emits assets/seed/seed.json + seed.manifest.json. Not part of the shipped
+# app; build-time only. `--replay` rebuilds from a recorded transcript offline.
+hex.workspace = true
 reqwest = { workspace = true, features = ["blocking"] }
+serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 # spec 042 (T250): the resolver/seed/caldwell/simbad surface this tool consumes
 # moved from `targeting` into the `targeting_resolver` crate.
 targeting_resolver = { path = "../../targeting/resolver" }

@@ -1,0 +1,35 @@
+{
+  "asset": "seed.json",
+  "sha256": "7e53eb625231e67888cc1d87d752672d35fc048a5780cff82a10dfeea22299fe",
+  "bytes": 7693488,
+  "format_version": 2,
+  "generated_at": "2026-10-07T15:27:42.918477Z",
+  "mode": "popular",
+  "entry_count": 16514,
+  "caldwell_count": 109,
+  "source": {
+    "service": "SIMBAD TAP (CDS)",
+    "endpoint": "https://simbad.cds.unistra.fr/simbad/sim-tap/sync",
+    "query_templates": [
+      "SELECT DISTINCT b.oid, b.main_id, b.ra, b.dec, b.otype_txt, f.V, b.galdim_majaxis, b.galdim_minaxis, b.galdim_angle FROM basic AS b JOIN ident AS i ON i.oidref = b.oid LEFT OUTER JOIN allfluxes AS f ON f.oidref = b.oid WHERE i.id LIKE '{like}' AND b.ra IS NOT NULL AND b.dec IS NOT NULL ORDER BY oid",
+      "SELECT DISTINCT b.oid, b.main_id, b.ra, b.dec, b.otype_txt, f.V, b.galdim_majaxis, b.galdim_minaxis, b.galdim_angle, i.id FROM basic AS b JOIN ident AS i ON i.oidref = b.oid LEFT OUTER JOIN allfluxes AS f ON f.oidref = b.oid WHERE i.id IN ({ids}) AND b.ra IS NOT NULL AND b.dec IS NOT NULL ORDER BY oid, id",
+      "SELECT i.oidref, i.id FROM ident AS i WHERE i.oidref IN ({oids})"
+    ],
+    "like_patterns": [
+      "M %",
+      "NGC %",
+      "IC %",
+      "SH  2-%",
+      "LBN %",
+      "LDN %",
+      "Barnard %",
+      "PN A66 %",
+      "VDB %",
+      "Cl Melotte %"
+    ],
+    "query_count": 270,
+    "queries_sha256": "5791cb5be35b2f75f268c1ad735cbd64a5dde7513c3502440dee0dcf9d5f8151",
+    "responses_sha256": "387d39266101c39720f437f87d72a97a5b7843e407a9906bc218689c1000fada",
+    "transcript_sha256": "bb2f61384ff34817c015bf327e3db9db656da77b839ee8bb34752fc51a172f00"
+  }
+}

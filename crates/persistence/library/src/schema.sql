@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
     value INTEGER NOT NULL
 ) STRICT;
 
-INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 7);
+INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 8);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('grouping_revision', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('scan_sequence', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('target_generation', 0);
@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS locations (
     -- Retired through a reviewed Retire location: history only, never reselected,
     -- rescanned or remapped, and no longer an overlap for registration.
     lifecycle TEXT NOT NULL DEFAULT 'active' CHECK (lifecycle IN ('active', 'retired')),
+    -- The kind of volume the root was registered on (LIB-FR-01). While a network
+    -- location's share is unmounted it reads Offline, never Missing (LIB-FR-19).
+    volume_kind TEXT NOT NULL CHECK (volume_kind IN ('local', 'removable', 'network')),
+    -- When the location's unfinished rehash of decided assets (D19) began; NULL
+    -- once a scan of the whole location reached its end. A scan that finds an
+    -- asset still verification pending under an unfinished run resumes that
+    -- rehash: what it completed since then is kept and only the remaining files
+    -- are hashed (LIB-FR-19).
+    rehash_started_at TEXT,
     created_at TEXT NOT NULL
 ) STRICT;
 
