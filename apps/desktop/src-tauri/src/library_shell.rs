@@ -112,6 +112,11 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ipc::library_review_retire_location,
         ipc::library_retire_location,
         ipc::library_list_operations,
+        // session filters (064 LIB-FR-17, 065 PRJ-FR-19)
+        crate::commands::session_filters::library_session_filter_counts,
+        crate::commands::session_filters::project_prefill_from_session,
+        crate::commands::session_filters::project_preview_session_addition,
+        crate::commands::session_filters::project_add_session,
         // projects
         crate::commands::project_goals::project_create,
         crate::commands::project_goals::project_update,
@@ -126,6 +131,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::project_goals::goal_template_list,
         crate::commands::project_goals::goal_template_save,
         crate::commands::project_goals::goal_template_delete,
+        crate::commands::project_progress::project_progress,
         // runs
         crate::commands::view_selection::view_create,
         crate::commands::view_selection::view_list,
@@ -148,6 +154,16 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::view_selection::view_review_mark,
         crate::commands::view_selection::view_revision,
         crate::commands::view_selection::project_members,
+        crate::commands::view_lifecycle::view_mark_complete,
+        crate::commands::view_lifecycle::view_reopen,
+        crate::commands::view_lifecycle::view_move_to_trash,
+        crate::commands::view_lifecycle::view_restore,
+        crate::commands::view_lifecycle::view_trash_list,
+        crate::commands::view_lifecycle::view_empty_trash_review,
+        crate::commands::view_groups::view_group_create,
+        crate::commands::view_groups::view_group_detail,
+        crate::commands::view_groups::view_group_assign_panel,
+        crate::commands::view_groups::view_group_set_setup,
         // frame review
         crate::commands::frame_review::pix_review_frames,
         crate::commands::frame_review::pix_start_measurement,
@@ -166,7 +182,28 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::frame_review::pix_import_review,
         crate::commands::frame_review::pix_confirm_import,
         crate::commands::frame_review::pix_thumbnails,
+        crate::commands::frame_review::pix_review_list,
+        crate::commands::frame_review::pix_display_names,
+        crate::commands::frame_review::pix_review_mark,
         // calibration
+        crate::commands::calibration_inputs::calibration_list_inputs,
+        crate::commands::calibration_inputs::calibration_input,
+        crate::commands::calibration_inputs::calibration_match,
+        crate::commands::calibration_inputs::calibration_view_plan,
+        crate::commands::calibration_inputs::calibration_readiness,
+        crate::commands::calibration_inputs::calibration_handoff,
+        crate::commands::calibration_inputs::calibration_set_required_kinds,
+        crate::commands::calibration_inputs::calibration_set_policy,
+        crate::commands::calibration_inputs::calibration_assign,
+        crate::commands::calibration_inputs::calibration_accept,
+        crate::commands::calibration_inputs::calibration_record_exception,
+        crate::commands::calibration_inputs::calibration_exclude,
+        crate::commands::calibration_inputs::calibration_withdraw,
+        crate::commands::calibration_inputs::calibration_project_evidence,
+        crate::commands::calibration_inputs::calibration_review_adoption,
+        crate::commands::calibration_inputs::calibration_adopt,
+        crate::commands::calibration_inputs::calibration_list_adoptions,
+        crate::commands::calibration_inputs::calibration_custody_facts,
         // preparation
         // results
         // storage
@@ -202,6 +239,14 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::observing_plans::planning_review_calendar_export,
         crate::commands::observing_plans::planning_export_calendar,
         // targets
+        crate::commands::targets_list::planning_target_rows,
+        crate::commands::targets_list::targets_search,
+        crate::commands::targets_list::targets_add,
+        crate::commands::targets_list::targets_set_favourite,
+        crate::commands::targets_list::targets_presets_list,
+        crate::commands::targets_list::targets_preset_save,
+        crate::commands::targets_list::targets_preset_rename,
+        crate::commands::targets_list::targets_preset_delete,
         // home
     ]);
     // The planning handlers call these through their Rust APIs, which need no

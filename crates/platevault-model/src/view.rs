@@ -207,6 +207,15 @@ pub enum SelectionReason {
     RefreshMatch {
         review_id: Uuid,
     },
+    /// A panel run's session whose pointing lies in the run's panel and in no
+    /// other (VSEL-FR-18): `separation_deg` of its mean pointing from the
+    /// panel centre names the evidence the group's panel decision records.
+    PanelPointing {
+        target_id: Uuid,
+        rig_id: Uuid,
+        panel_id: Uuid,
+        separation_deg: f64,
+    },
     Manual,
     SelectMatching {
         filters: Box<CandidateFilters>,

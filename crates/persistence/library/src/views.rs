@@ -17,17 +17,18 @@
 
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::future::Future;
 
 use platevault_model::{
     initial_member_state, ApplicableQuality, AssessedMembers, Asset, AssetReference, Availability,
     CandidateCapture, CaptureCopy, CopyState, DraftEdit, Equipment, ExpectedAsset, ExpectedSession,
-    FrameEvidence, FramingTarget, LibraryError, MemberBasis, MemberCopy, MemberReason, MemberState,
-    Membership, NewView, ObservationFingerprint, ProjectMember, ProjectRejection, Quality,
-    ReferenceKind, RefreshItem, RefreshItemKind, RefreshReview, RefreshState, RejectScope,
-    RejectionMark, RemapItem, ReviewDecision, ReviewMark, ReviewMarkOutcome, Revision,
-    RunCompletion, RunStage, SelectionReason, Session, SessionChoice, SessionChoiceState, View,
-    ViewCriteria, ViewDraftHeader, ViewListing, ViewMember, ViewQuery, ViewRecord, ViewRevision,
-    ViewRevisionHeader,
+    FrameEvidence, FramingTarget, LibraryError, LifecycleBlocker, MemberBasis, MemberCopy,
+    MemberReason, MemberState, Membership, NewView, ObservationFingerprint, ProjectMember,
+    ProjectRejection, Quality, ReferenceKind, RefreshItem, RefreshItemKind, RefreshReview,
+    RefreshState, RejectScope, RejectionMark, RemapItem, ReviewDecision, ReviewMark,
+    ReviewMarkOutcome, Revision, RunCompletion, RunStage, SelectionReason, Session, SessionChoice,
+    SessionChoiceState, TrashedRun, View, ViewCriteria, ViewDraftHeader, ViewListing, ViewMember,
+    ViewQuery, ViewRecord, ViewRevision, ViewRevisionHeader,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
@@ -41,6 +42,23 @@ use super::{
     require_revision, require_unique_assets, revision, successors_of, summarize_rows, to_json,
     to_text, CaptureView, Catalog, Members, Result, SessionSummary, SourceProbe, MAX_PAGE,
 };
+
+/// Run listing columns of `views v`, then `$tail`: the run with its name (its
+/// latest revision's, else its draft's), whether it has a draft and whether
+/// that draft is stale.
+macro_rules! listing_sql {
+    ($tail:literal) => {
+        concat!(
+            "SELECT v.*, c.committed_at, coalesce(c.name, d.name) AS name, ",
+            "d.id IS NOT NULL AS has_draft, ",
+            "coalesce(d.base_revision != v.revision, 0) AS draft_stale ",
+            "FROM views v ",
+            "LEFT JOIN view_revisions c ON c.view_id = v.id AND c.revision = v.revision ",
+            "LEFT JOIN view_revisions d ON d.view_id = v.id AND d.state = 'draft' ",
+            $tail
+        )
+    };
+}
 
 fn invalid(message: String) -> LibraryError {
     LibraryError::InvalidInput(message)
@@ -138,7 +156,7 @@ impl Catalog {
     pub async fn create_view(&self, input: &NewView) -> Result<ViewRecord> {
         input.validate()?;
         let record = write_txn!(self, |conn| {
-            let target_id = run_subject(conn, input.project_id, input.subject_id).await?;
+            let target_id = run_subject(conn, input.project_id, input.subject_id, false).await?;
             require_project_rig(conn, input.project_id, input.rig_id).await?;
             let id = Uuid::new_v4();
             let at = now()?;
@@ -301,7 +319,8 @@ impl Catalog {
     /// and `None` is returned.
     ///
     /// # Errors
-    /// `InvalidInput` for a run in the Project's Trash or a Complete run;
+    /// `InvalidInput` for a run in the Project's Trash, a Complete run or a
+    /// never-saved panel run, which stays in its run group (VSEL-FR-18);
     /// `Conflict` carrying the current draft revision for a stale
     /// `expected_draft`; `NotFound` for an unknown run.
     pub async fn discard_view_draft(
@@ -312,13 +331,24 @@ impl Catalog {
         let record = write_txn!(self, |conn| {
             let view = load_view(conn, id).await?;
             require_open(&view)?;
+            if let (0, Some(group)) = (view.revision, view.group_id) {
+                return Err(invalid(format!(
+                    "run {id} is a panel run of run group {group}: it was never saved, and \
+                     discarding its draft cannot remove it from the group"
+                )));
+            }
             let draft = require_draft(conn, id, expected_draft).await?;
             delete_revision_rows(conn, draft.row).await?;
             if view.revision == 0 {
-                sqlx::query("DELETE FROM views WHERE id = ?1")
-                    .bind(id.to_string())
-                    .execute(&mut *conn)
-                    .await?;
+                // A never-saved run has no committed revision, so it holds no
+                // calibration decision or refresh review; a policy write
+                // still records its calibration plan.
+                for statement in [
+                    "DELETE FROM calibration_plans WHERE view_id = ?1",
+                    "DELETE FROM views WHERE id = ?1",
+                ] {
+                    sqlx::query(statement).bind(id.to_string()).execute(&mut *conn).await?;
+                }
                 None
             } else {
                 Some(load_record(conn, id).await?)
@@ -344,41 +374,16 @@ impl Catalog {
     /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn list_views(&self, query: &ViewQuery) -> Result<Vec<ViewListing>> {
         let mut conn = self.reader().await?;
-        let rows = sqlx::query(
-            "SELECT v.*, c.committed_at, coalesce(c.name, d.name) AS name, \
-             d.id IS NOT NULL AS has_draft, \
-             coalesce(d.base_revision != v.revision, 0) AS draft_stale \
-             FROM views v \
-             LEFT JOIN view_revisions c ON c.view_id = v.id AND c.revision = v.revision \
-             LEFT JOIN view_revisions d ON d.view_id = v.id AND d.state = 'draft' \
-             WHERE v.trashed_at IS NULL AND (?1 IS NULL OR v.project_id = ?1) \
-             ORDER BY name, v.id LIMIT ?2 OFFSET ?3",
-        )
+        let rows = sqlx::query(listing_sql!(
+            "WHERE v.trashed_at IS NULL AND (?1 IS NULL OR v.project_id = ?1) \
+             ORDER BY name, v.id LIMIT ?2 OFFSET ?3"
+        ))
         .bind(query.project_id.map(|id| id.to_string()))
         .bind(i64::from(if query.limit == 0 { MAX_PAGE } else { query.limit.min(MAX_PAGE) }))
         .bind(i64::from(query.offset))
         .fetch_all(&mut *conn)
         .await?;
-        rows.iter()
-            .map(|row| {
-                let view = view_from_row(row)?;
-                Ok(ViewListing {
-                    id: view.id,
-                    name: row.try_get("name")?,
-                    project_id: view.project_id,
-                    subject_id: view.subject_id,
-                    rig_id: view.rig_id,
-                    group_id: view.group_id,
-                    panel_id: view.panel_id,
-                    stage: view.stage,
-                    completion: view.completion,
-                    revision: view.revision,
-                    committed_at: row.try_get("committed_at")?,
-                    has_draft: row.try_get("has_draft")?,
-                    draft_stale: row.try_get("draft_stale")?,
-                })
-            })
-            .collect()
+        rows.iter().map(listing_from_row).collect()
     }
 
     /// An immutable committed revision with every choice, member, copy and
@@ -429,6 +434,179 @@ impl Catalog {
             .map(|(session_id, view_ids)| ProjectMember { session_id, view_ids })
             .collect())
     }
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle: Complete, Reopen, Trash and Restore (RES-FR-06/07/10, D-W72)
+// ---------------------------------------------------------------------------
+
+impl Catalog {
+    /// Mark run `id` processing Complete (RES-FR-06): it moves to Done and
+    /// records the stage Reopen returns to. It needs no Result, removes
+    /// nothing and starts no Clean up. `blockers` names what blocks it; it is
+    /// asked inside the write transaction, holding the catalog writer, so no
+    /// operation recorded by another catalog write can start between the ask
+    /// and the write. It must only read. Any blocker it returns refuses.
+    ///
+    /// # Errors
+    /// `InvalidInput` naming each blocker, or for a run that is already
+    /// Complete or in the Project's Trash; `NotFound` for an unknown run; any
+    /// error of `blockers`.
+    pub async fn complete_view<F, Fut>(&self, id: Uuid, blockers: F) -> Result<ViewRecord>
+    where
+        F: FnOnce(View) -> Fut + Send,
+        Fut: Future<Output = Result<Vec<LifecycleBlocker>>> + Send,
+    {
+        let record = write_txn!(self, |conn| {
+            let record = load_record(conn, id).await?;
+            require_live(&record.view)?;
+            if record.view.completion == RunCompletion::Complete {
+                return Err(invalid(format!("run {} is already Complete", run_label(&record))));
+            }
+            refuse(&record, "marked Complete", &blockers(record.view.clone()).await?)?;
+            sqlx::query(
+                "UPDATE views SET completion = 'complete', stage_before_complete = stage, \
+                 stage = 'done', updated_at = ?2 WHERE id = ?1",
+            )
+            .bind(id.to_string())
+            .bind(now()?)
+            .execute(&mut *conn)
+            .await?;
+            load_record(conn, id).await?
+        });
+        Ok(record)
+    }
+
+    /// Reopen a Complete run (RES-FR-07): it returns to the stage it was in
+    /// before Complete and accepts membership changes again.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a run that is not Complete or is in the Project's
+    /// Trash; `NotFound` for an unknown run.
+    pub async fn reopen_view(&self, id: Uuid) -> Result<ViewRecord> {
+        let record = write_txn!(self, |conn| {
+            let view = load_view(conn, id).await?;
+            require_live(&view)?;
+            if view.completion != RunCompletion::Complete {
+                return Err(invalid(format!("run {id} is not Complete")));
+            }
+            sqlx::query(
+                "UPDATE views SET completion = 'open', stage = stage_before_complete, \
+                 stage_before_complete = NULL, updated_at = ?2 WHERE id = ?1",
+            )
+            .bind(id.to_string())
+            .bind(now()?)
+            .execute(&mut *conn)
+            .await?;
+            load_record(conn, id).await?
+        });
+        Ok(record)
+    }
+
+    /// Move run `id` to its Project's Trash (RES-FR-10, D-W72), at any stage.
+    /// It moves no file and keeps every revision, its draft, stage and
+    /// completion; it is hidden from run lists and Project members until it
+    /// is restored. `blockers` is asked as for [`Self::complete_view`], and
+    /// any blocker it returns refuses.
+    ///
+    /// # Errors
+    /// `InvalidInput` naming each blocker, or for a run already in the Trash;
+    /// `NotFound` for an unknown run; any error of `blockers`.
+    pub async fn trash_view<F, Fut>(&self, id: Uuid, blockers: F) -> Result<ViewRecord>
+    where
+        F: FnOnce(View) -> Fut + Send,
+        Fut: Future<Output = Result<Vec<LifecycleBlocker>>> + Send,
+    {
+        let record = write_txn!(self, |conn| {
+            let record = load_record(conn, id).await?;
+            if record.view.trashed_at.is_some() {
+                return Err(invalid(format!(
+                    "run {} is already in the Project's Trash",
+                    run_label(&record)
+                )));
+            }
+            refuse(&record, "moved to the Project's Trash", &blockers(record.view.clone()).await?)?;
+            let at = now()?;
+            sqlx::query("UPDATE views SET trashed_at = ?2, updated_at = ?2 WHERE id = ?1")
+                .bind(id.to_string())
+                .bind(&at)
+                .execute(&mut *conn)
+                .await?;
+            load_record(conn, id).await?
+        });
+        Ok(record)
+    }
+
+    /// Restore a run from its Project's Trash exactly as it was (RES-FR-10):
+    /// its revisions, draft, stage and completion never changed there. Moves
+    /// no file.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a run that is not in the Trash; `NotFound` for an
+    /// unknown run.
+    pub async fn restore_view(&self, id: Uuid) -> Result<ViewRecord> {
+        let record = write_txn!(self, |conn| {
+            let view = load_view(conn, id).await?;
+            if view.trashed_at.is_none() {
+                return Err(invalid(format!("run {id} is not in the Project's Trash")));
+            }
+            sqlx::query("UPDATE views SET trashed_at = NULL, updated_at = ?2 WHERE id = ?1")
+                .bind(id.to_string())
+                .bind(now()?)
+                .execute(&mut *conn)
+                .await?;
+            load_record(conn, id).await?
+        });
+        Ok(record)
+    }
+
+    /// The Project's Trash list (PRJ-FR-20): each of its runs in the Trash
+    /// with its stage, most recently trashed first. Read-only.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project.
+    pub async fn trashed_views(&self, project: Uuid) -> Result<Vec<TrashedRun>> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        projects::require_project(&mut snapshot, project).await?;
+        let rows = sqlx::query(listing_sql!(
+            "WHERE v.project_id = ?1 AND v.trashed_at IS NOT NULL \
+             ORDER BY v.trashed_at DESC, name, v.id"
+        ))
+        .bind(project.to_string())
+        .fetch_all(&mut *snapshot)
+        .await?;
+        snapshot.rollback().await?;
+        rows.iter()
+            .map(|row| {
+                Ok(TrashedRun {
+                    run: listing_from_row(row)?,
+                    trashed_at: row.try_get("trashed_at")?,
+                })
+            })
+            .collect()
+    }
+}
+
+/// A run as a refusal names it: its latest revision's name, else its draft's,
+/// and its id.
+fn run_label(record: &ViewRecord) -> String {
+    let name = record
+        .revision
+        .as_ref()
+        .map(|revision| revision.name.as_str())
+        .or_else(|| record.draft.as_ref().map(|draft| draft.name.as_str()))
+        .unwrap_or_default();
+    format!("'{name}' ({})", record.view.id)
+}
+
+/// Refuse `action` on the run while any blocker holds, naming each.
+fn refuse(record: &ViewRecord, action: &str, blockers: &[LifecycleBlocker]) -> Result<()> {
+    if blockers.is_empty() {
+        return Ok(());
+    }
+    let named: Vec<String> = blockers.iter().map(ToString::to_string).collect();
+    Err(invalid(format!("run {} cannot be {action}: {}", run_label(record), named.join("; "))))
 }
 
 // ---------------------------------------------------------------------------
@@ -544,16 +722,18 @@ const VIEW_REFERENCES: &str = "\
     WHERE m.asset_id IN (SELECT value FROM json_each(?1)) ORDER BY v.id, m.asset_id";
 
 /// The run's candidate sessions on `conn`'s snapshot, in candidate order: the
-/// Project's candidates whose subject and rig are the run's.
+/// Project's candidates whose subject and rig are the run's, and for a panel
+/// run only those its group assigned to its panel.
 async fn run_candidates(conn: &mut SqliteConnection, view: &View) -> Result<Vec<Uuid>> {
-    Ok(projects::candidates(conn, view.project_id)
+    let candidates = projects::candidates(conn, view.project_id)
         .await?
         .into_iter()
         .filter(|candidate| {
             candidate.subject_id == view.subject_id && candidate.rig_id == view.rig_id
         })
         .map(|candidate| candidate.session_id)
-        .collect())
+        .collect();
+    super::view_groups::panel_candidates(conn, view, candidates).await
 }
 
 /// The run's candidates its committed revision row `row` neither chose (nor
@@ -589,7 +769,8 @@ async fn new_candidates(conn: &mut SqliteConnection, view: &View, row: i64) -> R
 
 async fn read_candidate_basis(conn: &mut SqliteConnection, id: Uuid) -> Result<CandidateBasis> {
     let view = load_view(conn, id).await?;
-    let target_id = run_subject(conn, view.project_id, view.subject_id).await?;
+    let target_id =
+        run_subject(conn, view.project_id, view.subject_id, view.panel_id.is_some()).await?;
     let target = load_target(conn, target_id).await?;
     let framing = FramingTarget {
         target_id,
@@ -631,7 +812,7 @@ async fn read_candidate_basis(conn: &mut SqliteConnection, id: Uuid) -> Result<C
 
 /// One logical capture with every recorded copy, keyed like a member: the
 /// smallest copy id. The evidence is the session's own copy.
-fn candidate_capture(
+pub fn candidate_capture(
     view: &CaptureView,
     key: &str,
     present: &[&Asset],
@@ -656,7 +837,7 @@ fn candidate_capture(
 }
 
 /// The member observations a refresh addition binds (R11).
-fn assessed_members(assets: &[Asset]) -> AssessedMembers {
+pub fn assessed_members(assets: &[Asset]) -> AssessedMembers {
     AssessedMembers {
         observations: assets.iter().map(|a| (a.id, a.fingerprint.clone())).collect(),
         decisions: assets.iter().map(|a| (a.id, a.decision_revision)).collect(),
@@ -728,7 +909,7 @@ async fn location_state(conn: &mut SqliteConnection, id: Uuid) -> Result<(String
     Ok((row.try_get("name")?, reason))
 }
 
-async fn read_membership(
+pub async fn read_membership(
     conn: &mut SqliteConnection,
     id: Uuid,
     membership: Membership,
@@ -1241,7 +1422,7 @@ fn require_live(view: &View) -> Result<()> {
 
 /// A run whose membership may change: outside the Trash and not Complete. A
 /// Complete run accepts no membership change until it is reopened (VSEL-FR-17).
-fn require_open(view: &View) -> Result<()> {
+pub fn require_open(view: &View) -> Result<()> {
     require_live(view)?;
     if view.completion == RunCompletion::Complete {
         return Err(invalid(format!(
@@ -1591,9 +1772,15 @@ async fn regroup(conn: &mut SqliteConnection, row: i64, item: &RefreshItem) -> R
 // Subjects, rigs and choices
 // ---------------------------------------------------------------------------
 
-/// The Target of subject `subject` of `project`, refusing a mosaic subject:
-/// a run on a mosaic subject is a panel run of a run group (D-W38).
-async fn run_subject(conn: &mut SqliteConnection, project: Uuid, subject: Uuid) -> Result<Uuid> {
+/// The Target of subject `subject` of `project`. A mosaic subject takes only
+/// panel runs of a run group and a single-Target subject only single runs
+/// (D-W38), so `panel_run` says which one the caller reads or writes.
+pub async fn run_subject(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    subject: Uuid,
+    panel_run: bool,
+) -> Result<Uuid> {
     projects::require_project(conn, project).await?;
     let row = sqlx::query(
         "SELECT target_id, mosaic FROM project_subjects WHERE id = ?1 AND project_id = ?2",
@@ -1605,16 +1792,23 @@ async fn run_subject(conn: &mut SqliteConnection, project: Uuid, subject: Uuid) 
     .ok_or_else(|| {
         LibraryError::NotFound(format!("subject {subject} is not a subject of project {project}"))
     })?;
-    if row.try_get::<i64, _>("mosaic")? == 1 {
-        return Err(invalid(format!(
+    match (row.try_get::<i64, _>("mosaic")? == 1, panel_run) {
+        (true, false) => Err(invalid(format!(
             "subject {subject} is a mosaic: a run on it is a run group, one run per panel"
-        )));
+        ))),
+        (false, true) => Err(invalid(format!(
+            "subject {subject} is a single Target: a run group needs a mosaic subject"
+        ))),
+        _ => parse_uuid(&row.try_get::<String, _>("target_id")?),
     }
-    parse_uuid(&row.try_get::<String, _>("target_id")?)
 }
 
 /// Refuse a rig that is not one of the Project's rigs.
-async fn require_project_rig(conn: &mut SqliteConnection, project: Uuid, rig: Uuid) -> Result<()> {
+pub async fn require_project_rig(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+    rig: Uuid,
+) -> Result<()> {
     let listed: Option<i64> = sqlx::query_scalar(
         "SELECT 1 FROM project_rigs WHERE project_id = ?1 AND equipment_id = ?2",
     )
@@ -1684,7 +1878,7 @@ pub async fn refuse_if_used(
 
 /// Choose `session` in draft `row` with `reason`, adding each of its logical
 /// captures once under D02. Members already in the draft keep their state.
-async fn select_session(
+pub async fn select_session(
     conn: &mut SqliteConnection,
     row: i64,
     session: &Session,
@@ -1807,7 +2001,7 @@ async fn recorded_copies(conn: &mut SqliteConnection, row: i64) -> Result<BTreeS
 
 /// Remove the choice of `session` and its members: a criteria-based choice
 /// becomes an explicit session exclusion, a manual inclusion goes (R13).
-async fn deselect_session(conn: &mut SqliteConnection, row: i64, session: Uuid) -> Result<()> {
+pub async fn deselect_session(conn: &mut SqliteConnection, row: i64, session: Uuid) -> Result<()> {
     let reason: Option<String> = sqlx::query_scalar(
         "SELECT reason FROM view_session_choices \
          WHERE revision_row = ?1 AND session_id = ?2 AND state = 'selected'",
@@ -1984,7 +2178,7 @@ async fn select_expected(
 /// The draft row an edit applies to, after checking `expected_draft`: the
 /// existing draft one revision further, or a copy of the latest committed
 /// revision at draft revision 1.
-async fn begin_edit(
+pub async fn begin_edit(
     conn: &mut SqliteConnection,
     view: &View,
     expected_draft: Revision,
@@ -2095,7 +2289,27 @@ fn view_from_row(row: &SqliteRow) -> Result<View> {
     })
 }
 
-async fn load_view(conn: &mut SqliteConnection, id: Uuid) -> Result<View> {
+/// A run listing from a `listing_sql!` row.
+fn listing_from_row(row: &SqliteRow) -> Result<ViewListing> {
+    let view = view_from_row(row)?;
+    Ok(ViewListing {
+        id: view.id,
+        name: row.try_get("name")?,
+        project_id: view.project_id,
+        subject_id: view.subject_id,
+        rig_id: view.rig_id,
+        group_id: view.group_id,
+        panel_id: view.panel_id,
+        stage: view.stage,
+        completion: view.completion,
+        revision: view.revision,
+        committed_at: row.try_get("committed_at")?,
+        has_draft: row.try_get("has_draft")?,
+        draft_stale: row.try_get("draft_stale")?,
+    })
+}
+
+pub async fn load_view(conn: &mut SqliteConnection, id: Uuid) -> Result<View> {
     let row = sqlx::query("SELECT * FROM views WHERE id = ?1")
         .bind(id.to_string())
         .fetch_optional(&mut *conn)
@@ -2135,7 +2349,7 @@ fn header_of(row: &SqliteRow, view_id: Uuid) -> Result<ViewRevisionHeader> {
 }
 
 /// The row id and header of committed `revision`.
-async fn committed_header(
+pub async fn committed_header(
     conn: &mut SqliteConnection,
     id: Uuid,
     revision: Revision,
@@ -2179,7 +2393,7 @@ async fn draft_header(
     .transpose()
 }
 
-async fn load_record(conn: &mut SqliteConnection, id: Uuid) -> Result<ViewRecord> {
+pub async fn load_record(conn: &mut SqliteConnection, id: Uuid) -> Result<ViewRecord> {
     let view = load_view(conn, id).await?;
     let revision = if view.revision == 0 {
         None
@@ -2215,7 +2429,7 @@ async fn load_choices(conn: &mut SqliteConnection, row: i64) -> Result<Vec<Sessi
         .collect()
 }
 
-async fn load_members(conn: &mut SqliteConnection, row: i64) -> Result<Vec<ViewMember>> {
+pub async fn load_members(conn: &mut SqliteConnection, row: i64) -> Result<Vec<ViewMember>> {
     let rows =
         sqlx::query("SELECT * FROM view_members WHERE revision_row = ?1 ORDER BY member_key")
             .bind(row)

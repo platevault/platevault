@@ -11,7 +11,9 @@ use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use platevault_core::custody::trash::{OsTrash, SystemTrash};
+use platevault_core::custody::trash::OsTrash;
+#[cfg(target_os = "linux")]
+use platevault_core::custody::trash::SystemTrash;
 use platevault_core::library::Library;
 use platevault_core::{
     EntryKind, ItemChange, ItemOutcome, ItemPhase, NativePath, ReasonCode, StorageItem,
@@ -156,6 +158,21 @@ fn as_dyn(trash: &Arc<FakeTrash>) -> Arc<dyn OsTrash> {
     Arc::clone(trash) as Arc<dyn OsTrash>
 }
 
+/// The Trash a link test retires through, never the user's own. On Linux it
+/// is the real freedesktop adapter with its home Trash under `root/data`,
+/// missing until the first move creates it.
+#[cfg(target_os = "linux")]
+fn link_trash(root: &Path) -> Arc<dyn OsTrash> {
+    Arc::new(SystemTrash::with_data_home(root.join("data")))
+}
+
+/// The host Trash cannot be pointed elsewhere here, so the stand-in, which
+/// renames the link itself, takes its place.
+#[cfg(all(unix, not(target_os = "linux")))]
+fn link_trash(root: &Path) -> Arc<dyn OsTrash> {
+    Arc::new(FakeTrash::new(&root.join("bin")))
+}
+
 #[tokio::test]
 async fn immediate_delete_volume_counts_as_unsupported_and_keeps_file() {
     let temp = tempfile::tempdir().unwrap();
@@ -208,8 +225,7 @@ async fn link_trashed_without_following_target() {
     assert_eq!(folder_draft.source.kind, EntryKind::Link { target: native(&originals) });
     let id = record(&library, StorageOperationKind::Trash, vec![file_draft, folder_draft]).await;
 
-    let trash: Arc<dyn OsTrash> = Arc::new(SystemTrash::default());
-    let operation = library.run_storage_operation(id, trash).await.unwrap();
+    let operation = library.run_storage_operation(id, link_trash(&root)).await.unwrap();
 
     for item in &operation.items {
         assert_eq!(item.outcome, Some(ItemOutcome::Trashed), "{item:?}");
@@ -227,6 +243,11 @@ async fn link_trashed_without_following_target() {
         vec![std::ffi::OsString::from("light_001.fits")],
         "no target folder followed"
     );
+    #[cfg(target_os = "linux")]
+    for (name, target) in [("light_001.fits", &original), ("lights", &originals)] {
+        let trashed = root.join("data/Trash/files").join(name);
+        assert_eq!(&fs::read_link(&trashed).unwrap(), target, "the link itself is in the Trash");
+    }
 }
 
 #[tokio::test]

@@ -67,12 +67,15 @@ const SCHEMA: &str = schema_modules![
     "frame_thumbnails.sql",
     "storage.sql",
     "views.sql",
+    "calibration_decisions.sql",
     "import.sql",
+    "targets_list.sql",
+    "view_groups.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
 /// version is refused before any module's DDL runs.
-pub const SCHEMA_VERSION: i64 = 8;
+pub const SCHEMA_VERSION: i64 = 9;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -127,13 +130,20 @@ pub use trash::{TrashEpisode, TrashedAsset, TrashedFrame, TrashedQuery};
 mod frame_thumbnails;
 mod measurements;
 mod projects;
+pub use projects::ProgressBasis;
 
 pub use frame_thumbnails::{StoredThumbnail, ThumbnailBasis};
 pub use measurements::{FrameRecordBasis, ImportReviewInput};
+mod review_lists;
+pub use review_lists::{ReviewAsset, ReviewBasis, ReviewCapture};
 mod import;
+mod session_filters;
 mod storage;
+mod targets_list;
 mod views;
 pub use views::{CandidateBasis, CandidateSession, ChoiceBasis, MembershipBasis};
+mod view_groups;
+pub use view_groups::{GroupCandidates, ViewGroupBasis};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -201,6 +211,12 @@ pub enum SessionFilter {
     /// The only list that shows Trashed frames: sessions holding any, each
     /// summarized over its Trashed frames alone.
     Trashed,
+    /// Sessions with no confirmed Target, whatever their automatic Target row
+    /// says (Unresolved, Suggested, Needs review or none).
+    NeedsTarget,
+    /// Sessions with a confirmed Target that are neither a Project's candidate
+    /// nor a member of any Project's run.
+    NotInAnyProject,
 }
 
 /// A page of Sessions: light sessions of Captures locations (LIB-FR-16), newest
@@ -1082,6 +1098,7 @@ impl Catalog {
         let listed =
             listed_sessions(&mut conn, query.include_superseded, query.location_id, members)
                 .await?;
+        let listed = session_filters::retain(&mut conn, query.filter, listed).await?;
         let limit = if query.limit == 0 { MAX_PAGE } else { query.limit.min(MAX_PAGE) };
         let page = listed
             .into_iter()
@@ -1132,7 +1149,7 @@ enum Members {
 impl Members {
     fn of(filter: Option<SessionFilter>) -> Self {
         match filter {
-            None => Self::Live,
+            None | Some(SessionFilter::NeedsTarget | SessionFilter::NotInAnyProject) => Self::Live,
             Some(SessionFilter::Trashed) => Self::Trashed,
         }
     }

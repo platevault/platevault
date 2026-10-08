@@ -34,6 +34,14 @@ mod view;
 pub use view::*;
 pub mod import;
 pub use import::*;
+mod session_filters;
+pub use session_filters::*;
+mod targets_list;
+pub use targets_list::*;
+mod run_lifecycle;
+pub use run_lifecycle::*;
+mod view_group;
+pub use view_group::*;
 
 pub type Revision = u64;
 

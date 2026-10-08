@@ -14,11 +14,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use platevault_model::{
     builtin_goal_templates, validate_goals, validate_project_name, validate_rigs,
-    validate_subjects, AssetReference, Availability, GoalIdentity, GoalInput, GoalSpec,
-    GoalTemplate, GoalTemplateInput, LibraryError, PanelInput, Project, ProjectCandidate,
-    ProjectDetail, ProjectGoal, ProjectInput, ProjectQuery, ProjectRejection, ProjectState,
-    ProjectSubject, ProjectSummary, ReferenceKind, RejectionMark, Revision, SubjectInput,
-    SubjectPanel,
+    validate_subjects, ApplicableQuality, Asset, AssetReference, Availability, GoalIdentity,
+    GoalInput, GoalProgress, GoalSpec, GoalTally, GoalTemplate, GoalTemplateInput, LibraryError,
+    MeasurementMethod, MeasurementOutcome, MeasurementRecord, MemberBasis, MemberState, Membership,
+    MetricId, MetricState, Microseconds, PanelInput, Project, ProjectCandidate, ProjectDetail,
+    ProjectGoal, ProjectInput, ProjectQuery, ProjectRejection, ProjectState, ProjectSubject,
+    ProjectSummary, QualityCriterion, RecordValidity, ReferenceKind, RejectionMark, Revision,
+    SubjectInput, SubjectPanel,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
@@ -26,9 +28,10 @@ use uuid::Uuid;
 
 use super::views::{self, RunUse};
 use super::{
-    conflict, db_revision, fingerprint_matches, from_json, from_text, json_ids, load_asset,
-    load_equipment, load_target, next_revision, now, parse_uuid, require_decidable,
-    require_revision, revision, to_json, to_text, Catalog, Result, MAX_PAGE,
+    capture_quality, conflict, db_revision, fingerprint_matches, from_json, from_text, json_ids,
+    load_asset, load_assets, load_equipment, load_target, measurements, next_revision, now,
+    parse_uuid, require_decidable, require_revision, revision, to_json, to_text, CaptureView,
+    Catalog, Result, MAX_PAGE,
 };
 
 impl Catalog {
@@ -855,7 +858,7 @@ fn template_from_row(row: &SqliteRow) -> Result<GoalTemplate> {
     })
 }
 
-async fn load_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Project> {
+pub async fn load_project(conn: &mut SqliteConnection, id: Uuid) -> Result<Project> {
     let row = sqlx::query(
         "SELECT name, notes, state, done_at, revision, created_at, updated_at FROM projects \
          WHERE id = ?1",
@@ -1063,6 +1066,334 @@ async fn latest_rejections(
             })
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Progress (PRJ-FR-03, PRJ-FR-04, D-W36, D-W44, D-W45, D-W66, D-W72)
+// ---------------------------------------------------------------------------
+
+/// A Project's goal progress, read from one catalog snapshot at the
+/// Project's revision.
+#[derive(Clone, Debug)]
+pub struct ProgressBasis {
+    pub project_id: Uuid,
+    pub revision: Revision,
+    /// One row per integration or frame-count goal, in goal order.
+    pub goals: Vec<GoalProgress>,
+}
+
+impl Catalog {
+    /// Goal progress of Project `id` (PRJ-FR-04) from one catalog snapshot.
+    /// "in project" reads the latest saved revision of each run outside the
+    /// Project's Trash; a median-FWHM bar reads the latest `method` record
+    /// that is valid for the frame's current bytes (PIX R12). Hashes,
+    /// measures and writes nothing.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown Project; `PersistenceFailure` when the
+    /// catalog cannot be read.
+    pub async fn project_progress_basis(
+        &self,
+        id: Uuid,
+        method: &MeasurementMethod,
+    ) -> Result<ProgressBasis> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let basis = progress_basis(&mut snapshot, id, method).await?;
+        snapshot.rollback().await?;
+        Ok(basis)
+    }
+}
+
+/// Where the latest saved revision of a run outside the Trash holds a frame.
+struct Holding {
+    subject_id: Uuid,
+    panel_id: Option<Uuid>,
+    /// Included, with the bytes the run chose (R16): it counts in project.
+    counts: bool,
+}
+
+/// One content-identical frame: its logical captures (D16) joined by equal
+/// SHA-256, with the facts its goals read from its counted copies.
+struct Frame {
+    light: Option<bool>,
+    channel: Option<String>,
+    exposure: Option<Microseconds>,
+    quality: ApplicableQuality,
+    fwhm_median: Option<f64>,
+    rejected: bool,
+    /// The subjects it is a candidate of.
+    candidate_of: BTreeSet<Uuid>,
+    holdings: Vec<Holding>,
+}
+
+/// Trashed copies and copies of retired locations count toward no total.
+const fn counted(asset: &Asset) -> bool {
+    !matches!(asset.availability, Availability::Trashed | Availability::Retired)
+}
+
+async fn progress_basis(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    method: &MeasurementMethod,
+) -> Result<ProgressBasis> {
+    let project = load_project(conn, id).await?;
+    let candidates = candidates(conn, id).await?;
+    let members = saved_members(conn, id).await?;
+    let mut ids: BTreeSet<Uuid> =
+        candidates.iter().flat_map(|candidate| candidate.asset_ids.iter().copied()).collect();
+    ids.extend(members.iter().flat_map(|(_, member)| member.copies.iter().map(|c| c.asset_id)));
+    let assets: Vec<Asset> = load_assets(conn, &ids).await?.into_iter().filter(counted).collect();
+    let captures = CaptureView::read(conn, &[], &assets).await?;
+    let (of_asset, copies) = content_frames(&captures, &assets);
+    let copy_ids: BTreeSet<Uuid> = copies.iter().flatten().map(|copy| copy.id).collect();
+    let mut records = measurements::latest_records(conn, &copy_ids, &method.name).await?;
+    let rejected: BTreeSet<Uuid> = latest_rejections(conn, id)
+        .await?
+        .into_iter()
+        .filter(|decision| decision.rejected)
+        .map(|decision| decision.asset_id)
+        .collect();
+    let mut frames: Vec<Frame> =
+        copies.iter().map(|copies| frame_of(copies, &mut records, method, &rejected)).collect();
+    for (holding, member) in members {
+        let copy = std::iter::once(member.member.member_key)
+            .chain(member.copies.iter().map(|copy| copy.asset_id))
+            .find_map(|asset| of_asset.get(&asset).copied());
+        // A member with no counted copy left leaves both numbers.
+        if let Some(index) = copy {
+            let counts =
+                member.member.state == MemberState::Included && !member.changed_since_review;
+            frames[index].holdings.push(Holding { counts, ..holding });
+        }
+    }
+    for candidate in &candidates {
+        for asset in &candidate.asset_ids {
+            let Some(&index) = of_asset.get(asset) else { continue };
+            frames[index].candidate_of.insert(candidate.subject_id);
+        }
+    }
+    let goals = project
+        .goals
+        .iter()
+        .filter(|goal| goal.goal.counts_frames())
+        .map(|goal| goal_progress(&project.goals, goal, &frames))
+        .collect();
+    Ok(ProgressBasis { project_id: project.id, revision: project.revision, goals })
+}
+
+/// Every member of the latest saved revision of each run of `project` outside
+/// its Trash, with where the run holds it; `counts` is filled by the caller.
+async fn saved_members(
+    conn: &mut SqliteConnection,
+    project: Uuid,
+) -> Result<Vec<(Holding, MemberBasis)>> {
+    let rows = sqlx::query(
+        "SELECT id, subject_id, panel_id FROM views \
+         WHERE project_id = ?1 AND trashed_at IS NULL AND revision > 0 ORDER BY id",
+    )
+    .bind(project.to_string())
+    .fetch_all(&mut *conn)
+    .await?;
+    let mut members = Vec::new();
+    for row in &rows {
+        let view = parse_uuid(&row.try_get::<String, _>("id")?)?;
+        let subject_id = parse_uuid(&row.try_get::<String, _>("subject_id")?)?;
+        let panel_id =
+            row.try_get::<Option<String>, _>("panel_id")?.as_deref().map(parse_uuid).transpose()?;
+        let saved = views::read_membership(conn, view, Membership::Committed).await?;
+        members.extend(
+            saved
+                .members
+                .into_iter()
+                .map(|member| (Holding { subject_id, panel_id, counts: false }, member)),
+        );
+    }
+    Ok(members)
+}
+
+/// Group counted copies into content-identical frames: logical captures (D16)
+/// joined when any of their copies record the same SHA-256, so a byte-identical
+/// duplicate in one location is one frame too. Returns each asset's frame and
+/// each frame's counted copies in id order.
+fn content_frames(
+    captures: &CaptureView,
+    assets: &[Asset],
+) -> (HashMap<Uuid, usize>, Vec<Vec<Asset>>) {
+    let mut copies_of: BTreeMap<String, BTreeMap<Uuid, Asset>> = BTreeMap::new();
+    for asset in assets {
+        let copies = copies_of.entry(captures.key(asset).to_owned()).or_default();
+        copies.insert(asset.id, asset.clone());
+        for copy in captures.copies_of(captures.key(asset)) {
+            if counted(copy) {
+                copies.insert(copy.id, copy.clone());
+            }
+        }
+    }
+    let mut parent: HashMap<String, String> = HashMap::new();
+    let mut by_digest: HashMap<String, String> = HashMap::new();
+    for (key, copies) in &copies_of {
+        for copy in copies.values() {
+            let Some(digest) = copy.fingerprint.content_sha256.as_deref() else { continue };
+            match by_digest.get(digest) {
+                Some(first) => {
+                    let (left, right) = (root(&parent, key), root(&parent, first));
+                    if left != right {
+                        let (low, high) = if left < right { (left, right) } else { (right, left) };
+                        parent.insert(high, low);
+                    }
+                }
+                None => {
+                    by_digest.insert(digest.to_owned(), key.clone());
+                }
+            }
+        }
+    }
+    let mut joined: BTreeMap<String, BTreeMap<Uuid, Asset>> = BTreeMap::new();
+    for (key, copies) in copies_of {
+        joined.entry(root(&parent, &key)).or_default().extend(copies);
+    }
+    let mut of_asset = HashMap::new();
+    let frames = joined
+        .into_values()
+        .enumerate()
+        .map(|(index, copies)| {
+            of_asset.extend(copies.keys().map(|id| (*id, index)));
+            copies.into_values().collect()
+        })
+        .collect();
+    (of_asset, frames)
+}
+
+/// The root of `key`'s set; a key without a parent is its own root.
+fn root(parent: &HashMap<String, String>, key: &str) -> String {
+    let mut key = key;
+    while let Some(next) = parent.get(key) {
+        key = next;
+    }
+    key.to_owned()
+}
+
+/// A frame's facts from its counted copies: image type, channel and exposure
+/// from its primary copy (Available first), applicable quality over every
+/// copy, the median FWHM of the first copy with a valid measured record, and
+/// whether a copy carries an effective Project-only reject.
+fn frame_of(
+    copies: &[Asset],
+    records: &mut HashMap<Uuid, MeasurementRecord>,
+    method: &MeasurementMethod,
+    rejected: &BTreeSet<Uuid>,
+) -> Frame {
+    let primary = copies
+        .iter()
+        .min_by_key(|copy| {
+            (copy.availability != Availability::Available, copy.location_id, copy.id)
+        })
+        .expect("a frame holds at least one copy");
+    let effective = &primary.effective;
+    let fwhm_median = copies.iter().find_map(|copy| {
+        let record = records.remove(&copy.id)?;
+        if measurements::validity(copy, Some(&record), method) != RecordValidity::Valid {
+            return None;
+        }
+        let MeasurementOutcome::Measured { metrics, .. } = record.outcome else { return None };
+        metrics
+            .into_iter()
+            .find(|value| {
+                value.metric == MetricId::FwhmMedian && value.state == MetricState::Measured
+            })
+            .and_then(|value| value.value)
+    });
+    Frame {
+        light: effective.is_light(),
+        channel: effective
+            .filter
+            .as_deref()
+            .map(str::trim)
+            .filter(|filter| !filter.is_empty())
+            .map(str::to_owned),
+        exposure: effective.exposure_seconds.and_then(Microseconds::from_seconds),
+        quality: capture_quality(&copies.iter().collect::<Vec<_>>()),
+        fwhm_median,
+        rejected: copies.iter().any(|copy| rejected.contains(&copy.id)),
+        candidate_of: BTreeSet::new(),
+        holdings: Vec::new(),
+    }
+}
+
+/// One goal's two numbers over `frames`, each counted once. A frame is
+/// captured when it is a candidate of the subject, or a member of a run on the
+/// subject (and panel); it is in project when such a run includes it with the
+/// bytes it chose, no Project-only reject holds it and every bar admits it.
+/// Mosaic panels take members only: a candidate names no panel.
+fn goal_progress(goals: &[ProjectGoal], goal: &ProjectGoal, frames: &[Frame]) -> GoalProgress {
+    let quality_bars: Vec<QualityCriterion> = goals
+        .iter()
+        .filter(|bar| {
+            bar.subject_id == goal.subject_id
+                && (bar.panel_id.is_none() || bar.panel_id == goal.panel_id)
+        })
+        .filter_map(|bar| match &bar.goal {
+            GoalSpec::QualityBar { criterion } => Some(criterion.clone()),
+            _ => None,
+        })
+        .collect();
+    let mut progress = GoalProgress {
+        goal: goal.clone(),
+        in_project: GoalTally::default(),
+        captured: GoalTally::default(),
+        met: false,
+        quality_bars,
+        unknown_for_bar: 0,
+    };
+    let channel = goal.goal.channel();
+    for frame in frames {
+        if frame.light == Some(false) || frame.channel.as_deref() != channel {
+            continue;
+        }
+        let mut held = frame.holdings.iter().filter(|holding| {
+            holding.subject_id == goal.subject_id
+                && (goal.panel_id.is_none() || holding.panel_id == goal.panel_id)
+        });
+        let member = held.clone().next().is_some();
+        let counts = held.any(|holding| holding.counts);
+        let candidate = goal.panel_id.is_none() && frame.candidate_of.contains(&goal.subject_id);
+        if !member && !candidate {
+            continue;
+        }
+        progress.captured.count(frame.light, frame.exposure);
+        if !counts || frame.rejected {
+            continue;
+        }
+        match admits(&progress.quality_bars, frame) {
+            Some(true) => progress.in_project.count(frame.light, frame.exposure),
+            Some(false) => {}
+            None => progress.unknown_for_bar += 1,
+        }
+    }
+    progress.met = goal.goal.met_by(&progress.in_project);
+    progress
+}
+
+/// Whether every bar admits `frame`; `None` when none refuses it and one cannot
+/// judge it because the measurement it needs is missing (PRJ-FR-03).
+fn admits(bars: &[QualityCriterion], frame: &Frame) -> Option<bool> {
+    let mut unknown = false;
+    for bar in bars {
+        match bar {
+            QualityCriterion::UsableOnly => {
+                if frame.quality != ApplicableQuality::Usable {
+                    return Some(false);
+                }
+            }
+            QualityCriterion::MaxFwhmMedian { max_px } => match frame.fwhm_median {
+                Some(value) if value <= *max_px => {}
+                Some(_) => return Some(false),
+                None => unknown = true,
+            },
+        }
+    }
+    (!unknown).then_some(true)
 }
 
 #[cfg(test)]

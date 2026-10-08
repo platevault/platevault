@@ -58,6 +58,8 @@ pub struct Library {
     references: tokio::sync::RwLock<Vec<Arc<dyn AssetReferences>>>,
     pub(crate) planning: Mutex<crate::observing_plans::PlanningRuntime>,
     frame_review: FrameReview,
+    /// Lifecycle blockers and run folder sources (spec 070, D-W72).
+    pub(crate) lifecycle: crate::run_lifecycle::RunLifecycle,
     /// Test-only: the next N assessments are refused as if a concurrent writer
     /// had committed between the session read and the record.
     #[cfg(test)]
@@ -143,6 +145,7 @@ impl Library {
             planning,
             references: tokio::sync::RwLock::new(vec![projects, calibration, views]),
             frame_review,
+            lifecycle: crate::run_lifecycle::RunLifecycle::default(),
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         }))
@@ -167,6 +170,11 @@ impl Library {
     #[must_use]
     pub fn seed_target(&self, id: Uuid) -> Option<TargetCandidate> {
         self.targets.candidate(id)
+    }
+
+    /// The bundled seed index, for the Targets list's Browse and search.
+    pub(crate) fn target_index(&self) -> &TargetIndex {
+        &self.targets
     }
 
     /// Review replacement paths without changing originals or registered paths.
@@ -407,7 +415,7 @@ impl Library {
         Ok(LibrarySession { detail, target_assessments })
     }
 
-    async fn saved_targets(&self) -> Result<Arc<Vec<TargetCandidate>>, LibraryError> {
+    pub(crate) async fn saved_targets(&self) -> Result<Arc<Vec<TargetCandidate>>, LibraryError> {
         const PAGE: u32 = 1000;
         let mut cached = self.saved_targets.lock().await;
         let generation = self.catalog.target_generation().await?;

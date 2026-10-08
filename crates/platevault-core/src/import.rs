@@ -1459,7 +1459,10 @@ async fn destination_writability(
 /// inference), else a single light by IMAGETYP. A file without IMAGETYP is
 /// Unclassified: neither its name nor its stack count stands in for the
 /// frame-type header.
-fn classify(metadata: &CaptureMetadata, relative_path: &NativePath) -> Option<NamingFrameType> {
+pub(crate) fn classify(
+    metadata: &CaptureMetadata,
+    relative_path: &NativePath,
+) -> Option<NamingFrameType> {
     if metadata.image_type.as_deref().is_none_or(|text| text.trim().is_empty()) {
         return None;
     }
@@ -1493,7 +1496,10 @@ const fn image_type_text(frame_type: NamingFrameType) -> &'static str {
 }
 
 /// What the nine naming tokens resolve from; absent values take fallbacks.
-fn naming_metadata(metadata: &CaptureMetadata, frame_type: NamingFrameType) -> NamingMetadata {
+pub(crate) fn naming_metadata(
+    metadata: &CaptureMetadata,
+    frame_type: NamingFrameType,
+) -> NamingMetadata {
     let number = |value: Option<f64>| {
         value.filter(|value| value.is_finite()).map(|value| (value + 0.0).to_string())
     };
