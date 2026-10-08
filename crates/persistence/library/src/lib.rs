@@ -72,6 +72,7 @@ const SCHEMA: &str = schema_modules![
     "targets_list.sql",
     "view_groups.sql",
     "prepare.sql",
+    "results.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -148,6 +149,11 @@ pub use view_groups::{GroupCandidates, ViewGroupBasis};
 mod prepare;
 pub use prepare::{
     EntryUpdate, NewPreparation, NewPreparedEntry, PreparationRecord, RecordedFolders,
+};
+mod results;
+pub use results::{
+    DetectedMaster, NewAttachment, Observation, ResultsBasis, ResultsScan, ScannedResult,
+    VerifiedAcceptance, VerifiedProduct,
 };
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.

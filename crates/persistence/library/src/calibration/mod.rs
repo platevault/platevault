@@ -14,6 +14,7 @@ mod contained_write;
 mod custody;
 mod decisions;
 mod inventory;
+mod offers;
 
 use std::collections::BTreeSet;
 
@@ -37,6 +38,7 @@ use super::{
 pub use adoption::recover_adoptions;
 pub use decisions::group_policy_changed;
 use inventory::Listed;
+pub use offers::{offer_master, open_offers};
 
 // ---------------------------------------------------------------------------
 // Wire types of the inventory reads
