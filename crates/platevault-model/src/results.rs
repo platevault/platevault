@@ -68,6 +68,20 @@ pub enum ResultKind {
     },
 }
 
+impl fmt::Display for ResultKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::FinalImage => f.write_str("final image"),
+            Self::LinearIntegration => f.write_str("linear integration"),
+            Self::ChannelProduct => f.write_str("channel product"),
+            Self::MosaicPanel => f.write_str("mosaic panel"),
+            Self::AssembledMosaic => f.write_str("assembled mosaic"),
+            Self::CalibrationMaster { input } => write!(f, "master {}", input.as_str()),
+            Self::Intermediate { label } | Self::Other { label } => f.write_str(label),
+        }
+    }
+}
+
 /// Where a Result stands (RES-FR-01, RES-FR-04).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -108,12 +122,15 @@ pub enum ResultLineage {
 /// Which prepared revision a discovered Result came from (RES-FR-01,
 /// RES-AC-16, plan risk 9a), in evidence order: a tool header or log naming
 /// the revision's prepared folder, then the revision's time window labelled
-/// as inference, otherwise Unknown.
+/// as inference, otherwise Unknown. A run's Result names one of its
+/// preparation revisions; a run group's Result one of its Prepare all
+/// revisions.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "basis", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum RevisionAttribution {
     /// `source` (the file's own header, or a log naming the file) names
-    /// exactly one revision's prepared folder, `<Run>` or `<Run> (rev N)`.
+    /// exactly one revision's prepared folder: `<Run>` or `<Run> (rev N)`,
+    /// or a group folder `<Mosaic>` or `<Mosaic> (rev N)`.
     ToolEvidence { revision_id: Uuid, n: u32, source: NativePath },
     /// Inference: the file was last modified after this revision finished
     /// preparing and before the next one started.

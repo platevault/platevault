@@ -159,6 +159,7 @@ async fn direct_profile(world: &World) -> Profile {
             input_behavior: InputBehavior::ReadOnly,
             input_list: true,
             proofs,
+            ..CapabilityEvidence::default()
         },
     };
     world.catalog().create_profile(&input).await.unwrap()

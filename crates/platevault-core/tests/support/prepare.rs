@@ -390,8 +390,14 @@ impl World {
     }
 
     /// A verified read-only Siril profile that launches `/bin/sh` with
-    /// `script`, which gets the Results folder as `$1`.
+    /// `script`, which gets the Results folder as `$1`. It reads no product
+    /// input.
     pub async fn siril(&self, script: &str) -> Profile {
+        self.siril_reading(script, Vec::new()).await
+    }
+
+    /// As [`Self::siril`], reading accepted products of `kinds` as inputs.
+    pub async fn siril_reading(&self, script: &str, kinds: Vec<ResultKind>) -> Profile {
         let proofs = Capability::ALL
             .into_iter()
             .map(|capability| CapabilityProof {
@@ -407,6 +413,8 @@ impl World {
             capability_evidence: CapabilityEvidence {
                 input_behavior: InputBehavior::ReadOnly,
                 input_list: true,
+                product_kinds: kinds,
+                mixed_inputs: false,
                 proofs,
             },
         };
@@ -427,6 +435,7 @@ impl World {
                     capability: Capability::Input,
                     evidence: "rewrites FITS keywords of its input lights".into(),
                 }],
+                ..CapabilityEvidence::default()
             },
         };
         self.catalog().create_profile(&input).await.unwrap()

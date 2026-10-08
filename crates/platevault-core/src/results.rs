@@ -22,7 +22,9 @@
 //! prepared folder (`<Run>`, `<Run> (rev N)`, `<Mosaic> (rev N)/Panel N`) as a
 //! path; else the one revision whose window — from its preparation finishing
 //! to the next revision starting — holds the file's modification time,
-//! labelled as inference; else Unknown.
+//! labelled as inference; else Unknown. A run group's Assembled Result names
+//! a Prepare all revision the same way, by its group folder
+//! `<Mosaic> (rev N)` and its window.
 //!
 //! Acceptance and reuse re-read the bytes (D19): Accept Result refuses a
 //! product whose current SHA-256 is not the inspected one, and the input
@@ -53,9 +55,10 @@ use crate::run_lifecycle::{BlockersFuture, RunOperationGuard};
 use crate::view_selection::ViewDetail;
 use crate::{
     AcceptOutcome, AcceptRefusal, AcceptResult, Availability, CalibrationRules, CaptureMetadata,
-    EntryKind, InputVerification, LibraryError, NativePath, NewView, ObservationFingerprint,
-    PreparationRevision, PreparationState, ProductInput, ProfileKind, ResultInputOffer, ResultKind,
-    ResultOwner, ResultRecord, ResultState, ResultsListing, RevisionAttribution, View,
+    EntryKind, GroupPreparation, InputVerification, ItemReason, LibraryError, NativePath, NewView,
+    ObservationFingerprint, PreparationRevision, PreparationState, ProductInput, ProfileKind,
+    ReasonCode, ResultInputOffer, ResultKind, ResultOwner, ResultRecord, ResultState,
+    ResultsListing, RevisionAttribution, View,
 };
 
 /// A file modified this recently may still be being written: it reads
@@ -302,11 +305,56 @@ fn log_text(path: &Path) -> Option<String> {
     Some(String::from_utf8_lossy(&text).into_owned())
 }
 
-/// The path a revision's prepared folder is named by below its Project
-/// folder: `<Run>`, `<Run> (rev N)` or `<Mosaic> (rev N)/Panel N`.
-fn revision_tail(revision: &PreparationRevision) -> Option<String> {
-    let folder = revision.folder.to_path_buf().ok()?;
-    let output = revision.output.to_path_buf().ok()?;
+/// A revision a discovered Result can name: a run's preparation revision, or
+/// a run group's Prepare all revision for its Assembled mosaic.
+struct NamedRevision {
+    id: Uuid,
+    n: u32,
+    /// The path its prepared folder is named by below its Project folder:
+    /// `<Run>`, `<Run> (rev N)`, `<Mosaic> (rev N)/Panel N` or a group
+    /// folder `<Mosaic> (rev N)`.
+    tail: Option<String>,
+    /// When it started and finished, for one that ended Prepared or Partial:
+    /// only those open a time window.
+    window: Option<(i128, i128)>,
+}
+
+impl NamedRevision {
+    fn new(
+        (id, n): (Uuid, u32),
+        state: PreparationState,
+        (started_at, finished_at): (&str, Option<&str>),
+        (output, folder): (&NativePath, &NativePath),
+    ) -> Self {
+        let window = matches!(state, PreparationState::Prepared | PreparationState::Partial)
+            .then(|| Some((parse_nanos(started_at)?, parse_nanos(finished_at?)?)))
+            .flatten();
+        Self { id, n, tail: folder_tail(output, folder), window }
+    }
+
+    fn of_run(revision: &PreparationRevision) -> Self {
+        Self::new(
+            (revision.id, revision.n),
+            revision.state,
+            (&revision.started_at, revision.finished_at.as_deref()),
+            (&revision.output, &revision.folder),
+        )
+    }
+
+    fn of_group(preparation: &GroupPreparation) -> Self {
+        Self::new(
+            (preparation.id, preparation.n),
+            preparation.outcome,
+            (&preparation.started_at, preparation.finished_at.as_deref()),
+            (&preparation.output, &preparation.folder),
+        )
+    }
+}
+
+/// The path `folder` is named by below its Project folder in `output`.
+fn folder_tail(output: &NativePath, folder: &NativePath) -> Option<String> {
+    let folder = folder.to_path_buf().ok()?;
+    let output = output.to_path_buf().ok()?;
     let below: Vec<String> = match folder.strip_prefix(&output) {
         Ok(below) => below
             .components()
@@ -333,15 +381,11 @@ fn names_folder(text: &str, tail: &str) -> bool {
 
 /// The one revision whose prepared folder `text` names; none when it names
 /// several or none.
-fn named_revision<'a>(
-    text: &str,
-    revisions: &'a [(PreparationRevision, Option<String>)],
-) -> Option<&'a PreparationRevision> {
+fn named_revision<'a>(text: &str, revisions: &'a [NamedRevision]) -> Option<&'a NamedRevision> {
     let text = text.replace('\\', "/");
     let mut named = revisions
         .iter()
-        .filter(|(_, tail)| tail.as_deref().is_some_and(|tail| names_folder(&text, tail)))
-        .map(|(revision, _)| revision);
+        .filter(|revision| revision.tail.as_deref().is_some_and(|tail| names_folder(&text, tail)));
     let first = named.next()?;
     named.next().is_none().then_some(first)
 }
@@ -352,9 +396,9 @@ fn attribute(
     path: &Path,
     modified_ns: i128,
     logs: &[(PathBuf, String)],
-    revisions: &[(PreparationRevision, Option<String>)],
+    revisions: &[NamedRevision],
 ) -> RevisionAttribution {
-    let tool = |revision: &PreparationRevision, source: &Path| RevisionAttribution::ToolEvidence {
+    let tool = |revision: &NamedRevision, source: &Path| RevisionAttribution::ToolEvidence {
         revision_id: revision.id,
         n: revision.n,
         source: NativePath::from_path(source),
@@ -373,15 +417,10 @@ fn attribute(
             }
         }
     }
-    let mut windows: Vec<(&PreparationRevision, i128, i128)> = revisions
+    let mut windows: Vec<(&NamedRevision, i128, i128)> = revisions
         .iter()
-        .map(|(revision, _)| revision)
-        .filter(|revision| {
-            matches!(revision.state, PreparationState::Prepared | PreparationState::Partial)
-        })
         .filter_map(|revision| {
-            let finished = parse_nanos(revision.finished_at.as_deref()?)?;
-            Some((revision, parse_nanos(&revision.started_at)?, finished))
+            revision.window.map(|(started, finished)| (revision, started, finished))
         })
         .collect();
     windows.sort_by_key(|(revision, ..)| revision.n);
@@ -425,7 +464,7 @@ impl Candidate<'_> {
         owner: ResultOwner,
         default_kind: Option<&ResultKind>,
         logs: &[(PathBuf, String)],
-        revisions: &[(PreparationRevision, Option<String>)],
+        revisions: &[NamedRevision],
     ) -> ScannedResult {
         let master = matches!(owner, ResultOwner::Run { .. })
             .then(|| detect_master(self.path, self.relative))
@@ -447,11 +486,12 @@ impl Candidate<'_> {
     }
 }
 
-/// Walk and inspect the owner's Results folder (blocking).
+/// Walk and inspect the owner's Results folder (blocking): `revisions` are
+/// the ones its candidates can name.
 fn discover(
     basis: &ResultsBasis,
     folder: NativePath,
-    revisions: Vec<PreparationRevision>,
+    revisions: &[NamedRevision],
     excluded: &[PathBuf],
 ) -> ResultsScan {
     let linked = basis
@@ -499,13 +539,6 @@ fn discover(
         .filter(|(_, _, recognized)| *recognized == Recognized::Log)
         .filter_map(|(path, ..)| log_text(path).map(|text| (path.clone(), text)))
         .collect();
-    let revisions: Vec<(PreparationRevision, Option<String>)> = revisions
-        .into_iter()
-        .map(|revision| {
-            let tail = revision_tail(&revision);
-            (revision, tail)
-        })
-        .collect();
     let settled_before = nanos(SystemTime::now()) - i128::try_from(SETTLE.as_nanos()).unwrap_or(0);
     for (path, relative, recognized) in recognized {
         let Ok(fingerprint) = inventory::probe_fingerprint(&path) else {
@@ -521,7 +554,7 @@ fn discover(
             Recognized::Product => match observe_entry(&path) {
                 Ok(evidence) if evidence.kind == EntryKind::File => {
                     let candidate = Candidate { path: &path, relative: &relative, evidence };
-                    candidate.scanned(basis.owner, default_kind.as_ref(), &logs, &revisions)
+                    candidate.scanned(basis.owner, default_kind.as_ref(), &logs, revisions)
                 }
                 // Changed while it was read: still being written.
                 Err(LibraryError::Context { error, .. })
@@ -614,6 +647,54 @@ fn reread(record: &mut ResultRecord, observation: &Observation) {
     }
 }
 
+/// A run's product input as its rehash before Prepare read it (RES-FR-05):
+/// the fingerprint of the bytes that hash to its current acceptance digest,
+/// with that digest as its content SHA-256, or why it is blocked.
+pub(crate) struct RehashedProduct {
+    pub(crate) input: ProductInput,
+    pub(crate) read: Result<ObservationFingerprint, ItemReason>,
+}
+
+/// What Prepare may read of `input` after its rehash: only bytes that hash to
+/// the Result's current explicit acceptance, which the input records as
+/// `recorded` after the rehash write. Reference drift, an acceptance changed
+/// while it was checked, or an unreadable file blocks it.
+fn product_read(
+    input: &ProductInput,
+    recorded: Option<&str>,
+    verification: InputVerification,
+    observation: Observation,
+) -> Result<ObservationFingerprint, ItemReason> {
+    let name = input.result.name();
+    let accepted = input.result.accepted.as_ref().map_or(input.sha256.as_str(), |a| &a.sha256);
+    match (verification, observation) {
+        (InputVerification::Verified, Observation::Present { mut fingerprint, .. })
+            if recorded == Some(accepted) =>
+        {
+            fingerprint.content_sha256 = Some(accepted.to_owned());
+            Ok(fingerprint)
+        }
+        (InputVerification::Verified, _) => Err(ItemReason::new(
+            ReasonCode::SourceDrift,
+            format!("Result '{name}' was accepted again while it was checked; review again"),
+        )),
+        (InputVerification::Drifted { current_sha256 }, _) => Err(ItemReason::new(
+            ReasonCode::SourceDrift,
+            format!(
+                "Result '{name}' drifted: it hashes to {}, not its accepted {}; restore the \
+                 accepted bytes, or rescan its run's Results and accept its current bytes, to \
+                 reuse it",
+                short(&current_sha256),
+                short(accepted)
+            ),
+        )),
+        (InputVerification::Unavailable { reason, .. }, _) => Err(ItemReason::new(
+            ReasonCode::SourceUnavailable,
+            format!("Result '{name}': {reason}"),
+        )),
+    }
+}
+
 fn short(sha256: &str) -> &str {
     sha256.get(..12).unwrap_or(sha256)
 }
@@ -633,9 +714,21 @@ impl Library {
                 "{owner} has no recorded Results folder until it is prepared"
             )));
         };
-        let revisions = match owner {
-            ResultOwner::Run { view_id } => self.catalog().view_preparations(view_id).await?,
-            ResultOwner::Group { .. } => Vec::new(),
+        let revisions: Vec<NamedRevision> = match owner {
+            ResultOwner::Run { view_id } => self
+                .catalog()
+                .view_preparations(view_id)
+                .await?
+                .iter()
+                .map(NamedRevision::of_run)
+                .collect(),
+            ResultOwner::Group { group_id } => self
+                .catalog()
+                .group_preparations(group_id)
+                .await?
+                .iter()
+                .map(NamedRevision::of_group)
+                .collect(),
         };
         let recorded = self.catalog().recorded_preparation_folders().await?;
         // The walk starts at the chosen form, so it meets the other folders
@@ -646,7 +739,7 @@ impl Library {
             .chain(recorded.results.iter().filter(|recorded| recorded.path != folder))
             .map(|recorded| recorded.path.to_path_buf())
             .collect::<Result<Vec<_>, _>>()?;
-        let scan = blocking(move || Ok(discover(&basis, folder, revisions, &excluded))).await?;
+        let scan = blocking(move || Ok(discover(&basis, folder, &revisions, &excluded))).await?;
         self.catalog().record_results_scan(&scan).await
     }
 
@@ -825,6 +918,65 @@ impl Library {
     ) -> Result<Vec<ProductInput>, LibraryError> {
         let verified = self.verify_products(products).await?;
         self.catalog().add_view_product_inputs(view, &verified).await
+    }
+
+    /// Rehash every product input of `view` against its acceptance digest
+    /// before it is prepared (RES-FR-05). What each rehash read is recorded,
+    /// so a drifted product reads drifted; equal size and modification time
+    /// never stand in. An input whose Result was explicitly accepted again
+    /// with the bytes it now holds is reused, and records that digest in the
+    /// same write.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown run; catalog errors.
+    pub(crate) async fn rehash_product_inputs(
+        &self,
+        view: Uuid,
+    ) -> Result<Vec<RehashedProduct>, LibraryError> {
+        let inputs = self.catalog().view_product_inputs(view).await?;
+        if inputs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let checked = blocking(move || {
+            Ok(inputs
+                .into_iter()
+                .map(|input| {
+                    let (verification, observation) = verify(&input.result);
+                    (input, verification, observation)
+                })
+                .collect::<Vec<_>>())
+        })
+        .await?;
+        let observations: Vec<(Uuid, Observation)> = checked
+            .iter()
+            .map(|(input, _, observation)| (input.result.id, observation.clone()))
+            .collect();
+        // Verified reads the current bytes against the recorded acceptance, so
+        // only an explicit acceptance of other bytes moves an input.
+        let reaccepted: Vec<VerifiedProduct> = checked
+            .iter()
+            .filter(|(_, verification, _)| *verification == InputVerification::Verified)
+            .filter_map(|(input, ..)| {
+                let accepted = input.result.accepted.as_ref()?;
+                (accepted.sha256 != input.sha256).then(|| VerifiedProduct {
+                    result_id: input.result.id,
+                    sha256: accepted.sha256.clone(),
+                })
+            })
+            .collect();
+        let recorded =
+            self.catalog().record_product_input_rehash(view, &observations, &reaccepted).await?;
+        Ok(checked
+            .into_iter()
+            .map(|(input, verification, observation)| {
+                let digest = recorded
+                    .iter()
+                    .find(|now| now.result.id == input.result.id)
+                    .map(|now| now.sha256.clone());
+                let read = product_read(&input, digest.as_deref(), verification, observation);
+                RehashedProduct { input, read }
+            })
+            .collect())
     }
 
     /// Rehash each accepted product before it is added; any drift or unread

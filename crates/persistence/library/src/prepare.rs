@@ -13,9 +13,9 @@
 
 use platevault_model::{
     CorrectedField, EntryEvidence, EntryState, GroupPreparation, InputMode, ItemReason,
-    LibraryError, LinkKind, NativePath, PreparationRevision, PreparationState, PreparedEntry,
-    PreparedEntryKind, PreparedInput, Profile, ProfileInput, Revision, SourceBasis, View,
-    ViewGroup, WrittenCopy,
+    LibraryError, LinkKind, NativePath, PanelOutcome, PanelResult, PreparationRevision,
+    PreparationState, PreparedEntry, PreparedEntryKind, PreparedInput, Profile, ProfileInput,
+    Revision, RunCompletion, SourceBasis, View, ViewGroup, WrittenCopy,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
@@ -289,7 +289,8 @@ impl Catalog {
     }
 
     /// End a Running revision in its terminal state. A panel run's revision
-    /// retried after its Prepare all ended moves the group outcome with it.
+    /// retried after its Prepare all ended moves the group outcome with it;
+    /// a Prepare all the user canceled or paused keeps that stop.
     ///
     /// # Errors
     /// `InvalidInput` for `Running` as the end state or a revision that is not
@@ -324,10 +325,10 @@ impl Catalog {
             .execute(&mut *conn)
             .await?;
             if let Some(group) = revision.group_preparation_id {
-                if load_group_preparation_row(conn, group).await?.outcome
-                    != PreparationState::Running
-                {
-                    write_group_outcome(conn, group, &at).await?;
+                // A recorded Canceled or Paused is the user's stop, and stays.
+                let recorded = load_group_preparation_row(conn, group).await?.outcome;
+                if recorded != PreparationState::Running {
+                    write_group_outcome(conn, group, Some(recorded), &at).await?;
                 }
             }
             load_preparation(conn, id).await
@@ -427,7 +428,8 @@ impl Catalog {
                     .fetch_all(&mut *conn)
                     .await?;
             for group in &groups {
-                write_group_outcome(conn, parse_uuid(group)?, &at).await?;
+                let paused = Some(PreparationState::Paused);
+                write_group_outcome(conn, parse_uuid(group)?, paused, &at).await?;
             }
             Ok(done.rows_affected())
         })
@@ -556,6 +558,15 @@ pub struct PanelPreparationRecord {
 pub struct GroupPreparationRecord {
     pub preparation: GroupPreparation,
     pub panels: Vec<PanelPreparationRecord>,
+}
+
+/// A Prepare all its Retry made Running again, with each Partial or Paused
+/// panel run it skipped (in the Project's Trash or Complete), by panel
+/// number.
+#[derive(Clone, Debug)]
+pub struct ResumedGroupPreparation {
+    pub record: GroupPreparationRecord,
+    pub skipped: Vec<PanelOutcome>,
 }
 
 /// One panel run of a run group.
@@ -721,8 +732,8 @@ impl Catalog {
 
     /// End a Running Prepare all: every panel run's revision still Running
     /// ends `remaining` (Canceled or Paused when the user stopped Prepare
-    /// all, Failed when it ended early), and the group takes the outcome its
-    /// panel runs give (PREP-FR-12).
+    /// all, Failed when it ended early), and the group takes the outcome
+    /// that stop and its panel runs give (PREP-FR-12).
     ///
     /// # Errors
     /// `InvalidInput` for `Running` as the end state or a Prepare all that is
@@ -756,20 +767,21 @@ impl Catalog {
             .bind(&at)
             .execute(&mut *conn)
             .await?;
-            write_group_outcome(conn, id, &at).await?;
+            write_group_outcome(conn, id, Some(remaining), &at).await?;
             load_group_preparation(conn, id).await
         })
     }
 
     /// Retry a Partial or Paused Prepare all in its own group folder: every
     /// Partial or Paused panel run's revision runs again for its blocked and
-    /// pending entries; Prepared and Failed ones stay as they are.
+    /// pending entries; Prepared and Failed ones stay as they are. A panel
+    /// run in the Project's Trash (D-W75) or Complete is skipped and named.
     ///
     /// # Errors
-    /// `InvalidInput` for another outcome, nothing to retry, a panel run's
-    /// revision Running on its own, or a panel run that refuses Retry as
-    /// [`Self::resume_preparation`] names.
-    pub async fn resume_group_preparation(&self, id: Uuid) -> Result<GroupPreparationRecord> {
+    /// `InvalidInput` for another outcome, nothing left to retry (naming each
+    /// skipped panel run), a panel run's revision Running on its own, or a
+    /// panel run that refuses Retry as [`Self::resume_preparation`] names.
+    pub async fn resume_group_preparation(&self, id: Uuid) -> Result<ResumedGroupPreparation> {
         write_txn!(self, |conn| {
             let preparation = load_group_preparation_row(conn, id).await?;
             if !matches!(preparation.outcome, PreparationState::Partial | PreparationState::Paused)
@@ -781,10 +793,11 @@ impl Catalog {
                 )));
             }
             let record = load_group_preparation(conn, id).await?;
-            let revisions: Vec<&PreparationRevision> =
-                record.panels.iter().map(|panel| &panel.record.revision).collect();
-            if let Some(running) =
-                revisions.iter().find(|revision| revision.state == PreparationState::Running)
+            if let Some(running) = record
+                .panels
+                .iter()
+                .map(|panel| &panel.record.revision)
+                .find(|revision| revision.state == PreparationState::Running)
             {
                 return Err(invalid(format!(
                     "preparation '{}' of run {} is Running",
@@ -793,17 +806,47 @@ impl Catalog {
                 )));
             }
             let mut resumed = 0;
-            for revision in revisions.iter().filter(|revision| {
-                matches!(revision.state, PreparationState::Partial | PreparationState::Paused)
-            }) {
+            let mut skipped = Vec::new();
+            for panel in &record.panels {
+                let revision = &panel.record.revision;
+                if !matches!(revision.state, PreparationState::Partial | PreparationState::Paused) {
+                    continue;
+                }
+                let view = load_view(conn, revision.view_id).await?;
+                let skip = if view.trashed_at.is_some() {
+                    Some(format!(
+                        "Panel {} is in the Project's Trash; Retry skips it",
+                        panel.number
+                    ))
+                } else if view.completion == RunCompletion::Complete {
+                    Some(format!("Panel {} is Complete; Retry skips it", panel.number))
+                } else {
+                    None
+                };
+                if let Some(reason) = skip {
+                    skipped.push(PanelOutcome {
+                        panel_id: panel.panel_id,
+                        number: panel.number,
+                        view_id: view.id,
+                        result: PanelResult::Refused { reason },
+                    });
+                    continue;
+                }
                 resume_revision(conn, revision).await?;
                 resumed += 1;
             }
             if resumed == 0 {
-                return Err(invalid(format!(
+                let mut message = format!(
                     "Prepare all '{}' has no Partial or Paused panel run to retry",
                     preparation.name()
-                )));
+                );
+                for panel in &skipped {
+                    if let PanelResult::Refused { reason } = &panel.result {
+                        message.push_str("; ");
+                        message.push_str(reason);
+                    }
+                }
+                return Err(invalid(message));
             }
             sqlx::query(
                 "UPDATE group_preparations SET outcome = 'running', finished_at = NULL \
@@ -812,7 +855,7 @@ impl Catalog {
             .bind(id.to_string())
             .execute(&mut *conn)
             .await?;
-            load_group_preparation(conn, id).await
+            Ok(ResumedGroupPreparation { record: load_group_preparation(conn, id).await?, skipped })
         })
     }
 
@@ -1064,8 +1107,15 @@ async fn resume_revision(
     Ok(())
 }
 
-/// Record the outcome a Prepare all's panel runs give it (PREP-FR-12).
-async fn write_group_outcome(conn: &mut SqliteConnection, id: Uuid, at: &str) -> Result<()> {
+/// Record the outcome `stop` and a Prepare all's panel runs give it
+/// (PREP-FR-12): `stop` is Canceled or Paused when the user canceled or
+/// paused Prepare all, and any other state is no stop.
+async fn write_group_outcome(
+    conn: &mut SqliteConnection,
+    id: Uuid,
+    stop: Option<PreparationState>,
+    at: &str,
+) -> Result<()> {
     let states: Vec<String> = sqlx::query_scalar(
         "SELECT state FROM preparation_revisions WHERE group_preparation_id = ?1",
     )
@@ -1076,7 +1126,7 @@ async fn write_group_outcome(conn: &mut SqliteConnection, id: Uuid, at: &str) ->
         states.iter().map(|state| from_text(state)).collect::<Result<Vec<PreparationState>>>()?;
     sqlx::query("UPDATE group_preparations SET outcome = ?2, finished_at = ?3 WHERE id = ?1")
         .bind(id.to_string())
-        .bind(to_text(&GroupPreparation::outcome_for(states))?)
+        .bind(to_text(&GroupPreparation::outcome_for(stop, states))?)
         .bind(at)
         .execute(&mut *conn)
         .await?;

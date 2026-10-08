@@ -64,6 +64,16 @@ pub fn database(world: &World) -> PathBuf {
     world.temp.path().join("library.sqlite")
 }
 
+/// The single count `sql` reads with `id` bound, straight from the catalog
+/// file: rows no public read lists, such as a removed run's leftovers.
+pub async fn count(database: &Path, sql: &'static str, id: Uuid) -> i64 {
+    let options = SqliteConnectOptions::new().filename(database);
+    let mut conn = SqliteConnection::connect_with(&options).await.unwrap();
+    let found = sqlx::query_scalar(sql).bind(id.to_string()).fetch_one(&mut conn).await.unwrap();
+    conn.close().await.unwrap();
+    found
+}
+
 /// `<output>/<Project>/<Run> Results/`.
 pub fn results_dir(world: &World) -> PathBuf {
     world.output.join(PROJECT).join(format!("{RUN} Results"))
