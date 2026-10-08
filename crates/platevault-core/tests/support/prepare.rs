@@ -102,7 +102,30 @@ fn group_by_night(assets: &[Asset]) -> GroupingResult {
     }
 }
 
-/// Write each file with bytes unique to its path and scan the location once.
+/// A primary FITS header unique to `relative`: the frame's type and filter,
+/// and its path as a comment, in one block.
+fn fits(relative: &str, metadata: &CaptureMetadata) -> Vec<u8> {
+    let mut cards = vec![
+        "SIMPLE  =                    T".to_owned(),
+        "BITPIX  =                    8".to_owned(),
+        "NAXIS   =                    0".to_owned(),
+    ];
+    if let Some(kind) = &metadata.image_type {
+        cards.push(format!("IMAGETYP= '{kind:<8}'"));
+    }
+    if let Some(filter) = &metadata.filter {
+        cards.push(format!("FILTER  = '{filter:<8}'"));
+    }
+    cards.push(format!("COMMENT {relative}"));
+    cards.push("END".to_owned());
+    let mut bytes: Vec<u8> =
+        cards.iter().flat_map(|card| format!("{card:<80}").into_bytes()).collect();
+    bytes.resize(2880, b' ');
+    bytes
+}
+
+/// Write each file as a FITS header unique to its path and scan the
+/// location once.
 async fn scan(
     library: &Library,
     location: &Location,
@@ -114,7 +137,7 @@ async fn scan(
     for (relative, metadata) in frames {
         let path = root.join(relative);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, format!("{relative}{}", " ".repeat(64))).unwrap();
+        fs::write(&path, fits(relative, metadata)).unwrap();
         files.push(ScanFile {
             relative_path: NativePath::from_path(Path::new(relative)),
             fingerprint: InventoryProbe.fingerprint(&path).unwrap(),
@@ -344,6 +367,25 @@ impl World {
         self.assign(2).await;
     }
 
+    /// Confirm a catalog correction of one capture field of the light at
+    /// `path`, its file untouched, then re-run the automatic calibration
+    /// match its regroup asks for. Returns the corrected asset.
+    pub async fn correct(&self, path: &str, field: &str, value: serde_json::Value) -> Uuid {
+        let asset = self.asset_at(path).await;
+        let expected = ExpectedAsset {
+            asset_id: asset.id,
+            decision_revision: asset.decision_revision,
+            fingerprint: asset.fingerprint.clone(),
+        };
+        let correction = CorrectionInput { asset_id: asset.id, field: field.into(), value };
+        self.catalog()
+            .apply_correction_and_regroup(&[expected], &[correction], group_by_night)
+            .await
+            .unwrap();
+        self.assign(1).await;
+        asset.id
+    }
+
     /// A verified read-only Siril profile that launches `/bin/sh` with
     /// `script`, which gets the Results folder as `$1`.
     pub async fn siril(&self, script: &str) -> Profile {
@@ -399,6 +441,7 @@ impl World {
             link,
             output: Some(NativePath::from_path(&self.output)),
             folder_name: None,
+            corrections: std::collections::BTreeMap::new(),
         }
     }
 

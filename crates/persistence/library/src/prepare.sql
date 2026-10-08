@@ -62,6 +62,12 @@ CREATE TABLE IF NOT EXISTS prepared_entries (
     path TEXT NOT NULL,
     source TEXT,
     size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+    -- The D19 basis JSON its snapshot must match, as Prepare planned it:
+    -- the membership copy's or the calibration assignment's fingerprint.
+    basis TEXT,
+    -- The reviewed header change JSON an isolated patched Copy or Clone
+    -- carries (PREP-FR-03); null for every other entry.
+    header_changes TEXT,
     -- Entry evidence JSON of the source snapshot and of the written entry.
     source_evidence TEXT,
     source_sha256 TEXT,

@@ -33,18 +33,19 @@ use persistence_library::{
 };
 use uuid::Uuid;
 
-use crate::custody::{observe_entry, transfer, verify_source};
-use crate::layout;
+use crate::custody::{self, observe_entry, transfer, verify_source};
 use crate::library::{blocking, Library};
 use crate::run_lifecycle::{BlockersFuture, FoldersFuture, RunFolders, RunOperationGuard};
+use crate::{header_patch, layout};
 use crate::{
-    Availability, BlockedInput, CalibrationHandoff, EntryEvidence, EntryKind, EntryState,
+    Asset, Availability, BasisOrigin, BlockedInput, CalibrationHandoff, CorrectedField,
+    CorrectionChoice, CorrectionOption, EntryEvidence, EntryKind, EntryState, ImageFormat,
     InputMode, ItemReason, LibraryError, LifecycleBlocker, LinkKind, LocationCheck, MemberState,
-    Membership, ModeOption, NativePath, ObservationFingerprint, OpenOutcome, PlannedEntry,
+    Membership, ModeOption, NativePath, OpenOutcome, PlannedCorrection, PlannedEntry,
     PreparationFailed, PreparationOutcome, PreparationReview, PreparationRevision,
     PreparationState, PrepareRequest, PrepareStep, PreparedEntry, PreparedEntryKind,
     PreparedFolder, PreparedInput, Profile, ReasonCode, Revision, RunFolderSet, RunLocation,
-    RunOperationKind, RunStage, TransferDestination, View, Writability, WrittenCopy,
+    RunOperationKind, RunStage, SourceBasis, TransferDestination, View, Writability, WrittenCopy,
 };
 
 /// Whether this platform makes verified clones: APFS `clonefile` on macOS and
@@ -70,11 +71,8 @@ fn reason(code: ReasonCode, detail: impl Into<String>) -> ItemReason {
 
 /// The recorded basis an input's snapshot must match (D19): the confirmed
 /// membership's copy fingerprint, or the calibration assignment's digest.
-#[derive(Clone, Debug)]
-struct Basis {
-    fingerprint: ObservationFingerprint,
-    what: &'static str,
-}
+/// Prepare records it with each entry; Retry verifies against that record.
+type Basis = SourceBasis;
 
 /// One input review resolved to a source.
 #[derive(Clone, Debug)]
@@ -153,6 +151,24 @@ impl Library {
             .collect();
         let target = location.clone();
         let created = blocking(move || create_folders(&target, &folders, recorded_results)).await?;
+        let basis_of = |source: Option<&NativePath>| {
+            source.and_then(|source| anchors.get(&source.to_path_buf().ok()?).cloned())
+        };
+        // Only an offered, chosen patch reaches the entry of its source,
+        // a blocked one included, so Retry patches it too (PREP-FR-03).
+        let patched: HashMap<PathBuf, &[CorrectedField]> = review
+            .corrections
+            .iter()
+            .filter(|correction| correction.delivered)
+            .filter_map(|correction| {
+                Some((correction.source.to_path_buf().ok()?, correction.fields.as_slice()))
+            })
+            .collect();
+        let patch_of = |source: Option<&NativePath>| {
+            source
+                .and_then(|source| patched.get(&source.to_path_buf().ok()?))
+                .map_or_else(Vec::new, |fields| fields.to_vec())
+        };
         let mut entries: Vec<NewPreparedEntry> = review
             .entries
             .iter()
@@ -165,6 +181,8 @@ impl Library {
                 path: entry.path.clone(),
                 source: Some(entry.source.clone()),
                 size_bytes: entry.size_bytes,
+                basis: basis_of(Some(&entry.source)),
+                header_changes: patch_of(Some(&entry.source)),
                 blocked: None,
             })
             .collect();
@@ -177,6 +195,8 @@ impl Library {
             path: blocked.path.clone().unwrap_or_else(|| location.folder.clone()),
             source: blocked.source.clone(),
             size_bytes: blocked.size_bytes,
+            basis: basis_of(blocked.source.as_ref()),
+            header_changes: patch_of(blocked.source.as_ref()),
             blocked: Some(blocked.reason.clone()),
         }));
         let input = NewPreparation {
@@ -357,8 +377,15 @@ impl Library {
         let results = catalog.view_results_folder(view.id).await?;
         let recorded = catalog.recorded_preparation_folders().await?;
         let roots = self.input_roots(&basis, &calibration).await?;
-        let ((inputs, anchors), mut blocked, excluded) =
+        let ((mut inputs, anchors), mut blocked, excluded) =
             resolve_inputs(&basis, &calibration, &roots)?;
+        let corrections = self.plan_corrections(&inputs, request).await?;
+        inputs.retain(|input| {
+            !corrections.iter().any(|correction| {
+                correction.choice == Some(CorrectionChoice::Exclude)
+                    && input.asset_id == Some(correction.asset_id)
+            })
+        });
         let link =
             (request.mode == InputMode::LinkedView).then(|| request.link.unwrap_or_default());
         let mut refusals = Vec::new();
@@ -371,7 +398,7 @@ impl Library {
         if let Some(refusal) = mode_refusal(&profile, request.mode) {
             refusals.push(refusal);
         }
-        let modes = mode_options(&profile);
+        refusals.extend(correction_refusals(&corrections));
         let disk = DiskPlan {
             output: output.as_ref().map(NativePath::to_path_buf).transpose()?,
             project: project.name.clone(),
@@ -388,6 +415,9 @@ impl Library {
         let disk = blocking(move || check_disk(&disk)).await?;
         blocked.extend(disk.blocked);
         refusals.extend(disk.refusals);
+        if let Some(refusal) = link.and_then(|link| disk.links.refusal(link)) {
+            refusals.push(refusal);
+        }
         if let Some(refusal) = location_refusal(&disk.check) {
             refusals.push(refusal);
         }
@@ -410,20 +440,17 @@ impl Library {
             run_name: header.name.clone(),
             verified_profile: profile.verified(),
             unproven: profile.capability_evidence.unproven(),
-            suggested_mode: if profile.verified() && profile.reads_only() {
-                InputMode::LinkedView
-            } else {
-                InputMode::Copy
-            },
+            suggested_mode: suggested_mode(&profile, &disk.links),
             mode: request.mode,
             link,
-            modes,
+            modes: mode_options(&profile, &disk.links),
             preparation_number: n,
             location: disk.location,
             location_check: disk.check,
             entries: disk.entries,
             blocked,
             excluded,
+            corrections,
             calibration,
             operations: u64::try_from(created).unwrap_or(u64::MAX),
             footprint_bytes,
@@ -457,6 +484,37 @@ impl Library {
             roots.insert(id, self.catalog().location(id).await?.path.to_path_buf()?);
         }
         Ok(roots)
+    }
+
+    /// Every input a confirmed catalog correction changed, as review shows
+    /// it (PREP-FR-03, PREP-AC-06). Read-only: a corrected FITS source's
+    /// header is read to tell whether a patched Copy or Clone can carry it.
+    async fn plan_corrections(
+        &self,
+        inputs: &[SourceInput],
+        request: &PrepareRequest,
+    ) -> Result<Vec<PlannedCorrection>, LibraryError> {
+        let corrected: BTreeSet<Uuid> =
+            self.catalog().corrected_asset_ids().await?.into_iter().collect();
+        let mut found = Vec::new();
+        for input in inputs {
+            if let Some(asset_id) = input.asset_id.filter(|id| corrected.contains(id)) {
+                found.push((input.clone(), self.catalog().asset(asset_id).await?));
+            }
+        }
+        if found.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (mode, choices) = (request.mode, request.corrections.clone());
+        blocking(move || {
+            Ok(found
+                .iter()
+                .filter_map(|(input, asset)| {
+                    plan_correction(input, asset, mode, choices.get(&asset.id).copied())
+                })
+                .collect())
+        })
+        .await
     }
 
     /// Settle every entry not yet prepared, re-verify every prepared one
@@ -511,12 +569,17 @@ impl Library {
             }
             *entry = self.settle_entry(&revision, entry, anchors, control).await?;
         }
-        // Immediately before terminal success, every source and entry must
-        // still match its snapshot (D19).
+        // Immediately before terminal success, every entry must still be in
+        // the selection as reviewed, and every source and entry must still
+        // match its snapshot (D19).
         for entry in entries.iter().filter(|entry| entry.state == EntryState::Prepared) {
             let checked = entry.clone();
-            let Err(drift) = blocking(move || Ok(reverify(&checked))).await? else {
-                continue;
+            let drift = match still_selected(entry, anchors) {
+                Err(reason) => reason,
+                Ok(()) => match blocking(move || Ok(reverify(&checked))).await? {
+                    Err(drift) => drift,
+                    Ok(()) => continue,
+                },
             };
             let update = EntryUpdate {
                 state: EntryState::Blocked,
@@ -542,6 +605,7 @@ impl Library {
     }
 
     /// Snapshot one source and write its entry by the revision's mode.
+    #[allow(clippy::too_many_lines)]
     async fn settle_entry(
         &self,
         revision: &PreparationRevision,
@@ -554,7 +618,14 @@ impl Library {
             .as_ref()
             .ok_or_else(|| invalid("an entry without a source stays blocked"))?
             .to_path_buf()?;
-        let basis = anchors.get(&source).cloned();
+        if let Err(reason) = still_selected(entry, anchors) {
+            let (identity, written) = (entry.entry_identity.clone(), entry.written.clone());
+            return self
+                .record(revision, entry, None, identity, written, Err(reason), control)
+                .await;
+        }
+        // The basis Prepare recorded, never one rebuilt for this attempt.
+        let basis = entry.basis.clone();
         let previous = entry.source_evidence.clone();
         let snapshot =
             blocking(move || Ok(snapshot(&source, basis.as_ref(), previous.as_ref()))).await?;
@@ -566,8 +637,9 @@ impl Library {
                     // Written by an earlier attempt: it must re-read to match.
                     (Some(identity), kind) => {
                         let (checked, identity) = (snapshot.clone(), identity.clone());
+                        let changes = entry.header_changes.clone();
                         blocking(move || {
-                            Ok(verify_entry(kind, &checked, Some(&identity))
+                            Ok(verify_entry(kind, &checked, Some(&identity), &changes)
                                 .map(|()| Some(identity)))
                         })
                         .await?
@@ -613,13 +685,20 @@ impl Library {
                             }
                         }
                         let (checked, copy) = (snapshot.clone(), written.clone());
-                        blocking(move || Ok(copy_entry(&checked, &destination, copy.as_ref())))
-                            .await?
+                        let changes = entry.header_changes.clone();
+                        blocking(move || {
+                            Ok(copy_entry(&checked, &destination, copy.as_ref(), &changes))
+                        })
+                        .await?
                     }
                     (None, PreparedEntryKind::DirectSource) => Ok(None),
                     (None, kind) => {
                         let (checked, path) = (snapshot.clone(), entry.path.to_path_buf()?);
-                        blocking(move || Ok(link_or_clone(kind, &checked, &path).map(Some))).await?
+                        let changes = entry.header_changes.clone();
+                        blocking(move || {
+                            Ok(link_or_clone(kind, &checked, &path, &changes).map(Some))
+                        })
+                        .await?
                     }
                 };
                 match written_entry {
@@ -733,8 +812,9 @@ fn mode_refusal(profile: &Profile, mode: InputMode) -> Option<String> {
     }
 }
 
-/// Every input mode with its semantics and refusal for `profile`.
-fn mode_options(profile: &Profile) -> Vec<ModeOption> {
+/// Every input mode with its semantics and refusal for `profile` and the
+/// link support probed at the destination (PREP-AC-03/08).
+fn mode_options(profile: &Profile, links: &LinkSupport) -> Vec<ModeOption> {
     let options = [
         (
             InputMode::LinkedView,
@@ -767,9 +847,160 @@ fn mode_options(profile: &Profile) -> Vec<ModeOption> {
             mode,
             link,
             semantics: semantics.to_owned(),
-            refusal: mode_refusal(profile, mode),
+            refusal: mode_refusal(profile, mode)
+                .or_else(|| link.and_then(|link| links.refusal(link))),
         })
         .collect()
+}
+
+/// The mode review suggests (PREP-FR-04): Linked View's symlinks for a
+/// verified read-only profile whose destination holds them, else an
+/// isolated Copy. Hardlinks are never suggested: they need an explicit
+/// choice (PREP-AC-08).
+fn suggested_mode(profile: &Profile, links: &LinkSupport) -> InputMode {
+    if profile.verified() && profile.reads_only() && links.symlink.is_none() {
+        InputMode::LinkedView
+    } else {
+        InputMode::Copy
+    }
+}
+
+/// One corrected input as review shows it (PREP-FR-03, PREP-AC-06): each
+/// field's catalog value next to the header value, every choice with its
+/// refusal, and whether the application reads the catalog values. Only an
+/// isolated Copy or Clone of a FITS source is patched; links and
+/// Direct-source originals never are, so there the correction is not
+/// delivered. `None` when no field differs from the header.
+fn plan_correction(
+    input: &SourceInput,
+    asset: &Asset,
+    mode: InputMode,
+    choice: Option<CorrectionChoice>,
+) -> Option<PlannedCorrection> {
+    let fields = header_patch::corrected_fields(&asset.observed, &asset.effective);
+    if fields.is_empty() {
+        return None;
+    }
+    let source = input.source.display();
+    let patch = match mode {
+        InputMode::LinkedView | InputMode::DirectSource => Some(format!(
+            "{source}: links and Direct-source originals are never patched, so the application \
+             reads its header; switch to Copy or Clone to deliver the correction"
+        )),
+        InputMode::Copy | InputMode::Clone if asset.format != ImageFormat::Fits => {
+            Some(format!("{source}: PlateVault patches FITS headers only"))
+        }
+        InputMode::Copy | InputMode::Clone => header_patch::cards_for(&input.source, &fields)
+            .err()
+            .map(|detail| format!("{source} cannot be patched: {detail}")),
+    };
+    let options =
+        [CorrectionChoice::Patch, CorrectionChoice::AcceptSource, CorrectionChoice::Exclude]
+            .into_iter()
+            .map(|offered| CorrectionOption {
+                choice: offered,
+                refusal: if offered == CorrectionChoice::Patch { patch.clone() } else { None },
+            })
+            .collect();
+    Some(PlannedCorrection {
+        member_key: input.member_key,
+        asset_id: asset.id,
+        input: input.input,
+        source: NativePath::from_path(&input.source),
+        fields,
+        options,
+        choice,
+        delivered: choice == Some(CorrectionChoice::Patch) && patch.is_none(),
+    })
+}
+
+/// Why Prepare is refused for the corrections as chosen (PREP-FR-03): a
+/// correction is never handed over undecided, since the application would
+/// read the original value, and a refused choice is named.
+fn correction_refusals(corrections: &[PlannedCorrection]) -> Vec<String> {
+    corrections
+        .iter()
+        .filter_map(|correction| match correction.choice {
+            None => {
+                let fields: Vec<String> = correction
+                    .fields
+                    .iter()
+                    .map(|field| {
+                        format!(
+                            "{} '{}' (header '{}')",
+                            field.field,
+                            field.catalog.as_deref().unwrap_or("unknown"),
+                            field.header.as_deref().unwrap_or("none")
+                        )
+                    })
+                    .collect();
+                Some(format!(
+                    "{}: the catalog corrects {} and the application reads the header; choose a \
+                     patched Copy or Clone, the source value or excluding the input",
+                    correction.source.display(),
+                    fields.join(", ")
+                ))
+            }
+            Some(choice) => correction
+                .options
+                .iter()
+                .find(|option| option.choice == choice)
+                .and_then(|option| option.refusal.clone()),
+        })
+        .collect()
+}
+
+/// Whether the planned parent can hold each link kind (PREP-AC-03/08,
+/// PREP-FR-04): `None` once a probe link of that kind was created there,
+/// else why not. Nothing is refused while no parent is ready to probe.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct LinkSupport {
+    symlink: Option<String>,
+    hardlink: Option<String>,
+}
+
+impl LinkSupport {
+    fn refusal(&self, link: LinkKind) -> Option<String> {
+        let (refused, name) = match link {
+            LinkKind::Symlink => (&self.symlink, "symbolic links"),
+            LinkKind::Hardlink => (&self.hardlink, "hardlinks"),
+        };
+        refused.as_ref().map(|detail| {
+            format!(
+                "Linked View with {name} is refused: {detail}; choose Copy{}",
+                if CLONE_SUPPORTED { " or Clone" } else { "" }
+            )
+        })
+    }
+}
+
+/// Probe link support in `folder`, the planned project folder or its
+/// parent: create a probe file, then a symlink and a hardlink to it, each
+/// under a fresh hidden name, and remove exactly what was created. exFAT
+/// and FAT volumes, and Windows without the symlink privilege, refuse them.
+fn probe_links(folder: &Path) -> LinkSupport {
+    let name = format!(".platevault-link-probe-{}", Uuid::new_v4().simple());
+    let target = folder.join(&name);
+    if let Err(error) = fs::OpenOptions::new().write(true).create_new(true).open(&target) {
+        let detail = format!("links cannot be probed in {}: {error}", folder.display());
+        return LinkSupport { symlink: Some(detail.clone()), hardlink: Some(detail) };
+    }
+    let probe = |kind: &str, link: fn(&Path, &Path) -> std::io::Result<()>| {
+        let path = folder.join(format!("{name}.{kind}"));
+        match link(&target, &path) {
+            Ok(()) => {
+                let _ = fs::remove_file(&path);
+                None
+            }
+            Err(error) => Some(format!("{} cannot hold one ({error})", folder.display())),
+        }
+    };
+    let support = LinkSupport {
+        symlink: probe("symlink", fs_pathsafe::create_symlink),
+        hardlink: probe("hardlink", |target, path| fs::hard_link(target, path)),
+    };
+    let _ = fs::remove_file(&target);
+    support
 }
 
 fn location_refusal(check: &LocationCheck) -> Option<String> {
@@ -848,7 +1079,7 @@ fn resolve_inputs(
         let source = root(&copy.location_id)?.join(copy.path.relative_path()?);
         anchors.insert(
             source.clone(),
-            Basis { fingerprint: recorded, what: "the confirmed membership" },
+            Basis { fingerprint: recorded, origin: BasisOrigin::Membership },
         );
         inputs.push(SourceInput {
             member_key: Some(key),
@@ -867,7 +1098,10 @@ fn resolve_inputs(
             }
             anchors.insert(
                 source.clone(),
-                Basis { fingerprint: file.fingerprint.clone(), what: "its calibration assignment" },
+                Basis {
+                    fingerprint: file.fingerprint.clone(),
+                    origin: BasisOrigin::CalibrationAssignment,
+                },
             );
             inputs.push(SourceInput {
                 member_key: None,
@@ -922,6 +1156,7 @@ struct DiskCheck {
     refusals: Vec<String>,
     free_bytes: Option<u64>,
     writability: Option<Writability>,
+    links: LinkSupport,
 }
 
 fn check_disk(plan: &DiskPlan) -> Result<DiskCheck, LibraryError> {
@@ -970,7 +1205,13 @@ fn check_disk(plan: &DiskPlan) -> Result<DiskCheck, LibraryError> {
     if plan.folder_handoff {
         refusals.extend(folder_handoff_refusal(&plan.inputs));
     }
-    Ok(DiskCheck { location, check, entries, blocked, refusals, free_bytes, writability })
+    let links = match (&location, &check) {
+        (Some(location), LocationCheck::Ready | LocationCheck::FolderExists { .. }) => {
+            probe_links(&probe_folder(location)?)
+        }
+        _ => LinkSupport::default(),
+    };
+    Ok(DiskCheck { location, check, entries, blocked, refusals, free_bytes, writability, links })
 }
 
 type LocationRead = (Option<RunLocation>, LocationCheck, Option<Writability>, Option<u64>);
@@ -986,18 +1227,25 @@ fn check_location(plan: &DiskPlan) -> Result<LocationRead, LibraryError> {
         Ok(_) => return unavailable(format!("{} is not a real folder", output.display())),
         Err(error) => return unavailable(format!("{}: {error}", output.display())),
     }
-    let output = match fs::canonicalize(output) {
+    // The chosen parent is what the revision records and Open hands the
+    // application; its canonical form only answers containment. On Windows
+    // `fs::canonicalize` returns `\\?\` paths other applications may refuse.
+    if !output.is_absolute() {
+        return unavailable(format!("{} is not an absolute path", output.display()));
+    }
+    let canonical = match fs::canonicalize(output) {
         Ok(path) => path,
         Err(error) => return unavailable(format!("{}: {error}", output.display())),
     };
     for recorded in plan.recorded.prepared.iter().chain(&plan.recorded.results) {
         let path = recorded.to_path_buf()?;
         let path = fs::canonicalize(&path).unwrap_or(path);
-        if layout::inside(&output, &path) {
+        if layout::inside(&canonical, &path) {
             let check = LocationCheck::InsidePreparedFolder { folder: recorded.clone() };
             return Ok((None, check, None, None));
         }
     }
+    let output = output.clone();
     let location = layout::run_location(
         &output,
         &plan.project,
@@ -1028,10 +1276,18 @@ fn check_location(plan: &DiskPlan) -> Result<LocationRead, LibraryError> {
         Err(_) => output,
     };
     let writability = crate::import::writability(&writable_root);
-    let exists = |path: &Path| fs::symlink_metadata(path).is_ok();
-    let check = if exists(&folder) {
+    // A recorded folder collides even when it is missing on disk: the
+    // catalog never records one folder twice (PREP-FR-06).
+    let taken = |path: &Path, recorded: &[NativePath]| {
+        fs::symlink_metadata(path).is_ok()
+            || recorded
+                .iter()
+                .filter_map(|folder| folder.to_path_buf().ok())
+                .any(|folder| same_place(&folder, path))
+    };
+    let check = if taken(&folder, &plan.recorded.prepared) {
         LocationCheck::FolderExists { folder: location.folder.clone() }
-    } else if plan.results.is_none() && exists(&results) {
+    } else if plan.results.is_none() && taken(&results, &plan.recorded.results) {
         LocationCheck::FolderExists { folder: location.results.clone() }
     } else if let Writability::NotWritable { detail } = &writability {
         LocationCheck::NotWritable { detail: detail.clone() }
@@ -1039,6 +1295,33 @@ fn check_location(plan: &DiskPlan) -> Result<LocationRead, LibraryError> {
         LocationCheck::Ready
     };
     Ok((Some(location), check, Some(writability), free_bytes))
+}
+
+/// Whether two paths name one folder: equal as written, or once each one's
+/// nearest existing ancestor is resolved, so a recorded folder missing on
+/// disk is still found in another path form.
+fn same_place(left: &Path, right: &Path) -> bool {
+    left == right || resolved(left) == resolved(right)
+}
+
+fn resolved(path: &Path) -> PathBuf {
+    if let Ok(path) = fs::canonicalize(path) {
+        return path;
+    }
+    match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => resolved(parent).join(name),
+        _ => path.to_path_buf(),
+    }
+}
+
+/// Where review probes link support: the planned project folder once it
+/// exists, else the chosen parent it will be made in.
+fn probe_folder(location: &RunLocation) -> Result<PathBuf, LibraryError> {
+    let output = location.output.to_path_buf()?;
+    let project = location.folder.to_path_buf()?.parent().map(Path::to_path_buf);
+    Ok(project
+        .filter(|project| fs::symlink_metadata(project).is_ok_and(|metadata| metadata.is_dir()))
+        .unwrap_or(output))
 }
 
 /// The folder below the run folder an input goes to.
@@ -1243,6 +1526,34 @@ fn relative_to(path: &NativePath, folder: &NativePath) -> Result<NativePath, Lib
     Ok(NativePath::from_path(relative))
 }
 
+/// An entry is prepared only while the run's current selection still holds
+/// its source with the basis Prepare recorded (D19, PREP-FR-09). `anchors` is
+/// the current membership and calibration handoff: a source it no longer
+/// names, or names with another basis since review (a changed calibration
+/// assignment, a moved copy), needs a new review.
+fn still_selected(
+    entry: &PreparedEntry,
+    anchors: &HashMap<PathBuf, Basis>,
+) -> Result<(), ItemReason> {
+    let source = entry.source.as_ref().map(NativePath::display).unwrap_or_default();
+    let current = entry.source.as_ref().and_then(|path| anchors.get(&path.to_path_buf().ok()?));
+    match (&entry.basis, current) {
+        (Some(recorded), Some(current)) if recorded == current => Ok(()),
+        (Some(recorded), Some(_)) => Err(reason(
+            ReasonCode::SourceDrift,
+            format!(
+                "{source}: {} changed since review, so it is no longer in the reviewed \
+                 selection; review again",
+                recorded.origin
+            ),
+        )),
+        _ => Err(reason(
+            ReasonCode::SourceDrift,
+            format!("{source} is no longer in the reviewed selection; review again"),
+        )),
+    }
+}
+
 /// The source's snapshot (D19): its no-follow identity and SHA-256, which
 /// must match its recorded basis and any earlier snapshot of this entry.
 fn snapshot(
@@ -1270,7 +1581,7 @@ fn snapshot(
         {
             return Err(reason(
                 ReasonCode::SourceDrift,
-                format!("{} differs from {}", source.display(), basis.what),
+                format!("{} differs from {}", source.display(), basis.origin),
             ));
         }
         if recorded.content_sha256.as_ref().is_some_and(|sha| snapshot.sha256.as_ref() != Some(sha))
@@ -1280,7 +1591,7 @@ fn snapshot(
                 format!(
                     "{} differs from the SHA-256 recorded for {}",
                     source.display(),
-                    basis.what
+                    basis.origin
                 ),
             ));
         }
@@ -1295,22 +1606,33 @@ fn snapshot(
 }
 
 /// Copy through the verified transfer: write the recorded partial, install
-/// without replacing anything and re-read it against the snapshot.
+/// without replacing anything and re-read it against the snapshot. A
+/// patched copy then takes its reviewed header cards and re-reads to differ
+/// from the snapshot only by them (PREP-FR-03/09).
 fn copy_entry(
     snapshot: &EntryEvidence,
     destination: &TransferDestination,
     written: Option<&WrittenCopy>,
+    changes: &[CorrectedField],
 ) -> Result<Option<EntryEvidence>, ItemReason> {
     let written = written.ok_or_else(|| {
         reason(ReasonCode::Interrupted, "the copy's partial file was never recorded")
     })?;
     transfer::write(snapshot, destination, written)?;
-    transfer::verify(snapshot, destination, written)?;
     let path = destination
         .root
         .to_path_buf()
         .and_then(|root| Ok(root.join(destination.relative.relative_path()?)))
         .map_err(|error| reason(ReasonCode::DestinationChanged, error.to_string()))?;
+    if !changes.is_empty() {
+        let cards = patch_cards(snapshot, changes)?;
+        custody::patch_entry(&path, &written.identity, &cards)?;
+        let entry = observe_entry(&path)
+            .map_err(|error| reason(ReasonCode::DestinationChanged, error.to_string()))?;
+        custody::verify_patched(&entry, snapshot.sha256.as_deref(), &cards)?;
+        return Ok(Some(entry));
+    }
+    transfer::verify(snapshot, destination, written)?;
     let fingerprint = crate::inventory::probe_fingerprint(&path)
         .map_err(|error| reason(ReasonCode::DestinationChanged, error.to_string()))?;
     Ok(Some(EntryEvidence {
@@ -1319,6 +1641,21 @@ fn copy_entry(
         fingerprint,
         sha256: snapshot.sha256.clone(),
     }))
+}
+
+/// The header cards an isolated patched entry carries for `changes`, read
+/// from the snapshotted source (PREP-FR-03).
+fn patch_cards(
+    snapshot: &EntryEvidence,
+    changes: &[CorrectedField],
+) -> Result<Vec<header_patch::Card>, ItemReason> {
+    let source = snapshot
+        .path
+        .to_path_buf()
+        .map_err(|error| reason(ReasonCode::SourceUnavailable, error.to_string()))?;
+    header_patch::cards_for(&source, changes).map_err(|detail| {
+        reason(ReasonCode::WriteFailed, format!("{} cannot be patched: {detail}", source.display()))
+    })
 }
 
 fn occupied_or_failed(path: &Path, error: &std::io::Error) -> ItemReason {
@@ -1332,11 +1669,14 @@ fn occupied_or_failed(path: &Path, error: &std::io::Error) -> ItemReason {
     }
 }
 
-/// Write a symlink, hardlink or clone entry at `path` and prove it.
+/// Write a symlink, hardlink or clone entry at `path` and prove it. Only a
+/// clone takes `header_changes`, its reviewed header cards: links are never
+/// patched.
 fn link_or_clone(
     kind: PreparedEntryKind,
     snapshot: &EntryEvidence,
     path: &Path,
+    header_changes: &[CorrectedField],
 ) -> Result<EntryEvidence, ItemReason> {
     let source = snapshot
         .path
@@ -1368,6 +1708,12 @@ fn link_or_clone(
         }
         PreparedEntryKind::Clone => {
             clone_file(&source, path).map_err(|error| occupied_or_failed(path, &error))?;
+            if !header_changes.is_empty() {
+                let cards = patch_cards(snapshot, header_changes)?;
+                let clone = crate::inventory::probe_fingerprint(path)
+                    .map_err(|error| changed(error.to_string()))?;
+                custody::patch_entry(path, &clone.identity, &cards)?;
+            }
             let folder = path.parent().unwrap_or(path);
             transfer::sync_folder(folder).map_err(|error| {
                 reason(ReasonCode::WriteFailed, format!("{}: {error}", folder.display()))
@@ -1381,7 +1727,7 @@ fn link_or_clone(
             ));
         }
     };
-    verify_entry(kind, snapshot, Some(&entry))?;
+    verify_entry(kind, snapshot, Some(&entry), header_changes)?;
     Ok(entry)
 }
 
@@ -1423,14 +1769,20 @@ fn clone_file(_source: &Path, _path: &Path) -> std::io::Result<()> {
 
 /// D19 for one entry: the source against its snapshot, then the entry as
 /// written: a link by its identity and target, a copy, clone or hardlink by
-/// its identity and the snapshot's SHA-256.
+/// its identity and the snapshot's SHA-256. A patched copy or clone differs
+/// from the snapshot only by the header cards of its reviewed `changes`.
 fn verify_entry(
     kind: PreparedEntryKind,
     snapshot: &EntryEvidence,
     entry: Option<&EntryEvidence>,
+    changes: &[CorrectedField],
 ) -> Result<(), ItemReason> {
     verify_source(snapshot)?;
     if let Some(entry) = entry {
+        if !changes.is_empty() {
+            let cards = patch_cards(snapshot, changes)?;
+            return custody::verify_patched(entry, snapshot.sha256.as_deref(), &cards);
+        }
         let mismatch = |detail: String| reason(ReasonCode::DestinationMismatch, detail);
         verify_source(entry).map_err(|failure| mismatch(failure.detail))?;
         if kind != PreparedEntryKind::Symlink && entry.sha256 != snapshot.sha256 {
@@ -1454,7 +1806,7 @@ fn reverify(entry: &PreparedEntry) -> Result<(), ItemReason> {
             format!("{} has no recorded entry", entry.path.display()),
         ));
     }
-    verify_entry(entry.kind, snapshot, entry.entry_identity.as_ref())
+    verify_entry(entry.kind, snapshot, entry.entry_identity.as_ref(), &entry.header_changes)
 }
 
 /// Every prepared or drifted entry that no longer matches its snapshot.
@@ -1598,4 +1950,82 @@ pub(crate) async fn register(library: &Arc<Library>) -> Result<(), LibraryError>
     library.register_run_guard(Arc::clone(&sources) as Arc<dyn RunOperationGuard>).await;
     library.register_run_folders(sources).await;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Capability, CapabilityEvidence, CapabilityProof, InputBehavior, ProfileKind};
+
+    fn verified_read_only() -> Profile {
+        let proofs = Capability::ALL
+            .into_iter()
+            .map(|capability| CapabilityProof { capability, evidence: "fixture".into() })
+            .collect();
+        Profile {
+            id: Uuid::new_v4(),
+            name: "Siril".into(),
+            kind: ProfileKind::Siril,
+            executable: None,
+            args: vec!["{inputs}".into()],
+            capability_evidence: CapabilityEvidence {
+                input_behavior: InputBehavior::ReadOnly,
+                input_list: true,
+                proofs,
+            },
+            revision: 1,
+            created_at: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    fn linked(options: &[ModeOption], link: LinkKind) -> &ModeOption {
+        options.iter().find(|option| option.link == Some(link)).unwrap()
+    }
+
+    /// PREP-AC-03/08, PREP-FR-04: a destination whose probe refuses links
+    /// refuses both Linked View options with the reason, suggests an
+    /// isolated Copy instead, and leaves Copy and Direct source offered.
+    #[test]
+    fn unsupported_links_refuse_linked_view() {
+        let profile = verified_read_only();
+        assert_eq!(suggested_mode(&profile, &LinkSupport::default()), InputMode::LinkedView);
+        let unsupported = LinkSupport {
+            symlink: Some("/Volumes/EXFAT cannot hold one (Operation not supported)".into()),
+            hardlink: Some("/Volumes/EXFAT cannot hold one (Operation not supported)".into()),
+        };
+        let options = mode_options(&profile, &unsupported);
+        for link in [LinkKind::Symlink, LinkKind::Hardlink] {
+            let refusal = linked(&options, link).refusal.clone().unwrap_or_default();
+            assert!(refusal.contains("/Volumes/EXFAT cannot hold one"), "{refusal}");
+        }
+        for mode in [InputMode::Copy, InputMode::DirectSource] {
+            let option = options.iter().find(|option| option.mode == mode).unwrap();
+            assert_eq!(option.refusal, None, "{mode:?}");
+        }
+        assert!(matches!(
+            suggested_mode(&profile, &unsupported),
+            InputMode::Copy | InputMode::Clone
+        ));
+        let hardlinks_only = LinkSupport { hardlink: None, ..unsupported };
+        let options = mode_options(&profile, &hardlinks_only);
+        assert!(linked(&options, LinkKind::Symlink).refusal.is_some());
+        assert_eq!(linked(&options, LinkKind::Hardlink).refusal, None);
+        assert_eq!(suggested_mode(&profile, &hardlinks_only), InputMode::Copy, "never hardlinks");
+    }
+
+    /// The probe creates its links in the folder and removes exactly what it
+    /// created.
+    #[test]
+    fn probe_links_leaves_the_folder_as_it_was() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(folder.path().join("kept.txt"), b"kept").unwrap();
+        assert_eq!(probe_links(folder.path()), LinkSupport::default());
+        let left: Vec<_> =
+            fs::read_dir(folder.path()).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(left, ["kept.txt"]);
+        let missing = folder.path().join("missing");
+        let refused = probe_links(&missing);
+        assert!(refused.symlink.is_some() && refused.hardlink.is_some());
+    }
 }
