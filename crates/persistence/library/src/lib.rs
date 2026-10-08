@@ -140,6 +140,8 @@ pub use review_lists::{ReviewAsset, ReviewBasis, ReviewCapture};
 mod import;
 mod session_filters;
 mod storage;
+mod storage_overview;
+pub use storage_overview::DuplicateCopy;
 mod targets_list;
 mod views;
 pub use views::{CandidateBasis, CandidateSession, ChoiceBasis, MembershipBasis};
