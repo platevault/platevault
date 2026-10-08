@@ -965,7 +965,8 @@ impl Library {
     /// entry reads it, so it holds nobody's bytes but the retained source's,
     /// and a later review would hold its path as occupied. A copy goes only
     /// while its path still holds the identity recorded when it was written;
-    /// anything else found there stays. A copy something reads stays too.
+    /// anything else found there stays. A copy something reads, or may read
+    /// after a link repair that ended Uncertain ([`copy_in_use`]), stays too.
     async fn discard_unused_copies(
         &self,
         record: &ArchiveRecord,
@@ -1002,9 +1003,11 @@ impl Library {
             if recorded.is_some() || read {
                 continue;
             }
-            let identity = written.identity.clone();
+            let (references, identity) = (item.references.clone(), written.identity.clone());
             blocking(move || {
-                transfer::discard(&copy, &identity);
+                if !copy_in_use(&references, &copy) {
+                    transfer::discard(&copy, &identity);
+                }
                 Ok(())
             })
             .await?;
@@ -1296,35 +1299,8 @@ impl Plan {
         if let Some(earlier) = self.claimed.get(&(destination.id, path.clone())) {
             return Ok(Some(ArchiveHold::CollidesWithItem { seq: *earlier }));
         }
-        for entry in entries.iter().filter(|entry| tracked(entry)) {
-            if entry.kind == PreparedEntryKind::DirectSource {
-                return Ok(Some(ArchiveHold::DirectSource {
-                    run: entry.run.clone(),
-                    preparation: entry.preparation,
-                }));
-            }
-            let unsettled = match entry.state {
-                EntryState::Pending => Some("is being written"),
-                EntryState::Drifted => Some("drifted since it was prepared"),
-                EntryState::Prepared | EntryState::Blocked => None,
-            }
-            .or_else(|| entry.source.is_none().then_some("records no source"))
-            .or_else(|| {
-                (entry.kind != PreparedEntryKind::Copy
-                    && entry.kind != PreparedEntryKind::Clone
-                    && entry.entry_identity.is_none())
-                .then_some("records no entry")
-            });
-            if let Some(detail) = unsettled {
-                return Ok(Some(ArchiveHold::ReferenceUnsettled {
-                    run: entry.run.clone(),
-                    preparation: entry.preparation,
-                    detail: format!("prepared entry {} {detail}", entry.path.display()),
-                }));
-            }
-            if let Some(hold) = link_repair_hold(entry, RELINKS) {
-                return Ok(Some(hold));
-            }
+        if let Some(hold) = entries_hold(entries, RELINKS) {
+            return Ok(Some(hold));
         }
         if library.catalog().asset_recorded_at(destination.id, &path).await?.is_some() {
             return Ok(Some(ArchiveHold::Occupied { path }));
@@ -1474,6 +1450,63 @@ fn link_repair_hold(entry: &EntryReference, relinks: bool) -> Option<ArchiveHold
     })
 }
 
+/// Why the prepared entries that read a frame hold it back at review: a
+/// Direct-source path, an entry being written, drifted or recording no
+/// source or entry, or a link this platform cannot rebuild (`relinks`).
+fn entries_hold(entries: &[EntryReference], relinks: bool) -> Option<ArchiveHold> {
+    for entry in entries.iter().filter(|entry| tracked(entry)) {
+        if entry.kind == PreparedEntryKind::DirectSource {
+            return Some(ArchiveHold::DirectSource {
+                run: entry.run.clone(),
+                preparation: entry.preparation,
+            });
+        }
+        let unsettled = match entry.state {
+            EntryState::Pending => Some("is being written"),
+            EntryState::Drifted => Some("drifted since it was prepared"),
+            EntryState::Prepared | EntryState::Blocked => None,
+        }
+        .or_else(|| entry.source.is_none().then_some("records no source"))
+        .or_else(|| {
+            (entry.kind != PreparedEntryKind::Copy
+                && entry.kind != PreparedEntryKind::Clone
+                && entry.entry_identity.is_none())
+            .then_some("records no entry")
+        });
+        if let Some(detail) = unsettled {
+            return Some(ArchiveHold::ReferenceUnsettled {
+                run: entry.run.clone(),
+                preparation: entry.preparation,
+                detail: format!("prepared entry {} {detail}", entry.path.display()),
+            });
+        }
+        if let Some(hold) = link_repair_hold(entry, relinks) {
+            return Some(hold);
+        }
+    }
+    None
+}
+
+/// Whether something may still read the archive copy at `copy` though no
+/// record names it (STO-AC-10, D06): a reference whose update ended
+/// Uncertain or was interrupted, or a prepared link on disk that already
+/// points at it, as a rebuilt link does once its swap back or the old
+/// link's retirement failed.
+fn copy_in_use(references: &[ArchiveReference], copy: &Path) -> bool {
+    references.iter().any(|reference| {
+        reference.state == ReferenceState::Uncertain
+            || reference
+                .reason
+                .as_ref()
+                .is_some_and(|reason| reason.code == ReasonCode::Interrupted)
+            || (reference.update == ReferenceUpdate::RepointLink
+                && reference
+                    .entry_path
+                    .to_path_buf()
+                    .is_ok_and(|link| std::fs::read_link(link).is_ok_and(|target| target == copy)))
+    })
+}
+
 /// Rebuild the prepared link at `link` to point at `target`: a new link is
 /// created beside it and atomically exchanged with it, the old entry is
 /// proven to be the recorded link and only then leaves through the OS Trash,
@@ -1582,42 +1615,93 @@ mod tests {
     use super::*;
     use crate::{OfferRun, RunStage};
 
-    fn entry(kind: PreparedEntryKind) -> EntryReference {
+    fn run() -> OfferRun {
+        OfferRun {
+            view_id: Uuid::new_v4(),
+            name: "NGC7000-HOO".into(),
+            project_id: Uuid::new_v4(),
+            project_name: "NGC 7000 HOO".into(),
+            stage: RunStage::Done,
+        }
+    }
+
+    /// A prepared entry of `kind` whose recorded entry is `identity`.
+    fn entry(kind: PreparedEntryKind, identity: &EntryEvidence) -> EntryReference {
         EntryReference {
             asset_id: Uuid::new_v4(),
-            run: OfferRun {
-                view_id: Uuid::new_v4(),
-                name: "NGC7000-HOO".into(),
-                project_id: Uuid::new_v4(),
-                project_name: "NGC 7000 HOO".into(),
-                stage: RunStage::Done,
-            },
+            run: run(),
             preparation_id: Uuid::new_v4(),
             preparation: 2,
             seq: 0,
             kind,
-            path: NativePath::from_path(Path::new("/work/NGC7000-HOO/Lights/Ha_001.fits")),
+            path: identity.path.clone(),
             source: Some(NativePath::from_path(Path::new("/captures/Ha_001.fits"))),
-            entry_identity: None,
+            entry_identity: Some(identity.clone()),
             state: EntryState::Prepared,
         }
     }
 
-    /// STO-FR-07, D06: where a prepared link cannot be rebuilt, its frame is
-    /// held back at review naming the run, so no archive copy is written for
-    /// a repair that can only fail; entries that need no rebuild never hold.
+    /// STO-FR-07, D06: the entry check `Plan::hold` runs holds back a frame a
+    /// prepared link reads where links cannot be rebuilt, naming the run, so
+    /// no archive copy is written for it. With relinking, or for entries that
+    /// need no rebuild, nothing holds; a Direct-source path always does.
     #[test]
-    fn link_repair_held_at_review_where_links_cannot_be_rebuilt() {
-        let link = entry(PreparedEntryKind::Symlink);
-        let held = link_repair_hold(&link, false);
-        assert_eq!(
-            held,
-            Some(ArchiveHold::LinkRepairUnsupported { run: link.run.clone(), preparation: 2 })
-        );
-        assert_eq!(link_repair_hold(&link, true), None);
+    fn entries_hold_link_repair_where_links_cannot_be_rebuilt() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("Ha_001.fits");
+        std::fs::write(&file, b"a prepared entry").unwrap();
+        let identity = observe_entry(&file).unwrap();
+        let link = entry(PreparedEntryKind::Symlink, &identity);
+        let links = std::slice::from_ref(&link);
+        let held =
+            Some(ArchiveHold::LinkRepairUnsupported { run: link.run.clone(), preparation: 2 });
+        assert_eq!(entries_hold(links, false), held);
+        assert_eq!(entries_hold(links, true), None);
         for kind in [PreparedEntryKind::Hardlink, PreparedEntryKind::Copy, PreparedEntryKind::Clone]
         {
-            assert_eq!(link_repair_hold(&entry(kind), false), None, "{kind:?}");
+            assert_eq!(entries_hold(&[entry(kind, &identity)], false), None, "{kind:?}");
         }
+        let direct = [entry(PreparedEntryKind::DirectSource, &identity)];
+        assert!(matches!(entries_hold(&direct, true), Some(ArchiveHold::DirectSource { .. })));
+    }
+
+    #[cfg(unix)]
+    fn reference(link: &Path, state: ReferenceState, reason: ItemReason) -> ArchiveReference {
+        ArchiveReference {
+            run: run(),
+            preparation_id: Uuid::new_v4(),
+            preparation: 2,
+            entry_seq: 0,
+            entry_path: NativePath::from_path(link),
+            mode: PreparedEntryKind::Symlink,
+            update: ReferenceUpdate::RepointLink,
+            state,
+            reason: Some(reason),
+        }
+    }
+
+    /// STO-AC-10, D06: an archive copy stays while a reference to it ended
+    /// Uncertain or was interrupted, or while the prepared link on disk
+    /// already points at it, as after a failed swap back; a copy no link
+    /// reads is unused.
+    #[cfg(unix)]
+    #[test]
+    fn copy_kept_while_a_rebuilt_link_may_read_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let copy = dir.path().join("archive.fits");
+        std::fs::write(&copy, b"the archive copy").unwrap();
+        let link = dir.path().join("Ha_001.fits");
+        let interrupted = ItemReason::new(ReasonCode::Interrupted, "the swap back failed");
+        let uncertain = reference(&link, ReferenceState::Uncertain, interrupted.clone());
+        assert!(copy_in_use(&[uncertain], &copy));
+        assert!(copy_in_use(&[reference(&link, ReferenceState::Blocked, interrupted)], &copy));
+        let drift = ItemReason::new(ReasonCode::DestinationMismatch, "changed outside PlateVault");
+        let unread = [reference(&link, ReferenceState::Blocked, drift)];
+        assert!(!copy_in_use(&unread, &copy), "no link reads the copy");
+        std::os::unix::fs::symlink(dir.path().join("elsewhere.fits"), &link).unwrap();
+        assert!(!copy_in_use(&unread, &copy), "the link reads another file");
+        std::fs::remove_file(&link).unwrap();
+        std::os::unix::fs::symlink(&copy, &link).unwrap();
+        assert!(copy_in_use(&unread, &copy), "the swapped-in link reads the copy");
     }
 }

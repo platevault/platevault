@@ -25,10 +25,12 @@ use super::prepare_support::World;
 
 /// A stand-in OS Trash: each entry itself is renamed into a private bin, so
 /// nothing is ever deleted. Entries below a refused prefix read as a volume
-/// whose OS removal deletes immediately; a gated move waits until released.
+/// whose OS removal deletes immediately; entries below a misreported prefix
+/// are moved but reported as refused; a gated move waits until released.
 pub struct Bin {
     folder: PathBuf,
     refused: Mutex<Vec<PathBuf>>,
+    misreported: Mutex<Vec<PathBuf>>,
     moved: Mutex<Vec<(PathBuf, PathBuf)>>,
     gate: Mutex<Option<Gate>>,
 }
@@ -45,6 +47,7 @@ impl Bin {
         Arc::new(Self {
             folder,
             refused: Mutex::default(),
+            misreported: Mutex::default(),
             moved: Mutex::default(),
             gate: Mutex::default(),
         })
@@ -57,6 +60,12 @@ impl Bin {
     /// Entries at or below `path` sit where the OS deletes immediately.
     pub fn refuse(&self, path: &Path) {
         self.refused.lock().unwrap().push(path.to_path_buf());
+    }
+
+    /// Entries at or below `path` are moved, but the OS reports a failure,
+    /// so custody cannot prove where they went: an Uncertain retirement.
+    pub fn misreport(&self, path: &Path) {
+        self.misreported.lock().unwrap().push(path.to_path_buf());
     }
 
     /// Hold the next move open: `reached` fires once it is requested, and it
@@ -106,6 +115,9 @@ impl OsTrash for Bin {
         fs::rename(entry, &kept).map_err(|error| error.to_string())?;
         moved.push((entry.to_path_buf(), kept));
         drop(moved);
+        if self.misreported.lock().unwrap().iter().any(|prefix| entry.starts_with(prefix)) {
+            return Err("the OS Trash reported a failure after moving the entry".into());
+        }
         Ok(())
     }
 }

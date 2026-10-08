@@ -263,6 +263,35 @@ async fn reference_repair_failure_blocks_retirement() {
     );
 }
 
+/// STO-AC-10, STO-FR-07, D06: when retiring a replaced link through the OS
+/// Trash ends Uncertain, the rebuilt link already reads the archive copy.
+/// Its reference reads Uncertain, the source is retained, and the copy that
+/// link reads is never discarded, so no prepared link dangles.
+#[tokio::test]
+async fn uncertain_link_repair_keeps_the_archive_copy() {
+    let world = world().await;
+    let outcome = prepared(&world).await;
+    let project = done(&world).await;
+    let archive = archive_location(&world).await;
+    let frames = lights(&world).await;
+    let review = world.library.archive_review(project, archive.id).await.unwrap();
+    let bin = Bin::new(&world);
+    bin.misreport(&outcome.revision.folder.to_path_buf().unwrap());
+
+    let transfer = world.library.archive_execute(review.id, bin.trash()).await.unwrap();
+    assert_eq!(transfer.state, ArchiveState::Settled, "{transfer:#?}");
+    for frame in &frames {
+        let item = item(&transfer, frame);
+        assert_eq!(item.outcome, Some(ArchiveOutcome::SourceRetained), "{item:#?}");
+        assert_eq!(item.references[0].state, ReferenceState::Uncertain, "{item:#?}");
+        let copy = destination(&archive, item);
+        assert!(copy.exists(), "the copy the rebuilt link reads stays: {item:#?}");
+        let link = item.references[0].entry_path.to_path_buf().unwrap();
+        assert_eq!(fs::read_link(&link).unwrap(), copy, "the rebuilt link reads the copy");
+        assert!(file_of(&world.captures, frame).exists(), "the source is retained");
+    }
+}
+
 /// STO-FR-05/07, D06: the prepared entries a run's Clean up moved to the OS
 /// Trash read no frame any more. After Complete, Clean up and Mark Done,
 /// Archive reviews no reference update for them and archives every frame.
