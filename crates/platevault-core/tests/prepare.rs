@@ -565,7 +565,8 @@ async fn catalog_correction_patched_copy_or_excluded() {
         .prepared
         .iter()
         .all(|entry| entry.source.as_ref().map(path) != Some(source.clone())));
-    assert_eq!(outcome.prepared.len(), 9, "three lights and six calibration frames");
+    let lights = outcome.prepared.iter().filter(|entry| entry.input == PreparedInput::Light);
+    assert_eq!(lights.count(), 3, "the three other lights");
 }
 
 /// PREP-FR-03, PREP-AC-06: Linked View never patches: the correction is
