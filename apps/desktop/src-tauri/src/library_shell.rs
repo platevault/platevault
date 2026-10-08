@@ -240,6 +240,9 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::results::calibration_result_masters,
         // storage
         crate::commands::storage::storage_overview,
+        crate::commands::storage::cleanup_review,
+        crate::commands::storage::cleanup_execute,
+        crate::commands::storage::empty_trash_execute,
         // import
         crate::commands::naming::naming_get,
         crate::commands::naming::naming_save,

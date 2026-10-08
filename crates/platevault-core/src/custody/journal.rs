@@ -30,11 +30,12 @@ use persistence_library::Catalog;
 /// Operations an executor of this process is advancing right now.
 static LIVE: LazyLock<Mutex<HashSet<Uuid>>> = LazyLock::new(Mutex::default);
 
-/// Exclusive claim on one operation for this process; released on drop.
-struct Live(Uuid);
+/// Exclusive claim on one operation for this process; released on drop. PV-STO
+/// features claim their own operation ids with it too.
+pub(crate) struct Live(Uuid);
 
 impl Live {
-    fn claim(id: Uuid) -> Result<Self, LibraryError> {
+    pub(crate) fn claim(id: Uuid) -> Result<Self, LibraryError> {
         let claimed = LIVE.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(id);
         if !claimed {
             return Err(LibraryError::InvalidInput(format!(

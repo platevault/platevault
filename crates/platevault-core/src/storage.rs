@@ -3,6 +3,8 @@
 
 //! Storage custody (spec 071).
 
+mod cleanup;
+pub(crate) use cleanup::register as register_cleanup;
 mod overview;
 pub use overview::{
     BlockedEntry, DuplicateCandidate, LocationAvailability, RevisionFootprint, RunFootprint,
