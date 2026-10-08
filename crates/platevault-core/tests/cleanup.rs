@@ -17,6 +17,9 @@ mod cleanup_support;
 mod group_support;
 #[path = "support/prepare.rs"]
 mod prepare_support;
+#[path = "support/results.rs"]
+mod results_support;
+mod support;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -682,4 +685,60 @@ async fn empty_trash_of_the_last_panel_run_takes_the_group_folders() {
     assert!(!assembled.exists(), "the ticked Assembled folder went");
     assert!(trash.moved().contains(&mosaic_result));
     assert!(trash.moved().contains(&mosaic));
+}
+
+/// RES-FR-05, STO-FR-01/04/17: a product run's `Products/` entries are
+/// prepared entries like any other. Its Clean up lists the `Products/` copy
+/// relying on the accepted product, and its Empty Trash moves that copy and
+/// the run folder; the accepted product, its bytes and its Result record stay.
+#[tokio::test]
+async fn products_entries_clean_up_and_empty_trash() {
+    let world = world().await;
+    results_support::prepared(&world).await;
+    let kind = ResultKind::LinearIntegration;
+    let product = results_support::results_dir(&world).join("Ha_linear.fit");
+    results_support::stack(&product, &[("FILTER", "'Ha'")]);
+    let owner = ResultOwner::Run { view_id: world.run };
+    let id = results_support::accept(&world.library, owner, &product, kind.clone()).await;
+    let accepted = digest(&product);
+    let view = world.view().await;
+    let input = NewView {
+        project_id: view.project_id,
+        subject_id: view.subject_id,
+        rig_id: view.rig_id,
+        name: "NGC7000 HOO combine".into(),
+    };
+    let combine = world.library.create_view_with_products(&input, &[id]).await.unwrap().view.id;
+    world.catalog().save_view(combine, 0, 1).await.unwrap();
+    let reads = world.siril_reading(QUIET, vec![kind]).await;
+    let request = world.request(&reads, InputMode::Copy, None);
+    let outcome = world.library.prepare_run(combine, &request, 1, &Watch::quiet()).await.unwrap();
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    let folder = path(&outcome.revision.folder);
+    let copy = folder.join("Products/Ha_linear.fit");
+    world.library.mark_view_complete(combine).await.unwrap();
+    let trash = ScopedTrash::new(&world.temp.path().join("OS Trash"));
+
+    let request =
+        CleanupRequest::CleanUp { view_id: combine, selection: CleanupSelection::default() };
+    let review = world.library.review_cleanup(&request, trash.dyn_trash()).await.unwrap();
+    let listed = items(&review);
+    assert_eq!(paths(listed.iter().copied()), vec![copy.clone()], "{review:#?}");
+    assert_eq!(
+        (listed[0].role, listed[0].input),
+        (CleanupRole::Copy, Some(PreparedInput::Product))
+    );
+    assert_eq!(listed[0].relies_on.as_ref().map(path), Some(product.clone()));
+    assert_eq!(listed[0].state, CleanupItemState::Moves);
+
+    world.library.move_view_to_trash(combine).await.unwrap();
+    let request = CleanupRequest::EmptyTrash { view_id: combine, results: false };
+    let review = world.library.review_cleanup(&request, trash.dyn_trash()).await.unwrap();
+    assert_eq!(paths(items(&review)), vec![copy.clone()], "{review:#?}");
+    let emptied = world.library.empty_trash(review.id.unwrap(), trash.dyn_trash()).await.unwrap();
+    assert!(emptied.run_removed && emptied.left.is_empty(), "{emptied:#?}");
+    assert!(trash.moved().contains(&copy) && !folder.exists(), "{:?}", trash.moved());
+    assert_eq!(digest(&product), accepted, "the accepted product never moves");
+    assert_eq!(world.catalog().result(id).await.unwrap().state, ResultState::Accepted);
+    assert!(world.catalog().run_result_users(world.run).await.unwrap().is_empty());
 }
