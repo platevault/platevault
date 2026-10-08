@@ -35,6 +35,7 @@ use super::{
 };
 
 pub use adoption::recover_adoptions;
+pub use decisions::group_policy_changed;
 use inventory::Listed;
 
 // ---------------------------------------------------------------------------

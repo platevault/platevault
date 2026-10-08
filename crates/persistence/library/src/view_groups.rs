@@ -239,8 +239,11 @@ impl Catalog {
 
     /// Set the shared setup of run group `id` (VSEL-FR-18, VSEL-AC-22): the
     /// group takes it, and so does every panel run outside the Project's
-    /// Trash. A panel run in the Trash keeps its own setup and is reported
-    /// refused; no panel's outcome changes another panel or any status.
+    /// Trash that is not Complete. A panel run in the Trash or Complete keeps
+    /// its own setup and calibration plan and is reported refused, as its own
+    /// calibration writes are; no panel's outcome changes another panel or
+    /// any status. A policy change moves each changed panel's calibration
+    /// plan revision in the same transaction.
     ///
     /// # Errors
     /// `Conflict` for a stale `expected` revision; `NotFound` for an unknown
@@ -277,6 +280,12 @@ impl Catalog {
                              restore it first"
                         ),
                     }
+                } else if view.completion == RunCompletion::Complete {
+                    PanelResult::Refused {
+                        reason: format!(
+                            "Panel {number} is Complete and keeps its setup; reopen it first"
+                        ),
+                    }
                 } else if takes && !changed {
                     PanelResult::Unchanged
                 } else {
@@ -291,6 +300,10 @@ impl Catalog {
                         .bind(&at)
                         .execute(&mut *conn)
                         .await?;
+                        // U22: the shared policy moves the panel's calibration plan (CAL-FR-11).
+                        if view.calibration_policy != setup.calibration_policy {
+                            crate::calibration::group_policy_changed(conn, &view, &at).await?;
+                        }
                     }
                     PanelResult::Applied
                 };
@@ -368,14 +381,14 @@ async fn insert_panel_run(
 }
 
 /// A group's run with its panel.
-struct PanelRun {
-    number: u32,
-    panel_id: Uuid,
-    view: View,
+pub struct PanelRun {
+    pub number: u32,
+    pub panel_id: Uuid,
+    pub view: View,
 }
 
 /// The group's panel runs by panel number.
-async fn group_runs(conn: &mut SqliteConnection, group: Uuid) -> Result<Vec<PanelRun>> {
+pub async fn group_runs(conn: &mut SqliteConnection, group: Uuid) -> Result<Vec<PanelRun>> {
     let rows = sqlx::query(
         "SELECT v.id, p.id AS panel_id, p.number FROM views v \
          JOIN subject_panels p ON p.id = v.panel_id WHERE v.group_id = ?1 ORDER BY p.number",
@@ -713,7 +726,7 @@ fn group_from_row(row: &SqliteRow) -> Result<ViewGroup> {
     })
 }
 
-async fn load_group(conn: &mut SqliteConnection, id: Uuid) -> Result<ViewGroup> {
+pub async fn load_group(conn: &mut SqliteConnection, id: Uuid) -> Result<ViewGroup> {
     let row = sqlx::query("SELECT * FROM view_groups WHERE id = ?1")
         .bind(id.to_string())
         .fetch_optional(&mut *conn)

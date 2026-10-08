@@ -24,8 +24,8 @@ use platevault_core::{
     AdoptionDestination, AdoptionOperation, AdoptionReview, AdoptionSource, AdoptionState,
     CalibrationAssignment, CalibrationHandoff, CalibrationPlan, CalibrationPolicy,
     CalibrationReadiness, CalibrationViewPlan, CandidateRef, CustodyFact, DecisionItem,
-    ExpectedSession, InputForm, InputKind, ProjectCalibrationEvidence, Requirement, RequirementKey,
-    Revision,
+    ExpectedSession, GroupCalibrationReadiness, InputForm, InputKind, ProjectCalibrationEvidence,
+    Requirement, RequirementKey, Revision,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -108,6 +108,20 @@ pub async fn calibration_readiness(
     library.calibration_readiness(view_id, view_revision).await.map_err(fail(Some(view_id)))
 }
 
+/// A run group's calibration (CAL-FR-11): the one policy its panel runs
+/// share and each panel run's readiness line by panel number; a panel run
+/// never saved reads none. Read-only.
+///
+/// # Errors
+/// `NotFound` for an unknown run group.
+#[tauri::command]
+pub async fn calibration_group_readiness(
+    library: State<'_, Arc<Library>>,
+    group_id: Uuid,
+) -> Reply<GroupCalibrationReadiness> {
+    library.calibration_group_readiness(group_id).await.map_err(fail(Some(group_id)))
+}
+
 /// The PREP read: automatic, accepted and excepted assignments with their
 /// hashed inputs, exclusions, and every unresolved requirement with its reason.
 ///
@@ -142,11 +156,12 @@ pub async fn calibration_set_required_kinds(
         .map_err(fail(Some(view_id)))
 }
 
-/// Turn the run's automatic assignment on or off (D-W55).
+/// Turn the run's automatic assignment on or off (D-W55). A panel run takes
+/// its run group's policy from the group's setup (`view_group_set_setup`).
 ///
 /// # Errors
-/// `InvalidInput` for a run in the Trash or Complete; `Conflict` for a stale
-/// plan revision.
+/// `InvalidInput` for a panel run of a run group or a run in the Trash or
+/// Complete; `Conflict` for a stale plan revision.
 #[tauri::command]
 pub async fn calibration_set_policy(
     library: State<'_, Arc<Library>>,
