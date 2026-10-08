@@ -11,7 +11,9 @@
 -- One file of an owner: Pending while still being written, a recognized
 -- intermediate, an inspected candidate, an attached product or an accepted
 -- one. `sha256` is the latest inspection's digest; acceptance records the
--- digest the bytes matched and keeps it while they drift.
+-- digest the bytes matched and keeps it while they drift. A discovered file
+-- names the revision it came from: a run's preparation revision, or a run
+-- group's Prepare all revision for its Assembled mosaic.
 CREATE TABLE IF NOT EXISTS result_candidates (
     id TEXT PRIMARY KEY NOT NULL,
     view_id TEXT REFERENCES views (id),
@@ -24,6 +26,7 @@ CREATE TABLE IF NOT EXISTS result_candidates (
     ),
     association TEXT NOT NULL CHECK (association IN ('results_folder', 'user_linked')),
     prepared_revision_id TEXT REFERENCES preparation_revisions (id),
+    group_preparation_id TEXT REFERENCES group_preparations (id),
     attribution TEXT NOT NULL,
     sha256 TEXT CHECK (sha256 IS NULL OR length(sha256) = 64),
     fingerprint TEXT,
@@ -38,12 +41,17 @@ CREATE TABLE IF NOT EXISTS result_candidates (
     CHECK ((accepted_sha256 IS NULL) = (accepted_fingerprint IS NULL)),
     CHECK (state <> 'attached' OR association = 'user_linked'),
     CHECK (state NOT IN ('candidate', 'attached') OR sha256 IS NOT NULL),
-    CHECK (state NOT IN ('pending', 'intermediate') OR sha256 IS NULL)
+    CHECK (state NOT IN ('pending', 'intermediate') OR sha256 IS NULL),
+    CHECK (prepared_revision_id IS NULL OR view_id IS NOT NULL),
+    CHECK (group_preparation_id IS NULL OR group_id IS NOT NULL)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS result_candidates_view ON result_candidates (view_id)
     WHERE view_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS result_candidates_group ON result_candidates (group_id)
     WHERE group_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS result_candidates_prepared ON result_candidates (prepared_revision_id);
+CREATE INDEX IF NOT EXISTS result_candidates_group_prepared
+    ON result_candidates (group_preparation_id) WHERE group_preparation_id IS NOT NULL;
 
 -- An accepted product used as an input of another run, with the digest it had
 -- when it was added (RES-FR-05). It adds no members and no integration, and
@@ -75,3 +83,4 @@ CREATE TABLE IF NOT EXISTS master_offers (
     CHECK ((state = 'offered') = (decided_at IS NULL))
 ) STRICT;
 CREATE INDEX IF NOT EXISTS master_offers_result ON master_offers (result_id);
+CREATE INDEX IF NOT EXISTS master_offers_view ON master_offers (view_id, state);

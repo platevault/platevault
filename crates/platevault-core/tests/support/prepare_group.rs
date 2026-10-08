@@ -399,6 +399,7 @@ impl GroupWorld {
                 input_behavior: InputBehavior::ReadOnly,
                 input_list: true,
                 proofs,
+                ..CapabilityEvidence::default()
             },
         };
         self.catalog().create_profile(&input).await.unwrap()

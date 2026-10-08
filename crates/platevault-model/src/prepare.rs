@@ -22,7 +22,7 @@ use uuid::Uuid;
 use crate::{
     CalibrationHandoff, CalibrationNeedsReview, CalibrationPolicy, EntryEvidence, InputKind,
     InputMode, ItemReason, LibraryError, NativePath, ObservationFingerprint, PanelOutcome,
-    Revision, RunStage, Writability, WrittenCopy,
+    ResultKind, Revision, RunStage, Writability, WrittenCopy,
 };
 
 fn invalid(message: impl Into<String>) -> LibraryError {
@@ -78,7 +78,8 @@ pub enum Capability {
     Layout,
     /// How it is configured: exact input lists passed at launch.
     Configuration,
-    /// The product inputs it reads (lights, darks, flats, bias).
+    /// The accepted products (Results) it reads as inputs, by kind
+    /// (RES-FR-05).
     ProductInput,
     /// Output it writes that RES recognizes.
     RecognizedOutput,
@@ -116,7 +117,7 @@ pub struct CapabilityProof {
 
 /// A profile's recorded capability evidence (D04). Nothing is claimed
 /// without a proof: read-only input needs an `Input` proof, an input list a
-/// `Configuration` proof.
+/// `Configuration` proof, and product inputs a `ProductInput` proof.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilityEvidence {
@@ -125,6 +126,14 @@ pub struct CapabilityEvidence {
     /// The application reads the exact input paths passed as `{inputs}`.
     #[serde(default)]
     pub input_list: bool,
+    /// The kinds of accepted product the application reads as inputs; a
+    /// product of any other kind is unsupported and never converted.
+    #[serde(default)]
+    pub product_kinds: Vec<ResultKind>,
+    /// The application reads raw frames and products in one run; without
+    /// it they are prepared in separate runs (RES-FR-05).
+    #[serde(default)]
+    pub mixed_inputs: bool,
     #[serde(default)]
     pub proofs: Vec<CapabilityProof>,
 }
@@ -140,6 +149,19 @@ impl CapabilityEvidence {
         Capability::ALL.into_iter().filter(|capability| !self.proves(*capability)).collect()
     }
 
+    /// Whether the application reads an accepted product of `kind` as an
+    /// input (D04, RES-FR-05): the kind is claimed with its proof.
+    #[must_use]
+    pub fn reads_product(&self, kind: &ResultKind) -> bool {
+        self.proves(Capability::ProductInput) && self.product_kinds.contains(kind)
+    }
+
+    /// Whether the application reads raw frames and products in one run.
+    #[must_use]
+    pub fn reads_mixed_inputs(&self) -> bool {
+        self.proves(Capability::ProductInput) && self.mixed_inputs
+    }
+
     /// # Errors
     /// `InvalidInput` for blank evidence, or a claim without its proof.
     pub fn validate(&self) -> Result<(), LibraryError> {
@@ -151,6 +173,11 @@ impl CapabilityEvidence {
         }
         if self.input_list && !self.proves(Capability::Configuration) {
             return Err(invalid("an input list needs recorded configuration evidence"));
+        }
+        if (self.mixed_inputs || !self.product_kinds.is_empty())
+            && !self.proves(Capability::ProductInput)
+        {
+            return Err(invalid("product inputs need recorded product-input evidence"));
         }
         Ok(())
     }
@@ -339,6 +366,9 @@ pub enum BasisOrigin {
     Membership,
     /// The calibration assignment's input and digest.
     CalibrationAssignment,
+    /// An accepted product's acceptance digest, as its rehash read it
+    /// (RES-FR-05).
+    ProductAcceptance,
 }
 
 impl fmt::Display for BasisOrigin {
@@ -346,6 +376,7 @@ impl fmt::Display for BasisOrigin {
         f.write_str(match self {
             Self::Membership => "the confirmed membership",
             Self::CalibrationAssignment => "its calibration assignment",
+            Self::ProductAcceptance => "its acceptance",
         })
     }
 }
@@ -423,6 +454,8 @@ pub enum PreparedInput {
     Bias,
     Dark,
     Flat,
+    /// An accepted product of another run, a product input (RES-FR-05).
+    Product,
 }
 
 impl From<InputKind> for PreparedInput {
@@ -894,32 +927,30 @@ impl GroupPreparation {
             .unwrap_or_else(|| self.folder.display())
     }
 
-    /// The group outcome from its panel runs' outcomes (PREP-FR-12):
-    /// Canceled or Paused when Prepare all was canceled or paused, Prepared
-    /// when every panel run is Prepared, Failed when every one Failed, and
-    /// Partial otherwise. A panel run being retried on its own counts as
-    /// neither prepared nor failed.
+    /// The group outcome (PREP-FR-12): Prepared when every panel run is
+    /// Prepared, else Canceled or Paused when that is the `stop` the user made
+    /// on Prepare all, else Failed when every panel run Failed, and Partial
+    /// otherwise. Canceled and Paused come only from `stop`: a panel run
+    /// canceled, paused or being retried on its own counts as neither
+    /// prepared nor failed. A `stop` other than Canceled or Paused is none.
     #[must_use]
-    pub fn outcome_for(panels: impl IntoIterator<Item = PreparationState>) -> PreparationState {
+    pub fn outcome_for(
+        stop: Option<PreparationState>,
+        panels: impl IntoIterator<Item = PreparationState>,
+    ) -> PreparationState {
         let (mut any, mut prepared, mut failed) = (false, true, true);
-        let (mut canceled, mut paused) = (false, false);
         for state in panels {
             any = true;
             prepared &= state == PreparationState::Prepared;
             failed &= state == PreparationState::Failed;
-            canceled |= state == PreparationState::Canceled;
-            paused |= state == PreparationState::Paused;
         }
-        if canceled {
-            PreparationState::Canceled
-        } else if paused {
-            PreparationState::Paused
-        } else if any && prepared {
-            PreparationState::Prepared
-        } else if failed {
-            PreparationState::Failed
-        } else {
-            PreparationState::Partial
+        let stop = stop
+            .filter(|stop| matches!(stop, PreparationState::Canceled | PreparationState::Paused));
+        match stop {
+            _ if any && prepared => PreparationState::Prepared,
+            Some(stop) => stop,
+            None if failed => PreparationState::Failed,
+            None => PreparationState::Partial,
         }
     }
 }
@@ -947,6 +978,10 @@ pub struct GroupPreparationOutcome {
     /// `<Mosaic> Results/Assembled/`, where the assembled mosaic is saved.
     pub assembled: NativePath,
     pub offers: Vec<PreparationOffer>,
+    /// The panel runs the Prepare all or Retry that ended here skipped, each
+    /// with why: in the Project's Trash (D-W75) or, on Retry, Complete. By
+    /// panel number; empty when this outcome is read later.
+    pub skipped: Vec<PanelOutcome>,
 }
 
 impl GroupPreparationOutcome {

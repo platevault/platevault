@@ -224,9 +224,9 @@ impl Catalog {
     /// file is recorded in its scanned state; an unaccepted record takes the
     /// new observation, kind and attribution; an accepted one only its
     /// current bytes, so drift shows and its acceptance stays as history. A
-    /// record whose file is gone reads Missing, except a Pending one, which
-    /// is forgotten. A generated master is offered once per file and digest
-    /// (CAL-FR-06).
+    /// record whose file is gone reads Missing, except a Pending one no master
+    /// offer or product input names, which is forgotten. A generated master
+    /// is offered once per file and digest (CAL-FR-06).
     ///
     /// # Errors
     /// `InvalidInput` for a run in the Project's Trash or a folder that is no
@@ -457,7 +457,9 @@ impl Catalog {
     /// Create a run (as [`Self::create_view`]) whose Results input filter
     /// picked `products` (RES-FR-05, VSEL-FR-05): each is recorded as a
     /// product input with the digest it hashed to, adding no member and no
-    /// integration. Products of runs on another rig are inputs too.
+    /// integration. Its draft selects no raw session, so saving it adds no raw
+    /// session integration (RES-AC-04). Products of runs on another rig are
+    /// inputs too.
     ///
     /// # Errors
     /// As [`Self::create_view`], and as [`Self::add_view_product_inputs`] for
@@ -471,7 +473,7 @@ impl Catalog {
         require_products(products)?;
         let at = now()?;
         write_txn!(self, |conn| {
-            let view = insert_view(conn, input).await?;
+            let (view, _) = insert_view(conn, input).await?;
             insert_inputs(conn, &view, products, &at).await?;
             load_record(conn, view.id).await
         })
@@ -521,30 +523,58 @@ impl Catalog {
     /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn result_input_blockers(&self, view: Uuid) -> Result<Vec<LifecycleBlocker>> {
         let mut conn = self.reader().await?;
-        let rows = sqlx::query(
-            "SELECT r.id, r.path, i.view_id AS input_view, \
-             coalesce(c.name, d.name) AS input_name FROM view_product_inputs i \
-             JOIN result_candidates r ON r.id = i.result_id \
-             JOIN views v ON v.id = i.view_id \
-             LEFT JOIN view_revisions c ON c.view_id = v.id AND c.revision = v.revision \
-             LEFT JOIN view_revisions d ON d.view_id = v.id AND d.state = 'draft' \
-             WHERE r.view_id = ?1 AND i.view_id <> ?1 ORDER BY input_name, i.view_id, r.path",
-        )
-        .bind(view.to_string())
-        .fetch_all(&mut *conn)
-        .await?;
-        rows.iter()
-            .map(|row| {
-                let path: NativePath = from_json(&row.try_get::<String, _>("path")?)?;
-                Ok(LifecycleBlocker::ResultInput {
-                    result_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
-                    result_name: file_name(&path),
-                    view_id: parse_uuid(&row.try_get::<String, _>("input_view")?)?,
-                    view_name: row.try_get::<Option<String>, _>("input_name")?.unwrap_or_default(),
-                })
-            })
-            .collect()
+        input_blockers(&mut conn, view).await
     }
+}
+
+/// The runs using one of `view`'s Results as an input, each naming the
+/// Result (RES-FR-10).
+async fn input_blockers(conn: &mut SqliteConnection, view: Uuid) -> Result<Vec<LifecycleBlocker>> {
+    let rows = sqlx::query(
+        "SELECT r.id, r.path, i.view_id AS input_view, \
+         coalesce(c.name, d.name) AS input_name FROM view_product_inputs i \
+         JOIN result_candidates r ON r.id = i.result_id \
+         JOIN views v ON v.id = i.view_id \
+         LEFT JOIN view_revisions c ON c.view_id = v.id AND c.revision = v.revision \
+         LEFT JOIN view_revisions d ON d.view_id = v.id AND d.state = 'draft' \
+         WHERE r.view_id = ?1 AND i.view_id <> ?1 ORDER BY input_name, i.view_id, r.path",
+    )
+    .bind(view.to_string())
+    .fetch_all(&mut *conn)
+    .await?;
+    rows.iter()
+        .map(|row| {
+            let path: NativePath = from_json(&row.try_get::<String, _>("path")?)?;
+            Ok(LifecycleBlocker::ResultInput {
+                result_id: parse_uuid(&row.try_get::<String, _>("id")?)?,
+                result_name: file_name(&path),
+                view_id: parse_uuid(&row.try_get::<String, _>("input_view")?)?,
+                view_name: row.try_get::<Option<String>, _>("input_name")?.unwrap_or_default(),
+            })
+        })
+        .collect()
+}
+
+/// Remove what Results recorded on never-saved run `view`, which leaves with
+/// its draft: its product inputs, its own Results (attached ones, as it has
+/// no Results folder before its first preparation) and their master offers.
+/// The products its inputs name stay as they are. Refused while another run
+/// uses one of its Results as an input, naming each (RES-FR-10).
+pub async fn remove_unsaved_run_results(conn: &mut SqliteConnection, view: Uuid) -> Result<()> {
+    let blockers = input_blockers(conn, view).await?;
+    if !blockers.is_empty() {
+        let named: Vec<String> = blockers.iter().map(ToString::to_string).collect();
+        return Err(invalid(format!("run {view} cannot be discarded while {}", named.join("; "))));
+    }
+    for statement in [
+        "DELETE FROM view_product_inputs WHERE view_id = ?1",
+        "DELETE FROM master_offers WHERE view_id = ?1 \
+         OR result_id IN (SELECT id FROM result_candidates WHERE view_id = ?1)",
+        "DELETE FROM result_candidates WHERE view_id = ?1",
+    ] {
+        sqlx::query(statement).bind(view.to_string()).execute(&mut *conn).await?;
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -655,8 +685,10 @@ async fn record_scanned(
 
 /// A record whose file the rescan did not find: Unreadable below an entry
 /// that could not be read, the folder's availability when the folder itself
-/// could not be walked, else Missing; a Pending one that is gone is
-/// forgotten.
+/// could not be walked, else Missing. A Pending one that is gone is
+/// forgotten unless a master offer or a product input names it: that one
+/// reads Missing, so a dismissed offer stays dismissed for its file and
+/// digest.
 async fn settle_unseen(
     conn: &mut SqliteConnection,
     scan: &ResultsScan,
@@ -672,7 +704,10 @@ async fn settle_unseen(
     } else {
         Availability::Missing
     };
-    if availability == Availability::Missing && record.state == ResultState::Pending {
+    if availability == Availability::Missing
+        && record.state == ResultState::Pending
+        && !referenced(conn, record.id).await?
+    {
         sqlx::query("DELETE FROM result_candidates WHERE id = ?1")
             .bind(record.id.to_string())
             .execute(&mut *conn)
@@ -680,6 +715,18 @@ async fn settle_unseen(
         return Ok(());
     }
     set_availability(conn, record.id, availability, at).await
+}
+
+/// Whether a master offer or a product input names Result `id`.
+async fn referenced(conn: &mut SqliteConnection, id: Uuid) -> Result<bool> {
+    let found: Option<i64> = sqlx::query_scalar(
+        "SELECT 1 FROM master_offers WHERE result_id = ?1 \
+         UNION ALL SELECT 1 FROM view_product_inputs WHERE result_id = ?1 LIMIT 1",
+    )
+    .bind(id.to_string())
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(found.is_some())
 }
 
 pub async fn load_result(conn: &mut SqliteConnection, id: Uuid) -> Result<ResultRecord> {
@@ -715,6 +762,19 @@ async fn containing_folder(conn: &mut SqliteConnection, path: &Path) -> Result<O
     Ok(None)
 }
 
+/// The revision columns of a discovered file's attribution: a run's
+/// preparation revision, or a run group's Prepare all revision.
+fn revision_columns(
+    owner: ResultOwner,
+    attribution: &RevisionAttribution,
+) -> (Option<String>, Option<String>) {
+    let id = attribution.revision_id().map(|id| id.to_string());
+    match owner {
+        ResultOwner::Run { .. } => (id, None),
+        ResultOwner::Group { .. } => (None, id),
+    }
+}
+
 async fn insert_scanned(
     conn: &mut SqliteConnection,
     owner: ResultOwner,
@@ -723,11 +783,12 @@ async fn insert_scanned(
 ) -> Result<Uuid> {
     let id = Uuid::new_v4();
     let (view_id, group_id) = owner_columns(owner);
+    let (prepared, group_prepared) = revision_columns(owner, &file.attribution);
     sqlx::query(
         "INSERT INTO result_candidates (id, view_id, group_id, path, kind, availability, state, \
-         association, prepared_revision_id, attribution, sha256, fingerprint, discovered_at, \
-         updated_at) VALUES (?1, ?2, ?3, ?4, ?5, 'available', ?6, 'results_folder', ?7, ?8, ?9, \
-         ?10, ?11, ?11)",
+         association, prepared_revision_id, group_preparation_id, attribution, sha256, \
+         fingerprint, discovered_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, 'available', ?6, \
+         'results_folder', ?7, ?8, ?9, ?10, ?11, ?12, ?12)",
     )
     .bind(id.to_string())
     .bind(view_id)
@@ -735,7 +796,8 @@ async fn insert_scanned(
     .bind(to_json(&file.path)?)
     .bind(file.kind.as_ref().map(to_json).transpose()?)
     .bind(to_text(&file.state)?)
-    .bind(file.attribution.revision_id().map(|id| id.to_string()))
+    .bind(prepared)
+    .bind(group_prepared)
     .bind(to_json(&file.attribution)?)
     .bind(file.sha256.as_deref())
     .bind(to_json(&file.fingerprint)?)
@@ -766,15 +828,17 @@ async fn update_scanned(
         .await?;
         return Ok(());
     }
+    let (prepared, group_prepared) = revision_columns(record.owner, &file.attribution);
     sqlx::query(
         "UPDATE result_candidates SET availability = 'available', state = ?2, kind = ?3, \
-         prepared_revision_id = ?4, attribution = ?5, sha256 = ?6, fingerprint = ?7, \
-         updated_at = ?8 WHERE id = ?1",
+         prepared_revision_id = ?4, group_preparation_id = ?5, attribution = ?6, sha256 = ?7, \
+         fingerprint = ?8, updated_at = ?9 WHERE id = ?1",
     )
     .bind(record.id.to_string())
     .bind(to_text(&file.state)?)
     .bind(file.kind.as_ref().map(to_json).transpose()?)
-    .bind(file.attribution.revision_id().map(|id| id.to_string()))
+    .bind(prepared)
+    .bind(group_prepared)
     .bind(to_json(&file.attribution)?)
     .bind(file.sha256.as_deref())
     .bind(to_json(&file.fingerprint)?)

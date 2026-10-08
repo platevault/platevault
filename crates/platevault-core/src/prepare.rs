@@ -5,18 +5,23 @@
 //! PREP-FR-01..14; D04, D09, D19): review, Prepare, Retry, the outcome and
 //! Open, and Prepare all.
 //!
-//! Review changes nothing of the run or the library; it only creates and
-//! removes hidden `.platevault-link-probe-*` entries in the planned project
-//! folder or the chosen parent to probe link support. Prepare records a new revision Running in a new
-//! folder that never existed before, then settles each input: it snapshots
-//! the source (no-follow identity and SHA-256), refuses a snapshot differing
-//! from the confirmed membership or the calibration assignment's digest, and
+//! Review changes nothing of the run or the library; it only records what
+//! rehashing the run's product inputs against their acceptance digests read
+//! (RES-FR-05), so drift shows, and creates and removes hidden
+//! `.platevault-link-probe-*` entries in the planned project folder or the
+//! chosen parent to probe link support. Prepare records a new revision
+//! Running in a new folder that never existed before, then settles each
+//! input: it snapshots the source (no-follow identity and SHA-256), refuses a
+//! snapshot differing from the confirmed membership, the calibration
+//! assignment's digest or a product's acceptance digest, and
 //! writes the entry by the chosen mode through the custody primitives. Copies
 //! go through the verified transfer, clones and hardlinks are re-read, links
 //! are recorded by their own identity and target. Immediately before terminal
 //! success every source and entry is re-verified; drift blocks the item. Open
 //! re-verifies every entry again before each launch and refuses on drift.
-//! Nothing here marks a run Complete, and no source is ever written.
+//! Nothing here marks a run Complete, and no source is ever written. A run's
+//! accepted product inputs go to `Products/` when the profile reads their
+//! kind; otherwise review names them unsupported and nothing is converted.
 //!
 //! Prepare all prepares every panel run of a run group the same way, each in
 //! its own `Panel N/` folder of one new group folder, with its own outcome;
@@ -44,6 +49,7 @@ use uuid::Uuid;
 
 use crate::custody::{self, observe_entry, transfer, verify_source};
 use crate::library::{blocking, Library};
+use crate::results::RehashedProduct;
 use crate::run_lifecycle::{BlockersFuture, FoldersFuture, RunFolders, RunOperationGuard};
 use crate::{header_patch, layout};
 use crate::{
@@ -57,7 +63,8 @@ use crate::{
     PreparationOutcome, PreparationReview, PreparationRevision, PreparationState, PrepareRequest,
     PrepareStep, PreparedEntry, PreparedEntryKind, PreparedFolder, PreparedInput, Profile,
     ReasonCode, Revision, RunCompletion, RunFolderSet, RunLocation, RunOperationKind, RunStage,
-    SourceBasis, TransferDestination, View, ViewGroup, Writability, WrittenCopy,
+    SourceBasis, TransferDestination, View, ViewGroup, ViewRecord, ViewRevisionHeader, Writability,
+    WrittenCopy,
 };
 
 /// Whether this platform makes verified clones: APFS `clonefile` on macOS and
@@ -92,6 +99,8 @@ struct SourceInput {
     member_key: Option<Uuid>,
     asset_id: Option<Uuid>,
     master_id: Option<Uuid>,
+    /// The accepted product a product input is (RES-FR-05).
+    result_id: Option<Uuid>,
     input: PreparedInput,
     source: PathBuf,
     size_bytes: u64,
@@ -310,21 +319,7 @@ impl Library {
         let catalog = self.catalog();
         let record = catalog.view(view_id).await?;
         let view = &record.view;
-        if view.trashed_at.is_some() {
-            return Err(invalid(format!(
-                "run {} is in the Project's Trash; restore it first",
-                view.id
-            )));
-        }
-        if view.group_id.is_some() {
-            return Err(invalid(format!(
-                "run {} is a panel run; it is prepared with its run group",
-                view.id
-            )));
-        }
-        let header = record.revision.as_ref().ok_or_else(|| {
-            invalid(format!("run {} has no saved membership; save it before preparing", view.id))
-        })?;
+        let header = preparable(&record)?;
         let project = catalog.project(view.project_id).await?;
         let subject_name = project
             .subjects
@@ -344,22 +339,19 @@ impl Library {
         let results = catalog.view_results_folder(view.id).await?;
         let recorded = catalog.recorded_preparation_folders().await?;
         let roots = self.input_roots(&basis, &calibration).await?;
-        let ((mut inputs, anchors), mut blocked, excluded) =
+        let ((mut inputs, mut anchors), mut blocked, excluded) =
             resolve_inputs(&basis, &calibration, &roots)?;
         let corrections = self.plan_corrections(&inputs, request).await?;
         retain_unexcluded(&mut inputs, &corrections);
+        let products = self.rehash_product_inputs(view.id).await?;
+        let (product_inputs, product_anchors, product_blocked) = resolve_products(&products);
+        inputs.extend(product_inputs);
+        anchors.extend(product_anchors);
+        blocked.extend(product_blocked);
         let link =
             (request.mode == InputMode::LinkedView).then(|| request.link.unwrap_or_default());
-        let mut refusals = Vec::new();
-        if request.link.is_some() && request.mode != InputMode::LinkedView {
-            refusals.push("a link kind applies to Linked View only".to_owned());
-        }
-        if view.completion == crate::RunCompletion::Complete {
-            refusals.push(format!("run {} is Complete; reopen it before preparing", view.id));
-        }
-        if let Some(refusal) = mode_refusal(&profile, request.mode) {
-            refusals.push(refusal);
-        }
+        let mut refusals = setup_refusals(view, &profile, request);
+        refusals.extend(product_refusals(&products, &profile, includes_raw(&basis)));
         refusals.extend(correction_refusals(&corrections));
         let disk = DiskPlan {
             output: output.as_ref().map(NativePath::to_path_buf).transpose()?,
@@ -420,7 +412,8 @@ impl Library {
     }
 
     /// The anchors a revision's inputs are snapshotted against, resolved
-    /// again from its run's committed membership and calibration handoff.
+    /// again from its run's committed membership and calibration handoff,
+    /// and from its product inputs, each rehashed again (RES-FR-05).
     async fn anchors_of(
         &self,
         revision: &PreparationRevision,
@@ -429,7 +422,9 @@ impl Library {
         let calibration =
             self.calibration_handoff(revision.view_id, revision.membership_revision).await?;
         let roots = self.input_roots(&basis, &calibration).await?;
-        let ((_, anchors), _, _) = resolve_inputs(&basis, &calibration, &roots)?;
+        let ((_, mut anchors), _, _) = resolve_inputs(&basis, &calibration, &roots)?;
+        let products = self.rehash_product_inputs(revision.view_id).await?;
+        anchors.extend(resolve_products(&products).1);
         Ok(anchors)
     }
 
@@ -717,6 +712,43 @@ impl Library {
         control.settled(&settled);
         Ok(settled)
     }
+}
+
+/// Why a single run's Prepare is refused before any input is read: a link
+/// kind outside Linked View, a Complete run, or the profile refusing the
+/// mode (D04).
+fn setup_refusals(view: &View, profile: &Profile, request: &PrepareRequest) -> Vec<String> {
+    let mut refusals = Vec::new();
+    if request.link.is_some() && request.mode != InputMode::LinkedView {
+        refusals.push("a link kind applies to Linked View only".to_owned());
+    }
+    if view.completion == RunCompletion::Complete {
+        refusals.push(format!("run {} is Complete; reopen it before preparing", view.id));
+    }
+    refusals.extend(mode_refusal(profile, request.mode));
+    refusals
+}
+
+/// The saved membership a single run is prepared from; refused for a run in
+/// the Project's Trash, a panel run, which is prepared with its run group,
+/// and a run never saved.
+fn preparable(record: &ViewRecord) -> Result<&ViewRevisionHeader, LibraryError> {
+    let view = &record.view;
+    if view.trashed_at.is_some() {
+        return Err(invalid(format!(
+            "run {} is in the Project's Trash; restore it first",
+            view.id
+        )));
+    }
+    if view.group_id.is_some() {
+        return Err(invalid(format!(
+            "run {} is a panel run; it is prepared with its run group",
+            view.id
+        )));
+    }
+    record.revision.as_ref().ok_or_else(|| {
+        invalid(format!("run {} has no saved membership; save it before preparing", view.id))
+    })
 }
 
 fn outcome(record: PreparationRecord, stage: RunStage) -> PreparationOutcome {
@@ -1116,6 +1148,7 @@ fn resolve_inputs(
             member_key: Some(key),
             asset_id: Some(copy.asset_id),
             master_id: None,
+            result_id: None,
             input: PreparedInput::Light,
             source,
             size_bytes: copy.current.fingerprint.size_bytes,
@@ -1138,6 +1171,7 @@ fn resolve_inputs(
                 member_key: None,
                 asset_id: file.asset_id,
                 master_id: file.master_id,
+                result_id: None,
                 input: assignment.kind.into(),
                 source,
                 size_bytes: file.fingerprint.size_bytes,
@@ -1163,6 +1197,91 @@ fn resolve_inputs(
         });
     }
     Ok(((inputs, anchors), blocked, excluded))
+}
+
+/// A run's product inputs as their rehash read them (RES-FR-05): each whose
+/// bytes still hash to its acceptance digest is an input of `Products/`
+/// whose snapshot must match that read and digest; each that drifted or
+/// cannot be read is blocked and never prepared.
+fn resolve_products(
+    products: &[RehashedProduct],
+) -> (Vec<SourceInput>, HashMap<PathBuf, Basis>, Vec<BlockedInput>) {
+    let mut inputs = Vec::new();
+    let mut anchors = HashMap::new();
+    let mut blocked = Vec::new();
+    for product in products {
+        let result = &product.input.result;
+        let read = product.read.clone().and_then(|fingerprint| {
+            let source = result
+                .path
+                .to_path_buf()
+                .map_err(|error| reason(ReasonCode::SourceUnavailable, error.to_string()))?;
+            Ok((source, fingerprint))
+        });
+        match read {
+            Ok((source, fingerprint)) => {
+                let size_bytes = fingerprint.size_bytes;
+                let basis = Basis { fingerprint, origin: BasisOrigin::ProductAcceptance };
+                anchors.insert(source.clone(), basis);
+                inputs.push(SourceInput {
+                    member_key: None,
+                    asset_id: None,
+                    master_id: None,
+                    result_id: Some(result.id),
+                    input: PreparedInput::Product,
+                    source,
+                    size_bytes,
+                });
+            }
+            Err(why) => blocked.push(BlockedInput {
+                member_key: None,
+                input: PreparedInput::Product,
+                source: Some(result.path.clone()),
+                path: None,
+                size_bytes: 0,
+                reason: why,
+            }),
+        }
+    }
+    (inputs, anchors, blocked)
+}
+
+/// Why `profile` refuses the run's product inputs (RES-FR-05, RES-AC-05,
+/// D04): a product of a kind the profile has no product-input evidence for
+/// is named unsupported and never converted, and raw frames beside products
+/// need the profile to read both in one run, else they take separate runs.
+fn product_refusals(products: &[RehashedProduct], profile: &Profile, raw: bool) -> Vec<String> {
+    let evidence = &profile.capability_evidence;
+    let unsupported: Vec<String> = products
+        .iter()
+        .map(|product| &product.input.result)
+        .filter(|result| !result.kind.as_ref().is_some_and(|kind| evidence.reads_product(kind)))
+        .map(|result| match &result.kind {
+            Some(kind) => format!("'{}' ({kind})", result.name()),
+            None => format!("'{}' (no kind)", result.name()),
+        })
+        .collect();
+    let mut refusals = Vec::new();
+    if !unsupported.is_empty() {
+        refusals.push(format!(
+            "unsupported product input for profile '{}': {}; a product is never converted",
+            profile.name,
+            unsupported.join(", ")
+        ));
+    }
+    if raw && !products.is_empty() && !evidence.reads_mixed_inputs() {
+        refusals.push(format!(
+            "profile '{}' does not support raw frames and product inputs in one run \
+             (unsupported); prepare them in separate runs",
+            profile.name
+        ));
+    }
+    refusals
+}
+
+/// Whether the committed membership includes any raw frame.
+fn includes_raw(basis: &MembershipBasis) -> bool {
+    basis.members.iter().any(|member| member.member.state == MemberState::Included)
 }
 
 /// What review checks on disk, off the async runtime.
@@ -1415,26 +1534,33 @@ fn location_links(
         _ => LinkSupport::default(),
     })
 }
-/// The folder below the run folder an input goes to.
+
+/// The folder below the run folder an input goes to: an accepted product
+/// input goes to `Products/`, apart from the raw frames (RES-FR-05).
 fn subfolder(input: PreparedInput) -> PathBuf {
     match input {
         PreparedInput::Light => PathBuf::from("Lights"),
         PreparedInput::Dark => Path::new("Calibration").join("Darks"),
         PreparedInput::Flat => Path::new("Calibration").join("Flats"),
         PreparedInput::Bias => Path::new("Calibration").join("Bias"),
+        PreparedInput::Product => PathBuf::from("Products"),
     }
 }
 
-/// The entry's file name: the source's, with its asset or master id when
-/// another input of the same folder has the same name. A name never stands
-/// in for a header (D04): the application still reads each file's own.
+/// The entry's file name: the source's, with its asset, master or Result id
+/// when another input of the same folder has the same name. A name never
+/// stands in for a header (D04): the application still reads each file's own.
 fn entry_name(input: &SourceInput, names: &HashMap<(PathBuf, OsString), usize>) -> OsString {
     let name = input.source.file_name().map(OsStr::to_owned).unwrap_or_default();
     if names.get(&(subfolder(input.input), name.clone())).copied().unwrap_or(0) <= 1 {
         return name;
     }
-    let id =
-        input.asset_id.or(input.master_id).map(|id| id.simple().to_string()).unwrap_or_default();
+    let id = input
+        .asset_id
+        .or(input.master_id)
+        .or(input.result_id)
+        .map(|id| id.simple().to_string())
+        .unwrap_or_default();
     let path = Path::new(&name);
     let mut unique = path.file_stem().map(OsStr::to_owned).unwrap_or_default();
     unique.push(format!("-{}", id.get(..8).unwrap_or(&id)));
@@ -2265,11 +2391,13 @@ impl Library {
                 return Err(error);
             }
         };
-        self.run_group_preparation(record, &anchors, control).await
+        self.run_group_preparation(record, &anchors, control, review.skipped).await
     }
 
     /// Retry a Partial or Paused Prepare all in its own group folder: every
-    /// Partial or Paused panel run continues as Retry does for a run.
+    /// Partial or Paused panel run continues as Retry does for a run, except
+    /// one in the Project's Trash or Complete, which the outcome names as
+    /// skipped.
     ///
     /// # Errors
     /// `InvalidInput` as
@@ -2280,7 +2408,8 @@ impl Library {
         id: Uuid,
         control: &dyn PrepareControl,
     ) -> Result<GroupPreparationOutcome, LibraryError> {
-        let record = self.catalog().resume_group_preparation(id).await?;
+        let resumed = self.catalog().resume_group_preparation(id).await?;
+        let (record, skipped) = (resumed.record, resumed.skipped);
         let mut anchors = HashMap::new();
         for panel in &record.panels {
             let revision = &panel.record.revision;
@@ -2302,7 +2431,7 @@ impl Library {
                 }
             }
         }
-        self.run_group_preparation(record, &anchors, control).await
+        self.run_group_preparation(record, &anchors, control, skipped).await
     }
 
     /// The outcome of a Prepare all: each panel run's own outcome, the
@@ -2387,12 +2516,13 @@ impl Library {
 
     /// Prepare each Running panel run in panel order, stop every one left
     /// when the user cancels or pauses, and end Prepare all in the outcome
-    /// its panel runs give.
+    /// that stop and its panel runs give, naming the panel runs it `skipped`.
     async fn run_group_preparation(
         &self,
         record: GroupPreparationRecord,
         anchors: &HashMap<Uuid, HashMap<PathBuf, Basis>>,
         control: &dyn PrepareControl,
+        skipped: Vec<PanelOutcome>,
     ) -> Result<GroupPreparationOutcome, LibraryError> {
         let id = record.preparation.id;
         let mut stopped = None;
@@ -2428,7 +2558,9 @@ impl Library {
         };
         let record =
             self.catalog().finish_group_preparation(id, remaining, reason.as_deref()).await?;
-        self.group_outcome(record).await
+        let mut outcome = self.group_outcome(record).await?;
+        outcome.skipped = skipped;
+        Ok(outcome)
     }
 
     async fn group_outcome(
@@ -2447,7 +2579,13 @@ impl Library {
         }
         let verified = GroupPreparationOutcome::every_panel_verified(&panels);
         let offers = PreparationOutcome::offers_for(record.preparation.outcome, !verified);
-        Ok(GroupPreparationOutcome { preparation: record.preparation, panels, assembled, offers })
+        Ok(GroupPreparationOutcome {
+            preparation: record.preparation,
+            panels,
+            assembled,
+            offers,
+            skipped: Vec::new(),
+        })
     }
 
     async fn assembled_folder(
@@ -2506,7 +2644,7 @@ impl Library {
                 });
                 continue;
             }
-            plans.push(self.plan_panel(group, panel, &readiness, request).await?);
+            plans.push(self.plan_panel(group, panel, &readiness, &profile, request).await?);
         }
         if plans.is_empty() {
             refusals.push(format!(
@@ -2589,12 +2727,14 @@ impl Library {
 
     /// One panel run's part of the Prepare all review: its committed
     /// selection, its own calibration choices and readiness, its inputs with
-    /// their catalog corrections as `request` chooses them, and its refusals.
+    /// their catalog corrections as `request` chooses them, its product
+    /// inputs rehashed as for a run (RES-FR-05), and its refusals.
     async fn plan_panel(
         &self,
         group: &ViewGroup,
         panel: &GroupPanel,
         readiness: &GroupCalibrationReadiness,
+        profile: &Profile,
         request: &PrepareRequest,
     ) -> Result<PanelPlan, LibraryError> {
         let catalog = self.catalog();
@@ -2658,16 +2798,22 @@ impl Library {
         let basis = catalog.view_membership(view.id, Membership::Committed).await?;
         let calibration = self.calibration_handoff(view.id, view.revision).await?;
         let roots = self.input_roots(&basis, &calibration).await?;
-        let ((mut inputs, anchors), blocked, excluded) =
+        let ((mut inputs, mut anchors), mut blocked, excluded) =
             resolve_inputs(&basis, &calibration, &roots)?;
         let corrections = self.plan_corrections(&inputs, request).await?;
         retain_unexcluded(&mut inputs, &corrections);
+        let products = self.rehash_product_inputs(view.id).await?;
+        let (product_inputs, product_anchors, product_blocked) = resolve_products(&products);
+        inputs.extend(product_inputs);
+        anchors.extend(product_anchors);
+        blocked.extend(product_blocked);
         if inputs.is_empty() && blocked.is_empty() {
             review.refusals.push(format!("Panel {number} has no input to prepare"));
         }
         review.refusals.extend(
-            correction_refusals(&corrections)
+            product_refusals(&products, profile, includes_raw(&basis))
                 .into_iter()
+                .chain(correction_refusals(&corrections))
                 .map(|refusal| format!("Panel {number}: {refusal}")),
         );
         review.blocked = blocked;
@@ -2955,6 +3101,7 @@ mod tests {
                 input_behavior: InputBehavior::ReadOnly,
                 input_list: true,
                 proofs,
+                ..CapabilityEvidence::default()
             },
             revision: 1,
             created_at: String::new(),
