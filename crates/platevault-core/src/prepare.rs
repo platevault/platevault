@@ -3046,6 +3046,7 @@ mod tests {
         assert_eq!(fs::read(&kept).unwrap(), b"kept", "a stale link is removed, never followed");
     }
 
+    #[cfg(target_os = "macos")]
     fn fits(cards: &[&str]) -> Vec<u8> {
         let mut bytes: Vec<u8> = cards
             .iter()
@@ -3056,6 +3057,7 @@ mod tests {
         bytes
     }
 
+    #[cfg(target_os = "macos")]
     fn filter_change() -> CorrectedField {
         CorrectedField {
             field: "filter".into(),
