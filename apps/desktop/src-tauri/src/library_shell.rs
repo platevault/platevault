@@ -241,6 +241,15 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::results::calibration_result_masters,
         // storage
         crate::commands::storage::storage_overview,
+        // storage: Done / Archive (U31)
+        crate::commands::storage::archive_review,
+        crate::commands::storage::archive_restore_review,
+        crate::commands::storage::archive_execute,
+        crate::commands::storage::archive_status,
+        crate::commands::storage::session_archive_state,
+        crate::commands::storage::trash_rejected_execute,
+        crate::commands::storage::trash_intermediates_execute,
+        crate::commands::storage::trash_duplicates_execute,
         // import
         crate::commands::naming::naming_get,
         crate::commands::naming::naming_save,

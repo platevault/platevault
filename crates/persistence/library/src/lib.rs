@@ -73,6 +73,8 @@ const SCHEMA: &str = schema_modules![
     "view_groups.sql",
     "prepare.sql",
     "results.sql",
+    "archive.sql",
+    "trash_moves.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -166,6 +168,13 @@ pub use done_archive::{
     AdoptedSource, DoneArchiveBasis, PreparedUse, ProjectFrame, RecordedResult, RegisteredLocation,
     ResultsIntermediate,
 };
+mod archive;
+pub use archive::{
+    ArchiveAsset, ArchiveItemChange, ArchiveItemState, ArchiveRecord, ArchiveRepoint,
+    EntryReference, EntryRepoint, LatestRepoint, NewArchiveItem, NewArchiveTransfer, SessionFrame,
+};
+mod trash_moves;
+pub use trash_moves::{TrashMoveItem, TrashMoveRecord, TrashTarget};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -3,7 +3,10 @@
 
 //! Storage custody (spec 071).
 
+// Done / Archive execution (U31): Archive, restore and the three trash moves.
+mod archive;
 mod overview;
+mod trash_moves;
 pub use overview::{
     BlockedEntry, DuplicateCandidate, LocationAvailability, RevisionFootprint, RunFootprint,
     StorageOverview, TransferItemView, TransferView,
