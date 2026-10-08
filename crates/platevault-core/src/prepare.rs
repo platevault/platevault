@@ -4,7 +4,9 @@
 //! Application preparation of a single run (spec 069 PREP-FR-01..11,
 //! PREP-FR-14; D04, D09, D19): review, Prepare, Retry, the outcome and Open.
 //!
-//! Review is read-only. Prepare records a new revision Running in a new
+//! Review changes nothing of the run or the library; it only creates and
+//! removes hidden `.platevault-link-probe-*` entries in the planned project
+//! folder or the chosen parent to probe link support. Prepare records a new revision Running in a new
 //! folder that never existed before, then settles each input: it snapshots
 //! the source (no-follow identity and SHA-256), refuses a snapshot differing
 //! from the confirmed membership or the calibration assignment's digest, and
@@ -29,7 +31,7 @@ use std::sync::{Arc, Weak};
 
 use persistence_library::{
     EntryUpdate, MembershipBasis, NewPreparation, NewPreparedEntry, PreparationRecord,
-    RecordedFolders,
+    RecordedFolder, RecordedFolders,
 };
 use uuid::Uuid;
 
@@ -39,9 +41,9 @@ use crate::run_lifecycle::{BlockersFuture, FoldersFuture, RunFolders, RunOperati
 use crate::{header_patch, layout};
 use crate::{
     Asset, Availability, BasisOrigin, BlockedInput, CalibrationHandoff, CorrectedField,
-    CorrectionChoice, CorrectionOption, EntryEvidence, EntryKind, EntryState, ImageFormat,
-    InputMode, ItemReason, LibraryError, LifecycleBlocker, LinkKind, LocationCheck, MemberState,
-    Membership, ModeOption, NativePath, OpenOutcome, PlannedCorrection, PlannedEntry,
+    CorrectionChoice, CorrectionOption, EntryEvidence, EntryKind, EntryState, FileIdentity,
+    ImageFormat, InputMode, ItemReason, LibraryError, LifecycleBlocker, LinkKind, LocationCheck,
+    MemberState, Membership, ModeOption, NativePath, OpenOutcome, PlannedCorrection, PlannedEntry,
     PreparationFailed, PreparationOutcome, PreparationReview, PreparationRevision,
     PreparationState, PrepareRequest, PrepareStep, PreparedEntry, PreparedEntryKind,
     PreparedFolder, PreparedInput, Profile, ReasonCode, Revision, RunFolderSet, RunLocation,
@@ -96,7 +98,10 @@ impl Library {
     /// immutable committed selection, profile and capability gaps, each input
     /// mode with its refusal, the location, every entry with its path, what is
     /// blocked, calibration choices, operation count, footprint and free
-    /// space. Read-only: nothing is created until Prepare.
+    /// space. Nothing of the run is created until Prepare: review only
+    /// creates and removes hidden `.platevault-link-probe-*` entries (a
+    /// file, a symlink and a hardlink) in the planned project folder or the
+    /// chosen parent, and removes stale ones an interrupted review left.
     ///
     /// # Errors
     /// `InvalidInput` for a run in the Trash, a panel run or a run without a
@@ -119,6 +124,7 @@ impl Library {
     /// `membership_revision`; `InvalidInput` naming every refusal of the
     /// review, or when the folder appeared since; catalog errors. A failure
     /// after the revision was recorded ends it Failed.
+    #[allow(clippy::too_many_lines)]
     pub async fn prepare_run(
         &self,
         view: Uuid,
@@ -199,6 +205,15 @@ impl Library {
             header_changes: patch_of(blocked.source.as_ref()),
             blocked: Some(blocked.reason.clone()),
         }));
+        // Resolved now that both folders exist: containment never follows a
+        // symlinked parent retargeted later (PREP-FR-07).
+        let (folder, results) = (location.folder.to_path_buf()?, location.results.to_path_buf()?);
+        let (canonical_folder, canonical_results) = blocking(move || {
+            let resolve =
+                |path: &Path| fs::canonicalize(path).ok().map(|path| NativePath::from_path(&path));
+            Ok((resolve(&folder), resolve(&results)))
+        })
+        .await?;
         let input = NewPreparation {
             view_id: view,
             n: review.preparation_number,
@@ -209,6 +224,8 @@ impl Library {
             output: location.output.clone(),
             folder: location.folder.clone(),
             results_folder: location.results.clone(),
+            canonical_folder,
+            canonical_results,
             entries,
         };
         let record = match self.catalog().start_preparation(&input).await {
@@ -974,33 +991,74 @@ impl LinkSupport {
     }
 }
 
+/// The name prefix of every link probe entry review creates.
+const PROBE_PREFIX: &str = ".platevault-link-probe-";
+/// A probe entry older than this was left by an interrupted review.
+const STALE_PROBE_SECS: u64 = 60;
+
 /// Probe link support in `folder`, the planned project folder or its
 /// parent: create a probe file, then a symlink and a hardlink to it, each
-/// under a fresh hidden name, and remove exactly what was created. exFAT
-/// and FAT volumes, and Windows without the symlink privilege, refuse them.
+/// under a fresh hidden `PROBE_PREFIX` name that starts with its creation
+/// time, and remove exactly what was created on every path. exFAT and FAT
+/// volumes, and Windows without the symlink privilege, refuse them. Stale
+/// probe entries an interrupted review left are removed first.
 fn probe_links(folder: &Path) -> LinkSupport {
-    let name = format!(".platevault-link-probe-{}", Uuid::new_v4().simple());
+    /// Removes what the probe created, last first, however it ends.
+    struct Created(Vec<PathBuf>);
+    impl Drop for Created {
+        fn drop(&mut self) {
+            for path in self.0.iter().rev() {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs());
+    remove_stale_probes(folder, now);
+    let name = format!("{PROBE_PREFIX}{now}-{}", Uuid::new_v4().simple());
     let target = folder.join(&name);
     if let Err(error) = fs::OpenOptions::new().write(true).create_new(true).open(&target) {
         let detail = format!("links cannot be probed in {}: {error}", folder.display());
         return LinkSupport { symlink: Some(detail.clone()), hardlink: Some(detail) };
     }
-    let probe = |kind: &str, link: fn(&Path, &Path) -> std::io::Result<()>| {
+    let mut created = Created(vec![target.clone()]);
+    let mut probe = |kind: &str, link: fn(&Path, &Path) -> std::io::Result<()>| {
         let path = folder.join(format!("{name}.{kind}"));
         match link(&target, &path) {
             Ok(()) => {
-                let _ = fs::remove_file(&path);
+                created.0.push(path);
                 None
             }
             Err(error) => Some(format!("{} cannot hold one ({error})", folder.display())),
         }
     };
-    let support = LinkSupport {
+    LinkSupport {
         symlink: probe("symlink", fs_pathsafe::create_symlink),
         hardlink: probe("hardlink", |target, path| fs::hard_link(target, path)),
-    };
-    let _ = fs::remove_file(&target);
-    support
+    }
+}
+
+/// Remove every probe entry in `folder` an earlier review left: a file or
+/// link (never followed, never a folder) whose name has `PROBE_PREFIX` and
+/// does not start with a creation time within `STALE_PROBE_SECS` of `now`,
+/// so a concurrent review's fresh probe stays.
+fn remove_stale_probes(folder: &Path, now: u64) {
+    let Ok(entries) = fs::read_dir(folder) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(rest) = name.to_str().and_then(|name| name.strip_prefix(PROBE_PREFIX)) else {
+            continue;
+        };
+        let created = rest.split('-').next().and_then(|secs| secs.parse::<u64>().ok());
+        if created.is_some_and(|created| now.saturating_sub(created) < STALE_PROBE_SECS) {
+            continue;
+        }
+        let path = entry.path();
+        if fs::symlink_metadata(&path).is_ok_and(|metadata| !metadata.is_dir()) {
+            let _ = fs::remove_file(&path);
+        }
+    }
 }
 
 fn location_refusal(check: &LocationCheck) -> Option<String> {
@@ -1238,10 +1296,8 @@ fn check_location(plan: &DiskPlan) -> Result<LocationRead, LibraryError> {
         Err(error) => return unavailable(format!("{}: {error}", output.display())),
     };
     for recorded in plan.recorded.prepared.iter().chain(&plan.recorded.results) {
-        let path = recorded.to_path_buf()?;
-        let path = fs::canonicalize(&path).unwrap_or(path);
-        if layout::inside(&canonical, &path) {
-            let check = LocationCheck::InsidePreparedFolder { folder: recorded.clone() };
+        if layout::inside(&canonical, &resolved_record(recorded)?) {
+            let check = LocationCheck::InsidePreparedFolder { folder: recorded.path.clone() };
             return Ok((None, check, None, None));
         }
     }
@@ -1278,12 +1334,12 @@ fn check_location(plan: &DiskPlan) -> Result<LocationRead, LibraryError> {
     let writability = crate::import::writability(&writable_root);
     // A recorded folder collides even when it is missing on disk: the
     // catalog never records one folder twice (PREP-FR-06).
-    let taken = |path: &Path, recorded: &[NativePath]| {
+    let taken = |path: &Path, recorded: &[RecordedFolder]| {
         fs::symlink_metadata(path).is_ok()
-            || recorded
-                .iter()
-                .filter_map(|folder| folder.to_path_buf().ok())
-                .any(|folder| same_place(&folder, path))
+            || recorded.iter().any(|folder| {
+                folder.path.to_path_buf().is_ok_and(|chosen| chosen == path)
+                    || resolved_record(folder).is_ok_and(|place| place == resolved(path))
+            })
     };
     let check = if taken(&folder, &plan.recorded.prepared) {
         LocationCheck::FolderExists { folder: location.folder.clone() }
@@ -1297,11 +1353,14 @@ fn check_location(plan: &DiskPlan) -> Result<LocationRead, LibraryError> {
     Ok((Some(location), check, Some(writability), free_bytes))
 }
 
-/// Whether two paths name one folder: equal as written, or once each one's
-/// nearest existing ancestor is resolved, so a recorded folder missing on
-/// disk is still found in another path form.
-fn same_place(left: &Path, right: &Path) -> bool {
-    left == right || resolved(left) == resolved(right)
+/// Where a recorded folder is: the form it resolved to when Prepare made
+/// it, so a symlinked parent retargeted since never moves it (PREP-FR-07);
+/// a folder recorded without one resolves now.
+fn resolved_record(recorded: &RecordedFolder) -> Result<PathBuf, LibraryError> {
+    match &recorded.canonical {
+        Some(canonical) => canonical.to_path_buf(),
+        None => Ok(resolved(&recorded.path.to_path_buf()?)),
+    }
 }
 
 fn resolved(path: &Path) -> PathBuf {
@@ -1708,17 +1767,15 @@ fn link_or_clone(
         }
         PreparedEntryKind::Clone => {
             clone_file(&source, path).map_err(|error| occupied_or_failed(path, &error))?;
-            if !header_changes.is_empty() {
-                let cards = patch_cards(snapshot, header_changes)?;
-                let clone = crate::inventory::probe_fingerprint(path)
-                    .map_err(|error| changed(error.to_string()))?;
-                custody::patch_entry(path, &clone.identity, &cards)?;
+            let clone = crate::inventory::probe_fingerprint(path)
+                .map_err(|error| changed(error.to_string()))?;
+            // Any failure from here removes the clone while its name still
+            // holds it, so Retry clones again instead of finding it occupied.
+            let made = finish_clone(snapshot, path, &clone.identity, header_changes);
+            if made.is_err() {
+                transfer::discard(path, &clone.identity);
             }
-            let folder = path.parent().unwrap_or(path);
-            transfer::sync_folder(folder).map_err(|error| {
-                reason(ReasonCode::WriteFailed, format!("{}: {error}", folder.display()))
-            })?;
-            observe_entry(path).map_err(|error| changed(error.to_string()))?
+            return made;
         }
         PreparedEntryKind::Copy | PreparedEntryKind::DirectSource => {
             return Err(reason(
@@ -1728,6 +1785,28 @@ fn link_or_clone(
         }
     };
     verify_entry(kind, snapshot, Some(&entry), header_changes)?;
+    Ok(entry)
+}
+
+/// Patch a new clone with its reviewed header cards, sync its folder and
+/// prove it against the snapshot (D19).
+fn finish_clone(
+    snapshot: &EntryEvidence,
+    path: &Path,
+    identity: &FileIdentity,
+    header_changes: &[CorrectedField],
+) -> Result<EntryEvidence, ItemReason> {
+    if !header_changes.is_empty() {
+        let cards = patch_cards(snapshot, header_changes)?;
+        custody::patch_entry(path, identity, &cards)?;
+    }
+    let folder = path.parent().unwrap_or(path);
+    transfer::sync_folder(folder).map_err(|error| {
+        reason(ReasonCode::WriteFailed, format!("{}: {error}", folder.display()))
+    })?;
+    let entry = observe_entry(path)
+        .map_err(|error| reason(ReasonCode::DestinationChanged, error.to_string()))?;
+    verify_entry(PreparedEntryKind::Clone, snapshot, Some(&entry), header_changes)?;
     Ok(entry)
 }
 
@@ -2027,5 +2106,103 @@ mod tests {
         let missing = folder.path().join("missing");
         let refused = probe_links(&missing);
         assert!(refused.symlink.is_some() && refused.hardlink.is_some());
+    }
+
+    /// A later review removes the probe entries an interrupted one left,
+    /// by their exact prefix and age only: no link is followed, and a fresh
+    /// probe, a folder or another entry stays.
+    #[cfg(unix)]
+    #[test]
+    fn probe_links_removes_stale_probes_only() {
+        let folder = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let kept = outside.path().join("kept.txt");
+        fs::write(&kept, b"kept").unwrap();
+        let at = |name: &str| folder.path().join(name);
+        fs::write(at(".platevault-link-probe-0-a"), b"").unwrap();
+        fs::write(at(".platevault-link-probe-0-a.hardlink"), b"").unwrap();
+        std::os::unix::fs::symlink(&kept, at(".platevault-link-probe-0-a.symlink")).unwrap();
+        fs::write(at(".platevault-link-probe-0123abcd"), b"").unwrap();
+        let now =
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let fresh = format!(".platevault-link-probe-{now}-b");
+        fs::write(at(&fresh), b"").unwrap();
+        fs::create_dir(at(".platevault-link-probe-0-dir")).unwrap();
+        fs::write(at("notes.txt"), b"notes").unwrap();
+        assert_eq!(probe_links(folder.path()), LinkSupport::default());
+        let mut left: Vec<String> = fs::read_dir(folder.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(
+            left,
+            [".platevault-link-probe-0-dir".to_owned(), fresh, "notes.txt".to_owned()]
+        );
+        assert_eq!(fs::read(&kept).unwrap(), b"kept", "a stale link is removed, never followed");
+    }
+
+    fn fits(cards: &[&str]) -> Vec<u8> {
+        let mut bytes: Vec<u8> = cards
+            .iter()
+            .chain(&["END"])
+            .flat_map(|card| format!("{card:<80}").into_bytes())
+            .collect();
+        bytes.resize(2880, b' ');
+        bytes
+    }
+
+    fn filter_change() -> CorrectedField {
+        CorrectedField {
+            field: "filter".into(),
+            keywords: vec!["FILTER".into()],
+            header: Some("Ha".into()),
+            catalog: Some("OIII".into()),
+        }
+    }
+
+    /// PREP-FR-03: a patched Clone of a source without owner write (an
+    /// archive at 0444) is patched through its own handle and keeps the
+    /// source's mode; the source is untouched.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn patched_clone_of_read_only_source_keeps_its_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let folder = tempfile::tempdir().unwrap();
+        let source = folder.path().join("light.fits");
+        let cards = ["SIMPLE  =                    T", "NAXIS   =                    0"];
+        fs::write(&source, fits(&[cards[0], cards[1], "FILTER  = 'Ha      '"])).unwrap();
+        fs::set_permissions(&source, fs::Permissions::from_mode(0o444)).unwrap();
+        let original = fs::read(&source).unwrap();
+        let snapshot = observe_entry(&source).unwrap();
+        let clone = folder.path().join("clone.fits");
+        let entry =
+            link_or_clone(PreparedEntryKind::Clone, &snapshot, &clone, &[filter_change()]).unwrap();
+        assert_eq!(entry.path, NativePath::from_path(&clone));
+        assert_eq!(fs::metadata(&clone).unwrap().permissions().mode() & 0o777, 0o444);
+        assert!(
+            String::from_utf8_lossy(&fs::read(&clone).unwrap()).contains("FILTER  = 'OIII    '")
+        );
+        assert_eq!(fs::read(&source).unwrap(), original);
+        assert_eq!(fs::metadata(&source).unwrap().permissions().mode() & 0o777, 0o444);
+    }
+
+    /// A patch that fails after the clone was made removes that clone, so
+    /// the next attempt (Retry) clones again instead of finding its name
+    /// occupied.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn failed_clone_patch_removes_the_clone() {
+        let folder = tempfile::tempdir().unwrap();
+        let source = folder.path().join("light.fits");
+        fs::write(&source, vec![b'x'; 2880]).unwrap();
+        let snapshot = observe_entry(&source).unwrap();
+        let clone = folder.path().join("clone.fits");
+        let failed = link_or_clone(PreparedEntryKind::Clone, &snapshot, &clone, &[filter_change()])
+            .unwrap_err();
+        assert_eq!(failed.code, ReasonCode::WriteFailed, "{failed:?}");
+        assert!(fs::symlink_metadata(&clone).is_err(), "the failed clone is removed");
+        let retried = link_or_clone(PreparedEntryKind::Clone, &snapshot, &clone, &[]).unwrap();
+        assert_eq!(retried.sha256, snapshot.sha256);
     }
 }
