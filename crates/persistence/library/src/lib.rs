@@ -73,11 +73,14 @@ const SCHEMA: &str = schema_modules![
     "view_groups.sql",
     "prepare.sql",
     "results.sql",
+    "cleanup.sql",
+    "archive.sql",
+    "trash_moves.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
 /// version is refused before any module's DDL runs.
-pub const SCHEMA_VERSION: i64 = 14;
+pub const SCHEMA_VERSION: i64 = 16;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -142,7 +145,7 @@ mod import;
 mod session_filters;
 mod storage;
 mod storage_overview;
-pub use storage_overview::DuplicateCopy;
+pub use storage_overview::{DuplicateCopy, VerifiedTransfer};
 mod targets_list;
 mod views;
 pub use views::{CandidateBasis, CandidateSession, ChoiceBasis, MembershipBasis};
@@ -155,12 +158,29 @@ pub use prepare::{
     PreparationRecord, RecordedFolder, RecordedFolders, ResumedGroupPreparation,
 };
 mod home;
-pub use home::RunningOperations;
+pub use home::{RunningOperations, RunningStorage};
 mod results;
 pub use results::{
     DetectedMaster, NewAttachment, Observation, ResultsBasis, ResultsScan, ScannedResult,
     VerifiedAcceptance, VerifiedProduct,
 };
+mod cleanup;
+pub use cleanup::{
+    CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, GroupFolders, RunCleanupDraft,
+    RunCleanupFolder, RunCleanupItem, RunCleanupRecord, RunFolders,
+};
+mod done_archive;
+pub use done_archive::{
+    AdoptedSource, DoneArchiveBasis, PreparedUse, ProjectFrame, RecordedResult, RegisteredLocation,
+    ResultsIntermediate,
+};
+mod archive;
+pub use archive::{
+    ArchiveAsset, ArchiveItemChange, ArchiveItemState, ArchiveRecord, ArchiveRepoint,
+    EntryReference, EntryRepoint, LatestRepoint, NewArchiveItem, NewArchiveTransfer, SessionFrame,
+};
+mod trash_moves;
+pub use trash_moves::{TrashMoveItem, TrashMoveRecord, TrashTarget};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -18,6 +18,7 @@
 //! here: every mutation still re-verifies its SHA-256 immediately before it
 //! moves anything (D19).
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -30,8 +31,8 @@ use crate::library::{blocking, Library};
 use crate::{
     inventory, EntryEvidence, EntryState, InputMode, ItemOutcome, ItemPhase, ItemReason,
     LibraryError, LinkKind, Location, NativePath, PreparationState, PreparedEntry,
-    PreparedEntryKind, ReasonCode, Revision, StorageItem, StorageOperation, StorageOperationKind,
-    StorageOperationState, TransferDestination, WrittenCopy,
+    PreparedEntryKey, PreparedEntryKind, ReasonCode, Revision, StorageItem, StorageOperation,
+    StorageOperationKind, StorageOperationState, TransferArchive, TransferDestination, WrittenCopy,
 };
 
 /// What Storage shows, one section per concern.
@@ -138,13 +139,15 @@ pub struct DuplicateCandidate {
     pub copies: Vec<DuplicateCopy>,
 }
 
-/// A verified transfer with each item's recorded phase.
+/// A verified transfer with each item's recorded phase and, for an Archive
+/// or restore, the transfer of its Project it carries (STO-FR-11).
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferView {
     pub operation_id: Uuid,
     pub kind: StorageOperationKind,
     pub state: StorageOperationState,
+    pub archive: Option<TransferArchive>,
     pub created_at: String,
     pub updated_at: String,
     pub items: Vec<TransferItemView>,
@@ -209,8 +212,12 @@ impl Library {
             for revision in catalog.view_preparations(view_id).await? {
                 preparations.push(catalog.preparation(revision.id).await?);
             }
+            let removed = catalog.removed_prepared_entries(view_id).await?;
             let revisions = blocking(move || {
-                Ok(preparations.into_iter().map(revision_footprint).collect::<Vec<_>>())
+                Ok(preparations
+                    .into_iter()
+                    .map(|record| revision_footprint(record, &removed))
+                    .collect::<Vec<_>>())
             })
             .await?;
             runs.push(RunFootprint {
@@ -282,9 +289,10 @@ impl Library {
     async fn transfer_views(&self) -> Result<Vec<TransferView>, LibraryError> {
         let catalog = self.catalog();
         let mut views = Vec::new();
-        for operation in catalog.archive_transfers().await? {
+        for transfer in catalog.archive_transfers().await? {
+            let (operation, archive) = (transfer.operation, transfer.archive);
             if operation.state == StorageOperationState::Settled {
-                views.push(transfer_view(operation, &[]));
+                views.push(transfer_view(operation, archive, &[]));
                 continue;
             }
             let items = operation.items.clone();
@@ -305,22 +313,28 @@ impl Library {
             } else {
                 catalog.storage_operation(operation.id).await?
             };
-            views.push(transfer_view(operation, &found));
+            views.push(transfer_view(operation, archive, &found));
         }
         Ok(views)
     }
 }
 
-/// One revision's footprint, re-reading every entry it wrote. Runs off the
-/// async runtime.
-fn revision_footprint(record: PreparationRecord) -> RevisionFootprint {
+/// One revision's footprint, re-reading every entry it wrote. An entry a
+/// run Clean up moved to the OS Trash (`removed`) holds nothing and never
+/// reads as drift: `PlateVault` moved it. Runs off the async runtime.
+fn revision_footprint(
+    record: PreparationRecord,
+    removed: &HashSet<PreparedEntryKey>,
+) -> RevisionFootprint {
     let running = record.revision.state == PreparationState::Running;
     let mut entries = 0;
     let mut footprint_bytes = 0;
     let mut blocked = Vec::new();
     for entry in &record.entries {
+        let key = PreparedEntryKey { preparation_id: record.revision.id, seq: entry.seq };
         if !entry.kind.created()
             || !matches!(entry.state, EntryState::Prepared | EntryState::Drifted)
+            || removed.contains(&key)
         {
             continue;
         }
@@ -387,12 +401,14 @@ fn duplicate_candidates(copies: Vec<DuplicateCopy>) -> Vec<DuplicateCandidate> {
 
 fn transfer_view(
     operation: StorageOperation,
+    archive: Option<TransferArchive>,
     found: &[(u32, Revision, ItemReason)],
 ) -> TransferView {
     TransferView {
         operation_id: operation.id,
         kind: operation.kind,
         state: operation.state,
+        archive,
         created_at: operation.created_at,
         updated_at: operation.updated_at,
         items: operation

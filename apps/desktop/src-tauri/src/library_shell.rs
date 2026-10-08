@@ -128,6 +128,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::project_goals::project_list,
         crate::commands::project_goals::project_mark_done,
         crate::commands::project_goals::project_reopen,
+        crate::commands::project_goals::project_done_archive_review,
         crate::commands::project_goals::project_detail,
         crate::commands::project_goals::project_candidates,
         crate::commands::project_goals::goal_template_list,
@@ -240,6 +241,18 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::results::calibration_result_masters,
         // storage
         crate::commands::storage::storage_overview,
+        crate::commands::storage::cleanup_review,
+        crate::commands::storage::cleanup_execute,
+        crate::commands::storage::empty_trash_execute,
+        // storage: Done / Archive (U31)
+        crate::commands::storage::archive_review,
+        crate::commands::storage::archive_restore_review,
+        crate::commands::storage::archive_execute,
+        crate::commands::storage::archive_status,
+        crate::commands::storage::session_archive_state,
+        crate::commands::storage::trash_rejected_execute,
+        crate::commands::storage::trash_intermediates_execute,
+        crate::commands::storage::trash_duplicates_execute,
         // import
         crate::commands::naming::naming_get,
         crate::commands::naming::naming_save,

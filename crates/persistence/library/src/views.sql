@@ -129,12 +129,27 @@ CREATE TABLE IF NOT EXISTS view_member_copies (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS view_member_copies_asset ON view_member_copies (asset_id);
 
+-- Empty Trash's permit to remove a run record with every committed row it
+-- owns (STO-FR-17, RES-FR-10). PV-STO inserts the run's row and deletes it
+-- again in the one transaction that removes the record, so the table is empty
+-- outside that transaction; only a run in its Project's Trash takes a permit.
+-- Every immutability trigger below refuses a delete unless the run holds one.
+CREATE TABLE IF NOT EXISTS run_record_removals (
+    view_id TEXT PRIMARY KEY NOT NULL
+) STRICT;
+
+CREATE TRIGGER IF NOT EXISTS run_record_removals_trashed_only
+BEFORE INSERT ON run_record_removals
+WHEN (SELECT trashed_at FROM views WHERE id = NEW.view_id) IS NULL
+BEGIN SELECT RAISE(ABORT, 'only Empty Trash of a run in its Project''s Trash removes its record'); END;
+
 CREATE TRIGGER IF NOT EXISTS view_revisions_committed_update
 BEFORE UPDATE ON view_revisions WHEN OLD.state = 'committed'
 BEGIN SELECT RAISE(ABORT, 'committed view revision is immutable'); END;
 
 CREATE TRIGGER IF NOT EXISTS view_revisions_committed_delete
 BEFORE DELETE ON view_revisions WHEN OLD.state = 'committed'
+    AND NOT EXISTS (SELECT 1 FROM run_record_removals WHERE view_id = OLD.view_id)
 BEGIN SELECT RAISE(ABORT, 'committed view revision is immutable'); END;
 
 CREATE TRIGGER IF NOT EXISTS view_session_choices_committed_insert
@@ -150,6 +165,10 @@ BEGIN SELECT RAISE(ABORT, 'committed view revision is immutable'); END;
 CREATE TRIGGER IF NOT EXISTS view_session_choices_committed_delete
 BEFORE DELETE ON view_session_choices
 WHEN (SELECT state FROM view_revisions WHERE id = OLD.revision_row) = 'committed'
+    AND NOT EXISTS (
+        SELECT 1 FROM run_record_removals r JOIN view_revisions v ON v.view_id = r.view_id
+        WHERE v.id = OLD.revision_row
+    )
 BEGIN SELECT RAISE(ABORT, 'committed view revision is immutable'); END;
 
 CREATE TRIGGER IF NOT EXISTS view_members_committed_insert
@@ -165,6 +184,10 @@ BEGIN SELECT RAISE(ABORT, 'committed view revision is immutable'); END;
 CREATE TRIGGER IF NOT EXISTS view_members_committed_delete
 BEFORE DELETE ON view_members
 WHEN (SELECT state FROM view_revisions WHERE id = OLD.revision_row) = 'committed'
+    AND NOT EXISTS (
+        SELECT 1 FROM run_record_removals r JOIN view_revisions v ON v.view_id = r.view_id
+        WHERE v.id = OLD.revision_row
+    )
 BEGIN SELECT RAISE(ABORT, 'committed view revision is immutable'); END;
 
 CREATE TRIGGER IF NOT EXISTS view_member_copies_committed_insert
@@ -180,4 +203,8 @@ BEGIN SELECT RAISE(ABORT, 'committed view revision is immutable'); END;
 CREATE TRIGGER IF NOT EXISTS view_member_copies_committed_delete
 BEFORE DELETE ON view_member_copies
 WHEN (SELECT state FROM view_revisions WHERE id = OLD.revision_row) = 'committed'
+    AND NOT EXISTS (
+        SELECT 1 FROM run_record_removals r JOIN view_revisions v ON v.view_id = r.view_id
+        WHERE v.id = OLD.revision_row
+    )
 BEGIN SELECT RAISE(ABORT, 'committed view revision is immutable'); END;

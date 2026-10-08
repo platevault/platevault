@@ -48,6 +48,14 @@ mod home;
 pub use home::*;
 mod results;
 pub use results::*;
+mod cleanup;
+pub use cleanup::*;
+mod done_archive;
+pub use done_archive::*;
+mod archive;
+pub use archive::*;
+mod trash_moves;
+pub use trash_moves::*;
 
 pub type Revision = u64;
 

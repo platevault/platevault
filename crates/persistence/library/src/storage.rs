@@ -41,47 +41,8 @@ impl Catalog {
         kind: StorageOperationKind,
         drafts: &[StorageItemDraft],
     ) -> Result<StorageOperation> {
-        if drafts.is_empty() {
-            return Err(LibraryError::InvalidInput("a storage operation needs an item".into()));
-        }
-        for draft in drafts {
-            validate_draft(kind, draft)?;
-        }
-        let id = Uuid::new_v4();
         let operation = write_txn!(self, |conn| {
-            let at = now()?;
-            sqlx::query(
-                "INSERT INTO storage_operations (id, kind, state, revision, created_at, updated_at) \
-                 VALUES (?1, ?2, 'reviewed', 1, ?3, ?3)",
-            )
-            .bind(id.to_string())
-            .bind(to_text(&kind)?)
-            .bind(&at)
-            .execute(&mut *conn)
-            .await?;
-            for (seq, draft) in drafts.iter().enumerate() {
-                let seq = i64::try_from(seq)
-                    .map_err(|_| LibraryError::InvalidInput("too many storage items".into()))?;
-                let identity = StoredIdentity {
-                    kind: draft.source.kind.clone(),
-                    fingerprint: draft.source.fingerprint.clone(),
-                };
-                sqlx::query(
-                    "INSERT INTO storage_items (op_id, seq, path, identity, sha256, relied_on, \
-                     destination, written, phase, outcome, reason, revision, updated_at) \
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, 'pending', NULL, NULL, 1, ?8)",
-                )
-                .bind(id.to_string())
-                .bind(seq)
-                .bind(path_key(&draft.source.path))
-                .bind(to_json(&identity)?)
-                .bind(draft.source.sha256.as_deref())
-                .bind(to_json(&draft.relied_on)?)
-                .bind(draft.destination.as_ref().map(to_json).transpose()?)
-                .bind(&at)
-                .execute(&mut *conn)
-                .await?;
-            }
+            let id = insert_operation(conn, kind, drafts).await?;
             load_operation(conn, id).await?
         });
         Ok(operation)
@@ -221,6 +182,79 @@ impl Catalog {
         });
         Ok(operation)
     }
+}
+
+/// Insert a reviewed operation and its items inside the caller's write
+/// transaction, so a feature records its own rows with it atomically.
+///
+/// # Errors
+/// As [`Catalog::record_storage_operation`].
+pub async fn insert_operation(
+    conn: &mut SqliteConnection,
+    kind: StorageOperationKind,
+    drafts: &[StorageItemDraft],
+) -> Result<Uuid> {
+    if drafts.is_empty() {
+        return Err(LibraryError::InvalidInput("a storage operation needs an item".into()));
+    }
+    for draft in drafts {
+        validate_draft(kind, draft)?;
+    }
+    let id = Uuid::new_v4();
+    let at = now()?;
+    sqlx::query(
+        "INSERT INTO storage_operations (id, kind, state, revision, created_at, updated_at) \
+         VALUES (?1, ?2, 'reviewed', 1, ?3, ?3)",
+    )
+    .bind(id.to_string())
+    .bind(to_text(&kind)?)
+    .bind(&at)
+    .execute(&mut *conn)
+    .await?;
+    for (seq, draft) in drafts.iter().enumerate() {
+        let seq = i64::try_from(seq)
+            .map_err(|_| LibraryError::InvalidInput("too many storage items".into()))?;
+        let identity = StoredIdentity {
+            kind: draft.source.kind.clone(),
+            fingerprint: draft.source.fingerprint.clone(),
+        };
+        sqlx::query(
+            "INSERT INTO storage_items (op_id, seq, path, identity, sha256, relied_on, \
+             destination, written, phase, outcome, reason, revision, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, 'pending', NULL, NULL, 1, ?8)",
+        )
+        .bind(id.to_string())
+        .bind(seq)
+        .bind(path_key(&draft.source.path))
+        .bind(to_json(&identity)?)
+        .bind(draft.source.sha256.as_deref())
+        .bind(to_json(&draft.relied_on)?)
+        .bind(draft.destination.as_ref().map(to_json).transpose()?)
+        .bind(&at)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(id)
+}
+
+/// Delete a reviewed operation that never started, inside the caller's write
+/// transaction: nothing on disk was written or moved for it, so a review the
+/// user replaced leaves no unsettled work behind.
+///
+/// # Errors
+/// `InvalidInput` once the operation has started; `NotFound` for an unknown
+/// operation.
+pub async fn withdraw_reviewed_operation(conn: &mut SqliteConnection, id: Uuid) -> Result<()> {
+    if operation_state(conn, id).await? != StorageOperationState::Reviewed {
+        return Err(invalid("only a reviewed storage operation that never started is withdrawn"));
+    }
+    for statement in [
+        "DELETE FROM storage_items WHERE op_id = ?1",
+        "DELETE FROM storage_operations WHERE id = ?1",
+    ] {
+        sqlx::query(statement).bind(id.to_string()).execute(&mut *conn).await?;
+    }
+    Ok(())
 }
 
 fn invalid(message: &str) -> LibraryError {

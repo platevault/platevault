@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS catalog_meta (
     value INTEGER NOT NULL
 ) STRICT;
 
-INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 14);
+INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('schema_version', 16);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('grouping_revision', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('scan_sequence', 0);
 INSERT OR IGNORE INTO catalog_meta (key, value) VALUES ('target_generation', 0);

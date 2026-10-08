@@ -51,8 +51,11 @@ CREATE TRIGGER IF NOT EXISTS calibration_decisions_append_only_update
 BEFORE UPDATE ON calibration_decisions
 BEGIN SELECT RAISE(ABORT, 'calibration decisions are append-only'); END;
 
+-- Only Empty Trash removes a run's decisions, with its record (views.sql
+-- `run_record_removals`).
 CREATE TRIGGER IF NOT EXISTS calibration_decisions_append_only_delete
 BEFORE DELETE ON calibration_decisions
+WHEN NOT EXISTS (SELECT 1 FROM run_record_removals WHERE view_id = OLD.view_id)
 BEGIN SELECT RAISE(ABORT, 'calibration decisions are append-only'); END;
 
 -- An adopted master whose library copy last hashed, at assignment, against

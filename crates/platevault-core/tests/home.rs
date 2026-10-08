@@ -9,6 +9,8 @@
 //! running work of every kind.
 #![cfg(unix)]
 
+#[path = "support/cleanup.rs"]
+mod cleanup_support;
 #[path = "support/prepare_group.rs"]
 mod group_support;
 #[path = "support/home.rs"]
@@ -317,6 +319,9 @@ async fn running_work_lists_scan_measurement_prepare_import_storage() {
                     ("prepare_all", *group_preparation_id)
                 }
                 RunningWork::Import { import_id, .. } => ("import", *import_id),
+                RunningWork::Cleanup { cleanup_id, .. } => ("cleanup", *cleanup_id),
+                RunningWork::Archive { transfer_id, .. } => ("archive", *transfer_id),
+                RunningWork::TrashMove { operation_id, .. } => ("trash_move", *operation_id),
                 RunningWork::Storage { operation_id, .. } => ("storage", *operation_id),
             })
             .collect()
@@ -336,6 +341,43 @@ async fn running_work_lists_scan_measurement_prepare_import_storage() {
     let home = dashboard(&world.library, false).await;
     assert!(!listed(&home).contains(&("prepare", preparation.id)));
     assert_eq!(listed(&home).len(), 4);
+}
+
+/// PRJ-FR-17 section 6, STO-FR-01: a Running Clean up is listed once, as the
+/// run's Clean up with its storage operation, never again as that bare
+/// storage operation, and leaves the list once it settles.
+#[tokio::test]
+async fn running_work_lists_a_clean_up_once() {
+    let world = world().await;
+    let profile = world.siril("exit 0").await;
+    let request = world.request(&profile, InputMode::Copy, None);
+    let outcome = world.prepare(&request, &prepare_support::Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    world.library.mark_view_complete(world.run).await.unwrap();
+    let trash = cleanup_support::ScopedTrash::new(&world.temp.path().join("OS Trash"));
+    let clean_up =
+        CleanupRequest::CleanUp { view_id: world.run, selection: CleanupSelection::default() };
+    let review = world.library.review_cleanup(&clean_up, trash.dyn_trash()).await.unwrap();
+    let id = review.id.expect("Clean up records a review");
+    let catalog = world.catalog();
+    let started = catalog.start_run_cleanup(id).await.unwrap();
+    let operation = started.operation_id.expect("its entries move through the journal");
+    catalog.start_storage_operation(operation).await.unwrap();
+
+    let home = dashboard(&world.library, false).await;
+    let [RunningWork::Cleanup { cleanup_id, action, view_id, operation_id, .. }] =
+        home.running_work.as_slice()
+    else {
+        panic!("one Clean up and no bare storage operation: {:#?}", home.running_work);
+    };
+    assert_eq!(
+        (*cleanup_id, *action, *view_id, *operation_id),
+        (id, CleanupKind::CleanUp, world.run, Some(operation))
+    );
+    let outcome = world.library.run_cleanup(id, trash.dyn_trash()).await.unwrap();
+    assert_eq!(outcome.state, CleanupState::Settled, "{outcome:#?}");
+    let home = dashboard(&world.library, false).await;
+    assert!(home.running_work.is_empty(), "{:#?}", home.running_work);
 }
 
 /// PRJ-FR-17 section 6, PREP-FR-12: a Running Prepare all is listed once,
