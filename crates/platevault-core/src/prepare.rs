@@ -2383,30 +2383,7 @@ impl Library {
         let recorded = catalog.recorded_preparation_folders().await?;
         let link =
             (request.mode == InputMode::LinkedView).then(|| request.link.unwrap_or_default());
-        let mut refusals = Vec::new();
-        if group.setup.profile_id != Some(profile.id) {
-            refusals.push(format!(
-                "run group '{}' does not share profile '{}'; set the group's setup first",
-                group.name, profile.name
-            ));
-        }
-        if group.setup.input_mode != Some(request.mode) {
-            refusals.push(format!(
-                "run group '{}' does not share this input mode; set the group's setup first",
-                group.name
-            ));
-        }
-        if request.link.is_some() && request.mode != InputMode::LinkedView {
-            refusals.push("a link kind applies to Linked View only".to_owned());
-        }
-        if let Some(refusal) = mode_refusal(&profile, request.mode) {
-            refusals.push(refusal);
-        }
-        if let Some(running) =
-            basis.preparations.iter().find(|done| done.outcome == PreparationState::Running)
-        {
-            refusals.push(format!("Prepare all '{}' is Running", running.name()));
-        }
+        let mut refusals = group_setup_refusals(group, &profile, request, &basis.preparations);
         let n = basis.preparations.iter().map(|done| done.n).max().unwrap_or(0) + 1;
         let mut skipped = Vec::new();
         let mut plans = Vec::new();
@@ -2595,6 +2572,42 @@ impl Library {
         review.calibration = Some(calibration);
         Ok(PanelPlan { review, inputs, results, anchors })
     }
+}
+
+/// Why Prepare all refuses `request` before any panel is read: the group
+/// shares another profile or input mode, a link kind outside Linked View,
+/// the profile refuses the mode, or a Prepare all is Running.
+fn group_setup_refusals(
+    group: &ViewGroup,
+    profile: &Profile,
+    request: &PrepareRequest,
+    preparations: &[GroupPreparation],
+) -> Vec<String> {
+    let mut refusals = Vec::new();
+    if group.setup.profile_id != Some(profile.id) {
+        refusals.push(format!(
+            "run group '{}' does not share profile '{}'; set the group's setup first",
+            group.name, profile.name
+        ));
+    }
+    if group.setup.input_mode != Some(request.mode) {
+        refusals.push(format!(
+            "run group '{}' does not share this input mode; set the group's setup first",
+            group.name
+        ));
+    }
+    if request.link.is_some() && request.mode != InputMode::LinkedView {
+        refusals.push("a link kind applies to Linked View only".to_owned());
+    }
+    if let Some(refusal) = mode_refusal(profile, request.mode) {
+        refusals.push(refusal);
+    }
+    if let Some(running) =
+        preparations.iter().find(|done| done.outcome == PreparationState::Running)
+    {
+        refusals.push(format!("Prepare all '{}' is Running", running.name()));
+    }
+    refusals
 }
 
 /// What Prepare all review checks on disk, off the async runtime.

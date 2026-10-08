@@ -175,17 +175,13 @@ fn revision_folder(
     }
     let project_dir = output.join(segment("Project", project)?);
     let name = segment(label, name)?;
-    Ok(match folder_name {
-        Some(chosen) => {
-            let chosen = segment("folder", chosen)?;
-            let folder = project_dir.join(&chosen);
-            (project_dir, chosen, folder)
-        }
-        None => {
-            let folder = project_dir.join(revision_folder_name(&name, n));
-            (project_dir, name, folder)
-        }
-    })
+    if let Some(chosen) = folder_name {
+        let chosen = segment("folder", chosen)?;
+        let folder = project_dir.join(&chosen);
+        return Ok((project_dir, chosen, folder));
+    }
+    let folder = project_dir.join(revision_folder_name(&name, n));
+    Ok((project_dir, name, folder))
 }
 
 /// A prepared folder never is a Results folder, holds one or lies inside one.
