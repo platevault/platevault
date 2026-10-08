@@ -18,9 +18,9 @@ use std::sync::Arc;
 
 use platevault_core::library::Library;
 use platevault_core::{
-    GoalInput, GoalSpec, GoalTemplate, GoalTemplateInput, Project, ProjectCandidate, ProjectDetail,
-    ProjectInput, ProjectQuery, ProjectRejection, ProjectSummary, RejectionMark, Revision,
-    SubjectInput,
+    DoneArchiveSheet, GoalInput, GoalSpec, GoalTemplate, GoalTemplateInput, Project,
+    ProjectCandidate, ProjectDetail, ProjectInput, ProjectQuery, ProjectRejection, ProjectSummary,
+    RejectionMark, Revision, SubjectInput,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -220,6 +220,22 @@ pub async fn project_reopen(
         .reopen_project(project_id, expected_revision)
         .await
         .map_err(fail(Some(project_id)))
+}
+
+/// The Done Project's Done / Archive sheet: Archive with the sessions it keeps,
+/// "Move N rejected frames / processing intermediates / duplicate copies to
+/// Trash (size)" with every refusal and its reason, and Empty Trash while the
+/// Project's Trash holds runs. Offers only: records and moves nothing.
+///
+/// # Errors
+/// `InvalidInput` for a Project that is not Done; `NotFound` for an unknown
+/// Project.
+#[tauri::command]
+pub async fn project_done_archive_review(
+    library: State<'_, Arc<Library>>,
+    project_id: Uuid,
+) -> Reply<DoneArchiveSheet> {
+    library.done_archive_review(project_id).await.map_err(fail(Some(project_id)))
 }
 
 /// The Project with its candidates and latest Project-only decisions, from one

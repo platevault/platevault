@@ -167,6 +167,11 @@ pub use cleanup::{
     CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, RunCleanupDraft, RunCleanupFolder,
     RunCleanupItem, RunCleanupRecord,
 };
+mod done_archive;
+pub use done_archive::{
+    AdoptedSource, DoneArchiveBasis, PreparedUse, ProjectFrame, RecordedResult, RegisteredLocation,
+    ResultsIntermediate,
+};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

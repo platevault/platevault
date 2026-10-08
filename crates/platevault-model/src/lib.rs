@@ -50,6 +50,8 @@ mod results;
 pub use results::*;
 mod cleanup;
 pub use cleanup::*;
+mod done_archive;
+pub use done_archive::*;
 
 pub type Revision = u64;
 
