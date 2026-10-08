@@ -84,7 +84,9 @@ pub(super) fn stamp(meta: &Metadata) -> Stamp {
 ///
 /// Unix uses the decimal inode number. Windows opens the entry itself (never
 /// a reparse target) and uses the 64-bit file index as 16 hex digits after
-/// checking the handle's volume serial against the qualified volume.
+/// checking the handle's volume serial against the qualified volume and its
+/// length against `meta`; a file that grew in between fails with the
+/// `CHANGED_WHILE_READ` kind.
 // Only the Windows branch can fail; the shared signature keeps callers uniform.
 #[cfg_attr(unix, allow(clippy::unnecessary_wraps))]
 pub(super) fn file_id(
@@ -107,15 +109,44 @@ pub(super) fn file_id(
         if Some(windows_handle::serial(&info)) != volume.stable_id {
             return Err(std::io::Error::other("entry is not on the qualified volume"));
         }
-        if !meta.is_dir() && info.file_size() != meta.len() {
-            return Err(std::io::Error::other("entry changed while its file ID was read"));
-        }
+        unchanged_length(meta, info.file_size())?;
         Ok(Some(format!("{:016X}", info.file_index())))
     }
     #[cfg(not(any(unix, windows)))]
     {
         let _ = (path, meta);
         Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+    }
+}
+
+/// The error kind of a file-ID read whose entry changed between its metadata
+/// and its handle. No file-ID read reports it for any other reason: Unix
+/// makes no call, and no Windows file error decodes to it.
+const CHANGED_WHILE_READ: std::io::ErrorKind = std::io::ErrorKind::Interrupted;
+
+/// Refuse a handle that reports another length than the metadata it was
+/// opened after: the file changed in between, typically because it is still
+/// being written.
+#[cfg(any(windows, test))]
+fn unchanged_length(meta: &Metadata, handle_len: u64) -> std::io::Result<()> {
+    if meta.is_dir() || handle_len == meta.len() {
+        return Ok(());
+    }
+    Err(std::io::Error::new(CHANGED_WHILE_READ, "entry changed while its file ID was read"))
+}
+
+/// A failed file-ID read as a probe reports it. A link or junction is invalid
+/// input. An entry that changed while it was read is an identity conflict, so
+/// its reader observes it again rather than refusing it as unreadable: a
+/// capture still being written keeps settling. Anything else keeps its I/O
+/// error kind.
+pub(super) fn file_id_error(path: &Path, error: &std::io::Error) -> LibraryError {
+    match error.kind() {
+        std::io::ErrorKind::InvalidInput => {
+            scoped(LibraryError::InvalidInput(error.to_string()), path)
+        }
+        CHANGED_WHILE_READ => scoped(LibraryError::IdentityConflict(error.to_string()), path),
+        _ => LibraryError::from_io(path, error),
     }
 }
 
@@ -859,6 +890,26 @@ mod tests {
         assert_eq!(windows_kind(Some(2)), VolumeKind::Removable);
         assert_eq!(windows_kind(Some(4)), VolumeKind::Network);
         assert_eq!(windows_kind(None), VolumeKind::Local);
+    }
+
+    #[test]
+    fn a_file_growing_while_its_id_is_read_is_observed_again_not_unreadable() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("light_002.fits");
+        fs::write(&path, [0_u8; 2880]).unwrap();
+        let meta = fs::symlink_metadata(&path).unwrap();
+        assert!(unchanged_length(&meta, meta.len()).is_ok());
+        let folder_meta = fs::symlink_metadata(folder.path()).unwrap();
+        assert!(unchanged_length(&folder_meta, folder_meta.len() + 1).is_ok(), "folders differ");
+
+        let kind = |error: &std::io::Error| file_id_error(&path, error).response(None, None).kind;
+        let grew = unchanged_length(&meta, meta.len() + 2880).unwrap_err();
+        assert_eq!(kind(&grew), "identity_conflict", "a file still being written settles again");
+        let elsewhere = std::io::Error::other("entry is not on the qualified volume");
+        assert_eq!(kind(&elsewhere), "source_unavailable");
+        let link =
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "entry is a reparse point");
+        assert_eq!(kind(&link), "invalid_input");
     }
 
     fn observation(stable_id: &str, kind: VolumeKind) -> RootObservation {

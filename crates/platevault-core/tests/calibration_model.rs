@@ -80,9 +80,11 @@ fn required_kinds_are_bias_dark_and_flat_without_duplicates() {
 #[test]
 fn an_adoption_destination_names_a_new_file_below_the_location_root() {
     use platevault_core::AdoptionDestination;
+    // Each literal is the native encoding of its text: `/` is a separator on
+    // every host, and a payload from another OS is refused before validation.
     let destination = |path: &str| AdoptionDestination {
         location_id: Uuid::from_u128(7),
-        relative_path: NativePath::UnixBytes(path.as_bytes().to_vec()),
+        relative_path: NativePath::from_path(std::path::Path::new(path)),
     };
     for refused in
         ["/masters/masterFlat.fit", "../masterFlat.fit", "masters/../../x.fit", "", ".", "masters/"]
