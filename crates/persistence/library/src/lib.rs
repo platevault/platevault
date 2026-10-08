@@ -152,7 +152,7 @@ mod prepare;
 pub use prepare::{
     EntryUpdate, GroupPanel, GroupPreparationBasis, GroupPreparationRecord, NewGroupPreparation,
     NewPanelPreparation, NewPreparation, NewPreparedEntry, PanelPreparationRecord,
-    PreparationRecord, RecordedFolder, RecordedFolders,
+    PreparationRecord, RecordedFolder, RecordedFolders, ResumedGroupPreparation,
 };
 mod home;
 pub use home::RunningOperations;
@@ -7522,6 +7522,48 @@ mod tests {
                             (session_id=? AND size_bytes=? AND capture_start=? AND location_id=?)";
                 assert!(plan.iter().any(|detail| detail.contains(seek)), "{sql}\n{plan:#?}");
             }
+        }
+    }
+
+    /// The Prepare all and Results foreign-key lookups seek an index: a
+    /// Prepare all's panel revisions, the Results a preparation revision or a
+    /// Prepare all is recorded on, and a run's open master offers.
+    #[tokio::test]
+    async fn preparation_and_results_lookups_use_indexes() {
+        let dir = tempfile::tempdir().unwrap();
+        let catalog = Catalog::open(&dir.path().join("catalog.sqlite")).await.unwrap();
+        let mut conn = catalog.reader().await.unwrap();
+        for (sql, index) in [
+            (
+                "SELECT state FROM preparation_revisions WHERE group_preparation_id = ?1",
+                "preparation_revisions_group",
+            ),
+            (
+                "SELECT id FROM result_candidates WHERE prepared_revision_id = ?1",
+                "result_candidates_prepared",
+            ),
+            (
+                "SELECT id FROM result_candidates WHERE group_preparation_id = ?1",
+                "result_candidates_group_prepared",
+            ),
+            (
+                "SELECT id FROM master_offers WHERE view_id = ?1 AND state = 'offered'",
+                "master_offers_view",
+            ),
+        ] {
+            let plan: Vec<String> =
+                sqlx::query(sqlx::AssertSqlSafe(format!("EXPLAIN QUERY PLAN {sql}")))
+                    .bind("id")
+                    .fetch_all(&mut *conn)
+                    .await
+                    .unwrap()
+                    .iter()
+                    .map(|row| row.try_get::<String, _>("detail").unwrap())
+                    .collect();
+            assert!(
+                plan.iter().any(|detail| detail.contains(&format!("INDEX {index} "))),
+                "{sql}\n{plan:#?}"
+            );
         }
     }
 

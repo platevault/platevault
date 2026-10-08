@@ -76,15 +76,18 @@ CREATE TABLE IF NOT EXISTS preparation_revisions (
 ) STRICT;
 CREATE UNIQUE INDEX IF NOT EXISTS preparation_revisions_running
     ON preparation_revisions (view_id) WHERE state = 'running';
+CREATE INDEX IF NOT EXISTS preparation_revisions_group
+    ON preparation_revisions (group_preparation_id) WHERE group_preparation_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS prepared_entries (
     prep_id TEXT NOT NULL REFERENCES preparation_revisions (id),
     seq INTEGER NOT NULL CHECK (seq >= 0),
-    -- The membership's logical capture; null for a calibration input.
+    -- The membership's logical capture; null for a calibration input and for
+    -- an accepted product input (RES-FR-05), which `source` names.
     member_key TEXT,
     asset_id TEXT,
     master_id TEXT,
-    input TEXT NOT NULL CHECK (input IN ('light', 'bias', 'dark', 'flat')),
+    input TEXT NOT NULL CHECK (input IN ('light', 'bias', 'dark', 'flat', 'product')),
     kind TEXT NOT NULL CHECK (
         kind IN ('symlink', 'hardlink', 'copy', 'clone', 'direct_source')
     ),

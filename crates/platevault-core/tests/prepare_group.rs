@@ -87,6 +87,34 @@ impl PrepareControl for PauseAt {
     fn settled(&self, _entry: &PreparedEntry) {}
 }
 
+/// A Prepare control that cancels at its first step.
+struct CancelNow;
+
+impl PrepareControl for CancelNow {
+    fn step(&self) -> PrepareStep {
+        PrepareStep::Cancel
+    }
+
+    fn settled(&self, _entry: &PreparedEntry) {}
+}
+
+/// A Prepare control that watches every settled entry and pauses as `pause`
+/// says.
+struct WatchThenPause {
+    watch: Watch,
+    pause: PauseAt,
+}
+
+impl PrepareControl for WatchThenPause {
+    fn step(&self) -> PrepareStep {
+        self.pause.step()
+    }
+
+    fn settled(&self, entry: &PreparedEntry) {
+        self.watch.settled(entry);
+    }
+}
+
 /// PREP-AC-16, PREP-FR-07/12: `<Project>/<Mosaic>/Panel 1/` to `Panel 3/`,
 /// each panel run's `<Mosaic> Results/Panel N/` and the group's
 /// `<Mosaic> Results/Assembled/`; no Results folder inside the group folder,
@@ -334,16 +362,22 @@ async fn group_outcome_partial_when_one_panel_partial() {
     let after: Vec<String> = world.sources().iter().map(|source| digest(source)).collect();
     assert_eq!(after, digests, "sources are untouched");
 
-    for (panels, group) in [
-        (vec![Prepared, Prepared, Prepared], Prepared),
-        (vec![Failed, Failed, Failed], Failed),
-        (vec![Prepared, Failed, Prepared], Partial),
-        (vec![Prepared, Partial, Prepared], Partial),
-        (vec![Prepared, Running, Prepared], Partial),
-        (vec![Prepared, Canceled, Canceled], Canceled),
-        (vec![Prepared, Paused, Paused], Paused),
+    // Canceled and Paused come only from the user's stop on Prepare all.
+    for (stop, panels, group) in [
+        (None, vec![Prepared, Prepared, Prepared], Prepared),
+        (None, vec![Failed, Failed, Failed], Failed),
+        (None, vec![Prepared, Failed, Prepared], Partial),
+        (None, vec![Prepared, Partial, Prepared], Partial),
+        (None, vec![Prepared, Running, Prepared], Partial),
+        (None, vec![Prepared, Canceled, Prepared], Partial),
+        (None, vec![Prepared, Paused, Paused], Partial),
+        (Some(Canceled), vec![Prepared, Canceled, Canceled], Canceled),
+        (Some(Paused), vec![Prepared, Paused, Paused], Paused),
+        (Some(Paused), vec![Prepared, Prepared, Prepared], Prepared),
+        (Some(Partial), vec![Prepared, Partial, Prepared], Partial),
     ] {
-        assert_eq!(GroupPreparation::outcome_for(panels.clone()), group, "{panels:?}");
+        let outcome = GroupPreparation::outcome_for(stop, panels.clone());
+        assert_eq!(outcome, group, "{stop:?} {panels:?}");
     }
 
     // Pausing in Panel 2 leaves Panel 2 and Panel 3 Paused; Retry continues.
@@ -612,4 +646,63 @@ async fn panel_correction_patched_in_its_copy_only() {
     for number in [1, 3] {
         assert!(panel(&outcome, number).prepared.iter().all(|e| e.header_changes.is_empty()));
     }
+}
+
+/// D-W75, PREP-FR-12: Retry of a Prepare all skips each Partial or Paused
+/// panel run that was moved to the Project's Trash or marked Complete, names
+/// it, and resumes the others; it is refused only when none is left.
+#[tokio::test]
+async fn group_retry_skips_trashed_and_complete_panel_runs() {
+    use PreparationState::{Partial, Paused, Prepared};
+    let world = group_world().await;
+    let profile = world.wbpp(QUIET).await;
+    let request = world.setup(&profile, InputMode::Copy).await;
+    // Panel 2 ends Partial, and Prepare all pauses at Panel 3's first entry.
+    let (watch, locked) = lock_panel2(&world);
+    let pause = PauseAt { steps: AtomicUsize::new(0), at: 2 * ENTRIES + 1 };
+    let stopped = world.prepare_all(&request, &WatchThenPause { watch, pause }).await;
+    unlock(&locked);
+    assert_eq!(panel_states(&stopped), vec![Prepared, Partial, Paused], "{stopped:#?}");
+    assert_eq!(stopped.preparation.outcome, Paused);
+    let id = stopped.preparation.id;
+
+    world.library.move_view_to_trash(world.run(2)).await.unwrap();
+    world.library.mark_view_complete(world.run(3)).await.unwrap();
+    let error = world.library.retry_group_preparation(id, &Watch::quiet()).await.unwrap_err();
+    refused(&error, "no Partial or Paused panel run to retry");
+    refused(&error, "Panel 2 is in the Project's Trash");
+    refused(&error, "Panel 3 is Complete");
+
+    world.catalog().reopen_view(world.run(3)).await.unwrap();
+    let retried = world.library.retry_group_preparation(id, &Watch::quiet()).await.unwrap();
+    assert_eq!(panel_states(&retried), vec![Prepared, Partial, Prepared], "{retried:#?}");
+    assert_eq!(retried.preparation.outcome, Partial);
+    let skipped: Vec<(u32, Uuid)> =
+        retried.skipped.iter().map(|panel| (panel.number, panel.view_id)).collect();
+    assert_eq!(skipped, vec![(2, world.run(2))], "{:?}", retried.skipped);
+    let PanelResult::Refused { reason } = &retried.skipped[0].result else {
+        panic!("a skipped panel run is refused: {:?}", retried.skipped[0]);
+    };
+    assert!(reason.contains("in the Project's Trash"), "{reason}");
+}
+
+/// PREP-FR-12: Canceled and Paused come from the user stopping Prepare all,
+/// never from one panel run. Canceling Panel 2's own Retry counts it as not
+/// prepared, so the group reads Partial.
+#[tokio::test]
+async fn canceling_one_panel_retry_leaves_the_group_partial() {
+    use PreparationState::{Canceled, Partial, Prepared};
+    let world = group_world().await;
+    let profile = world.wbpp(QUIET).await;
+    let request = world.setup(&profile, InputMode::Copy).await;
+    let (watch, locked) = lock_panel2(&world);
+    let outcome = world.prepare_all(&request, &watch).await;
+    unlock(&locked);
+    assert_eq!(outcome.preparation.outcome, Partial, "{outcome:#?}");
+    let panel2 = panel(&outcome, 2).revision.id;
+    let canceled = world.library.retry_preparation(panel2, &CancelNow).await.unwrap();
+    assert_eq!(canceled.revision.state, Canceled);
+    let group = world.library.group_preparation_outcome(outcome.preparation.id).await.unwrap();
+    assert_eq!(panel_states(&group), vec![Prepared, Canceled, Prepared]);
+    assert_eq!(group.preparation.outcome, Partial, "{group:#?}");
 }

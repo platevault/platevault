@@ -27,8 +27,8 @@ use prepare_support::{
     digest, overwrite_in_place, restore_in_place, world, Watch, World, PROJECT, RUN,
 };
 use results_support::{
-    accept, database, find, paths, prepared, record_results_folder, results_dir, settle, stack,
-    text,
+    accept, count, database, find, paths, prepared, record_results_folder, results_dir, settle,
+    stack, text,
 };
 use uuid::Uuid;
 
@@ -597,4 +597,294 @@ async fn dismissed_result_master_still_adopted() {
         catalog.result_masters().await.unwrap().is_empty(),
         "an adopted master leaves the list"
     );
+}
+
+/// RES-FR-01, CAL-FR-06: a master that was offered and dismissed, then read
+/// Pending while being rewritten and removed, stays recorded as Missing: its
+/// offer names it, so the rescan succeeds and nothing is forgotten. When the
+/// dismissed bytes return the same record reads them and Dismiss still holds.
+#[tokio::test]
+async fn offered_master_removed_while_pending_reads_missing_and_stays_dismissed() {
+    let world = world().await;
+    prepared(&world).await;
+    let master = results_dir(&world).join("master_dark.fit");
+    let keywords = [("IMAGETYP", "'Dark'"), ("STACKCNT", "20")];
+    stack(&master, &keywords);
+    let listing = world.library.rescan_results(run(&world)).await.unwrap();
+    let record = find(&listing.candidates, &master).clone();
+    let catalog = world.library.catalog();
+    let offer = catalog.dismiss_master_offer(listing.offers[0].id).await.unwrap();
+
+    support::fits(&master, &[("IMAGETYP", "'Dark'"), ("STACKCNT", "21")]).unwrap();
+    let listing = world.library.rescan_results(run(&world)).await.unwrap();
+    assert_eq!(find(&listing.candidates, &master).state, ResultState::Pending);
+    std::fs::remove_file(&master).unwrap();
+    let listing = world.library.rescan_results(run(&world)).await.unwrap();
+    let kept = find(&listing.candidates, &master);
+    assert_eq!((kept.id, kept.state), (record.id, ResultState::Pending));
+    assert_eq!(kept.availability, Availability::Missing);
+    let decided = database(&world);
+    let sql = "SELECT count(*) FROM master_offers WHERE id = ?1 AND state = 'dismissed'";
+    assert_eq!(count(&decided, sql, offer.id).await, 1, "the dismissal is kept");
+
+    stack(&master, &keywords);
+    let listing = world.library.rescan_results(run(&world)).await.unwrap();
+    let back = find(&listing.candidates, &master);
+    assert_eq!((back.id, back.availability), (record.id, Availability::Available));
+    assert_eq!(back.sha256, record.sha256);
+    assert!(listing.offers.is_empty(), "Dismiss holds for that file and digest");
+}
+
+/// A never-saved run on the world's subject and rig, as Create run makes it.
+fn combine_input(view: &View) -> NewView {
+    NewView {
+        project_id: view.project_id,
+        subject_id: view.subject_id,
+        rig_id: view.rig_id,
+        name: "NGC7000 HOO combine".into(),
+    }
+}
+
+/// RES-AC-04, RES-FR-05, D-W4: a run created from accepted Results lists
+/// them as product inputs with their originating run and starts with no raw
+/// session selected, so saving it adds no raw session integration.
+#[tokio::test]
+async fn run_created_from_products_selects_no_raw_session() {
+    let world = world().await;
+    prepared(&world).await;
+    let product = results_dir(&world).join("Ha_linear.fit");
+    stack(&product, &[("FILTER", "'Ha'")]);
+    let id = accept(&world.library, run(&world), &product, ResultKind::LinearIntegration).await;
+    let view = world.view().await;
+    let candidates = world.catalog().view_membership(world.run, Membership::Committed).await;
+    assert!(!candidates.unwrap().members.is_empty(), "the subject has raw sessions on the rig");
+
+    let created =
+        world.library.create_view_with_products(&combine_input(&view), &[id]).await.unwrap();
+    let combine = created.view.id;
+    assert!(created.revision.is_none(), "never saved");
+    assert!(created.sessions.is_empty(), "no raw session is selected: {:?}", created.sessions);
+    let draft = world.catalog().view_membership(combine, Membership::Draft).await.unwrap();
+    assert!(draft.members.is_empty(), "{:?}", draft.members);
+    let inputs = world.catalog().view_product_inputs(combine).await.unwrap();
+    assert_eq!(inputs.iter().map(|input| input.result.id).collect::<Vec<_>>(), vec![id]);
+    assert_eq!(inputs[0].origin.owner, run(&world));
+    assert_eq!(inputs[0].origin.owner_name, RUN);
+    assert_eq!(inputs[0].sha256, digest(&product));
+
+    let saved = world.catalog().save_view(combine, 0, 1).await.unwrap();
+    assert_eq!(saved.view.revision, 1);
+    let committed = world.catalog().view_membership(combine, Membership::Committed).await;
+    assert!(committed.unwrap().members.is_empty(), "saving adds no raw session integration");
+    assert_eq!(world.catalog().view_product_inputs(combine).await.unwrap().len(), 1);
+}
+
+/// RES-FR-05, RES-FR-02: discarding a never-saved run removes its product
+/// inputs and the Result attached to it with it, leaves the products of other
+/// runs as they were, and is refused while another run uses its Result.
+#[tokio::test]
+async fn discarding_never_saved_run_removes_its_inputs_and_attached_results() {
+    let world = world().await;
+    prepared(&world).await;
+    let product = results_dir(&world).join("Ha_linear.fit");
+    stack(&product, &[("FILTER", "'Ha'")]);
+    let id = accept(&world.library, run(&world), &product, ResultKind::LinearIntegration).await;
+    let view = world.view().await;
+    let db = database(&world);
+    let inputs_of = "SELECT count(*) FROM view_product_inputs WHERE view_id = ?1";
+    let results_of = "SELECT count(*) FROM result_candidates WHERE view_id = ?1";
+
+    let combine = world.library.create_view_with_products(&combine_input(&view), &[id]).await;
+    let combine = combine.unwrap().view.id;
+    let discarded = world.catalog().discard_view_draft(combine, 1).await.unwrap();
+    assert!(discarded.is_none(), "a never-saved run goes with its draft");
+    refused_missing(&world.catalog().view(combine).await.unwrap_err());
+    assert_eq!(count(&db, inputs_of, combine).await, 0, "no product input is left behind");
+    let source = world.catalog().result(id).await.unwrap();
+    assert_eq!((source.state, source.owner), (ResultState::Accepted, run(&world)));
+
+    let attached = other_run(&world, view.rig_id, "HOO attached").await;
+    let elsewhere = world.temp.path().join("Elsewhere/HOO.fit");
+    stack(&elsewhere, &[("OBJECT", "'HOO'")]);
+    let owner = ResultOwner::Run { view_id: attached };
+    let kind = ResultKind::FinalImage;
+    let record = world
+        .library
+        .attach_result(owner, NativePath::from_path(&elsewhere), kind.clone())
+        .await
+        .unwrap();
+    world.library.add_view_product_inputs(attached, &[id]).await.unwrap();
+    assert!(world.catalog().discard_view_draft(attached, 1).await.unwrap().is_none());
+    assert_eq!(count(&db, results_of, attached).await, 0, "the attached Result goes too");
+    assert_eq!(count(&db, inputs_of, attached).await, 0);
+    assert!(elsewhere.exists(), "discarding moves no file");
+    refused_missing(&world.catalog().result(record.id).await.unwrap_err());
+
+    let used = other_run(&world, view.rig_id, "HOO used").await;
+    let used_file = world.temp.path().join("Elsewhere/HOO used.fit");
+    stack(&used_file, &[("OBJECT", "'HOO used'")]);
+    let owner = ResultOwner::Run { view_id: used };
+    let record =
+        world.library.attach_result(owner, NativePath::from_path(&used_file), kind).await.unwrap();
+    let accepted = world
+        .library
+        .accept_results(&[AcceptResult { result_id: record.id, kind: None }])
+        .await
+        .unwrap();
+    assert!(accepted.refused.is_empty(), "{:?}", accepted.refused);
+    let consumer = other_run(&world, view.rig_id, "HOO consumer").await;
+    world.library.add_view_product_inputs(consumer, &[record.id]).await.unwrap();
+    let error = world.catalog().discard_view_draft(used, 1).await.unwrap_err();
+    refused(&error, "HOO consumer");
+    refused(&error, "HOO used.fit");
+    assert_eq!(world.catalog().result(record.id).await.unwrap().state, ResultState::Accepted);
+    assert!(world.catalog().view(used).await.unwrap().draft.is_some(), "nothing changes");
+}
+
+fn refused_missing(error: &LibraryError) {
+    assert!(matches!(error, LibraryError::NotFound(_)), "{error}");
+}
+
+/// RES-FR-01, RES-FR-08, plan risk 9a: a group Result names the Prepare all
+/// revision it came from like a run's Result does: a header naming
+/// `<Mosaic> (rev 2)/` is tool evidence, and a file written after the second
+/// Prepare all finished falls in its time window.
+#[tokio::test]
+async fn group_result_records_group_revision() {
+    let world = group_world().await;
+    let profile = world.wbpp("exit 0").await;
+    let request = world.setup(&profile, InputMode::Copy).await;
+    let first = world.prepare_all(&request, &Watch::quiet()).await;
+    assert_eq!(first.preparation.outcome, PreparationState::Prepared, "{first:#?}");
+    world.drop_last_light(2).await;
+    world.assign(2, 2).await;
+    let second = world.prepare_all(&request, &Watch::quiet()).await;
+    assert_eq!((second.preparation.outcome, second.preparation.n), (PreparationState::Prepared, 2));
+    let assembled = native(&second.assembled);
+    let named = assembled.join("named.fit");
+    let history = format!("'../{MOSAIC} (rev 2)/Panel 1/Lights/a.fits'");
+    stack(&named, &[("HISTORY", history.as_str())]);
+    let latest = assembled.join("latest.fit");
+    support::fits(&latest, &[("OBJECT", "'latest'")]).unwrap();
+    tokio::time::sleep(platevault_core::results::SETTLE + Duration::from_millis(500)).await;
+
+    let listing =
+        world.library.rescan_results(ResultOwner::Group { group_id: world.group }).await.unwrap();
+    let rev2 = second.preparation.id;
+    assert_eq!(
+        find(&listing.candidates, &named).attribution,
+        RevisionAttribution::ToolEvidence {
+            revision_id: rev2,
+            n: 2,
+            source: NativePath::from_path(&named)
+        }
+    );
+    assert_eq!(
+        find(&listing.candidates, &latest).attribution,
+        RevisionAttribution::TimeWindow { revision_id: rev2, n: 2 }
+    );
+}
+
+/// RES-AC-05, RES-FR-05, D04: a run whose inputs are two accepted products
+/// is refused with a profile that reads no product input, naming both
+/// unsupported, and nothing is prepared or converted. With a profile that
+/// reads linear integrations each product is rehashed first: the one whose
+/// bytes drifted since acceptance is blocked and recorded drifted, and the
+/// other is prepared under the run folder's `Products/`.
+#[tokio::test]
+async fn product_run_prepared_only_with_product_input_support() {
+    let world = world().await;
+    prepared(&world).await;
+    let kind = ResultKind::LinearIntegration;
+    let ha = results_dir(&world).join("Ha_linear.fit");
+    stack(&ha, &[("FILTER", "'Ha'")]);
+    let oiii = results_dir(&world).join("OIII_linear.fit");
+    stack(&oiii, &[("FILTER", "'OIII'")]);
+    let ha_id = accept(&world.library, run(&world), &ha, kind.clone()).await;
+    let oiii_id = accept(&world.library, run(&world), &oiii, kind.clone()).await;
+    let view = world.view().await;
+    let combine =
+        world.library.create_view_with_products(&combine_input(&view), &[ha_id, oiii_id]).await;
+    let combine = combine.unwrap().view.id;
+    world.catalog().save_view(combine, 0, 1).await.unwrap();
+    let folder = world.output.join(PROJECT).join("NGC7000 HOO combine");
+
+    let siril = world.siril("exit 0").await;
+    let request = world.request(&siril, InputMode::Copy, None);
+    let review = world.library.review_preparation(combine, &request).await.unwrap();
+    let unsupported = review
+        .refusals
+        .iter()
+        .find(|refusal| refusal.contains("unsupported product input"))
+        .unwrap_or_else(|| panic!("named unsupported: {:?}", review.refusals));
+    assert!(unsupported.contains("'Ha_linear.fit' (linear integration)"), "{unsupported}");
+    assert!(unsupported.contains("'OIII_linear.fit' (linear integration)"), "{unsupported}");
+    let error = world.library.prepare_run(combine, &request, 1, &Watch::quiet()).await;
+    refused(&error.unwrap_err(), "unsupported product input");
+    assert!(!folder.exists(), "nothing is prepared");
+
+    let reads = world.siril_reading("exit 0", vec![kind]).await;
+    let request = world.request(&reads, InputMode::Copy, None);
+    let accepted_oiii = digest(&oiii);
+    overwrite_in_place(&oiii);
+    let review = world.library.review_preparation(combine, &request).await.unwrap();
+    assert!(review.refusals.is_empty(), "{:?}", review.refusals);
+    let planned: Vec<(PreparedInput, PathBuf)> =
+        review.entries.iter().map(|entry| (entry.input, native(&entry.path))).collect();
+    assert_eq!(planned, vec![(PreparedInput::Product, folder.join("Products/Ha_linear.fit"))]);
+    assert_eq!(review.blocked.len(), 1, "{:?}", review.blocked);
+    assert_eq!(review.blocked[0].input, PreparedInput::Product);
+    assert_eq!(review.blocked[0].source.as_ref().map(native), Some(oiii.clone()));
+    assert_eq!(review.blocked[0].reason.code, ReasonCode::SourceDrift);
+    assert!(review.blocked[0].reason.detail.contains("drifted"), "{:?}", review.blocked[0]);
+    let drifted = world.catalog().result(oiii_id).await.unwrap();
+    assert!(drifted.drifted, "the rehash records the drift");
+    assert_eq!(drifted.accepted.as_ref().map(|a| a.sha256.clone()), Some(accepted_oiii));
+
+    let outcome = world.library.prepare_run(combine, &request, 1, &Watch::quiet()).await.unwrap();
+    assert_eq!(outcome.revision.state, PreparationState::Partial, "{outcome:#?}");
+    assert_eq!(outcome.prepared.len(), 1, "{outcome:#?}");
+    let entry = &outcome.prepared[0];
+    assert_eq!((entry.input, native(&entry.path)), planned[0]);
+    assert_eq!(digest(&native(&entry.path)), digest(&ha), "the accepted bytes, unconverted");
+    let basis = entry.basis.as_ref().expect("the acceptance is the entry's basis");
+    assert_eq!(basis.origin, BasisOrigin::ProductAcceptance);
+    let blocked = outcome.blocked.iter().map(|entry| entry.source.as_ref().map(native));
+    assert_eq!(blocked.collect::<Vec<_>>(), vec![Some(oiii)]);
+}
+
+/// RES-FR-05, RES-AC-05: Prepare all reads each panel run's product inputs
+/// too. Panel 1, holding raw frames and an accepted Panel 2 product, is
+/// refused by a profile that reads neither products nor both kinds of input
+/// in one run, and the refusals name Panel 1 alone.
+#[tokio::test]
+async fn prepare_all_names_a_panel_runs_unsupported_product_inputs() {
+    let (world, outcome) = prepared_group().await;
+    let results = native(&group_panel(&outcome, 2).revision.results_folder);
+    let product = results.join("Panel2_stack.fit");
+    stack(&product, &[("OBJECT", "'Panel 2'")]);
+    let owner = ResultOwner::Run { view_id: world.run(2) };
+    let id = accept(&world.library, owner, &product, ResultKind::MosaicPanel).await;
+    world.library.add_view_product_inputs(world.run(1), &[id]).await.unwrap();
+    let request = PrepareRequest {
+        profile_id: outcome.preparation.profile_id,
+        mode: InputMode::Copy,
+        link: None,
+        output: Some(NativePath::from_path(&world.output)),
+        folder_name: None,
+        corrections: std::collections::BTreeMap::new(),
+    };
+    let review = world.review(&request).await;
+    let named = |needle: &str| {
+        review
+            .refusals
+            .iter()
+            .any(|refusal| refusal.starts_with("Panel 1: ") && refusal.contains(needle))
+    };
+    assert!(named("unsupported product input"), "{:?}", review.refusals);
+    assert!(named("'Panel2_stack.fit' (mosaic panel)"), "{:?}", review.refusals);
+    assert!(named("prepare them in separate runs"), "{:?}", review.refusals);
+    for other in ["Panel 2: ", "Panel 3: "] {
+        assert!(review.refusals.iter().all(|r| !r.starts_with(other)), "{:?}", review.refusals);
+    }
 }
