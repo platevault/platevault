@@ -30,8 +30,8 @@ use crate::view_geometry::{frame_geometry, rectangle, session_geometry, FrameGeo
 use crate::{
     ChannelSummary, ExclusionCount, ExclusionReason, FieldOfView, GroupActionOutcome, GroupSetup,
     LibraryError, MembershipSummary, Microseconds, NewViewGroup, PanelAssignment, PanelBasis,
-    PanelCheck, PanelDecision, PanelEvidence, PanelFilter, PanelFlag, PointingAssessment, Revision,
-    SkyPoint, SubjectPanel, View, ViewGroup,
+    PanelCheck, PanelDecision, PanelEvidence, PanelFilter, PanelFlag, PanelRunState,
+    PointingAssessment, Revision, SkyPoint, SubjectPanel, View, ViewGroup,
 };
 
 // ---------------------------------------------------------------------------
@@ -227,6 +227,9 @@ pub struct PanelRunDetail {
     pub outline: Option<PanelOutline>,
     pub view: View,
     pub name: String,
+    /// Trashed for a panel run in the Project's Trash: still listed, its
+    /// frames in no group count (D-W75).
+    pub state: PanelRunState,
     /// The run's profile and calibration policy are the group's.
     pub setup_matches_group: bool,
     /// The draft's summary when one exists, else the latest revision's.
@@ -237,9 +240,9 @@ pub struct PanelRunDetail {
     pub sessions: Vec<Uuid>,
 }
 
-/// The group's summary over its panel runs, each logical capture once since
-/// every session belongs to one panel; flagged and new sessions count in no
-/// panel (PRJ-AC-13).
+/// The group's summary over its panel runs outside the Project's Trash
+/// (D-W75), each logical capture once since every session belongs to one
+/// panel; flagged and new sessions count in no panel (PRJ-AC-13).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupSummary {
@@ -247,7 +250,8 @@ pub struct GroupSummary {
     pub unknown_channel: Option<ChannelSummary>,
     pub included_frames: u64,
     pub included_seconds: Microseconds,
-    /// Unresolved sources and members changed since review, over every panel.
+    /// Unresolved sources and members changed since review, over every
+    /// counted panel.
     pub unresolved_sources: u64,
     pub changed_since_review: u64,
     pub flagged_sessions: u64,
@@ -410,8 +414,9 @@ impl Library {
 
     /// The group's setup, each panel run's status, outline and summary, the
     /// group summary, and its candidates with their panel decisions, kept by
-    /// `filter`. Read-only: a new candidate's pointing is assessed, never
-    /// recorded.
+    /// `filter`. A panel run in the Project's Trash is listed as Trashed and
+    /// its frames count toward no group summary (D-W75). Read-only: a new
+    /// candidate's pointing is assessed, never recorded.
     ///
     /// # Errors
     /// `NotFound` for an unknown run group.
@@ -469,14 +474,18 @@ impl Library {
                 setup_matches_group: setup_matches(&detail.view, &group.setup),
                 summary: detail.draft_summary.or(detail.revision_summary),
                 new_sessions: detail.new_sessions,
+                state: PanelRunState::of(&detail.view),
                 view: detail.view,
                 panel,
                 name,
                 sessions,
             });
         }
-        let summaries: Vec<&MembershipSummary> =
-            panels.iter().filter_map(|panel| panel.summary.as_ref()).collect();
+        let summaries: Vec<&MembershipSummary> = panels
+            .iter()
+            .filter(|panel| panel.state == PanelRunState::Live)
+            .filter_map(|panel| panel.summary.as_ref())
+            .collect();
         let summary = group_summary(&summaries, &rows);
         let filters = panels
             .iter()

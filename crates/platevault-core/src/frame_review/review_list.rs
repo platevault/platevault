@@ -1,15 +1,17 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Review lists (spec 067 PIX-FR-14, PIX-FR-16, PIX-FR-18, D-W42, D-W43,
-//! D-W54). Review frames opens on a run's Review step or on a Project's
-//! candidate sessions; both list the context's live logical captures with
-//! two-level labels, filtered and sorted, and every Trashed frame is left
-//! out of the list and its counts. Names render through the naming
-//! resolver and rename nothing. A mark routes through the run's Review step
-//! transaction while the run is open, and otherwise writes the library or
-//! Project-only decision alone. Listing reads no source and starts no
-//! measurement.
+//! Review lists (spec 067 PIX-FR-14, PIX-FR-16, PIX-FR-17, PIX-FR-18, D-W41,
+//! D-W42, D-W43, D-W54). Review frames opens on a run's Review step, on a run
+//! group's Review all or on a Project's candidate sessions; each lists the
+//! context's live logical captures with two-level labels, filtered and
+//! sorted, and every Trashed frame is left out of the list and its counts.
+//! Review all spans every panel run with a Panel column and a Panel filter.
+//! Names render through the naming resolver and rename nothing. A mark
+//! routes through the run's Review step transaction while the run is open,
+//! and otherwise writes the library or Project-only decision alone; a Review
+//! all mark routes as its frame's panel run's Review step would. Listing
+//! reads no source and starts no measurement.
 
 use std::cmp::Ordering;
 
@@ -26,26 +28,37 @@ use crate::{
 };
 
 impl FrameReview {
-    /// The context's frames `filter` admits, ordered by `sort` and named by
-    /// `names`, with per-label counts over the whole context. A run lists its
-    /// open draft's members, else its latest committed revision's; a
-    /// Project lists its candidate sessions' frames. Labels read the
-    /// capture's library quality first and then the listed Project's
-    /// rejection. Trashed frames are never listed or counted. Starts no
-    /// measurement and writes nothing.
+    /// The context's frames `filter` and the Panel filter `panel` admit,
+    /// ordered by `sort` and named by `names`, with per-label counts over the
+    /// frames the Panel filter admits. A run lists its open draft's members,
+    /// else its latest committed revision's; a run group lists each panel
+    /// run's frames that way, each with its panel; a Project lists its
+    /// candidate sessions' frames. Labels read the capture's library quality
+    /// first and then the listed Project's rejection. Trashed frames are
+    /// never listed or counted. Starts no measurement and writes nothing.
     ///
     /// # Errors
-    /// `NotFound` for an unknown run or Project; `InvalidInput` for a run in
-    /// the Project's Trash or a display template the naming resolver refuses;
+    /// `NotFound` for an unknown run, run group or Project; `InvalidInput`
+    /// for a run in the Project's Trash, a Panel filter naming no listed
+    /// panel run's panel, or a display template the naming resolver refuses;
     /// `PersistenceFailure`.
     pub async fn review_list(
         &self,
         context: ReviewContext,
         filter: ReviewFilter,
+        panel: Option<Uuid>,
         sort: &ReviewSort,
         names: &NameTemplate,
     ) -> Result<ReviewList, LibraryError> {
-        let basis = self.shared.catalog.review_basis(context).await?;
+        let mut basis = self.shared.catalog.review_basis(context).await?;
+        if let Some(panel) = panel {
+            if !basis.panels.iter().any(|run| run.panel_id == panel) {
+                return Err(LibraryError::InvalidInput(format!(
+                    "panel {panel} has no panel run in this review"
+                )));
+            }
+            basis.captures.retain(|capture| capture.panel.is_some_and(|p| p.panel_id == panel));
+        }
         let ids: Vec<Uuid> = basis.captures.iter().map(|capture| capture.asset.id).collect();
         let states = self.shared.frame_states(&ids).await?;
         let mut counts = ReviewCounts::default();
@@ -64,6 +77,7 @@ impl FrameReview {
                 project,
                 other_copies,
                 member,
+                panel: frame_panel,
                 ..
             } = capture;
             let display = display_name(&asset, path, names)?;
@@ -76,6 +90,7 @@ impl FrameReview {
                 project,
                 other_copies,
                 member,
+                panel: frame_panel,
                 state,
             });
         }
@@ -84,7 +99,9 @@ impl FrameReview {
             context,
             project_id: basis.project_id,
             run: basis.run,
+            panels: basis.panels,
             filter,
+            panel_filter: panel,
             counts,
             frames,
         })
@@ -118,14 +135,18 @@ impl FrameReview {
     /// `expected_draft` (0 starts a draft). Otherwise the library decision
     /// (`library_set_quality`) or the Project-only decision of the context's
     /// Project (`project_set_rejection`) is written alone, and a Complete
-    /// run's fixed membership stays.
+    /// run's fixed membership stays. In a run group's Review all the mark
+    /// routes through the panel run whose membership holds the frame, against
+    /// that run's draft revision, so only that frame's decision and that panel
+    /// run's member change (PIX-FR-17).
     ///
     /// # Errors
     /// As the route's write: `Conflict` for a stale draft, asset or Project
     /// decision; `InvalidInput` for a run in the Trash, a frame that is no
-    /// member, or a Retired or Trashed copy; `NotFound` for an unknown run,
-    /// Project or asset; source access errors and `IdentityConflict` when a
-    /// P or X mark hashes the source.
+    /// member, a Review all frame no single panel run holds, or a Retired or
+    /// Trashed copy; `NotFound` for an unknown run, run group, Project or
+    /// asset; source access errors and `IdentityConflict` when a P or X mark
+    /// hashes the source.
     pub async fn review_mark(
         &self,
         context: ReviewContext,
@@ -133,25 +154,37 @@ impl FrameReview {
         mark: &ReviewMark,
     ) -> Result<ReviewMarked, LibraryError> {
         let catalog = &self.shared.catalog;
-        let project = match context {
-            ReviewContext::Run { view_id } => {
-                let record = catalog.view(view_id).await?;
-                // A run in the Trash takes the Review step route, which refuses it.
-                if record.view.completion == RunCompletion::Open || record.view.trashed_at.is_some()
-                {
-                    let outcome = catalog
-                        .view_review_mark(view_id, expected_draft, mark, InventoryProbe)
-                        .await?;
-                    return Ok(ReviewMarked {
-                        decision: outcome.decision,
-                        member: Some(outcome.member),
-                        draft_revision: outcome.record.draft.map(|draft| draft.draft_revision),
-                    });
-                }
-                record.view.project_id
+        let view_id = match context {
+            ReviewContext::Run { view_id } => view_id,
+            ReviewContext::ViewGroup { group_id } => {
+                let asset = match mark {
+                    ReviewMark::Library { asset, .. } => asset.asset_id,
+                    ReviewMark::Project { mark } => mark.asset_id,
+                };
+                catalog.review_group_run(group_id, asset).await?
             }
-            ReviewContext::ProjectCandidates { project_id } => project_id,
+            ReviewContext::ProjectCandidates { project_id } => {
+                return self.decide(project_id, mark).await;
+            }
         };
+        let record = catalog.view(view_id).await?;
+        // A run in the Trash takes the Review step route, which refuses it.
+        if record.view.completion == RunCompletion::Open || record.view.trashed_at.is_some() {
+            let outcome =
+                catalog.view_review_mark(view_id, expected_draft, mark, InventoryProbe).await?;
+            return Ok(ReviewMarked {
+                decision: outcome.decision,
+                member: Some(outcome.member),
+                draft_revision: outcome.record.draft.map(|draft| draft.draft_revision),
+            });
+        }
+        self.decide(record.view.project_id, mark).await
+    }
+
+    /// Write the mark's library decision, or its Project-only decision in
+    /// `project`, alone.
+    async fn decide(&self, project: Uuid, mark: &ReviewMark) -> Result<ReviewMarked, LibraryError> {
+        let catalog = &self.shared.catalog;
         let missing = || LibraryError::PersistenceFailure("the decision was not read back".into());
         let decision = match mark {
             ReviewMark::Library { asset, quality } => {
@@ -223,6 +256,12 @@ fn sort_frames(frames: &mut [ReviewFrame], sort: ReviewSort) {
                 b.asset.effective.exposure_seconds,
                 direction,
                 f64::total_cmp,
+            ),
+            ReviewSortKey::Panel => present(
+                a.panel.map(|panel| panel.number),
+                b.panel.map(|panel| panel.number),
+                direction,
+                Ord::cmp,
             ),
             ReviewSortKey::Metric { metric } => {
                 let value = |frame: &ReviewFrame| {

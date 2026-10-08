@@ -34,10 +34,11 @@ WHEN NEW.project_id IS NOT OLD.project_id OR NEW.subject_id IS NOT OLD.subject_i
 BEGIN SELECT RAISE(ABORT, 'a run group''s project, subject and rig are fixed'); END;
 
 -- Each panel run stays tied to its panel for good (VSEL-FR-18): discarding a
--- never-saved panel run's draft cannot remove the run from its group.
+-- never-saved panel run's draft cannot remove the run from its group. Only
+-- Empty Trash removes a panel run, once it is in the Project's Trash (D-W75).
 CREATE TRIGGER IF NOT EXISTS views_panel_run_kept
-BEFORE DELETE ON views WHEN OLD.group_id IS NOT NULL
-BEGIN SELECT RAISE(ABORT, 'a panel run belongs to its run group and is never removed'); END;
+BEFORE DELETE ON views WHEN OLD.group_id IS NOT NULL AND OLD.trashed_at IS NULL
+BEGIN SELECT RAISE(ABORT, 'a panel run stays in its run group until Empty Trash removes it'); END;
 
 -- One panel decision per group session: by pointing with its evidence (model
 -- JSON), assigned to one panel or flagged, or by the user. A flagged or
@@ -61,3 +62,13 @@ CREATE TABLE IF NOT EXISTS view_panel_assignments (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS view_panel_assignments_panel ON view_panel_assignments (panel_id)
     WHERE panel_id IS NOT NULL;
+
+-- Empty Trash removing a panel run leaves its group one panel fewer: the
+-- group's decisions onto that panel go with it, so those sessions are new
+-- candidates again (D-W75).
+CREATE TRIGGER IF NOT EXISTS views_panel_run_removed
+AFTER DELETE ON views WHEN OLD.group_id IS NOT NULL
+BEGIN
+    DELETE FROM view_panel_assignments
+    WHERE group_id = OLD.group_id AND panel_id = OLD.panel_id;
+END;

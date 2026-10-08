@@ -18,12 +18,13 @@ pub mod transfer;
 pub mod trash;
 
 use std::fs::{self, File, Metadata};
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use sha2::{Digest, Sha256};
 
+use crate::header_patch::Card;
 use crate::inventory;
 use crate::library::Library;
 use crate::{
@@ -103,7 +104,9 @@ fn modified_nanos(metadata: &Metadata) -> Option<i128> {
     }
 }
 
-fn observe_entry(path: &Path) -> Result<EntryEvidence, LibraryError> {
+/// The no-follow evidence of one entry: a file with its SHA-256, a link with
+/// its target text. PREP snapshots its sources and written entries with it.
+pub(crate) fn observe_entry(path: &Path) -> Result<EntryEvidence, LibraryError> {
     if !path.is_absolute() {
         return Err(LibraryError::InvalidInput("custody paths must be absolute".into()));
     }
@@ -375,7 +378,7 @@ fn link_holds(
 
 /// D19: the source still holds its reviewed identity and, for a file, its
 /// reviewed SHA-256. A link is checked without following it.
-fn verify_source(source: &EntryEvidence) -> Result<(), ItemReason> {
+pub(crate) fn verify_source(source: &EntryEvidence) -> Result<(), ItemReason> {
     let path = path_of(&source.path)?;
     let checked = match &source.kind {
         EntryKind::Link { target } => link_holds(&path, &source.fingerprint, target),
@@ -418,4 +421,130 @@ fn verify_kept(kept: &KeptCopy) -> Result<(), ItemReason> {
 fn path_of(path: &NativePath) -> Result<PathBuf, ItemReason> {
     path.to_path_buf()
         .map_err(|error| ItemReason::new(ReasonCode::SourceUnavailable, error.to_string()))
+}
+
+/// Write `cards` into the isolated entry at `path` while it still holds
+/// `identity`: a patched Copy or Clone the preparation itself wrote, never
+/// an original or a link (PREP-FR-03). A card already holding its patched
+/// bytes is written unchanged, so a resumed item patches again safely. A
+/// clone carries its source's mode, which may lack owner write (an archive
+/// at 0444): the handle proven to be the entry grants it for the patch and
+/// gives the mode back afterwards.
+pub(crate) fn patch_entry(
+    path: &Path,
+    identity: &FileIdentity,
+    cards: &[Card],
+) -> Result<(), ItemReason> {
+    let foreign = || {
+        ItemReason::new(
+            ReasonCode::DestinationChanged,
+            format!("{} is not the file this preparation wrote", path.display()),
+        )
+    };
+    let failed = |error: std::io::Error| {
+        ItemReason::new(ReasonCode::WriteFailed, format!("{}: {error}", path.display()))
+    };
+    let inspected = fs::symlink_metadata(path).map_err(failed)?;
+    if is_link(&inspected)
+        || !inspected.is_file()
+        || cards.iter().any(|card| card.offset + Card::LEN > inspected.len())
+    {
+        return Err(foreign());
+    }
+    let probed = inventory::probe_fingerprint(path).map_err(|_| foreign())?;
+    let held = File::open(path).map_err(failed)?;
+    if !same_identity(&probed.identity, identity) || !handle_is(&held, &inspected, identity) {
+        return Err(foreign());
+    }
+    let mode = held.metadata().map_err(failed)?.permissions();
+    let writable = owner_writable(&mode);
+    if let Some(writable) = &writable {
+        held.set_permissions(writable.clone()).map_err(failed)?;
+    }
+    let written = (|| {
+        let mut file = fs::OpenOptions::new().write(true).open(path).map_err(failed)?;
+        if !handle_is(&file, &inspected, identity) {
+            return Err(foreign());
+        }
+        for card in cards {
+            file.seek(SeekFrom::Start(card.offset)).map_err(failed)?;
+            file.write_all(&card.patched).map_err(failed)?;
+        }
+        file.sync_all().map_err(failed)
+    })();
+    let restored = match writable {
+        Some(_) => held.set_permissions(mode).map_err(failed),
+        None => Ok(()),
+    };
+    written.and(restored)
+}
+
+/// `mode` with owner write added, or `None` when it already has it.
+#[cfg(unix)]
+fn owner_writable(mode: &fs::Permissions) -> Option<fs::Permissions> {
+    use std::os::unix::fs::PermissionsExt;
+    (mode.mode() & 0o200 == 0).then(|| fs::Permissions::from_mode(mode.mode() | 0o200))
+}
+
+#[cfg(not(unix))]
+fn owner_writable(mode: &fs::Permissions) -> Option<fs::Permissions> {
+    mode.readonly().then(|| {
+        let mut writable = mode.clone();
+        writable.set_readonly(false);
+        writable
+    })
+}
+
+/// D19 for an isolated patched entry (PREP-FR-09): re-read, it still holds
+/// its recorded bytes, and it differs from the source snapshot only by
+/// `cards`, each holding its patched bytes where the source held the
+/// original ones.
+pub(crate) fn verify_patched(
+    entry: &EntryEvidence,
+    source_sha256: Option<&str>,
+    cards: &[Card],
+) -> Result<(), ItemReason> {
+    let path = path_of(&entry.path)?;
+    let mismatch = |detail: String| ItemReason::new(ReasonCode::DestinationMismatch, detail);
+    let beyond = || {
+        mismatch(format!(
+            "{} differs from the source snapshot beyond its reviewed header change",
+            path.display()
+        ))
+    };
+    if cards.iter().any(|card| card.offset + Card::LEN > entry.fingerprint.size_bytes) {
+        return Err(beyond());
+    }
+    let index = |value: u64| usize::try_from(value).unwrap_or(usize::MAX);
+    let mut unpatched = Sha256::new();
+    let mut offset = 0_u64;
+    let mut holds_cards = true;
+    let digest = read_unchanged(&path, &Expect::recorded(&entry.fingerprint), |bytes| {
+        let end = offset + u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+        let mut at = offset;
+        for card in
+            cards.iter().filter(|card| card.offset < end && card.offset + Card::LEN > offset)
+        {
+            let from = card.offset.max(offset);
+            let to = (card.offset + Card::LEN).min(end);
+            unpatched.update(&bytes[index(at - offset)..index(from - offset)]);
+            let span = index(from - card.offset)..index(to - card.offset);
+            holds_cards &=
+                bytes[index(from - offset)..index(to - offset)] == card.patched[span.clone()];
+            unpatched.update(&card.original[span]);
+            at = to;
+        }
+        unpatched.update(&bytes[index(at - offset)..]);
+        offset = end;
+        Ok(())
+    })
+    .map_err(|check| mismatch(check.detail().to_owned()))?;
+    let unpatched = hex::encode(unpatched.finalize());
+    if !holds_cards
+        || Some(digest.as_str()) != entry.sha256.as_deref()
+        || Some(unpatched.as_str()) != source_sha256
+    {
+        return Err(beyond());
+    }
+    Ok(())
 }

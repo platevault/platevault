@@ -71,11 +71,12 @@ const SCHEMA: &str = schema_modules![
     "import.sql",
     "targets_list.sql",
     "view_groups.sql",
+    "prepare.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
 /// version is refused before any module's DDL runs.
-pub const SCHEMA_VERSION: i64 = 9;
+pub const SCHEMA_VERSION: i64 = 12;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -144,6 +145,11 @@ mod views;
 pub use views::{CandidateBasis, CandidateSession, ChoiceBasis, MembershipBasis};
 mod view_groups;
 pub use view_groups::{GroupCandidates, ViewGroupBasis};
+mod prepare;
+pub use prepare::{
+    EntryUpdate, NewPreparation, NewPreparedEntry, PreparationRecord, RecordedFolder,
+    RecordedFolders,
+};
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

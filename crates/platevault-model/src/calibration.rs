@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use crate::{
     Availability, CalibrationPolicy, CaptureMetadata, ErrorResponse, ExpectedAsset, FileIdentity,
-    LibraryError, NativePath, ObservationFingerprint, Revision,
+    LibraryError, NativePath, ObservationFingerprint, PanelRunState, Revision,
 };
 
 fn invalid(message: String) -> LibraryError {
@@ -1079,6 +1079,34 @@ impl CalibrationReadiness {
             groups,
         })
     }
+}
+
+/// One panel run's readiness line in its run group (CAL-FR-11). A panel run
+/// in the Project's Trash is listed as Trashed and counts toward no group
+/// aggregate (D-W75).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelCalibrationReadiness {
+    pub panel_id: Uuid,
+    pub number: u32,
+    pub view_id: Uuid,
+    pub state: PanelRunState,
+    /// The readiness of the panel run's latest committed membership revision;
+    /// `None` until the panel run is first saved, as nothing is matched yet.
+    pub readiness: Option<CalibrationReadiness>,
+}
+
+/// A run group's calibration (CAL-FR-11, PREP-FR-12): the one policy its
+/// panel runs share and each panel run's readiness, by panel number. Each
+/// panel run is matched on its own lights and keeps its own assignments,
+/// exceptions and exclusions.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupCalibrationReadiness {
+    pub group_id: Uuid,
+    pub group_revision: Revision,
+    pub policy: CalibrationPolicy,
+    pub panels: Vec<PanelCalibrationReadiness>,
 }
 
 fn count(items: usize) -> u64 {

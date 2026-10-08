@@ -506,6 +506,9 @@ pub struct ProjectQuery {
     /// Only the Projects with this Target as a subject.
     #[serde(default)]
     pub target_id: Option<Uuid>,
+    /// "Show done": also list Done Projects; only open ones otherwise.
+    #[serde(default)]
+    pub show_done: bool,
     pub offset: u32,
     pub limit: u32,
 }

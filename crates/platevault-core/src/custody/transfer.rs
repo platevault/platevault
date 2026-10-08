@@ -125,8 +125,9 @@ fn holds(path: &Path, identity: &FileIdentity) -> bool {
         .is_ok_and(|observed| same_identity(&observed.identity, identity))
 }
 
-/// Remove a partial copy this item wrote, only while its name still holds it.
-fn discard(partial: &Path, identity: &FileIdentity) {
+/// Remove a file this operation wrote (a partial copy, a clone), only while
+/// its name still holds it.
+pub(crate) fn discard(partial: &Path, identity: &FileIdentity) {
     if holds(partial, identity) {
         let _ = fs::remove_file(partial);
     }
@@ -286,7 +287,7 @@ pub(crate) fn verify(
 }
 
 #[cfg(unix)]
-fn sync_folder(folder: &Path) -> std::io::Result<()> {
+pub(crate) fn sync_folder(folder: &Path) -> std::io::Result<()> {
     fs::File::open(folder)?.sync_all()
 }
 
@@ -294,6 +295,6 @@ fn sync_folder(folder: &Path) -> std::io::Result<()> {
 /// install's directory entry, and the re-read proves the installed bytes.
 #[cfg(not(unix))]
 #[allow(clippy::unnecessary_wraps)]
-const fn sync_folder(_folder: &Path) -> std::io::Result<()> {
+pub(crate) const fn sync_folder(_folder: &Path) -> std::io::Result<()> {
     Ok(())
 }

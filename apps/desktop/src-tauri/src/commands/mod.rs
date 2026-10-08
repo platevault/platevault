@@ -47,6 +47,7 @@ pub mod patterns;
 pub mod plan_apply;
 pub mod plans;
 pub mod preferences;
+pub mod prepare;
 pub mod prepared_views;
 pub mod project_goals;
 pub mod project_progress;

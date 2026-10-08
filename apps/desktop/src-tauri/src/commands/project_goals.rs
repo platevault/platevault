@@ -167,7 +167,7 @@ pub async fn project_set_rejection(
 }
 
 /// Project summaries by name, optionally only those with `target_id` as a
-/// subject.
+/// subject. Done Projects are listed only when `showDone` ("Show done") is on.
 ///
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
@@ -175,11 +175,51 @@ pub async fn project_set_rejection(
 pub async fn project_list(
     library: State<'_, Arc<Library>>,
     target_id: Option<Uuid>,
+    show_done: Option<bool>,
     offset: u32,
     limit: u32,
 ) -> Reply<Vec<ProjectSummary>> {
-    let query = ProjectQuery { target_id, offset, limit };
+    let query = ProjectQuery { target_id, show_done: show_done.unwrap_or(false), offset, limit };
     library.catalog().list_projects(&query).await.map_err(fail(target_id))
+}
+
+/// Mark the Project Done. Refused while any run outside the Project's Trash
+/// is not Complete, naming each with its stage. Moves no file.
+///
+/// # Errors
+/// `Conflict` for a stale revision; `NotFound` for an unknown Project;
+/// `InvalidInput` naming each run that is not Complete, or for a Project
+/// already Done.
+#[tauri::command]
+pub async fn project_mark_done(
+    library: State<'_, Arc<Library>>,
+    project_id: Uuid,
+    expected_revision: Revision,
+) -> Reply<Project> {
+    library
+        .catalog()
+        .mark_project_done(project_id, expected_revision)
+        .await
+        .map_err(fail(Some(project_id)))
+}
+
+/// Reopen a Done Project with its runs, goals and members unchanged. Moves no
+/// file.
+///
+/// # Errors
+/// `Conflict` for a stale revision; `NotFound` for an unknown Project;
+/// `InvalidInput` for a Project that is open.
+#[tauri::command]
+pub async fn project_reopen(
+    library: State<'_, Arc<Library>>,
+    project_id: Uuid,
+    expected_revision: Revision,
+) -> Reply<Project> {
+    library
+        .catalog()
+        .reopen_project(project_id, expected_revision)
+        .await
+        .map_err(fail(Some(project_id)))
 }
 
 /// The Project with its candidates and latest Project-only decisions, from one

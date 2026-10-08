@@ -126,6 +126,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::project_goals::project_apply_goal_template,
         crate::commands::project_goals::project_set_rejection,
         crate::commands::project_goals::project_list,
+        crate::commands::project_goals::project_mark_done,
+        crate::commands::project_goals::project_reopen,
         crate::commands::project_goals::project_detail,
         crate::commands::project_goals::project_candidates,
         crate::commands::project_goals::goal_template_list,
@@ -191,6 +193,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::calibration_inputs::calibration_match,
         crate::commands::calibration_inputs::calibration_view_plan,
         crate::commands::calibration_inputs::calibration_readiness,
+        crate::commands::calibration_inputs::calibration_group_readiness,
         crate::commands::calibration_inputs::calibration_handoff,
         crate::commands::calibration_inputs::calibration_set_required_kinds,
         crate::commands::calibration_inputs::calibration_set_policy,
@@ -205,6 +208,17 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::calibration_inputs::calibration_list_adoptions,
         crate::commands::calibration_inputs::calibration_custody_facts,
         // preparation
+        crate::commands::prepare::prepare_profiles,
+        crate::commands::prepare::prepare_profile_create,
+        crate::commands::prepare::prepare_profile_update,
+        crate::commands::prepare::prepare_review,
+        crate::commands::prepare::prepare_run,
+        crate::commands::prepare::prepare_retry,
+        crate::commands::prepare::prepare_stop,
+        crate::commands::prepare::prepare_list,
+        crate::commands::prepare::prepare_outcome,
+        crate::commands::prepare::prepare_blocker,
+        crate::commands::prepare::prepare_open,
         // results
         // storage
         // import
@@ -238,6 +252,9 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::observing_plans::planning_open_notification_settings,
         crate::commands::observing_plans::planning_review_calendar_export,
         crate::commands::observing_plans::planning_export_calendar,
+        crate::commands::observing_plans::planning_tonight,
+        crate::commands::observing_plans::planning_project_windows,
+        crate::commands::observing_plans::planning_target_gaps,
         // targets
         crate::commands::targets_list::planning_target_rows,
         crate::commands::targets_list::targets_search,
