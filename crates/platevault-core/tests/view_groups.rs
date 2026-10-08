@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Mosaic run groups (spec 066 VSEL-FR-05/07/08/18/19, VSEL-AC-21/22,
-//! PRJ-AC-13, PV-VSEL-SC-04; D-W38, D-W41, D-W73) over generated FITS
+//! PRJ-AC-13, PV-VSEL-SC-04; D-W38, D-W41, D-W73, D-W75) over generated FITS
 //! sessions of NGC 7000 Mosaic: one panel run per confirmed panel and no
 //! whole-mosaic run, panel assignment by pointing against the rig's field of
-//! view, flagged sessions that wait for the user, one shared setup, and status
-//! and outcomes per panel. Fixture files are only read.
+//! view, flagged sessions that wait for the user, one shared setup, status
+//! and outcomes per panel, and a panel run in the Project's Trash listed as
+//! Trashed until Restore or Empty Trash. Fixture files are only read.
 #![cfg(unix)]
 
 mod support;
@@ -18,7 +19,7 @@ use std::time::Duration;
 use persistence_library::SessionQuery;
 use platevault_core::library::Library;
 use platevault_core::targets::ICRS_FRAME;
-use platevault_core::view_groups::{GroupSessionState, ViewGroupDetail};
+use platevault_core::view_groups::{GroupSessionState, PanelRunDetail, ViewGroupDetail};
 use platevault_core::*;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
 use sqlx::Connection;
@@ -252,11 +253,70 @@ impl World {
 
     /// Run SQL a later unit's write owns (U16 Move to Trash) directly.
     async fn raw_sql(&self, statement: &str) {
-        let options = SqliteConnectOptions::new().filename(&self.database);
-        let mut conn = SqliteConnection::connect_with(&options).await.unwrap();
-        sqlx::query(sqlx::AssertSqlSafe(statement.to_owned())).execute(&mut conn).await.unwrap();
-        conn.close().await.unwrap();
+        self.try_raw_sql(statement).await.unwrap();
     }
+
+    async fn try_raw_sql(&self, statement: &str) -> Result<(), sqlx::Error> {
+        let options = SqliteConnectOptions::new().filename(&self.database);
+        let mut conn = SqliteConnection::connect_with(&options).await?;
+        let result =
+            sqlx::query(sqlx::AssertSqlSafe(statement.to_owned())).execute(&mut conn).await;
+        conn.close().await?;
+        result.map(drop)
+    }
+
+    /// Remove the record of trashed run `view` as a confirmed Empty Trash
+    /// does (PV-STO executes it): a never-saved run holds only its draft.
+    async fn empty_trash(&self, view: Uuid) {
+        let rows = format!("SELECT id FROM view_revisions WHERE view_id = '{view}'");
+        self.raw_sql(&format!(
+            "BEGIN; \
+             DELETE FROM view_member_copies WHERE revision_row IN ({rows}); \
+             DELETE FROM view_members WHERE revision_row IN ({rows}); \
+             DELETE FROM view_session_choices WHERE revision_row IN ({rows}); \
+             DELETE FROM view_revisions WHERE view_id = '{view}'; \
+             DELETE FROM calibration_plans WHERE view_id = '{view}'; \
+             DELETE FROM views WHERE id = '{view}'; \
+             COMMIT;"
+        ))
+        .await;
+    }
+
+    /// Review all over `group`: its listed panel numbers and the sessions of
+    /// its listed frames.
+    async fn review_all(&self, group: Uuid) -> (Vec<u32>, Vec<Uuid>) {
+        let list = self
+            .library
+            .frame_review()
+            .review_list(
+                ReviewContext::ViewGroup { group_id: group },
+                ReviewFilter::All,
+                None,
+                &ReviewSort::default(),
+                &NameTemplate::FileName,
+            )
+            .await
+            .unwrap();
+        let numbers = list.panels.iter().map(|panel| panel.number).collect();
+        (numbers, sorted(list.frames.iter().map(|frame| frame.session_id).collect()))
+    }
+
+    /// Each panel's state in the group's calibration readiness.
+    async fn readiness_states(&self, group: Uuid) -> Vec<(u32, PanelRunState)> {
+        let readiness = self.library.calibration_group_readiness(group).await.unwrap();
+        readiness.panels.iter().map(|panel| (panel.number, panel.state)).collect()
+    }
+}
+
+fn states(detail: &ViewGroupDetail) -> Vec<(u32, PanelRunState)> {
+    detail.panels.iter().map(|panel| (panel.panel.number, panel.state)).collect()
+}
+
+const LIVE: PanelRunState = PanelRunState::Live;
+const TRASHED: PanelRunState = PanelRunState::Trashed;
+
+fn frames(summary: Option<&MembershipSummary>) -> u64 {
+    summary.map_or(0, |summary| summary.included_frames)
 }
 
 fn expected_session(session: &Session) -> ExpectedSession {
@@ -588,4 +648,140 @@ async fn group_action_reports_per_panel_outcome() {
     assert!(error.to_string().contains("Trash"), "{error}");
     let unchanged = world.detail(detail.group.id, None).await;
     assert_eq!(row(&unchanged, world.sessions[BETWEEN]).state, GroupSessionState::Flagged);
+}
+
+/// D-W75: a panel run moved to the Project's Trash keeps its row in the
+/// group, marked Trashed, and its frames leave every group count and summary.
+#[tokio::test]
+async fn trashed_panel_listed_as_trashed_and_excluded_from_counts() {
+    let world = World::new().await;
+    let detail = world.group().await;
+    assert_eq!(detail.summary.included_frames, 3);
+    world.library.move_view_to_trash(detail.panels[0].view.id).await.unwrap();
+
+    let after = world.detail(detail.group.id, None).await;
+    assert_eq!(states(&after), vec![(1, TRASHED), (2, LIVE), (3, LIVE)]);
+    let trashed = &after.panels[0];
+    assert!(trashed.view.trashed_at.is_some());
+    assert_eq!(frames(trashed.summary.as_ref()), 2, "its row keeps its own summary");
+    // The group counts Panel 3's frame only.
+    let panel_3 = after.panels[2].summary.as_ref().unwrap();
+    assert_eq!(after.summary.included_frames, 1);
+    assert_eq!(after.summary.included_seconds, panel_3.included_seconds);
+    let channels: Vec<(Option<String>, u64)> = after
+        .summary
+        .channels
+        .iter()
+        .map(|channel| (channel.channel.clone(), channel.included_frames))
+        .collect();
+    assert_eq!(channels, vec![(Some("Ha".into()), 1)]);
+    assert_eq!(after.summary.unknown_channel, None);
+}
+
+/// D-W75: every group action skips a trashed panel run and reports it:
+/// setup refuses it, Review all leaves it out, and the group's calibration
+/// readiness lists it as Trashed.
+#[tokio::test]
+async fn group_actions_skip_trashed_panel() {
+    let world = World::new().await;
+    let detail = world.group().await;
+    let group = detail.group.id;
+    let p1 = &detail.panels[0];
+    world.library.move_view_to_trash(p1.view.id).await.unwrap();
+
+    let setup = GroupSetup {
+        profile_id: Some(Uuid::new_v4()),
+        input_mode: Some(InputMode::Copy),
+        calibration_policy: CalibrationPolicy::Manual,
+    };
+    let outcome =
+        world.library.set_view_group_setup(group, detail.group.revision, &setup).await.unwrap();
+    let PanelResult::Refused { reason } = &outcome.panels[0].result else {
+        panic!("Panel 1 is in the Trash: {:?}", outcome.panels[0].result);
+    };
+    assert!(reason.contains("Trash"), "{reason}");
+    assert_eq!(outcome.panels[1].result, PanelResult::Applied);
+    assert_eq!(outcome.panels[2].result, PanelResult::Applied);
+    let kept = world.library.catalog().view(p1.view.id).await.unwrap().view;
+    assert_eq!((kept.profile_id, kept.calibration_policy), (None, CalibrationPolicy::Automatic));
+
+    assert_eq!(world.review_all(group).await, (vec![2, 3], world.ids(&[P3])));
+    assert_eq!(world.readiness_states(group).await, vec![(1, TRASHED), (2, LIVE), (3, LIVE)]);
+}
+
+/// D-W75: Restore returns a trashed panel run to its group as it was: live,
+/// counted, and in every group action again.
+#[tokio::test]
+async fn restore_returns_trashed_panel() {
+    let world = World::new().await;
+    let detail = world.group().await;
+    let group = detail.group.id;
+    let p1 = &detail.panels[0];
+    world.library.move_view_to_trash(p1.view.id).await.unwrap();
+    let trashed = world.detail(group, None).await;
+    assert_eq!(states(&trashed), vec![(1, TRASHED), (2, LIVE), (3, LIVE)]);
+    assert_eq!(trashed.summary.included_frames, 1);
+
+    let restored = world.library.catalog().restore_view(p1.view.id).await.unwrap();
+    assert!(restored.view.trashed_at.is_none());
+    let back = world.detail(group, None).await;
+    assert_eq!(states(&back), vec![(1, LIVE), (2, LIVE), (3, LIVE)]);
+    assert_eq!(frames(back.panels[0].summary.as_ref()), 2);
+    assert_eq!(back.summary.included_frames, 3);
+    assert_eq!(world.draft_selected(p1.view.id).await, world.ids(&[P1_A, P1_B]));
+    assert_eq!(world.review_all(group).await, (vec![1, 2, 3], world.ids(&[P1_A, P1_B, P3])));
+    assert_eq!(world.readiness_states(group).await, vec![(1, LIVE), (2, LIVE), (3, LIVE)]);
+    let setup = GroupSetup { profile_id: Some(Uuid::new_v4()), ..GroupSetup::default() };
+    let outcome = world.library.set_view_group_setup(group, back.group.revision, &setup).await;
+    let results: Vec<PanelResult> =
+        outcome.unwrap().panels.into_iter().map(|panel| panel.result).collect();
+    assert_eq!(results, vec![PanelResult::Applied; 3]);
+}
+
+/// D-W75: Empty Trash removes a trashed panel run's record, and the group has
+/// one panel fewer. A live panel run's record is still never removed, and
+/// the group's decisions onto the removed panel go with it.
+#[tokio::test]
+async fn empty_trash_deletes_trashed_panel_run() {
+    let world = World::new().await;
+    let detail = world.group().await;
+    let group = detail.group.id;
+    let [p1, p2] = [&detail.panels[0], &detail.panels[1]];
+    let onto = |panel: &PanelRunDetail| {
+        [PanelDecision {
+            session_id: world.sessions[BETWEEN],
+            choice: PanelChoice::Panel { panel_id: panel.panel.id },
+        }]
+    };
+    let decided =
+        world.library.assign_view_group_panels(group, detail.group.revision, &onto(p2)).await;
+    assert_eq!(row(&decided.unwrap(), world.sessions[BETWEEN]).panel_id, Some(p2.panel.id));
+
+    let error = world
+        .try_raw_sql(&format!("DELETE FROM views WHERE id = '{}'", p2.view.id))
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("run group"), "a live panel run is kept: {error}");
+
+    world.library.move_view_to_trash(p2.view.id).await.unwrap();
+    let review = world.library.empty_trash_review(world.project.id, &[p2.view.id]).await.unwrap();
+    assert_eq!(review.runs.len(), 1);
+    world.empty_trash(p2.view.id).await;
+
+    let after = world.detail(group, None).await;
+    assert_eq!(states(&after), vec![(1, LIVE), (3, LIVE)], "one panel fewer");
+    assert_eq!(after.summary.included_frames, 3);
+    assert!(!after.filters.iter().any(|count| count.filter == PanelFilter::Panel { number: 2 }));
+    let query = ViewQuery { project_id: Some(world.project.id), offset: 0, limit: 0 };
+    assert_eq!(world.library.catalog().list_views(&query).await.unwrap().len(), 2);
+    assert!(world.library.catalog().trashed_views(world.project.id).await.unwrap().is_empty());
+    // The session decided onto Panel 2 is new again; its pointing now gives
+    // Panel 1 alone, and the user can decide it.
+    let between = row(&after, world.sessions[BETWEEN]);
+    assert_eq!((between.state, between.panel_id), (GroupSessionState::New, Some(p1.panel.id)));
+    let decisions = onto(p1);
+    let decided = world.library.assign_view_group_panels(group, after.group.revision, &decisions);
+    assert_eq!(row(&decided.await.unwrap(), world.sessions[BETWEEN]).panel_number, Some(1));
+    assert_eq!(world.draft_selected(p1.view.id).await, world.ids(&[P1_A, P1_B, BETWEEN]));
+    assert_eq!(world.readiness_states(group).await, vec![(1, LIVE), (3, LIVE)]);
 }

@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 use crate::{
     CalibrationPolicy, ExpectedSession, FieldOfView, LibraryError, Revision, SkyPoint,
-    SubjectPanel, ViewRecord,
+    SubjectPanel, View, ViewRecord,
 };
 
 /// How a preparation presents its inputs to the processing tool (PREP-FR-04).
@@ -225,6 +225,29 @@ pub struct PanelOutcome {
 pub struct GroupActionOutcome {
     pub group: ViewGroup,
     pub panels: Vec<PanelOutcome>,
+}
+
+/// Where a panel run stands in its run group (D-W75). A panel run in the
+/// Project's Trash stays listed with its group as Trashed: its frames leave
+/// every group count and summary, and group actions skip it. Restore returns
+/// it; Empty Trash removes its record, and the group has one panel fewer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PanelRunState {
+    Live,
+    Trashed,
+}
+
+impl PanelRunState {
+    /// The state of panel run `view`.
+    #[must_use]
+    pub const fn of(view: &View) -> Self {
+        if view.trashed_at.is_some() {
+            Self::Trashed
+        } else {
+            Self::Live
+        }
+    }
 }
 
 /// The run group's Panel filter (VSEL-FR-05): the sessions of one panel, the

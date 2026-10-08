@@ -28,8 +28,8 @@ use platevault_model::{
     CalibrationViewPlan, CandidateEvaluation, CandidateRef, DecisionItem, ErrorResponse,
     ExpectedAsset, GroupCalibrationReadiness, InputKind, InputRef, LibraryError, LightGroupKey,
     Location, MemberState, NativePath, ObservationFingerprint, PanelCalibrationReadiness,
-    ProjectCalibrationEvidence, ProjectWarning, Requirement, RequirementKey, Resolution, Revision,
-    RunCompletion, SubjectChannelEvidence, UnresolvedReason, Verdict, View,
+    PanelRunState, ProjectCalibrationEvidence, ProjectWarning, Requirement, RequirementKey,
+    Resolution, Revision, RunCompletion, SubjectChannelEvidence, UnresolvedReason, Verdict, View,
 };
 use serde::Serialize;
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
@@ -86,7 +86,8 @@ impl Catalog {
     /// A run group's calibration (CAL-FR-11, PREP-FR-12): the one policy its
     /// panel runs share and, by panel number, each panel run's readiness line
     /// of its latest committed membership revision; a panel run never saved
-    /// reads none. Each line reads that panel run's own decisions only. One
+    /// reads none. Each line reads that panel run's own decisions only; a
+    /// panel run in the Project's Trash is listed as Trashed (D-W75). One
     /// snapshot; hashes nothing.
     ///
     /// # Errors
@@ -113,6 +114,7 @@ impl Catalog {
                 panel_id,
                 number,
                 view_id: view.id,
+                state: PanelRunState::of(&view),
                 readiness,
             });
         }
