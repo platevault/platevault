@@ -132,6 +132,9 @@ pub enum ArchiveHold {
     DirectSource { run: OfferRun, preparation: u32 },
     /// A prepared entry that reads the copy is being written, or drifted.
     ReferenceUnsettled { run: OfferRun, preparation: u32, detail: String },
+    /// A prepared link reads the copy and this platform cannot rebuild it
+    /// (only macOS and Linux do), so nothing is written for the frame.
+    LinkRepairUnsupported { run: OfferRun, preparation: u32 },
     /// The copy, its catalog record or its references changed since review.
     Changed { detail: String },
 }
@@ -161,7 +164,9 @@ pub enum ArchiveOutcome {
     Archived,
     /// The destination verified but the source stays where it is: a
     /// reference could not be updated or re-verified, the source drifted,
-    /// or its volume has no OS Trash. Both versions are kept for review.
+    /// or its volume has no OS Trash. Once the frame's record moved to the
+    /// copy, both versions are kept for review; a copy that nothing records
+    /// or reads is discarded, so a later review finds its path free.
     SourceRetained,
     /// Held back before its destination verified; the source stays.
     Blocked,

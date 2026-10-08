@@ -596,13 +596,9 @@ fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
-/// PREP-FR-07: a run prepared below a symlinked parent records where its
-/// folders resolved. Once that parent is retargeted at a copy of the tree,
-/// Empty Trash moves nothing from either tree: each folder stays, named with
-/// where it resolves now, and the run record still goes.
-#[tokio::test]
-async fn empty_trash_never_follows_a_retargeted_parent() {
-    let world = world().await;
+/// Prepare the world's run with Copy below `Mount/Processing`, where `Mount`
+/// is a symlink to `Volume A`; returns the outcome, the volume and the mount.
+async fn prepared_below_mount(world: &World) -> (PreparationOutcome, PathBuf, PathBuf) {
     let volume = world.temp.path().join("Volume A");
     fs::create_dir_all(volume.join("Processing")).unwrap();
     let mount = world.temp.path().join("Mount");
@@ -612,9 +608,28 @@ async fn empty_trash_never_follows_a_retargeted_parent() {
     request.output = Some(NativePath::from_path(&mount.join("Processing")));
     let outcome = world.prepare(&request, &Watch::quiet()).await;
     assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
-    let folder = path(&outcome.revision.folder);
-    assert!(folder.starts_with(&mount), "{}", folder.display());
+    assert!(path(&outcome.revision.folder).starts_with(&mount));
+    (outcome, volume, mount)
+}
 
+/// Move `volume` to `Volume C` and retarget `mount` at it: every folder below
+/// keeps its identity but no longer resolves where Prepare made it.
+fn move_volume(world: &World, volume: &Path, mount: &Path) {
+    let moved = world.temp.path().join("Volume C");
+    fs::rename(volume, &moved).unwrap();
+    fs::remove_file(mount).unwrap();
+    std::os::unix::fs::symlink(&moved, mount).unwrap();
+}
+
+/// PREP-FR-07: a run prepared below a symlinked parent records where its
+/// folders resolved. Once that parent is retargeted at a copy of the tree,
+/// Empty Trash moves nothing from either tree: each folder stays, named with
+/// where it resolves now, and the run record still goes.
+#[tokio::test]
+async fn empty_trash_never_follows_a_retargeted_parent() {
+    let world = world().await;
+    let (outcome, volume, mount) = prepared_below_mount(&world).await;
+    let folder = path(&outcome.revision.folder);
     let decoy = world.temp.path().join("Volume B");
     copy_tree(&volume, &decoy);
     fs::remove_file(&mount).unwrap();
@@ -637,10 +652,93 @@ async fn empty_trash_never_follows_a_retargeted_parent() {
     assert_eq!((tree(&volume), tree(&decoy)), before, "neither tree changed");
 }
 
+/// PREP-FR-07, STO-FR-17: Empty Trash re-checks immediately before a folder
+/// moves that it still resolves where Prepare made it, not only at review.
+/// A parent moved and retargeted after review leaves the folder with its
+/// identity, and the folder still stays in place, named as drifted.
+#[tokio::test]
+async fn empty_trash_rechecks_the_folder_form_before_it_moves() {
+    let world = world().await;
+    let (outcome, volume, mount) = prepared_below_mount(&world).await;
+    world.library.move_view_to_trash(world.run).await.unwrap();
+    let trash = ScopedTrash::new(&world.temp.path().join("OS Trash"));
+    let request = CleanupRequest::EmptyTrash { view_id: world.run, results: false };
+    let review = world.library.review_cleanup(&request, trash.dyn_trash()).await.unwrap();
+    assert!(review.staying.is_empty() && review.moves > 0, "{review:#?}");
+
+    move_volume(&world, &volume, &mount);
+    let emptied = world.library.empty_trash(review.id.unwrap(), trash.dyn_trash()).await.unwrap();
+    assert!(emptied.run_removed, "{emptied:#?}");
+    let folder = path(&outcome.revision.folder);
+    let left = emptied.left.iter().find(|item| item.folder && path(&item.path) == folder);
+    let left = left.unwrap_or_else(|| panic!("the prepared folder stays, named: {emptied:#?}"));
+    assert_eq!(left.reason.code, ReasonCode::SourceDrift, "{left:#?}");
+    assert!(folder.is_dir(), "the folder is still in place");
+    assert!(!trash.moved().contains(&folder), "{:?}", trash.moved());
+}
+
+/// PREP-FR-07, STO-FR-04: Clean up applies the folder check to its items.
+/// Once the parent of a prepared folder moved and was retargeted, each entry
+/// keeps its identity, but the folder no longer resolves where Prepare made
+/// it, so every entry stays in place, named as drifted, and nothing moves.
+#[tokio::test]
+async fn clean_up_keeps_entries_of_a_folder_that_resolves_elsewhere() {
+    let world = world().await;
+    let (_, volume, mount) = prepared_below_mount(&world).await;
+    world.library.mark_view_complete(world.run).await.unwrap();
+    move_volume(&world, &volume, &mount);
+    let trash = ScopedTrash::new(&world.temp.path().join("OS Trash"));
+
+    let review = review_clean_up(&world, CleanupSelection::default(), &trash).await.unwrap();
+    assert!(!items(&review).is_empty(), "{review:#?}");
+    assert!(
+        items(&review).iter().all(|item| stays_for(item) == Some(ReasonCode::SourceDrift)),
+        "{review:#?}"
+    );
+    assert_eq!((review.moves, review.id), (0, None), "{review:#?}");
+    assert!(trash.moved().is_empty());
+}
+
+/// STO-FR-10, RES-FR-07: a Clean up reviewed while the run was Complete
+/// covers every revision, so once the run is reopened it is refused before
+/// anything moves; and while a Clean up runs, Reopen is refused.
+#[tokio::test]
+async fn reopened_run_refuses_its_complete_clean_up_and_running_clean_up_blocks_reopen() {
+    let world = world().await;
+    let profile = world.siril(QUIET).await;
+    let request = world.request(&profile, InputMode::Copy, None);
+    let outcome = world.prepare(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    world.library.mark_view_complete(world.run).await.unwrap();
+    let trash = ScopedTrash::new(&world.temp.path().join("OS Trash"));
+    let review = review_clean_up(&world, CleanupSelection::default(), &trash).await.unwrap();
+    assert!(review.moves > 0, "{review:#?}");
+
+    world.catalog().reopen_view(world.run).await.unwrap();
+    let refused = world.library.run_cleanup(review.id.unwrap(), trash.dyn_trash()).await;
+    let refused = refused.unwrap_err();
+    assert!(matches!(refused, LibraryError::InvalidInput(_)), "{refused}");
+    assert!(refused.to_string().contains("no longer Complete"), "{refused}");
+    assert!(trash.moved().is_empty(), "{:?}", trash.moved());
+    assert!(outcome.prepared.iter().all(|entry| path(&entry.path).exists()));
+
+    world.library.mark_view_complete(world.run).await.unwrap();
+    let review = review_clean_up(&world, CleanupSelection::default(), &trash).await.unwrap();
+    let id = review.id.unwrap();
+    world.catalog().start_run_cleanup(id).await.unwrap();
+    let blocked = world.catalog().reopen_view(world.run).await.unwrap_err();
+    assert!(matches!(blocked, LibraryError::InvalidInput(_)), "{blocked}");
+    assert!(blocked.to_string().contains("Clean up"), "{blocked}");
+    let cleaned = world.library.run_cleanup(id, trash.dyn_trash()).await.unwrap();
+    assert_eq!(cleaned.state, CleanupState::Settled, "{cleaned:#?}");
+    world.catalog().reopen_view(world.run).await.unwrap();
+}
+
 /// D-W75, PREP-FR-12: Empty Trash of an earlier panel run leaves its run
 /// group's folders in place; Empty Trash of the last panel run left also
 /// takes the group folder, once its `Panel N/` folders are gone, and the
-/// ticked `Assembled/` folder with its Results.
+/// ticked `Assembled/` folder with its Results, whose records then read
+/// Missing, as for any Result file moved to the OS Trash.
 #[tokio::test]
 async fn empty_trash_of_the_last_panel_run_takes_the_group_folders() {
     let world = group_support::group_world().await;
@@ -650,9 +748,11 @@ async fn empty_trash_of_the_last_panel_run_takes_the_group_folders() {
     assert_eq!(outcome.preparation.outcome, PreparationState::Prepared, "{outcome:#?}");
     let mosaic = world.group_folder(group_support::MOSAIC);
     let assembled = world.results().join("Assembled");
-    fs::create_dir_all(&assembled).unwrap();
     let mosaic_result = assembled.join("NGC7000_mosaic.fits");
-    fs::write(&mosaic_result, "the assembled mosaic").unwrap();
+    results_support::stack(&mosaic_result, &[("OBJECT", "'NGC 7000 Mosaic'")]);
+    let owner = ResultOwner::Group { group_id: world.group };
+    let listing = world.library.rescan_results(owner).await.unwrap();
+    let recorded = results_support::find(&listing.candidates, &mosaic_result).id;
     let trash = ScopedTrash::new(&world.temp.path().join("OS Trash"));
     let empty = |panel: Uuid| {
         let (library, trash) = (Arc::clone(&world.library), trash.dyn_trash());
@@ -685,6 +785,8 @@ async fn empty_trash_of_the_last_panel_run_takes_the_group_folders() {
     assert!(!assembled.exists(), "the ticked Assembled folder went");
     assert!(trash.moved().contains(&mosaic_result));
     assert!(trash.moved().contains(&mosaic));
+    let record = world.library.catalog().result(recorded).await.unwrap();
+    assert_eq!(record.availability, Availability::Missing, "{record:#?}");
 }
 
 /// RES-FR-05, STO-FR-01/04/17: a product run's `Products/` entries are

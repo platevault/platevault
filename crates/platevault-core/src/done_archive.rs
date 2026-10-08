@@ -26,28 +26,33 @@
 //! - Empty Trash, while the Project's Trash holds runs.
 //!
 //! Offers only: nothing here hashes, records an operation or moves a file.
-//! PV-STO re-verifies every approved item and adds its custody refusals.
+//! PV-STO adds the custody refusals its read-only checks find to the sheet
+//! (STO-FR-14/16), then re-verifies every approved item and refuses again
+//! what fails when it would move.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 
 use persistence_library::{
     AdoptedSource, DoneArchiveBasis, PreparedUse, ProjectFrame, RegisteredLocation,
 };
 use uuid::Uuid;
 
+use crate::custody::trash::OsTrash;
 use crate::library::Library;
 use crate::{
     ApplicableQuality, ArchiveOffer, Availability, DoneArchiveSheet, DuplicateFrame,
     DuplicatesOffer, EmptyTrashOffer, FrameCopy, IntermediatesOffer, KeptLibraryCopy, LibraryError,
     LocationRole, OfferRefusal, OfferedIntermediate, ProjectState, RefusedCopy, RefusedFrame,
-    RefusedIntermediate, RejectedFrame, RejectedFramesOffer, RunCompletion, TrashedRun,
+    RefusedIntermediate, RejectedFrame, RejectedFramesOffer, Revision, RunCompletion, TrashedRun,
 };
 
 impl Library {
     /// The Done / Archive sheet of Project `project_id`: Archive, the three
-    /// trash offers with every refusal and its reason, and Empty Trash while
-    /// the Project's Trash holds runs. Read-only: it hashes, records and
-    /// moves nothing.
+    /// trash offers with every refusal and its reason, the custody refusals
+    /// of `trash` and the Project's locations included, and Empty Trash
+    /// while the Project's Trash holds runs. Read-only: it hashes, records
+    /// and moves nothing.
     ///
     /// # Errors
     /// `InvalidInput` for a Project that is not Done; `NotFound` for an
@@ -55,7 +60,27 @@ impl Library {
     pub async fn done_archive_review(
         &self,
         project_id: Uuid,
+        trash: Arc<dyn OsTrash>,
     ) -> Result<DoneArchiveSheet, LibraryError> {
+        let basis = self.done_basis(project_id).await?;
+        let trashed = self.catalog().trashed_views(project_id).await?;
+        self.with_custody(sheet(&basis, trashed), trash).await
+    }
+
+    /// The Archive a Done Project's sheet offers, at the Project revision it
+    /// was computed for.
+    ///
+    /// # Errors
+    /// As [`Self::done_archive_review`].
+    pub(crate) async fn archive_offer(
+        &self,
+        project_id: Uuid,
+    ) -> Result<(Revision, ArchiveOffer), LibraryError> {
+        let basis = self.done_basis(project_id).await?;
+        Ok((basis.project.revision, archive(&basis)))
+    }
+
+    async fn done_basis(&self, project_id: Uuid) -> Result<DoneArchiveBasis, LibraryError> {
         let basis = self.catalog().done_archive_basis(project_id).await?;
         if basis.project.state != ProjectState::Done {
             return Err(LibraryError::InvalidInput(format!(
@@ -63,8 +88,7 @@ impl Library {
                 basis.project.name
             )));
         }
-        let trashed = self.catalog().trashed_views(project_id).await?;
-        Ok(sheet(&basis, trashed))
+        Ok(basis)
     }
 }
 
@@ -110,15 +134,26 @@ fn rejected_frames(basis: &DoneArchiveBasis) -> RejectedFramesOffer {
         }
         let reasons = frame_refusals(basis, frame);
         if reasons.is_empty() {
-            let size_bytes = copies.iter().map(|copy| copy.size_bytes).sum();
+            let size_bytes = copies
+                .iter()
+                .filter(|copy| !hardlinked(basis, copy.asset_id))
+                .map(|copy| copy.size_bytes)
+                .sum();
             offer.n += 1;
             offer.size_bytes += size_bytes;
             offer.frames.push(RejectedFrame { frame_key: frame.key, copies, size_bytes });
         } else {
-            offer.refused.push(RefusedFrame { frame_key: frame.key, copies, reasons });
+            let custody = Vec::new();
+            offer.refused.push(RefusedFrame { frame_key: frame.key, copies, reasons, custody });
         }
     }
     offer
+}
+
+/// Whether a prepared hardlink still holds the bytes of copy `asset_id`, so
+/// moving the copy reclaims none of them (STO-FR-14).
+fn hardlinked(basis: &DoneArchiveBasis, asset_id: Uuid) -> bool {
+    basis.uses.iter().any(|used| used.holds_bytes && used.asset_id == Some(asset_id))
 }
 
 /// Why `frame` stays: each revision of a run that is not Complete, in any
@@ -186,6 +221,7 @@ fn intermediates(basis: &DoneArchiveBasis) -> IntermediatesOffer {
                 owner: source.source.owner,
                 path: source.source.path.clone(),
                 reasons: vec![reason],
+                custody: Vec::new(),
             }),
         }
     }
@@ -255,7 +291,8 @@ fn duplicates(basis: &DoneArchiveBasis) -> DuplicatesOffer {
                     offer.size_bytes += copy.size_bytes;
                     duplicate.offered.push(copy.clone());
                 } else {
-                    duplicate.refused.push(RefusedCopy { copy: copy.clone(), reasons });
+                    let custody = Vec::new();
+                    duplicate.refused.push(RefusedCopy { copy: copy.clone(), reasons, custody });
                 }
             }
             offer.frames.push(duplicate);

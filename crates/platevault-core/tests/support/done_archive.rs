@@ -95,9 +95,23 @@ pub async fn done(world: &World) -> Uuid {
     project
 }
 
-/// The Done / Archive sheet of `project`.
+/// A stand-in OS Trash every path has, for sheets whose custody checks a
+/// test does not exercise; it never moves anything.
+pub struct EveryTrash;
+
+impl platevault_core::custody::trash::OsTrash for EveryTrash {
+    fn support(&self, _entry: &Path, _size_bytes: u64) -> TrashSupport {
+        TrashSupport::Supported
+    }
+
+    fn move_to_trash(&self, _entry: &Path) -> Result<(), String> {
+        Err("the sheet moves nothing".into())
+    }
+}
+
+/// The Done / Archive sheet of `project`, every path with an OS Trash.
 pub async fn sheet(world: &World, project: Uuid) -> DoneArchiveSheet {
-    world.library.done_archive_review(project).await.unwrap()
+    world.library.done_archive_review(project, std::sync::Arc::new(EveryTrash)).await.unwrap()
 }
 
 /// Another open Project `name` on the world's Target and rig, with run

@@ -31,6 +31,7 @@ use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
+use super::cleanup::removed_entry_sql;
 use super::{
     capture_quality, from_json, from_text, instant, json_ids, load_asset, load_assets,
     logical_captures, parse_uuid, path_from_key, projects, results, Catalog, Result,
@@ -75,6 +76,9 @@ pub struct PreparedUse {
     pub member_key: Option<Uuid>,
     /// The entry is the Direct-source path itself (PREP-FR-04).
     pub direct_source: bool,
+    /// The entry is a written prepared hardlink no Clean up removed: it
+    /// still holds the bytes of its asset (STO-FR-14).
+    pub holds_bytes: bool,
 }
 
 /// A Result that records the prepared revision it came from (RES-FR-01): a
@@ -154,12 +158,16 @@ const CALIBRATION_INPUTS: &str = "SELECT DISTINCT coalesce(json_extract(i.value,
      WHERE x.view_id = d.view_id AND x.light_group = d.light_group AND x.kind = d.kind)";
 
 /// Every prepared entry, of any run in any Project, reading one of the given
-/// assets by recorded asset, member key or adopted master copy, with its run.
-const USES: &str = "WITH u AS (SELECT e.prep_id, e.member_key, e.kind, \
-     coalesce(e.asset_id, (SELECT a.id FROM assets a JOIN adopted_masters m \
+/// assets by recorded asset, member key or adopted master copy, with its run
+/// and whether it is a written hardlink no Clean up removed.
+const USES: &str = concat!(
+    "WITH u AS (SELECT e.prep_id, e.member_key, e.kind, e.state, ",
+    removed_entry_sql!("e.prep_id", "e.seq"),
+    " AS removed, coalesce(e.asset_id, (SELECT a.id FROM assets a JOIN adopted_masters m \
      ON a.location_id = m.location_id AND a.path_key = m.path_key WHERE m.id = e.master_id)) \
      AS asset_id FROM prepared_entries e) \
      SELECT DISTINCT u.prep_id, u.member_key, u.asset_id, u.kind = 'direct_source' AS direct, \
+     (u.kind = 'hardlink' AND u.state = 'prepared' AND NOT u.removed) AS holds_bytes, \
      p.n, v.id AS view_id, v.stage, v.completion, v.project_id, pj.name AS project_name, \
      coalesce(c.name, d.name) AS run_name \
      FROM u JOIN preparation_revisions p ON p.id = u.prep_id \
@@ -168,7 +176,8 @@ const USES: &str = "WITH u AS (SELECT e.prep_id, e.member_key, e.kind, \
      LEFT JOIN view_revisions d ON d.view_id = v.id AND d.state = 'draft' \
      WHERE u.asset_id IN (SELECT value FROM json_each(?1)) \
      OR u.member_key IN (SELECT value FROM json_each(?1)) \
-     ORDER BY pj.name, v.project_id, run_name, v.id, p.n, u.asset_id, u.member_key";
+     ORDER BY pj.name, v.project_id, run_name, v.id, p.n, u.asset_id, u.member_key"
+);
 
 /// The inspected Results recording one of the given prepared revisions.
 const RECORDED_RESULTS: &str = "SELECT r.id, r.path, r.attribution, r.prepared_revision_id \
@@ -248,6 +257,21 @@ impl Catalog {
             member_sessions: member_sessions.into_iter().collect(),
             kept_sessions,
         })
+    }
+
+    /// The given `sessions` a run outside the Trash of a Project other than
+    /// `project`, and not marked Done, selects in its latest saved revision,
+    /// naming those Projects: the sessions Archive keeps (PRJ-FR-14).
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn kept_sessions(
+        &self,
+        project: Uuid,
+        sessions: &BTreeSet<Uuid>,
+    ) -> Result<Vec<KeptSession>> {
+        let mut conn = self.reader().await?;
+        kept_sessions(&mut conn, project, sessions).await
     }
 }
 
@@ -371,6 +395,7 @@ async fn prepared_uses(
                 asset_id: optional_uuid(row, "asset_id")?,
                 member_key: optional_uuid(row, "member_key")?,
                 direct_source: row.try_get("direct")?,
+                holds_bytes: row.try_get("holds_bytes")?,
             })
         })
         .collect()

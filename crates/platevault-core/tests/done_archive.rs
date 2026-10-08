@@ -438,7 +438,8 @@ async fn archive_keeps_sessions_used_by_open_projects() {
 async fn empty_trash_offered_when_trash_holds_runs() {
     let world = world().await;
     let project = project_of(&world).await;
-    let error = world.library.done_archive_review(project).await.unwrap_err();
+    let trash = std::sync::Arc::new(done_archive_support::EveryTrash);
+    let error = world.library.done_archive_review(project, trash).await.unwrap_err();
     assert!(matches!(error, LibraryError::InvalidInput(_)), "{error}");
     assert!(error.to_string().contains("not Done"), "{error}");
     done(&world).await;

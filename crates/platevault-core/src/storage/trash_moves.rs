@@ -34,9 +34,10 @@ use crate::{
     inventory, ApprovedFrame, Availability, DoneArchiveSheet, DuplicatesApproval, EntryEvidence,
     EntryKind, FrameCopy, IntermediatesApproval, ItemChange, ItemOutcome, ItemPhase, ItemReason,
     KeptCopy, LibraryError, Location, LocationLifecycle, LocationRole, MoveRefusal, MovedItem,
-    NativePath, ObservationFingerprint, ReasonCode, RefusedMove, RejectedFramesApproval,
-    StorageItemDraft, StorageOperation, StorageOperationKind, StorageOperationState,
-    TrashMoveSummary, TrashOffer, TrashSupport, UncertainMove,
+    NativePath, ObservationFingerprint, OfferRefusal, ReasonCode, RefusedCopy, RefusedFrame,
+    RefusedIntermediate, RefusedMove, RejectedFramesApproval, StorageItemDraft, StorageOperation,
+    StorageOperationKind, StorageOperationState, TrashMoveSummary, TrashOffer, TrashSupport,
+    UncertainMove,
 };
 
 /// The detail prefix of a copy refused because another copy of its frame was.
@@ -78,7 +79,7 @@ impl Library {
         if let Some(summary) = self.resume_move(project_id, offer, &trash).await? {
             return Ok(summary);
         }
-        let sheet = self.approved_sheet(project_id, approval.project_revision).await?;
+        let sheet = self.approved_sheet(project_id, approval.project_revision, &trash).await?;
         let context = Context::new(self).await?;
         let mut candidates = Vec::new();
         let mut refused = Vec::new();
@@ -109,7 +110,7 @@ impl Library {
         if let Some(summary) = self.resume_move(project_id, offer, &trash).await? {
             return Ok(summary);
         }
-        let sheet = self.approved_sheet(project_id, approval.project_revision).await?;
+        let sheet = self.approved_sheet(project_id, approval.project_revision, &trash).await?;
         let context = Context::new(self).await?;
         let mut candidates = Vec::new();
         let mut refused = Vec::new();
@@ -140,7 +141,7 @@ impl Library {
         if let Some(summary) = self.resume_move(project_id, offer, &trash).await? {
             return Ok(summary);
         }
-        let sheet = self.approved_sheet(project_id, approval.project_revision).await?;
+        let sheet = self.approved_sheet(project_id, approval.project_revision, &trash).await?;
         let context = Context::new(self).await?;
         let mut candidates = Vec::new();
         let mut refused = Vec::new();
@@ -181,8 +182,9 @@ impl Library {
         &self,
         project_id: Uuid,
         approved_revision: u64,
+        trash: &Arc<dyn OsTrash>,
     ) -> Result<DoneArchiveSheet, LibraryError> {
-        let sheet = self.done_archive_review(project_id).await?;
+        let sheet = self.done_archive_review(project_id, Arc::clone(trash)).await?;
         if sheet.project_revision != approved_revision {
             return Err(LibraryError::Conflict {
                 id: project_id,
@@ -219,12 +221,7 @@ impl Library {
             offer.refused.iter().find(|frame| frame.frame_key == approved.frame_key)
         {
             let paths = context.paths(&refused.copies)?;
-            let reasons = refused
-                .reasons
-                .iter()
-                .cloned()
-                .map(|refusal| MoveRefusal::Offer { refusal })
-                .collect();
+            let reasons = offer_reasons(&refused.reasons, &refused.custody);
             return Ok(Err(RefusedMove { id: approved.frame_key, paths, reasons }));
         }
         let Some(frame) = offer.frames.iter().find(|frame| frame.frame_key == approved.frame_key)
@@ -258,11 +255,7 @@ impl Library {
             }
         }
         if !reasons.is_empty() {
-            if frame.copies.len() > 1 {
-                if let Some(path) = reasons.iter().find_map(refused_path) {
-                    reasons.push(MoveRefusal::FrameIncomplete { refused: path });
-                }
-            }
+            whole_frame(&mut reasons, frame.copies.len());
             return Ok(Err(RefusedMove { id: approved.frame_key, paths, reasons }));
         }
         let complete_view_ids = self.catalog().complete_runs_holding(&listed).await?;
@@ -283,12 +276,7 @@ impl Library {
                 frame.refused.iter().find(|refused| refused.copy.asset_id == asset_id)
             {
                 let paths = context.paths(std::slice::from_ref(&refused.copy))?;
-                let reasons = refused
-                    .reasons
-                    .iter()
-                    .cloned()
-                    .map(|refusal| MoveRefusal::Offer { refusal })
-                    .collect();
+                let reasons = offer_reasons(&refused.reasons, &refused.custody);
                 return Ok(Err(RefusedMove { id: asset_id, paths, reasons }));
             }
             let Some(copy) = frame.offered.iter().find(|copy| copy.asset_id == asset_id) else {
@@ -337,12 +325,7 @@ impl Library {
     ) -> Result<Result<Candidate, RefusedMove>, LibraryError> {
         let offer = &sheet.intermediates;
         if let Some(refused) = offer.refused.iter().find(|item| item.result_id == result_id) {
-            let reasons = refused
-                .reasons
-                .iter()
-                .cloned()
-                .map(|refusal| MoveRefusal::Offer { refusal })
-                .collect();
+            let reasons = offer_reasons(&refused.reasons, &refused.custody);
             return Ok(Err(RefusedMove {
                 id: result_id,
                 paths: vec![refused.path.clone()],
@@ -374,10 +357,10 @@ impl Library {
                 "the Results scan recorded no observation of it".into(),
             );
         };
-        let path = item.path.to_path_buf()?;
-        if let TrashSupport::Unsupported { detail, .. } = trash.support(&path, item.size_bytes) {
-            return refuse(ReasonCode::TrashUnsupported, format!("{detail}; it stays in place"));
+        if let Err(refusal) = file_custody(&item.path, item.size_bytes, trash)? {
+            return Ok(Err(RefusedMove { id: result_id, paths, reasons: vec![refusal] }));
         }
+        let path = item.path.to_path_buf()?;
         let probe = path.clone();
         let observed = blocking(move || {
             Ok(inventory::probe_fingerprint(&probe).and_then(|current| {
@@ -427,10 +410,9 @@ impl Library {
         Ok(Ok(Candidate { id: result_id, moves, complete_view_ids: Vec::new() }))
     }
 
-    /// The custody checks of one library copy, reading no bytes: its
-    /// location (a Captures one for a rejected frame), availability, OS
-    /// Trash support and recorded digest. Returns its snapshot: the catalog
-    /// observation with that digest.
+    /// The custody checks of one library copy, reading no bytes, against its
+    /// catalog record now ([`copy_custody`]). Returns its snapshot: the
+    /// catalog observation with the recorded digest.
     async fn library_copy(
         &self,
         copy: &FrameCopy,
@@ -439,55 +421,36 @@ impl Library {
         context: &Context,
         trash: &dyn OsTrash,
     ) -> Result<Result<EntryEvidence, MoveRefusal>, LibraryError> {
-        let location = context.location(copy.location_id)?;
-        let path = context.file(copy)?;
-        let native = NativePath::from_path(&path);
-        let custody = |code: ReasonCode, detail: String| {
-            Ok(Err(MoveRefusal::Custody {
-                path: native.clone(),
-                reason: ItemReason::new(code, detail),
-            }))
-        };
-        if captures_only && location.role != LocationRole::Captures {
-            return Ok(Err(MoveRefusal::OutsideCaptures {
-                path: native,
-                location: location.name.clone(),
-            }));
-        }
-        if location.lifecycle != LocationLifecycle::Active {
-            return custody(
-                ReasonCode::SourceUnavailable,
-                format!("location '{}' is retired", location.name),
-            );
-        }
         let asset = self.catalog().asset(copy.asset_id).await?;
-        if asset.availability != Availability::Available {
-            return custody(
-                ReasonCode::SourceUnavailable,
-                format!(
-                    "{} reads {:?} in location '{}'",
-                    path.display(),
-                    asset.availability,
-                    location.name
-                ),
-            );
-        }
-        let Some(sha256) =
-            asset.fingerprint.content_sha256.clone().or_else(|| digest.map(str::to_owned))
-        else {
-            return Ok(Err(MoveRefusal::NoRecordedDigest { path: native }));
+        let now = FrameCopy {
+            size_bytes: asset.fingerprint.size_bytes,
+            sha256: asset.fingerprint.content_sha256.clone().or_else(|| digest.map(str::to_owned)),
+            availability: asset.availability,
+            ..copy.clone()
         };
-        if let TrashSupport::Unsupported { detail, .. } =
-            trash.support(&path, asset.fingerprint.size_bytes)
-        {
-            return custody(ReasonCode::TrashUnsupported, format!("{detail}; it stays in place"));
-        }
+        let sha256 = match copy_custody(&now, captures_only, context, trash)? {
+            Ok(sha256) => sha256,
+            Err(refusal) => return Ok(Err(refusal)),
+        };
         Ok(Ok(EntryEvidence {
-            path: native.clone(),
+            path: NativePath::from_path(&context.file(copy)?),
             kind: EntryKind::File,
             fingerprint: ObservationFingerprint { content_sha256: None, ..asset.fingerprint },
             sha256: Some(sha256),
         }))
+    }
+
+    /// `sheet` with every custody refusal (STO-FR-14/15/16) its read-only
+    /// checks find on `trash` and the registered locations: an offered item
+    /// that fails one moves to the offer's refused items, out of N and Size,
+    /// and a refused one lists it beside its offer refusals. No byte is read.
+    pub(crate) async fn with_custody(
+        &self,
+        sheet: DoneArchiveSheet,
+        trash: Arc<dyn OsTrash>,
+    ) -> Result<DoneArchiveSheet, LibraryError> {
+        let context = Context::new(self).await?;
+        blocking(move || add_custody(sheet, &context, trash.as_ref())).await
     }
 
     /// Journal the candidates and drive the move until it settles.
@@ -711,6 +674,171 @@ fn movable(source: &EntryEvidence, trash: &dyn OsTrash) -> Result<(), ItemReason
         ));
     }
     verify_source(source)
+}
+
+/// An item's sheet refusals as move refusals: its offer refusals, then the
+/// custody refusals the sheet's read-only checks found.
+fn offer_reasons(reasons: &[OfferRefusal], custody: &[MoveRefusal]) -> Vec<MoveRefusal> {
+    reasons
+        .iter()
+        .cloned()
+        .map(|refusal| MoveRefusal::Offer { refusal })
+        .chain(custody.iter().cloned())
+        .collect()
+}
+
+/// A refused copy refuses its whole frame (STO-FR-15): with more than one
+/// copy, `reasons` also names the frame incomplete.
+fn whole_frame(reasons: &mut Vec<MoveRefusal>, copies: usize) {
+    if copies > 1 {
+        if let Some(path) = reasons.iter().find_map(refused_path) {
+            reasons.push(MoveRefusal::FrameIncomplete { refused: path });
+        }
+    }
+}
+
+/// The read-only custody checks of one library copy as `copy` records it
+/// (STO-FR-15): a Captures location for a rejected frame, an active
+/// location, an Available copy, a recorded digest and an OS Trash. Returns
+/// the digest the move re-verifies.
+fn copy_custody(
+    copy: &FrameCopy,
+    captures_only: bool,
+    context: &Context,
+    trash: &dyn OsTrash,
+) -> Result<Result<String, MoveRefusal>, LibraryError> {
+    let location = context.location(copy.location_id)?;
+    let path = context.file(copy)?;
+    let native = NativePath::from_path(&path);
+    let custody = |code: ReasonCode, detail: String| {
+        Ok(Err(MoveRefusal::Custody {
+            path: native.clone(),
+            reason: ItemReason::new(code, detail),
+        }))
+    };
+    if captures_only && location.role != LocationRole::Captures {
+        return Ok(Err(MoveRefusal::OutsideCaptures {
+            path: native,
+            location: location.name.clone(),
+        }));
+    }
+    if location.lifecycle != LocationLifecycle::Active {
+        return custody(
+            ReasonCode::SourceUnavailable,
+            format!("location '{}' is retired", location.name),
+        );
+    }
+    if copy.availability != Availability::Available {
+        return custody(
+            ReasonCode::SourceUnavailable,
+            format!(
+                "{} reads {:?} in location '{}'",
+                path.display(),
+                copy.availability,
+                location.name
+            ),
+        );
+    }
+    let Some(sha256) = copy.sha256.clone() else {
+        return Ok(Err(MoveRefusal::NoRecordedDigest { path: native }));
+    };
+    if let TrashSupport::Unsupported { detail, .. } = trash.support(&path, copy.size_bytes) {
+        return custody(ReasonCode::TrashUnsupported, format!("{detail}; it stays in place"));
+    }
+    Ok(Ok(sha256))
+}
+
+/// The read-only custody check of a Results file at `path`: its volume
+/// keeps what the OS Trash receives.
+fn file_custody(
+    path: &NativePath,
+    size_bytes: u64,
+    trash: &dyn OsTrash,
+) -> Result<Result<(), MoveRefusal>, LibraryError> {
+    Ok(match trash.support(&path.to_path_buf()?, size_bytes) {
+        TrashSupport::Supported => Ok(()),
+        TrashSupport::Unsupported { detail, .. } => Err(MoveRefusal::Custody {
+            path: path.clone(),
+            reason: ItemReason::new(
+                ReasonCode::TrashUnsupported,
+                format!("{detail}; it stays in place"),
+            ),
+        }),
+    })
+}
+
+/// Move each offered item of `sheet` that fails a read-only custody check
+/// into its offer's refused items, and list the custody refusals of each
+/// refused one (STO-FR-14/16).
+fn add_custody(
+    mut sheet: DoneArchiveSheet,
+    context: &Context,
+    trash: &dyn OsTrash,
+) -> Result<DoneArchiveSheet, LibraryError> {
+    let frame_custody = |copies: &[FrameCopy]| -> Result<Vec<MoveRefusal>, LibraryError> {
+        let digest = copies.iter().find_map(|copy| copy.sha256.clone());
+        let mut reasons = Vec::new();
+        for copy in copies {
+            let copy = FrameCopy {
+                sha256: copy.sha256.clone().or_else(|| digest.clone()),
+                ..copy.clone()
+            };
+            reasons.extend(copy_custody(&copy, true, context, trash)?.err());
+        }
+        whole_frame(&mut reasons, copies.len());
+        Ok(reasons)
+    };
+    let offer = &mut sheet.rejected_frames;
+    for refused in &mut offer.refused {
+        refused.custody = frame_custody(&refused.copies)?;
+    }
+    for frame in std::mem::take(&mut offer.frames) {
+        let custody = frame_custody(&frame.copies)?;
+        if custody.is_empty() {
+            offer.frames.push(frame);
+            continue;
+        }
+        offer.n -= 1;
+        offer.size_bytes -= frame.size_bytes;
+        let (frame_key, copies) = (frame.frame_key, frame.copies);
+        offer.refused.push(RefusedFrame { frame_key, copies, reasons: Vec::new(), custody });
+    }
+    let offer = &mut sheet.intermediates;
+    for refused in &mut offer.refused {
+        refused.custody = file_custody(&refused.path, 0, trash)?.err().into_iter().collect();
+    }
+    for item in std::mem::take(&mut offer.items) {
+        let Err(refusal) = file_custody(&item.path, item.size_bytes, trash)? else {
+            offer.items.push(item);
+            continue;
+        };
+        offer.n -= 1;
+        offer.size_bytes -= item.size_bytes;
+        offer.refused.push(RefusedIntermediate {
+            result_id: item.result_id,
+            owner: item.owner,
+            path: item.path,
+            reasons: Vec::new(),
+            custody: vec![refusal],
+        });
+    }
+    let offer = &mut sheet.duplicates;
+    for frame in &mut offer.frames {
+        for refused in &mut frame.refused {
+            refused.custody =
+                copy_custody(&refused.copy, false, context, trash)?.err().into_iter().collect();
+        }
+        for copy in std::mem::take(&mut frame.offered) {
+            let Err(refusal) = copy_custody(&copy, false, context, trash)? else {
+                frame.offered.push(copy);
+                continue;
+            };
+            offer.n -= 1;
+            offer.size_bytes -= copy.size_bytes;
+            frame.refused.push(RefusedCopy { copy, reasons: Vec::new(), custody: vec![refusal] });
+        }
+    }
+    Ok(sheet)
 }
 
 /// Locations by id, for paths and custody checks.

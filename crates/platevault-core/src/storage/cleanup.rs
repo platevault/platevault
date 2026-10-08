@@ -127,6 +127,9 @@ struct FolderPlan {
     /// Its identity, or why it stays as a whole: it is not the folder
     /// preparation wrote, or another run still needs what it holds.
     identity: Result<FileIdentity, ItemReason>,
+    /// The form it resolved to when Prepare made it, re-checked before it
+    /// moves (PREP-FR-07).
+    canonical: Option<NativePath>,
 }
 
 /// One item with what review decided for it.
@@ -135,6 +138,15 @@ struct Assessed {
     state: CleanupItemState,
     draft: Option<StorageItemDraft>,
     relies_on: Option<PathBuf>,
+}
+
+/// What a review records beside its items and folders.
+struct ReviewContext {
+    /// The run's completion its scope was computed for (STO-FR-10).
+    completion: RunCompletion,
+    /// The Results folder an Empty Trash names, and whether it is ticked.
+    results_folder: Option<NativePath>,
+    ticked: bool,
 }
 
 impl Library {
@@ -216,20 +228,23 @@ impl Library {
             let assessed = candidates
                 .into_iter()
                 .map(|candidate| {
-                    let folder_staying = (kind == CleanupKind::EmptyTrash)
-                        .then(|| {
-                            folder_staying(&folders[candidate.folder], &supports[candidate.folder])
-                        })
-                        .flatten();
+                    let folder = &folders[candidate.folder];
+                    let folder_staying = match kind {
+                        CleanupKind::EmptyTrash => {
+                            folder_staying(folder, &supports[candidate.folder])
+                        }
+                        // Clean up moves no folder, but an entry of a folder
+                        // that is not the one Prepare made stays (PREP-FR-07).
+                        CleanupKind::CleanUp => folder.identity.as_ref().err().cloned(),
+                    };
                     assess(candidate, check.as_ref(), &protected, folder_staying)
                 })
                 .collect::<Vec<_>>();
             Ok((folders.into_iter().zip(supports).collect::<Vec<_>>(), assessed))
         })
         .await?;
-        let mut review = self
-            .record_review(request, run_name, folders, assessed, results_folder, ticked)
-            .await?;
+        let context = ReviewContext { completion: run.view.completion, results_folder, ticked };
+        let mut review = self.record_review(request, run_name, folders, assessed, context).await?;
         if kind == CleanupKind::CleanUp && review.groups.is_empty() {
             review.statement = nothing_to_clean(&run.view, &preparations).into();
         }
@@ -243,8 +258,9 @@ impl Library {
     ///
     /// # Errors
     /// `NotFound` for an unknown review; `InvalidInput` for an Empty Trash
-    /// review, while the review is already executing in this process, or when
-    /// the run moved to its Project's Trash since the review.
+    /// review, while the review is already executing in this process, when
+    /// the run moved to its Project's Trash since the review, or when a Clean
+    /// up reviewed on the Complete run finds it reopened (STO-FR-10).
     pub async fn run_cleanup(
         &self,
         id: Uuid,
@@ -264,10 +280,13 @@ impl Library {
 
     /// Execute a recorded Empty Trash (STO-FR-17): every recorded entry goes
     /// to the OS Trash once it and the original it relies on re-verify (D19),
-    /// then each folder left holding nothing but empty folders, and then the
-    /// run record is removed with every row it owns. Items that cannot go
-    /// stay where they are and are named in the outcome. Library frames and
-    /// quality decisions never change. A running Empty Trash resumes.
+    /// then each folder left holding nothing but empty folders and still
+    /// resolving where Prepare made it, and then the run record is removed
+    /// with every row it owns. A Result record left at a moved path, such as
+    /// the run group's in a ticked `Assembled/`, reads Missing. Items that
+    /// cannot go stay where they are and are named in the outcome. Library
+    /// frames and quality decisions never change. A running Empty Trash
+    /// resumes.
     ///
     /// # Errors
     /// `NotFound` for an unknown review; `InvalidInput` for a Clean up
@@ -287,6 +306,7 @@ impl Library {
                 self.run_storage_operation(operation, Arc::clone(&trash)).await?;
             }
             self.retire_folders(id, &trash).await?;
+            self.catalog().record_moved_results(id).await?;
             self.catalog().remove_trashed_run(id).await?;
         }
         self.cleanup_outcome(id).await
@@ -437,9 +457,9 @@ impl Library {
         run_name: String,
         folders: Vec<(FolderPlan, TrashSupport)>,
         assessed: Vec<Assessed>,
-        results_folder: Option<NativePath>,
-        ticked: bool,
+        context: ReviewContext,
     ) -> Result<CleanupReview, LibraryError> {
+        let ReviewContext { completion, results_folder, ticked } = context;
         let kind = request.kind();
         let view_id = request.view_id();
         let excluded = match request {
@@ -461,6 +481,7 @@ impl Library {
             let draft = RunCleanupDraft {
                 kind,
                 view_id,
+                completion,
                 results_ticked: ticked,
                 items: item_drafts,
                 folders: folder_drafts,
@@ -485,8 +506,9 @@ impl Library {
         })
     }
 
-    /// Move each Empty Trash folder that holds nothing but empty folders to
-    /// the OS Trash, recording the intent before each move.
+    /// Move each Empty Trash folder that holds nothing but empty folders and
+    /// still resolves where Prepare made it to the OS Trash, recording the
+    /// intent before each move.
     async fn retire_folders(&self, id: Uuid, trash: &Arc<dyn OsTrash>) -> Result<(), LibraryError> {
         let record = self.catalog().run_cleanup(id).await?;
         let named = self.named_paths(&record).await?;
@@ -503,10 +525,17 @@ impl Library {
                 continue;
             };
             let checker = Arc::clone(trash);
-            let (check_path, check_identity, check_named) =
-                (path.clone(), identity.clone(), named.clone());
+            let (check_path, check_identity, canonical, check_named) =
+                (path.clone(), identity.clone(), folder.canonical.clone(), named.clone());
             let ready = blocking(move || {
-                Ok(folder_ready(checker.as_ref(), &check_path, &check_identity, &check_named))
+                let canonical = canonical.as_ref();
+                Ok(folder_ready(
+                    checker.as_ref(),
+                    &check_path,
+                    &check_identity,
+                    canonical,
+                    &check_named,
+                ))
             })
             .await?;
             if let Err(stop) = ready {
@@ -601,6 +630,7 @@ fn plan_folders(
                 path: path.clone(),
                 role: folder.role,
                 identity: folder.identity.clone().ok(),
+                canonical: folder.canonical.clone(),
                 staying: reason.clone(),
             });
         }
@@ -699,12 +729,15 @@ enum FolderStop {
     Kept(Option<ItemReason>),
 }
 
-/// Whether the reviewed folder is in place, holds nothing but empty folders
-/// and can go to the OS Trash.
+/// Whether the reviewed folder is in place, still resolves where Prepare
+/// made it (PREP-FR-07), holds nothing but empty folders and can go to the
+/// OS Trash. Its identity alone proves little on a volume without stable
+/// file ids, so a parent retargeted since review is caught by its form.
 fn folder_ready(
     trash: &dyn OsTrash,
     path: &Path,
     identity: &FileIdentity,
+    canonical: Option<&NativePath>,
     named: &HashSet<PathBuf>,
 ) -> Result<(), FolderStop> {
     match inventory::observe_folder_identity(path) {
@@ -721,6 +754,9 @@ fn folder_ready(
                 format!("{}: {error}", path.display()),
             )));
         }
+    }
+    if let Some(reason) = resolves_elsewhere(path, canonical) {
+        return Err(FolderStop::Gone(reason));
     }
     if let TrashSupport::Unsupported { reason, detail } = trash.support(path, 0) {
         return Err(FolderStop::Kept(Some(ItemReason::new(
@@ -873,7 +909,7 @@ fn folder_plan(
             )
         }),
     };
-    FolderPlan { path, role, identity }
+    FolderPlan { path, role, identity, canonical: canonical.cloned() }
 }
 
 /// Why `path` is no longer the folder Prepare made at `canonical`: it now
@@ -1079,6 +1115,7 @@ fn push_group(
             path,
             role: CleanupFolderRole::Assembled,
             identity: Err(reason),
+            canonical: assembled.canonical.clone(),
         });
     }
     Ok(())

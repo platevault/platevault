@@ -24,6 +24,7 @@ use sqlx::sqlite::SqliteRow;
 use sqlx::{Connection, Row, SqliteConnection};
 use uuid::Uuid;
 
+use super::cleanup::removed_entry_sql;
 use super::{
     asset_from_row, conflict, db_revision, db_size, fingerprint_matches, from_json, from_text,
     json_ids, load_asset, now, parse_uuid, path_key, rebind_association_bases, revision, to_json,
@@ -161,15 +162,20 @@ pub struct SessionFrame {
     pub repoint: Option<LatestRepoint>,
 }
 
-const ENTRY_REFERENCES: &str = "SELECT e.asset_id, e.prep_id, e.seq, e.kind, e.path, e.source, \
+/// Every prepared entry that reads one of the assets `?1`, except an entry a
+/// Clean up or Empty Trash moved to the OS Trash: it reads nothing any more.
+const ENTRY_REFERENCES: &str = concat!(
+    "SELECT e.asset_id, e.prep_id, e.seq, e.kind, e.path, e.source, \
          e.entry_identity, e.state, p.n, v.id AS view_id, v.stage, v.project_id, \
          pj.name AS project_name, coalesce(c.name, d.name) AS run_name \
      FROM prepared_entries e JOIN preparation_revisions p ON p.id = e.prep_id \
      JOIN views v ON v.id = p.view_id JOIN projects pj ON pj.id = v.project_id \
      LEFT JOIN view_revisions c ON c.view_id = v.id AND c.revision = v.revision \
      LEFT JOIN view_revisions d ON d.view_id = v.id AND d.state = 'draft' \
-     WHERE e.asset_id IN (SELECT value FROM json_each(?1)) \
-     ORDER BY e.asset_id, pj.name, v.id, p.n, e.seq";
+     WHERE e.asset_id IN (SELECT value FROM json_each(?1)) AND NOT ",
+    removed_entry_sql!("e.prep_id", "e.seq"),
+    " ORDER BY e.asset_id, pj.name, v.id, p.n, e.seq"
+);
 
 const LATEST_REPOINTS: &str = "SELECT i.asset_id, i.transfer_id, t.kind, t.project_id, \
          pj.name AS project_name, i.source_location_id, i.source_path, \
@@ -574,7 +580,8 @@ impl Catalog {
     }
 
     /// Every prepared entry, of any run in any Project, that reads one of
-    /// `assets`.
+    /// `assets`; an entry a Clean up or Empty Trash moved to the OS Trash
+    /// reads nothing any more and is left out (STO-FR-05).
     ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.

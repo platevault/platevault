@@ -8,15 +8,16 @@
 //!
 //! The sheet only offers. Computing it records no operation and moves
 //! nothing; PV-STO executes an approved offer under its custody rules
-//! (STO-FR-13..17), which re-verify every item before it moves and add their
-//! own refusals. Every refusal the sheet lists names its reason.
+//! (STO-FR-13..17), which re-verify every item before it moves. The sheet
+//! already lists the custody refusals PV-STO's read-only checks find
+//! (STO-FR-14/16), and every refusal it lists names its reason.
 
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{Availability, NativePath, ResultOwner, Revision, RunStage, TrashedRun};
+use crate::{Availability, MoveRefusal, NativePath, ResultOwner, Revision, RunStage, TrashedRun};
 
 /// A run as an offer or refusal names it.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -121,6 +122,8 @@ pub struct RejectedFrame {
     /// The frame's logical capture key (D16): its smallest copy asset id.
     pub frame_key: Uuid,
     pub copies: Vec<FrameCopy>,
+    /// The expected reclaim: the copies' recorded bytes, without those a
+    /// prepared hardlink still holds (STO-FR-14).
     pub size_bytes: u64,
 }
 
@@ -131,6 +134,9 @@ pub struct RefusedFrame {
     pub frame_key: Uuid,
     pub copies: Vec<FrameCopy>,
     pub reasons: Vec<OfferRefusal>,
+    /// The custody refusals (STO-FR-15) the sheet's read-only checks found
+    /// for its copies; if any copy is refused, the whole frame is.
+    pub custody: Vec<MoveRefusal>,
 }
 
 /// "Move N rejected frames to Trash (size)" (PRJ-FR-15, root FR-021): the
@@ -141,7 +147,8 @@ pub struct RefusedFrame {
 pub struct RejectedFramesOffer {
     /// The number of frames offered.
     pub n: u64,
-    /// Their copies' recorded bytes.
+    /// The expected reclaim: their copies' recorded bytes, without the bytes
+    /// a prepared hardlink still holds (STO-FR-14).
     pub size_bytes: u64,
     pub frames: Vec<RejectedFrame>,
     pub refused: Vec<RefusedFrame>,
@@ -181,6 +188,8 @@ pub struct RefusedIntermediate {
     pub owner: ResultOwner,
     pub path: NativePath,
     pub reasons: Vec<OfferRefusal>,
+    /// The custody refusals (STO-FR-15) the sheet's read-only checks found.
+    pub custody: Vec<MoveRefusal>,
 }
 
 /// "Move N processing intermediates to Trash (size)" (PRJ-FR-15, D-W70): the
@@ -203,6 +212,8 @@ pub struct IntermediatesOffer {
 pub struct RefusedCopy {
     pub copy: FrameCopy,
     pub reasons: Vec<OfferRefusal>,
+    /// The custody refusals (STO-FR-15) the sheet's read-only checks found.
+    pub custody: Vec<MoveRefusal>,
 }
 
 /// One Project frame with byte-identical extra copies: the copy it keeps and

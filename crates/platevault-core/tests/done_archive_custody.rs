@@ -33,10 +33,12 @@ use custody_support::{
     approve_duplicates, approve_intermediates, approve_rejected, archive_location, copies_in,
     custody_codes, file_in, open_project, project_without, record, session_of, Bin,
 };
-use done_archive_support::{done, file_of, light, set_quality, sheet};
+use done_archive_support::{
+    done, file_of, light, mark_done, project_of, record_preparation, set_quality, sheet,
+};
 use persistence_library::TrashedQuery;
 use platevault_core::*;
-use prepare_support::{overwrite_in_place, tree, world, World, HA_LIGHTS, OIII_LIGHTS};
+use prepare_support::{overwrite_in_place, tree, world, Watch, World, HA_LIGHTS, OIII_LIGHTS};
 use results_support::{prepared, results_dir, stack};
 use uuid::Uuid;
 
@@ -181,10 +183,11 @@ async fn archive_paths_follow_templates() {
 }
 
 /// STO-AC-10, STO-FR-07, D06: a prepared link changed outside `PlateVault`
-/// fails its reference repair. That frame's destination stays verified, its
-/// reference reads blocked and its source is retained with its catalog record;
-/// every other frame's link is rebuilt to its archive path before its source
-/// is retired.
+/// fails its reference repair. That frame's reference reads blocked and its
+/// source is retained with its catalog record; the archive copy it wrote and
+/// nothing reads is discarded, so a later review offers the frame again
+/// rather than holding its archive path as occupied. Every other frame's link
+/// is rebuilt to its archive path before its source is retired.
 #[tokio::test]
 async fn reference_repair_failure_blocks_retirement() {
     let world = world().await;
@@ -219,6 +222,8 @@ async fn reference_repair_failure_blocks_retirement() {
     fs::write(&elsewhere, b"another tool's file").unwrap();
     fs::remove_file(link_of(broken)).unwrap();
     std::os::unix::fs::symlink(&elsewhere, link_of(broken)).unwrap();
+    let source = file_of(&world.captures, broken);
+    let original = support::digest(&source);
 
     let bin = Bin::new(&world);
     let transfer = world.library.archive_execute(review.id, bin.trash()).await.unwrap();
@@ -228,12 +233,8 @@ async fn reference_repair_failure_blocks_retirement() {
     assert!(!held.repointed);
     assert_eq!(held.references[0].state, ReferenceState::Blocked, "{held:#?}");
     assert!(held.references[0].reason.is_some());
-    let source = file_of(&world.captures, broken);
-    assert_eq!(
-        support::digest(&source),
-        support::digest(&destination(&archive, held)),
-        "both versions are kept"
-    );
+    assert_eq!(support::digest(&source), original, "the source keeps its bytes");
+    assert!(!destination(&archive, held).exists(), "the unused archive copy is discarded");
     assert!(bin.kept(&source).is_none(), "the source was never retired");
     assert_eq!(record(&world, broken.id).await.location_id, world.captures.id);
     assert_eq!(fs::read_link(link_of(broken)).unwrap(), elsewhere, "the foreign link is untouched");
@@ -245,6 +246,8 @@ async fn reference_repair_failure_blocks_retirement() {
         assert_eq!(fs::read_link(link_of(frame)).unwrap(), destination(&archive, item));
         assert!(!file_of(&world.captures, frame).exists());
     }
+    let again = world.library.archive_review(project, archive.id).await.unwrap();
+    assert_eq!(item(&again, broken).hold, None, "{again:#?}");
     let journal =
         world.catalog().storage_operation(transfer.storage_operation_id.unwrap()).await.unwrap();
     let outcomes: Vec<Option<ItemOutcome>> =
@@ -258,6 +261,89 @@ async fn reference_repair_failure_blocks_retirement() {
         outcomes.iter().filter(|outcome| **outcome == Some(ItemOutcome::Blocked)).count(),
         1
     );
+}
+
+/// STO-FR-05/07, D06: the prepared entries a run's Clean up moved to the OS
+/// Trash read no frame any more. After Complete, Clean up and Mark Done,
+/// Archive reviews no reference update for them and archives every frame.
+#[tokio::test]
+async fn archive_after_clean_up_archives_every_frame() {
+    let world = world().await;
+    prepared(&world).await;
+    world.library.mark_view_complete(world.run).await.unwrap();
+    let bin = Bin::new(&world);
+    let request =
+        CleanupRequest::CleanUp { view_id: world.run, selection: CleanupSelection::default() };
+    let review = world.library.review_cleanup(&request, bin.trash()).await.unwrap();
+    let cleaned = world.library.run_cleanup(review.id.unwrap(), bin.trash()).await.unwrap();
+    assert!(!cleaned.moved.is_empty() && cleaned.left.is_empty(), "{cleaned:#?}");
+    let project = project_of(&world).await;
+    mark_done(&world, project).await;
+    let archive = archive_location(&world).await;
+    let frames = lights(&world).await;
+
+    let review = world.library.archive_review(project, archive.id).await.unwrap();
+    for frame in &frames {
+        let item = item(&review, frame);
+        assert!(item.hold.is_none() && item.references.is_empty(), "{item:#?}");
+    }
+    let transfer = world.library.archive_execute(review.id, bin.trash()).await.unwrap();
+    assert_eq!(transfer.state, ArchiveState::Settled);
+    for frame in &frames {
+        let item = item(&transfer, frame);
+        assert_eq!(item.outcome, Some(ArchiveOutcome::Archived), "{item:#?}");
+        assert!(destination(&archive, item).exists());
+        assert_eq!(record(&world, frame.id).await.location_id, archive.id);
+    }
+}
+
+/// D06, STO-FR-07: the prepared entries that read a frame and the kept-session
+/// rule are re-read immediately before each retirement. While the first Ha
+/// frame retires, open Project B starts using the Ha session and records a
+/// prepared link to an OIII frame of a session it does not select: the other
+/// Ha frame and that OIII frame keep their sources, each naming why, and the
+/// frame nothing changed for retires.
+#[tokio::test]
+async fn references_and_kept_sessions_recheck_before_retirement() {
+    let world = world().await;
+    let project = done(&world).await;
+    let archive = archive_location(&world).await;
+    let [ha_1, ha_2, oiii_1, oiii_2] = lights(&world).await;
+    let oiii = session_of(&world, OIII_LIGHTS[0]).await;
+    let review = world.library.archive_review(project, archive.id).await.unwrap();
+    assert!(review.items.iter().all(|item| item.hold.is_none()), "{review:#?}");
+    assert_eq!(review.items[0].asset_id, ha_1.id, "Ha_001 retires first");
+    let bin = Bin::new(&world);
+    let (reached, release) = bin.hold_next();
+    let running = {
+        let (library, trash) = (Arc::clone(&world.library), bin.trash());
+        tokio::spawn(async move { library.archive_execute(review.id, trash).await })
+    };
+    tokio::time::timeout(Duration::from_secs(20), reached.notified())
+        .await
+        .expect("retirement starts");
+    let (_, b_run) = project_without(&world, "NGC 7000 Wide", "Wide-Ha", &[oiii]).await;
+    let linked = file_of(&world.captures, &oiii_1);
+    record_preparation(&world, b_run, InputMode::LinkedView, &[(oiii_1.id, &oiii_1, linked)]).await;
+    drop(release);
+    let transfer = running.await.unwrap().unwrap();
+
+    assert_eq!(transfer.state, ArchiveState::Settled, "{transfer:#?}");
+    for frame in [&ha_1, &oiii_2] {
+        assert_eq!(item(&transfer, frame).outcome, Some(ArchiveOutcome::Archived));
+    }
+    for (frame, code, needle) in [
+        (&ha_2, ReasonCode::Protected, "NGC 7000 Wide"),
+        (&oiii_1, ReasonCode::DestinationMismatch, "prepared entries"),
+    ] {
+        let item = item(&transfer, frame);
+        assert_eq!(item.outcome, Some(ArchiveOutcome::SourceRetained), "{item:#?}");
+        let reason = item.reason.as_ref().expect("the retained source names why");
+        assert_eq!(reason.code, code, "{item:#?}");
+        assert!(reason.detail.contains(needle), "{item:#?}");
+        assert!(file_of(&world.captures, frame).exists(), "its source stays in place");
+        assert!(bin.kept(&file_of(&world.captures, frame)).is_none());
+    }
 }
 
 /// STO-FR-15, STO-AC-19: every physical copy of a rejected frame moves, or
@@ -312,6 +398,76 @@ async fn rejected_move_whole_frame_or_refused() {
         assert_eq!(record(&world, asset.id).await.availability, Availability::Available);
     }
     assert_eq!(summary.moved_bytes, ha_1.fingerprint.size_bytes + extra[0].fingerprint.size_bytes);
+}
+
+/// STO-FR-14: the rejected-frames Size is the expected reclaim. A copy whose
+/// bytes a Complete run's prepared hardlink still holds reclaims nothing, so
+/// its bytes leave the Size while the frame stays offered; once Clean up
+/// moved that hardlink to the OS Trash, they count again.
+#[tokio::test]
+async fn rejected_size_excludes_bytes_a_hardlink_still_holds() {
+    let world = world().await;
+    let profile = world.siril("exit 0").await;
+    let request = world.request(&profile, InputMode::LinkedView, Some(LinkKind::Hardlink));
+    let outcome = world.prepare(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    let ha_1 = light(&world, HA_LIGHTS[0]).await;
+    set_quality(&world, &ha_1, Quality::Unusable).await;
+    let project = done(&world).await;
+    let offer = sheet(&world, project).await.rejected_frames;
+    assert_eq!(offer.n, 1, "{offer:#?}");
+    assert_eq!((offer.size_bytes, offer.frames[0].size_bytes), (0, 0), "{offer:#?}");
+
+    let bin = Bin::new(&world);
+    let request =
+        CleanupRequest::CleanUp { view_id: world.run, selection: CleanupSelection::default() };
+    let review = world.library.review_cleanup(&request, bin.trash()).await.unwrap();
+    let cleaned = world.library.run_cleanup(review.id.unwrap(), bin.trash()).await.unwrap();
+    assert!(!cleaned.moved.is_empty() && cleaned.left.is_empty(), "{cleaned:#?}");
+    let offer = sheet(&world, project).await.rejected_frames;
+    let size = ha_1.fingerprint.size_bytes;
+    assert_eq!((offer.size_bytes, offer.frames[0].size_bytes), (size, size), "{offer:#?}");
+}
+
+/// STO-AC-21, STO-FR-14/16, PRJ-FR-15: the sheet lists each custody refusal
+/// when it opens, before any approval. An intermediate on a volume with no OS
+/// Trash, and a rejected frame whose only copy sits there, are refused with
+/// that reason and leave N and Size; the other intermediates are offered.
+#[tokio::test]
+async fn sheet_lists_custody_refusals_when_it_opens() {
+    let world = world().await;
+    prepared(&world).await;
+    let results = results_dir(&world);
+    let files: Vec<PathBuf> =
+        (1..=4).map(|n| results.join(format!("process/pp_light_0000{n}.fit"))).collect();
+    for file in &files {
+        stack(file, &[("OBJECT", "'NGC 7000'")]);
+    }
+    world.library.rescan_results(ResultOwner::Run { view_id: world.run }).await.unwrap();
+    let ha_1 = light(&world, HA_LIGHTS[0]).await;
+    set_quality(&world, &ha_1, Quality::Unusable).await;
+    let project = done(&world).await;
+    let bin = Bin::new(&world);
+    bin.refuse(&files[3]);
+    bin.refuse(&file_of(&world.captures, &ha_1));
+
+    let sheet = world.library.done_archive_review(project, bin.trash()).await.unwrap();
+    let no_trash = |custody: &[MoveRefusal]| {
+        matches!(custody, [MoveRefusal::Custody { reason, .. }]
+            if reason.code == ReasonCode::TrashUnsupported)
+    };
+    let offer = &sheet.intermediates;
+    assert_eq!(offer.n, 3, "{offer:#?}");
+    let [refused] = offer.refused.as_slice() else {
+        panic!("one intermediate is refused: {offer:#?}");
+    };
+    assert_eq!(refused.path.to_path_buf().unwrap(), files[3]);
+    assert!(no_trash(&refused.custody), "{refused:#?}");
+    let frames = &sheet.rejected_frames;
+    assert_eq!((frames.n, frames.size_bytes), (0, 0), "{frames:#?}");
+    let [frame] = frames.refused.as_slice() else { panic!("one refused frame: {frames:#?}") };
+    assert_eq!(frame.frame_key, ha_1.id);
+    assert!(frame.reasons.is_empty() && no_trash(&frame.custody), "{frame:#?}");
 }
 
 /// D19, STO-AC-19, STO-AC-14: a file changed in place with its size and

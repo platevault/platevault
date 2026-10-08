@@ -506,17 +506,24 @@ impl Catalog {
     }
 
     /// Reopen a Complete run (RES-FR-07): it returns to the stage it was in
-    /// before Complete and accepts membership changes again.
+    /// before Complete and accepts membership changes again. A running Clean
+    /// up of the run, which may cover every revision of the Complete run,
+    /// finishes first (STO-FR-10).
     ///
     /// # Errors
-    /// `InvalidInput` for a run that is not Complete or is in the Project's
-    /// Trash; `NotFound` for an unknown run.
+    /// `InvalidInput` for a run that is not Complete, is in the Project's
+    /// Trash or has a running Clean up; `NotFound` for an unknown run.
     pub async fn reopen_view(&self, id: Uuid) -> Result<ViewRecord> {
         let record = write_txn!(self, |conn| {
             let view = load_view(conn, id).await?;
             require_live(&view)?;
             if view.completion != RunCompletion::Complete {
                 return Err(invalid(format!("run {id} is not Complete")));
+            }
+            if let Some(running) = super::cleanup::running_cleanup(conn, id).await? {
+                return Err(invalid(format!(
+                    "run {id} cannot be reopened while its Clean up ({running}) is running"
+                )));
             }
             sqlx::query(
                 "UPDATE views SET completion = 'open', stage = stage_before_complete, \

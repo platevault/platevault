@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS run_cleanups (
     view_id TEXT NOT NULL,
     project_id TEXT NOT NULL,
     run_name TEXT NOT NULL,
+    -- The run's completion the review's scope was computed for: a Clean up
+    -- of a Complete run covers every revision, so it starts only while the
+    -- run is still Complete (STO-FR-10).
+    completion TEXT NOT NULL CHECK (completion IN ('open', 'complete')),
     results_ticked INTEGER NOT NULL CHECK (results_ticked IN (0, 1)),
     -- The Trash operation moving the recorded entries; none when none moves.
     op_id TEXT UNIQUE REFERENCES storage_operations (id),
@@ -54,15 +58,17 @@ CREATE INDEX IF NOT EXISTS run_cleanup_items_entry
 -- An Empty Trash folder: a prepared folder, or the Results folder when
 -- ticked. It goes to the OS Trash only once nothing but empty folders remains
 -- in it. Its identity is recorded at review and `retiring` before the move,
--- so a resumed folder is decided by identity, never by its name. A folder
--- that cannot go keeps `reason`; one kept only for entries that stay, which
--- are named themselves, keeps none.
+-- so a resumed folder is decided by identity, never by its name; it must
+-- still resolve to `canonical`, the form Prepare recorded (PREP-FR-07). A
+-- folder that cannot go keeps `reason`; one kept only for entries that stay,
+-- which are named themselves, keeps none.
 CREATE TABLE IF NOT EXISTS run_cleanup_folders (
     cleanup_id TEXT NOT NULL REFERENCES run_cleanups (id),
     n INTEGER NOT NULL CHECK (n >= 0),
     path TEXT NOT NULL,
     role TEXT NOT NULL,
     identity TEXT,
+    canonical TEXT,
     phase TEXT NOT NULL CHECK (phase IN ('pending', 'retiring', 'settled')),
     outcome TEXT CHECK (outcome IS NULL OR outcome IN ('trashed', 'blocked', 'uncertain')),
     reason TEXT,

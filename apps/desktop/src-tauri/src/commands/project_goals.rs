@@ -235,7 +235,8 @@ pub async fn project_done_archive_review(
     library: State<'_, Arc<Library>>,
     project_id: Uuid,
 ) -> Reply<DoneArchiveSheet> {
-    library.done_archive_review(project_id).await.map_err(fail(Some(project_id)))
+    let trash = Arc::new(platevault_core::custody::trash::SystemTrash::default());
+    library.done_archive_review(project_id, trash).await.map_err(fail(Some(project_id)))
 }
 
 /// The Project with its candidates and latest Project-only decisions, from one

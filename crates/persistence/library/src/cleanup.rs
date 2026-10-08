@@ -17,12 +17,31 @@ use std::collections::HashSet;
 
 use platevault_model::{
     CleanupFolderRole, CleanupKind, CleanupRole, CleanupState, FileIdentity, ItemOutcome,
-    ItemPhase, ItemReason, LibraryError, NativePath, PreparedEntryKey, StorageItemDraft,
-    StorageOperationKind,
+    ItemPhase, ItemReason, LibraryError, NativePath, PreparedEntryKey, RunCompletion,
+    StorageItemDraft, StorageOperationKind,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
 use uuid::Uuid;
+
+/// SQL: an earlier Clean up or Empty Trash moved the prepared entry
+/// `$prep`/`$seq` to the OS Trash, so it no longer reads anything
+/// (STO-FR-05). The run's record of what it removed; the entry row stays.
+macro_rules! removed_entry_sql {
+    ($prep:literal, $seq:literal) => {
+        concat!(
+            "EXISTS (SELECT 1 FROM run_cleanup_items ci \
+             JOIN run_cleanups cc ON cc.id = ci.cleanup_id \
+             JOIN storage_items cs ON cs.op_id = cc.op_id AND cs.seq = ci.storage_seq \
+             WHERE ci.prep_id = ",
+            $prep,
+            " AND ci.entry_seq = ",
+            $seq,
+            " AND cs.outcome = 'trashed')"
+        )
+    };
+}
+pub(crate) use removed_entry_sql;
 
 use super::prepare::{
     load_group_folders, load_recorded_assembled_folder, load_recorded_results_folder,
@@ -61,6 +80,8 @@ pub struct CleanupFolderDraft {
     pub path: NativePath,
     pub role: CleanupFolderRole,
     pub identity: Option<FileIdentity>,
+    /// The form it resolved to when Prepare made it (PREP-FR-07).
+    pub canonical: Option<NativePath>,
     pub staying: Option<ItemReason>,
 }
 
@@ -69,6 +90,9 @@ pub struct CleanupFolderDraft {
 pub struct RunCleanupDraft {
     pub kind: CleanupKind,
     pub view_id: Uuid,
+    /// The run's completion the review's scope was computed for: a Clean up
+    /// of a Complete run covers every revision (STO-FR-10).
+    pub completion: RunCompletion,
     pub results_ticked: bool,
     pub items: Vec<CleanupItemDraft>,
     pub folders: Vec<CleanupFolderDraft>,
@@ -94,6 +118,9 @@ pub struct RunCleanupFolder {
     pub path: NativePath,
     pub role: CleanupFolderRole,
     pub identity: Option<FileIdentity>,
+    /// The form it resolved to when Prepare made it (PREP-FR-07); it must
+    /// still resolve there when it moves.
+    pub canonical: Option<NativePath>,
     /// `Pending`, `Retiring` (the move was about to be requested) or `Settled`.
     pub phase: ItemPhase,
     /// `Trashed`, `Blocked` (kept in place) or `Uncertain`.
@@ -109,6 +136,8 @@ pub struct RunCleanupRecord {
     pub view_id: Uuid,
     pub project_id: Uuid,
     pub run_name: String,
+    /// The run's completion the review's scope was computed for.
+    pub completion: RunCompletion,
     pub results_ticked: bool,
     pub operation_id: Option<Uuid>,
     pub state: CleanupState,
@@ -193,14 +222,23 @@ impl Catalog {
     ///
     /// # Errors
     /// `NotFound` for an unknown run; `InvalidInput` for an Empty Trash of a
-    /// run outside its Project's Trash or a Clean up of one inside it, while
-    /// another removal of the run is running, or for an item the storage
-    /// journal refuses.
+    /// run outside its Project's Trash or a Clean up of one inside it, for a
+    /// run whose completion is no longer the one the review's scope was
+    /// computed for, while another removal of the run is running, or for an
+    /// item the storage journal refuses.
     pub async fn record_run_cleanup(&self, draft: &RunCleanupDraft) -> Result<RunCleanupRecord> {
         let id = Uuid::new_v4();
         let record = write_txn!(self, |conn| {
             let run = load_record(conn, draft.view_id).await?;
             require_kind_fits(draft.kind, run.view.trashed_at.is_some(), draft.view_id)?;
+            if run.view.completion != draft.completion {
+                return Err(invalid(format!(
+                    "run {} was {} when its {} was reviewed; review it again",
+                    draft.view_id,
+                    completion_name(draft.completion),
+                    kind_name(draft.kind)
+                )));
+            }
             if let Some(running) = running_cleanup(conn, draft.view_id).await? {
                 return Err(invalid(format!(
                     "a {} of run {} is running ({running}); it finishes before another review",
@@ -230,15 +268,16 @@ impl Catalog {
                 .unwrap_or_default();
             let at = now()?;
             sqlx::query(
-                "INSERT INTO run_cleanups (id, kind, view_id, project_id, run_name, \
+                "INSERT INTO run_cleanups (id, kind, view_id, project_id, run_name, completion, \
                  results_ticked, op_id, state, created_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'reviewed', ?8)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'reviewed', ?9)",
             )
             .bind(id.to_string())
             .bind(to_text(&draft.kind)?)
             .bind(draft.view_id.to_string())
             .bind(run.view.project_id.to_string())
             .bind(&name)
+            .bind(to_text(&draft.completion)?)
             .bind(i64::from(draft.results_ticked))
             .bind(operation.map(|op| op.to_string()))
             .bind(&at)
@@ -260,18 +299,32 @@ impl Catalog {
 
     /// Start a recorded review: it runs only while the run is still where
     /// the review found it, in its Project's Trash for Empty Trash and outside
-    /// it for Clean up. A running or settled review is returned unchanged, so
-    /// an interrupted one resumes.
+    /// it for Clean up. A Clean up reviewed on a Complete run covers every
+    /// revision, so it starts only while the run is still Complete; one
+    /// reviewed before Complete covers only replaced revisions, which stay
+    /// replaced (STO-FR-10). A running or settled review is returned
+    /// unchanged, so an interrupted one resumes.
     ///
     /// # Errors
     /// `NotFound` for an unknown review or run; `InvalidInput` when the run
-    /// moved into or out of its Project's Trash since the review.
+    /// moved into or out of its Project's Trash since the review, or a Clean
+    /// up reviewed on a Complete run finds it reopened.
     pub async fn start_run_cleanup(&self, id: Uuid) -> Result<RunCleanupRecord> {
         let record = write_txn!(self, |conn| {
             let record = load_cleanup(conn, id).await?;
             if record.state == CleanupState::Reviewed {
                 let run = load_record(conn, record.view_id).await?;
                 require_kind_fits(record.kind, run.view.trashed_at.is_some(), record.view_id)?;
+                if record.kind == CleanupKind::CleanUp
+                    && record.completion == RunCompletion::Complete
+                    && run.view.completion != RunCompletion::Complete
+                {
+                    return Err(invalid(format!(
+                        "run {} is no longer Complete: its Clean up was reviewed over every \
+                         revision while it was Complete; review it again",
+                        record.view_id
+                    )));
+                }
                 sqlx::query("UPDATE run_cleanups SET state = 'running' WHERE id = ?1")
                     .bind(id.to_string())
                     .execute(&mut *conn)
@@ -439,6 +492,32 @@ impl Catalog {
         Ok(record)
     }
 
+    /// Every Result record at a path a running Empty Trash moved to the OS
+    /// Trash reads Missing, as a rescan would record it: the Results of the
+    /// run's group in a ticked `Assembled/` folder outlive the run record
+    /// (D-W75). Repeating it changes nothing.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown review; `PersistenceFailure` when the write
+    /// cannot commit.
+    pub async fn record_moved_results(&self, id: Uuid) -> Result<()> {
+        write_txn!(self, |conn| {
+            load_cleanup(conn, id).await?;
+            sqlx::query(
+                "UPDATE result_candidates SET availability = 'missing', updated_at = ?2 \
+                 WHERE availability <> 'missing' AND path IN (SELECT i.path \
+                 FROM run_cleanup_items i JOIN run_cleanups c ON c.id = i.cleanup_id \
+                 JOIN storage_items s ON s.op_id = c.op_id AND s.seq = i.storage_seq \
+                 WHERE c.id = ?1 AND i.role = 'result' AND s.outcome = 'trashed')",
+            )
+            .bind(id.to_string())
+            .bind(now()?)
+            .execute(&mut *conn)
+            .await?;
+        });
+        Ok(())
+    }
+
     /// The prepared entries of `view` an earlier Clean up moved to the OS
     /// Trash: the run's record of what it removed (STO-FR-05).
     ///
@@ -446,12 +525,11 @@ impl Catalog {
     /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn removed_prepared_entries(&self, view: Uuid) -> Result<HashSet<PreparedEntryKey>> {
         let mut conn = self.reader().await?;
-        let rows = sqlx::query(
-            "SELECT i.prep_id, i.entry_seq FROM run_cleanup_items i \
-             JOIN run_cleanups c ON c.id = i.cleanup_id \
-             JOIN storage_items s ON s.op_id = c.op_id AND s.seq = i.storage_seq \
-             WHERE c.view_id = ?1 AND i.prep_id IS NOT NULL AND s.outcome = 'trashed'",
-        )
+        let rows = sqlx::query(concat!(
+            "SELECT e.prep_id, e.seq FROM prepared_entries e \
+             JOIN preparation_revisions p ON p.id = e.prep_id WHERE p.view_id = ?1 AND ",
+            removed_entry_sql!("e.prep_id", "e.seq")
+        ))
         .bind(view.to_string())
         .fetch_all(&mut *conn)
         .await?;
@@ -459,7 +537,7 @@ impl Catalog {
             .map(|row| {
                 Ok(PreparedEntryKey {
                     preparation_id: parse_uuid(&row.try_get::<String, _>("prep_id")?)?,
-                    seq: u32_of(row.try_get("entry_seq")?)?,
+                    seq: u32_of(row.try_get("seq")?)?,
                 })
             })
             .collect()
@@ -546,6 +624,13 @@ const fn kind_name(kind: CleanupKind) -> &'static str {
     }
 }
 
+const fn completion_name(completion: RunCompletion) -> &'static str {
+    match completion {
+        RunCompletion::Open => "not Complete",
+        RunCompletion::Complete => "Complete",
+    }
+}
+
 /// Empty Trash acts on a run in its Project's Trash, Clean up on one outside.
 fn require_kind_fits(kind: CleanupKind, trashed: bool, view: Uuid) -> Result<()> {
     match (kind, trashed) {
@@ -559,7 +644,8 @@ fn require_kind_fits(kind: CleanupKind, trashed: bool, view: Uuid) -> Result<()>
     }
 }
 
-async fn running_cleanup(conn: &mut SqliteConnection, view: Uuid) -> Result<Option<String>> {
+/// The running Clean up or Empty Trash of `view`, if any.
+pub async fn running_cleanup(conn: &mut SqliteConnection, view: Uuid) -> Result<Option<String>> {
     Ok(sqlx::query_scalar("SELECT id FROM run_cleanups WHERE view_id = ?1 AND state = 'running'")
         .bind(view.to_string())
         .fetch_optional(&mut *conn)
@@ -636,14 +722,15 @@ async fn insert_folders(
             None => (ItemPhase::Pending, None),
         };
         sqlx::query(
-            "INSERT INTO run_cleanup_folders (cleanup_id, n, path, role, identity, phase, \
-             outcome, reason, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO run_cleanup_folders (cleanup_id, n, path, role, identity, canonical, \
+             phase, outcome, reason, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         )
         .bind(id.to_string())
         .bind(i64::try_from(n).map_err(|_| invalid("too many Empty Trash folders"))?)
         .bind(to_json(&folder.path)?)
         .bind(to_json(&folder.role)?)
         .bind(folder.identity.as_ref().map(to_json).transpose()?)
+        .bind(folder.canonical.as_ref().map(to_json).transpose()?)
         .bind(to_text(&phase)?)
         .bind(outcome.as_ref().map(to_text).transpose()?)
         .bind(folder.staying.as_ref().map(to_json).transpose()?)
@@ -661,8 +748,8 @@ fn u32_of(value: i64) -> Result<u32> {
 
 async fn load_cleanup(conn: &mut SqliteConnection, id: Uuid) -> Result<RunCleanupRecord> {
     let row = sqlx::query(
-        "SELECT kind, view_id, project_id, run_name, results_ticked, op_id, state, created_at, \
-         settled_at, run_removed_at FROM run_cleanups WHERE id = ?1",
+        "SELECT kind, view_id, project_id, run_name, completion, results_ticked, op_id, state, \
+         created_at, settled_at, run_removed_at FROM run_cleanups WHERE id = ?1",
     )
     .bind(id.to_string())
     .fetch_optional(&mut *conn)
@@ -676,8 +763,8 @@ async fn load_cleanup(conn: &mut SqliteConnection, id: Uuid) -> Result<RunCleanu
     .fetch_all(&mut *conn)
     .await?;
     let folders = sqlx::query(
-        "SELECT n, path, role, identity, phase, outcome, reason FROM run_cleanup_folders \
-         WHERE cleanup_id = ?1 ORDER BY n",
+        "SELECT n, path, role, identity, canonical, phase, outcome, reason \
+         FROM run_cleanup_folders WHERE cleanup_id = ?1 ORDER BY n",
     )
     .bind(id.to_string())
     .fetch_all(&mut *conn)
@@ -688,6 +775,7 @@ async fn load_cleanup(conn: &mut SqliteConnection, id: Uuid) -> Result<RunCleanu
         view_id: parse_uuid(&row.try_get::<String, _>("view_id")?)?,
         project_id: parse_uuid(&row.try_get::<String, _>("project_id")?)?,
         run_name: row.try_get("run_name")?,
+        completion: from_text(&row.try_get::<String, _>("completion")?)?,
         results_ticked: row.try_get::<i64, _>("results_ticked")? == 1,
         operation_id: row
             .try_get::<Option<String>, _>("op_id")?
@@ -733,6 +821,10 @@ fn folder_from_row(row: &SqliteRow) -> Result<RunCleanupFolder> {
         identity: row
             .try_get::<Option<String>, _>("identity")?
             .map(|identity| from_json(&identity))
+            .transpose()?,
+        canonical: row
+            .try_get::<Option<String>, _>("canonical")?
+            .map(|canonical| from_json(&canonical))
             .transpose()?,
         phase: from_text(&row.try_get::<String, _>("phase")?)?,
         outcome: row

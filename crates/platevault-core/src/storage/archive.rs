@@ -30,7 +30,7 @@ use persistence_library::{
 use uuid::Uuid;
 
 use crate::custody::trash::OsTrash;
-use crate::custody::{in_place, observe_entry, same_identity};
+use crate::custody::{in_place, observe_entry, same_identity, transfer};
 use crate::import::{classify, naming_metadata, writability};
 use crate::library::{blocking, Library};
 use crate::{
@@ -86,7 +86,7 @@ impl Library {
         project_id: Uuid,
         destination: Uuid,
     ) -> Result<ArchiveTransfer, LibraryError> {
-        let sheet = self.done_archive_review(project_id).await?;
+        let (project_revision, offer) = self.archive_offer(project_id).await?;
         let location = self.catalog().location(destination).await?;
         if location.lifecycle != LocationLifecycle::Active {
             return Err(LibraryError::InvalidInput(format!(
@@ -94,7 +94,7 @@ impl Library {
                 location.name
             )));
         }
-        let sessions: BTreeSet<Uuid> = sheet.archive.sessions.iter().copied().collect();
+        let sessions: BTreeSet<Uuid> = offer.sessions.iter().copied().collect();
         if sessions.is_empty() {
             return Err(LibraryError::InvalidInput(
                 "the Done / Archive sheet offers no session to archive: every member session is \
@@ -109,10 +109,9 @@ impl Library {
             let layout = self.layout(asset).await?;
             items.push(plan.item(self, asset.session_id, &asset.asset, &location, layout).await?);
         }
-        let kept = sheet.archive.kept;
-        let input = plan
-            .finish(ArchiveKind::Archive, project_id, sheet.project_revision, kept, items)
-            .await?;
+        let kept = offer.kept;
+        let input =
+            plan.finish(ArchiveKind::Archive, project_id, project_revision, kept, items).await?;
         Ok(self.catalog().record_archive_transfer(&input).await?.transfer)
     }
 
@@ -318,16 +317,15 @@ impl Library {
         let transfer = &record.transfer;
         let kept: HashMap<Uuid, ArchiveHold> = match transfer.kind {
             ArchiveKind::Archive => {
-                let sheet = self.done_archive_review(transfer.project.id).await?;
-                let mut kept: HashMap<Uuid, ArchiveHold> = sheet
-                    .archive
+                let (_, offer) = self.archive_offer(transfer.project.id).await?;
+                let mut kept: HashMap<Uuid, ArchiveHold> = offer
                     .kept
                     .into_iter()
                     .map(|session| {
                         (session.session_id, ArchiveHold::Kept { projects: session.projects })
                     })
                     .collect();
-                let members: HashSet<Uuid> = sheet.archive.sessions.into_iter().collect();
+                let members: HashSet<Uuid> = offer.sessions.into_iter().collect();
                 for item in &transfer.items {
                     if !members.contains(&item.session_id) && !kept.contains_key(&item.session_id) {
                         kept.insert(
@@ -462,20 +460,9 @@ impl Library {
         if asset.availability != Availability::Available {
             return Ok(Err(ArchiveHold::Unavailable { availability: asset.availability }));
         }
-        let current: BTreeSet<(Uuid, u32)> = references
-            .get(&item.asset_id)
-            .into_iter()
-            .flatten()
-            .filter(|entry| tracked(entry))
-            .map(|entry| (entry.preparation_id, entry.seq))
-            .collect();
-        let reviewed: BTreeSet<(Uuid, u32)> = item
-            .references
-            .iter()
-            .map(|reference| (reference.preparation_id, reference.entry_seq))
-            .collect();
-        if current != reviewed {
-            return changed("the prepared entries that read the frame changed since review");
+        let current = references.get(&item.asset_id).map_or(&[][..], Vec::as_slice);
+        if references_changed(current, item) {
+            return changed(REFERENCES_CHANGED);
         }
         if let Some(occupant) = self
             .catalog()
@@ -520,6 +507,7 @@ impl Library {
                 if operation.state != StorageOperationState::Settled {
                     self.catalog().settle_storage_operation(op_id).await?;
                 }
+                self.discard_unused_copies(&record, &operation).await?;
                 self.catalog().settle_archive_transfer(id).await?;
                 return Ok(());
             };
@@ -565,7 +553,7 @@ impl Library {
                     self.repair(&record, item, state.revision, op_id, next, trash).await?;
                 }
                 (ItemPhase::DestinationVerified, ArchivePhase::ReferenceUpdated) => {
-                    match self.references_hold(item).await? {
+                    match self.references_hold(&record.transfer, item).await? {
                         Ok(()) => {
                             self.step_storage_operation(op_id, Arc::clone(trash)).await?;
                         }
@@ -885,10 +873,13 @@ impl Library {
         }
     }
 
-    /// Immediately before retirement (D06): every reference still reads the
+    /// Immediately before retirement (D06, STO-FR-07): the prepared entries
+    /// that read the frame are still the reviewed ones, no Project that is not
+    /// Done keeps an Archive's session now, every reference still reads the
     /// destination copy and the catalog record names it.
     async fn references_hold(
         &self,
+        transfer: &ArchiveTransfer,
         item: &ArchiveItem,
     ) -> Result<Result<(), ItemReason>, LibraryError> {
         let asset = self.catalog().asset(item.asset_id).await?;
@@ -900,16 +891,35 @@ impl Library {
                 "the frame's catalog record no longer names the archive copy",
             )));
         }
+        let entries = references_by_asset(
+            self.catalog().entry_references(&BTreeSet::from([item.asset_id])).await?,
+        );
+        let current = entries.get(&item.asset_id).cloned().unwrap_or_default();
+        if references_changed(&current, item) {
+            return Ok(Err(ItemReason::new(ReasonCode::DestinationMismatch, REFERENCES_CHANGED)));
+        }
+        if transfer.kind == ArchiveKind::Archive {
+            let session = BTreeSet::from([item.session_id]);
+            let kept = self.catalog().kept_sessions(transfer.project.id, &session).await?;
+            if let Some(kept) = kept.first() {
+                let names: Vec<String> =
+                    kept.projects.iter().map(|project| format!("'{}'", project.name)).collect();
+                return Ok(Err(ItemReason::new(
+                    ReasonCode::Protected,
+                    format!(
+                        "the session is now a member of a run in Project {}, which is not Done; \
+                         the source stays",
+                        names.join(", ")
+                    ),
+                )));
+            }
+        }
         let locations = self.locations_of(std::slice::from_ref(item)).await?;
         let target = NativePath::from_path(&absolute(
             &locations,
             item.destination_location_id,
             &item.destination_path,
         )?);
-        let entries = references_by_asset(
-            self.catalog().entry_references(&BTreeSet::from([item.asset_id])).await?,
-        );
-        let current = entries.get(&item.asset_id).cloned().unwrap_or_default();
         for reference in &item.references {
             let Some(entry) = current.iter().find(|entry| {
                 entry.preparation_id == reference.preparation_id && entry.seq == reference.entry_seq
@@ -949,6 +959,78 @@ impl Library {
         }
         Ok(Ok(()))
     }
+
+    /// Discard each archive copy this transfer wrote that a Source-retained
+    /// item left unused: the frame's record never moved to it and no prepared
+    /// entry reads it, so it holds nobody's bytes but the retained source's,
+    /// and a later review would hold its path as occupied. A copy goes only
+    /// while its path still holds the identity recorded when it was written;
+    /// anything else found there stays. A copy something reads stays too.
+    async fn discard_unused_copies(
+        &self,
+        record: &ArchiveRecord,
+        operation: &StorageOperation,
+    ) -> Result<(), LibraryError> {
+        let retained: Vec<(&ArchiveItem, &StorageItem)> = record
+            .transfer
+            .items
+            .iter()
+            .zip(&record.states)
+            .filter(|(item, _)| item.outcome == Some(ArchiveOutcome::SourceRetained))
+            .filter(|(item, _)| !item.repointed)
+            .filter_map(|(item, state)| {
+                Some((item, operation.items.get(index(state.journal_seq?))?))
+            })
+            .collect();
+        if retained.is_empty() {
+            return Ok(());
+        }
+        let locations = self.locations_of(&record.transfer.items).await?;
+        let assets: BTreeSet<Uuid> = retained.iter().map(|(item, _)| item.asset_id).collect();
+        let readers = references_by_asset(self.catalog().entry_references(&assets).await?);
+        for (item, journal) in retained {
+            let Some(written) = journal.written.as_ref() else { continue };
+            let recorded = self
+                .catalog()
+                .asset_recorded_at(item.destination_location_id, &item.destination_path)
+                .await?;
+            let copy = absolute(&locations, item.destination_location_id, &item.destination_path)?;
+            let target = NativePath::from_path(&copy);
+            let read = readers.get(&item.asset_id).is_some_and(|entries| {
+                entries.iter().any(|entry| entry.source.as_ref() == Some(&target))
+            });
+            if recorded.is_some() || read {
+                continue;
+            }
+            let identity = written.identity.clone();
+            blocking(move || {
+                transfer::discard(&copy, &identity);
+                Ok(())
+            })
+            .await?;
+        }
+        Ok(())
+    }
+}
+
+/// Why an item retains its source: the entries that read it are not the
+/// reviewed ones.
+const REFERENCES_CHANGED: &str = "the prepared entries that read the frame changed since review";
+
+/// Whether the tracked prepared entries reading the frame differ from the
+/// ones `item` was reviewed with.
+fn references_changed(current: &[EntryReference], item: &ArchiveItem) -> bool {
+    let current: BTreeSet<(Uuid, u32)> = current
+        .iter()
+        .filter(|entry| tracked(entry))
+        .map(|entry| (entry.preparation_id, entry.seq))
+        .collect();
+    let reviewed: BTreeSet<(Uuid, u32)> = item
+        .references
+        .iter()
+        .map(|reference| (reference.preparation_id, reference.entry_seq))
+        .collect();
+    current != reviewed
 }
 
 /// Whether the frame's record is still at the archive path its latest
@@ -1240,6 +1322,9 @@ impl Plan {
                     detail: format!("prepared entry {} {detail}", entry.path.display()),
                 }));
             }
+            if let Some(hold) = link_repair_hold(entry, RELINKS) {
+                return Ok(Some(hold));
+            }
         }
         if library.catalog().asset_recorded_at(destination.id, &path).await?.is_some() {
             return Ok(Some(ArchiveHold::Occupied { path }));
@@ -1375,6 +1460,20 @@ fn reference_of(entry: &EntryReference) -> Option<ArchiveReference> {
     })
 }
 
+/// Whether this platform rebuilds a prepared link ([`relink`]).
+const RELINKS: bool = cfg!(unix);
+
+/// Why the frame `entry` reads is held back at review when its link must be
+/// rebuilt and `relinks` is false: nothing is then written for it, rather
+/// than a verified copy whose link repair can only fail.
+fn link_repair_hold(entry: &EntryReference, relinks: bool) -> Option<ArchiveHold> {
+    let repoints = reference_of(entry).is_some_and(|r| r.update == ReferenceUpdate::RepointLink);
+    (repoints && !relinks).then(|| ArchiveHold::LinkRepairUnsupported {
+        run: entry.run.clone(),
+        preparation: entry.preparation,
+    })
+}
+
 /// Rebuild the prepared link at `link` to point at `target`: a new link is
 /// created beside it and atomically exchanged with it, the old entry is
 /// proven to be the recorded link and only then leaves through the OS Trash,
@@ -1476,4 +1575,49 @@ fn relink(
             link.display()
         ),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{OfferRun, RunStage};
+
+    fn entry(kind: PreparedEntryKind) -> EntryReference {
+        EntryReference {
+            asset_id: Uuid::new_v4(),
+            run: OfferRun {
+                view_id: Uuid::new_v4(),
+                name: "NGC7000-HOO".into(),
+                project_id: Uuid::new_v4(),
+                project_name: "NGC 7000 HOO".into(),
+                stage: RunStage::Done,
+            },
+            preparation_id: Uuid::new_v4(),
+            preparation: 2,
+            seq: 0,
+            kind,
+            path: NativePath::from_path(Path::new("/work/NGC7000-HOO/Lights/Ha_001.fits")),
+            source: Some(NativePath::from_path(Path::new("/captures/Ha_001.fits"))),
+            entry_identity: None,
+            state: EntryState::Prepared,
+        }
+    }
+
+    /// STO-FR-07, D06: where a prepared link cannot be rebuilt, its frame is
+    /// held back at review naming the run, so no archive copy is written for
+    /// a repair that can only fail; entries that need no rebuild never hold.
+    #[test]
+    fn link_repair_held_at_review_where_links_cannot_be_rebuilt() {
+        let link = entry(PreparedEntryKind::Symlink);
+        let held = link_repair_hold(&link, false);
+        assert_eq!(
+            held,
+            Some(ArchiveHold::LinkRepairUnsupported { run: link.run.clone(), preparation: 2 })
+        );
+        assert_eq!(link_repair_hold(&link, true), None);
+        for kind in [PreparedEntryKind::Hardlink, PreparedEntryKind::Copy, PreparedEntryKind::Clone]
+        {
+            assert_eq!(link_repair_hold(&entry(kind), false), None, "{kind:?}");
+        }
+    }
 }
