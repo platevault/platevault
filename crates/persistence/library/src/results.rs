@@ -252,43 +252,13 @@ impl Catalog {
             let mut seen = BTreeSet::new();
             for file in &scan.files {
                 seen.insert(file.path.clone());
-                let id = match records.get(&file.path) {
-                    Some(record) if record.association == ResultAssociation::UserLinked => continue,
-                    Some(record) => {
-                        update_scanned(conn, record, file, &at).await?;
-                        record.id
-                    }
-                    // Another owner attached this file: it stays theirs.
-                    None if path_recorded(conn, &file.path).await? => continue,
-                    None => insert_scanned(conn, scan.owner, file, &at).await?,
-                };
-                if let (Some(master), Some(sha256), ResultOwner::Run { view_id }) =
-                    (&file.master, &file.sha256, scan.owner)
-                {
-                    offer_master(conn, id, view_id, &file.path, sha256, master, &at).await?;
-                }
+                record_scanned(conn, scan.owner, records.get(&file.path), file, &at).await?;
             }
             for record in records.values() {
-                if record.association == ResultAssociation::UserLinked
-                    || seen.contains(&record.path)
+                if record.association != ResultAssociation::UserLinked
+                    && !seen.contains(&record.path)
                 {
-                    continue;
-                }
-                let path = record.path.to_path_buf()?;
-                let availability = if scan.folder_availability != Availability::Available {
-                    scan.folder_availability
-                } else if unreadable.iter().any(|entry| path.starts_with(entry)) {
-                    Availability::Unreadable
-                } else {
-                    Availability::Missing
-                };
-                if availability == Availability::Missing && record.state == ResultState::Pending {
-                    sqlx::query("DELETE FROM result_candidates WHERE id = ?1")
-                        .bind(record.id.to_string())
-                        .execute(&mut *conn)
-                        .await?;
-                } else {
-                    set_availability(conn, record.id, availability, &at).await?;
+                    settle_unseen(conn, scan, &unreadable, record, &at).await?;
                 }
             }
             for (id, observation) in &scan.linked {
@@ -664,7 +634,63 @@ async fn listing(conn: &mut SqliteConnection, owner: ResultOwner) -> Result<Resu
     Ok(ResultsListing { owner, folder, candidates, intermediates, offers })
 }
 
-pub(crate) async fn load_result(conn: &mut SqliteConnection, id: Uuid) -> Result<ResultRecord> {
+/// One file the rescan found: a recorded one takes the observation, a new
+/// one is recorded, and a generated master of a run is offered once. A file
+/// another owner attached, or one this owner attached, is left as it is.
+async fn record_scanned(
+    conn: &mut SqliteConnection,
+    owner: ResultOwner,
+    recorded: Option<&ResultRecord>,
+    file: &ScannedResult,
+    at: &str,
+) -> Result<()> {
+    let id = match recorded {
+        Some(record) if record.association == ResultAssociation::UserLinked => return Ok(()),
+        Some(record) => {
+            update_scanned(conn, record, file, at).await?;
+            record.id
+        }
+        None if path_recorded(conn, &file.path).await? => return Ok(()),
+        None => insert_scanned(conn, owner, file, at).await?,
+    };
+    if let (Some(master), Some(sha256), ResultOwner::Run { view_id }) =
+        (&file.master, &file.sha256, owner)
+    {
+        offer_master(conn, id, view_id, &file.path, sha256, master, at).await?;
+    }
+    Ok(())
+}
+
+/// A record whose file the rescan did not find: Unreadable below an entry
+/// that could not be read, the folder's availability when the folder itself
+/// could not be walked, else Missing; a Pending one that is gone is
+/// forgotten.
+async fn settle_unseen(
+    conn: &mut SqliteConnection,
+    scan: &ResultsScan,
+    unreadable: &[PathBuf],
+    record: &ResultRecord,
+    at: &str,
+) -> Result<()> {
+    let path = record.path.to_path_buf()?;
+    let availability = if scan.folder_availability != Availability::Available {
+        scan.folder_availability
+    } else if unreadable.iter().any(|entry| path.starts_with(entry)) {
+        Availability::Unreadable
+    } else {
+        Availability::Missing
+    };
+    if availability == Availability::Missing && record.state == ResultState::Pending {
+        sqlx::query("DELETE FROM result_candidates WHERE id = ?1")
+            .bind(record.id.to_string())
+            .execute(&mut *conn)
+            .await?;
+        return Ok(());
+    }
+    set_availability(conn, record.id, availability, at).await
+}
+
+pub async fn load_result(conn: &mut SqliteConnection, id: Uuid) -> Result<ResultRecord> {
     let row = sqlx::query(result_sql!("WHERE r.id = ?1"))
         .bind(id.to_string())
         .fetch_optional(&mut *conn)

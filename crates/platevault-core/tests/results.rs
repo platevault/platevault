@@ -181,8 +181,10 @@ async fn candidate_records_prepared_revision() {
     let second = world.prepare(&request, &Watch::quiet()).await;
     assert_eq!(second.revision.n, 2);
     let results = results_dir(&world);
-    let window =
-        (at(first.revision.finished_at.as_deref().unwrap()) + at(&second.revision.started_at)) / 2;
+    let window = i128::midpoint(
+        at(first.revision.finished_at.as_deref().unwrap()),
+        at(&second.revision.started_at),
+    );
     let header = results.join("tool.fit");
     support::fits(&header, &[("HISTORY", &format!("'../{RUN} (rev 2)/Lights/Ha_001.fits'"))])
         .unwrap();
@@ -346,7 +348,7 @@ async fn accept_requires_current_bytes_match() {
 }
 
 /// RES-AC-14, RES-AC-04, D-W56: an accepted OIII product of a run on rig
-/// Esprit is offered to a RedCat run labelled with its rig; picking it adds a
+/// Esprit is offered to a `RedCat` run labelled with its rig; picking it adds a
 /// product input and no raw session or member.
 #[tokio::test]
 async fn product_from_other_rig_offered_as_input_with_rig() {
@@ -430,14 +432,15 @@ async fn panel_inferred_from_folder_only() {
     let panel2 = world.results().join("Panel 2/stack.fit");
     stack(&panel2, &[("OBJECT", "'Cygnus Wall Panel 3'")]);
     let owner = |number| ResultOwner::Run { view_id: world.panel_run(number) };
+    // Panel 3 (which the header names) and Panel 1 open first: neither claims it.
+    for other in [3, 1] {
+        let listing = world.library.rescan_results(owner(other)).await.unwrap();
+        assert!(listing.candidates.is_empty(), "Panel {other}: {:?}", paths(&listing.candidates));
+    }
     let listing = world.library.rescan_results(owner(2)).await.unwrap();
     assert_eq!(paths(&listing.candidates), vec![panel2]);
     assert_eq!(listing.candidates[0].kind, Some(ResultKind::MosaicPanel));
     assert_eq!(listing.candidates[0].owner, owner(2));
-    for other in [1, 3] {
-        let listing = world.library.rescan_results(owner(other)).await.unwrap();
-        assert!(listing.candidates.is_empty(), "Panel {other}: {:?}", paths(&listing.candidates));
-    }
 }
 
 /// RES-AC-11/12, RES-FR-08, D-W73: `Assembled/` yields the group Result of

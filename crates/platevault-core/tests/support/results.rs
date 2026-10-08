@@ -64,7 +64,7 @@ pub async fn record_results_folder(
     path: &Path,
 ) {
     fs::create_dir_all(path).unwrap();
-    let id = |value: Option<Uuid>| value.map_or("NULL".to_owned(), |id| format!("'{id}'"));
+    let id = |value: Option<Uuid>| value.map_or_else(|| "NULL".to_owned(), |id| format!("'{id}'"));
     raw_sql(
         database,
         &format!(

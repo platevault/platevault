@@ -410,6 +410,43 @@ fn observe_path(path: &NativePath) -> Observation {
     }
 }
 
+/// A settled product file just inspected.
+struct Candidate<'a> {
+    path: &'a Path,
+    relative: &'a Path,
+    evidence: crate::EntryEvidence,
+}
+
+impl Candidate<'_> {
+    /// The candidate with its kind (a detected master's, else the owner's
+    /// folder kind) and the revision it came from.
+    fn scanned(
+        self,
+        owner: ResultOwner,
+        default_kind: Option<&ResultKind>,
+        logs: &[(PathBuf, String)],
+        revisions: &[(PreparationRevision, Option<String>)],
+    ) -> ScannedResult {
+        let master = matches!(owner, ResultOwner::Run { .. })
+            .then(|| detect_master(self.path, self.relative))
+            .flatten();
+        let kind = master.as_ref().map_or_else(
+            || default_kind.cloned(),
+            |master| Some(ResultKind::CalibrationMaster { input: master.classification.kind }),
+        );
+        let modified_ns = self.evidence.fingerprint.modified_ns;
+        ScannedResult {
+            path: NativePath::from_path(self.path),
+            state: ResultState::Candidate,
+            kind,
+            fingerprint: self.evidence.fingerprint,
+            sha256: self.evidence.sha256,
+            attribution: attribute(self.path, modified_ns, logs, revisions),
+            master,
+        }
+    }
+}
+
 /// Walk and inspect the owner's Results folder (blocking).
 fn discover(
     basis: &ResultsBasis,
@@ -483,27 +520,8 @@ fn discover(
             }
             Recognized::Product => match observe_entry(&path) {
                 Ok(evidence) if evidence.kind == EntryKind::File => {
-                    let master = matches!(basis.owner, ResultOwner::Run { .. })
-                        .then(|| detect_master(&path, &relative))
-                        .flatten();
-                    let kind = master.as_ref().map_or_else(
-                        || default_kind.clone(),
-                        |master| {
-                            Some(ResultKind::CalibrationMaster {
-                                input: master.classification.kind,
-                            })
-                        },
-                    );
-                    let modified_ns = evidence.fingerprint.modified_ns;
-                    ScannedResult {
-                        path: NativePath::from_path(&path),
-                        state: ResultState::Candidate,
-                        kind,
-                        fingerprint: evidence.fingerprint,
-                        sha256: evidence.sha256,
-                        attribution: attribute(&path, modified_ns, &logs, &revisions),
-                        master,
-                    }
+                    let candidate = Candidate { path: &path, relative: &relative, evidence };
+                    candidate.scanned(basis.owner, default_kind.as_ref(), &logs, &revisions)
                 }
                 // Changed while it was read: still being written.
                 Err(LibraryError::Context { error, .. })
@@ -708,7 +726,7 @@ impl Library {
                      inspect it again",
                     short(&inspected),
                     short(&current)
-                )))
+                )));
                 }
                 Observation::Present { sha256: None, .. } | Observation::Unavailable(_) => {
                     refused.push(refuse(format!("'{name}' cannot be read now")));
