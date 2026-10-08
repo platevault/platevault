@@ -13,18 +13,19 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use persistence_library::{SessionFilter, SessionQuery, SessionSummary};
+use persistence_library::{RunningStorage, SessionFilter, SessionQuery, SessionSummary};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::library::Library;
 use crate::tonight::{Tonight, TonightQuery};
 use crate::{
-    GoalProgress, GoalShortfall, HomeAction, HomeProject, ImportState, LibraryError, NextAction,
-    OpenChoiceKind, PreparationState, Project, ProjectCandidate, ProjectMember, ProjectQuery,
-    ProjectState, QualityLabel, ReadyToAdd, ReviewContext, ReviewFilter, RunBlocker, RunCompletion,
-    RunStage, RunState, RunningWork, ScanState, SessionAction, SessionFilterCounts,
-    StorageOperationState, TargetStatus, UnmetGoal, UnreviewedSession, ViewListing, ViewQuery,
+    ArchiveState, CleanupState, GoalProgress, GoalShortfall, HomeAction, HomeProject, ImportState,
+    LibraryError, NextAction, OpenChoiceKind, PreparationState, Project, ProjectCandidate,
+    ProjectMember, ProjectQuery, ProjectState, QualityLabel, ReadyToAdd, ReviewContext,
+    ReviewFilter, RunBlocker, RunCompletion, RunStage, RunState, RunningWork, ScanState,
+    SessionAction, SessionFilterCounts, StorageOperationState, TargetStatus, UnmetGoal,
+    UnreviewedSession, ViewListing, ViewQuery,
 };
 
 /// Home (PRJ-FR-17, root FR-020): the top line, then its six sections in
@@ -45,7 +46,9 @@ pub struct HomeDashboard {
     /// 5. Every Target with an unmet goal in an open Project, by designation.
     pub target_status: Vec<TargetStatus>,
     /// 6. Running scans, measurement runs, preparations, Prepare all of run
-    ///    groups, imports and storage operations, in that order.
+    ///    groups, imports, run Clean ups and Empty Trashes, archive transfers,
+    ///    Done / Archive trash moves and other storage operations, in that
+    ///    order.
     pub running_work: Vec<RunningWork>,
 }
 
@@ -314,18 +317,70 @@ impl Library {
                 });
             }
         }
-        for id in running.storage {
+        self.storage_work(running.storage, &mut work).await?;
+        Ok(work)
+    }
+
+    /// Running run Clean ups and Empty Trashes, archive transfers, trash
+    /// moves, then every other Running storage operation, each listed once.
+    async fn storage_work(
+        &self,
+        running: RunningStorage,
+        work: &mut Vec<RunningWork>,
+    ) -> Result<(), LibraryError> {
+        let catalog = self.catalog();
+        let count = |items: usize| u64::try_from(items).unwrap_or(u64::MAX);
+        for id in running.cleanups {
+            let cleanup = catalog.run_cleanup(id).await?;
+            if cleanup.state == CleanupState::Running {
+                work.push(RunningWork::Cleanup {
+                    cleanup_id: cleanup.id,
+                    action: cleanup.kind,
+                    view_id: cleanup.view_id,
+                    run_name: cleanup.run_name,
+                    operation_id: cleanup.operation_id,
+                    reviewed_at: cleanup.created_at,
+                });
+            }
+        }
+        for id in running.archives {
+            let transfer = catalog.archive_record(id).await?.transfer;
+            if transfer.state == ArchiveState::Running {
+                work.push(RunningWork::Archive {
+                    transfer_id: transfer.id,
+                    action: transfer.kind,
+                    project_id: transfer.project.id,
+                    operation_id: transfer.storage_operation_id,
+                    items: count(transfer.items.len()),
+                    updated_at: transfer.updated_at,
+                });
+            }
+        }
+        for id in running.trash_moves {
+            let operation = catalog.storage_operation(id).await?;
+            let moved = catalog.trash_move(id).await?;
+            if operation.state == StorageOperationState::Running && !moved.settled {
+                work.push(RunningWork::TrashMove {
+                    operation_id: operation.id,
+                    offer: moved.offer,
+                    project_id: moved.project_id,
+                    items: count(moved.items.len()),
+                    updated_at: operation.updated_at,
+                });
+            }
+        }
+        for id in running.operations {
             let operation = catalog.storage_operation(id).await?;
             if operation.state == StorageOperationState::Running {
                 work.push(RunningWork::Storage {
                     operation_id: operation.id,
                     action: operation.kind,
-                    items: u64::try_from(operation.items.len()).unwrap_or(u64::MAX),
+                    items: count(operation.items.len()),
                     updated_at: operation.updated_at,
                 });
             }
         }
-        Ok(work)
+        Ok(())
     }
 }
 

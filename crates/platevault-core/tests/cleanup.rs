@@ -515,3 +515,168 @@ async fn immutability_holds_outside_empty_trash() {
     let emptied = world.library.empty_trash(id, trash.dyn_trash()).await.unwrap();
     assert!(emptied.run_removed, "the started Empty Trash resumes and removes the run");
 }
+
+/// PREP-FR-03, STO-FR-04, D19: a patched Copy differs from its source by its
+/// reviewed header card. Clean up moves it against its own patched digest,
+/// relying on the source as its retained original, and the source never
+/// changes.
+#[tokio::test]
+async fn clean_up_moves_a_patched_copy_by_its_patched_digest() {
+    let world = world().await;
+    let source = world.light(HA_LIGHTS[0]);
+    let original = digest(&source);
+    let asset = world.correct(HA_LIGHTS[0], "filter", serde_json::json!("OIII")).await;
+    let profile = world.siril(QUIET).await;
+    let mut request = world.request(&profile, InputMode::Copy, None);
+    request.corrections.insert(asset, CorrectionChoice::Patch);
+    let outcome = world.prepare(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    let entry = outcome.prepared.iter().find(|entry| entry.asset_id == Some(asset)).unwrap();
+    assert_eq!(entry.header_changes.len(), 1, "{entry:#?}");
+    let patched = path(&entry.path);
+    assert_ne!(digest(&patched), original, "the copy carries the patched card");
+    world.library.mark_view_complete(world.run).await.unwrap();
+    let trash = ScopedTrash::new(&world.temp.path().join("OS Trash"));
+
+    let review = review_clean_up(&world, CleanupSelection::default(), &trash).await.unwrap();
+    let item = items(&review).into_iter().find(|item| path(&item.path) == patched).unwrap();
+    assert_eq!(item.state, CleanupItemState::Moves, "{item:#?}");
+    assert_eq!(item.relies_on.as_ref().map(path), Some(source.clone()));
+    let cleaned = world.library.run_cleanup(review.id.unwrap(), trash.dyn_trash()).await.unwrap();
+    assert!(cleaned.left.is_empty(), "{cleaned:#?}");
+    assert!(trash.moved().contains(&patched) && !patched.exists());
+    assert_eq!(digest(&source), original, "the source never changes");
+}
+
+/// The Storage footprint (STO-FR-11/12) of the world's run's first revision.
+async fn first_footprint(world: &World) -> platevault_core::storage::RevisionFootprint {
+    let overview = world.library.storage_overview().await.unwrap();
+    let run = overview.footprints.into_iter().find(|run| run.view_id == world.run).unwrap();
+    run.revisions.into_iter().next().unwrap()
+}
+
+/// STO-FR-11/12 after STO-FR-01: entries a Clean up moved to the OS Trash
+/// leave the run's Storage footprint and never read as external drift.
+#[tokio::test]
+async fn cleaned_entries_leave_the_storage_footprint() {
+    let world = world().await;
+    let profile = world.siril(QUIET).await;
+    let request = world.request(&profile, InputMode::Copy, None);
+    let outcome = world.prepare(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    let before = first_footprint(&world).await;
+    assert!(before.entries > 0 && before.footprint_bytes > 0, "{before:#?}");
+    assert!(before.blocked.is_empty(), "{before:#?}");
+    world.library.mark_view_complete(world.run).await.unwrap();
+    let trash = ScopedTrash::new(&world.temp.path().join("OS Trash"));
+
+    let review = review_clean_up(&world, CleanupSelection::default(), &trash).await.unwrap();
+    let cleaned = world.library.run_cleanup(review.id.unwrap(), trash.dyn_trash()).await.unwrap();
+    assert!(cleaned.left.is_empty(), "{cleaned:#?}");
+    let after = first_footprint(&world).await;
+    assert_eq!((after.entries, after.footprint_bytes), (0, 0), "{after:#?}");
+    assert!(after.blocked.is_empty(), "PlateVault moved them: {after:#?}");
+}
+
+/// Copy every folder and file below `from` to `to`.
+fn copy_tree(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let path = entry.unwrap().path();
+        let target = to.join(path.file_name().unwrap());
+        if fs::symlink_metadata(&path).unwrap().is_dir() {
+            copy_tree(&path, &target);
+        } else {
+            fs::copy(&path, &target).unwrap();
+        }
+    }
+}
+
+/// PREP-FR-07: a run prepared below a symlinked parent records where its
+/// folders resolved. Once that parent is retargeted at a copy of the tree,
+/// Empty Trash moves nothing from either tree: each folder stays, named with
+/// where it resolves now, and the run record still goes.
+#[tokio::test]
+async fn empty_trash_never_follows_a_retargeted_parent() {
+    let world = world().await;
+    let volume = world.temp.path().join("Volume A");
+    fs::create_dir_all(volume.join("Processing")).unwrap();
+    let mount = world.temp.path().join("Mount");
+    std::os::unix::fs::symlink(&volume, &mount).unwrap();
+    let profile = world.siril(QUIET).await;
+    let mut request = world.request(&profile, InputMode::Copy, None);
+    request.output = Some(NativePath::from_path(&mount.join("Processing")));
+    let outcome = world.prepare(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    let folder = path(&outcome.revision.folder);
+    assert!(folder.starts_with(&mount), "{}", folder.display());
+
+    let decoy = world.temp.path().join("Volume B");
+    copy_tree(&volume, &decoy);
+    fs::remove_file(&mount).unwrap();
+    std::os::unix::fs::symlink(&decoy, &mount).unwrap();
+    let before = (tree(&volume), tree(&decoy));
+    world.library.move_view_to_trash(world.run).await.unwrap();
+    let trash = ScopedTrash::new(&world.temp.path().join("OS Trash"));
+    let request = CleanupRequest::EmptyTrash { view_id: world.run, results: true };
+    let review = world.library.review_cleanup(&request, trash.dyn_trash()).await.unwrap();
+    assert!(items(&review).is_empty(), "{review:#?}");
+    let staying: Vec<(PathBuf, ReasonCode)> =
+        review.staying.iter().map(|item| (path(&item.path), item.reason.code)).collect();
+    assert!(staying.contains(&(folder.clone(), ReasonCode::SourceDrift)), "{review:#?}");
+
+    let emptied = world.library.empty_trash(review.id.unwrap(), trash.dyn_trash()).await.unwrap();
+    assert!(emptied.run_removed, "{emptied:#?}");
+    assert!(trash.moved().is_empty(), "{:?}", trash.moved());
+    assert_eq!((tree(&volume), tree(&decoy)), before, "neither tree changed");
+}
+
+/// D-W75, PREP-FR-12: Empty Trash of an earlier panel run leaves its run
+/// group's folders in place; Empty Trash of the last panel run left also
+/// takes the group folder, once its `Panel N/` folders are gone, and the
+/// ticked `Assembled/` folder with its Results.
+#[tokio::test]
+async fn empty_trash_of_the_last_panel_run_takes_the_group_folders() {
+    let world = group_support::group_world().await;
+    let profile = world.wbpp(QUIET).await;
+    let request = world.setup(&profile, InputMode::LinkedView).await;
+    let outcome = world.prepare_all(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.preparation.outcome, PreparationState::Prepared, "{outcome:#?}");
+    let mosaic = world.group_folder(group_support::MOSAIC);
+    let assembled = world.results().join("Assembled");
+    fs::create_dir_all(&assembled).unwrap();
+    let mosaic_result = assembled.join("NGC7000_mosaic.fits");
+    fs::write(&mosaic_result, "the assembled mosaic").unwrap();
+    let trash = ScopedTrash::new(&world.temp.path().join("OS Trash"));
+    let empty = |panel: Uuid| {
+        let (library, trash) = (Arc::clone(&world.library), trash.dyn_trash());
+        async move {
+            library.move_view_to_trash(panel).await.unwrap();
+            let request = CleanupRequest::EmptyTrash { view_id: panel, results: true };
+            let review = library.review_cleanup(&request, Arc::clone(&trash)).await.unwrap();
+            let emptied = library.empty_trash(review.id.unwrap(), trash).await.unwrap();
+            assert!(emptied.run_removed && emptied.left.is_empty(), "{emptied:#?}");
+            review.folders.into_iter().map(|folder| folder.role).collect::<Vec<_>>()
+        }
+    };
+    let panel = |n| CleanupFolderRole::Prepared { preparation_revision: n };
+    for n in [1, 2] {
+        assert_eq!(empty(world.run(n)).await, vec![panel(1), CleanupFolderRole::Results]);
+    }
+    assert!(mosaic.join("Panel 3").exists() && mosaic_result.exists());
+
+    let roles = empty(world.run(3)).await;
+    assert_eq!(
+        roles,
+        vec![
+            panel(1),
+            CleanupFolderRole::Results,
+            CleanupFolderRole::Group { group_preparation: 1 },
+            CleanupFolderRole::Assembled,
+        ]
+    );
+    assert!(!mosaic.exists(), "the group folder went once its Panel N/ folders were gone");
+    assert!(!assembled.exists(), "the ticked Assembled folder went");
+    assert!(trash.moved().contains(&mosaic_result));
+    assert!(trash.moved().contains(&mosaic));
+}

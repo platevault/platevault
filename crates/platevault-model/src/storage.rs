@@ -162,8 +162,8 @@ pub enum ReasonCode {
     WriteFailed,
     /// After an interruption the recorded evidence cannot prove what happened.
     Interrupted,
-    /// A library frame or an original source: run Clean up and Empty Trash
-    /// never touch it.
+    /// A library frame, an original source, or a run group's Results another
+    /// run uses as an input: run Clean up and Empty Trash never touch it.
     Protected,
 }
 

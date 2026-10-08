@@ -145,7 +145,7 @@ mod import;
 mod session_filters;
 mod storage;
 mod storage_overview;
-pub use storage_overview::DuplicateCopy;
+pub use storage_overview::{DuplicateCopy, VerifiedTransfer};
 mod targets_list;
 mod views;
 pub use views::{CandidateBasis, CandidateSession, ChoiceBasis, MembershipBasis};
@@ -158,7 +158,7 @@ pub use prepare::{
     PreparationRecord, RecordedFolder, RecordedFolders,
 };
 mod home;
-pub use home::RunningOperations;
+pub use home::{RunningOperations, RunningStorage};
 mod results;
 pub use results::{
     DetectedMaster, NewAttachment, Observation, ResultsBasis, ResultsScan, ScannedResult,
@@ -166,8 +166,8 @@ pub use results::{
 };
 mod cleanup;
 pub use cleanup::{
-    CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, RunCleanupDraft, RunCleanupFolder,
-    RunCleanupItem, RunCleanupRecord,
+    CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, GroupFolders, RunCleanupDraft,
+    RunCleanupFolder, RunCleanupItem, RunCleanupRecord, RunFolders,
 };
 mod done_archive;
 pub use done_archive::{

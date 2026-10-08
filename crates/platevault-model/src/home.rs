@@ -11,9 +11,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    CalibrationNeedsReview, GoalProgress, GoalSpec, Microseconds, NativePath, PreparationFailed,
-    ProjectCandidate, ProjectSummary, ReviewContext, ReviewFilter, RunCounters, RunStage,
-    ScanProgress, StorageOperationKind, ViewListing,
+    ArchiveKind, CalibrationNeedsReview, CleanupKind, GoalProgress, GoalSpec, Microseconds,
+    NativePath, PreparationFailed, ProjectCandidate, ProjectSummary, ReviewContext, ReviewFilter,
+    RunCounters, RunStage, ScanProgress, StorageOperationKind, TrashOffer, ViewListing,
 };
 
 /// Home's first section (PRJ-FR-17 section 1).
@@ -223,6 +223,37 @@ pub enum RunningWork {
         source_path: NativePath,
         updated_at: String,
     },
+    /// A run's Clean up or Empty Trash, listed once with its storage
+    /// operation, through Empty Trash's folder moves (STO-FR-01/17).
+    Cleanup {
+        cleanup_id: Uuid,
+        action: CleanupKind,
+        view_id: Uuid,
+        run_name: String,
+        /// The storage operation moving its items; none when only folders go.
+        operation_id: Option<Uuid>,
+        /// When its review was recorded.
+        reviewed_at: String,
+    },
+    /// A Done Project's archive or restore transfer, listed once with its
+    /// storage operation (STO-FR-06/13).
+    Archive {
+        transfer_id: Uuid,
+        action: ArchiveKind,
+        project_id: Uuid,
+        operation_id: Option<Uuid>,
+        items: u64,
+        updated_at: String,
+    },
+    /// A Done / Archive sheet's OS Trash move of one offer (STO-FR-14/15/16).
+    TrashMove {
+        operation_id: Uuid,
+        offer: TrashOffer,
+        project_id: Uuid,
+        items: u64,
+        updated_at: String,
+    },
+    /// A storage operation no feature above lists.
     Storage {
         operation_id: Uuid,
         /// OS Trash, copy or move.

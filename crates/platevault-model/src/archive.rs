@@ -222,6 +222,16 @@ pub struct ArchiveTransfer {
     pub updated_at: String,
 }
 
+/// The Archive or restore transfer a verified storage transfer carries:
+/// Storage lists it as that transfer of its Project (STO-FR-11).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferArchive {
+    pub transfer_id: Uuid,
+    pub kind: ArchiveKind,
+    pub project: ProjectName,
+}
+
 /// One frame of a session at its archive path.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

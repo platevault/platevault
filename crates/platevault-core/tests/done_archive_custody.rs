@@ -14,6 +14,8 @@
 mod custody_support;
 #[path = "support/done_archive.rs"]
 mod done_archive_support;
+#[path = "support/home.rs"]
+mod home_support;
 #[path = "support/prepare.rs"]
 mod prepare_support;
 #[path = "support/results.rs"]
@@ -35,7 +37,7 @@ use done_archive_support::{done, file_of, light, set_quality, sheet};
 use persistence_library::TrashedQuery;
 use platevault_core::*;
 use prepare_support::{overwrite_in_place, tree, world, World, HA_LIGHTS, OIII_LIGHTS};
-use results_support::prepared;
+use results_support::{prepared, results_dir, stack};
 use uuid::Uuid;
 
 fn ids(items: &[ArchiveItem]) -> BTreeSet<Uuid> {
@@ -600,4 +602,109 @@ async fn separate_approvals_and_running_transfer_refuses_trash() {
     let transfer = running.await.unwrap().unwrap();
     assert_eq!(transfer.state, ArchiveState::Settled, "{transfer:#?}");
     assert!(duplicate.exists(), "Archive moves no duplicate copy");
+}
+
+async fn running_work(world: &World) -> Vec<RunningWork> {
+    let home = world.library.home_dashboard(false, &home_support::tonight()).await.unwrap();
+    home.running_work
+}
+
+/// PRJ-FR-17 section 6, STO-FR-11: a running Done / Archive trash move and a
+/// running Archive are each listed once on Home, never again as their bare
+/// storage operation, and Storage names the Archive its verified transfer
+/// carries.
+#[tokio::test]
+async fn home_and_storage_name_trash_moves_and_archive_transfers() {
+    let world = world().await;
+    let ha_1 = light(&world, HA_LIGHTS[0]).await;
+    set_quality(&world, &ha_1, Quality::Unusable).await;
+    let project = done(&world).await;
+    let offered = sheet(&world, project).await;
+    let bin = Bin::new(&world);
+
+    let (reached, release) = bin.hold_next();
+    let moving = {
+        let (library, trash, approval) =
+            (Arc::clone(&world.library), bin.trash(), approve_rejected(&offered));
+        tokio::spawn(async move { library.trash_rejected_execute(project, &approval, trash).await })
+    };
+    tokio::time::timeout(Duration::from_secs(20), reached.notified())
+        .await
+        .expect("the move starts");
+    let work = running_work(&world).await;
+    let [RunningWork::TrashMove { offer, project_id, items, .. }] = work.as_slice() else {
+        panic!("one trash move and no bare storage operation: {work:#?}");
+    };
+    assert_eq!((*offer, *project_id, *items), (TrashOffer::RejectedFrames, project, 1));
+    drop(release);
+    assert_eq!(moving.await.unwrap().unwrap().moved.len(), 1);
+    assert!(running_work(&world).await.is_empty());
+
+    let archive = archive_location(&world).await;
+    let review = world.library.archive_review(project, archive.id).await.unwrap();
+    let (reached, release) = bin.hold_next();
+    let running = {
+        let (library, trash) = (Arc::clone(&world.library), bin.trash());
+        tokio::spawn(async move { library.archive_execute(review.id, trash).await })
+    };
+    tokio::time::timeout(Duration::from_secs(20), reached.notified())
+        .await
+        .expect("retirement starts");
+    let work = running_work(&world).await;
+    let [RunningWork::Archive { transfer_id, action, project_id, operation_id, .. }] =
+        work.as_slice()
+    else {
+        panic!("one Archive and no bare storage operation: {work:#?}");
+    };
+    assert_eq!((*transfer_id, *action, *project_id), (review.id, ArchiveKind::Archive, project));
+    assert!(operation_id.is_some(), "{work:#?}");
+    drop(release);
+    let transfer = running.await.unwrap().unwrap();
+    assert_eq!(transfer.state, ArchiveState::Settled, "{transfer:#?}");
+    assert!(running_work(&world).await.is_empty());
+
+    let overview = world.library.storage_overview().await.unwrap();
+    let operation = transfer.storage_operation_id.expect("the transfer was journaled");
+    let shown = overview.transfers.iter().find(|view| view.operation_id == operation).unwrap();
+    let expected = TransferArchive {
+        transfer_id: review.id,
+        kind: ArchiveKind::Archive,
+        project: transfer.project,
+    };
+    assert_eq!(shown.archive.as_ref(), Some(&expected), "{shown:#?}");
+}
+
+/// STO-FR-17 after STO-FR-15: once a Done / Archive trash move took one of a
+/// run's intermediates, Empty Trash of that run, after its Project is
+/// reopened and the run trashed, still removes the run record, and the move
+/// keeps naming what it moved.
+#[tokio::test]
+async fn empty_trash_removes_a_run_whose_intermediate_was_trashed() {
+    let world = world().await;
+    prepared(&world).await;
+    stack(&results_dir(&world).join("process/pp_light_00001.fit"), &[("OBJECT", "'NGC 7000'")]);
+    world.library.rescan_results(ResultOwner::Run { view_id: world.run }).await.unwrap();
+    let project = done(&world).await;
+    let offered = sheet(&world, project).await;
+    assert_eq!(offered.intermediates.n, 1, "{:#?}", offered.intermediates);
+    let bin = Bin::new(&world);
+    let summary = world
+        .library
+        .trash_intermediates_execute(project, &approve_intermediates(&offered), bin.trash())
+        .await
+        .unwrap();
+    assert_eq!(summary.moved.len(), 1, "{summary:#?}");
+    let operation = summary.operation_id.expect("the move is journaled");
+
+    let catalog = world.catalog();
+    let revision = catalog.project(project).await.unwrap().revision;
+    catalog.reopen_project(project, revision).await.unwrap();
+    world.library.move_view_to_trash(world.run).await.unwrap();
+    let request = CleanupRequest::EmptyTrash { view_id: world.run, results: false };
+    let review = world.library.review_cleanup(&request, bin.trash()).await.unwrap();
+    let emptied = world.library.empty_trash(review.id.unwrap(), bin.trash()).await.unwrap();
+    assert!(emptied.run_removed, "{emptied:#?}");
+    let gone = catalog.view(world.run).await.unwrap_err();
+    assert!(matches!(gone, LibraryError::NotFound(_)), "{gone}");
+    assert_eq!(catalog.trash_move(operation).await.unwrap().items.len(), 1);
 }

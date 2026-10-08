@@ -24,6 +24,10 @@ use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
 use uuid::Uuid;
 
+use super::prepare::{
+    load_group_folders, load_recorded_assembled_folder, load_recorded_results_folder,
+    load_revision_folders, RecordedFolder,
+};
 use super::storage::{insert_operation, withdraw_reviewed_operation};
 use super::views::load_record;
 use super::{from_json, from_text, now, parse_uuid, to_json, to_text, Catalog, Result};
@@ -115,10 +119,48 @@ pub struct RunCleanupRecord {
     pub run_removed_at: Option<String>,
 }
 
+/// The recorded folders a run's removal covers, read through PREP's
+/// loaders, each with the form it resolved to when Prepare made it
+/// (PREP-FR-07).
+#[derive(Clone, Debug, Default)]
+pub struct RunFolders {
+    /// Each preparation revision's folder by number: a run's `<Run>/` or
+    /// `<Run> (rev N)/`, a panel run's `Panel N/`.
+    pub prepared: Vec<(u32, RecordedFolder)>,
+    /// The run's Results folder, or a panel run's `<Mosaic> Results/Panel N/`.
+    pub results: Option<RecordedFolder>,
+    /// The run group's own folders, only for the last panel run left in its
+    /// group: once it goes, no run holds them any more (D-W75).
+    pub group: Option<GroupFolders>,
+}
+
+/// A run group's own recorded folders.
+#[derive(Clone, Debug)]
+pub struct GroupFolders {
+    /// Each Prepare all revision's group folder by number: `<Mosaic>/`, then
+    /// `<Mosaic> (rev N)/`.
+    pub folders: Vec<(u32, RecordedFolder)>,
+    /// `<Mosaic> Results/Assembled/`, once Prepare all recorded it.
+    pub assembled: Option<RecordedFolder>,
+    /// The other runs using one of the group's accepted Results as an input.
+    pub assembled_users: Vec<Uuid>,
+}
+
 /// The other runs using one of run `?1`'s accepted Results as an input.
 const RESULT_USERS: &str = "SELECT DISTINCT p.view_id FROM view_product_inputs p \
      JOIN result_candidates r ON r.id = p.result_id \
      WHERE r.view_id = ?1 AND p.view_id <> ?1 ORDER BY p.view_id";
+
+/// The runs other than `?2` using one of run group `?1`'s accepted Results as
+/// an input.
+const GROUP_RESULT_USERS: &str = "SELECT DISTINCT p.view_id FROM view_product_inputs p \
+     JOIN result_candidates r ON r.id = p.result_id \
+     WHERE r.group_id = ?1 AND p.view_id <> ?2 ORDER BY p.view_id";
+
+/// The run group of panel run `?1` when no other panel run is left in it.
+const LAST_PANEL_GROUP: &str = "SELECT v.group_id FROM views v WHERE v.id = ?1 \
+     AND v.group_id IS NOT NULL AND NOT EXISTS \
+     (SELECT 1 FROM views o WHERE o.group_id = v.group_id AND o.id <> v.id)";
 
 /// The rows that go with a run record, child before parent. Committed rows
 /// leave only while the run holds its Empty Trash permit.
@@ -455,6 +497,45 @@ impl Catalog {
         let users: Vec<String> =
             sqlx::query_scalar(RESULT_USERS).bind(view.to_string()).fetch_all(&mut *conn).await?;
         users.iter().map(|user| parse_uuid(user)).collect()
+    }
+
+    /// The recorded folders `view`'s removal covers, from one catalog
+    /// snapshot: each preparation revision's folder and the Results folder,
+    /// and for the last panel run left in its run group the group's folders
+    /// with the runs using one of the group's accepted Results.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn run_folders(&self, view: Uuid) -> Result<RunFolders> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let prepared = load_revision_folders(&mut snapshot, view).await?;
+        let results = load_recorded_results_folder(&mut snapshot, view).await?;
+        let last_panel: Option<String> = sqlx::query_scalar(LAST_PANEL_GROUP)
+            .bind(view.to_string())
+            .fetch_optional(&mut *snapshot)
+            .await?;
+        let group = match last_panel {
+            None => None,
+            Some(group) => {
+                let group = parse_uuid(&group)?;
+                let users: Vec<String> = sqlx::query_scalar(GROUP_RESULT_USERS)
+                    .bind(group.to_string())
+                    .bind(view.to_string())
+                    .fetch_all(&mut *snapshot)
+                    .await?;
+                Some(GroupFolders {
+                    folders: load_group_folders(&mut snapshot, group).await?,
+                    assembled: load_recorded_assembled_folder(&mut snapshot, group).await?,
+                    assembled_users: users
+                        .iter()
+                        .map(|user| parse_uuid(user))
+                        .collect::<Result<_>>()?,
+                })
+            }
+        };
+        snapshot.rollback().await?;
+        Ok(RunFolders { prepared, results, group })
     }
 }
 

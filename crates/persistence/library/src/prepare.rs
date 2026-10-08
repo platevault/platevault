@@ -1135,13 +1135,39 @@ pub async fn load_assembled_folder(
     conn: &mut SqliteConnection,
     group: Uuid,
 ) -> Result<Option<NativePath>> {
-    let path: Option<String> = sqlx::query_scalar(
-        "SELECT path FROM results_folders WHERE group_id = ?1 AND kind = 'assembled'",
+    Ok(load_recorded_assembled_folder(conn, group).await?.map(|folder| folder.path))
+}
+
+/// [`load_assembled_folder`] with the form it resolved to when Prepare all
+/// made it (PREP-FR-07).
+pub async fn load_recorded_assembled_folder(
+    conn: &mut SqliteConnection,
+    group: Uuid,
+) -> Result<Option<RecordedFolder>> {
+    let row: Option<(String, Option<String>)> = sqlx::query_as(
+        "SELECT path, canonical_path FROM results_folders \
+         WHERE group_id = ?1 AND kind = 'assembled'",
     )
     .bind(group.to_string())
     .fetch_optional(&mut *conn)
     .await?;
-    path.as_deref().map(from_json).transpose()
+    row.map(|(path, canonical)| recorded_folder(&path, canonical.as_deref())).transpose()
+}
+
+/// Each Prepare all revision's group folder of the run group, by number,
+/// with the form it resolved to when Prepare all made it (PREP-FR-07).
+pub async fn load_group_folders(
+    conn: &mut SqliteConnection,
+    group: Uuid,
+) -> Result<Vec<(u32, RecordedFolder)>> {
+    let rows: Vec<(i64, String, Option<String>)> = sqlx::query_as(
+        "SELECT n, folder, canonical_folder FROM group_preparations WHERE group_id = ?1 \
+         ORDER BY n",
+    )
+    .bind(group.to_string())
+    .fetch_all(&mut *conn)
+    .await?;
+    numbered_folders(&rows)
 }
 
 fn group_preparation_row(row: &SqliteRow) -> Result<GroupPreparation> {
@@ -1283,12 +1309,54 @@ pub async fn load_results_folder(
     conn: &mut SqliteConnection,
     view: Uuid,
 ) -> Result<Option<NativePath>> {
-    let path: Option<String> =
-        sqlx::query_scalar("SELECT path FROM results_folders WHERE view_id = ?1")
+    Ok(load_recorded_results_folder(conn, view).await?.map(|folder| folder.path))
+}
+
+/// [`load_results_folder`] with the form it resolved to when Prepare made it
+/// (PREP-FR-07).
+pub async fn load_recorded_results_folder(
+    conn: &mut SqliteConnection,
+    view: Uuid,
+) -> Result<Option<RecordedFolder>> {
+    let row: Option<(String, Option<String>)> =
+        sqlx::query_as("SELECT path, canonical_path FROM results_folders WHERE view_id = ?1")
             .bind(view.to_string())
             .fetch_optional(&mut *conn)
             .await?;
-    path.as_deref().map(from_json).transpose()
+    row.map(|(path, canonical)| recorded_folder(&path, canonical.as_deref())).transpose()
+}
+
+/// Each preparation revision's folder of a run or panel run (a panel run's is
+/// its `Panel N/`), by number, with the form it resolved to when Prepare made
+/// it (PREP-FR-07).
+pub async fn load_revision_folders(
+    conn: &mut SqliteConnection,
+    view: Uuid,
+) -> Result<Vec<(u32, RecordedFolder)>> {
+    let rows: Vec<(i64, String, Option<String>)> = sqlx::query_as(
+        "SELECT n, folder, canonical_folder FROM preparation_revisions WHERE view_id = ?1 \
+         ORDER BY n",
+    )
+    .bind(view.to_string())
+    .fetch_all(&mut *conn)
+    .await?;
+    numbered_folders(&rows)
+}
+
+/// One recorded folder from its stored chosen form and resolved form.
+fn recorded_folder(path: &str, canonical: Option<&str>) -> Result<RecordedFolder> {
+    Ok(RecordedFolder { path: from_json(path)?, canonical: canonical.map(from_json).transpose()? })
+}
+
+fn numbered_folders(rows: &[(i64, String, Option<String>)]) -> Result<Vec<(u32, RecordedFolder)>> {
+    rows.iter()
+        .map(|(n, path, canonical)| {
+            let n = u32::try_from(*n).map_err(|_| {
+                LibraryError::PersistenceFailure(format!("corrupt revision number {n}"))
+            })?;
+            Ok((n, recorded_folder(path, canonical.as_deref())?))
+        })
+        .collect()
 }
 
 /// Every recorded prepared folder (a run's revision, a panel run's `Panel N/`
@@ -1307,14 +1375,7 @@ pub async fn load_recorded_folders(conn: &mut SqliteConnection) -> Result<Record
             .fetch_all(&mut *conn)
             .await?;
     let folders = |rows: &[(String, Option<String>)]| -> Result<Vec<RecordedFolder>> {
-        rows.iter()
-            .map(|(path, canonical)| {
-                Ok(RecordedFolder {
-                    path: from_json(path)?,
-                    canonical: canonical.as_deref().map(from_json).transpose()?,
-                })
-            })
-            .collect()
+        rows.iter().map(|(path, canonical)| recorded_folder(path, canonical.as_deref())).collect()
     };
     Ok(RecordedFolders { prepared: folders(&prepared)?, results: folders(&results)? })
 }

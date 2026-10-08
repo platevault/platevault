@@ -1381,7 +1381,10 @@ fn canonical(path: &NativePath) -> Option<NativePath> {
     fs::canonicalize(path).ok().map(|path| NativePath::from_path(&path))
 }
 
-fn resolved(path: &Path) -> PathBuf {
+/// `path` with its nearest existing ancestor resolved, so a missing path is
+/// still compared in the form its existing parent resolves to. Run removal
+/// compares its folders with library locations in this form too.
+pub(crate) fn resolved(path: &Path) -> PathBuf {
     if let Ok(path) = fs::canonicalize(path) {
         return path;
     }

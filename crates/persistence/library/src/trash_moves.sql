@@ -27,7 +27,10 @@ CREATE TABLE IF NOT EXISTS trash_move_items (
     seq INTEGER NOT NULL CHECK (seq >= 0),
     item_id TEXT NOT NULL,
     asset_id TEXT REFERENCES assets (id),
-    result_id TEXT REFERENCES result_candidates (id),
+    -- An intermediate keeps no foreign key, as a run Clean up keeps its run's
+    -- id (cleanup.sql): Empty Trash later removes a trashed run's Results
+    -- records with the run, and the move still names what it moved.
+    result_id TEXT,
     -- The Complete runs whose fixed membership lists a rejected frame (D-W52).
     complete_view_ids TEXT NOT NULL,
     recorded_at TEXT,

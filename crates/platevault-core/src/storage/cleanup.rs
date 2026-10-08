@@ -11,18 +11,26 @@
 //! run in its Project's Trash, lists every entry of each prepared folder and,
 //! only when the user ticks it, of the Results folder; each folder follows its
 //! entries to the OS Trash once nothing but empty folders remains in it, and
-//! then the run record goes with every row it owns.
+//! then the run record goes with every row it owns. A panel run's folders are
+//! its `Panel N/` folders and `<Mosaic> Results/Panel N/`; Empty Trash of the
+//! last panel run left in its run group also takes each group folder, once
+//! its `Panel N/` folders are gone, and the ticked `Assembled/` folder unless
+//! another run uses one of its accepted Results (D-W75). Every folder comes
+//! from PREP's records: one recorded with the form it resolved to when
+//! Prepare made it must still resolve there, so a retargeted symlinked parent
+//! never turns run removal on another folder (PREP-FR-07).
 //!
 //! Review reads each moving entry's evidence (a file with its SHA-256, a link
 //! by its own identity and target text, never followed) and the retained
 //! original a hardlink, clone or copy relies on, and records them with the
 //! storage journal; execution re-verifies both immediately before each move
-//! (D19) and resumes from the journal after an interruption. A hardlink whose
-//! original no longer holds its bytes is the last copy and stays. An item on
-//! a location without an OS Trash, an item whose evidence drifted, and any
-//! library frame or original source stay where they are and are named with
-//! their reason. Nothing is ever deleted: the OS Trash is the only way out,
-//! with no fallback.
+//! (D19) and resumes from the journal after an interruption. A patched copy
+//! or clone moves against its own patched digest (PREP-FR-03), its retained
+//! original against the source's. A hardlink whose original no longer holds
+//! its bytes is the last copy and stays. An item on a location without an OS
+//! Trash, an item whose evidence drifted, and any library frame or original
+//! source stay where they are and are named with their reason. Nothing is
+//! ever deleted: the OS Trash is the only way out, with no fallback.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
@@ -31,8 +39,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
 use persistence_library::{
-    CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, PreparationRecord, RunCleanupDraft,
-    RunCleanupFolder, RunCleanupRecord,
+    CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, PreparationRecord, RecordedFolder,
+    RunCleanupDraft, RunCleanupFolder, RunCleanupRecord, RunFolders,
 };
 use uuid::Uuid;
 
@@ -40,6 +48,7 @@ use crate::custody::journal::Live;
 use crate::custody::trash::OsTrash;
 use crate::custody::{observe_entry, same_identity, verify_source};
 use crate::library::{blocking, Library};
+use crate::prepare::resolved;
 use crate::run_lifecycle::{BlockersFuture, RunOperationGuard};
 use crate::{
     inventory, CleanupFolder, CleanupFolderRole, CleanupGroup, CleanupItem, CleanupItemState,
@@ -115,7 +124,8 @@ struct Candidate {
 struct FolderPlan {
     path: PathBuf,
     role: CleanupFolderRole,
-    /// Its identity, or why it is not the folder preparation wrote.
+    /// Its identity, or why it stays as a whole: it is not the folder
+    /// preparation wrote, or another run still needs what it holds.
     identity: Result<FileIdentity, ItemReason>,
 }
 
@@ -154,6 +164,7 @@ impl Library {
             )));
         }
         let preparations = self.preparations(view_id, &run_name).await?;
+        let recorded = self.catalog().run_folders(view_id).await?;
         let (selection, results_folder, ticked) = match request {
             CleanupRequest::CleanUp { selection, .. } => {
                 if run.view.trashed_at.is_some() {
@@ -179,7 +190,7 @@ impl Library {
                         named.join(", ")
                     )));
                 }
-                let folder = self.catalog().view_results_folder(view_id).await?;
+                let folder = recorded.results.as_ref().map(|results| results.path.clone());
                 (CleanupSelection::default(), folder, *results)
             }
         };
@@ -187,12 +198,13 @@ impl Library {
             CleanupKind::CleanUp => {
                 let removed = self.catalog().removed_prepared_entries(view_id).await?;
                 let scope = clean_up_scope(&run.view, &preparations);
-                blocking(move || Ok(clean_up_candidates(&scope, &removed, &selection))).await?
+                let prepared = recorded.prepared;
+                blocking(move || Ok(clean_up_candidates(&scope, &prepared, &removed, &selection)))
+                    .await?
             }
             CleanupKind::EmptyTrash => {
-                let results = if ticked { results_folder.clone() } else { None };
                 let records = preparations.clone();
-                blocking(move || empty_trash_candidates(&records, results.as_ref())).await?
+                blocking(move || empty_trash_candidates(&records, &recorded, ticked)).await?
             }
         };
         let protected = self.protected_paths(&folders, &preparations).await?;
@@ -373,30 +385,45 @@ impl Library {
 
     /// The paths run removal never touches: every library frame recorded in
     /// a registered location that overlaps one of the folders, each original
-    /// source and each Direct-source path.
+    /// source and each Direct-source path. Each is in the form its parent
+    /// resolves to ([`entry_place`]), and folders and locations overlap by
+    /// where they resolve, so a folder or location reached through a
+    /// symlinked parent is still compared where it is (PREP-FR-07).
     async fn protected_paths(
         &self,
         folders: &[FolderPlan],
         preparations: &[PreparationRecord],
     ) -> Result<HashSet<PathBuf>, LibraryError> {
-        let mut protected = HashSet::new();
+        let mut named = Vec::new();
         for entry in preparations.iter().flat_map(|record| &record.entries) {
             if entry.kind == PreparedEntryKind::DirectSource {
-                protected.extend(entry.path.to_path_buf().ok());
+                named.extend(entry.path.to_path_buf().ok());
             }
-            protected.extend(entry.source.as_ref().and_then(|source| source.to_path_buf().ok()));
+            named.extend(entry.source.as_ref().and_then(|source| source.to_path_buf().ok()));
         }
-        for location in self.catalog().list_locations().await? {
-            let Ok(root) = location.path.to_path_buf() else {
-                continue;
-            };
-            if !folders
-                .iter()
-                .any(|folder| folder.path.starts_with(&root) || root.starts_with(&folder.path))
-            {
-                continue;
-            }
-            for asset in self.catalog().location_assets(location.id).await? {
+        let places: Vec<PathBuf> = folders.iter().map(|folder| folder.path.clone()).collect();
+        let roots: Vec<(Uuid, PathBuf)> = self
+            .catalog()
+            .list_locations()
+            .await?
+            .into_iter()
+            .filter_map(|location| Some((location.id, location.path.to_path_buf().ok()?)))
+            .collect();
+        let (mut protected, overlapping) = blocking(move || {
+            let places: Vec<PathBuf> = places.iter().map(|place| resolved(place)).collect();
+            let overlapping: Vec<(Uuid, PathBuf)> = roots
+                .into_iter()
+                .map(|(id, root)| (id, resolved(&root)))
+                .filter(|(_, root)| {
+                    places.iter().any(|place| place.starts_with(root) || root.starts_with(place))
+                })
+                .collect();
+            let protected: HashSet<PathBuf> = named.iter().map(|path| entry_place(path)).collect();
+            Ok((protected, overlapping))
+        })
+        .await?;
+        for (id, root) in overlapping {
+            for asset in self.catalog().location_assets(id).await? {
                 protected
                     .extend(asset.relative_path.relative_path().ok().map(|rel| root.join(rel)));
             }
@@ -828,20 +855,59 @@ const fn role_of(kind: PreparedEntryKind) -> Option<CleanupRole> {
     }
 }
 
-fn folder_plan(path: PathBuf, role: CleanupFolderRole) -> FolderPlan {
-    let identity = inventory::observe_folder_identity(&path).map_err(|error| {
+/// One folder a review covers, by its chosen path. A folder recorded with
+/// the form it resolved to when Prepare made it must still resolve there,
+/// so a symlinked parent retargeted since never makes run removal act on
+/// another folder (PREP-FR-07); such a folder stays as a whole.
+fn folder_plan(
+    path: PathBuf,
+    canonical: Option<&NativePath>,
+    role: CleanupFolderRole,
+) -> FolderPlan {
+    let identity = match resolves_elsewhere(&path, canonical) {
+        Some(reason) => Err(reason),
+        None => inventory::observe_folder_identity(&path).map_err(|error| {
+            ItemReason::new(
+                ReasonCode::SourceDrift,
+                format!("{} is not the folder PlateVault wrote: {error}", path.display()),
+            )
+        }),
+    };
+    FolderPlan { path, role, identity }
+}
+
+/// Why `path` is no longer the folder Prepare made at `canonical`: it now
+/// resolves elsewhere. `None` without a recorded form, or when `path` cannot
+/// be resolved (its identity check then names that).
+fn resolves_elsewhere(path: &Path, canonical: Option<&NativePath>) -> Option<ItemReason> {
+    let made = canonical?.to_path_buf().ok()?;
+    let now = fs::canonicalize(path).ok()?;
+    (now != made).then(|| {
         ItemReason::new(
             ReasonCode::SourceDrift,
-            format!("{} is not the folder PlateVault wrote: {error}", path.display()),
+            format!(
+                "{} now resolves to {}, not to {} where Prepare made it; it stays in place",
+                path.display(),
+                now.display(),
+                made.display()
+            ),
         )
-    });
-    FolderPlan { path, role, identity }
+    })
+}
+
+/// The recorded resolved form of revision `n`'s folder.
+fn canonical_of(prepared: &[(u32, RecordedFolder)], n: u32) -> Option<&NativePath> {
+    prepared
+        .iter()
+        .find(|(number, _)| *number == n)
+        .and_then(|(_, folder)| folder.canonical.as_ref())
 }
 
 /// Clean up: only the entries the revisions created and wrote, not removed
 /// by an earlier Clean up; originals and Direct-source paths never.
 fn clean_up_candidates(
     scope: &[PreparationRecord],
+    recorded: &[(u32, RecordedFolder)],
     removed: &HashSet<PreparedEntryKey>,
     selection: &CleanupSelection,
 ) -> (Vec<FolderPlan>, Vec<Candidate>) {
@@ -852,9 +918,11 @@ fn clean_up_candidates(
             continue;
         };
         let folder = folders.len();
+        let n = record.revision.n;
         folders.push(folder_plan(
             path,
-            CleanupFolderRole::Prepared { preparation_revision: record.revision.n },
+            canonical_of(recorded, n),
+            CleanupFolderRole::Prepared { preparation_revision: n },
         ));
         for entry in &record.entries {
             let key = PreparedEntryKey { preparation_id: record.revision.id, seq: entry.seq };
@@ -891,10 +959,16 @@ fn source_of(evidence: Option<&EntryEvidence>, source: Option<&NativePath>) -> O
 
 /// Empty Trash: every entry below each prepared folder and, when ticked, the
 /// Results folder. A recorded prepared entry keeps its retained-original
-/// rule; anything else in a prepared folder is an unprepared entry.
+/// rule; anything else in a prepared folder is an unprepared entry. Folders
+/// come child before parent, the order they go in. For the last panel run of
+/// a run group the group's folders follow: each group folder lists nothing
+/// and goes once its `Panel N/` folders are gone, and `Assembled/` joins the
+/// ticked Results unless another run uses one of the group's accepted
+/// Results (D-W75, PREP-FR-07).
 fn empty_trash_candidates(
     preparations: &[PreparationRecord],
-    results: Option<&NativePath>,
+    recorded: &RunFolders,
+    ticked: bool,
 ) -> Result<(Vec<FolderPlan>, Vec<Candidate>), LibraryError> {
     let mut folders = Vec::new();
     let mut candidates = Vec::new();
@@ -904,9 +978,11 @@ fn empty_trash_candidates(
             continue;
         };
         let folder = folders.len();
+        let n = record.revision.n;
         let plan = folder_plan(
             path,
-            CleanupFolderRole::Prepared { preparation_revision: record.revision.n },
+            canonical_of(&recorded.prepared, n),
+            CleanupFolderRole::Prepared { preparation_revision: n },
         );
         let entries: HashMap<PathBuf, _> = record
             .entries
@@ -950,19 +1026,79 @@ fn empty_trash_candidates(
             });
         }
     }
-    if let Some(path) = results.and_then(existing) {
-        let folder = folders.len();
-        let plan = folder_plan(path, CleanupFolderRole::Results);
-        let walked = if plan.identity.is_ok() { walk(&plan.path)? } else { Vec::new() };
-        folders.push(plan);
-        for path in walked {
-            if seen.insert(path.clone()) {
-                let size_bytes = fs::symlink_metadata(&path).map_or(0, |metadata| metadata.len());
-                candidates.push(plain(path, CleanupRole::Result, None, size_bytes, folder));
-            }
+    if ticked {
+        if let Some(results) = &recorded.results {
+            push_results(
+                results,
+                CleanupFolderRole::Results,
+                &mut folders,
+                &mut candidates,
+                &mut seen,
+            )?;
         }
     }
+    let Some(group) = &recorded.group else {
+        return Ok((folders, candidates));
+    };
+    for (n, recorded) in &group.folders {
+        if let Some(path) = existing(&recorded.path) {
+            let role = CleanupFolderRole::Group { group_preparation: *n };
+            folders.push(folder_plan(path, recorded.canonical.as_ref(), role));
+        }
+    }
+    match (&group.assembled, group.assembled_users.as_slice()) {
+        (Some(assembled), []) if ticked => push_results(
+            assembled,
+            CleanupFolderRole::Assembled,
+            &mut folders,
+            &mut candidates,
+            &mut seen,
+        )?,
+        (Some(assembled), users) if ticked => {
+            if let Some(path) = existing(&assembled.path) {
+                let named: Vec<String> = users.iter().map(ToString::to_string).collect();
+                let reason = ItemReason::new(
+                    ReasonCode::Protected,
+                    format!(
+                        "an accepted Result in {} is an input to run {}; it stays in place",
+                        path.display(),
+                        named.join(", ")
+                    ),
+                );
+                folders.push(FolderPlan {
+                    path,
+                    role: CleanupFolderRole::Assembled,
+                    identity: Err(reason),
+                });
+            }
+        }
+        _ => {}
+    }
     Ok((folders, candidates))
+}
+
+/// A ticked Results folder with every entry below it as a Result item.
+fn push_results(
+    recorded: &RecordedFolder,
+    role: CleanupFolderRole,
+    folders: &mut Vec<FolderPlan>,
+    candidates: &mut Vec<Candidate>,
+    seen: &mut HashSet<PathBuf>,
+) -> Result<(), LibraryError> {
+    let Some(path) = existing(&recorded.path) else {
+        return Ok(());
+    };
+    let folder = folders.len();
+    let plan = folder_plan(path, recorded.canonical.as_ref(), role);
+    let walked = if plan.identity.is_ok() { walk(&plan.path)? } else { Vec::new() };
+    folders.push(plan);
+    for path in walked {
+        if seen.insert(path.clone()) {
+            let size_bytes = fs::symlink_metadata(&path).map_or(0, |metadata| metadata.len());
+            candidates.push(plain(path, CleanupRole::Result, None, size_bytes, folder));
+        }
+    }
+    Ok(())
 }
 
 const fn plain(
@@ -991,6 +1127,16 @@ const fn plain(
 fn existing(path: &NativePath) -> Option<PathBuf> {
     let path = path.to_path_buf().ok()?;
     fs::symlink_metadata(&path).is_ok().then_some(path)
+}
+
+/// Where an entry is, without following it: its parent folder as it
+/// resolves now with the entry's own name, so a link is never resolved to
+/// its target.
+fn entry_place(path: &Path) -> PathBuf {
+    match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => resolved(parent).join(name),
+        _ => path.to_path_buf(),
+    }
 }
 
 /// Every entry below `folder` that is not itself a folder, without following
@@ -1039,7 +1185,7 @@ fn assess(
         return decided(CleanupItemState::NotSelected, candidate);
     }
     let path = candidate.path.display().to_string();
-    if protected.contains(&candidate.path) {
+    if protected.contains(&entry_place(&candidate.path)) {
         let state = stays(
             ReasonCode::Protected,
             format!(

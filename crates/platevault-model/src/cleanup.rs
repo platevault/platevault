@@ -177,12 +177,21 @@ pub struct CleanupGroup {
     pub items: Vec<CleanupItem>,
 }
 
-/// Which recorded folder of the run.
+/// Which recorded folder of the run. A run group's own folders join Empty
+/// Trash of its last panel run only (D-W75).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum CleanupFolderRole {
+    /// A run's revision folder, or a panel run's `Panel N/`.
     Prepared { preparation_revision: u32 },
+    /// The run's Results folder, or a panel run's `<Mosaic> Results/Panel N/`.
     Results,
+    /// A Prepare all revision's group folder, `<Mosaic>/` or
+    /// `<Mosaic> (rev N)/`: it lists no entry of its own and goes once its
+    /// `Panel N/` folders are gone.
+    Group { group_preparation: u32 },
+    /// The run group's `<Mosaic> Results/Assembled/`, only when ticked.
+    Assembled,
 }
 
 /// Trash support for one folder of the run with its moving and staying

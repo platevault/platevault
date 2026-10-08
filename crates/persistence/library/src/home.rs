@@ -3,8 +3,9 @@
 
 //! Home's running work (spec 065 PRJ-FR-17 section 6): which scans,
 //! measurement runs, preparation revisions, Prepare all revisions of run
-//! groups, imports and storage operations are Running, read in one catalog
-//! snapshot. Each feature's own read loads the record. Read-only.
+//! groups, imports, run Clean ups and Empty Trashes, archive transfers, Done
+//! / Archive trash moves and other storage operations are Running, read in
+//! one catalog snapshot. Each feature's own read loads the record. Read-only.
 
 use sqlx::sqlite::SqliteConnection;
 use sqlx::Connection;
@@ -23,7 +24,23 @@ pub struct RunningOperations {
     /// Running Prepare all revisions; their panel runs' revisions are theirs.
     pub group_preparations: Vec<Uuid>,
     pub imports: Vec<Uuid>,
-    pub storage: Vec<Uuid>,
+    pub storage: RunningStorage,
+}
+
+/// Running storage work, each listed once by the feature that owns it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RunningStorage {
+    /// Running run Clean ups and Empty Trashes; their storage operations are
+    /// theirs, through Empty Trash's folder moves.
+    pub cleanups: Vec<Uuid>,
+    /// Running archive and restore transfers; their storage operations are
+    /// theirs.
+    pub archives: Vec<Uuid>,
+    /// The storage operations of Done / Archive trash moves that are Running.
+    pub trash_moves: Vec<Uuid>,
+    /// Running storage operations of no Clean up, Empty Trash, archive
+    /// transfer or trash move.
+    pub operations: Vec<Uuid>,
 }
 
 impl Catalog {
@@ -64,15 +81,41 @@ impl Catalog {
                 "SELECT id FROM import_operations WHERE state = 'running' ORDER BY created_at, id",
             )
             .await?,
-            storage: running(
-                &mut snapshot,
-                "SELECT id FROM storage_operations WHERE state = 'running' ORDER BY created_at, id",
-            )
-            .await?,
+            storage: running_storage(&mut snapshot).await?,
         };
         snapshot.rollback().await?;
         Ok(running)
     }
+}
+
+async fn running_storage(conn: &mut SqliteConnection) -> Result<RunningStorage> {
+    Ok(RunningStorage {
+        cleanups: running(
+            conn,
+            "SELECT id FROM run_cleanups WHERE state = 'running' ORDER BY created_at, id",
+        )
+        .await?,
+        archives: running(
+            conn,
+            "SELECT id FROM archive_transfers WHERE state = 'running' ORDER BY created_at, id",
+        )
+        .await?,
+        trash_moves: running(
+            conn,
+            "SELECT t.op_id FROM trash_moves t JOIN storage_operations o ON o.id = t.op_id \
+             WHERE t.settled_at IS NULL AND o.state = 'running' ORDER BY o.created_at, o.id",
+        )
+        .await?,
+        operations: running(
+            conn,
+            "SELECT o.id FROM storage_operations o WHERE o.state = 'running' \
+             AND NOT EXISTS (SELECT 1 FROM run_cleanups c WHERE c.op_id = o.id) \
+             AND NOT EXISTS (SELECT 1 FROM archive_transfers a WHERE a.storage_op_id = o.id) \
+             AND NOT EXISTS (SELECT 1 FROM trash_moves t WHERE t.op_id = o.id) \
+             ORDER BY o.created_at, o.id",
+        )
+        .await?,
+    })
 }
 
 async fn running(conn: &mut SqliteConnection, sql: &'static str) -> Result<Vec<Uuid>> {
