@@ -11,9 +11,9 @@
 //! refusal writes nothing.
 
 use platevault_model::{
-    EntryEvidence, EntryState, InputMode, ItemReason, LibraryError, LinkKind, NativePath,
-    PreparationRevision, PreparationState, PreparedEntry, PreparedEntryKind, PreparedInput,
-    Profile, ProfileInput, Revision, WrittenCopy,
+    CorrectedField, EntryEvidence, EntryState, InputMode, ItemReason, LibraryError, LinkKind,
+    NativePath, PreparationRevision, PreparationState, PreparedEntry, PreparedEntryKind,
+    PreparedInput, Profile, ProfileInput, Revision, SourceBasis, WrittenCopy,
 };
 use sqlx::sqlite::{SqliteConnection, SqliteRow};
 use sqlx::{Connection, Row};
@@ -41,6 +41,10 @@ pub struct NewPreparedEntry {
     pub path: NativePath,
     pub source: Option<NativePath>,
     pub size_bytes: u64,
+    /// What its snapshot must match (D19); `None` only without a source.
+    pub basis: Option<SourceBasis>,
+    /// The reviewed header change of an isolated patched Copy or Clone.
+    pub header_changes: Vec<CorrectedField>,
     pub blocked: Option<ItemReason>,
 }
 
@@ -102,7 +106,8 @@ macro_rules! entry_sql {
     ($tail:literal) => {
         concat!(
             "SELECT seq, member_key, asset_id, master_id, input, kind, path, source, size_bytes, ",
-            "source_evidence, source_sha256, entry_identity, written, state, reason, updated_at ",
+            "basis, header_changes, source_evidence, source_sha256, entry_identity, written, ",
+            "state, reason, updated_at ",
             "FROM prepared_entries ",
             $tail
         )
@@ -528,6 +533,19 @@ impl Catalog {
         .await?;
         output.as_deref().map(from_json).transpose()
     }
+
+    /// Every asset a confirmed catalog correction changed (PREP-FR-03).
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn corrected_asset_ids(&self) -> Result<Vec<Uuid>> {
+        let mut conn = self.reader().await?;
+        let ids: Vec<String> =
+            sqlx::query_scalar("SELECT DISTINCT asset_id FROM corrections ORDER BY asset_id")
+                .fetch_all(&mut *conn)
+                .await?;
+        ids.iter().map(|id| parse_uuid(id)).collect()
+    }
 }
 
 async fn insert_entry(
@@ -542,9 +560,9 @@ async fn insert_entry(
     let state = if entry.blocked.is_some() { EntryState::Blocked } else { EntryState::Pending };
     sqlx::query(
         "INSERT INTO prepared_entries (prep_id, seq, member_key, asset_id, master_id, input, \
-         kind, path, source, size_bytes, source_evidence, source_sha256, entry_identity, \
-         written, state, reason, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, \
-         NULL, NULL, NULL, NULL, ?11, ?12, ?13)",
+         kind, path, source, size_bytes, basis, header_changes, source_evidence, \
+         source_sha256, entry_identity, written, state, reason, updated_at) VALUES (?1, ?2, ?3, \
+         ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, NULL, NULL, NULL, NULL, ?13, ?14, ?15)",
     )
     .bind(id.to_string())
     .bind(seq)
@@ -556,6 +574,8 @@ async fn insert_entry(
     .bind(to_json(&entry.path)?)
     .bind(entry.source.as_ref().map(to_json).transpose()?)
     .bind(size)
+    .bind(entry.basis.as_ref().map(to_json).transpose()?)
+    .bind((!entry.header_changes.is_empty()).then(|| to_json(&entry.header_changes)).transpose()?)
     .bind(to_text(&state)?)
     .bind(entry.blocked.as_ref().map(to_json).transpose()?)
     .bind(at)
@@ -723,6 +743,8 @@ fn entry_row(row: &SqliteRow) -> Result<PreparedEntry> {
         source: optional_json(row, "source")?,
         size_bytes: u64::try_from(size)
             .map_err(|_| LibraryError::PersistenceFailure(format!("corrupt size {size}")))?,
+        basis: optional_json(row, "basis")?,
+        header_changes: optional_json(row, "header_changes")?.unwrap_or_default(),
         source_evidence: optional_json(row, "source_evidence")?,
         source_sha256: row.try_get("source_sha256")?,
         entry_identity: optional_json(row, "entry_identity")?,

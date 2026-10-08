@@ -7,8 +7,9 @@
 //! A run's first preparation revision goes to `<output>/<Project>/<Run>/`,
 //! each later one to `<Run> (rev N)/` beside it, and every revision shares the
 //! sibling `<Run> Results/` folder, outside every prepared folder, so the
-//! application never reads its own output as input. An override parent keeps
-//! the `<Project>/` level.
+//! application never reads its own output as input. A folder name the user
+//! chose for the first revision names its Results folder too. An override
+//! parent keeps the `<Project>/` level.
 
 use std::path::Path;
 
@@ -46,7 +47,9 @@ pub fn results_folder_name(run: &str) -> String {
 /// Where revision `n` of run `run` in Project `project` goes under `output`.
 /// `folder_name` replaces the proposed `<Run>` or `<Run> (rev N)` name when
 /// the user chose another; `results` is the run's recorded Results folder,
-/// which every later revision keeps.
+/// which every later revision keeps. Without one, the Results folder takes
+/// the prepared folder's chosen name, `<folder_name> Results`, so another
+/// name also resolves a Results folder collision.
 ///
 /// # Errors
 /// `InvalidInput` for a name [`segment`] refuses, a relative `output`, or a
@@ -71,10 +74,12 @@ pub fn run_location(
         Some(name) => segment("folder", name)?,
         None => revision_folder_name(&run, n),
     };
-    let folder = project_dir.join(name);
-    let results = match results {
-        Some(recorded) => recorded.to_path_buf()?,
-        None => project_dir.join(results_folder_name(&run)),
+    let folder = project_dir.join(&name);
+    let results = if let Some(recorded) = results {
+        recorded.to_path_buf()?
+    } else {
+        let base = if folder_name.is_some() { name.as_str() } else { run.as_str() };
+        project_dir.join(results_folder_name(base))
     };
     if inside(&results, &folder) || inside(&folder, &results) {
         return Err(LibraryError::InvalidInput(format!(
