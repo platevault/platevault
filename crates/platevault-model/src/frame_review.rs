@@ -1250,13 +1250,16 @@ impl FrameState {
 // Review lists (PIX-FR-14, PIX-FR-16, PIX-FR-18)
 // ---------------------------------------------------------------------------
 
-/// Where Review frames opened (PIX-FR-18).
+/// Where Review frames opened (PIX-FR-17, PIX-FR-18).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum ReviewContext {
     /// A run's Review step: its draft members while it is open and has a
     /// draft, else its latest committed revision's.
     Run { view_id: Uuid },
+    /// A run group's Review all: every panel run's frames, each listed as
+    /// its own panel run's Review step lists it, with its panel.
+    ViewGroup { group_id: Uuid },
     /// A Project's candidate sessions. Home's "Review N new frames" opens it
     /// filtered to Unreviewed (PRJ-FR-18 rule 1).
     ProjectCandidates { project_id: Uuid },
@@ -1341,6 +1344,8 @@ pub enum ReviewSortKey {
     Label,
     Filter,
     Exposure,
+    /// The panel number; frames outside a run group have none.
+    Panel,
     /// A built-in metric's measured value; a frame without one is Not measured.
     Metric {
         metric: MetricId,
@@ -1411,6 +1416,25 @@ pub struct ReviewRun {
     pub draft_revision: Revision,
 }
 
+/// The panel run of a run group a listed frame is a member of (PIX-FR-17).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewPanel {
+    pub panel_id: Uuid,
+    pub number: u32,
+    pub view_id: Uuid,
+}
+
+/// One panel run a run group's Review all lists, by panel number: what the
+/// Panel filter offers and the draft revision its marks expect.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewPanelRun {
+    pub panel_id: Uuid,
+    pub number: u32,
+    pub run: ReviewRun,
+}
+
 /// One listed frame: a logical capture (D16) shown, previewed and marked
 /// through one copy outside the Trash.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1427,13 +1451,15 @@ pub struct ReviewFrame {
     pub project: ProjectDecision,
     /// The capture's other copies outside the Trash.
     pub other_copies: Vec<Uuid>,
-    /// In a Run context, the frame's member.
+    /// In a run or run group context, the frame's member.
     pub member: Option<ReviewMember>,
+    /// In a run group context, the panel run holding the frame.
+    pub panel: Option<ReviewPanel>,
     pub state: FrameState,
 }
 
-/// Frames per label over the whole context, whatever the filter. A Trashed
-/// frame counts nowhere.
+/// Frames per label over the whole context, or the Panel filter's panel,
+/// whatever the label filter. A Trashed frame counts nowhere.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewCounts {
@@ -1463,7 +1489,8 @@ impl ReviewCounts {
     }
 }
 
-/// `pix_review_list`: the context's frames the filter admits, sorted.
+/// `pix_review_list`: the context's frames the filter and the Panel filter
+/// admit, sorted.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReviewList {
@@ -1471,7 +1498,11 @@ pub struct ReviewList {
     /// The Project whose labels the list reads.
     pub project_id: Uuid,
     pub run: Option<ReviewRun>,
+    /// In a run group context, the group's panel runs by panel number.
+    pub panels: Vec<ReviewPanelRun>,
     pub filter: ReviewFilter,
+    /// The Panel filter: only this panel's frames are listed.
+    pub panel_filter: Option<Uuid>,
     pub counts: ReviewCounts,
     pub frames: Vec<ReviewFrame>,
 }
