@@ -151,6 +151,8 @@ mod prepare;
 pub use prepare::{
     EntryUpdate, NewPreparation, NewPreparedEntry, PreparationRecord, RecordedFolders,
 };
+mod home;
+pub use home::RunningOperations;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
