@@ -61,6 +61,11 @@ pub struct NewPreparation {
     pub output: NativePath,
     pub folder: NativePath,
     pub results_folder: NativePath,
+    /// `folder` and `results_folder` resolved when Prepare made them: the
+    /// containment checks use these, so a symlinked parent retargeted later
+    /// never moves them (PREP-FR-07). Display and Open keep the chosen form.
+    pub canonical_folder: Option<NativePath>,
+    pub canonical_results: Option<NativePath>,
     pub entries: Vec<NewPreparedEntry>,
 }
 
@@ -85,8 +90,16 @@ pub struct PreparationRecord {
 /// check (PREP-FR-06): prepared folders and Results folders.
 #[derive(Clone, Debug, Default)]
 pub struct RecordedFolders {
-    pub prepared: Vec<NativePath>,
-    pub results: Vec<NativePath>,
+    pub prepared: Vec<RecordedFolder>,
+    pub results: Vec<RecordedFolder>,
+}
+
+/// One recorded folder: the chosen form, and the form it resolved to when
+/// Prepare made it (`None` for a folder recorded without one).
+#[derive(Clone, Debug)]
+pub struct RecordedFolder {
+    pub path: NativePath,
+    pub canonical: Option<NativePath>,
 }
 
 /// A preparation revision read: its columns, then `$tail`.
@@ -252,11 +265,12 @@ impl Catalog {
                 None => {
                     sqlx::query(
                         "INSERT INTO results_folders (id, view_id, group_id, kind, path, \
-                         created_at) VALUES (?1, ?2, NULL, 'run', ?3, ?4)",
+                         canonical_path, created_at) VALUES (?1, ?2, NULL, 'run', ?3, ?4, ?5)",
                     )
                     .bind(Uuid::new_v4().to_string())
                     .bind(view.id.to_string())
                     .bind(to_json(&input.results_folder)?)
+                    .bind(input.canonical_results.as_ref().map(to_json).transpose()?)
                     .bind(&at)
                     .execute(&mut *conn)
                     .await?;
@@ -264,9 +278,9 @@ impl Catalog {
             }
             sqlx::query(
                 "INSERT INTO preparation_revisions (id, view_id, n, membership_revision, \
-                 profile_id, mode, link, output, folder, results_folder, state, reason, \
-                 group_preparation_id, started_at, finished_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, \
-                 ?7, ?8, ?9, ?10, 'running', NULL, NULL, ?11, NULL)",
+                 profile_id, mode, link, output, folder, canonical_folder, results_folder, \
+                 state, reason, group_preparation_id, started_at, finished_at) VALUES (?1, ?2, \
+                 ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'running', NULL, NULL, ?12, NULL)",
             )
             .bind(id.to_string())
             .bind(view.id.to_string())
@@ -277,6 +291,7 @@ impl Catalog {
             .bind(input.link.as_ref().map(to_text).transpose()?)
             .bind(to_json(&input.output)?)
             .bind(to_json(&input.folder)?)
+            .bind(input.canonical_folder.as_ref().map(to_json).transpose()?)
             .bind(to_json(&input.results_folder)?)
             .bind(&at)
             .execute(&mut *conn)
@@ -507,16 +522,26 @@ impl Catalog {
     /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn recorded_preparation_folders(&self) -> Result<RecordedFolders> {
         let mut conn = self.reader().await?;
-        let prepared: Vec<String> =
-            sqlx::query_scalar("SELECT folder FROM preparation_revisions ORDER BY started_at, id")
+        let prepared: Vec<(String, Option<String>)> = sqlx::query_as(
+            "SELECT folder, canonical_folder FROM preparation_revisions ORDER BY started_at, id",
+        )
+        .fetch_all(&mut *conn)
+        .await?;
+        let results: Vec<(String, Option<String>)> =
+            sqlx::query_as("SELECT path, canonical_path FROM results_folders")
                 .fetch_all(&mut *conn)
                 .await?;
-        let results: Vec<String> =
-            sqlx::query_scalar("SELECT path FROM results_folders").fetch_all(&mut *conn).await?;
-        Ok(RecordedFolders {
-            prepared: prepared.iter().map(|path| from_json(path)).collect::<Result<_>>()?,
-            results: results.iter().map(|path| from_json(path)).collect::<Result<_>>()?,
-        })
+        let folders = |rows: &[(String, Option<String>)]| -> Result<Vec<RecordedFolder>> {
+            rows.iter()
+                .map(|(path, canonical)| {
+                    Ok(RecordedFolder {
+                        path: from_json(path)?,
+                        canonical: canonical.as_deref().map(from_json).transpose()?,
+                    })
+                })
+                .collect()
+        };
+        Ok(RecordedFolders { prepared: folders(&prepared)?, results: folders(&results)? })
     }
 
     /// The parent folder the latest preparation chose: review's default.

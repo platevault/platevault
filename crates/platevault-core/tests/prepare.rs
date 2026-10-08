@@ -381,6 +381,8 @@ async fn closing_app_never_completes_run() {
                 &world.output.join(PROJECT).join(format!("{RUN} (rev 2)")),
             ),
             results_folder: outcome.revision.results_folder.clone(),
+            canonical_folder: None,
+            canonical_results: None,
             entries: vec![persistence_library::NewPreparedEntry {
                 member_key: None,
                 asset_id: None,
@@ -642,6 +644,8 @@ async fn recorded_results_folder_collision_named_and_resolved() {
             output: NativePath::from_path(&world.output),
             folder: NativePath::from_path(&taken_folder),
             results_folder: NativePath::from_path(&taken_results),
+            canonical_folder: None,
+            canonical_results: None,
             entries: vec![persistence_library::NewPreparedEntry {
                 member_key: None,
                 asset_id: None,
@@ -694,4 +698,38 @@ async fn recorded_results_folder_collision_named_and_resolved() {
     let outcome = world.prepare(&request, &Watch::quiet()).await;
     assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
     assert_eq!(path(&outcome.revision.results_folder), project.join(format!("{RUN} B Results")));
+}
+
+/// PREP-FR-07: containment uses the folder as Prepare made it, not as a
+/// symlinked parent resolves later. After the link is retargeted to another
+/// drive, a parent inside the earlier prepared folder, chosen by its real
+/// path, is still refused.
+#[tokio::test]
+async fn retargeted_parent_keeps_prepared_folder_refused() {
+    let world = world().await;
+    let (drive_a, drive_b) = (world.temp.path().join("Drive A"), world.temp.path().join("Drive B"));
+    fs::create_dir_all(drive_a.join("Processing")).unwrap();
+    fs::create_dir_all(drive_b.join("Processing")).unwrap();
+    let astro = world.temp.path().join("Astro");
+    std::os::unix::fs::symlink(&drive_a, &astro).unwrap();
+    let profile = world.siril(QUIET).await;
+    let mut request = world.request(&profile, InputMode::Copy, None);
+    request.output = Some(NativePath::from_path(&astro.join("Processing")));
+    let outcome = world.prepare(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.revision.state, PreparationState::Prepared, "{outcome:#?}");
+    assert!(path(&outcome.revision.folder).starts_with(&astro), "the chosen form is recorded");
+
+    fs::remove_file(&astro).unwrap();
+    std::os::unix::fs::symlink(&drive_b, &astro).unwrap();
+    let real = fs::canonicalize(drive_a.join("Processing")).unwrap().join(PROJECT);
+    for inside in [real.join(RUN).join("Lights"), real.join(format!("{RUN} Results"))] {
+        request.output = Some(NativePath::from_path(&inside));
+        let review = world.library.review_preparation(world.run, &request).await.unwrap();
+        assert!(
+            matches!(review.location_check, LocationCheck::InsidePreparedFolder { .. }),
+            "{} inside the earlier folder: {:?}",
+            inside.display(),
+            review.location_check
+        );
+    }
 }

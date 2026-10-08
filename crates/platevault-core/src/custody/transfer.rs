@@ -125,8 +125,9 @@ fn holds(path: &Path, identity: &FileIdentity) -> bool {
         .is_ok_and(|observed| same_identity(&observed.identity, identity))
 }
 
-/// Remove a partial copy this item wrote, only while its name still holds it.
-fn discard(partial: &Path, identity: &FileIdentity) {
+/// Remove a file this operation wrote (a partial copy, a clone), only while
+/// its name still holds it.
+pub(crate) fn discard(partial: &Path, identity: &FileIdentity) {
     if holds(partial, identity) {
         let _ = fs::remove_file(partial);
     }
