@@ -4792,6 +4792,7 @@ dependencies = [
  "platevault_model",
  "platevault_pixels",
  "rustix",
+ "safe-filename",
  "serde",
  "serde_json",
  "sha2 0.10.9",

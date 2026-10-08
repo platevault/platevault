@@ -286,7 +286,7 @@ pub(crate) fn verify(
 }
 
 #[cfg(unix)]
-fn sync_folder(folder: &Path) -> std::io::Result<()> {
+pub(crate) fn sync_folder(folder: &Path) -> std::io::Result<()> {
     fs::File::open(folder)?.sync_all()
 }
 
@@ -294,6 +294,6 @@ fn sync_folder(folder: &Path) -> std::io::Result<()> {
 /// install's directory entry, and the re-read proves the installed bytes.
 #[cfg(not(unix))]
 #[allow(clippy::unnecessary_wraps)]
-const fn sync_folder(_folder: &Path) -> std::io::Result<()> {
+pub(crate) const fn sync_folder(_folder: &Path) -> std::io::Result<()> {
     Ok(())
 }

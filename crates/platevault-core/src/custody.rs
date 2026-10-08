@@ -103,7 +103,9 @@ fn modified_nanos(metadata: &Metadata) -> Option<i128> {
     }
 }
 
-fn observe_entry(path: &Path) -> Result<EntryEvidence, LibraryError> {
+/// The no-follow evidence of one entry: a file with its SHA-256, a link with
+/// its target text. PREP snapshots its sources and written entries with it.
+pub(crate) fn observe_entry(path: &Path) -> Result<EntryEvidence, LibraryError> {
     if !path.is_absolute() {
         return Err(LibraryError::InvalidInput("custody paths must be absolute".into()));
     }
@@ -375,7 +377,7 @@ fn link_holds(
 
 /// D19: the source still holds its reviewed identity and, for a file, its
 /// reviewed SHA-256. A link is checked without following it.
-fn verify_source(source: &EntryEvidence) -> Result<(), ItemReason> {
+pub(crate) fn verify_source(source: &EntryEvidence) -> Result<(), ItemReason> {
     let path = path_of(&source.path)?;
     let checked = match &source.kind {
         EntryKind::Link { target } => link_holds(&path, &source.fingerprint, target),
