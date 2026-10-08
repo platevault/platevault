@@ -6,11 +6,14 @@ license.workspace = true
 
 [dependencies]
 platevault_model = { path = "../platevault-model" }
+platevault_pixels = { path = "../platevault-pixels" }
 persistence_library = { path = "../persistence/library" }
+calibration_master_detect = { path = "../calibration/master-detect" }
 metadata_core = { path = "../metadata/core" }
 metadata_fits = { path = "../metadata/fits" }
 metadata_xisf = { path = "../metadata/xisf" }
 fs_pathsafe = { path = "../fs/pathsafe" }
+patterns = { path = "../patterns" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -21,15 +24,31 @@ time.workspace = true
 sha2.workspace = true
 hex.workspace = true
 unicode-normalization.workspace = true
+csv.workspace = true
+base64 = "0.22.1"
 simbad-resolver = "0.5.0"
 skymath = "0.7.2"
 target-match = "0.5.1"
+# Spec 072 R3: the bundled IANA database only, so every platform and test
+# resolves the same zone rules for nights, local times and calendar text.
+jiff = { version = "0.2.37", default-features = false, features = [
+  "std",
+  "tzdb-bundle-always",
+] }
+tempfile.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 winapi-util = "0.1.11"
 
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.1", features = ["fs", "process"] }
+
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+trash.workspace = true
+
 [dev-dependencies]
-tempfile.workspace = true
+parking_lot = "0.12.5"
+platevault_pixels = { path = "../platevault-pixels", features = ["fixtures"] }
 
 [lints]
 workspace = true

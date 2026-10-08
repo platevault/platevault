@@ -12,6 +12,21 @@ use metadata_core::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+pub mod naming;
+pub use naming::*;
+pub mod rig;
+pub use rig::*;
+mod planning;
+pub use planning::*;
+mod calibration;
+pub use calibration::*;
+mod project;
+pub use project::*;
+mod frame_review;
+pub use frame_review::*;
+pub mod storage;
+pub use storage::*;
+
 pub type Revision = u64;
 
 #[derive(Debug, thiserror::Error)]
@@ -22,6 +37,14 @@ pub enum LibraryError {
     NotFound(String),
     #[error("revision conflict for {id}; current revision {current}")]
     Conflict { id: Uuid, current: Revision, successors: Vec<Uuid> },
+    /// A selected window `key` is not among the windows recomputed at `site`;
+    /// `current` is its Target's revision. The wire kind is `conflict`.
+    #[error(
+        "window {key} at site {site} is not among the recomputed windows; Target {} is at \
+         revision {current}",
+        .key.target_id()
+    )]
+    WindowConflict { key: WindowKey, site: String, current: Revision },
     #[error("filesystem identity conflict: {0}")]
     IdentityConflict(String),
     #[error("access denied: {0}")]
@@ -86,7 +109,9 @@ impl LibraryError {
         let (kind, retry) = match self {
             Self::InvalidInput(_) => ("invalid_input", RetryAction::Review),
             Self::NotFound(_) => ("not_found", RetryAction::Retry),
-            Self::Conflict { .. } => ("conflict", RetryAction::Review),
+            Self::Conflict { .. } | Self::WindowConflict { .. } => {
+                ("conflict", RetryAction::Review)
+            }
             Self::IdentityConflict(_) => ("identity_conflict", RetryAction::Review),
             Self::AccessDenied(_) => ("access_denied", RetryAction::Retry),
             Self::SourceUnavailable(_) => ("source_unavailable", RetryAction::Retry),
@@ -101,6 +126,9 @@ impl LibraryError {
         let (identity, current_revision, successors) = match self {
             Self::Conflict { id, current, successors } => {
                 (Some(*id), Some(*current), successors.clone())
+            }
+            Self::WindowConflict { key, current, .. } => {
+                (Some(key.target_id()), Some(*current), Vec::new())
             }
             _ => (identity, None, Vec::new()),
         };
@@ -450,6 +478,9 @@ pub struct CaptureMetadata {
     pub mechanical_rotation_deg: Option<f64>,
     pub focal_length_mm: Option<f64>,
     pub pixel_size_um: Option<f64>,
+    /// Integration count: `STACKCNT`, else `NCOMBINE`. Absent stays `None`, never 0.
+    #[serde(default)]
+    pub stack_count: Option<u32>,
 }
 
 fn finite(value: Option<f64>) -> Option<f64> {
@@ -529,6 +560,7 @@ impl From<&RawFileMetadata> for CaptureMetadata {
             mechanical_rotation_deg: finite(raw.rotator_angle_deg),
             focal_length_mm: finite(raw.focal_length_mm),
             pixel_size_um: finite(raw.pixel_size_um),
+            stack_count: raw.stack_count,
         }
     }
 }
@@ -931,6 +963,10 @@ pub struct Equipment {
     pub telescope: Option<String>,
     pub focal_length_mm: Option<f64>,
     pub pixel_size_um: Option<f64>,
+    pub sensor_width_px: Option<u32>,
+    pub sensor_height_px: Option<u32>,
+    /// Mono or OSC, from the camera; `None` while unknown.
+    pub color_kind: Option<ColorKind>,
     pub decision_revision: Revision,
     pub state: AssociationState,
     pub provenance: Provenance,
@@ -1030,6 +1066,8 @@ pub enum ReferenceKind {
     Project,
     /// A Result's recorded lineage.
     Result,
+    /// An adopted master's provenance record (CAL).
+    Calibration,
 }
 
 /// One record of another feature naming the library assets it holds. The

@@ -11,24 +11,27 @@
 
 use std::sync::Arc;
 
-use persistence_library::{CorrectionPreview, LocationFailure, SessionQuery, SessionSummary};
+use persistence_library::{
+    CorrectionPreview, LocationFailure, SessionFilter, SessionQuery, SessionSummary, TrashedAsset,
+    TrashedQuery,
+};
 use platevault_core::grouping::group_assets;
 use platevault_core::library::{ConfirmedCorrection, InventoryProbe, Library, LibrarySession};
 use platevault_core::targets::{user_target, TargetQuery, TargetSearchHit, UserTargetInput};
 use platevault_core::{
-    Asset, Association, AssociationState, CorrectionInput, Equipment, ErrorResponse, ExpectedAsset,
-    ExpectedSession, LibraryError, Location, LocationRole, NativePath, Provenance, Quality,
-    RemapReview, RetireReview, Revision, ScanOperation, TargetCandidate, TargetCone,
+    Asset, Association, AssociationState, ColorKind, CorrectionInput, Equipment, ErrorResponse,
+    ExpectedAsset, ExpectedSession, LibraryError, Location, LocationRole, NativePath, Provenance,
+    Quality, RemapReview, RetireReview, Revision, ScanOperation, TargetCandidate, TargetCone,
     TargetCoverage, TargetRecord,
 };
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use uuid::Uuid;
 
-type Reply<T> = Result<T, ErrorResponse>;
+pub(super) type Reply<T> = Result<T, ErrorResponse>;
 
 /// Stable wire failure for `identity`, keeping any scope the error carries.
-fn fail(identity: Option<Uuid>) -> impl FnOnce(LibraryError) -> ErrorResponse {
+pub(crate) fn fail(identity: Option<Uuid>) -> impl FnOnce(LibraryError) -> ErrorResponse {
     move |error| report(&error, identity, None)
 }
 
@@ -79,6 +82,9 @@ pub struct EquipmentInput {
     pub telescope: Option<String>,
     pub focal_length_mm: Option<f64>,
     pub pixel_size_um: Option<f64>,
+    pub sensor_width_px: Option<u32>,
+    pub sensor_height_px: Option<u32>,
+    pub color_kind: Option<ColorKind>,
 }
 
 /// Register a read-only location; nothing is scanned or modified.
@@ -150,7 +156,9 @@ pub async fn library_cancel_scan(
     library.cancel_scan(operation_id).await.map_err(fail(Some(operation_id)))
 }
 
-/// Session summaries, newest night first; browsing measures nothing.
+/// Session summaries, newest night first; browsing measures nothing. Sessions
+/// lists light sessions of Captures locations; `filter` `trashed` lists the
+/// sessions holding Trashed frames, summarized over those frames (LIB-FR-16/18).
 ///
 /// # Errors
 /// `PersistenceFailure` when the catalog cannot be read.
@@ -159,16 +167,34 @@ pub async fn library_list_sessions(
     library: State<'_, Arc<Library>>,
     location_id: Option<Uuid>,
     include_superseded: Option<bool>,
+    filter: Option<SessionFilter>,
     offset: u32,
     limit: u32,
 ) -> Reply<Vec<SessionSummary>> {
     let query = SessionQuery {
         location_id,
         include_superseded: include_superseded.unwrap_or(false),
+        filter,
         offset,
         limit,
     };
     library.catalog().list_sessions(&query).await.map_err(fail(location_id))
+}
+
+/// The Sessions "Trashed" filter's frames, newest trash first: each kept record
+/// with its last-observed metadata and the operation that trashed it (LIB-FR-18).
+///
+/// # Errors
+/// `PersistenceFailure` when the catalog cannot be read.
+#[tauri::command]
+pub async fn library_trashed_assets(
+    library: State<'_, Arc<Library>>,
+    session_id: Option<Uuid>,
+    offset: u32,
+    limit: u32,
+) -> Reply<Vec<TrashedAsset>> {
+    let query = TrashedQuery { session_id, offset, limit };
+    library.catalog().trashed_assets(&query).await.map_err(fail(session_id))
 }
 
 /// Session assets, observed/effective metadata, associations, lineage and
@@ -336,6 +362,9 @@ pub async fn library_save_equipment(
         telescope: equipment.telescope,
         focal_length_mm: equipment.focal_length_mm,
         pixel_size_um: equipment.pixel_size_um,
+        sensor_width_px: equipment.sensor_width_px,
+        sensor_height_px: equipment.sensor_height_px,
+        color_kind: equipment.color_kind,
         decision_revision: expected_revision.unwrap_or_default(),
         state: AssociationState::Confirmed,
         provenance: Provenance::User,

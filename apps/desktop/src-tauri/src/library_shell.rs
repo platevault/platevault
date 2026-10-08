@@ -4,8 +4,11 @@
 //! Isolated rebuilt library shell (spec 064): its own Tauri runtime over the
 //! clean catalog.
 //!
-//! It boots only [`Library`] and the [`crate::commands::library`] IPC surface,
-//! with the catalog in its own data directory. The one window is labelled
+//! It boots only [`Library`] and the [`crate::commands::library`] and
+//! [`crate::commands::observing_plans`] IPC surfaces, with the catalog in its
+//! own data directory. The dialog and opener plugins serve the planning
+//! handlers' Rust calls, and the platform reminder notifier with the system
+//! clock is attached before any command runs. The one window is labelled
 //! `library`, so it holds `capabilities/library.json` (plus the dev bridge
 //! grant with `dev-tools`) and none of the legacy `default.json`. Nothing from
 //! the legacy composition root runs here: no `AppState`, legacy database,
@@ -73,7 +76,8 @@ const RETAINED_FINISHED: usize = 256;
 /// # Errors
 /// Every startup failure: a refused bridge address, invalid provider
 /// configuration, an unusable data directory, a catalog that cannot be opened
-/// (including a foreign or legacy database) or the Tauri runtime itself.
+/// (including a foreign or legacy database), reminder subscriptions that
+/// cannot be read when the notifier attaches, or the Tauri runtime itself.
 pub fn run() -> Result<(), Box<dyn Error>> {
     let provider = provider_config()?;
     // One labelled block per feature. A feature adds its handlers under its own
@@ -87,6 +91,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ipc::library_scan_status,
         ipc::library_cancel_scan,
         ipc::library_list_sessions,
+        ipc::library_trashed_assets,
         ipc::library_session,
         ipc::library_preview_metadata,
         ipc::library_confirm_metadata,
@@ -107,17 +112,69 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         ipc::library_retire_location,
         ipc::library_list_operations,
         // projects
+        crate::commands::project_goals::project_create,
+        crate::commands::project_goals::project_update,
+        crate::commands::project_goals::project_set_subjects,
+        crate::commands::project_goals::project_set_rigs,
+        crate::commands::project_goals::project_set_goals,
+        crate::commands::project_goals::project_apply_goal_template,
+        crate::commands::project_goals::project_set_rejection,
+        crate::commands::project_goals::project_list,
+        crate::commands::project_goals::project_detail,
+        crate::commands::project_goals::project_candidates,
+        crate::commands::project_goals::goal_template_list,
+        crate::commands::project_goals::goal_template_save,
+        crate::commands::project_goals::goal_template_delete,
         // runs
         // frame review
+        crate::commands::frame_review::pix_review_frames,
+        crate::commands::frame_review::pix_start_measurement,
+        crate::commands::frame_review::pix_prioritize_measurement,
+        crate::commands::frame_review::pix_measurement_status,
+        crate::commands::frame_review::pix_cancel_measurement,
+        crate::commands::frame_review::pix_list_measurement_runs,
+        crate::commands::frame_review::pix_open_frame,
+        crate::commands::frame_review::pix_preview_tile,
+        crate::commands::frame_review::pix_compare_regions,
+        crate::commands::frame_review::pix_sample_region,
+        crate::commands::frame_review::pix_frame_stars,
+        crate::commands::frame_review::pix_star_cutouts,
+        crate::commands::frame_review::pix_frame_detail,
+        crate::commands::frame_review::pix_review_import,
+        crate::commands::frame_review::pix_import_review,
+        crate::commands::frame_review::pix_confirm_import,
+        crate::commands::frame_review::pix_thumbnails,
         // calibration
         // preparation
         // results
         // storage
         // import
+        crate::commands::naming::naming_get,
+        crate::commands::naming::naming_save,
+        crate::commands::naming::naming_restore_defaults,
+        crate::commands::naming::naming_preview,
         // planning
+        crate::commands::rigs::rig_filters_get,
+        crate::commands::rigs::rig_filters_save,
+        crate::commands::rigs::rig_unknown_filters,
+        crate::commands::observing_plans::planning_list_sites,
+        crate::commands::observing_plans::planning_save_site,
+        crate::commands::observing_plans::planning_set_default_site,
+        crate::commands::observing_plans::planning_compute_windows,
+        crate::commands::observing_plans::planning_set_planned,
+        crate::commands::observing_plans::planning_review_reminders,
+        crate::commands::observing_plans::planning_enable_reminders,
+        crate::commands::observing_plans::planning_disable_reminders,
+        crate::commands::observing_plans::planning_reminder_status,
+        crate::commands::observing_plans::planning_open_notification_settings,
+        crate::commands::observing_plans::planning_review_calendar_export,
+        crate::commands::observing_plans::planning_export_calendar,
         // targets
         // home
     ]);
+    // The planning handlers call these through their Rust APIs, which need no
+    // grant; window `library` holds only `capabilities/library.json`.
+    let builder = builder.plugin(tauri_plugin_dialog::init()).plugin(tauri_plugin_opener::init());
     #[cfg(feature = "dev-tools")]
     let builder = builder.plugin(dev_bridge(std::env::var(BRIDGE_BIND_ENV).ok().as_deref())?);
 
@@ -132,7 +189,12 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         online_provider = provider.is_some(),
         "library catalog opened"
     );
+    let notifier = crate::library_notifier::platform_notifier();
+    let clock = Arc::new(platevault_core::notifier::SystemClock);
+    tauri::async_runtime::block_on(library.attach_notifier(notifier, clock))
+        .map_err(|error| format!("cannot attach the reminder notifier: {error}"))?;
     ProgressBridge::spawn(app.handle().clone(), Arc::clone(&library));
+    crate::commands::frame_review::spawn_measurement_bridge(app.handle().clone(), &library);
     app.manage(library);
     app.run(|_, _| {});
     Ok(())

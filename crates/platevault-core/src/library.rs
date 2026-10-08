@@ -14,8 +14,10 @@ use serde::Serialize;
 use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
 
+use crate::frame_review::FrameReview;
 use crate::grouping::group_assets;
 use crate::inventory;
+use crate::projects::{CalibrationReferences, ProjectReferences};
 use crate::targets::{
     SimbadConfig, SimbadTargetResolver, TargetAssessment, TargetIndex, TargetQuery, TargetSearchHit,
 };
@@ -53,6 +55,8 @@ pub struct Library {
     scans: Mutex<HashMap<Uuid, ScanControl>>,
     progress: broadcast::Sender<ScanOperation>,
     references: tokio::sync::RwLock<Vec<Arc<dyn AssetReferences>>>,
+    pub(crate) planning: Mutex<crate::observing_plans::PlanningRuntime>,
+    frame_review: FrameReview,
     /// Test-only: the next N assessments are refused as if a concurrent writer
     /// had committed between the session read and the record.
     #[cfg(test)]
@@ -105,8 +109,9 @@ impl persistence_library::SourceProbe for InventoryProbe {
 }
 
 impl Library {
-    /// Open a fresh-schema catalog and load the offline target dataset.
-    /// Interrupted scan recovery is owned by the catalog.
+    /// Open a fresh-schema catalog and load the offline target dataset, with the
+    /// catalog's Projects registered as a reference source. Interrupted scan
+    /// recovery is owned by the catalog.
     ///
     /// # Errors
     /// Returns catalog persistence, seed validation or provider configuration errors.
@@ -118,6 +123,13 @@ impl Library {
         let targets = blocking(TargetIndex::bundled).await?;
         let provider = provider.map(SimbadTargetResolver::simbad).transpose()?;
         let (progress, _) = broadcast::channel(128);
+        let planning =
+            Mutex::new(crate::observing_plans::PlanningRuntime::new(Arc::clone(&catalog)));
+        let projects: Arc<dyn AssetReferences> =
+            Arc::new(ProjectReferences { catalog: Arc::clone(&catalog) });
+        let calibration: Arc<dyn AssetReferences> =
+            Arc::new(CalibrationReferences { catalog: Arc::clone(&catalog) });
+        let frame_review = FrameReview::new(Arc::clone(&catalog));
         Ok(Arc::new(Self {
             catalog,
             targets: Arc::new(targets),
@@ -125,7 +137,9 @@ impl Library {
             scans: Mutex::new(HashMap::new()),
             saved_targets: Mutex::new(None),
             progress,
-            references: tokio::sync::RwLock::new(Vec::new()),
+            planning,
+            references: tokio::sync::RwLock::new(vec![projects, calibration]),
+            frame_review,
             #[cfg(test)]
             forced_conflicts: std::sync::atomic::AtomicUsize::new(0),
         }))
@@ -134,6 +148,12 @@ impl Library {
     #[must_use]
     pub fn catalog(&self) -> &Catalog {
         &self.catalog
+    }
+
+    /// Measurement runs, previews, star diagnostics and imports (spec 067).
+    #[must_use]
+    pub const fn frame_review(&self) -> &FrameReview {
+        &self.frame_review
     }
 
     #[must_use]
@@ -462,6 +482,7 @@ impl Library {
                 .list_sessions(&SessionQuery {
                     location_id: Some(location_id),
                     include_superseded: false,
+                    filter: None,
                     offset,
                     limit: 1000,
                 })
@@ -726,7 +747,7 @@ impl Library {
     }
 }
 
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, LibraryError> + Send + 'static,
 ) -> Result<T, LibraryError> {
     tokio::task::spawn_blocking(work).await.map_err(|error| {

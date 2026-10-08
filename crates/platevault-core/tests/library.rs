@@ -300,11 +300,16 @@ async fn scan_to_end(library: &Arc<Library>, location: Uuid) -> ScanOperation {
 }
 
 /// Wait for the terminal event of scan `id`, published after scan-time work.
+///
+/// On Windows every root check and every duplicate-copy rehash of a scan runs
+/// a PowerShell CIM volume query, so a scan beside duplicate copies makes about
+/// sixteen. While measurement tests ran their own queries beside this suite, CI
+/// saw ~2 s per query and such a scan pass 20 s; the budget keeps a 3x margin.
 async fn published_terminal(
     progress: &mut tokio::sync::broadcast::Receiver<ScanOperation>,
     id: Uuid,
 ) -> ScanOperation {
-    tokio::time::timeout(Duration::from_secs(20), async {
+    tokio::time::timeout(Duration::from_secs(120), async {
         loop {
             let operation = progress.recv().await.unwrap();
             if operation.id == id && operation.state != ScanState::Running {
@@ -1041,8 +1046,9 @@ async fn a_deleted_or_moved_root_never_blocks_an_unrelated_sibling() {
 }
 
 /// Records of a feature that holds library asset ids (VSEL Views and their
-/// prepared revisions, PRJ Projects, Results), served through the seam those
-/// features implement. The library only reads them.
+/// prepared revisions, Results), served through the seam those features
+/// implement. Projects are the real catalog records `Library::open` registers.
+/// The library only reads them.
 struct Records {
     kind: ReferenceKind,
     held: tokio::sync::Mutex<Vec<AssetReference>>,
@@ -1114,6 +1120,7 @@ fn assert_names_every_reference(
     location: &Location,
     assets: &[Uuid],
     session: Uuid,
+    project: Uuid,
 ) {
     assert_eq!(
         (review.location_name.as_str(), &review.root, review.availability),
@@ -1131,12 +1138,19 @@ fn assert_names_every_reference(
     let expected = [
         (ReferenceKind::View, 0x7000),
         (ReferenceKind::View, 0x7001),
-        (ReferenceKind::Project, 0x31),
+        (ReferenceKind::Project, project.as_u128()),
     ];
     assert_eq!(referenced, expected);
+    // Adopted masters (068) are consulted too, so a location holding a
+    // master's source copies can never be retired without naming it.
     assert_eq!(
         review.consulted,
-        [ReferenceKind::View, ReferenceKind::Project, ReferenceKind::Result]
+        [
+            ReferenceKind::View,
+            ReferenceKind::Project,
+            ReferenceKind::Result,
+            ReferenceKind::Calibration
+        ]
     );
     assert!(
         review.statement.contains("deletes, moves or modifies no file"),
@@ -1176,6 +1190,55 @@ async fn rereview_after_return(
         (Availability::Offline, &review.assets, &review.sessions, &review.references)
     );
     (location, again)
+}
+
+/// A real Project whose Project-only rejects hold `assets`: its subject is
+/// `target` on a saved rig.
+async fn project_rejecting(
+    catalog: &persistence_library::Catalog,
+    target: Uuid,
+    assets: &[Uuid],
+) -> Project {
+    let rig = Equipment {
+        id: Uuid::new_v4(),
+        name: "Cold-1 rig".into(),
+        camera: None,
+        telescope: None,
+        focal_length_mm: None,
+        pixel_size_um: None,
+        sensor_width_px: None,
+        sensor_height_px: None,
+        color_kind: None,
+        decision_revision: 0,
+        state: AssociationState::Confirmed,
+        provenance: Provenance::User,
+    };
+    let rig = catalog.save_equipment(&rig, None).await.unwrap();
+    let input = ProjectInput {
+        name: "M 31 mosaic".into(),
+        notes: None,
+        subjects: vec![SubjectInput {
+            target_id: target,
+            name: None,
+            mosaic: false,
+            panels: Vec::new(),
+        }],
+        rig_ids: vec![rig.id],
+        goals: Vec::new(),
+    };
+    let project = catalog.create_project(&input).await.unwrap();
+    let mut marks = Vec::with_capacity(assets.len());
+    for id in assets {
+        let asset = catalog.asset(*id).await.unwrap();
+        marks.push(RejectionMark {
+            asset_id: asset.id,
+            fingerprint: asset.fingerprint,
+            expected_revision: 0,
+            rejected: true,
+        });
+    }
+    catalog.set_project_rejection(project.id, &marks).await.unwrap();
+    project
 }
 
 /// LIB-AC-16: an offline location whose copies are fixed View members leaves the
@@ -1221,12 +1284,9 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
             record(ReferenceKind::View, 0x7001, "M 31 Ha prepared", 1, &assets),
         ],
     );
-    let projects = Records::new(
-        ReferenceKind::Project,
-        vec![record(ReferenceKind::Project, 0x31, "M 31 mosaic", 5, &assets)],
-    );
+    let project = project_rejecting(catalog, m31, &assets).await;
     let results = Records::new(ReferenceKind::Result, Vec::new());
-    for source in [&views, &projects, &results] {
+    for source in [&views, &results] {
         library.register_references(Arc::clone(source) as Arc<dyn AssetReferences>).await;
     }
     let fixed = views.snapshot().await;
@@ -1240,7 +1300,7 @@ async fn retiring_an_offline_location_keeps_fixed_views_and_counts_its_folder_on
     assert_eq!(totals(&catalog.target_coverage(m31).await.unwrap()), (600.0, 300.0, 300.0));
 
     let review = library.review_retire_location(location.id).await.unwrap();
-    assert_names_every_reference(&review, &location, &assets, summary.session.id);
+    assert_names_every_reference(&review, &location, &assets, summary.session.id, project.id);
 
     // If its availability changes after the review, confirmation needs a new one.
     let (location, review) = rereview_after_return(&library, &review, &root).await;
@@ -1348,6 +1408,9 @@ async fn decide_and_confirm(
         telescope: None,
         focal_length_mm: Some(250.0),
         pixel_size_um: Some(3.76),
+        sensor_width_px: None,
+        sensor_height_px: None,
+        color_kind: None,
         decision_revision: 0,
         state: AssociationState::Unresolved,
         provenance: Provenance::User,

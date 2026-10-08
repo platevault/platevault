@@ -1,0 +1,154 @@
+// Copyright (C) 2024-2026 Sjors Robroek
+// SPDX-License-Identifier: AGPL-3.0-only
+
+//! Custody facts (the STO seam) and Retire location references (R19).
+//!
+//! Both are catalog reads from one reader snapshot; they hash and open no file.
+//! Every fact carries the no-follow fingerprint the catalog recorded.
+
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeSet, HashMap};
+
+use platevault_model::{
+    Asset, AssetReference, Availability, CalibrationRules, CandidateRef, CustodyFact, CustodyKind,
+    LocationLifecycle, MasterKeptCopy, ReferenceKind,
+};
+use sqlx::Connection;
+use uuid::Uuid;
+
+use super::{inventory, load_masters};
+use crate::{load_assets, load_location, Catalog, Result};
+
+impl Catalog {
+    /// The calibration files STO keeps in protected Keep: candidate masters,
+    /// adopted masters and adoption sources retained after adoption, each
+    /// with its recorded no-follow fingerprint; a retained source names its
+    /// kept copy, the adopted master.
+    ///
+    /// Until results discovery identifies a run's outputs, the facts are
+    /// library-wide: every listed candidate master, every adopted master in an
+    /// Active location and every adopted master's source still recorded outside
+    /// a Retired location and outside the Trash. A source whose adoption failed
+    /// stays a candidate master. Hashes and opens nothing.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn calibration_custody_facts<R: CalibrationRules + ?Sized>(
+        &self,
+        rules: &R,
+    ) -> Result<Vec<CustodyFact>> {
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let listed = inventory::list_inputs(&mut snapshot, rules).await?;
+        let masters = load_masters(&mut snapshot).await?;
+        let sources: BTreeSet<Uuid> =
+            masters.iter().filter_map(|master| master.provenance.source.asset_id).collect();
+        let sources: HashMap<Uuid, _> = load_assets(&mut snapshot, &sources)
+            .await?
+            .into_iter()
+            .map(|asset| (asset.id, asset))
+            .collect();
+        let mut lifecycles = HashMap::new();
+        for master in &masters {
+            if let Entry::Vacant(entry) = lifecycles.entry(master.location_id) {
+                entry.insert(load_location(&mut snapshot, master.location_id).await?.lifecycle);
+            }
+        }
+        snapshot.rollback().await?;
+
+        let mut facts = Vec::new();
+        for input in &listed {
+            let CandidateRef::Candidate { asset_id } = input.summary.input else {
+                continue;
+            };
+            for copy in input.members.iter().flat_map(|member| &member.copies) {
+                facts.push(CustodyFact {
+                    kind: CustodyKind::CandidateMaster,
+                    asset_id: Some(asset_id),
+                    master_id: None,
+                    result_id: None,
+                    location_id: copy.location_id,
+                    relative_path: copy.relative_path.clone(),
+                    fingerprint: copy.fingerprint.clone(),
+                    kept_copy: None,
+                });
+            }
+        }
+        for master in &masters {
+            if lifecycles[&master.location_id] == LocationLifecycle::Active {
+                facts.push(CustodyFact {
+                    kind: CustodyKind::AdoptedMaster,
+                    asset_id: master.asset_id,
+                    master_id: Some(master.id),
+                    result_id: None,
+                    location_id: master.location_id,
+                    relative_path: master.relative_path.clone(),
+                    fingerprint: master.fingerprint.clone(),
+                    kept_copy: None,
+                });
+            }
+            let source = master.provenance.source.asset_id.and_then(|id| sources.get(&id));
+            let retained = |source: &&Asset| {
+                !matches!(source.availability, Availability::Retired | Availability::Trashed)
+            };
+            let Some(source) = source.filter(retained) else {
+                continue;
+            };
+            facts.push(CustodyFact {
+                kind: CustodyKind::GeneratedSource,
+                asset_id: Some(source.id),
+                master_id: None,
+                result_id: master.provenance.source.result_id,
+                location_id: source.location_id,
+                relative_path: source.relative_path.clone(),
+                fingerprint: source.fingerprint.clone(),
+                kept_copy: Some(MasterKeptCopy {
+                    master_id: master.id,
+                    location_id: master.location_id,
+                    relative_path: master.relative_path.clone(),
+                    fingerprint: master.fingerprint.clone(),
+                }),
+            });
+        }
+        Ok(facts)
+    }
+
+    /// The calibration records holding any of `assets`, kind Calibration: each
+    /// adopted master whose source or indexed destination is asked, at the
+    /// master revision.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn calibration_references(
+        &self,
+        assets: &BTreeSet<Uuid>,
+    ) -> Result<Vec<AssetReference>> {
+        if assets.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut conn = self.reader().await?;
+        let mut snapshot = conn.begin().await?;
+        let masters = load_masters(&mut snapshot).await?;
+        snapshot.rollback().await?;
+
+        let mut references = Vec::new();
+        for master in masters {
+            let held: BTreeSet<Uuid> = [master.provenance.source.asset_id, master.asset_id]
+                .into_iter()
+                .flatten()
+                .filter(|id| assets.contains(id))
+                .collect();
+            if held.is_empty() {
+                continue;
+            }
+            references.push(AssetReference {
+                kind: ReferenceKind::Calibration,
+                id: master.id,
+                name: format!("{} master {}", master.kind.as_str(), master.relative_path.display()),
+                revision: master.revision,
+                asset_ids: held.into_iter().collect(),
+            });
+        }
+        Ok(references)
+    }
+}

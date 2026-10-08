@@ -57,11 +57,20 @@ macro_rules! schema_modules {
 #[rustfmt::skip]
 const SCHEMA: &str = schema_modules![
     "schema.sql",
+    "naming.sql",
+    "rigs.sql",
+    "planning.sql",
+    "calibration.sql",
+    "trash.sql",
+    "projects.sql",
+    "measurements.sql",
+    "frame_thumbnails.sql",
+    "storage.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
 /// version is refused before any module's DDL runs.
-pub const SCHEMA_VERSION: i64 = 6;
+pub const SCHEMA_VERSION: i64 = 7;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 const READER_CONNECTIONS: u32 = 4;
 const MAX_PAGE: u32 = 1000;
@@ -81,18 +90,45 @@ macro_rules! write_txn {
     }};
 }
 
+/// The asset row columns joined with their location's state, read from `assets`
+/// (every record, Trashed ones included) or with `live` from `live_assets`.
 macro_rules! asset_sql {
     ($tail:literal) => {
+        asset_sql!(@from "assets", $tail)
+    };
+    (live $tail:literal) => {
+        asset_sql!(@from "live_assets", $tail)
+    };
+    (@from $table:literal, $tail:literal) => {
         concat!(
             "SELECT a.id, a.location_id, a.path_key, a.fingerprint, a.format, a.availability, ",
             "a.observed, a.effective, a.observation_revision, a.decision_revision, a.quality, ",
             "a.quality_basis, a.verification_pending, a.last_observed_at, a.last_verified_at, ",
             "l.availability AS location_availability, l.lifecycle AS location_lifecycle ",
-            "FROM assets a JOIN locations l ON l.id = a.location_id ",
+            "FROM ", $table, " a JOIN locations l ON l.id = a.location_id ",
             $tail
         )
     };
 }
+
+mod naming;
+mod planning;
+mod rigs;
+pub use planning::{DeliveryClaim, DeliveryOutcome, SubscriptionWrite, PLANNING_SETTINGS_ID};
+mod calibration;
+
+pub use calibration::{
+    CalibrationInputDetail, CalibrationInputSummary, InputCopy, InputGroup, InputMember, InputQuery,
+};
+mod trash;
+pub use trash::{TrashEpisode, TrashedAsset, TrashedFrame, TrashedQuery};
+mod frame_thumbnails;
+mod measurements;
+mod projects;
+
+pub use frame_thumbnails::{StoredThumbnail, ThumbnailBasis};
+pub use measurements::{FrameRecordBasis, ImportReviewInput};
+mod storage;
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -151,11 +187,25 @@ pub struct LocationReferences {
     pub consulted: Vec<ReferenceKind>,
 }
 
+/// A Sessions filter (LIB-FR-17, LIB-FR-18).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionFilter {
+    /// The only list that shows Trashed frames: sessions holding any, each
+    /// summarized over its Trashed frames alone.
+    Trashed,
+}
+
+/// A page of Sessions: light sessions of Captures locations (LIB-FR-16), newest
+/// night first. Without a filter every summary covers its live frames only, and a
+/// session whose frames are all Trashed is not listed (LIB-FR-18).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionQuery {
     pub location_id: Option<Uuid>,
     pub include_superseded: bool,
+    #[serde(default)]
+    pub filter: Option<SessionFilter>,
     pub offset: u32,
     pub limit: u32,
 }
@@ -335,7 +385,8 @@ type AssociationIndex = HashMap<(Uuid, &'static str), Association>;
 impl Catalog {
     /// Open or create a clean catalog file with one durable writer and separate readers.
     ///
-    /// Interrupted Running scans are recorded Partial with their scope incomplete.
+    /// Interrupted Running scans are recorded Partial with their scope incomplete,
+    /// and Running master adoptions are recorded Interrupted.
     ///
     /// # Errors
     /// `PersistenceFailure` when the file cannot be opened or WAL/FULL/foreign-key
@@ -353,6 +404,8 @@ impl Catalog {
         let mut writer = connect_writer(&writer_options).await?;
         install_schema(&mut writer).await?;
         recover_interrupted(&mut writer).await?;
+        planning::recover_sending(&mut writer).await?;
+        measurements::recover_interrupted(&mut writer).await?;
         let readers = SqlitePoolOptions::new()
             .max_connections(READER_CONNECTIONS)
             .connect_with(base.read_only(true))
@@ -874,6 +927,8 @@ impl Catalog {
     /// Hash reviewed frames of a batch off the writer lock, bound to their observation,
     /// plus Unreviewed copies whose recorded digest carries a decided copy's decision
     /// in another location (D16): their bytes decide whether that decision applies.
+    /// A file at a Trashed frame's recorded path is hashed too: only its digest can
+    /// return the frame (LIB-FR-18).
     ///
     /// The reviewed asset is found exactly as the transaction will find it, including
     /// a single case/normalization variant on insensitive volumes; the live observed
@@ -890,7 +945,10 @@ impl Catalog {
             let AssetMatch::Existing(asset) = &matched else {
                 continue;
             };
-            if asset.quality != Quality::Unreviewed || aliased_copy(&mut conn, asset).await? {
+            if asset.quality != Quality::Unreviewed
+                || asset.availability == Availability::Trashed
+                || aliased_copy(&mut conn, asset).await?
+            {
                 let key = path_key(&file.relative_path);
                 work.push((key, file.relative_path.clone(), file.fingerprint.clone()));
             }
@@ -1002,43 +1060,45 @@ impl Catalog {
         location_assets(&mut conn, location_id).await
     }
 
+    /// Sessions in list order (see [`SessionQuery`]): without a filter each
+    /// summary covers the session's live frames, under [`SessionFilter::Trashed`]
+    /// its Trashed frames alone.
+    ///
     /// # Errors
     /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn list_sessions(&self, query: &SessionQuery) -> Result<Vec<SessionSummary>> {
         let mut conn = self.reader().await?;
-        let ids: Vec<String> = sqlx::query_scalar(
-            "SELECT s.id FROM sessions s WHERE (?1 = 1 OR s.superseded_by IS NULL) \
-             AND (?2 IS NULL OR EXISTS (SELECT 1 FROM session_members m \
-             JOIN assets a ON a.id = m.asset_id WHERE m.session_id = s.id AND a.location_id = ?2)) \
-             ORDER BY s.date_basis IS NULL, s.date_basis DESC, s.capture_key, s.id \
-             LIMIT ?3 OFFSET ?4",
-        )
-        .bind(i64::from(query.include_superseded))
-        .bind(query.location_id.map(|id| id.to_string()))
-        .bind(i64::from(if query.limit == 0 { MAX_PAGE } else { query.limit.min(MAX_PAGE) }))
-        .bind(i64::from(query.offset))
-        .fetch_all(&mut *conn)
-        .await?;
-        let mut rows = Vec::with_capacity(ids.len());
-        for id in ids {
-            rows.push(load_session_row(&mut conn, parse_uuid(&id)?).await?);
+        let members = Members::of(query.filter);
+        let listed =
+            listed_sessions(&mut conn, query.include_superseded, query.location_id, members)
+                .await?;
+        let limit = if query.limit == 0 { MAX_PAGE } else { query.limit.min(MAX_PAGE) };
+        let page = listed
+            .into_iter()
+            .skip(usize::try_from(query.offset).unwrap_or(usize::MAX))
+            .take(usize::try_from(limit).unwrap_or(usize::MAX));
+        let mut rows = Vec::new();
+        for id in page {
+            rows.push(load_session_row(&mut conn, id).await?);
         }
-        summarize_rows(&mut conn, rows).await
+        summarize_rows(&mut conn, rows, members).await
     }
 
+    /// One session over its live frames: a Trashed frame is in none of its
+    /// assets, members or counts (LIB-FR-18).
+    ///
     /// # Errors
     /// `NotFound` for an unknown session.
     pub async fn session(&self, id: Uuid) -> Result<SessionDetail> {
         let mut conn = self.reader().await?;
-        let row = load_session_row(&mut conn, id).await?;
-        let ids: BTreeSet<Uuid> = row.session.asset_ids.iter().copied().collect();
-        let assets = load_assets(&mut conn, &ids).await?;
+        let mut row = load_session_row(&mut conn, id).await?;
+        let assets = scoped_members(&mut conn, &mut row, Members::Live).await?;
         let view = CaptureView::read(&mut conn, &[id], &assets).await?;
         let members = view.members(&assets);
         let associations = load_associations(&mut conn, id).await?;
         let lineage = session_lineage(&mut conn, id).await?;
         let successors = successors_of(&mut conn, &row).await?;
-        let summary = view.summary(row, &assets, successors);
+        let summary = view.summary(row, &assets, successors, Members::Live);
         Ok(SessionDetail { summary, assets, members, associations, lineage })
     }
 
@@ -1049,6 +1109,85 @@ impl Catalog {
         load_session_row(&mut conn, session_id).await?;
         load_associations(&mut conn, session_id).await
     }
+}
+
+/// Which of a session's recorded members a Sessions read covers: the live ones,
+/// or under the "Trashed" filter the Trashed ones alone (LIB-FR-18).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Members {
+    Live,
+    Trashed,
+}
+
+impl Members {
+    fn of(filter: Option<SessionFilter>) -> Self {
+        match filter {
+            None => Self::Live,
+            Some(SessionFilter::Trashed) => Self::Trashed,
+        }
+    }
+
+    fn holds(self, asset: &Asset) -> bool {
+        (asset.availability == Availability::Trashed) == (self == Self::Trashed)
+    }
+}
+
+/// Sessions with a member of the read's scope in a Captures location, one row
+/// per distinct effective IMAGETYP of those members, newest night first.
+macro_rules! sessions_in_captures {
+    ($members:literal) => {
+        concat!(
+            "SELECT DISTINCT s.id, s.date_basis, s.capture_key, \
+             json_extract(a.effective, '$.imageType') AS image_type FROM sessions s \
+             JOIN session_members m ON m.session_id = s.id JOIN ",
+            $members,
+            " a ON a.id = m.asset_id JOIN locations l ON l.id = a.location_id \
+             WHERE l.role = 'captures' AND (?1 = 1 OR s.superseded_by IS NULL) \
+             AND (?2 IS NULL OR EXISTS (SELECT 1 FROM session_members n JOIN ",
+            $members,
+            " b ON b.id = n.asset_id WHERE n.session_id = s.id AND b.location_id = ?2)) \
+             ORDER BY s.date_basis IS NULL, s.date_basis DESC, s.capture_key, s.id"
+        )
+    };
+}
+
+const LIVE_SESSIONS: &str = sessions_in_captures!("live_assets");
+const TRASHED_SESSIONS: &str =
+    sessions_in_captures!("(SELECT * FROM assets WHERE availability = 'trashed')");
+
+/// Every session Sessions lists for this scope, in list order: light sessions of
+/// Captures locations (LIB-FR-16). A session of known calibration frames (dark,
+/// flat, bias) is never listed, wherever it is; one with an absent, blank or
+/// unrecognised IMAGETYP is unknown evidence and stays listed. A session with no
+/// member in the scope, such as one whose frames are all Trashed, is not listed.
+async fn listed_sessions(
+    conn: &mut SqliteConnection,
+    include_superseded: bool,
+    location_id: Option<Uuid>,
+    members: Members,
+) -> Result<Vec<Uuid>> {
+    let sql = match members {
+        Members::Live => LIVE_SESSIONS,
+        Members::Trashed => TRASHED_SESSIONS,
+    };
+    let rows = sqlx::query(sql)
+        .bind(i64::from(include_superseded))
+        .bind(location_id.map(|id| id.to_string()))
+        .fetch_all(&mut *conn)
+        .await?;
+    let mut listed: Vec<Uuid> = Vec::new();
+    for row in &rows {
+        let id = parse_uuid(&row.try_get::<String, _>("id")?)?;
+        if listed.last() == Some(&id) {
+            continue;
+        }
+        let image_type: Option<String> = row.try_get("image_type")?;
+        let evidence = CaptureMetadata { image_type, ..CaptureMetadata::default() };
+        if evidence.is_light() != Some(false) {
+            listed.push(id);
+        }
+    }
+    Ok(listed)
 }
 
 // ---------------------------------------------------------------------------
@@ -2183,6 +2322,7 @@ async fn recover_interrupted(conn: &mut SqliteConnection) -> Result<()> {
         finalize_operation(&mut txn, op.id, ScanState::Partial, &op.progress, &[], &incomplete)
             .await?;
     }
+    calibration::recover_adoptions(&mut txn).await?;
     txn.commit().await?;
     Ok(())
 }
@@ -2906,11 +3046,12 @@ async fn location_provisional(conn: &mut SqliteConnection, id: Uuid) -> Result<b
 }
 
 /// The first readable pass of an operation (its first verified batch, or its
-/// terminal pass) marks every decided asset in its scope verification pending,
-/// and every copy whose recorded digest carries a decided copy's decision in
-/// another location. Each successful rehash in this operation clears the mark; a
-/// canceled scan or a failed rehash leaves it. Offline scans never get here, so
-/// offline inputs keep their last-observed quality.
+/// terminal pass) marks every decided live asset in its scope verification
+/// pending, and every live copy whose recorded digest carries a live decided
+/// copy's decision in another location. Each successful rehash in this operation
+/// clears the mark; a canceled scan or a failed rehash leaves it. Offline scans
+/// never get here, so offline inputs keep their last-observed quality. A Trashed
+/// frame is in the OS Trash, so it awaits no rehash (LIB-FR-18).
 async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Result<()> {
     let armed = sqlx::query(
         "UPDATE scan_operations SET verification_armed = 1 WHERE id = ?1 AND verification_armed = 0",
@@ -2924,13 +3065,15 @@ async fn arm_verification(conn: &mut SqliteConnection, op: &OperationRow) -> Res
     }
     let key = path_key(&op.scope);
     let rows = sqlx::query(
-        "SELECT a.id, a.path_key FROM assets a WHERE a.location_id = ?1 \
+        "SELECT a.id, a.path_key FROM live_assets a WHERE a.location_id = ?1 \
          AND a.availability <> 'missing' AND substr(a.path_key, 1, ?2) = ?3 \
          AND (a.quality <> 'unreviewed' OR (a.content_sha256 IS NOT NULL AND (EXISTS ( \
-             SELECT 1 FROM assets d WHERE d.content_sha256 = a.content_sha256 \
+             SELECT 1 FROM live_assets d WHERE d.content_sha256 = a.content_sha256 \
              AND d.location_id <> a.location_id) \
-             OR EXISTS (SELECT 1 FROM copy_links WHERE left_id = a.id) \
-             OR EXISTS (SELECT 1 FROM copy_links WHERE right_id = a.id))))",
+             OR EXISTS (SELECT 1 FROM copy_links k JOIN live_assets r ON r.id = k.right_id \
+                 WHERE k.left_id = a.id) \
+             OR EXISTS (SELECT 1 FROM copy_links k JOIN live_assets r ON r.id = k.left_id \
+                 WHERE k.right_id = a.id))))",
     )
     .bind(op.location_id.to_string())
     .bind(i64::try_from(key.len()).map_err(|_| LibraryError::InvalidInput("path too long".into()))?)
@@ -3131,6 +3274,8 @@ fn terminal_progress(op: &OperationRow, walked: &ScanProgress) -> ScanProgress {
     }
 }
 
+/// Mark Missing every live record of a complete scope the scan did not observe.
+/// A Trashed frame is in the OS Trash, never Missing (LIB-FR-18).
 async fn reconcile_absence(
     conn: &mut SqliteConnection,
     op: &OperationRow,
@@ -3139,7 +3284,8 @@ async fn reconcile_absence(
 ) -> Result<()> {
     let issues = load_issue_paths(conn, op.id).await?;
     let rows = sqlx::query(
-        "SELECT id, path_key FROM assets WHERE location_id = ?1 AND availability <> 'missing' \
+        "SELECT id, path_key FROM live_assets WHERE location_id = ?1 \
+         AND availability <> 'missing' \
          AND (last_operation_id IS NULL OR last_operation_id <> ?2)",
     )
     .bind(op.location_id.to_string())
@@ -3264,6 +3410,9 @@ async fn observe_file(
     let mut fingerprint = file.fingerprint.clone();
     fingerprint.content_sha256 = observed.digest;
     match find_asset(conn, location, &file.relative_path, &fingerprint, op.id).await? {
+        AssetMatch::Existing(stored) if stored.availability == Availability::Trashed => {
+            observe_trashed(conn, op, *stored, file, fingerprint, observed_at).await
+        }
         AssetMatch::Existing(stored)
             if stored.quality != Quality::Unreviewed && fingerprint.content_sha256.is_none() =>
         {
@@ -3305,6 +3454,40 @@ async fn observe_file(
         AssetMatch::New => insert_asset(conn, op, location, file, &fingerprint, observed_at)
             .await
             .map(Change::Inserted),
+    }
+}
+
+/// A file at a Trashed frame's recorded path (LIB-FR-18): the user put it back,
+/// or other bytes now sit there. Without a digest the frame stays Trashed and the
+/// path is an issue. With one, the record leaves Trashed and its episode becomes
+/// history. The record is compared against the bytes the episode trashed, so a
+/// matching SHA-256 returns the frame with its decision (Unusable) and different
+/// bytes are a new observation that follows the `ChangedContent` rule (LIB-FR-09).
+async fn observe_trashed(
+    conn: &mut SqliteConnection,
+    op: &OperationRow,
+    mut stored: Asset,
+    file: &ScanFile,
+    fingerprint: ObservationFingerprint,
+    observed_at: &str,
+) -> Result<Change> {
+    if fingerprint.content_sha256.is_none() {
+        let issue = ScanIssue {
+            relative_path: file.relative_path.clone(),
+            reason: "a file at a Trashed frame's path was not content-verified in this scan".into(),
+            availability: Availability::Unreadable,
+        };
+        record_issue(conn, op, &issue).await?;
+        return Ok(Change::Unchanged);
+    }
+    if let Some(episode) = trash::open_episode(conn, stored.id).await? {
+        stored.fingerprint.content_sha256 = Some(episode.sha256);
+    }
+    trash::close_episode(conn, stored.id, observed_at).await?;
+    // The session holding the record regains a live member either way.
+    match refresh_asset(conn, op, &stored, file, fingerprint, observed_at).await? {
+        Change::Unchanged => Ok(Change::Refreshed { id: stored.id, regroup: false }),
+        changed => Ok(changed),
     }
 }
 
@@ -3559,7 +3742,8 @@ async fn record_issue(
     mark_scope_incomplete(conn, op.id, &scope).await?;
     let key = path_key(&scope);
     let rows = sqlx::query(
-        "SELECT id, path_key FROM assets WHERE location_id = ?1 AND substr(path_key, 1, ?2) = ?3",
+        "SELECT id, path_key FROM live_assets WHERE location_id = ?1 \
+         AND substr(path_key, 1, ?2) = ?3",
     )
     .bind(op.location_id.to_string())
     .bind(i64::try_from(key.len()).map_err(|_| LibraryError::InvalidInput("path too long".into()))?)
@@ -4176,12 +4360,17 @@ async fn current_members(conn: &mut SqliteConnection, session_id: Uuid) -> Resul
     ids.iter().map(|id| parse_uuid(id)).collect()
 }
 
+/// A session's live current members: Trashed ones are in no session read,
+/// assessment basis or total (LIB-FR-18).
 async fn current_member_assets(
     conn: &mut SqliteConnection,
     session_id: Uuid,
 ) -> Result<Vec<Asset>> {
-    let members = current_members(conn, session_id).await?;
-    load_assets(conn, &members).await
+    let rows = sqlx::query(asset_sql!(live "WHERE a.session_id = ?1 ORDER BY a.id"))
+        .bind(session_id.to_string())
+        .fetch_all(&mut *conn)
+        .await?;
+    rows.iter().map(asset_from_row).collect()
 }
 
 async fn load_session_row(conn: &mut SqliteConnection, id: Uuid) -> Result<SessionRow> {
@@ -4264,36 +4453,61 @@ async fn successors_of(conn: &mut SqliteConnection, row: &SessionRow) -> Result<
     }
 }
 
-/// Summaries of these sessions with one D16 view for the whole request.
+/// The row's recorded members within `members`, with the row's asset ids
+/// narrowed to them, so no Trashed id leaks into a live read or the reverse.
+async fn scoped_members(
+    conn: &mut SqliteConnection,
+    row: &mut SessionRow,
+    members: Members,
+) -> Result<Vec<Asset>> {
+    let ids: BTreeSet<Uuid> = row.session.asset_ids.iter().copied().collect();
+    let assets: Vec<Asset> =
+        load_assets(conn, &ids).await?.into_iter().filter(|asset| members.holds(asset)).collect();
+    let kept: BTreeSet<Uuid> = assets.iter().map(|asset| asset.id).collect();
+    row.session.asset_ids.retain(|id| kept.contains(id));
+    Ok(assets)
+}
+
+/// Summaries of these sessions over their `members`, with one D16 view for the
+/// whole request.
 async fn summarize_rows(
     conn: &mut SqliteConnection,
-    rows: Vec<SessionRow>,
+    mut rows: Vec<SessionRow>,
+    members: Members,
 ) -> Result<Vec<SessionSummary>> {
-    let mut members = Vec::with_capacity(rows.len());
+    let mut scoped = Vec::with_capacity(rows.len());
     let mut all = Vec::new();
-    for row in &rows {
-        let ids: BTreeSet<Uuid> = row.session.asset_ids.iter().copied().collect();
-        let assets = load_assets(conn, &ids).await?;
+    for row in &mut rows {
+        let assets = scoped_members(conn, row, members).await?;
         all.extend(assets.iter().cloned());
-        members.push(assets);
+        scoped.push(assets);
     }
     let sessions: Vec<Uuid> = rows.iter().map(|row| row.session.id).collect();
     let view = CaptureView::read(conn, &sessions, &all).await?;
     let mut summaries = Vec::with_capacity(rows.len());
-    for (row, assets) in rows.into_iter().zip(members) {
+    for (row, assets) in rows.into_iter().zip(scoped) {
         let successors = successors_of(conn, &row).await?;
-        summaries.push(view.summary(row, &assets, successors));
+        summaries.push(view.summary(row, &assets, successors, members));
     }
     Ok(summaries)
 }
 
-/// The worst availability among a session's copies that are not retired; Retired
-/// only when every copy is.
+/// The worst availability among a session's copies that are neither retired nor
+/// Trashed. When none is: Retired if any copy is, otherwise Trashed (a summary
+/// of the "Trashed" filter).
 fn session_availability(assets: &[Asset]) -> Availability {
-    let live: Vec<&Asset> =
-        assets.iter().filter(|asset| asset.availability != Availability::Retired).collect();
+    let live: Vec<&Asset> = assets
+        .iter()
+        .filter(|asset| {
+            !matches!(asset.availability, Availability::Retired | Availability::Trashed)
+        })
+        .collect();
     if live.is_empty() && !assets.is_empty() {
-        return Availability::Retired;
+        return if assets.iter().any(|asset| asset.availability == Availability::Retired) {
+            Availability::Retired
+        } else {
+            Availability::Trashed
+        };
     }
     [
         Availability::Offline,
@@ -4421,19 +4635,22 @@ async fn check_expected_assets(
     Ok(assets)
 }
 
-/// Refuse a new decision on a copy of a retired location, naming the copy.
+/// Refuse a new decision or correction on a copy of a retired location or a
+/// Trashed frame (LIB-FR-18), naming the copy.
 fn require_decidable(asset: &Asset) -> Result<()> {
-    if asset.availability == Availability::Retired {
-        return Err(scoped(
-            LibraryError::InvalidInput(format!(
-                "asset {} is a copy of a retired location and takes no new decision",
-                asset.id
-            )),
-            asset.relative_path.clone(),
-            Some(asset.id),
-        ));
-    }
-    Ok(())
+    let refusal = match asset.availability {
+        Availability::Retired => "is a copy of a retired location",
+        Availability::Trashed => "is Trashed",
+        _ => return Ok(()),
+    };
+    Err(scoped(
+        LibraryError::InvalidInput(format!(
+            "asset {} {refusal} and takes no new decision",
+            asset.id
+        )),
+        asset.relative_path.clone(),
+        Some(asset.id),
+    ))
 }
 
 fn capture_fields() -> Result<BTreeSet<String>> {
@@ -4881,6 +5098,9 @@ fn validate_equipment(equipment: &Equipment) -> Result<()> {
     if !positive(equipment.focal_length_mm) || !positive(equipment.pixel_size_um) {
         return Err(LibraryError::InvalidInput("equipment dimensions must be positive".into()));
     }
+    if equipment.sensor_width_px == Some(0) || equipment.sensor_height_px == Some(0) {
+        return Err(LibraryError::InvalidInput("sensor size must be positive".into()));
+    }
     Ok(())
 }
 
@@ -4891,10 +5111,14 @@ async fn upsert_equipment(
 ) -> Result<()> {
     sqlx::query(
         "INSERT INTO equipment (id, name, camera, telescope, focal_length_mm, pixel_size_um, \
-         state, provenance, decision_revision, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT (id) DO UPDATE SET \
+         sensor_width_px, sensor_height_px, color_kind, state, provenance, decision_revision, \
+         updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13) \
+         ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, camera = excluded.camera, telescope = excluded.telescope, \
          focal_length_mm = excluded.focal_length_mm, pixel_size_um = excluded.pixel_size_um, \
+         sensor_width_px = excluded.sensor_width_px, sensor_height_px = excluded.sensor_height_px, \
+         color_kind = excluded.color_kind, \
          state = excluded.state, provenance = excluded.provenance, \
          decision_revision = excluded.decision_revision, updated_at = excluded.updated_at",
     )
@@ -4904,6 +5128,9 @@ async fn upsert_equipment(
     .bind(equipment.telescope.as_deref())
     .bind(equipment.focal_length_mm)
     .bind(equipment.pixel_size_um)
+    .bind(equipment.sensor_width_px)
+    .bind(equipment.sensor_height_px)
+    .bind(equipment.color_kind.as_ref().map(to_text).transpose()?)
     .bind(to_text(&equipment.state)?)
     .bind(to_json(&equipment.provenance)?)
     .bind(db_revision(decision_revision)?)
@@ -4926,6 +5153,13 @@ async fn load_equipment(conn: &mut SqliteConnection, id: Uuid) -> Result<Equipme
         telescope: row.try_get("telescope")?,
         focal_length_mm: row.try_get("focal_length_mm")?,
         pixel_size_um: row.try_get("pixel_size_um")?,
+        sensor_width_px: row.try_get("sensor_width_px")?,
+        sensor_height_px: row.try_get("sensor_height_px")?,
+        color_kind: row
+            .try_get::<Option<String>, _>("color_kind")?
+            .as_deref()
+            .map(from_text)
+            .transpose()?,
         decision_revision: revision(row.try_get("decision_revision")?)?,
         state: from_text(&row.try_get::<String, _>("state")?)?,
         provenance: from_json(&row.try_get::<String, _>("provenance")?)?,
@@ -5221,14 +5455,18 @@ impl CaptureView {
     ) -> Result<Self> {
         let candidates = candidates_in_sessions(conn, sessions).await?;
         let (key_of, copies) = logical_captures(conn, assets).await?;
-        // A retired location is never scanned again, so it keeps no scope provisional.
-        let locations: BTreeMap<Uuid, bool> = assets
-            .iter()
-            .map(|asset| (asset.location_id, asset.availability == Availability::Retired))
-            .collect();
+        // A retired location is never scanned again and a Trashed copy is in no
+        // total, so a location whose read copies are all either keeps no scope
+        // provisional.
+        let mut locations: BTreeMap<Uuid, bool> = BTreeMap::new();
+        for asset in assets {
+            let counted =
+                !matches!(asset.availability, Availability::Retired | Availability::Trashed);
+            *locations.entry(asset.location_id).or_default() |= counted;
+        }
         let mut provisional = HashMap::with_capacity(locations.len());
-        for (id, retired) in locations {
-            provisional.insert(id, !retired && location_provisional(conn, id).await?);
+        for (id, counted) in locations {
+            provisional.insert(id, counted && location_provisional(conn, id).await?);
         }
         Ok(Self { key_of, copies, candidates, provisional })
     }
@@ -5289,13 +5527,21 @@ impl CaptureView {
             .collect()
     }
 
-    fn summary(&self, row: SessionRow, assets: &[Asset], successors: Vec<Uuid>) -> SessionSummary {
+    /// The session's summary over `assets`, its recorded members within `members`.
+    /// Retired copies count no capture; a live read counts no Trashed copy.
+    fn summary(
+        &self,
+        row: SessionRow,
+        assets: &[Asset],
+        successors: Vec<Uuid>,
+        members: Members,
+    ) -> SessionSummary {
         let location_ids: BTreeSet<Uuid> = assets.iter().map(|asset| asset.location_id).collect();
         let provisional = location_ids.iter().any(|id| self.location_provisional(*id))
             || assets.iter().any(|asset| self.candidates.contains(&asset.id));
         let captures: BTreeSet<&str> = assets
             .iter()
-            .filter(|asset| asset.availability != Availability::Retired)
+            .filter(|asset| asset.availability != Availability::Retired && members.holds(asset))
             .map(|asset| self.key(asset))
             .collect();
         SessionSummary {
@@ -5339,33 +5585,34 @@ fn capture_quality(copies: &[&Asset]) -> ApplicableQuality {
     }
 }
 
-/// Every recorded copy, Missing included, of the given digests in Active
-/// locations: a retired copy is never joined to another (no decision transfers).
-const COPIES_BY_DIGEST: &str = asset_sql!(
+/// Every recorded live copy, Missing included, of the given digests in Active
+/// locations: a retired copy is never joined to another (no decision transfers),
+/// and a Trashed copy never joins a live one (LIB-FR-18).
+const COPIES_BY_DIGEST: &str = asset_sql!(live
     "WHERE a.content_sha256 IN (SELECT value FROM json_each(?1)) \
      AND a.session_id IS NOT NULL AND l.lifecycle = 'active' ORDER BY a.location_id, a.id"
 );
 
-const ASSETS_BY_IDS: &str = asset_sql!("WHERE a.id IN (SELECT value FROM json_each(?1))");
+const ASSETS_BY_IDS: &str = asset_sql!(live "WHERE a.id IN (SELECT value FROM json_each(?1))");
 
-/// Recorded copy links touching any of the given assets, between copies of
+/// Recorded copy links touching any of the given assets, between live copies of
 /// Active locations only.
 const LINKS_OF_ASSETS: &str = "SELECT k.left_id, k.right_id FROM copy_links k \
-     WHERE k.left_id IN (SELECT value FROM json_each(?1)) AND NOT EXISTS (SELECT 1 \
-     FROM assets r JOIN locations l ON l.id = r.location_id \
-     WHERE r.id IN (k.left_id, k.right_id) AND l.lifecycle = 'retired') \
+     WHERE k.left_id IN (SELECT value FROM json_each(?1)) AND (SELECT count(*) \
+     FROM live_assets r JOIN locations l ON l.id = r.location_id \
+     WHERE r.id IN (k.left_id, k.right_id) AND l.lifecycle = 'active') = 2 \
      UNION SELECT k.left_id, k.right_id FROM copy_links k \
-     WHERE k.right_id IN (SELECT value FROM json_each(?1)) AND NOT EXISTS (SELECT 1 \
-     FROM assets r JOIN locations l ON l.id = r.location_id \
-     WHERE r.id IN (k.left_id, k.right_id) AND l.lifecycle = 'retired')";
+     WHERE k.right_id IN (SELECT value FROM json_each(?1)) AND (SELECT count(*) \
+     FROM live_assets r JOIN locations l ON l.id = r.location_id \
+     WHERE r.id IN (k.left_id, k.right_id) AND l.lifecycle = 'active') = 2";
 
 /// Assets of the request's sessions with a duplicate candidate: an asset in the
 /// same session (equal capture key) in another location with equal size and an
 /// equal, known capture start that has a time of day, where either side has no
 /// content digest and both can still be read. Unknown or date-only starts never
-/// match. Copies of retired locations are never candidates.
-const CANDIDATES_IN_SESSIONS: &str = "SELECT DISTINCT a.id FROM assets a CROSS JOIN assets b \
-     ON b.session_id = a.session_id AND b.size_bytes = a.size_bytes \
+/// match. Copies of retired locations and Trashed copies are never candidates.
+const CANDIDATES_IN_SESSIONS: &str = "SELECT DISTINCT a.id FROM live_assets a \
+     CROSS JOIN live_assets b ON b.session_id = a.session_id AND b.size_bytes = a.size_bytes \
      AND b.capture_start = a.capture_start \
      AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id \
      AND l.lifecycle = 'active') \
@@ -5375,13 +5622,13 @@ const CANDIDATES_IN_SESSIONS: &str = "SELECT DISTINCT a.id FROM assets a CROSS J
      AND a.availability <> 'missing' AND b.availability <> 'missing' \
      AND (a.content_sha256 IS NULL OR b.content_sha256 IS NULL)";
 
-/// The same matches driven from one location's assets, hashed or not, with each
-/// partner's location; `candidate` marks the duplicate-candidate pairs. Partners
-/// in retired locations never match.
+/// The same matches driven from one location's live assets, hashed or not, with
+/// each partner's location; `candidate` marks the duplicate-candidate pairs.
+/// Partners in retired locations and Trashed partners never match.
 const MATCHES_OF_LOCATION: &str = "SELECT a.id AS id, b.id AS partner, \
      b.location_id AS partner_location, \
      (a.content_sha256 IS NULL OR b.content_sha256 IS NULL) AS candidate \
-     FROM assets a CROSS JOIN assets b ON b.session_id = a.session_id \
+     FROM live_assets a CROSS JOIN live_assets b ON b.session_id = a.session_id \
      AND b.size_bytes = a.size_bytes AND b.capture_start = a.capture_start \
      AND b.location_id IN (SELECT l.id FROM locations l WHERE l.id <> a.location_id \
      AND l.lifecycle = 'active') \
@@ -5389,17 +5636,17 @@ const MATCHES_OF_LOCATION: &str = "SELECT a.id AS id, b.id AS partner, \
      AND instr(a.capture_start, ':') > 0 \
      AND a.availability <> 'missing' AND b.availability <> 'missing'";
 
-const PENDING_IN_LOCATION: &str =
-    "SELECT EXISTS (SELECT 1 FROM assets WHERE location_id = ?1 AND verification_pending = 1)";
+const PENDING_IN_LOCATION: &str = "SELECT EXISTS (SELECT 1 FROM live_assets \
+     WHERE location_id = ?1 AND verification_pending = 1)";
 
-/// A hashed asset that is a copy of a logical capture: its digest is recorded in
-/// another Active location, or a recorded link joins it to a copy there.
-const IS_ALIASED_COPY: &str = "SELECT EXISTS (SELECT 1 FROM assets d \
+/// A hashed asset that is a copy of a logical capture: its digest is recorded on
+/// a live copy in another Active location, or a recorded link joins it to one.
+const IS_ALIASED_COPY: &str = "SELECT EXISTS (SELECT 1 FROM live_assets d \
      JOIN locations l ON l.id = d.location_id \
      WHERE d.content_sha256 = ?1 AND d.location_id <> ?2 AND l.lifecycle = 'active') \
-     OR EXISTS (SELECT 1 FROM copy_links k JOIN assets r ON r.id = k.right_id \
+     OR EXISTS (SELECT 1 FROM copy_links k JOIN live_assets r ON r.id = k.right_id \
      JOIN locations l ON l.id = r.location_id WHERE k.left_id = ?3 AND l.lifecycle = 'active') \
-     OR EXISTS (SELECT 1 FROM copy_links k JOIN assets r ON r.id = k.left_id \
+     OR EXISTS (SELECT 1 FROM copy_links k JOIN live_assets r ON r.id = k.left_id \
      JOIN locations l ON l.id = r.location_id WHERE k.right_id = ?3 AND l.lifecycle = 'active')";
 
 /// Record that an asset whose digest is about to change was byte-identical to its
@@ -5428,7 +5675,8 @@ fn join_copies(parent: &mut HashMap<Uuid, Uuid>, left: Uuid, right: Uuid) {
 /// digest is recorded in at least two registered locations (Missing copies
 /// included) or a recorded link proves the pair: once byte-identical, or an
 /// unambiguous duplicate-candidate pair. A size/start match alone never joins. Any
-/// other asset, and every copy of a retired location, is its own capture. Linked
+/// other asset, every copy of a retired location and every Trashed copy is its own
+/// capture, joined to nothing (LIB-FR-18). Linked
 /// copies and their digest copies are followed until the capture is closed, so
 /// every entry point sees the same copies.
 async fn logical_captures(
@@ -5447,7 +5695,7 @@ async fn logical_captures(
             if nodes.contains_key(&asset.id) {
                 continue;
             }
-            if asset.availability == Availability::Retired {
+            if matches!(asset.availability, Availability::Retired | Availability::Trashed) {
                 nodes.insert(asset.id, asset);
                 continue;
             }
@@ -6219,6 +6467,130 @@ fn hash_contained(
     Ok(hex::encode(hasher.finalize()))
 }
 
+/// What a consumer read from a contained source: its value, the asset as
+/// loaded, the SHA-256 of every byte of the file and the fingerprint observed
+/// around the read with that digest.
+#[derive(Clone, Debug)]
+pub struct ContainedRead<T> {
+    pub value: T,
+    pub asset: Asset,
+    pub sha256: String,
+    pub fingerprint: ObservationFingerprint,
+}
+
+impl Catalog {
+    /// Stream one asset's source to `consume` through the no-follow contained
+    /// open, hashing every byte it reads and any unread remainder. The read is
+    /// of the recorded file (D19): the probe must still observe the asset's
+    /// recorded observation, the opened handle must carry its recorded volume,
+    /// file id, size and nanosecond mtime before and after the read, and
+    /// `require_unchanged_contained` must hold once it ends. Bytes rewritten
+    /// in place under equal stats are read and reported by their current
+    /// digest; a file swapped in with equal stats is refused. Writes no row and
+    /// never calls `verify_digest`.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown asset; `SourceUnavailable` for a Retired or
+    /// Trashed asset or an unreadable source; `IdentityConflict` when the root, a
+    /// folder or the file differs from the recorded observation around the read;
+    /// `InvalidInput` for a link; any error `consume` returns. No value is
+    /// returned on error.
+    pub async fn open_contained<P, T, F>(
+        &self,
+        asset_id: Uuid,
+        probe: P,
+        consume: F,
+    ) -> Result<ContainedRead<T>>
+    where
+        P: SourceProbe,
+        T: Send + 'static,
+        F: FnOnce(&mut dyn Read) -> Result<T> + Send + 'static,
+    {
+        let (asset, location) = {
+            let mut conn = self.reader().await?;
+            let asset = load_asset(&mut conn, asset_id).await?;
+            let location = load_location(&mut conn, asset.location_id).await?;
+            (asset, location)
+        };
+        let refused = match asset.availability {
+            Availability::Retired => Some("the asset's location is retired"),
+            Availability::Trashed => Some("the asset is in the Trash"),
+            _ => None,
+        };
+        if let Some(reason) = refused {
+            return Err(scoped(
+                LibraryError::SourceUnavailable(reason.into()),
+                location.path,
+                Some(asset_id),
+            ));
+        }
+        let relative = asset.relative_path.relative_path()?;
+        let root = SourceRoot::new(location)?;
+        let recorded = asset.fingerprint.clone();
+        let (value, sha256, fingerprint) = blocking(move || {
+            read_contained_source(&root, &relative, &recorded, &probe, consume)
+                .map_err(|error| scoped(error, root.source(&relative), Some(asset_id)))
+        })
+        .await?;
+        Ok(ContainedRead { value, asset, sha256, fingerprint })
+    }
+}
+
+/// Verify the root and require the probe to observe the `recorded` file, open
+/// it without following links, require the handle to be that file, pass a
+/// hashing reader to `consume` and hash the remainder. Then require the handle
+/// unchanged, the folder chain unchanged, the path still naming the recorded
+/// file and the root unchanged.
+fn read_contained_source<P, T, F>(
+    root: &SourceRoot,
+    relative: &Path,
+    recorded: &ObservationFingerprint,
+    probe: &P,
+    consume: F,
+) -> Result<(T, String, ObservationFingerprint)>
+where
+    P: SourceProbe,
+    F: FnOnce(&mut dyn Read) -> Result<T>,
+{
+    root.verify(probe)?;
+    let path = root.path.join(relative);
+    let mut observed = probe.fingerprint(&path)?;
+    if !fingerprint_matches(&observed, recorded) {
+        return Err(changed_source(root, relative));
+    }
+    let (mut file, chain) = open_contained(root, relative)?;
+    require_recorded_handle(root, relative, &file, recorded)?;
+    let mut hasher = Sha256::new();
+    let value = {
+        let mut reader = HashingReader { inner: &mut file, hasher: &mut hasher };
+        let value = consume(&mut reader)?;
+        std::io::copy(&mut reader, &mut std::io::sink())
+            .map_err(|error| LibraryError::from_io(&path, &error))?;
+        value
+    };
+    require_recorded_handle(root, relative, &file, recorded)?;
+    chain.verify_unchanged()?;
+    require_unchanged_contained(root, relative, recorded)?;
+    root.verify(probe)?;
+    let sha256 = hex::encode(hasher.finalize());
+    observed.content_sha256 = Some(sha256.clone());
+    Ok((value, sha256, observed))
+}
+
+/// Hashes exactly the bytes read through it.
+struct HashingReader<'a> {
+    inner: &'a mut std::fs::File,
+    hasher: &'a mut Sha256,
+}
+
+impl Read for HashingReader<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.inner.read(buffer)?;
+        self.hasher.update(&buffer[..read]);
+        Ok(read)
+    }
+}
+
 /// In-transaction recheck that a contained source is still the verified file:
 /// on the recorded volume, with the recorded file id on the opened handle and the
 /// verified size and nanosecond mtime. A replacement with equal stats is refused.
@@ -6228,12 +6600,23 @@ fn require_unchanged_contained(
     fingerprint: &ObservationFingerprint,
 ) -> Result<()> {
     let (file, chain) = open_contained(root, relative)?;
+    chain.verify_unchanged()?;
+    require_recorded_handle(root, relative, &file, fingerprint)
+}
+
+/// The opened handle is the recorded file: on the recorded volume, with the
+/// recorded file id and the recorded size and nanosecond mtime.
+fn require_recorded_handle(
+    root: &SourceRoot,
+    relative: &Path,
+    file: &std::fs::File,
+    fingerprint: &ObservationFingerprint,
+) -> Result<()> {
     let metadata = file
         .metadata()
         .map_err(|error| LibraryError::from_io(&root.path.join(relative), &error))?;
-    chain.verify_unchanged()?;
     if same_volume(&fingerprint.identity.volume, &root.location.identity.volume)
-        && handle_matches(&file, &metadata, &fingerprint.identity)
+        && handle_matches(file, &metadata, &fingerprint.identity)
         && stat_matches(&metadata, fingerprint.size_bytes, fingerprint.modified_ns)
     {
         Ok(())
