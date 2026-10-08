@@ -240,6 +240,9 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::observing_plans::planning_open_notification_settings,
         crate::commands::observing_plans::planning_review_calendar_export,
         crate::commands::observing_plans::planning_export_calendar,
+        crate::commands::observing_plans::planning_tonight,
+        crate::commands::observing_plans::planning_project_windows,
+        crate::commands::observing_plans::planning_target_gaps,
         // targets
         crate::commands::targets_list::planning_target_rows,
         crate::commands::targets_list::targets_search,
