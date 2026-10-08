@@ -502,6 +502,45 @@ impl Catalog {
         })
     }
 
+    /// Record what rehashing `view`'s product inputs before Prepare read
+    /// (RES-FR-05), and in the same write move each input in `reaccepted` to
+    /// the digest its Result is now explicitly accepted with: its current
+    /// bytes hashed to that acceptance digest just now, so reuse resumes. Only
+    /// a recorded acceptance moves an input; bytes a rescan merely read never
+    /// do. Returns the run's product inputs after the write.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown run or Result.
+    pub async fn record_product_input_rehash(
+        &self,
+        view: Uuid,
+        observations: &[(Uuid, Observation)],
+        reaccepted: &[VerifiedProduct],
+    ) -> Result<Vec<ProductInput>> {
+        let at = now()?;
+        write_txn!(self, |conn| {
+            load_view(conn, view).await?;
+            for (id, observation) in observations {
+                load_result(conn, *id).await?;
+                observe(conn, *id, observation, &at).await?;
+            }
+            for product in reaccepted {
+                sqlx::query(
+                    "UPDATE view_product_inputs SET sha256 = ?3 \
+                     WHERE view_id = ?1 AND result_id = ?2 AND sha256 <> ?3 AND EXISTS ( \
+                     SELECT 1 FROM result_candidates WHERE id = ?2 AND state = 'accepted' \
+                     AND accepted_sha256 = ?3)",
+                )
+                .bind(view.to_string())
+                .bind(product.result_id.to_string())
+                .bind(&product.sha256)
+                .execute(&mut *conn)
+                .await?;
+            }
+            product_inputs(conn, view).await
+        })
+    }
+
     /// The product inputs of a run with their originating runs, apart from
     /// its raw sessions. Read-only.
     ///

@@ -648,44 +648,44 @@ fn reread(record: &mut ResultRecord, observation: &Observation) {
 }
 
 /// A run's product input as its rehash before Prepare read it (RES-FR-05):
-/// the fingerprint of the bytes that hash to its acceptance digest, with that
-/// digest as its content SHA-256, or why it is blocked.
+/// the fingerprint of the bytes that hash to its current acceptance digest,
+/// with that digest as its content SHA-256, or why it is blocked.
 pub(crate) struct RehashedProduct {
     pub(crate) input: ProductInput,
     pub(crate) read: Result<ObservationFingerprint, ItemReason>,
 }
 
 /// What Prepare may read of `input` after its rehash: only bytes that hash to
-/// the acceptance digest the input was added with. Reference drift, an
-/// acceptance of other bytes since, or an unreadable file blocks it.
+/// the Result's current explicit acceptance, which the input records as
+/// `recorded` after the rehash write. Reference drift, an acceptance changed
+/// while it was checked, or an unreadable file blocks it.
 fn product_read(
     input: &ProductInput,
+    recorded: Option<&str>,
     verification: InputVerification,
     observation: Observation,
 ) -> Result<ObservationFingerprint, ItemReason> {
     let name = input.result.name();
-    let accepted = input.result.accepted.as_ref().map(|accepted| accepted.sha256.as_str());
+    let accepted = input.result.accepted.as_ref().map_or(input.sha256.as_str(), |a| &a.sha256);
     match (verification, observation) {
         (InputVerification::Verified, Observation::Present { mut fingerprint, .. })
-            if accepted == Some(input.sha256.as_str()) =>
+            if recorded == Some(accepted) =>
         {
-            fingerprint.content_sha256 = Some(input.sha256.clone());
+            fingerprint.content_sha256 = Some(accepted.to_owned());
             Ok(fingerprint)
         }
         (InputVerification::Verified, _) => Err(ItemReason::new(
             ReasonCode::SourceDrift,
-            format!(
-                "Result '{name}' was accepted with other bytes since it became an input of this \
-                 run; add it again"
-            ),
+            format!("Result '{name}' was accepted again while it was checked; review again"),
         )),
         (InputVerification::Drifted { current_sha256 }, _) => Err(ItemReason::new(
             ReasonCode::SourceDrift,
             format!(
-                "Result '{name}' drifted: it hashes to {}, not its accepted {}; review it before \
-                 reuse",
+                "Result '{name}' drifted: it hashes to {}, not its accepted {}; restore the \
+                 accepted bytes, or rescan its run's Results and accept its current bytes, to \
+                 reuse it",
                 short(&current_sha256),
-                short(&input.sha256)
+                short(accepted)
             ),
         )),
         (InputVerification::Unavailable { reason, .. }, _) => Err(ItemReason::new(
@@ -923,7 +923,9 @@ impl Library {
     /// Rehash every product input of `view` against its acceptance digest
     /// before it is prepared (RES-FR-05). What each rehash read is recorded,
     /// so a drifted product reads drifted; equal size and modification time
-    /// never stand in.
+    /// never stand in. An input whose Result was explicitly accepted again
+    /// with the bytes it now holds is reused, and records that digest in the
+    /// same write.
     ///
     /// # Errors
     /// `NotFound` for an unknown run; catalog errors.
@@ -949,11 +951,29 @@ impl Library {
             .iter()
             .map(|(input, _, observation)| (input.result.id, observation.clone()))
             .collect();
-        self.catalog().record_result_observations(&observations).await?;
+        // Verified reads the current bytes against the recorded acceptance, so
+        // only an explicit acceptance of other bytes moves an input.
+        let reaccepted: Vec<VerifiedProduct> = checked
+            .iter()
+            .filter(|(_, verification, _)| *verification == InputVerification::Verified)
+            .filter_map(|(input, ..)| {
+                let accepted = input.result.accepted.as_ref()?;
+                (accepted.sha256 != input.sha256).then(|| VerifiedProduct {
+                    result_id: input.result.id,
+                    sha256: accepted.sha256.clone(),
+                })
+            })
+            .collect();
+        let recorded =
+            self.catalog().record_product_input_rehash(view, &observations, &reaccepted).await?;
         Ok(checked
             .into_iter()
             .map(|(input, verification, observation)| {
-                let read = product_read(&input, verification, observation);
+                let digest = recorded
+                    .iter()
+                    .find(|now| now.result.id == input.result.id)
+                    .map(|now| now.sha256.clone());
+                let read = product_read(&input, digest.as_deref(), verification, observation);
                 RehashedProduct { input, read }
             })
             .collect())

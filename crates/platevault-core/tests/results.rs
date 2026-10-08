@@ -888,3 +888,59 @@ async fn prepare_all_names_a_panel_runs_unsupported_product_inputs() {
         assert!(review.refusals.iter().all(|r| !r.starts_with(other)), "{:?}", review.refusals);
     }
 }
+
+/// RES-FR-05, RES-AC-09, D19: a product input whose bytes drifted after
+/// acceptance blocks Prepare, and a rescan alone that reads the drifted bytes
+/// changes nothing. Once its owner explicitly accepts the current bytes, the
+/// input is reused: Prepare reads it, and the input records the new digest.
+#[tokio::test]
+async fn reaccepted_product_input_is_reused_with_its_new_digest() {
+    let world = world().await;
+    prepared(&world).await;
+    let kind = ResultKind::LinearIntegration;
+    let ha = results_dir(&world).join("Ha_linear.fit");
+    stack(&ha, &[("FILTER", "'Ha'")]);
+    let id = accept(&world.library, run(&world), &ha, kind.clone()).await;
+    let view = world.view().await;
+    let combine = world.library.create_view_with_products(&combine_input(&view), &[id]).await;
+    let combine = combine.unwrap().view.id;
+    world.catalog().save_view(combine, 0, 1).await.unwrap();
+    let reads = world.siril_reading("exit 0", vec![kind]).await;
+    let request = world.request(&reads, InputMode::Copy, None);
+    let accepted = digest(&ha);
+    let input_digest = |inputs: Vec<ProductInput>| inputs[0].sha256.clone();
+
+    overwrite_in_place(&ha);
+    let current = digest(&ha);
+    for rescanned in [false, true] {
+        if rescanned {
+            world.library.rescan_results(run(&world)).await.unwrap();
+            let record = world.catalog().result(id).await.unwrap();
+            assert_eq!(record.sha256.as_deref(), Some(current.as_str()), "the rescan reads it");
+            assert_eq!(record.accepted.as_ref().map(|a| a.sha256.clone()), Some(accepted.clone()));
+        }
+        let review = world.library.review_preparation(combine, &request).await.unwrap();
+        assert!(review.entries.is_empty(), "rescanned {rescanned}: {:?}", review.entries);
+        let detail = &review.blocked[0].reason.detail;
+        assert!(
+            detail.contains("drifted") && detail.contains("accept its current bytes"),
+            "{detail}"
+        );
+        let error = world.library.prepare_run(combine, &request, 1, &Watch::quiet()).await;
+        refused(&error.unwrap_err(), "no input of the run can be prepared");
+        let inputs = world.catalog().view_product_inputs(combine).await.unwrap();
+        assert_eq!(input_digest(inputs), accepted, "drift without acceptance keeps the input");
+    }
+
+    let explicit = AcceptResult { result_id: id, kind: None };
+    let outcome = world.library.accept_results(&[explicit]).await.unwrap();
+    assert!(outcome.refused.is_empty(), "{:?}", outcome.refused);
+    let review = world.library.review_preparation(combine, &request).await.unwrap();
+    assert!(review.refusals.is_empty() && review.blocked.is_empty(), "{review:#?}");
+    assert_eq!(review.entries.len(), 1);
+    let inputs = world.catalog().view_product_inputs(combine).await.unwrap();
+    assert_eq!(input_digest(inputs), current, "the input records the accepted digest");
+    let prepared = world.library.prepare_run(combine, &request, 1, &Watch::quiet()).await.unwrap();
+    assert_eq!(prepared.revision.state, PreparationState::Prepared, "{prepared:#?}");
+    assert_eq!(digest(&native(&prepared.prepared[0].path)), current);
+}
