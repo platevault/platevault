@@ -126,7 +126,8 @@ pub fn validate_location_root(location: &Location) -> Result<FileIdentity, Libra
 /// # Errors
 /// `InvalidInput` for links, junctions and non-regular files, the I/O error
 /// kind when the entry cannot be inspected, and `IdentityConflict` when the
-/// volume identity cannot be qualified.
+/// volume identity cannot be qualified or the entry changed while its file ID
+/// was read (a file still being written).
 pub fn probe_fingerprint(path: &Path) -> Result<ObservationFingerprint, LibraryError> {
     let meta = fs::symlink_metadata(path).map_err(|error| LibraryError::from_io(path, &error))?;
     if fs_pathsafe::is_link_or_junction_metadata(&meta) || !meta.is_file() {
@@ -136,13 +137,8 @@ pub fn probe_fingerprint(path: &Path) -> Result<ObservationFingerprint, LibraryE
         ));
     }
     let volume = identity::volume_of(path, &meta)?;
-    let file_id = identity::file_id(path, &meta, &volume).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::InvalidInput {
-            identity::scoped(LibraryError::InvalidInput(error.to_string()), path)
-        } else {
-            LibraryError::from_io(path, &error)
-        }
-    })?;
+    let file_id = identity::file_id(path, &meta, &volume)
+        .map_err(|error| identity::file_id_error(path, &error))?;
     let modified_ns = meta.modified().ok().and_then(nanos_since_epoch).ok_or_else(|| {
         identity::scoped(
             LibraryError::SourceUnavailable("modification time unavailable".into()),
