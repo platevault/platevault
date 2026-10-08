@@ -305,41 +305,7 @@ async fn group_outcome_partial_when_one_panel_partial() {
 
     // A Running Prepare all blocks Mark Complete and Move run to Trash on
     // each of its panel runs; closing PlateVault leaves it Paused.
-    let review = world.review(&request).await;
-    let location = review.location.clone().unwrap();
-    let input = persistence_library::NewGroupPreparation {
-        group_id: world.group,
-        n: review.preparation_number,
-        profile_id: profile.id,
-        mode: InputMode::Copy,
-        link: None,
-        output: location.output.clone(),
-        folder: location.folder.clone(),
-        assembled: location.assembled.clone(),
-        panels: review
-            .panels
-            .iter()
-            .zip(&location.panels)
-            .map(|(panel, place)| persistence_library::NewPanelPreparation {
-                view_id: panel.view_id,
-                n: panel.preparation_number,
-                membership_revision: panel.membership_revision,
-                folder: place.folder.clone(),
-                results_folder: place.results.clone(),
-                entries: vec![persistence_library::NewPreparedEntry {
-                    member_key: panel.entries[0].member_key,
-                    asset_id: panel.entries[0].asset_id,
-                    master_id: None,
-                    input: PreparedInput::Light,
-                    kind: PreparedEntryKind::Copy,
-                    path: panel.entries[0].path.clone(),
-                    source: Some(panel.entries[0].source.clone()),
-                    size_bytes: panel.entries[0].size_bytes,
-                    blocked: None,
-                }],
-            })
-            .collect(),
-    };
+    let input = world.running_input(&profile, &request).await;
     let running = world.catalog().start_group_preparation(&input).await.unwrap();
     assert_eq!(running.preparation.outcome, Running);
     let name = format!("{MOSAIC} (rev 3)");

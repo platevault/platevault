@@ -436,6 +436,50 @@ impl GroupWorld {
         self.library.prepare_group(self.group, request, &review.basis(), control).await.unwrap()
     }
 
+    /// What records the next Prepare all Running for the reviewed `request`
+    /// with `profile`: one Copy of each panel run's first light, none written.
+    pub async fn running_input(
+        &self,
+        profile: &Profile,
+        request: &PrepareRequest,
+    ) -> persistence_library::NewGroupPreparation {
+        let review = self.review(request).await;
+        let location = review.location.clone().unwrap();
+        persistence_library::NewGroupPreparation {
+            group_id: self.group,
+            n: review.preparation_number,
+            profile_id: profile.id,
+            mode: InputMode::Copy,
+            link: None,
+            output: location.output.clone(),
+            folder: location.folder.clone(),
+            assembled: location.assembled.clone(),
+            panels: review
+                .panels
+                .iter()
+                .zip(&location.panels)
+                .map(|(panel, place)| persistence_library::NewPanelPreparation {
+                    view_id: panel.view_id,
+                    n: panel.preparation_number,
+                    membership_revision: panel.membership_revision,
+                    folder: place.folder.clone(),
+                    results_folder: place.results.clone(),
+                    entries: vec![persistence_library::NewPreparedEntry {
+                        member_key: panel.entries[0].member_key,
+                        asset_id: panel.entries[0].asset_id,
+                        master_id: None,
+                        input: PreparedInput::Light,
+                        kind: PreparedEntryKind::Copy,
+                        path: panel.entries[0].path.clone(),
+                        source: Some(panel.entries[0].source.clone()),
+                        size_bytes: panel.entries[0].size_bytes,
+                        blocked: None,
+                    }],
+                })
+                .collect(),
+        }
+    }
+
     /// `<output>/<Project>/<Mosaic>` or a later group folder.
     pub fn group_folder(&self, name: &str) -> PathBuf {
         self.output.join(PROJECT).join(name)

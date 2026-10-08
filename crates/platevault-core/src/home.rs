@@ -44,8 +44,8 @@ pub struct HomeDashboard {
     pub tonight: Tonight,
     /// 5. Every Target with an unmet goal in an open Project, by designation.
     pub target_status: Vec<TargetStatus>,
-    /// 6. Running scans, measurement runs, preparations, imports and storage
-    ///    operations, in that order.
+    /// 6. Running scans, measurement runs, preparations, Prepare all of run
+    ///    groups, imports and storage operations, in that order.
     pub running_work: Vec<RunningWork>,
 }
 
@@ -289,6 +289,18 @@ impl Library {
                     number: revision.n,
                     folder: revision.folder,
                     started_at: revision.started_at,
+                });
+            }
+        }
+        for id in running.group_preparations {
+            let preparation = catalog.group_preparation(id).await?.preparation;
+            if preparation.outcome == PreparationState::Running {
+                work.push(RunningWork::PrepareAll {
+                    group_preparation_id: preparation.id,
+                    group_id: preparation.group_id,
+                    number: preparation.n,
+                    folder: preparation.folder,
+                    started_at: preparation.started_at,
                 });
             }
         }

@@ -8,6 +8,8 @@
 //! external drift in an entry the application wrote blocks that item.
 #![cfg(unix)]
 
+#[path = "support/prepare_group.rs"]
+mod group_support;
 #[path = "support/storage_overview.rs"]
 mod overview_support;
 #[path = "support/prepare.rs"]
@@ -133,8 +135,61 @@ async fn overview_separates_availability_footprints_duplicates_transfers() {
     let sections: BTreeSet<&str> = wire.as_object().unwrap().keys().map(String::as_str).collect();
     assert_eq!(
         sections,
-        ["duplicates", "footprints", "locations", "transfers"].into_iter().collect()
+        ["duplicates", "footprints", "groupFootprints", "locations", "transfers"]
+            .into_iter()
+            .collect()
     );
+    assert!(overview.group_footprints.is_empty(), "{:#?}", overview.group_footprints);
+}
+
+/// STO-FR-11, PREP-FR-12/13: a run group's Prepare all shows as its group
+/// folder with the panel run revisions in it, their copies' bytes and the
+/// Assembled folder, and each panel run lists its `Panel N/` revision.
+#[tokio::test]
+async fn group_footprint_lists_prepare_all_and_assembled() {
+    let world = group_support::group_world().await;
+    let profile = world.wbpp(QUIET).await;
+    let request = world.setup(&profile, InputMode::Copy).await;
+    let outcome = world.prepare_all(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.preparation.outcome, PreparationState::Prepared, "{outcome:#?}");
+
+    let overview = world.library.storage_overview().await.unwrap();
+    assert_eq!(overview.footprints.len(), 3, "{:#?}", overview.footprints);
+    let mut panel_bytes = 0;
+    for panel in &outcome.panels {
+        let prepared = &panel.outcome.revision;
+        let run = overview.footprints.iter().find(|run| run.view_id == prepared.view_id).unwrap();
+        assert_eq!(run.results_folder.as_ref(), Some(&prepared.results_folder));
+        let [revision] = run.revisions.as_slice() else {
+            panic!("Panel {}: {:#?}", panel.number, run.revisions);
+        };
+        assert_eq!((revision.preparation_id, &revision.folder), (prepared.id, &prepared.folder));
+        assert_eq!(revision.group_preparation_id, Some(outcome.preparation.id));
+        panel_bytes += revision.footprint_bytes;
+    }
+    assert!(panel_bytes > 0);
+
+    let [group] = overview.group_footprints.as_slice() else {
+        panic!("{:#?}", overview.group_footprints);
+    };
+    assert_eq!(
+        (group.group_id, group.project_id, group.name.as_str()),
+        (world.group, world.project, group_support::MOSAIC)
+    );
+    assert_eq!(group.assembled_folder.as_ref(), Some(&outcome.assembled));
+    let [revision] = group.revisions.as_slice() else {
+        panic!("{:#?}", group.revisions);
+    };
+    assert_eq!(
+        (revision.group_preparation_id, revision.n, revision.outcome),
+        (outcome.preparation.id, 1, PreparationState::Prepared)
+    );
+    assert_eq!(revision.folder, outcome.preparation.folder);
+    let listed: BTreeSet<Uuid> = revision.panel_preparations.iter().copied().collect();
+    let panels: BTreeSet<Uuid> =
+        outcome.panels.iter().map(|panel| panel.outcome.revision.id).collect();
+    assert_eq!(listed, panels);
+    assert_eq!((revision.footprint_bytes, group.footprint_bytes), (panel_bytes, panel_bytes));
 }
 
 /// STO-FR-11, D16: showing a duplicate candidate, however often, records no

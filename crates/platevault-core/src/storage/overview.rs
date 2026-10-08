@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! The Storage overview (STO-FR-11, STO-FR-12, STO-AC-12, D16): registered
-//! locations with their availability, run footprints, library-wide
-//! content-identity duplicate candidates and archive transfers, each in its
-//! own section.
+//! locations with their availability, run footprints (each run's, and each
+//! run group's Prepare all), library-wide content-identity duplicate
+//! candidates and archive transfers, each in its own section.
 //!
 //! The overview only reads. Displaying a duplicate candidate authorizes
 //! nothing: it records no operation, approves no removal and changes no
@@ -40,6 +40,9 @@ use crate::{
 pub struct StorageOverview {
     pub locations: Vec<LocationAvailability>,
     pub footprints: Vec<RunFootprint>,
+    /// Run groups' Prepare all footprints; each `Panel N/` folder is also its
+    /// panel run's revision in `footprints`.
+    pub group_footprints: Vec<GroupFootprint>,
     pub duplicates: Vec<DuplicateCandidate>,
     pub transfers: Vec<TransferView>,
 }
@@ -74,6 +77,8 @@ pub struct RevisionFootprint {
     pub preparation_id: Uuid,
     pub n: u32,
     pub folder: NativePath,
+    /// The Prepare all whose group folder holds this panel run revision.
+    pub group_preparation_id: Option<Uuid>,
     pub state: PreparationState,
     pub mode: InputMode,
     pub link: Option<LinkKind>,
@@ -83,6 +88,36 @@ pub struct RevisionFootprint {
     pub footprint_bytes: u64,
     /// Written entries blocked for review: recorded drift, or drift found now.
     pub blocked: Vec<BlockedEntry>,
+}
+
+/// The folders a run group's Prepare all revisions wrote (PREP-FR-12/13):
+/// each group folder, holding one `Panel N/` per panel run, and the group's
+/// `<Mosaic> Results/Assembled/`.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupFootprint {
+    pub group_id: Uuid,
+    pub project_id: Uuid,
+    /// The mosaic's name: the `<Mosaic>` of its group and Results folders.
+    pub name: String,
+    pub assembled_folder: Option<NativePath>,
+    pub revisions: Vec<GroupRevisionFootprint>,
+    /// Bytes held by the copies of every revision's panel runs.
+    pub footprint_bytes: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupRevisionFootprint {
+    pub group_preparation_id: Uuid,
+    pub n: u32,
+    /// `<Mosaic>/` or `<Mosaic> (rev N)/`.
+    pub folder: NativePath,
+    pub outcome: PreparationState,
+    /// The panel run revisions in its `Panel N/` folders.
+    pub panel_preparations: Vec<Uuid>,
+    /// Bytes held by those revisions' copies.
+    pub footprint_bytes: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -136,9 +171,13 @@ impl Library {
     /// # Errors
     /// Catalog read failures.
     pub async fn storage_overview(&self) -> Result<StorageOverview, LibraryError> {
+        let locations = self.location_availability().await?;
+        let footprints = self.run_footprints().await?;
+        let group_footprints = self.group_footprints(&footprints).await?;
         Ok(StorageOverview {
-            locations: self.location_availability().await?,
-            footprints: self.run_footprints().await?,
+            locations,
+            footprints,
+            group_footprints,
             duplicates: duplicate_candidates(self.catalog().live_duplicate_copies().await?),
             transfers: self.transfer_views().await?,
         })
@@ -188,6 +227,56 @@ impl Library {
             left.name.cmp(&right.name).then(left.view_id.cmp(&right.view_id))
         });
         Ok(runs)
+    }
+
+    /// Each run group's Prepare all revisions, counting the bytes of the
+    /// panel run revisions `runs` lists in each group folder.
+    async fn group_footprints(
+        &self,
+        runs: &[RunFootprint],
+    ) -> Result<Vec<GroupFootprint>, LibraryError> {
+        let catalog = self.catalog();
+        let mut groups = Vec::new();
+        for group_id in catalog.groups_with_footprint().await? {
+            let basis = catalog.group_preparation_basis(group_id).await?;
+            let revisions: Vec<GroupRevisionFootprint> = basis
+                .preparations
+                .into_iter()
+                .map(|preparation| {
+                    let panels: Vec<&RevisionFootprint> = runs
+                        .iter()
+                        .flat_map(|run| &run.revisions)
+                        .filter(|revision| revision.group_preparation_id == Some(preparation.id))
+                        .collect();
+                    GroupRevisionFootprint {
+                        group_preparation_id: preparation.id,
+                        n: preparation.n,
+                        folder: preparation.folder,
+                        outcome: preparation.outcome,
+                        panel_preparations: panels
+                            .iter()
+                            .map(|revision| revision.preparation_id)
+                            .collect(),
+                        footprint_bytes: panels
+                            .iter()
+                            .map(|revision| revision.footprint_bytes)
+                            .sum(),
+                    }
+                })
+                .collect();
+            groups.push(GroupFootprint {
+                group_id,
+                project_id: basis.group.project_id,
+                name: basis.group.name,
+                assembled_folder: basis.assembled,
+                footprint_bytes: revisions.iter().map(|revision| revision.footprint_bytes).sum(),
+                revisions,
+            });
+        }
+        groups.sort_by(|left, right| {
+            left.name.cmp(&right.name).then(left.group_id.cmp(&right.group_id))
+        });
+        Ok(groups)
     }
 
     async fn transfer_views(&self) -> Result<Vec<TransferView>, LibraryError> {
@@ -248,6 +337,7 @@ fn revision_footprint(record: PreparationRecord) -> RevisionFootprint {
         preparation_id: revision.id,
         n: revision.n,
         folder: revision.folder,
+        group_preparation_id: revision.group_preparation_id,
         state: revision.state,
         mode: revision.mode,
         link: revision.link,

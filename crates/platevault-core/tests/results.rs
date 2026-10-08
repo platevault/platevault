@@ -10,6 +10,8 @@
 //! the Result-input Trash refusal and the once-only master offer.
 #![cfg(unix)]
 
+#[path = "support/prepare_group.rs"]
+mod group_support;
 #[path = "support/prepare.rs"]
 mod prepare_support;
 #[path = "support/results.rs"]
@@ -19,13 +21,14 @@ mod support;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
+use group_support::{group_world, panel as group_panel, GroupWorld, MOSAIC};
 use platevault_core::*;
 use prepare_support::{
     digest, overwrite_in_place, restore_in_place, world, Watch, World, PROJECT, RUN,
 };
 use results_support::{
-    accept, database, find, group_world, paths, prepared, record_results_folder, results_dir,
-    settle, stack, text, GroupWorld,
+    accept, database, find, paths, prepared, record_results_folder, results_dir, settle, stack,
+    text,
 };
 use uuid::Uuid;
 
@@ -367,7 +370,7 @@ async fn product_from_other_rig_offered_as_input_with_rig() {
         .unwrap();
     let source = other_run(&world, esprit.id, "NGC7000-OIII-Esprit").await;
     let folder = world.output.join(PROJECT).join("NGC7000-OIII-Esprit Results");
-    record_results_folder(&database(&world), Some(source), None, "run", &folder).await;
+    record_results_folder(&database(&world), source, &folder).await;
     let product = folder.join("OIII_linear.fit");
     stack(&product, &[("FILTER", "'OIII'")]);
     let id = accept(
@@ -397,29 +400,21 @@ async fn product_from_other_rig_offered_as_input_with_rig() {
     assert!(again.iter().all(|offer| offer.result.id != id), "an input is not offered twice");
 }
 
-async fn recorded_group() -> GroupWorld {
+/// `group_support`'s run group Prepared once by Prepare all, which records
+/// each panel run's `<Mosaic> Results/Panel N/` and the group's
+/// `<Mosaic> Results/Assembled/`.
+async fn prepared_group() -> (GroupWorld, GroupPreparationOutcome) {
     let world = group_world().await;
+    let profile = world.wbpp("exit 0").await;
+    let request = world.setup(&profile, InputMode::Copy).await;
+    let outcome = world.prepare_all(&request, &Watch::quiet()).await;
+    assert_eq!(outcome.preparation.outcome, PreparationState::Prepared, "{outcome:#?}");
     for number in 1..=3 {
-        let folder = world.results().join(format!("Panel {number}"));
-        record_results_folder(
-            &world.database,
-            Some(world.panel_run(number)),
-            None,
-            "panel",
-            &folder,
-        )
-        .await;
+        let recorded = &group_panel(&outcome, number).revision.results_folder;
+        assert_eq!(native(recorded), world.results().join(format!("Panel {number}")));
     }
-    let assembled = world.results().join("Assembled");
-    record_results_folder(
-        &world.database,
-        None,
-        Some(world.group.group.id),
-        "assembled",
-        &assembled,
-    )
-    .await;
-    world
+    assert_eq!(native(&outcome.assembled), world.results().join("Assembled"));
+    (world, outcome)
 }
 
 /// RES-AC-11, RES-FR-08: each panel run lists exactly its own `Panel N/`
@@ -427,11 +422,11 @@ async fn recorded_group() -> GroupWorld {
 /// prepared group folder is never read.
 #[tokio::test]
 async fn panel_inferred_from_folder_only() {
-    let world = recorded_group().await;
-    stack(&world.project_dir.join("Cygnus Wall/Panel 2/stray.fit"), &[]);
+    let (world, _) = prepared_group().await;
+    stack(&world.group_folder(MOSAIC).join("Panel 2/stray.fit"), &[]);
     let panel2 = world.results().join("Panel 2/stack.fit");
-    stack(&panel2, &[("OBJECT", "'Cygnus Wall Panel 3'")]);
-    let owner = |number| ResultOwner::Run { view_id: world.panel_run(number) };
+    stack(&panel2, &[("OBJECT", format!("'{MOSAIC} Panel 3'").as_str())]);
+    let owner = |number| ResultOwner::Run { view_id: world.run(number) };
     // Panel 3 (which the header names) and Panel 1 open first: neither claims it.
     for other in [3, 1] {
         let listing = world.library.rescan_results(owner(other)).await.unwrap();
@@ -448,22 +443,21 @@ async fn panel_inferred_from_folder_only() {
 /// and the mosaic subject, and no panel run changes.
 #[tokio::test]
 async fn assembled_is_group_result() {
-    let world = recorded_group().await;
-    let assembled = world.results().join("Assembled/Cygnus Wall mosaic.fit");
-    stack(&assembled, &[("OBJECT", "'Cygnus Wall'")]);
+    let (world, outcome) = prepared_group().await;
+    let assembled = native(&outcome.assembled).join(format!("{MOSAIC} mosaic.fit"));
+    stack(&assembled, &[("OBJECT", format!("'{MOSAIC}'").as_str())]);
     let catalog = world.library.catalog();
     let mut runs = Vec::new();
     for number in 1..=3 {
-        runs.push(catalog.view(world.panel_run(number)).await.unwrap());
+        runs.push(catalog.view(world.run(number)).await.unwrap());
     }
-    let group = ResultOwner::Group { group_id: world.group.group.id };
+    let group = ResultOwner::Group { group_id: world.group };
     let listing = world.library.rescan_results(group).await.unwrap();
     assert_eq!(paths(&listing.candidates), vec![assembled.clone()]);
     let record = &listing.candidates[0];
     assert_eq!(record.kind, Some(ResultKind::AssembledMosaic));
     assert_eq!(record.owner, group);
-    let panel =
-        world.library.rescan_results(ResultOwner::Run { view_id: world.panel_run(1) }).await;
+    let panel = world.library.rescan_results(ResultOwner::Run { view_id: world.run(1) }).await;
     assert!(panel.unwrap().candidates.is_empty(), "the group Result is no panel's");
     let outcome = world
         .library
@@ -472,13 +466,13 @@ async fn assembled_is_group_result() {
         .unwrap();
     assert_eq!(outcome.accepted.len(), 1, "{:?}", outcome.refused);
     assert_eq!(outcome.accepted[0].lineage, ResultLineage::Unknown);
-    let accepted = catalog.accepted_results(Some(world.project.id), None).await.unwrap();
+    let accepted = catalog.accepted_results(Some(world.project), None).await.unwrap();
     assert_eq!(accepted.len(), 1);
     assert_eq!(accepted[0].origin.owner, group);
-    assert_eq!(accepted[0].origin.subject_name, "Cygnus Wall");
-    assert_eq!(accepted[0].origin.subject_id, world.project.subjects[0].id);
+    assert_eq!(accepted[0].origin.subject_name, MOSAIC);
+    assert_eq!(accepted[0].origin.subject_id, runs[0].view.subject_id);
     for (number, before) in (1..=3).zip(&runs) {
-        assert_eq!(&catalog.view(world.panel_run(number)).await.unwrap(), before);
+        assert_eq!(&catalog.view(world.run(number)).await.unwrap(), before);
     }
     let other = world.temp.path().join("final.fit");
     stack(&other, &[]);
@@ -488,6 +482,14 @@ async fn assembled_is_group_result() {
         .await
         .unwrap_err();
     refused(&error, "Assembled mosaic");
+    let in_group_folder = world.group_folder(MOSAIC).join("loose.fit");
+    stack(&in_group_folder, &[]);
+    let error = world
+        .library
+        .attach_result(group, NativePath::from_path(&in_group_folder), ResultKind::AssembledMosaic)
+        .await
+        .unwrap_err();
+    refused(&error, "lies in the recorded folder");
 }
 
 /// RES-AC-20, RES-FR-10: Move run to Trash is refused while the run's

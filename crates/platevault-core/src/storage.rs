@@ -5,6 +5,6 @@
 
 mod overview;
 pub use overview::{
-    BlockedEntry, DuplicateCandidate, LocationAvailability, RevisionFootprint, RunFootprint,
-    StorageOverview, TransferItemView, TransferView,
+    BlockedEntry, DuplicateCandidate, GroupFootprint, GroupRevisionFootprint, LocationAvailability,
+    RevisionFootprint, RunFootprint, StorageOverview, TransferItemView, TransferView,
 };

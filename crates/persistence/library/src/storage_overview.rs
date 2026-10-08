@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Storage overview reads (spec 071 STO-FR-11, D16): the library-wide
-//! content-identity duplicate copies, the archive transfers and the runs
-//! with a recorded footprint. Every query here only reads; none records an
-//! operation or changes a decision.
+//! content-identity duplicate copies, the archive transfers, and the runs
+//! and run groups with a recorded footprint. Every query here only reads;
+//! none records an operation or changes a decision.
 
 use platevault_model::{Availability, LibraryError, NativePath, StorageOperation};
 use serde::{Deserialize, Serialize};
@@ -100,6 +100,22 @@ impl Catalog {
             "SELECT view_id FROM preparation_revisions \
              UNION SELECT view_id FROM results_folders WHERE view_id IS NOT NULL \
              ORDER BY view_id",
+        )
+        .fetch_all(&mut *conn)
+        .await?;
+        ids.iter().map(|id| parse_uuid(id)).collect()
+    }
+
+    /// The run groups with a recorded Prepare all or Assembled folder.
+    ///
+    /// # Errors
+    /// `PersistenceFailure` when the catalog cannot be read.
+    pub async fn groups_with_footprint(&self) -> Result<Vec<Uuid>> {
+        let mut conn = self.reader().await?;
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT group_id FROM group_preparations \
+             UNION SELECT group_id FROM results_folders WHERE group_id IS NOT NULL \
+             ORDER BY group_id",
         )
         .fetch_all(&mut *conn)
         .await?;

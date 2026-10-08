@@ -9,6 +9,8 @@
 //! running work of every kind.
 #![cfg(unix)]
 
+#[path = "support/prepare_group.rs"]
+mod group_support;
 #[path = "support/home.rs"]
 mod home_support;
 #[path = "support/prepare.rs"]
@@ -311,6 +313,9 @@ async fn running_work_lists_scan_measurement_prepare_import_storage() {
                 RunningWork::Scan { operation_id, .. } => ("scan", *operation_id),
                 RunningWork::Measurement { operation_id, .. } => ("measurement", *operation_id),
                 RunningWork::Prepare { preparation_id, .. } => ("prepare", *preparation_id),
+                RunningWork::PrepareAll { group_preparation_id, .. } => {
+                    ("prepare_all", *group_preparation_id)
+                }
                 RunningWork::Import { import_id, .. } => ("import", *import_id),
                 RunningWork::Storage { operation_id, .. } => ("storage", *operation_id),
             })
@@ -331,4 +336,35 @@ async fn running_work_lists_scan_measurement_prepare_import_storage() {
     let home = dashboard(&world.library, false).await;
     assert!(!listed(&home).contains(&("prepare", preparation.id)));
     assert_eq!(listed(&home).len(), 4);
+}
+
+/// PRJ-FR-17 section 6, PREP-FR-12: a Running Prepare all is listed once,
+/// never once per panel run, and leaves the list when it ends.
+#[tokio::test]
+async fn running_work_lists_prepare_all_once() {
+    let world = group_support::group_world().await;
+    let profile = world.wbpp("exit 0").await;
+    let request = world.setup(&profile, InputMode::Copy).await;
+    let input = world.running_input(&profile, &request).await;
+    let running = world.catalog().start_group_preparation(&input).await.unwrap().preparation;
+    assert_eq!(running.outcome, PreparationState::Running);
+
+    let home = dashboard(&world.library, false).await;
+    let [RunningWork::PrepareAll { group_preparation_id, group_id, number, folder, started_at }] =
+        home.running_work.as_slice()
+    else {
+        panic!("one Prepare all and no panel run's own Prepare: {:#?}", home.running_work);
+    };
+    assert_eq!(*group_preparation_id, running.id);
+    assert_eq!(*group_id, world.group);
+    assert_eq!(*number, 1);
+    assert_eq!(folder, &running.folder);
+    assert_eq!(started_at, &running.started_at);
+    world
+        .catalog()
+        .finish_group_preparation(running.id, PreparationState::Canceled, None)
+        .await
+        .unwrap();
+    let home = dashboard(&world.library, false).await;
+    assert!(home.running_work.is_empty(), "{:#?}", home.running_work);
 }

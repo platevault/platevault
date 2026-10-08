@@ -29,6 +29,7 @@ use sqlx::{Connection, Row};
 use uuid::Uuid;
 
 use super::calibration::{offer_master, open_offers};
+use super::prepare::{load_assembled_folder, load_recorded_folders, load_results_folder};
 use super::views::{insert_view, load_record, load_view, require_live, require_open};
 use super::{from_json, from_text, now, parse_uuid, to_json, to_text, Catalog, Result};
 
@@ -587,19 +588,10 @@ async fn load_folder(
     conn: &mut SqliteConnection,
     owner: ResultOwner,
 ) -> Result<Option<NativePath>> {
-    let path: Option<String> = match owner {
-        ResultOwner::Run { view_id } => {
-            sqlx::query_scalar("SELECT path FROM results_folders WHERE view_id = ?1")
-                .bind(view_id.to_string())
-        }
-        ResultOwner::Group { group_id } => sqlx::query_scalar(
-            "SELECT path FROM results_folders WHERE group_id = ?1 AND kind = 'assembled'",
-        )
-        .bind(group_id.to_string()),
+    match owner {
+        ResultOwner::Run { view_id } => load_results_folder(conn, view_id).await,
+        ResultOwner::Group { group_id } => load_assembled_folder(conn, group_id).await,
     }
-    .fetch_optional(&mut *conn)
-    .await?;
-    path.as_deref().map(from_json).transpose()
 }
 
 async fn owner_records(
@@ -708,15 +700,13 @@ async fn path_recorded(conn: &mut SqliteConnection, path: &NativePath) -> Result
     Ok(found.is_some())
 }
 
-/// The recorded Results or prepared folder holding `path`, if any.
+/// The recorded Results or prepared folder holding `path`, if any: a run's
+/// revision, a panel run's `Panel N/`, a run group's group folder, or any
+/// Results folder.
 async fn containing_folder(conn: &mut SqliteConnection, path: &Path) -> Result<Option<PathBuf>> {
-    let folders: Vec<String> = sqlx::query_scalar(
-        "SELECT path FROM results_folders UNION ALL SELECT folder FROM preparation_revisions",
-    )
-    .fetch_all(&mut *conn)
-    .await?;
-    for folder in folders {
-        let folder = from_json::<NativePath>(&folder)?.to_path_buf()?;
+    let recorded = load_recorded_folders(conn).await?;
+    for folder in recorded.results.iter().chain(&recorded.prepared) {
+        let folder = folder.to_path_buf()?;
         if path.starts_with(&folder) {
             return Ok(Some(folder));
         }

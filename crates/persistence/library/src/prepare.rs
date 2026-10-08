@@ -448,19 +448,7 @@ impl Catalog {
     /// `PersistenceFailure` when the catalog cannot be read.
     pub async fn recorded_preparation_folders(&self) -> Result<RecordedFolders> {
         let mut conn = self.reader().await?;
-        let prepared: Vec<String> = sqlx::query_scalar(
-            "SELECT folder FROM (SELECT folder, started_at, id FROM preparation_revisions \
-             UNION ALL SELECT folder, started_at, id FROM group_preparations) \
-             ORDER BY started_at, id",
-        )
-        .fetch_all(&mut *conn)
-        .await?;
-        let results: Vec<String> =
-            sqlx::query_scalar("SELECT path FROM results_folders").fetch_all(&mut *conn).await?;
-        Ok(RecordedFolders {
-            prepared: prepared.iter().map(|path| from_json(path)).collect::<Result<_>>()?,
-            results: results.iter().map(|path| from_json(path)).collect::<Result<_>>()?,
-        })
+        load_recorded_folders(&mut conn).await
     }
 
     /// The parent folder the latest preparation chose: review's default.
@@ -1089,7 +1077,8 @@ async fn load_group_preparation(
     Ok(GroupPreparationRecord { preparation, panels })
 }
 
-async fn load_assembled_folder(
+/// The run group's recorded `Assembled/` folder, once Prepare all recorded it.
+pub(super) async fn load_assembled_folder(
     conn: &mut SqliteConnection,
     group: Uuid,
 ) -> Result<Option<NativePath>> {
@@ -1234,7 +1223,8 @@ async fn load_view_revisions(
     rows.iter().map(revision_row).collect()
 }
 
-async fn load_results_folder(
+/// The Results folder recorded for a run or panel run, shared by its revisions.
+pub(super) async fn load_results_folder(
     conn: &mut SqliteConnection,
     view: Uuid,
 ) -> Result<Option<NativePath>> {
@@ -1244,6 +1234,24 @@ async fn load_results_folder(
             .fetch_optional(&mut *conn)
             .await?;
     path.as_deref().map(from_json).transpose()
+}
+
+/// Every recorded prepared folder (a run's revision, a panel run's `Panel N/`
+/// and a run group's group folder) and every recorded Results folder.
+pub(super) async fn load_recorded_folders(conn: &mut SqliteConnection) -> Result<RecordedFolders> {
+    let prepared: Vec<String> = sqlx::query_scalar(
+        "SELECT folder FROM (SELECT folder, started_at, id FROM preparation_revisions \
+         UNION ALL SELECT folder, started_at, id FROM group_preparations) \
+         ORDER BY started_at, id",
+    )
+    .fetch_all(&mut *conn)
+    .await?;
+    let results: Vec<String> =
+        sqlx::query_scalar("SELECT path FROM results_folders").fetch_all(&mut *conn).await?;
+    Ok(RecordedFolders {
+        prepared: prepared.iter().map(|path| from_json(path)).collect::<Result<_>>()?,
+        results: results.iter().map(|path| from_json(path)).collect::<Result<_>>()?,
+    })
 }
 
 async fn load_entry(conn: &mut SqliteConnection, id: Uuid, seq: u32) -> Result<PreparedEntry> {

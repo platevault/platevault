@@ -209,6 +209,15 @@ pub enum RunningWork {
         folder: NativePath,
         started_at: String,
     },
+    /// A run group's Prepare all, listed once for all its panel runs.
+    PrepareAll {
+        group_preparation_id: Uuid,
+        group_id: Uuid,
+        number: u32,
+        /// `<Mosaic>/` or `<Mosaic> (rev N)/`.
+        folder: NativePath,
+        started_at: String,
+    },
     Import {
         import_id: Uuid,
         source_path: NativePath,
