@@ -1,13 +1,15 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The Targets list (spec 072 PLAN-TGT-FR-01..05/07..10) on the [`Library`]
+//! The Targets list (spec 072 PLAN-TGT-FR-01..13) on the [`Library`]
 //! facade: My targets (★ favourites plus the subjects of open Projects, with
 //! their badges, D-W60), Browse catalogues, unified search over My targets,
 //! the bundled catalogues and SIMBAD, tonight's planning columns, Sessions and
-//! Captured per channel over frames outside the Trash, and the built-in and
-//! saved presets. Every planning value comes from [`planning::target_night`],
-//! the computation behind the Plan area windows; nothing is stored.
+//! Captured per channel over frames outside the Trash, the built-in and saved
+//! presets, and for the selected rigs the Fit per rig, the Filters strip as
+//! the union of their bands and the rig-dependent presets. Every planning
+//! value comes from [`planning::target_night`], the computation behind the
+//! Plan area windows; nothing is stored.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -20,11 +22,13 @@ use crate::library::{blocking, Library};
 use crate::planning::{self, NightContext, TargetNight};
 use crate::targets::TargetQuery;
 use crate::{
-    AddTarget, Band, BandState, BuiltinPreset, BuiltinPresetInfo, Catalogue, LibraryError,
-    MyTargetMarks, ObservingSite, PlanningUnknownReason, PresetFilters, PresetRef, Recommendation,
-    Revision, SavedPreset, SimbadSearch, TargetActivity, TargetRecord, TargetRow, TargetsBasis,
-    TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsSearchResult,
+    AddTarget, AngularSize, Band, BandState, BuiltinPreset, BuiltinPresetInfo, Catalogue,
+    FieldOfView, Fit, FitUnknownReason, LibraryError, MyTargetMarks, ObservingSite,
+    PlanningUnknownReason, PresetFilters, PresetRef, Recommendation, Revision, RigFit,
+    RigSelection, SavedPreset, SimbadSearch, TargetActivity, TargetRecord, TargetRow, TargetsBasis,
+    TargetsColumn, TargetsPage, TargetsPresets, TargetsQuery, TargetsRig, TargetsSearchResult,
     TargetsSearchResults, TargetsSearchSource, TargetsShow, TargetsSort, WindowUnavailableReason,
+    FIT_MIN_COVERAGE,
 };
 
 /// Local search results listed before the SIMBAD result.
@@ -36,12 +40,16 @@ impl Library {
     /// One Targets list page: the rows of the Show mode, catalogues and preset
     /// with tonight's planning values at the planning site (the query's, else
     /// the default site), sorted with unknown values last, and the Moon once
-    /// for the toolbar. Read-only.
+    /// for the toolbar. With rigs selected each row carries one Fit per rig and
+    /// the Filters strip is the union of their bands. Read-only.
     ///
     /// # Errors
-    /// `InvalidInput` for an invalid query; `NotFound` for an unknown site.
+    /// `InvalidInput` for an invalid query or a preset the selected rigs do
+    /// not offer; `NotFound` for an unknown site, rig or Project.
     pub async fn target_rows(&self, query: &TargetsQuery) -> Result<TargetsPage, LibraryError> {
         query.validate()?;
+        let (rigs, strip) = self.targets_rigs(query.rigs).await?;
+        query.preset.map_or(Ok(()), |preset| offer(preset, &rigs, &strip))?;
         let site = self.planning_site(query.site_id).await?;
         if query.show == TargetsShow::Browse
             && query.catalogues.is_empty()
@@ -54,6 +62,8 @@ impl Library {
                 needs_catalogue_or_preset: true,
                 total: 0,
                 rows: Vec::new(),
+                rigs,
+                bands: strip,
             });
         }
         let marks = self.catalog().my_target_marks().await?;
@@ -111,7 +121,7 @@ impl Library {
         let (basis, moon, computed) = computed;
         let mut rows: Vec<Listed> = computed
             .into_iter()
-            .map(|(record, night)| listed(record, night, &marks, &saved, &activity))
+            .map(|(record, night)| listed(record, night, &marks, &saved, &activity, &rigs, &strip))
             .collect();
         if let Some(preset) = query.preset {
             rows.retain(|row| admits(preset, row));
@@ -128,7 +138,40 @@ impl Library {
             needs_catalogue_or_preset: false,
             total,
             rows: rows.into_iter().skip(offset).take(limit).map(|listed| listed.row).collect(),
+            rigs,
+            bands: strip,
         })
+    }
+
+    /// The rigs a selection names, each with its bands and field of view,
+    /// and the Filters strip: all seven bands with no rig, else the union of
+    /// the rigs' bands in display order (PLAN-TGT-FR-06).
+    async fn targets_rigs(
+        &self,
+        selection: RigSelection,
+    ) -> Result<(Vec<TargetsRig>, Vec<Band>), LibraryError> {
+        let ids = match selection {
+            RigSelection::None => return Ok((Vec::new(), BANDS.to_vec())),
+            RigSelection::Rig { equipment_id } => vec![equipment_id],
+            RigSelection::Project { project_id } => {
+                self.catalog().project(project_id).await?.rig_ids
+            }
+        };
+        let mut rigs = Vec::with_capacity(ids.len());
+        for id in ids {
+            let rig = self.rig(id).await?;
+            rigs.push(TargetsRig {
+                equipment_id: rig.equipment.id,
+                name: rig.equipment.name,
+                bands: rig.bands,
+                field_of_view: rig.field_of_view,
+            });
+        }
+        let strip = BANDS
+            .into_iter()
+            .filter(|band| rigs.iter().any(|rig| rig.bands.contains(band)))
+            .collect();
+        Ok((rigs, strip))
     }
 
     /// Search My targets, the bundled catalogues and SIMBAD. Case and
@@ -222,15 +265,24 @@ impl Library {
         self.catalog().set_favourite(target_id, favourite).await
     }
 
-    /// The built-in presets with their definitions, then the saved presets.
+    /// The built-in presets offered for the selected rigs, with their
+    /// definitions, then the saved presets. Mosaic candidates and Fits nicely
+    /// need a rig; the narrowband presets are hidden when the selected rigs
+    /// pass no Ha, SII or OIII (PLAN-TGT-FR-12/13).
     ///
     /// # Errors
-    /// `PersistenceFailure` when the catalog cannot be read.
-    pub async fn targets_presets(&self) -> Result<TargetsPresets, LibraryError> {
+    /// `NotFound` for an unknown rig or Project; `PersistenceFailure` when the
+    /// catalog cannot be read.
+    pub async fn targets_presets(
+        &self,
+        rigs: RigSelection,
+    ) -> Result<TargetsPresets, LibraryError> {
+        let (rigs, strip) = self.targets_rigs(rigs).await?;
         let builtin = BuiltinPreset::ALL
-            .iter()
+            .into_iter()
+            .filter(|preset| preset.offered(!rigs.is_empty(), &strip))
             .map(|preset| BuiltinPresetInfo {
-                preset: *preset,
+                preset,
                 name: preset.name().to_owned(),
                 definition: preset.definition().to_owned(),
             })
@@ -371,6 +423,8 @@ fn listed(
     marks: &MyTargetMarks,
     saved: &HashMap<Uuid, TargetRecord>,
     activity: &std::collections::BTreeMap<Uuid, TargetActivity>,
+    rigs: &[TargetsRig],
+    strip: &[Band],
 ) -> Listed {
     let id = record.candidate.id;
     let TargetActivity { sessions, captured } = activity.get(&id).cloned().unwrap_or_default();
@@ -388,6 +442,14 @@ fn listed(
         unknown_reason: None,
         sessions,
         captured,
+        fit: rigs
+            .iter()
+            .map(|rig| RigFit {
+                equipment_id: rig.equipment_id,
+                rig_name: rig.name.clone(),
+                fit: fit(record.candidate.angular_size, rig.field_of_view),
+            })
+            .collect(),
         target: record.candidate,
     };
     let mut moon_up_window_minutes = 0;
@@ -405,7 +467,7 @@ fn listed(
         }
         Some((Ok(night), moon_age_days)) => {
             let moon_free = night.img_time_minutes > 0 && night.moon_up_window_minutes == 0;
-            let bands = band_states(night.lunar_separation_deg, moon_age_days, moon_free);
+            let bands = band_states(strip, night.lunar_separation_deg, moon_age_days, moon_free);
             row.recommendation = Some(recommendation(&bands));
             row.bands = bands;
             row.max_altitude_deg = night.peak_dark_altitude_deg;
@@ -420,11 +482,61 @@ fn listed(
 }
 
 // ---------------------------------------------------------------------------
-// Bands
+// Fit and bands
 // ---------------------------------------------------------------------------
 
 /// Every band of the Filters strip in display order.
 const BANDS: [Band; 7] = [Band::L, Band::R, Band::G, Band::B, Band::Ha, Band::Sii, Band::Oiii];
+
+/// A Target's Fit in a rig's field (PLAN-TGT-FR-11). Coverage is the major
+/// axis as a share of the field's shorter side: at most 1 the Target fits one
+/// field and reads "fits" from 25% coverage, "tiny" below it. Larger, it
+/// needs a grid of fields covering its major axis along both sides of the
+/// field, since nothing fixes its orientation in the frame. A rig without a
+/// field of view, then a Target without a catalogued size, reads "-" with
+/// the reason.
+#[must_use]
+pub fn fit(size: Option<AngularSize>, field: Option<FieldOfView>) -> Fit {
+    let positive = |value: f64| value.is_finite() && value > 0.0;
+    let Some(field) = field.filter(|field| positive(field.width_deg) && positive(field.height_deg))
+    else {
+        return Fit::Unknown { reason: FitUnknownReason::FieldOfViewUnknown };
+    };
+    let Some(major) = size.map(|size| size.major_arcmin).filter(|major| positive(*major)) else {
+        return Fit::Unknown { reason: FitUnknownReason::SizeUnknown };
+    };
+    let (width, height) = (field.width_deg * 60.0, field.height_deg * 60.0);
+    let coverage = major / width.min(height);
+    if coverage > 1.0 {
+        let panels = fields_across(major, width).saturating_mul(fields_across(major, height));
+        Fit::Panels { coverage, panels }
+    } else if coverage >= FIT_MIN_COVERAGE {
+        Fit::Fits { coverage }
+    } else {
+        Fit::Tiny { coverage }
+    }
+}
+
+/// Fields side by side, without overlap, that span `extent` (both positive
+/// and finite, in the same unit).
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn fields_across(extent: f64, side: f64) -> u32 {
+    // A positive finite ratio rounded up; `as` saturates beyond `u32::MAX`.
+    (extent / side).ceil() as u32
+}
+
+/// Refuse a preset the selected rigs do not offer (PLAN-TGT-FR-12/13).
+fn offer(preset: BuiltinPreset, rigs: &[TargetsRig], strip: &[Band]) -> Result<(), LibraryError> {
+    if preset.offered(!rigs.is_empty(), strip) {
+        return Ok(());
+    }
+    let needs = if preset.needs_rig() {
+        "a selected rig"
+    } else {
+        "a selected rig with an Ha, SII or OIII filter"
+    };
+    Err(LibraryError::InvalidInput(format!("the preset {:?} needs {needs}", preset.name())))
+}
 
 /// The Moon-avoidance rule of spec 047 D4: a band is viable when the Target's
 /// separation from the Moon is at least the band's Lorentzian minimum,
@@ -439,10 +551,15 @@ const fn band_params(band: Band) -> (f64, f64) {
     }
 }
 
-/// Each band viable or limited by the Moon tonight. A Target whose windows
-/// all fall while the Moon is down is limited in no band.
-fn band_states(separation_deg: f64, moon_age_days: f64, moon_free: bool) -> Vec<BandState> {
-    BANDS
+/// Each strip band viable or limited by the Moon tonight. A Target whose
+/// windows all fall while the Moon is down is limited in no band.
+fn band_states(
+    strip: &[Band],
+    separation_deg: f64,
+    moon_age_days: f64,
+    moon_free: bool,
+) -> Vec<BandState> {
+    strip
         .iter()
         .map(|band| {
             let (distance, width) = band_params(*band);
@@ -476,7 +593,7 @@ fn viable(row: &TargetRow, admit: impl Fn(Band) -> bool) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Whether a row meets a built-in preset's definition; unknown values meet
-/// none.
+/// none. With several rigs a Fit preset matches on any of them.
 fn admits(preset: BuiltinPreset, listed: &Listed) -> bool {
     let row = &listed.row;
     let img = row.img_time_minutes.unwrap_or(0);
@@ -493,6 +610,8 @@ fn admits(preset: BuiltinPreset, listed: &Listed) -> bool {
         BuiltinPreset::PlanetaryNebulaeOiii => {
             kind == "planetary_nebula" && viable(row, |band| band == Band::Oiii)
         }
+        BuiltinPreset::MosaicCandidates => row.fit.iter().any(|rig| rig.fit.is_mosaic_candidate()),
+        BuiltinPreset::FitsNicely => row.fit.iter().any(|rig| rig.fit.fits_nicely()),
     }
 }
 
@@ -613,12 +732,13 @@ mod tests {
 
     #[test]
     fn full_moon_limits_broadband_before_narrowband() {
-        let bands = band_states(80.0, 0.0, false);
+        let bands = band_states(&BANDS, 80.0, 0.0, false);
         let viable: Vec<Band> = bands.iter().filter(|s| s.viable).map(|s| s.band).collect();
         assert_eq!(viable, [Band::Ha, Band::Sii]);
         assert_eq!(recommendation(&bands), Recommendation::NarrowbandOnly);
-        assert!(band_states(60.0, 14.7, false).iter().all(|state| state.viable));
-        assert!(band_states(1.0, 0.0, true).iter().all(|state| state.viable));
-        assert_eq!(recommendation(&band_states(1.0, 0.0, false)), Recommendation::AvoidTonight);
+        assert!(band_states(&BANDS, 60.0, 14.7, false).iter().all(|state| state.viable));
+        assert!(band_states(&BANDS, 1.0, 0.0, true).iter().all(|state| state.viable));
+        let none = band_states(&BANDS, 1.0, 0.0, false);
+        assert_eq!(recommendation(&none), Recommendation::AvoidTonight);
     }
 }

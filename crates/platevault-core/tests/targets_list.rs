@@ -60,6 +60,7 @@ fn query(show: TargetsShow, site: Option<Uuid>, night: Date) -> TargetsQuery {
         sort: None,
         offset: 0,
         limit: None,
+        rigs: RigSelection::None,
     }
 }
 
@@ -504,7 +505,7 @@ async fn saved_preset_persists_rename_delete_builtin_immutable() {
     let temp = tempfile::tempdir().unwrap();
     let database = temp.path().join("library.sqlite");
     let library = open(&database).await;
-    let presets = library.targets_presets().await.unwrap();
+    let presets = library.targets_presets(RigSelection::None).await.unwrap();
     let names: Vec<&str> = presets.builtin.iter().map(|info| info.name.as_str()).collect();
     assert_eq!(
         names,
@@ -529,7 +530,7 @@ async fn saved_preset_persists_rename_delete_builtin_immutable() {
     drop(library);
 
     let library = open(&database).await;
-    let presets = library.targets_presets().await.unwrap();
+    let presets = library.targets_presets(RigSelection::None).await.unwrap();
     assert_eq!(presets.saved, std::slice::from_ref(&saved));
     assert_eq!(presets.saved[0].filters, filters, "applying it restores the same filters");
 
@@ -552,7 +553,7 @@ async fn saved_preset_persists_rename_delete_builtin_immutable() {
         .delete_targets_preset(PresetRef::Saved { id: saved.id }, renamed.revision)
         .await
         .unwrap();
-    let presets = library.targets_presets().await.unwrap();
+    let presets = library.targets_presets(RigSelection::None).await.unwrap();
     assert!(presets.saved.is_empty());
     assert_eq!(presets.builtin.len(), 5);
 }
@@ -571,7 +572,8 @@ async fn builtin_presets_follow_their_definitions() {
     let viable = |row: &TargetRow, bands: &[Band]| {
         row.bands.iter().any(|state| state.viable && bands.contains(&state.band))
     };
-    for preset in BuiltinPreset::ALL {
+    let menu = library.targets_presets(RigSelection::None).await.unwrap().builtin;
+    for preset in menu.into_iter().map(|info| info.preset) {
         request.preset = Some(preset);
         let page = library.target_rows(&request).await.unwrap();
         assert!(page.total <= all.total);
@@ -595,6 +597,9 @@ async fn builtin_presets_follow_their_definitions() {
                 BuiltinPreset::PlanetaryNebulaeOiii => {
                     assert_eq!(row.target.object_type, "planetary_nebula");
                     assert!(viable(row, &[Band::Oiii]));
+                }
+                BuiltinPreset::MosaicCandidates | BuiltinPreset::FitsNicely => {
+                    unreachable!("offered only with a rig selected")
                 }
             }
         }

@@ -1,19 +1,20 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Targets list IPC (spec 072 PLAN-TGT-FR-01..05/07..10), registered only by
-//! the isolated rebuilt shell ([`crate::library_shell`]) under its targets
-//! label. The rows and every planning value come from Rust; the page presents
-//! them. Reads write nothing; ★ and Add to targets write only the favourite
-//! and, for a Target not saved yet, its record. Failures follow the library
-//! [`platevault_core::ErrorResponse`] conventions, naming the Target or preset.
+//! Targets list IPC (spec 072 PLAN-TGT-FR-01..13), registered only by the
+//! isolated rebuilt shell ([`crate::library_shell`]) under its targets label.
+//! The rows and every planning value, Fit per selected rig and the Filters
+//! strip come from Rust; the page presents them. Reads write nothing; ★ and
+//! Add to targets write only the favourite and, for a Target not saved yet,
+//! its record. Failures follow the library [`platevault_core::ErrorResponse`]
+//! conventions, naming the Target or preset.
 
 use std::sync::Arc;
 
 use platevault_core::library::Library;
 use platevault_core::{
-    AddTarget, PresetFilters, PresetRef, Revision, SavedPreset, TargetRecord, TargetsPage,
-    TargetsPresets, TargetsQuery, TargetsSearchResults,
+    AddTarget, PresetFilters, PresetRef, Revision, RigSelection, SavedPreset, TargetRecord,
+    TargetsPage, TargetsPresets, TargetsQuery, TargetsSearchResults,
 };
 use tauri::State;
 use uuid::Uuid;
@@ -22,10 +23,14 @@ use super::library::{fail, Reply};
 
 /// One Targets list page: My targets or Browse catalogues with tonight's
 /// planning columns, the Moon once for the toolbar, sorted with unknown
-/// values last. Read-only.
+/// values last. `query.rigs` is the rig selector: no rig, one rig, or "this
+/// Project's rigs". The page returns the selected rigs, one Fit per rig on
+/// each row, the Filters strip as the union of their bands, and the built-in
+/// presets they offer. Read-only.
 ///
 /// # Errors
-/// `InvalidInput` for an invalid query; `NotFound` for an unknown site.
+/// `InvalidInput` for an invalid query or a preset the selected rigs do not
+/// offer; `NotFound` for an unknown site, rig or Project.
 #[tauri::command]
 pub async fn planning_target_rows(
     library: State<'_, Arc<Library>>,
@@ -77,13 +82,20 @@ pub async fn targets_set_favourite(
     library.set_favourite(target_id, favourite).await.map_err(fail(Some(target_id)))
 }
 
-/// The built-in presets with their definitions, then the saved presets.
+/// The built-in presets offered for the rig selector's rigs (absent: no
+/// rig), with their definitions, then the saved presets. Mosaic candidates
+/// and Fits nicely need a rig; the narrowband presets are hidden when the
+/// selected rigs pass no Ha, SII or OIII.
 ///
 /// # Errors
-/// `PersistenceFailure` when the catalog cannot be read.
+/// `NotFound` for an unknown rig or Project; `PersistenceFailure` when the
+/// catalog cannot be read.
 #[tauri::command]
-pub async fn targets_presets_list(library: State<'_, Arc<Library>>) -> Reply<TargetsPresets> {
-    library.targets_presets().await.map_err(fail(None))
+pub async fn targets_presets_list(
+    library: State<'_, Arc<Library>>,
+    rigs: Option<RigSelection>,
+) -> Reply<TargetsPresets> {
+    library.targets_presets(rigs.unwrap_or_default()).await.map_err(fail(None))
 }
 
 /// Save the current filters as a named preset at revision 1.
