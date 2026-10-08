@@ -265,6 +265,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::targets_list::targets_preset_rename,
         crate::commands::targets_list::targets_preset_delete,
         // home
+        crate::commands::home::home_dashboard,
     ]);
     // The planning handlers call these through their Rust APIs, which need no
     // grant; window `library` holds only `capabilities/library.json`.

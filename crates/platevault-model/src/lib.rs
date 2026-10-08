@@ -44,6 +44,8 @@ mod view_group;
 pub use view_group::*;
 mod prepare;
 pub use prepare::*;
+mod home;
+pub use home::*;
 
 pub type Revision = u64;
 
