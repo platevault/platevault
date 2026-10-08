@@ -73,6 +73,7 @@ const SCHEMA: &str = schema_modules![
     "view_groups.sql",
     "prepare.sql",
     "results.sql",
+    "cleanup.sql",
 ];
 /// The one version of the whole [`SCHEMA`] list, recorded by `schema.sql`'s
 /// `catalog_meta` row. There are no migrations: a catalog recording any other
@@ -160,6 +161,11 @@ mod results;
 pub use results::{
     DetectedMaster, NewAttachment, Observation, ResultsBasis, ResultsScan, ScannedResult,
     VerifiedAcceptance, VerifiedProduct,
+};
+mod cleanup;
+pub use cleanup::{
+    CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, RunCleanupDraft, RunCleanupFolder,
+    RunCleanupItem, RunCleanupRecord,
 };
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.

@@ -153,6 +153,8 @@ impl Library {
         crate::prepare::register(&library).await?;
         // RES (070, U27): Result-input guard on Move run to Trash (RES-FR-10).
         crate::results::register(&library).await;
+        // PV-STO (071, U29): running Clean up / Empty Trash guard (RES-FR-07, RES-FR-10).
+        crate::storage::register_cleanup(&library).await;
         Ok(library)
     }
 
