@@ -147,7 +147,9 @@ mod view_groups;
 pub use view_groups::{GroupCandidates, ViewGroupBasis};
 mod prepare;
 pub use prepare::{
-    EntryUpdate, NewPreparation, NewPreparedEntry, PreparationRecord, RecordedFolders,
+    EntryUpdate, GroupPanel, GroupPreparationBasis, GroupPreparationRecord, NewGroupPreparation,
+    NewPanelPreparation, NewPreparation, NewPreparedEntry, PanelPreparationRecord,
+    PreparationRecord, RecordedFolders,
 };
 
 /// Actual writer-connection settings read back with `PRAGMA` after open.

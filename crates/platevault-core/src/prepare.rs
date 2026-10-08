@@ -1,8 +1,9 @@
 // Copyright (C) 2024-2026 Sjors Robroek
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Application preparation of a single run (spec 069 PREP-FR-01..11,
-//! PREP-FR-14; D04, D09, D19): review, Prepare, Retry, the outcome and Open.
+//! Application preparation of a run and of a run group (spec 069
+//! PREP-FR-01..14; D04, D09, D19): review, Prepare, Retry, the outcome and
+//! Open, and Prepare all.
 //!
 //! Review is read-only. Prepare records a new revision Running in a new
 //! folder that never existed before, then settles each input: it snapshots
@@ -15,9 +16,14 @@
 //! re-verifies every entry again before each launch and refuses on drift.
 //! Nothing here marks a run Complete, and no source is ever written.
 //!
-//! PREP feeds the run lifecycle ports: a Running revision blocks Mark
-//! Complete and Move run to Trash ([`RunOperationGuard`]), every revision's
-//! folder and the run's Results folder are named for Empty Trash
+//! Prepare all prepares every panel run of a run group the same way, each in
+//! its own `Panel N/` folder of one new group folder, with its own outcome;
+//! the group's outcome follows them, and Open on the group needs every panel
+//! run verified.
+//!
+//! PREP feeds the run lifecycle ports: a Running revision or Prepare all
+//! blocks Mark Complete and Move run to Trash ([`RunOperationGuard`]), every
+//! revision's folder and the run's Results folder are named for Empty Trash
 //! ([`RunFolders`]), and [`PreparationFailed`] is the run blocker Home reads.
 
 use std::collections::{BTreeSet, HashMap};
@@ -28,8 +34,9 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Weak};
 
 use persistence_library::{
-    EntryUpdate, MembershipBasis, NewPreparation, NewPreparedEntry, PreparationRecord,
-    RecordedFolders,
+    EntryUpdate, GroupPanel, GroupPreparationRecord, MembershipBasis, NewGroupPreparation,
+    NewPanelPreparation, NewPreparation, NewPreparedEntry, PanelPreparationRecord,
+    PreparationRecord, RecordedFolders,
 };
 use uuid::Uuid;
 
@@ -38,13 +45,16 @@ use crate::layout;
 use crate::library::{blocking, Library};
 use crate::run_lifecycle::{BlockersFuture, FoldersFuture, RunFolders, RunOperationGuard};
 use crate::{
-    Availability, BlockedInput, CalibrationHandoff, EntryEvidence, EntryKind, EntryState,
-    InputMode, ItemReason, LibraryError, LifecycleBlocker, LinkKind, LocationCheck, MemberState,
-    Membership, ModeOption, NativePath, ObservationFingerprint, OpenOutcome, PlannedEntry,
-    PreparationFailed, PreparationOutcome, PreparationReview, PreparationRevision,
-    PreparationState, PrepareRequest, PrepareStep, PreparedEntry, PreparedEntryKind,
-    PreparedFolder, PreparedInput, Profile, ReasonCode, Revision, RunFolderSet, RunLocation,
-    RunOperationKind, RunStage, TransferDestination, View, Writability, WrittenCopy,
+    Availability, BlockedInput, CalibrationHandoff, CalibrationReadiness, EntryEvidence, EntryKind,
+    EntryState, GroupCalibrationReadiness, GroupLocation, GroupPreparation,
+    GroupPreparationOutcome, GroupPreparationReview, GroupPrepareBasis, InputMode, ItemReason,
+    LibraryError, LifecycleBlocker, LinkKind, LocationCheck, MemberState, Membership, ModeOption,
+    NativePath, ObservationFingerprint, OpenOutcome, PanelOutcome, PanelPreparationOutcome,
+    PanelPreparationReview, PanelResult, PlannedEntry, PreparationFailed, PreparationOutcome,
+    PreparationReview, PreparationRevision, PreparationState, PrepareRequest, PrepareStep,
+    PreparedEntry, PreparedEntryKind, PreparedFolder, PreparedInput, Profile, ReasonCode, Revision,
+    RunCompletion, RunFolderSet, RunLocation, RunOperationKind, RunStage, TransferDestination,
+    View, ViewGroup, Writability, WrittenCopy,
 };
 
 /// Whether this platform makes verified clones: APFS `clonefile` on macOS and
@@ -142,43 +152,16 @@ impl Library {
         let location =
             review.location.clone().ok_or_else(|| invalid("choose a parent folder for the run"))?;
         let recorded_results = self.catalog().view_results_folder(view).await?.is_some();
-        let folders: BTreeSet<PathBuf> = review
-            .entries
-            .iter()
-            .filter(|entry| entry.kind != PreparedEntryKind::DirectSource)
-            .map(|entry| &entry.path)
-            .chain(review.blocked.iter().filter_map(|blocked| blocked.path.as_ref()))
-            .filter_map(|path| path.to_path_buf().ok()?.parent().map(Path::to_path_buf))
-            .filter(|parent| parent.starts_with(location.folder.to_path_buf().unwrap_or_default()))
-            .collect();
+        let folder = location.folder.to_path_buf()?;
+        let folders = entry_folders(&review.entries, &review.blocked, &folder);
         let target = location.clone();
         let created = blocking(move || create_folders(&target, &folders, recorded_results)).await?;
-        let mut entries: Vec<NewPreparedEntry> = review
-            .entries
-            .iter()
-            .map(|entry| NewPreparedEntry {
-                member_key: entry.member_key,
-                asset_id: entry.asset_id,
-                master_id: entry.master_id,
-                input: entry.input,
-                kind: entry.kind,
-                path: entry.path.clone(),
-                source: Some(entry.source.clone()),
-                size_bytes: entry.size_bytes,
-                blocked: None,
-            })
-            .collect();
-        entries.extend(review.blocked.iter().map(|blocked| NewPreparedEntry {
-            member_key: blocked.member_key,
-            asset_id: None,
-            master_id: None,
-            input: blocked.input,
-            kind: entry_kind(review.mode, review.link),
-            path: blocked.path.clone().unwrap_or_else(|| location.folder.clone()),
-            source: blocked.source.clone(),
-            size_bytes: blocked.size_bytes,
-            blocked: Some(blocked.reason.clone()),
-        }));
+        let entries = new_entries(
+            &review.entries,
+            &review.blocked,
+            entry_kind(review.mode, review.link),
+            &location.folder,
+        );
         let input = NewPreparation {
             view_id: view,
             n: review.preparation_number,
@@ -218,17 +201,7 @@ impl Library {
         control: &dyn PrepareControl,
     ) -> Result<PreparationOutcome, LibraryError> {
         let record = self.catalog().resume_preparation(id).await?;
-        let revision = &record.revision;
-        let resolved = async {
-            let basis =
-                self.catalog().view_membership(revision.view_id, Membership::Committed).await?;
-            let calibration =
-                self.calibration_handoff(revision.view_id, revision.membership_revision).await?;
-            let roots = self.input_roots(&basis, &calibration).await?;
-            let ((_, anchors), _, _) = resolve_inputs(&basis, &calibration, &roots)?;
-            Ok::<_, LibraryError>(anchors)
-        }
-        .await;
+        let resolved = self.anchors_of(&record.revision).await;
         match resolved {
             Ok(anchors) => self.run_preparation(record, &anchors, control).await,
             Err(error) => {
@@ -309,8 +282,9 @@ impl Library {
             });
         };
         let executable = executable.to_path_buf()?;
-        let args = launch_args(&profile, &checked)?;
         let cwd = folder.to_path_buf()?;
+        let results = checked.revision.results_folder.to_path_buf()?;
+        let args = launch_args(&profile, &cwd, &results, &checked.entries)?;
         blocking(move || Ok(launch(&executable, &args, &cwd, folder))).await
     }
 
@@ -395,12 +369,7 @@ impl Library {
             refusals.push("no input of the run can be prepared as reviewed".to_owned());
         }
         let created = disk.entries.iter().filter(|entry| entry.kind.created()).count();
-        let footprint_bytes = disk
-            .entries
-            .iter()
-            .filter(|entry| entry.kind == PreparedEntryKind::Copy)
-            .map(|entry| entry.size_bytes)
-            .sum();
+        let footprint_bytes = footprint(&disk.entries);
         let review = PreparationReview {
             view_id: view.id,
             membership_revision: view.revision,
@@ -410,11 +379,7 @@ impl Library {
             run_name: header.name.clone(),
             verified_profile: profile.verified(),
             unproven: profile.capability_evidence.unproven(),
-            suggested_mode: if profile.verified() && profile.reads_only() {
-                InputMode::LinkedView
-            } else {
-                InputMode::Copy
-            },
+            suggested_mode: suggested_mode(&profile),
             mode: request.mode,
             link,
             modes,
@@ -433,6 +398,20 @@ impl Library {
             profile,
         };
         Ok(Planned { review, anchors })
+    }
+
+    /// The anchors a revision's inputs are snapshotted against, resolved
+    /// again from its run's committed membership and calibration handoff.
+    async fn anchors_of(
+        &self,
+        revision: &PreparationRevision,
+    ) -> Result<HashMap<PathBuf, Basis>, LibraryError> {
+        let basis = self.catalog().view_membership(revision.view_id, Membership::Committed).await?;
+        let calibration =
+            self.calibration_handoff(revision.view_id, revision.membership_revision).await?;
+        let roots = self.input_roots(&basis, &calibration).await?;
+        let ((_, anchors), _, _) = resolve_inputs(&basis, &calibration, &roots)?;
+        Ok(anchors)
     }
 
     /// Every location root the membership and calibration inputs live on.
@@ -704,6 +683,24 @@ const fn entry_kind(mode: InputMode, link: Option<LinkKind>) -> PreparedEntryKin
     }
 }
 
+/// Linked View for a verified read-only profile, else isolated Copy.
+fn suggested_mode(profile: &Profile) -> InputMode {
+    if profile.verified() && profile.reads_only() {
+        InputMode::LinkedView
+    } else {
+        InputMode::Copy
+    }
+}
+
+/// The storage the planned copies take.
+fn footprint(entries: &[PlannedEntry]) -> u64 {
+    entries
+        .iter()
+        .filter(|entry| entry.kind == PreparedEntryKind::Copy)
+        .map(|entry| entry.size_bytes)
+        .sum()
+}
+
 /// Why `profile` refuses `mode` (D04, PREP-FR-04/05).
 fn mode_refusal(profile: &Profile, mode: InputMode) -> Option<String> {
     match mode {
@@ -926,78 +923,74 @@ struct DiskCheck {
 
 fn check_disk(plan: &DiskPlan) -> Result<DiskCheck, LibraryError> {
     let (location, check, writability, free_bytes) = check_location(plan)?;
+    let (entries, blocked) = match &location {
+        Some(location) => plan_entries(
+            &plan.inputs,
+            plan.kind,
+            &location.folder.to_path_buf()?,
+            &location.output.to_path_buf()?,
+        ),
+        None => (Vec::new(), Vec::new()),
+    };
+    let refusals =
+        if plan.folder_handoff { folder_handoff_refusal(&plan.inputs) } else { Vec::new() };
+    Ok(DiskCheck { location, check, entries, blocked, refusals, free_bytes, writability })
+}
+
+/// Each input's entry in `folder` (its source for Direct source), or the
+/// reason its source cannot be prepared.
+fn plan_entries(
+    inputs: &[SourceInput],
+    kind: PreparedEntryKind,
+    folder: &Path,
+    output: &Path,
+) -> (Vec<PlannedEntry>, Vec<BlockedInput>) {
     let mut entries = Vec::new();
     let mut blocked = Vec::new();
-    let mut refusals = Vec::new();
     let mut names: HashMap<(PathBuf, OsString), usize> = HashMap::new();
-    if let Some(location) = &location {
-        for input in &plan.inputs {
-            if let Some(name) = input.source.file_name() {
-                *names.entry((subfolder(input.input), name.to_owned())).or_default() += 1;
-            }
+    for input in inputs {
+        if let Some(name) = input.source.file_name() {
+            *names.entry((subfolder(input.input), name.to_owned())).or_default() += 1;
         }
-        let folder = location.folder.to_path_buf()?;
-        let output = location.output.to_path_buf()?;
-        for input in &plan.inputs {
-            let path = if plan.kind == PreparedEntryKind::DirectSource {
-                input.source.clone()
-            } else {
-                folder.join(subfolder(input.input)).join(entry_name(input, &names))
-            };
-            if let Err(reason) = source_present(&input.source, plan.kind, &output) {
-                blocked.push(BlockedInput {
-                    member_key: input.member_key,
-                    input: input.input,
-                    source: Some(NativePath::from_path(&input.source)),
-                    path: Some(NativePath::from_path(&path)),
-                    size_bytes: input.size_bytes,
-                    reason,
-                });
-                continue;
-            }
-            entries.push(PlannedEntry {
+    }
+    for input in inputs {
+        let path = if kind == PreparedEntryKind::DirectSource {
+            input.source.clone()
+        } else {
+            folder.join(subfolder(input.input)).join(entry_name(input, &names))
+        };
+        if let Err(reason) = source_present(&input.source, kind, output) {
+            blocked.push(BlockedInput {
                 member_key: input.member_key,
-                asset_id: input.asset_id,
-                master_id: input.master_id,
                 input: input.input,
-                kind: plan.kind,
-                source: NativePath::from_path(&input.source),
-                path: NativePath::from_path(&path),
+                source: Some(NativePath::from_path(&input.source)),
+                path: Some(NativePath::from_path(&path)),
                 size_bytes: input.size_bytes,
+                reason,
             });
+            continue;
         }
+        entries.push(PlannedEntry {
+            member_key: input.member_key,
+            asset_id: input.asset_id,
+            master_id: input.master_id,
+            input: input.input,
+            kind,
+            source: NativePath::from_path(&input.source),
+            path: NativePath::from_path(&path),
+            size_bytes: input.size_bytes,
+        });
     }
-    if plan.folder_handoff {
-        refusals.extend(folder_handoff_refusal(&plan.inputs));
-    }
-    Ok(DiskCheck { location, check, entries, blocked, refusals, free_bytes, writability })
+    (entries, blocked)
 }
 
 type LocationRead = (Option<RunLocation>, LocationCheck, Option<Writability>, Option<u64>);
 
 fn check_location(plan: &DiskPlan) -> Result<LocationRead, LibraryError> {
-    let Some(output) = &plan.output else {
-        return Ok((None, LocationCheck::ChooseParent, None, None));
+    let output = match chosen_parent(plan.output.as_deref(), &plan.recorded)? {
+        Ok(output) => output,
+        Err(check) => return Ok((None, check, None, None)),
     };
-    let unavailable =
-        |detail: String| Ok((None, LocationCheck::ParentUnavailable { detail }, None, None));
-    match fs::symlink_metadata(output) {
-        Ok(metadata) if metadata.is_dir() => {}
-        Ok(_) => return unavailable(format!("{} is not a real folder", output.display())),
-        Err(error) => return unavailable(format!("{}: {error}", output.display())),
-    }
-    let output = match fs::canonicalize(output) {
-        Ok(path) => path,
-        Err(error) => return unavailable(format!("{}: {error}", output.display())),
-    };
-    for recorded in plan.recorded.prepared.iter().chain(&plan.recorded.results) {
-        let path = recorded.to_path_buf()?;
-        let path = fs::canonicalize(&path).unwrap_or(path);
-        if layout::inside(&output, &path) {
-            let check = LocationCheck::InsidePreparedFolder { folder: recorded.clone() };
-            return Ok((None, check, None, None));
-        }
-    }
     let location = layout::run_location(
         &output,
         &plan.project,
@@ -1010,22 +1003,12 @@ fn check_location(plan: &DiskPlan) -> Result<LocationRead, LibraryError> {
     let results = location.results.to_path_buf()?;
     let project = folder.parent().unwrap_or(&output).to_path_buf();
     let free_bytes = fs4::available_space(&output).ok();
-    let writable_root = match fs::symlink_metadata(&project) {
-        Ok(metadata)
-            if metadata.is_dir() && !fs_pathsafe::is_link_or_junction_metadata(&metadata) =>
-        {
-            project
+    let writable_root = match writable_root(&project, &output) {
+        Ok(root) => root,
+        Err(detail) => {
+            let check = LocationCheck::ParentUnavailable { detail };
+            return Ok((Some(location), check, None, free_bytes));
         }
-        Ok(_) => {
-            let detail = format!("{} is not a real folder", project.display());
-            return Ok((
-                Some(location),
-                LocationCheck::ParentUnavailable { detail },
-                None,
-                free_bytes,
-            ));
-        }
-        Err(_) => output,
     };
     let writability = crate::import::writability(&writable_root);
     let exists = |path: &Path| fs::symlink_metadata(path).is_ok();
@@ -1039,6 +1022,51 @@ fn check_location(plan: &DiskPlan) -> Result<LocationRead, LibraryError> {
         LocationCheck::Ready
     };
     Ok((Some(location), check, Some(writability), free_bytes))
+}
+
+/// The chosen parent, canonical, or why it cannot take a preparation: none
+/// was chosen, it is unavailable, or it lies inside a recorded prepared,
+/// group or Results folder.
+fn chosen_parent(
+    output: Option<&Path>,
+    recorded: &RecordedFolders,
+) -> Result<Result<PathBuf, LocationCheck>, LibraryError> {
+    let Some(output) = output else {
+        return Ok(Err(LocationCheck::ChooseParent));
+    };
+    let unavailable = |detail: String| Ok(Err(LocationCheck::ParentUnavailable { detail }));
+    match fs::symlink_metadata(output) {
+        Ok(metadata) if metadata.is_dir() => {}
+        Ok(_) => return unavailable(format!("{} is not a real folder", output.display())),
+        Err(error) => return unavailable(format!("{}: {error}", output.display())),
+    }
+    let output = match fs::canonicalize(output) {
+        Ok(path) => path,
+        Err(error) => return unavailable(format!("{}: {error}", output.display())),
+    };
+    for recorded in recorded.prepared.iter().chain(&recorded.results) {
+        let path = recorded.to_path_buf()?;
+        let path = fs::canonicalize(&path).unwrap_or(path);
+        if layout::inside(&output, &path) {
+            return Ok(Err(LocationCheck::InsidePreparedFolder { folder: recorded.clone() }));
+        }
+    }
+    Ok(Ok(output))
+}
+
+/// The folder review reads writability of: the Project folder when it exists
+/// as a real folder, else the parent; a Project entry that is no real folder
+/// is named.
+fn writable_root(project: &Path, output: &Path) -> Result<PathBuf, String> {
+    match fs::symlink_metadata(project) {
+        Ok(metadata)
+            if metadata.is_dir() && !fs_pathsafe::is_link_or_junction_metadata(&metadata) =>
+        {
+            Ok(project.to_path_buf())
+        }
+        Ok(_) => Err(format!("{} is not a real folder", project.display())),
+        Err(_) => Ok(output.to_path_buf()),
+    }
 }
 
 /// The folder below the run folder an input goes to.
@@ -1170,6 +1198,58 @@ impl CreatedFolders {
     }
 }
 
+/// The planned folders below `folder` that entries go to: never a
+/// Direct-source path's.
+fn entry_folders(
+    entries: &[PlannedEntry],
+    blocked: &[BlockedInput],
+    folder: &Path,
+) -> BTreeSet<PathBuf> {
+    entries
+        .iter()
+        .filter(|entry| entry.kind != PreparedEntryKind::DirectSource)
+        .map(|entry| &entry.path)
+        .chain(blocked.iter().filter_map(|blocked| blocked.path.as_ref()))
+        .filter_map(|path| path.to_path_buf().ok()?.parent().map(Path::to_path_buf))
+        .filter(|parent| parent.starts_with(folder))
+        .collect()
+}
+
+/// The entries a new revision records: every planned entry pending, every
+/// blocked input with its reason.
+fn new_entries(
+    entries: &[PlannedEntry],
+    blocked: &[BlockedInput],
+    kind: PreparedEntryKind,
+    folder: &NativePath,
+) -> Vec<NewPreparedEntry> {
+    entries
+        .iter()
+        .map(|entry| NewPreparedEntry {
+            member_key: entry.member_key,
+            asset_id: entry.asset_id,
+            master_id: entry.master_id,
+            input: entry.input,
+            kind: entry.kind,
+            path: entry.path.clone(),
+            source: Some(entry.source.clone()),
+            size_bytes: entry.size_bytes,
+            blocked: None,
+        })
+        .chain(blocked.iter().map(|blocked| NewPreparedEntry {
+            member_key: blocked.member_key,
+            asset_id: None,
+            master_id: None,
+            input: blocked.input,
+            kind,
+            path: blocked.path.clone().unwrap_or_else(|| folder.clone()),
+            source: blocked.source.clone(),
+            size_bytes: blocked.size_bytes,
+            blocked: Some(blocked.reason.clone()),
+        }))
+        .collect()
+}
+
 /// Create the revision's new folder, its input subfolders and, on the first
 /// revision, the Results folder. An existing folder is never reused.
 fn create_folders(
@@ -1183,27 +1263,9 @@ fn create_folders(
     let project = folder.parent().unwrap_or(&output).to_path_buf();
     let mut created = CreatedFolders { folders: Vec::new() };
     let made = (|| {
-        match fs::symlink_metadata(&project) {
-            Ok(metadata)
-                if metadata.is_dir() && !fs_pathsafe::is_link_or_junction_metadata(&metadata) => {}
-            Ok(_) => {
-                return Err(invalid(format!("{} is not a real folder", project.display())));
-            }
-            Err(_) => make_folder(&project, &mut created)?,
-        }
+        real_folder(&project, &mut created)?;
         make_folder(&folder, &mut created)?;
-        for sub in subfolders {
-            let relative = sub
-                .strip_prefix(&folder)
-                .map_err(|_| invalid(format!("{} lies outside the run folder", sub.display())))?;
-            let mut current = folder.clone();
-            for part in relative.components() {
-                current.push(part);
-                if fs::symlink_metadata(&current).is_err() {
-                    make_folder(&current, &mut created)?;
-                }
-            }
-        }
+        make_subfolders(&folder, subfolders, &mut created)?;
         if !results_recorded || fs::symlink_metadata(&results).is_err() {
             make_folder(&results, &mut created)?;
         }
@@ -1216,6 +1278,78 @@ fn create_folders(
             Err(error)
         }
     }
+}
+
+/// Prepare all's new folders (PREP-FR-12): the group folder, each panel run's
+/// `Panel N/` folder and its input subfolders, and each Results folder in
+/// `results` that is not recorded yet or went missing. An existing folder is
+/// never reused.
+fn create_group_folders(
+    location: &GroupLocation,
+    subfolders: &BTreeSet<PathBuf>,
+    results: &[(PathBuf, bool)],
+) -> Result<CreatedFolders, LibraryError> {
+    let folder = location.folder.to_path_buf()?;
+    let output = location.output.to_path_buf()?;
+    let project = folder.parent().unwrap_or(&output).to_path_buf();
+    let mut created = CreatedFolders { folders: Vec::new() };
+    let made = (|| {
+        real_folder(&project, &mut created)?;
+        make_folder(&folder, &mut created)?;
+        for panel in &location.panels {
+            make_folder(&panel.folder.to_path_buf()?, &mut created)?;
+        }
+        make_subfolders(&folder, subfolders, &mut created)?;
+        for (path, recorded) in results {
+            if !recorded || fs::symlink_metadata(path).is_err() {
+                real_folder(path.parent().unwrap_or(&project), &mut created)?;
+                make_folder(path, &mut created)?;
+            }
+        }
+        Ok(())
+    })();
+    match made {
+        Ok(()) => Ok(created),
+        Err(error) => {
+            created.remove();
+            Err(error)
+        }
+    }
+}
+
+/// A real folder at `path`, created when missing; an entry there that is no
+/// real folder refuses.
+fn real_folder(path: &Path, created: &mut CreatedFolders) -> Result<(), LibraryError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata)
+            if metadata.is_dir() && !fs_pathsafe::is_link_or_junction_metadata(&metadata) =>
+        {
+            Ok(())
+        }
+        Ok(_) => Err(invalid(format!("{} is not a real folder", path.display()))),
+        Err(_) => make_folder(path, created),
+    }
+}
+
+/// Every missing folder from `folder` down to each of `subfolders`.
+fn make_subfolders(
+    folder: &Path,
+    subfolders: &BTreeSet<PathBuf>,
+    created: &mut CreatedFolders,
+) -> Result<(), LibraryError> {
+    for sub in subfolders {
+        let relative = sub
+            .strip_prefix(folder)
+            .map_err(|_| invalid(format!("{} lies outside the prepared folder", sub.display())))?;
+        let mut current = folder.to_path_buf();
+        for part in relative.components() {
+            current.push(part);
+            if fs::symlink_metadata(&current).is_err() {
+                make_folder(&current, created)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Create one new folder and sync its parent; an existing entry refuses.
@@ -1470,14 +1604,14 @@ fn reverify_all(entries: &[PreparedEntry]) -> Vec<(u32, ItemReason)> {
 /// argument per prepared entry) expanded.
 fn launch_args(
     profile: &Profile,
-    record: &PreparationRecord,
+    folder: &Path,
+    results: &Path,
+    entries: &[PreparedEntry],
 ) -> Result<Vec<OsString>, LibraryError> {
-    let folder = record.revision.folder.to_path_buf()?;
-    let results = record.revision.results_folder.to_path_buf()?;
     let mut args = Vec::new();
     for arg in &profile.args {
         if arg == "{inputs}" {
-            for entry in record.entries.iter().filter(|entry| entry.state == EntryState::Prepared) {
+            for entry in entries.iter().filter(|entry| entry.state == EntryState::Prepared) {
                 args.push(entry.path.to_path_buf()?.into_os_string());
             }
             continue;
@@ -1488,10 +1622,10 @@ fn launch_args(
             expanded.push(&rest[..start]);
             let tail = &rest[start..];
             if let Some(after) = tail.strip_prefix("{folder}") {
-                expanded.push(&folder);
+                expanded.push(folder);
                 rest = after;
             } else if let Some(after) = tail.strip_prefix("{results}") {
-                expanded.push(&results);
+                expanded.push(results);
                 rest = after;
             } else {
                 expanded.push("{");
@@ -1534,9 +1668,684 @@ fn launch(executable: &Path, args: &[OsString], cwd: &Path, folder: NativePath) 
     }
 }
 
-/// PREP's run lifecycle sources: Running revisions block Mark Complete and
-/// Move run to Trash; every revision's folder and the run's Results folder
-/// are named for Empty Trash.
+// ---------------------------------------------------------------------------
+// Run group: Prepare all (PREP-FR-07/12/13, D-W38, D-W73)
+// ---------------------------------------------------------------------------
+
+/// A Prepare all review with each panel run's anchors, by run.
+struct GroupPlanned {
+    review: GroupPreparationReview,
+    anchors: HashMap<Uuid, HashMap<PathBuf, Basis>>,
+}
+
+/// One panel run as review resolved it, before the disk check.
+struct PanelPlan {
+    review: PanelPreparationReview,
+    inputs: Vec<SourceInput>,
+    results: Option<NativePath>,
+    anchors: HashMap<PathBuf, Basis>,
+}
+
+impl Library {
+    /// Review Prepare all on a run group (PREP-FR-08/12, PREP-AC-16): one
+    /// review over every panel run outside the Project's Trash, with the
+    /// group folder and each `Panel N/` folder, each panel run's Results
+    /// folder and the group's Assembled folder, each panel's entries and own
+    /// calibration choices, the shared setup once, one total footprint and
+    /// the free space. Read-only: nothing is created until Prepare all.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a name that is no folder name; `NotFound` for an
+    /// unknown run group or profile.
+    pub async fn review_group_preparation(
+        &self,
+        group: Uuid,
+        request: &PrepareRequest,
+    ) -> Result<GroupPreparationReview, LibraryError> {
+        Ok(self.plan_group_preparation(group, request).await?.review)
+    }
+
+    /// Prepare all (PREP-FR-12/13): record the group revision Running in its
+    /// new group folder, prepare each panel run under its `Panel N/` folder in
+    /// turn, each ending in its own outcome, and end in the outcome the
+    /// panel runs give. One panel's blocked items never block another's.
+    ///
+    /// # Errors
+    /// `Conflict` when the run group or a panel run's committed membership
+    /// moved past `expected`; `InvalidInput` naming every refusal of the
+    /// review, or when a folder appeared since; catalog errors.
+    pub async fn prepare_group(
+        &self,
+        group: Uuid,
+        request: &PrepareRequest,
+        expected: &GroupPrepareBasis,
+        control: &dyn PrepareControl,
+    ) -> Result<GroupPreparationOutcome, LibraryError> {
+        let GroupPlanned { review, anchors } = self.plan_group_preparation(group, request).await?;
+        if review.basis() != *expected {
+            return Err(LibraryError::Conflict {
+                id: group,
+                current: review.group_revision,
+                successors: Vec::new(),
+            });
+        }
+        if !review.refusals.is_empty() {
+            return Err(invalid(review.refusals.join("; ")));
+        }
+        let location = review
+            .location
+            .clone()
+            .ok_or_else(|| invalid("choose a parent folder for the run group"))?;
+        let kind = entry_kind(review.mode, review.link);
+        let mut subfolders = BTreeSet::new();
+        let mut results = Vec::with_capacity(review.panels.len() + 1);
+        let mut panels = Vec::with_capacity(review.panels.len());
+        for (panel, place) in review.panels.iter().zip(&location.panels) {
+            subfolders.extend(entry_folders(
+                &panel.entries,
+                &panel.blocked,
+                &place.folder.to_path_buf()?,
+            ));
+            let recorded = self.catalog().view_results_folder(panel.view_id).await?.is_some();
+            results.push((place.results.to_path_buf()?, recorded));
+            panels.push(NewPanelPreparation {
+                view_id: panel.view_id,
+                n: panel.preparation_number,
+                membership_revision: panel.membership_revision,
+                folder: place.folder.clone(),
+                results_folder: place.results.clone(),
+                entries: new_entries(&panel.entries, &panel.blocked, kind, &place.folder),
+            });
+        }
+        let recorded = self.catalog().group_assembled_folder(group).await?.is_some();
+        results.push((location.assembled.to_path_buf()?, recorded));
+        let target = location.clone();
+        let created =
+            blocking(move || create_group_folders(&target, &subfolders, &results)).await?;
+        let input = NewGroupPreparation {
+            group_id: group,
+            n: review.preparation_number,
+            profile_id: review.profile.id,
+            mode: review.mode,
+            link: review.link,
+            output: location.output,
+            folder: location.folder,
+            assembled: location.assembled,
+            panels,
+        };
+        let record = match self.catalog().start_group_preparation(&input).await {
+            Ok(record) => record,
+            Err(error) => {
+                blocking(move || {
+                    created.remove();
+                    Ok(())
+                })
+                .await?;
+                return Err(error);
+            }
+        };
+        self.run_group_preparation(record, &anchors, control).await
+    }
+
+    /// Retry a Partial or Paused Prepare all in its own group folder: every
+    /// Partial or Paused panel run continues as Retry does for a run.
+    ///
+    /// # Errors
+    /// `InvalidInput` as
+    /// [`persistence_library::Catalog::resume_group_preparation`]; catalog
+    /// errors.
+    pub async fn retry_group_preparation(
+        &self,
+        id: Uuid,
+        control: &dyn PrepareControl,
+    ) -> Result<GroupPreparationOutcome, LibraryError> {
+        let record = self.catalog().resume_group_preparation(id).await?;
+        let mut anchors = HashMap::new();
+        for panel in &record.panels {
+            let revision = &panel.record.revision;
+            if revision.state != PreparationState::Running {
+                continue;
+            }
+            match self.anchors_of(revision).await {
+                Ok(found) => {
+                    anchors.insert(revision.view_id, found);
+                }
+                Err(error) => {
+                    self.catalog()
+                        .finish_preparation(
+                            revision.id,
+                            PreparationState::Failed,
+                            Some(&error.to_string()),
+                        )
+                        .await?;
+                }
+            }
+        }
+        self.run_group_preparation(record, &anchors, control).await
+    }
+
+    /// The outcome of a Prepare all: each panel run's own outcome, the
+    /// Assembled folder, and what the group offers. Running reads as progress.
+    ///
+    /// # Errors
+    /// `NotFound` for an unknown one.
+    pub async fn group_preparation_outcome(
+        &self,
+        id: Uuid,
+    ) -> Result<GroupPreparationOutcome, LibraryError> {
+        let record = self.catalog().group_preparation(id).await?;
+        self.group_outcome(record).await
+    }
+
+    /// Open on the run group's folder (PREP-FR-13): only when every panel
+    /// run is verified, and immediately before the launch every panel run's
+    /// entries are re-verified under D19; drift refuses the launch and names
+    /// the changed entries. `{folder}` is the group folder and `{results}` the
+    /// Assembled folder. Launching never marks a panel run Complete.
+    ///
+    /// # Errors
+    /// `InvalidInput` for a Prepare all that is not Prepared, a panel run not
+    /// Prepared or one in the Project's Trash; `NotFound` for an unknown one.
+    pub async fn open_group_preparation(&self, id: Uuid) -> Result<OpenOutcome, LibraryError> {
+        let record = self.catalog().group_preparation(id).await?;
+        let preparation = &record.preparation;
+        if preparation.outcome != PreparationState::Prepared {
+            return Err(invalid(format!(
+                "Prepare all '{}' is {}; Open on the group needs every panel run verified",
+                preparation.name(),
+                preparation.outcome
+            )));
+        }
+        for panel in &record.panels {
+            let revision = &panel.record.revision;
+            if revision.state != PreparationState::Prepared {
+                return Err(invalid(format!(
+                    "Panel {} is {}; Open on the group needs every panel run verified",
+                    panel.number, revision.state
+                )));
+            }
+            if self.catalog().view(revision.view_id).await?.view.trashed_at.is_some() {
+                return Err(invalid(format!(
+                    "Panel {} is in the Project's Trash; restore it before opening the group",
+                    panel.number
+                )));
+            }
+        }
+        let mut drifted = Vec::new();
+        let mut inputs = Vec::new();
+        for panel in &record.panels {
+            let entries = panel.record.entries.clone();
+            let found = blocking(move || Ok(reverify_all(&entries))).await?;
+            let checked =
+                self.catalog().record_open_check(panel.record.revision.id, &found).await?;
+            for entry in checked.entries {
+                if entry.state == EntryState::Drifted {
+                    drifted.push(entry);
+                } else {
+                    inputs.push(entry);
+                }
+            }
+        }
+        if !drifted.is_empty() {
+            return Ok(OpenOutcome::Refused { drifted });
+        }
+        let profile = self.catalog().profile(preparation.profile_id).await?;
+        let folder = preparation.folder.clone();
+        let Some(executable) = profile.executable.as_ref() else {
+            return Ok(OpenOutcome::ChooseApplication {
+                folder,
+                detail: format!("profile '{}' has no application configured", profile.name),
+            });
+        };
+        let executable = executable.to_path_buf()?;
+        let assembled = self.assembled_folder(preparation).await?.to_path_buf()?;
+        let cwd = folder.to_path_buf()?;
+        let args = launch_args(&profile, &cwd, &assembled, &inputs)?;
+        blocking(move || Ok(launch(&executable, &args, &cwd, folder))).await
+    }
+
+    /// Prepare each Running panel run in panel order, stop every one left
+    /// when the user cancels or pauses, and end Prepare all in the outcome
+    /// its panel runs give.
+    async fn run_group_preparation(
+        &self,
+        record: GroupPreparationRecord,
+        anchors: &HashMap<Uuid, HashMap<PathBuf, Basis>>,
+        control: &dyn PrepareControl,
+    ) -> Result<GroupPreparationOutcome, LibraryError> {
+        let id = record.preparation.id;
+        let mut stopped = None;
+        let mut failure = None;
+        for panel in record.panels {
+            let (view, state) = (panel.record.revision.view_id, panel.record.revision.state);
+            let (PreparationState::Running, Some(anchors)) = (state, anchors.get(&view)) else {
+                continue;
+            };
+            // A panel run's blocked items or failure end only that panel run.
+            match self.run_preparation(panel.record, anchors, control).await {
+                Ok(outcome)
+                    if matches!(
+                        outcome.revision.state,
+                        PreparationState::Canceled | PreparationState::Paused
+                    ) =>
+                {
+                    stopped = Some(outcome.revision.state);
+                    break;
+                }
+                Ok(_) => {}
+                Err(error) => failure = Some(error.to_string()),
+            }
+        }
+        let (remaining, reason) = match stopped {
+            Some(state) => (state, None),
+            None => (
+                PreparationState::Failed,
+                Some(failure.unwrap_or_else(|| {
+                    "Prepare all ended before this panel run was prepared".to_owned()
+                })),
+            ),
+        };
+        let record =
+            self.catalog().finish_group_preparation(id, remaining, reason.as_deref()).await?;
+        self.group_outcome(record).await
+    }
+
+    async fn group_outcome(
+        &self,
+        record: GroupPreparationRecord,
+    ) -> Result<GroupPreparationOutcome, LibraryError> {
+        let assembled = self.assembled_folder(&record.preparation).await?;
+        let mut panels = Vec::with_capacity(record.panels.len());
+        for PanelPreparationRecord { number, panel_id, record } in record.panels {
+            let stage = self.catalog().view(record.revision.view_id).await?.view.stage;
+            panels.push(PanelPreparationOutcome {
+                number,
+                panel_id,
+                outcome: outcome(record, stage),
+            });
+        }
+        let verified = GroupPreparationOutcome::every_panel_verified(&panels);
+        let offers = PreparationOutcome::offers_for(record.preparation.outcome, !verified);
+        Ok(GroupPreparationOutcome { preparation: record.preparation, panels, assembled, offers })
+    }
+
+    async fn assembled_folder(
+        &self,
+        preparation: &GroupPreparation,
+    ) -> Result<NativePath, LibraryError> {
+        self.catalog().group_assembled_folder(preparation.group_id).await?.ok_or_else(|| {
+            LibraryError::PersistenceFailure(format!(
+                "Prepare all '{}' has no recorded Assembled folder",
+                preparation.name()
+            ))
+        })
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn plan_group_preparation(
+        &self,
+        group_id: Uuid,
+        request: &PrepareRequest,
+    ) -> Result<GroupPlanned, LibraryError> {
+        let catalog = self.catalog();
+        let basis = catalog.group_preparation_basis(group_id).await?;
+        let group = &basis.group;
+        let project = catalog.project(group.project_id).await?;
+        let subject_name = project
+            .subjects
+            .iter()
+            .find(|subject| subject.id == group.subject_id)
+            .map(|subject| subject.name.clone().unwrap_or_else(|| subject.designation.clone()))
+            .unwrap_or_default();
+        let profile = catalog.profile(request.profile_id).await?;
+        let readiness = self.calibration_group_readiness(group_id).await?;
+        let output = match &request.output {
+            Some(output) => Some(output.clone()),
+            None => catalog.last_preparation_output().await?,
+        };
+        let recorded = catalog.recorded_preparation_folders().await?;
+        let link =
+            (request.mode == InputMode::LinkedView).then(|| request.link.unwrap_or_default());
+        let mut refusals = Vec::new();
+        if group.setup.profile_id != Some(profile.id) {
+            refusals.push(format!(
+                "run group '{}' does not share profile '{}'; set the group's setup first",
+                group.name, profile.name
+            ));
+        }
+        if group.setup.input_mode != Some(request.mode) {
+            refusals.push(format!(
+                "run group '{}' does not share this input mode; set the group's setup first",
+                group.name
+            ));
+        }
+        if request.link.is_some() && request.mode != InputMode::LinkedView {
+            refusals.push("a link kind applies to Linked View only".to_owned());
+        }
+        if let Some(refusal) = mode_refusal(&profile, request.mode) {
+            refusals.push(refusal);
+        }
+        if let Some(running) =
+            basis.preparations.iter().find(|done| done.outcome == PreparationState::Running)
+        {
+            refusals.push(format!("Prepare all '{}' is Running", running.name()));
+        }
+        let n = basis.preparations.iter().map(|done| done.n).max().unwrap_or(0) + 1;
+        let mut skipped = Vec::new();
+        let mut plans = Vec::new();
+        for panel in &basis.panels {
+            if panel.view.trashed_at.is_some() {
+                skipped.push(PanelOutcome {
+                    panel_id: panel.panel_id,
+                    number: panel.number,
+                    view_id: panel.view.id,
+                    result: PanelResult::Refused {
+                        reason: format!(
+                            "Panel {} is in the Project's Trash; Prepare all skips it",
+                            panel.number
+                        ),
+                    },
+                });
+                continue;
+            }
+            plans.push(self.plan_panel(group, panel, &readiness).await?);
+        }
+        if plans.is_empty() {
+            refusals.push(format!(
+                "run group '{}' has no panel run outside the Project's Trash",
+                group.name
+            ));
+        }
+        let disk = GroupDiskPlan {
+            output: output.as_ref().map(NativePath::to_path_buf).transpose()?,
+            project: project.name.clone(),
+            mosaic: group.name.clone(),
+            n,
+            folder_name: request.folder_name.clone(),
+            panels: plans
+                .iter()
+                .map(|plan| PanelDisk {
+                    number: plan.review.number,
+                    view_id: plan.review.view_id,
+                    results: plan.results.clone(),
+                    inputs: plan.inputs.clone(),
+                })
+                .collect(),
+            assembled: basis.assembled.clone(),
+            recorded,
+            kind: entry_kind(request.mode, link),
+            folder_handoff: request.mode == InputMode::DirectSource
+                && !profile.capability_evidence.input_list,
+        };
+        let disk = blocking(move || check_group_disk(&disk)).await?;
+        if let Some(refusal) = location_refusal(&disk.check) {
+            refusals.push(refusal);
+        }
+        let mut anchors = HashMap::new();
+        let mut panels = Vec::with_capacity(plans.len());
+        for (plan, checked) in plans.into_iter().zip(disk.panels) {
+            let mut review = plan.review;
+            let number = review.number;
+            review.blocked.extend(checked.blocked);
+            review
+                .refusals
+                .extend(checked.refusals.into_iter().map(|r| format!("Panel {number}: {r}")));
+            let created = checked.entries.iter().filter(|entry| entry.kind.created()).count();
+            review.operations = u64::try_from(created).unwrap_or(u64::MAX);
+            review.footprint_bytes = footprint(&checked.entries);
+            review.entries = checked.entries;
+            refusals.extend(review.refusals.iter().cloned());
+            anchors.insert(review.view_id, plan.anchors);
+            panels.push(review);
+        }
+        let review = GroupPreparationReview {
+            group_id: group.id,
+            group_revision: group.revision,
+            project_name: project.name.clone(),
+            subject_name,
+            mosaic_name: group.name.clone(),
+            verified_profile: profile.verified(),
+            unproven: profile.capability_evidence.unproven(),
+            suggested_mode: suggested_mode(&profile),
+            mode: request.mode,
+            link,
+            modes: mode_options(&profile),
+            calibration_policy: group.setup.calibration_policy,
+            preparation_number: n,
+            location: disk.location,
+            location_check: disk.check,
+            operations: panels.iter().map(|panel| panel.operations).sum(),
+            footprint_bytes: panels.iter().map(|panel| panel.footprint_bytes).sum(),
+            free_bytes: disk.free_bytes,
+            writability: disk.writability,
+            panels,
+            skipped,
+            refusals,
+            profile,
+        };
+        Ok(GroupPlanned { review, anchors })
+    }
+
+    /// One panel run's part of the Prepare all review: its committed
+    /// selection, its own calibration choices and readiness, its inputs and
+    /// its refusals.
+    async fn plan_panel(
+        &self,
+        group: &ViewGroup,
+        panel: &GroupPanel,
+        readiness: &GroupCalibrationReadiness,
+    ) -> Result<PanelPlan, LibraryError> {
+        let catalog = self.catalog();
+        let number = panel.number;
+        let record = catalog.view(panel.view.id).await?;
+        let view = &record.view;
+        let revisions = catalog.view_preparations(view.id).await?;
+        let mut refusals = Vec::new();
+        if view.completion == RunCompletion::Complete {
+            refusals.push(format!("Panel {number} is Complete; reopen it before preparing"));
+        }
+        if view.profile_id != group.setup.profile_id
+            || view.calibration_policy != group.setup.calibration_policy
+        {
+            refusals.push(format!("Panel {number} does not hold the run group's shared setup"));
+        }
+        if let Some(running) =
+            revisions.iter().find(|revision| revision.state == PreparationState::Running)
+        {
+            refusals.push(format!("Panel {number}: preparation '{}' is Running", running.name()));
+        }
+        let calibration_review = readiness
+            .panels
+            .iter()
+            .find(|line| line.view_id == view.id)
+            .and_then(|line| line.readiness.as_ref())
+            .and_then(CalibrationReadiness::needs_review_blocker);
+        let mut review = PanelPreparationReview {
+            number,
+            panel_id: panel.panel_id,
+            view_id: view.id,
+            run_name: record
+                .revision
+                .as_ref()
+                .map(|header| header.name.clone())
+                .or_else(|| record.draft.as_ref().map(|draft| draft.name.clone()))
+                .unwrap_or_default(),
+            membership_revision: view.revision,
+            draft_unsaved: record.draft.is_some(),
+            membership_changed: revisions
+                .last()
+                .is_some_and(|latest| latest.membership_revision != view.revision),
+            preparation_number: revisions.iter().map(|revision| revision.n).max().unwrap_or(0) + 1,
+            entries: Vec::new(),
+            blocked: Vec::new(),
+            excluded: 0,
+            calibration: None,
+            calibration_review,
+            operations: 0,
+            footprint_bytes: 0,
+            refusals,
+        };
+        let results = catalog.view_results_folder(view.id).await?;
+        if record.revision.is_none() {
+            review
+                .refusals
+                .push(format!("Panel {number} has no saved membership; save it before preparing"));
+            return Ok(PanelPlan { review, inputs: Vec::new(), results, anchors: HashMap::new() });
+        }
+        let basis = catalog.view_membership(view.id, Membership::Committed).await?;
+        let calibration = self.calibration_handoff(view.id, view.revision).await?;
+        let roots = self.input_roots(&basis, &calibration).await?;
+        let ((inputs, anchors), blocked, excluded) = resolve_inputs(&basis, &calibration, &roots)?;
+        if inputs.is_empty() && blocked.is_empty() {
+            review.refusals.push(format!("Panel {number} has no input to prepare"));
+        }
+        review.blocked = blocked;
+        review.excluded = excluded;
+        review.calibration = Some(calibration);
+        Ok(PanelPlan { review, inputs, results, anchors })
+    }
+}
+
+/// What Prepare all review checks on disk, off the async runtime.
+struct GroupDiskPlan {
+    output: Option<PathBuf>,
+    project: String,
+    mosaic: String,
+    n: u32,
+    folder_name: Option<String>,
+    panels: Vec<PanelDisk>,
+    assembled: Option<NativePath>,
+    recorded: RecordedFolders,
+    kind: PreparedEntryKind,
+    folder_handoff: bool,
+}
+
+struct PanelDisk {
+    number: u32,
+    view_id: Uuid,
+    results: Option<NativePath>,
+    inputs: Vec<SourceInput>,
+}
+
+struct PanelDiskCheck {
+    entries: Vec<PlannedEntry>,
+    blocked: Vec<BlockedInput>,
+    refusals: Vec<String>,
+}
+
+struct GroupDiskCheck {
+    location: Option<GroupLocation>,
+    check: LocationCheck,
+    /// In the order of [`GroupDiskPlan::panels`].
+    panels: Vec<PanelDiskCheck>,
+    free_bytes: Option<u64>,
+    writability: Option<Writability>,
+}
+
+fn check_group_disk(plan: &GroupDiskPlan) -> Result<GroupDiskCheck, LibraryError> {
+    let (location, check, writability, free_bytes) = check_group_location(plan)?;
+    let output = location.as_ref().map(|location| location.output.to_path_buf()).transpose()?;
+    let mut panels = Vec::with_capacity(plan.panels.len());
+    for (index, panel) in plan.panels.iter().enumerate() {
+        let folder = location
+            .as_ref()
+            .and_then(|location| location.panels.get(index))
+            .map(|place| place.folder.to_path_buf())
+            .transpose()?;
+        let (entries, blocked) = match (folder, &output) {
+            (Some(folder), Some(output)) => plan_entries(&panel.inputs, plan.kind, &folder, output),
+            _ => (Vec::new(), Vec::new()),
+        };
+        let refusals =
+            if plan.folder_handoff { folder_handoff_refusal(&panel.inputs) } else { Vec::new() };
+        panels.push(PanelDiskCheck { entries, blocked, refusals });
+    }
+    Ok(GroupDiskCheck { location, check, panels, free_bytes, writability })
+}
+
+type GroupLocationRead = (Option<GroupLocation>, LocationCheck, Option<Writability>, Option<u64>);
+
+fn check_group_location(plan: &GroupDiskPlan) -> Result<GroupLocationRead, LibraryError> {
+    let output = match chosen_parent(plan.output.as_deref(), &plan.recorded)? {
+        Ok(output) => output,
+        Err(check) => return Ok((None, check, None, None)),
+    };
+    let paths: Vec<layout::PanelPaths<'_>> = plan
+        .panels
+        .iter()
+        .map(|panel| layout::PanelPaths {
+            number: panel.number,
+            view_id: panel.view_id,
+            results: panel.results.as_ref(),
+        })
+        .collect();
+    let location = layout::group_location(
+        &output,
+        &plan.project,
+        &plan.mosaic,
+        plan.n,
+        plan.folder_name.as_deref(),
+        &paths,
+        plan.assembled.as_ref(),
+    )?;
+    let folder = location.folder.to_path_buf()?;
+    let project = folder.parent().unwrap_or(&output).to_path_buf();
+    let free_bytes = fs4::available_space(&output).ok();
+    let writable_root = match writable_root(&project, &output) {
+        Ok(root) => root,
+        Err(detail) => {
+            let check = LocationCheck::ParentUnavailable { detail };
+            return Ok((Some(location), check, None, free_bytes));
+        }
+    };
+    let writability = crate::import::writability(&writable_root);
+    let check = group_folders_check(&location, plan, &folder, &project, &writability)?;
+    Ok((Some(location), check, Some(writability), free_bytes))
+}
+
+/// Whether the group folder and every Results folder recorded for the
+/// first time can be created: none exists yet, and `<Mosaic> Results/` is a
+/// real folder when present.
+fn group_folders_check(
+    location: &GroupLocation,
+    plan: &GroupDiskPlan,
+    folder: &Path,
+    project: &Path,
+    writability: &Writability,
+) -> Result<LocationCheck, LibraryError> {
+    if fs::symlink_metadata(folder).is_ok() {
+        return Ok(LocationCheck::FolderExists { folder: location.folder.clone() });
+    }
+    let fresh = location
+        .panels
+        .iter()
+        .zip(&plan.panels)
+        .filter(|(_, panel)| panel.results.is_none())
+        .map(|(place, _)| &place.results)
+        .chain(plan.assembled.is_none().then_some(&location.assembled));
+    for results in fresh {
+        let path = results.to_path_buf()?;
+        if fs::symlink_metadata(&path).is_ok() {
+            return Ok(LocationCheck::FolderExists { folder: results.clone() });
+        }
+        if let Some(parent) = path.parent().filter(|parent| *parent != project) {
+            if let Err(detail) = writable_root(parent, parent) {
+                return Ok(LocationCheck::ParentUnavailable { detail });
+            }
+        }
+    }
+    Ok(match writability {
+        Writability::NotWritable { detail } => {
+            LocationCheck::NotWritable { detail: detail.clone() }
+        }
+        _ => LocationCheck::Ready,
+    })
+}
+
+/// PREP's run lifecycle sources: Running revisions, and a Running Prepare all
+/// on each of its panel runs, block Mark Complete and Move run to Trash;
+/// every revision's folder (a panel run's `Panel N/` in each group folder) and
+/// the run's Results folder are named for Empty Trash.
 struct PreparationSources {
     library: Weak<Library>,
 }
@@ -1553,15 +2362,28 @@ impl RunOperationGuard for PreparationSources {
     fn blockers<'a>(&'a self, view: &'a View) -> BlockersFuture<'a> {
         Box::pin(async move {
             let library = self.library()?;
+            let groups = library.catalog().running_group_preparations(view.id).await?;
             let revisions = library.catalog().view_preparations(view.id).await?;
-            Ok(revisions
-                .into_iter()
+            let in_group = |revision: &PreparationRevision| {
+                revision.group_preparation_id.is_some_and(|id| groups.iter().any(|g| g.id == id))
+            };
+            let running = revisions
+                .iter()
                 .filter(|revision| revision.state == PreparationState::Running)
+                .filter(|revision| !in_group(revision))
                 .map(|revision| LifecycleBlocker::RunningOperation {
                     operation_id: revision.id,
                     operation: RunOperationKind::Preparation,
                     name: revision.name(),
+                });
+            Ok(groups
+                .iter()
+                .map(|group| LifecycleBlocker::RunningOperation {
+                    operation_id: group.id,
+                    operation: RunOperationKind::Preparation,
+                    name: group.name(),
                 })
+                .chain(running)
                 .collect())
         })
     }

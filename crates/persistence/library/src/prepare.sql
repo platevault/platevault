@@ -1,12 +1,13 @@
 -- Copyright (C) 2024-2026 Sjors Robroek
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
--- Application preparation (spec 069 PREP-FR-01..11, PREP-FR-14): handoff
--- profiles with their capability evidence, preparation revisions of a run,
--- each in its own new folder, the entries each revision created or passed
--- through with their source snapshots, and the Results folder every revision
--- of a run shares. Paths are native-path JSON. A revision's folder is never
--- recorded twice, and a run has at most one Running revision.
+-- Application preparation (spec 069 PREP-FR-01..14): handoff profiles with
+-- their capability evidence, preparation revisions of a run, each in its own
+-- new folder, the entries each revision created or passed through with their
+-- source snapshots, the Results folder every revision of a run shares, and a
+-- run group's Prepare all revisions. Paths are native-path JSON. A revision's
+-- folder is never recorded twice, and a run or run group has at most one
+-- Running revision.
 
 CREATE TABLE IF NOT EXISTS profiles (
     id TEXT PRIMARY KEY NOT NULL,
@@ -20,6 +21,29 @@ CREATE TABLE IF NOT EXISTS profiles (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 ) STRICT;
+
+-- A run group's Prepare all revision (PREP-FR-12/13, D-W38, D-W73): its own
+-- new group folder, `<Mosaic>/` and then `<Mosaic> (rev N)/`, holding only one
+-- `Panel N/` folder per panel run. Each panel run's revision is a
+-- `preparation_revisions` row naming it; the outcome follows the panels'
+-- outcomes once Prepare all ends.
+CREATE TABLE IF NOT EXISTS group_preparations (
+    id TEXT PRIMARY KEY NOT NULL,
+    group_id TEXT NOT NULL REFERENCES view_groups (id),
+    n INTEGER NOT NULL CHECK (n > 0),
+    profile_id TEXT NOT NULL REFERENCES profiles (id),
+    output TEXT NOT NULL,
+    folder TEXT NOT NULL UNIQUE,
+    outcome TEXT NOT NULL CHECK (
+        outcome IN ('running', 'prepared', 'partial', 'failed', 'canceled', 'paused')
+    ),
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    UNIQUE (group_id, n),
+    CHECK ((outcome = 'running') = (finished_at IS NULL))
+) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS group_preparations_running
+    ON group_preparations (group_id) WHERE outcome = 'running';
 
 CREATE TABLE IF NOT EXISTS preparation_revisions (
     id TEXT PRIMARY KEY NOT NULL,
@@ -38,7 +62,7 @@ CREATE TABLE IF NOT EXISTS preparation_revisions (
     ),
     reason TEXT,
     -- The run group preparation (Prepare all) this revision belongs to.
-    group_preparation_id TEXT,
+    group_preparation_id TEXT REFERENCES group_preparations (id),
     started_at TEXT NOT NULL,
     finished_at TEXT,
     UNIQUE (view_id, n),
@@ -81,7 +105,7 @@ CREATE TABLE IF NOT EXISTS prepared_entries (
 CREATE TABLE IF NOT EXISTS results_folders (
     id TEXT PRIMARY KEY NOT NULL,
     view_id TEXT REFERENCES views (id),
-    group_id TEXT,
+    group_id TEXT REFERENCES view_groups (id),
     kind TEXT NOT NULL CHECK (kind IN ('run', 'panel', 'assembled')),
     path TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL,
@@ -90,3 +114,5 @@ CREATE TABLE IF NOT EXISTS results_folders (
 ) STRICT;
 CREATE UNIQUE INDEX IF NOT EXISTS results_folders_view
     ON results_folders (view_id) WHERE view_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS results_folders_group
+    ON results_folders (group_id) WHERE group_id IS NOT NULL;
