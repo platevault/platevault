@@ -219,6 +219,13 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::prepare::prepare_outcome,
         crate::commands::prepare::prepare_blocker,
         crate::commands::prepare::prepare_open,
+        crate::commands::prepare::prepare_group_review,
+        crate::commands::prepare::prepare_group_run,
+        crate::commands::prepare::prepare_group_retry,
+        crate::commands::prepare::prepare_group_stop,
+        crate::commands::prepare::prepare_group_list,
+        crate::commands::prepare::prepare_group_outcome,
+        crate::commands::prepare::prepare_group_open,
         // results
         // storage
         crate::commands::storage::storage_overview,
