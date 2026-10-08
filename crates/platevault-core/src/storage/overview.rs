@@ -321,7 +321,7 @@ impl Library {
 
 /// One revision's footprint, re-reading every entry it wrote. An entry a
 /// run Clean up moved to the OS Trash (`removed`) holds nothing and never
-/// reads as drift: PlateVault moved it. Runs off the async runtime.
+/// reads as drift: `PlateVault` moved it. Runs off the async runtime.
 fn revision_footprint(
     record: PreparationRecord,
     removed: &HashSet<PreparedEntryKey>,

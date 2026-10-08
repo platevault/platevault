@@ -621,9 +621,11 @@ async fn empty_trash_never_follows_a_retargeted_parent() {
     let request = CleanupRequest::EmptyTrash { view_id: world.run, results: true };
     let review = world.library.review_cleanup(&request, trash.dyn_trash()).await.unwrap();
     assert!(items(&review).is_empty(), "{review:#?}");
-    let staying: Vec<(PathBuf, ReasonCode)> =
-        review.staying.iter().map(|item| (path(&item.path), item.reason.code)).collect();
-    assert!(staying.contains(&(folder.clone(), ReasonCode::SourceDrift)), "{review:#?}");
+    let drifted = review
+        .staying
+        .iter()
+        .any(|item| path(&item.path) == folder && item.reason.code == ReasonCode::SourceDrift);
+    assert!(drifted, "the prepared folder stays, named as drifted: {review:#?}");
 
     let emptied = world.library.empty_trash(review.id.unwrap(), trash.dyn_trash()).await.unwrap();
     assert!(emptied.run_removed, "{emptied:#?}");

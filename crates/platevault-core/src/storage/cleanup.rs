@@ -39,8 +39,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
 use persistence_library::{
-    CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, PreparationRecord, RecordedFolder,
-    RunCleanupDraft, RunCleanupFolder, RunCleanupRecord, RunFolders,
+    CleanupDisposition, CleanupFolderDraft, CleanupItemDraft, GroupFolders, PreparationRecord,
+    RecordedFolder, RunCleanupDraft, RunCleanupFolder, RunCleanupRecord, RunFolders,
 };
 use uuid::Uuid;
 
@@ -1037,44 +1037,51 @@ fn empty_trash_candidates(
             )?;
         }
     }
-    let Some(group) = &recorded.group else {
-        return Ok((folders, candidates));
-    };
+    if let Some(group) = &recorded.group {
+        push_group(group, ticked, &mut folders, &mut candidates, &mut seen)?;
+    }
+    Ok((folders, candidates))
+}
+
+/// The last panel run's group folders, after its own: each group folder
+/// lists nothing, and the ticked `Assembled/` folder stays as a whole while
+/// another run uses one of the group's accepted Results.
+fn push_group(
+    group: &GroupFolders,
+    ticked: bool,
+    folders: &mut Vec<FolderPlan>,
+    candidates: &mut Vec<Candidate>,
+    seen: &mut HashSet<PathBuf>,
+) -> Result<(), LibraryError> {
     for (n, recorded) in &group.folders {
         if let Some(path) = existing(&recorded.path) {
             let role = CleanupFolderRole::Group { group_preparation: *n };
             folders.push(folder_plan(path, recorded.canonical.as_ref(), role));
         }
     }
-    match (&group.assembled, group.assembled_users.as_slice()) {
-        (Some(assembled), []) if ticked => push_results(
-            assembled,
-            CleanupFolderRole::Assembled,
-            &mut folders,
-            &mut candidates,
-            &mut seen,
-        )?,
-        (Some(assembled), users) if ticked => {
-            if let Some(path) = existing(&assembled.path) {
-                let named: Vec<String> = users.iter().map(ToString::to_string).collect();
-                let reason = ItemReason::new(
-                    ReasonCode::Protected,
-                    format!(
-                        "an accepted Result in {} is an input to run {}; it stays in place",
-                        path.display(),
-                        named.join(", ")
-                    ),
-                );
-                folders.push(FolderPlan {
-                    path,
-                    role: CleanupFolderRole::Assembled,
-                    identity: Err(reason),
-                });
-            }
-        }
-        _ => {}
+    let Some(assembled) = group.assembled.as_ref().filter(|_| ticked) else {
+        return Ok(());
+    };
+    if group.assembled_users.is_empty() {
+        return push_results(assembled, CleanupFolderRole::Assembled, folders, candidates, seen);
     }
-    Ok((folders, candidates))
+    if let Some(path) = existing(&assembled.path) {
+        let named: Vec<String> = group.assembled_users.iter().map(ToString::to_string).collect();
+        let reason = ItemReason::new(
+            ReasonCode::Protected,
+            format!(
+                "an accepted Result in {} is an input to run {}; it stays in place",
+                path.display(),
+                named.join(", ")
+            ),
+        );
+        folders.push(FolderPlan {
+            path,
+            role: CleanupFolderRole::Assembled,
+            identity: Err(reason),
+        });
+    }
+    Ok(())
 }
 
 /// A ticked Results folder with every entry below it as a Result item.
