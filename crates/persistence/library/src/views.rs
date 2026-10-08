@@ -142,6 +142,58 @@ struct DraftRow {
 // Runs and drafts
 // ---------------------------------------------------------------------------
 
+/// Insert run `input` in the open write transaction, at revision 0 with
+/// unsaved work at draft revision 1 holding every available candidate of the
+/// subject on the rig, each with the reason naming that Target and rig. The
+/// creation path [`Catalog::create_view`] and creation with Results as inputs
+/// share; it writes only run rows.
+///
+/// # Errors
+/// As [`Catalog::create_view`], after `input` validated.
+pub async fn insert_view(conn: &mut SqliteConnection, input: &NewView) -> Result<View> {
+    let target_id = run_subject(conn, input.project_id, input.subject_id, false).await?;
+    require_project_rig(conn, input.project_id, input.rig_id).await?;
+    let id = Uuid::new_v4();
+    let at = now()?;
+    sqlx::query(
+        "INSERT INTO views (id, project_id, subject_id, rig_id, stage, completion, \
+         calibration_policy, revision, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, ?8)",
+    )
+    .bind(id.to_string())
+    .bind(input.project_id.to_string())
+    .bind(input.subject_id.to_string())
+    .bind(input.rig_id.to_string())
+    .bind(to_text(&RunStage::Select)?)
+    .bind(to_text(&RunCompletion::Open)?)
+    .bind(to_text(&platevault_model::CalibrationPolicy::Automatic)?)
+    .bind(&at)
+    .execute(&mut *conn)
+    .await?;
+    let criteria = ViewCriteria { target_id, rig_id: input.rig_id, panel_id: None };
+    let row = sqlx::query(
+        "INSERT INTO view_revisions (view_id, state, draft_revision, base_revision, name, \
+         criteria, updated_at) VALUES (?1, 'draft', 1, 0, ?2, ?3, ?4)",
+    )
+    .bind(id.to_string())
+    .bind(input.name.trim())
+    .bind(to_json(&criteria)?)
+    .bind(&at)
+    .execute(&mut *conn)
+    .await?
+    .last_insert_rowid();
+    let view = load_view(conn, id).await?;
+    let reason = SelectionReason::Candidate { target_id, rig_id: input.rig_id };
+    for candidate in run_candidates(conn, &view).await? {
+        let assets = current_member_assets(conn, candidate).await?;
+        if assets.iter().any(|asset| asset.availability == Availability::Available) {
+            let session = load_session_row(conn, candidate).await?.session;
+            select_session(conn, row, &session, &reason, None).await?;
+        }
+    }
+    Ok(view)
+}
+
 impl Catalog {
     /// Create a run in its Project on one subject and one of the Project's
     /// rigs, at revision 0 with unsaved work at draft revision 1. The draft
@@ -156,47 +208,8 @@ impl Catalog {
     pub async fn create_view(&self, input: &NewView) -> Result<ViewRecord> {
         input.validate()?;
         let record = write_txn!(self, |conn| {
-            let target_id = run_subject(conn, input.project_id, input.subject_id, false).await?;
-            require_project_rig(conn, input.project_id, input.rig_id).await?;
-            let id = Uuid::new_v4();
-            let at = now()?;
-            sqlx::query(
-                "INSERT INTO views (id, project_id, subject_id, rig_id, stage, completion, \
-                 calibration_policy, revision, created_at, updated_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, ?8)",
-            )
-            .bind(id.to_string())
-            .bind(input.project_id.to_string())
-            .bind(input.subject_id.to_string())
-            .bind(input.rig_id.to_string())
-            .bind(to_text(&RunStage::Select)?)
-            .bind(to_text(&RunCompletion::Open)?)
-            .bind(to_text(&platevault_model::CalibrationPolicy::Automatic)?)
-            .bind(&at)
-            .execute(&mut *conn)
-            .await?;
-            let criteria = ViewCriteria { target_id, rig_id: input.rig_id, panel_id: None };
-            let row = sqlx::query(
-                "INSERT INTO view_revisions (view_id, state, draft_revision, base_revision, name, \
-                 criteria, updated_at) VALUES (?1, 'draft', 1, 0, ?2, ?3, ?4)",
-            )
-            .bind(id.to_string())
-            .bind(input.name.trim())
-            .bind(to_json(&criteria)?)
-            .bind(&at)
-            .execute(&mut *conn)
-            .await?
-            .last_insert_rowid();
-            let view = load_view(conn, id).await?;
-            let reason = SelectionReason::Candidate { target_id, rig_id: input.rig_id };
-            for candidate in run_candidates(conn, &view).await? {
-                let assets = current_member_assets(conn, candidate).await?;
-                if assets.iter().any(|asset| asset.availability == Availability::Available) {
-                    let session = load_session_row(conn, candidate).await?.session;
-                    select_session(conn, row, &session, &reason, None).await?;
-                }
-            }
-            load_record(conn, id).await?
+            let view = insert_view(conn, input).await?;
+            load_record(conn, view.id).await?
         });
         Ok(record)
     }
@@ -1410,7 +1423,7 @@ impl Catalog {
 }
 
 /// A run in the Project's Trash offers no step until it is restored (D-W72).
-fn require_live(view: &View) -> Result<()> {
+pub fn require_live(view: &View) -> Result<()> {
     if view.trashed_at.is_some() {
         return Err(invalid(format!(
             "run {} is in the Project's Trash; restore it first",

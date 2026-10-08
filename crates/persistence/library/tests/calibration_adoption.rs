@@ -177,12 +177,13 @@ async fn review_refuses_each_unadoptable_request_and_writes_nothing() {
     )
     .await;
     assert_eq!(kind(&not_master), "invalid_input", "{not_master}");
-    let pending_res = refuse(
+    // Results discovery (070) records Result sources; an unknown one is not found.
+    let unknown_result = refuse(
         AdoptionSource::Result { result_id: Uuid::new_v4() },
         into(&lib.calibration, "masters/result.fit"),
     )
     .await;
-    assert_eq!(kind(&pending_res), "invalid_input", "{pending_res}");
+    assert_eq!(kind(&unknown_result), "not_found", "{unknown_result}");
 
     catalog
         .mark_location_unavailable(lib.calibration.id, Availability::Offline, "unplugged")

@@ -227,6 +227,17 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         crate::commands::prepare::prepare_group_outcome,
         crate::commands::prepare::prepare_group_open,
         // results
+        crate::commands::results::results_list,
+        crate::commands::results::results_rescan,
+        crate::commands::results::results_attach,
+        crate::commands::results::results_accept,
+        crate::commands::results::results_accepted,
+        crate::commands::results::results_inputs,
+        crate::commands::results::view_create_with_products,
+        crate::commands::results::view_add_product_inputs,
+        crate::commands::results::view_product_inputs,
+        crate::commands::results::results_master_dismiss,
+        crate::commands::results::calibration_result_masters,
         // storage
         crate::commands::storage::storage_overview,
         // import

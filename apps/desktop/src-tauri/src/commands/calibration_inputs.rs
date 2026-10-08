@@ -295,8 +295,9 @@ pub async fn calibration_project_evidence(
 ///
 /// # Errors
 /// `IdentityConflict` scoped to an existing destination entry; `InvalidInput`
-/// for a RES output before 070, a non-master or a Retired source;
-/// `SourceUnavailable` for an offline location.
+/// for a Result that is no offered master or lies outside every registered
+/// location, a non-master or a Retired source; `SourceUnavailable` for an
+/// offline location.
 #[tauri::command]
 pub async fn calibration_review_adoption(
     library: State<'_, Arc<Library>>,
