@@ -9,6 +9,8 @@ import { useEffect, useId, useRef, useState } from "react"
 import { KeyValueList } from "@/components/app/data"
 import { ActionError, DetailSkeleton, Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
+import { Pill } from "@/components/app/pill"
+import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
@@ -25,8 +27,8 @@ import { ReturnNotice } from "./settings-layout"
 const HREF = "/settings/targets"
 
 const PROVIDERS: Array<{ value: AppSettings["targetLookup"]["provider"]; title: string; description: string }> = [
-  { value: "cds-sesame", title: "CDS Sesame", description: "Queries SIMBAD, NED and VizieR in turn. Best coverage." },
-  { value: "simbad", title: "SIMBAD only", description: "One provider. Fewer galaxy and catalogue aliases." },
+  { value: "cds-sesame", title: "CDS Sesame", description: "SIMBAD, NED, VizieR" },
+  { value: "simbad", title: "SIMBAD only", description: "SIMBAD" },
 ]
 
 const PROVIDER_LABEL: Record<AppSettings["targetLookup"]["provider"], string> = { "cds-sesame": "CDS Sesame", simbad: "SIMBAD" }
@@ -115,35 +117,30 @@ export function TargetLookupPage() {
 
   return (
     <div>
-      <PageHeader
-        level={2}
-        title="Target lookup"
-        description="Optional online enrichment for Targets: coordinates, aliases and object type, each labelled with its provider. Capture metadata is never replaced."
-      />
+      <PageHeader level={2} title="Target lookup" />
       <PageBody>
-        <ReturnNotice task="Target lookup" />
-        <Notice tone="info" title="Local search always works">
-          Searching by name, alias or coordinates uses your {targets === 1 ? "1 Target" : `${targets} Targets`} and the bundled offline catalogues of {BUNDLED_CATALOGUE.length} objects. It needs no
-          account or network.
-        </Notice>
+        <ReturnNotice />
+        <p className="flex flex-wrap items-center gap-1.5 text-sm" data-local-search>
+          <Pill tone="success">Local search</Pill>
+          <span className="text-muted-foreground tabular-nums">
+            {targets === 1 ? "1 Target" : `${targets} Targets`} · {BUNDLED_CATALOGUE.length} catalogue objects
+          </span>
+        </p>
         {writeError ? <ActionError message={writeError.message} onRetry={writeError.retry} /> : null}
 
-        <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-          <div className="space-y-0.5">
+        <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
+          <span className="inline-flex items-center gap-1.5">
             <label htmlFor={ids.enabled} className="text-sm font-medium">
               Look up Targets online
             </label>
-            <p id={`${ids.enabled}-hint`} className="text-xs text-muted-foreground">
-              Sends Target names to the provider below when you add or enrich a Target. A failed lookup never blocks indexing.
-            </p>
-          </div>
-          <Switch id={ids.enabled} aria-describedby={`${ids.enabled}-hint`} checked={lookup.enabled} onCheckedChange={(checked) => change({ ...lookup, enabled: checked })} />
+            <HelpTip label="About online lookup">Sends Target names to the provider. A failed lookup never blocks indexing.</HelpTip>
+          </span>
+          <Switch id={ids.enabled} checked={lookup.enabled} onCheckedChange={(checked) => change({ ...lookup, enabled: checked })} />
         </div>
 
         <Section title="Provider" level={3} id={ids.provider}>
           <RadioGroup
             aria-labelledby={`${ids.provider}-title`}
-            aria-describedby={lookup.enabled ? undefined : `${ids.provider}-off`}
             disabled={!lookup.enabled}
             value={lookup.provider}
             onValueChange={(value) => change({ ...lookup, provider: value as AppSettings["targetLookup"]["provider"] })}
@@ -161,14 +158,9 @@ export function TargetLookupPage() {
               </FieldLabel>
             ))}
           </RadioGroup>
-          {lookup.enabled ? null : (
-            <p id={`${ids.provider}-off`} className="text-xs text-muted-foreground">
-              Turn on online lookup to choose a provider.
-            </p>
-          )}
         </Section>
 
-        <Section title="Test a lookup" level={3} id="lookup-test" description="Prototype: the response is fixture data, and no request leaves this browser.">
+        <Section title="Test" level={3} id="lookup-test" actions={<Pill tone="muted">Fixture</Pill>}>
           <form
             noValidate
             className="max-w-sm"
@@ -186,7 +178,7 @@ export function TargetLookupPage() {
               action={
                 <Button type="submit" className="shrink-0" aria-busy={running || undefined}>
                   {running ? <Loader2 aria-hidden="true" data-icon="inline-start" className="motion-safe:animate-spin" /> : <Search aria-hidden="true" data-icon="inline-start" />}
-                  {running ? "Looking up…" : "Test lookup"}
+                  {running ? "Looking up…" : "Test"}
                 </Button>
               }
             />
@@ -198,7 +190,7 @@ export function TargetLookupPage() {
               last.outcome === "resolved" && last.result ? (
                 <div className="space-y-2 rounded-lg border p-3">
                   <p className="text-sm">
-                    {last.message} <span className="text-muted-foreground">Prototype: fixture response · {formatDateTime(last.at)}</span>
+                    {last.message} <span className="text-muted-foreground">{formatDateTime(last.at)}</span>
                   </p>
                   <KeyValueList
                     items={[
@@ -210,7 +202,7 @@ export function TargetLookupPage() {
                   />
                 </div>
               ) : (
-                <Notice tone={last.outcome === "failed" ? "warning" : "info"} title={last.outcome === "failed" ? "Lookup failed" : last.outcome === "off" ? "Online lookup is off" : "No match"}>
+                <Notice tone={last.outcome === "failed" ? "warning" : "info"} title={last.outcome === "failed" ? "Lookup failed" : last.outcome === "off" ? "Online lookup off" : "No match"}>
                   {last.message}
                 </Notice>
               )

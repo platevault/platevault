@@ -1,29 +1,37 @@
 /**
  * Settings › Locations (J19 S2-S3, S5, S7, S12-S13, S15; J28 S11-S13;
- * LIB-FR-01, -06, -07, -15; LIB-AC-04, -05, -11, -16; D11). Registered
- * locations by role with access, online state and scan scope; Index now,
- * Rescan, Choose folder again, Retry, Locate or remap, Retire location, Edit
- * and Remove. `?locationId=` opens one location, `?add=<role>` starts adding
- * one, `?return=` links back.
+ * LIB-FR-01, -06, -07, -15; LIB-AC-04, -05, -11, -16; D11; P-ARC1).
+ * Registered locations by role with access, online state and scan scope;
+ * Index now, Rescan, Choose folder again, Retry, Locate or remap, Retire
+ * location, Edit and Remove, in each row's More actions menu and on
+ * right-click. Several archive locations may be registered; one carries the
+ * Default pill (the Archive step's default destination) and the others offer
+ * Make default. `?locationId=` opens one location, `?add=<role>` starts
+ * adding one, `?return=` links back.
  */
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
-import { MoreHorizontal, Play, RotateCw } from "lucide-react"
+import { MoreHorizontal, Play, Plus, RotateCw } from "lucide-react"
 import { type ReactNode, useEffect, useId, useRef, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { ActionError, Notice } from "@/components/app/feedback"
 import { OperationPanel } from "@/components/app/operation-panel"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
+import { Pill } from "@/components/app/pill"
+import { Refusal, type RefusalProps, refusalFrom } from "@/components/app/refusal"
+import { ContextMenuArea, type MenuEntry } from "@/components/app/row-menu"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { defaultArchiveLocation } from "@/domain/derive"
 import { locationAvailability } from "@/domain/library"
 import type { Location, LocationRole } from "@/domain/types"
 import { formatDateTime, plural } from "@/lib/format"
+import { setDefaultArchiveLocation } from "@/store/actions/settings"
 import { store, useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { AddLocationFlow } from "../components/add-location-flow"
@@ -92,7 +100,6 @@ function EditLocationDialog({ location, onClose }: { location: Location | null; 
         >
           <DialogHeader>
             <DialogTitle>Edit {location?.displayName}</DialogTitle>
-            <DialogDescription>Changes the catalog record only. The folder and its files stay as they are.</DialogDescription>
           </DialogHeader>
           {location ? <PathText path={location.path} className="text-muted-foreground" /> : null}
           <TextField id={ids.name} label="Display name" value={name} onChange={setName} error={error} autoFocus />
@@ -110,12 +117,11 @@ function EditLocationDialog({ location, onClose }: { location: Location | null; 
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{ROLE_COPY[role].description}</p>
           </Field>
           {writeError ? <ActionError message={writeError} onRetry={submit} /> : null}
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-            <Button type="submit">Save changes</Button>
+            <Button type="submit">Save</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -135,7 +141,7 @@ function LocationDetail({ location, onClose, actions }: { location: Location | n
             <SheetHeader>
               <SheetTitle>{location.displayName}</SheetTitle>
               <SheetDescription>
-                {ROLE_COPY[location.role].title} location, registered {formatDateTime(location.registeredAt)}.
+                {ROLE_COPY[location.role].title} · {formatDateTime(location.registeredAt)}
               </SheetDescription>
             </SheetHeader>
             <div className="space-y-4 overflow-y-auto px-4 pb-4">
@@ -217,13 +223,20 @@ function RetireReviewPanel({
           { label: "Results", value: none(review.results) },
         ]}
       />
-      <p className="text-sm text-pretty">
-        Retiring deletes, moves or modifies no file. These copies will read Retired, leave integration totals and stay named unresolved in fixed Views. A retired
-        location is never reselected, rescanned or remapped.
-      </p>
+      <ul aria-label="Changes" className="flex flex-wrap gap-1">
+        <li>
+          <Pill tone="warning">{`${plural(review.frames, "copy", "copies")} read Retired`}</Pill>
+        </li>
+        <li>
+          <Pill tone="muted">Leaves totals</Pill>
+        </li>
+        <li>
+          <Pill tone="muted">No file changes</Pill>
+        </li>
+      </ul>
       {refusal ? (
         <div id={refusalId}>
-          <Notice tone="refusal" title="Availability changed since this review">
+          <Notice tone="refusal" title="Availability changed">
             {refusal}
           </Notice>
         </div>
@@ -297,81 +310,101 @@ export function LocationsPage() {
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-location-id="${CSS.escape(id)}"] button[aria-label^="More actions"]`)?.focus())
   }
 
-  function rowActions(location: Location) {
+  const settings = useStore((s) => s.settings)
+  const defaultArchiveId = defaultArchiveLocation({ catalog, settings })?.id ?? null
+  const [defaultRefusal, setDefaultRefusal] = useState<RefusalProps | null>(null)
+
+  function makeDefault(location: Location) {
+    const result = setDefaultArchiveLocation(location.id)
+    setDefaultRefusal(result.ok ? null : (refusalFrom(result, "Make default blocked") ?? { action: "Make default not saved", reason: result.message, blockers: [] }))
+  }
+
+  /** Every action a location offers, for its More actions menu and its right-click menu. */
+  function locationEntries(location: Location): MenuEntry[] {
     const frames = framesInLocation(catalog, location.id)
     const availability = locationAvailability(store.getState().disk, location)
-    const online = availability === "online"
+    const run = latestIndexRun(store.getState().operations, location.id)
+    const busy = run !== null && !isSettled(run.op.status) && run.op.status !== "interrupted"
+    const details: MenuEntry = { label: "Details", onSelect: () => setDetail(location.id) }
+    // A retired location is never reselected, rescanned or remapped (LIB-FR-15).
+    if (availability === "retired") return [details]
+    return [
+      { label: location.scanScope === "never" ? "Index now" : "Rescan", disabled: busy || availability !== "online", onSelect: () => actions.retry(location) },
+      ...(location.role === "archive" && defaultArchiveId !== location.id ? [{ label: "Make default", onSelect: () => makeDefault(location) }] : []),
+      details,
+      { label: "Edit", onSelect: () => setEditing(location) },
+      { label: "Locate or remap", disabled: frames === 0, onSelect: () => actions.locate(location) },
+      { label: "Choose folder again", onSelect: () => actions.chooseAgain(location) },
+      { separator: true },
+      { label: "Retire location", disabled: frames === 0, onSelect: () => openRetire(location) },
+      { label: frames > 0 ? `Remove · ${plural(frames, "frame")}` : "Remove", destructive: true, disabled: frames > 0, onSelect: () => setRemoving(location) },
+    ]
+  }
+
+  function rowActions(location: Location) {
+    const availability = locationAvailability(store.getState().disk, location)
     const run = latestIndexRun(store.getState().operations, location.id)
     const busy = run !== null && !isSettled(run.op.status) && run.op.status !== "interrupted"
     const never = location.scanScope === "never"
-    // A retired location is never reselected, rescanned or remapped (LIB-FR-15).
-    if (availability === "retired") {
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={`More actions for ${location.displayName}`} />}>
-            <MoreHorizontal aria-hidden="true" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-60">
-            <DropdownMenuItem onClick={() => setDetail(location.id)}>Details</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )
-    }
+    const more = (
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={`More actions for ${location.displayName}`} />}>
+          <MoreHorizontal aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          {locationEntries(location).map((entry, index) =>
+            "separator" in entry ? (
+              <DropdownMenuSeparator key={`sep-${index}`} />
+            ) : "heading" in entry ? null : (
+              <DropdownMenuItem key={entry.label} variant={entry.destructive ? "destructive" : "default"} disabled={entry.disabled} onClick={entry.onSelect}>
+                {entry.label}
+              </DropdownMenuItem>
+            ),
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+    if (availability === "retired") return more
     return (
       <>
+        {location.role === "archive" && defaultArchiveId !== location.id ? (
+          <Button size="sm" variant="ghost" onClick={() => makeDefault(location)} data-make-default={location.id}>
+            Make default<span className="sr-only"> {location.displayName}</span>
+          </Button>
+        ) : null}
         <Button
           size="sm"
           variant="outline"
-          disabled={busy || !online}
-          title={busy ? "Indexing is in progress" : !online ? "Offline: reconnect the volume to index it" : undefined}
+          disabled={busy || availability !== "online"}
+          title={busy ? "Indexing" : availability !== "online" ? "Offline" : undefined}
           onClick={() => actions.retry(location)}
         >
           {never ? <Play aria-hidden="true" data-icon="inline-start" /> : <RotateCw aria-hidden="true" data-icon="inline-start" />}
           {never ? "Index now" : "Rescan"}
         </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" aria-label={`More actions for ${location.displayName}`} />}>
-            <MoreHorizontal aria-hidden="true" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-60">
-            <DropdownMenuItem onClick={() => setDetail(location.id)}>Details</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setEditing(location)}>Edit</DropdownMenuItem>
-            <DropdownMenuItem disabled={frames === 0} onClick={() => actions.locate(location)}>
-              {frames === 0 ? "Locate or remap (nothing indexed yet)" : "Locate or remap"}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => actions.chooseAgain(location)}>Choose folder again</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={frames === 0} onClick={() => openRetire(location)}>
-              {frames === 0 ? "Retire location (nothing indexed; use Remove)" : "Retire location"}
-            </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" disabled={frames > 0} onClick={() => setRemoving(location)} className={frames > 0 ? "flex-col items-start gap-0.5" : undefined}>
-              Remove
-              {frames > 0 ? <span className="text-xs text-muted-foreground">Holds {plural(frames, "indexed frame")}. Use Locate or remap, or Retire location.</span> : null}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {more}
       </>
     )
   }
 
   const busyIndex = latestIndex && !isSettled(latestIndex.status)
   const detailActions = detail ? rowActions(detail) : null
+  const menu = (id: string) => {
+    const location = catalog.locations[id]
+    return location ? locationEntries(location) : []
+  }
 
   return (
     <div>
-      <PageHeader
-        level={2}
-        title="Locations"
-        description="Folders PlateVault indexes in place, by role. Registering or indexing a location never changes its files."
-      />
+      <PageHeader level={2} title="Locations" />
       <PageBody>
-        <ReturnNotice task="Locations" />
+        <ReturnNotice />
         {latestIndex ? (
           busyIndex ? (
             <OperationPanel operationId={latestIndex.id} />
           ) : (
-            <p className="text-sm text-muted-foreground tabular-nums">
-              Last indexing: <StatusBadge kind="operation" value={latestIndex.status} /> {latestIndex.settledAt ? formatDateTime(latestIndex.settledAt) : ""}
+            <p className="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground tabular-nums">
+              Last indexing <StatusBadge kind="operation" value={latestIndex.status} /> {latestIndex.settledAt ? formatDateTime(latestIndex.settledAt) : ""}
               {latestIndex.summary ? ` · ${latestIndex.summary}` : ""} ·{" "}
               <Link to="/activity" className="text-link underline-offset-4 hover:underline">
                 Activity
@@ -379,6 +412,7 @@ export function LocationsPage() {
             </p>
           )
         ) : null}
+        {defaultRefusal ? <Refusal {...defaultRefusal} /> : null}
 
         {ROLE_ORDER.map((role) => {
           const rows = locations.filter((l) => l.role === role)
@@ -389,43 +423,44 @@ export function LocationsPage() {
               id={`locations-${role}`}
               level={3}
               title={copy.title}
-              description={copy.description}
               actions={
                 <Button size="sm" variant="outline" onClick={() => setAdding({ role })}>
-                  {rows.length === 0 ? copy.add : "Add another location"}
+                  <Plus aria-hidden="true" data-icon="inline-start" />
+                  Add<span className="sr-only"> {copy.noun} location</span>
                 </Button>
               }
             >
               {rows.length === 0 ? (
-                <div className="flex items-center gap-2 rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                  <StatusBadge kind="role" value="unset" /> No {copy.noun} location yet.
-                </div>
+                <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">None</p>
               ) : (
-                <ul className="space-y-2" aria-label={`${copy.title} locations`}>
-                  {rows.map((location) => (
-                    <LocationRow
-                      key={location.id}
-                      headingLevel={4}
-                      location={location}
-                      current={highlight === location.id || search.locationId === location.id}
-                      actions={rowActions(location)}
-                      // rowActions offers Rescan on every row that can still be indexed.
-                      actionsIncludeRescan
-                      onChooseAgain={actions.chooseAgain}
-                      onRetry={actions.retry}
-                      onLocate={actions.locate}
-                      // While its review is open, the review's own button is the only "Retire location" on the row.
-                      onRetire={retiring?.review.locationId === location.id ? undefined : openRetire}
-                      feedback={
-                        retiring?.review.locationId === location.id ? (
-                          <RetireReviewPanel review={retiring.review} refusal={retiring.refusal} onConfirm={confirmRetire} onClose={() => setRetiring(null)} />
-                        ) : (
-                          actions.feedbackFor(location)
-                        )
-                      }
-                    />
-                  ))}
-                </ul>
+                <ContextMenuArea menu={menu}>
+                  <ul className="space-y-2" aria-label={`${copy.title} locations`}>
+                    {rows.map((location) => (
+                      <LocationRow
+                        key={location.id}
+                        headingLevel={4}
+                        location={location}
+                        current={highlight === location.id || search.locationId === location.id}
+                        badges={role === "archive" && defaultArchiveId === location.id ? <Pill tone="info">Default</Pill> : null}
+                        actions={rowActions(location)}
+                        // rowActions offers Rescan on every row that can still be indexed.
+                        actionsIncludeRescan
+                        onChooseAgain={actions.chooseAgain}
+                        onRetry={actions.retry}
+                        onLocate={actions.locate}
+                        // While its review is open, the review's own button is the only "Retire location" on the row.
+                        onRetire={retiring?.review.locationId === location.id ? undefined : openRetire}
+                        feedback={
+                          retiring?.review.locationId === location.id ? (
+                            <RetireReviewPanel review={retiring.review} refusal={retiring.refusal} onConfirm={confirmRetire} onClose={() => setRetiring(null)} />
+                          ) : (
+                            actions.feedbackFor(location)
+                          )
+                        }
+                      />
+                    ))}
+                  </ul>
+                </ContextMenuArea>
               )}
             </Section>
           )
@@ -448,9 +483,8 @@ export function LocationsPage() {
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
         title={`Remove ${removing?.displayName ?? "location"}?`}
-        description="PlateVault stops indexing this folder. Nothing was indexed from it, so no frame loses a copy."
-        changes={[`Remove the registration for ${removing?.path ?? ""}`]}
-        unchanged={["The folder and every file in it", "Other locations, sessions and decisions"]}
+        description={null}
+        changes={[`Unregister ${removing?.path ?? ""}`]}
         confirmLabel="Remove location"
         tone="destructive"
         onConfirm={() => (removing ? removeLocation(removing.id, HREF) : undefined)}

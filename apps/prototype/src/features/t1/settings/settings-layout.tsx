@@ -7,7 +7,6 @@
 import { Link, Outlet, useSearch } from "@tanstack/react-router"
 import { Undo2 } from "lucide-react"
 import { SETTINGS_SECTIONS as SECTIONS } from "@/app/navigation"
-import { Notice } from "@/components/app/feedback"
 import { ListDetail, PageHeader } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -44,7 +43,7 @@ function SettingsMenu() {
 export function SettingsLayout() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Settings" description="Changes apply as you make them. Library changes are recorded in Activity." />
+      <PageHeader title="Settings" />
       <ListDetail
         listLabel="Settings sections"
         className="grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]"
@@ -67,32 +66,25 @@ function safeReturnPath(value: string | undefined): string | null {
 }
 
 function returnLabel(path: string): string {
-  if (/^\/sessions\/[^/]+$/.test(path)) return "Back to the session"
-  if (path.startsWith("/plan")) return "Back to the Plan"
-  if (/^\/targets\/[^/]+$/.test(path)) return "Back to the Target"
-  if (/^\/projects\/[^/]+\/(runs|groups)\//.test(path)) return "Back to the run"
+  if (/^\/sessions\/[^/]+$/.test(path)) return "Back to session"
+  if (path.startsWith("/plan")) return "Back to Plan"
+  if (/^\/targets\/[^/]+$/.test(path)) return "Back to Target"
+  if (/^\/projects\/[^/]+\/(runs|groups)\//.test(path)) return "Back to run"
   if (path.startsWith("/storage")) return "Back to Storage"
-  if (path.startsWith("/projects/")) return "Back to the Project"
+  if (path.startsWith("/calibration")) return "Back to Calibration"
+  if (path.startsWith("/projects/")) return "Back to Project"
   return "Go back"
 }
 
 /** `?return=` (HLD §4): one link back to the task that sent the user here. */
-export function ReturnNotice({ task }: { task: string }) {
+export function ReturnNotice() {
   const search = useSearch({ strict: false }) as Record<string, string | undefined>
   const path = safeReturnPath(search.return)
   if (!path) return null
   return (
-    <Notice
-      tone="info"
-      title={`Opened from another task: ${task}`}
-      actions={
-        <Button size="sm" variant="outline" render={<a href={`#${path}`} />}>
-          <Undo2 aria-hidden="true" data-icon="inline-start" />
-          {returnLabel(path)}
-        </Button>
-      }
-    >
-      When you are done here, go back to continue where you were.
-    </Notice>
+    <Button size="sm" variant="outline" render={<a href={`#${path}`} />} data-return-link>
+      <Undo2 aria-hidden="true" data-icon="inline-start" />
+      {returnLabel(path)}
+    </Button>
   )
 }
