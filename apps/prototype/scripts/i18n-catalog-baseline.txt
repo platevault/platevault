@@ -2,8 +2,8 @@
 # scripts/check-i18n-catalog.mjs fails on any code-param / dup-value
 # violation NOT listed here. Note why in the change that adds an entry.
 # Regenerate with: node scripts/check-i18n-catalog.mjs --generate
-# pt-BR agrees in gender with the noun: 'Mostrar tudo' (plan entries) vs 'Mostrar todas' (sessões).
-dup-value	plan_show_all,sessions_show_all
+# pt-BR agrees in gender with the noun: 'Mostrar tudo' (plan entries), 'Mostrar todos' (frames), 'Mostrar todas' (sessões).
+dup-value	plan_show_all,review_show_all,sessions_show_all
 # 'Wrap up' is a stage name (pt-BR noun 'Encerramento') and an action (verb 'Encerrar').
 dup-value	run_wrap_up,wrapup_action
 # pt-BR gender follows the noun: panel (painel, m.) vs session (sessão, f.).

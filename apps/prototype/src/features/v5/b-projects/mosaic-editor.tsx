@@ -225,7 +225,7 @@ export function MosaicEditor({ project, subjectId, rigId: initialRig, profileId:
 
   const menu = (key: string): MenuEntry[] => [
     { heading: m.mosaic_place_on() },
-    ...included.map((p) => ({ label: m.mosaic_panel({ n: p.n }), onSelect: () => assign(key, p.id) })),
+    ...included.map((p) => ({ label: m.review_panel_n({ n: p.n }), onSelect: () => assign(key, p.id) })),
     { separator: true },
     { label: m.mosaic_by_pointing(), icon: Crosshair, onSelect: () => assign(key, "auto") },
     { label: m.mosaic_leave_out(), icon: Ban, onSelect: () => assign(key, null) },
@@ -339,14 +339,14 @@ export function MosaicEditor({ project, subjectId, rigId: initialRig, profileId:
                   >
                     <Checkbox id={`${panel.id}-inc`} checked={panel.include} onCheckedChange={() => toggle(panel.id)} />
                     <Label htmlFor={`${panel.id}-inc`} className="w-16 font-medium">
-                      {m.mosaic_panel({ n: panel.n })}
+                      {m.review_panel_n({ n: panel.n })}
                     </Label>
                     <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground tabular-nums">
                       {formatRa(panel.ra)} {formatDec(panel.dec)}
                     </span>
                     {panelRuns(panel.id).length > 0 ? <Pill tone="muted">{m.mosaic_in_a_run()}</Pill> : null}
                     <CountBadge count={countOn(panel.id)} tone={countOn(panel.id) > 0 ? "info" : "muted"} label={m.project_sessions_count({ count: countOn(panel.id) })} />
-                    <Button size="icon-sm" variant="ghost" aria-label={m.project_remove_named({ name: m.mosaic_panel({ n: panel.n }) })} onClick={() => removePanel(panel)}>
+                    <Button size="icon-sm" variant="ghost" aria-label={m.project_remove_named({ name: m.review_panel_n({ n: panel.n }) })} onClick={() => removePanel(panel)}>
                       <X aria-hidden="true" />
                     </Button>
                   </li>
@@ -425,7 +425,7 @@ function SessionItem({ row, panels, onAssign }: { row: SessionRow; panels: Panel
   const panel = panels.find((p) => p.id === placement.panelId)
   const value = !placement.byUser ? PLACE_AUTO : placement.panelId ?? PLACE_OUT
   const label = `${formatNight(session.night)} · ${session.channel ?? m.palette_session_no_filter()}`
-  const options = [{ value: PLACE_AUTO, label: m.mosaic_by_pointing() }, ...panels.map((p) => ({ value: p.id, label: m.mosaic_panel({ n: p.n }) })), { value: PLACE_OUT, label: m.mosaic_leave_out() }]
+  const options = [{ value: PLACE_AUTO, label: m.mosaic_by_pointing() }, ...panels.map((p) => ({ value: p.id, label: m.review_panel_n({ n: p.n }) })), { value: PLACE_OUT, label: m.mosaic_leave_out() }]
   return (
     <li
       {...menuKey(session.id)}
@@ -446,7 +446,7 @@ function SessionItem({ row, panels, onAssign }: { row: SessionRow; panels: Panel
             </Pill>
           ) : panel ? (
             <Pill tone={placement.byUser ? "info" : "success"} title={placement.detail}>
-              {m.mosaic_panel({ n: panel.n })}
+              {m.review_panel_n({ n: panel.n })}
             </Pill>
           ) : (
             <Pill tone="muted" title={placement.detail}>
@@ -546,7 +546,7 @@ function FieldView({
             key={p.id}
             role="checkbox"
             aria-checked={p.include}
-            aria-label={m.mosaic_panel({ n: p.n })}
+            aria-label={m.review_panel_n({ n: p.n })}
             tabIndex={0}
             transform={`rotate(${-p.rotationDeg} ${c.x} ${c.y})`}
             className="cursor-pointer outline-none [&:focus-visible>rect]:stroke-ring"

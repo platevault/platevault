@@ -102,7 +102,7 @@ function projectSessions(catalog: Catalog, project: Project): Session[] {
 
 function frameLabel(catalog: Catalog, asset: Asset): string {
   const session = asset.sessionId ? catalog.sessions[asset.sessionId] : undefined
-  return session ? `${formatNight(session.night)} · ${session.channel ?? m.palette_session_no_filter()}` : m.wrapup_no_session()
+  return session ? `${formatNight(session.night)} · ${session.channel ?? m.palette_session_no_filter()}` : m.review_no_session()
 }
 
 // ---------------------------------------------------------------------------

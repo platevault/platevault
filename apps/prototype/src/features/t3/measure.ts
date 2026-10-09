@@ -13,6 +13,7 @@ import { runHref } from "@/domain/derive"
 import { simulateMeasurement } from "@/domain/measurement"
 import type { AssetId, Catalog, FrameMeasurement, MeasurementRecord, Metric, Operation, OperationId, OperationItem, RunId } from "@/domain/types"
 import { plural } from "@/lib/format"
+import { m } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "@/store/core"
 import { type OperationHandler, isSettled, patchOperation, resumeOperation, settleOperation, startOperation } from "@/store/operations"
 import { currentFile, pixelScaleFor, sessionLabel } from "@/domain/membership"
@@ -249,18 +250,31 @@ export function unfinishedCount(op: Operation | undefined): number {
   return payload.verify.length + payload.queue.length
 }
 
+/** Metric names; getters, so every read is in the chosen language. */
 export const METRIC_LABEL: Record<Metric["key"], string> = {
-  fwhm: "FWHM",
-  hfr: "HFR",
-  eccentricity: "Eccentricity",
-  "star-count": "Star count",
-  background: "Background",
-  snr: "SNR",
+  get fwhm() {
+    return m.measure_metric_fwhm()
+  },
+  get hfr() {
+    return m.measure_metric_hfr()
+  },
+  get eccentricity() {
+    return m.measure_metric_eccentricity()
+  },
+  get "star-count"() {
+    return m.measure_metric_star_count()
+  },
+  get background() {
+    return m.measure_metric_background()
+  },
+  get snr() {
+    return m.measure_metric_snr()
+  },
 }
 
 /** "6.42″", "2.10 px", "0.41", "1,820 stars", "880 ADU"; null values never become numbers. */
 export function formatMetric(metric: Pick<Metric, "value" | "unit">): string {
-  if (metric.value === null) return "Not reported"
+  if (metric.value === null) return m.measure_not_reported()
   const value = metric.unit === "stars" || metric.unit === "ADU" ? metric.value.toLocaleString("en-GB") : String(metric.value)
   if (metric.unit === "arcsec") return `${value}″`
   if (metric.unit === "ratio" || metric.unit === "") return value

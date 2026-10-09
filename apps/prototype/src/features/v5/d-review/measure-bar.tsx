@@ -11,12 +11,12 @@
  * role=status region; the progress bar carries the running count.
  */
 import { type RefObject, useEffect, useId, useRef, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import type { Operation } from "@/domain/types"
 import { type MeasurePayload, startMeasurement, unfinishedCount } from "@/features/t3/measure"
-import { plural } from "@/lib/format"
 import { cancelOperation, isSettled } from "@/store/operations"
 import type { ReviewFrame, ReviewScope } from "./model"
 
@@ -39,6 +39,7 @@ export function startScopeMeasurement(scope: ReviewScope): number {
 
 /** The measurement part of Review's status line; `home` is the focusable status line focus returns to. */
 export function MeasureBar({ scope, frames, home }: { scope: ReviewScope; frames: ReviewFrame[]; home: RefObject<HTMLElement | null> }) {
+  const m = useMessages()
   const reasonId = useId()
   const cancelRef = useRef<HTMLButtonElement>(null)
   const handOff = useRef(false)
@@ -49,10 +50,9 @@ export function MeasureBar({ scope, frames, home }: { scope: ReviewScope; frames
   const unreadable = frames.filter((f) => f.availability !== "available").length
   const last: Operation | undefined = [...scope.ops].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1)
   const unfinished = scope.ops.reduce((n, op) => n + unfinishedCount(op), 0)
-  const summary =
-    last?.status === "canceled"
-      ? `Measurement canceled; ${unfinished} not measured.`
-      : `${last?.summary ? `${last.summary} ` : ""}${notMeasured === 0 ? "Every readable frame has a built-in value." : `${plural(notMeasured, "frame")} not measured.`}`
+  const notMeasuredText = m.measure_frames_not_measured({ count: notMeasured })
+  const coverage = notMeasured === 0 ? m.measure_all_have_value() : `${notMeasuredText}.`
+  const summary = last?.status === "canceled" ? m.measure_canceled_summary({ count: unfinished }) : last?.summary ? `${last.summary} ${coverage}` : coverage
 
   // Focus follows the control that replaced the one you pressed, then settles on the status line.
   const wasRunning = useRef(running)
@@ -72,7 +72,7 @@ export function MeasureBar({ scope, frames, home }: { scope: ReviewScope; frames
   const start = () => {
     const total = [...measureTargets(scope).values()].reduce((n, ids) => n + ids.length, 0)
     handOff.current = true
-    if (startScopeMeasurement(scope) > 0) setSaid(`Measuring ${plural(total, "frame")}, the current frame first.`)
+    if (startScopeMeasurement(scope) > 0) setSaid(m.measure_started({ count: total }))
     else handOff.current = false
   }
 
@@ -87,21 +87,19 @@ export function MeasureBar({ scope, frames, home }: { scope: ReviewScope; frames
     const total = active.reduce((n, op) => n + op.progress.total, 0)
     const verifying = active.some((op) => (op.payload as unknown as MeasurePayload).verify.length > 0)
     const paused = active.every((op) => op.status !== "running")
-    const word = paused ? (active.some((op) => op.status === "interrupted") ? "Interrupted by a restart" : "Paused") : verifying ? "Verifying cached values" : "Measuring"
+    const word = paused ? (active.some((op) => op.status === "interrupted") ? m.measure_interrupted_restart() : m.status_paused()) : verifying ? m.measure_verifying_cached() : m.measure_measuring()
     return (
       <span className="flex min-w-0 items-center gap-2">
         {status}
-        <Progress value={total > 0 ? (done / total) * 100 : 0} aria-label="Measurement progress" getAriaValueText={() => `${done} of ${total} frames`} className="w-24 shrink-0" />
-        <span className="min-w-0 truncate tabular-nums">
-          {word}: {done} of {total}
-        </span>
+        <Progress value={total > 0 ? (done / total) * 100 : 0} aria-label={m.measure_progress_label()} getAriaValueText={() => m.sessions_import_progress({ done, total })} className="w-24 shrink-0" />
+        <span className="min-w-0 truncate tabular-nums">{m.measure_progress_text({ word, done, total })}</span>
         {paused ? (
           <Button size="xs" variant="outline" onClick={start}>
-            Resume
+            {m.verb_resume()}
           </Button>
         ) : null}
         <Button ref={cancelRef} size="xs" variant="outline" onClick={() => active.forEach((op) => cancelOperation(op.id))}>
-          Cancel
+          {m.verb_cancel()}
         </Button>
       </span>
     )
@@ -111,8 +109,8 @@ export function MeasureBar({ scope, frames, home }: { scope: ReviewScope; frames
     <span className="flex min-w-0 items-center gap-2">
       {status}
       {last ? <StatusBadge kind="operation" value={last.status} className="shrink-0" /> : null}
-      <span className="min-w-0 truncate" title={`${summary}${unreadable > 0 ? ` ${plural(unreadable, "frame")} unreadable.` : ""}`}>
-        {notMeasured === 0 ? "All measured" : `${plural(notMeasured, "frame")} not measured`}
+      <span className="min-w-0 truncate" title={unreadable > 0 ? `${summary} ${m.measure_frames_unreadable({ count: unreadable })}` : summary}>
+        {notMeasured === 0 ? m.measure_all_measured() : notMeasuredText}
       </span>
       {notMeasured > 0 ? (
         <>
@@ -123,10 +121,10 @@ export function MeasureBar({ scope, frames, home }: { scope: ReviewScope; frames
             disabled={disabledReason !== null}
             focusableWhenDisabled
             aria-describedby={disabledReason ? reasonId : undefined}
-            title={disabledReason ? `Measuring blocked · ${disabledReason}` : undefined}
+            title={disabledReason ? m.measure_blocked({ reason: disabledReason }) : undefined}
             className="shrink-0 aria-disabled:pointer-events-none aria-disabled:opacity-50"
           >
-            Measure frames
+            {m.measure_frames_action()}
           </Button>
           {disabledReason ? (
             <span id={reasonId} className="sr-only">

@@ -3,13 +3,16 @@
  * Review is open, its frame commands appear in the command palette with
  * their hotkeys. Slice D owns this file.
  */
+import { useMessages } from "@/app/preferences"
 import type { PaletteCommand, ShellContribution } from "@/app/shell-contract"
 import { useReviewCommands } from "./commands"
 
 function useCommands(): PaletteCommand[] {
+  const m = useMessages()
   const commands = useReviewCommands()
   if (!commands) return []
-  return commands.map((c) => ({ id: `d:${c.id}`, label: `${c.label} (${c.keys})`, group: "Review", keywords: `frame review ${c.keys.toLowerCase()}`, run: c.run }))
+  const group = m.step_review()
+  return commands.map((c) => ({ id: `d:${c.id}`, label: m.shell_with_shortcut({ label: c.label, shortcut: c.keys }), group, keywords: `frame review ${c.keys.toLowerCase()}`, run: c.run }))
 }
 
 export const dShell: ShellContribution = { useCommands }

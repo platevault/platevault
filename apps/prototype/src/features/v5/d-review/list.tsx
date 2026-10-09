@@ -8,29 +8,33 @@
  */
 import { ArrowDown, ArrowUp, ArrowUpDown, ImageOff, Loader } from "lucide-react"
 import { type MouseEvent, type ReactNode, type Ref, useEffect, useLayoutEffect, useRef } from "react"
+import { useMessages } from "@/app/preferences"
 import { ContextMenuArea, type MenuEntry, menuKey } from "@/components/app/row-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { currentFile, formatMetricFixed, previewUnavailableReason, sessionLabel } from "@/domain/membership"
 import type { AssetId, Catalog, Disk, MetricKey } from "@/domain/types"
 import { formatExposure, formatTime } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { STATUS, StatusBadge } from "@/components/app/status"
 import { NoteMarker, type NoteRow } from "@/components/app/tips"
 import { BUILT_IN_METHOD } from "@/domain/measurement"
 import { useSize } from "@/features/t3/frame-preview"
+import { METRIC_LABEL } from "@/features/t3/measure"
 import type { ReviewContext, ReviewFrame } from "./model"
-import { MEMBER_WORD, QualityLabel, qualityWord } from "./quality"
+import { memberWord, QualityLabel, qualityWord } from "./quality"
 import { useThumbnail } from "./thumbnails"
 
-const COLUMN_NOTE: Record<1 | 2, NoteRow[]> = {
-  1: [
-    { label: "Method", value: `${BUILT_IN_METHOD.method} ${BUILT_IN_METHOD.version}` },
-    { label: "Basis", value: "Linear data" },
-  ],
-  2: [
-    { label: "Source", value: "Imported CSV" },
-    { label: "Match", value: "File name, unverified" },
-  ],
+function columnNote(m: Messages, note: 1 | 2): NoteRow[] {
+  return note === 1
+    ? [
+        { label: m.frame_note_method(), value: `${BUILT_IN_METHOD.method} ${BUILT_IN_METHOD.version}` },
+        { label: m.frame_note_basis(), value: m.review_linear_data() },
+      ]
+    : [
+        { label: m.evidence_column_source(), value: m.review_imported_csv() },
+        { label: m.frame_note_match(), value: m.frame_match_file_name() },
+      ]
 }
 
 export type Activate = (id: AssetId, mode: "set" | "toggle" | "range") => void
@@ -51,15 +55,21 @@ export interface FrameColumn {
   cell: (f: ReviewFrame) => ReactNode
 }
 
-const MEASURE_WORD: Record<ReviewFrame["measure"], { value: "valid" | "pending" | "verifying" | "unavailable"; label: string }> = {
-  measured: { value: "valid", label: "Measured" },
-  pending: { value: "pending", label: "Pending" },
-  verifying: { value: "verifying", label: "Verifying" },
-  "history-only": { value: "unavailable", label: "Not measured" },
-  "not-measured": { value: "unavailable", label: "Not measured" },
+function measureBadge(m: Messages, measure: ReviewFrame["measure"]): { value: "valid" | "pending" | "verifying" | "unavailable"; label: string } {
+  switch (measure) {
+    case "measured":
+      return { value: "valid", label: m.status_measured() }
+    case "pending":
+      return { value: "pending", label: m.status_pending() }
+    case "verifying":
+      return { value: "verifying", label: m.status_verifying() }
+    case "history-only":
+    case "not-measured":
+      return { value: "unavailable", label: m.status_not_measured() }
+  }
 }
 
-function metricColumn(key: MetricKey, header: string): FrameColumn {
+function metricColumn(m: Messages, key: MetricKey, header: string): FrameColumn {
   return {
     id: key,
     header,
@@ -67,12 +77,12 @@ function metricColumn(key: MetricKey, header: string): FrameColumn {
     align: "right",
     sortValue: (f) => f.builtIn[key]?.value ?? null,
     cell: (f) => {
-      const m = f.builtIn[key]
-      return m ? (
-        formatMetricFixed(m)
+      const metric = f.builtIn[key]
+      return metric ? (
+        formatMetricFixed(metric)
       ) : (
         <span className="text-muted-foreground">
-          –<span className="sr-only">{MEASURE_WORD[f.measure].label}</span>
+          –<span className="sr-only">{measureBadge(m, f.measure).label}</span>
         </span>
       )
     },
@@ -80,12 +90,12 @@ function metricColumn(key: MetricKey, header: string): FrameColumn {
 }
 
 /** Every column the review offers; the Frame column is always shown (PIX-FR-16). */
-export function frameColumns(names: Map<AssetId, string>): FrameColumn[] {
+export function frameColumns(m: Messages, names: Map<AssetId, string>): FrameColumn[] {
   const path = (f: ReviewFrame) => f.asset.copies[0]?.path ?? f.asset.fileName
   return [
     {
       id: "frame",
-      header: "Frame",
+      header: m.review_col_frame(),
       sortValue: (f) => names.get(f.asset.id) ?? f.asset.fileName,
       cell: (f) => (
         <span className="block max-w-[22rem] truncate font-medium" title={path(f)}>
@@ -93,47 +103,50 @@ export function frameColumns(names: Map<AssetId, string>): FrameColumn[] {
         </span>
       ),
     },
-    { id: "panel", header: "Panel", contexts: ["group"], sortValue: (f) => f.panel?.n ?? null, cell: (f) => (f.panel ? `Panel ${f.panel.n}` : "–") },
-    { id: "subject", header: "Subject", contexts: ["candidates"], sortValue: (f) => f.subject, cell: (f) => f.subject ?? "–" },
-    { id: "session", header: "Session", contexts: ["run", "group", "candidates"], sortValue: (f) => f.session?.startedAt ?? null, cell: (f) => (f.session ? sessionLabel(f.session) : <span className="text-muted-foreground">No session</span>) },
-    { id: "time", header: "Time", sortValue: (f) => f.asset.observed.dateObs, cell: (f) => formatTime(f.asset.observed.dateObs) },
-    { id: "exposure", header: "Exposure", align: "right", sortValue: (f) => f.asset.observed.exposureS, cell: (f) => formatExposure(f.asset.observed.exposureS) },
-    { id: "quality", header: "Quality", sortValue: (f) => qualityWord(f), cell: (f) => <QualityLabel frame={f} short /> },
-    { id: "member", header: "In run", contexts: ["run", "group"], sortValue: (f) => f.member, cell: (f) => (f.member ? MEMBER_WORD[f.member] : "–") },
-    metricColumn("fwhm", "FWHM"),
-    metricColumn("hfr", "HFR"),
-    metricColumn("eccentricity", "Ecc."),
-    metricColumn("star-count", "Stars"),
-    metricColumn("background", "Background"),
-    metricColumn("snr", "SNR"),
+    { id: "panel", header: m.review_col_panel(), contexts: ["group"], sortValue: (f) => f.panel?.n ?? null, cell: (f) => (f.panel ? m.review_panel_n({ n: f.panel.n }) : "–") },
+    { id: "subject", header: m.review_col_subject(), contexts: ["candidates"], sortValue: (f) => f.subject, cell: (f) => f.subject ?? "–" },
+    { id: "session", header: m.review_col_session(), contexts: ["run", "group", "candidates"], sortValue: (f) => f.session?.startedAt ?? null, cell: (f) => (f.session ? sessionLabel(f.session) : <span className="text-muted-foreground">{m.review_no_session()}</span>) },
+    { id: "time", header: m.review_col_time(), sortValue: (f) => f.asset.observed.dateObs, cell: (f) => formatTime(f.asset.observed.dateObs) },
+    { id: "exposure", header: m.review_col_exposure(), align: "right", sortValue: (f) => f.asset.observed.exposureS, cell: (f) => formatExposure(f.asset.observed.exposureS) },
+    { id: "quality", header: m.review_col_quality(), sortValue: (f) => qualityWord(m, f), cell: (f) => <QualityLabel frame={f} short /> },
+    { id: "member", header: m.review_col_member(), contexts: ["run", "group"], sortValue: (f) => f.member, cell: (f) => (f.member ? memberWord(m, f.member) : "–") },
+    metricColumn(m, "fwhm", METRIC_LABEL.fwhm),
+    metricColumn(m, "hfr", METRIC_LABEL.hfr),
+    metricColumn(m, "eccentricity", m.review_ecc_short()),
+    metricColumn(m, "star-count", m.review_tab_stars()),
+    metricColumn(m, "background", METRIC_LABEL.background),
+    metricColumn(m, "snr", METRIC_LABEL.snr),
     {
       id: "fwhm-imported",
-      header: "FWHM imported",
+      header: m.review_col_fwhm_imported(),
       note: 2,
       align: "right",
       sortValue: (f) => f.imported.fwhm?.value ?? null,
       cell: (f) =>
         f.imported.fwhm ? (
-          <span title="Imported, unverified">
+          <span title={m.review_imported_unverified()}>
             {formatMetricFixed(f.imported.fwhm)}
-            <span className="sr-only">, imported, unverified</span>
+            <span className="sr-only">{m.review_imported_unverified_sr()}</span>
           </span>
         ) : (
           <span className="text-muted-foreground">
             <span aria-hidden="true">–</span>
-            <span className="sr-only">None</span>
+            <span className="sr-only">{m.review_none()}</span>
           </span>
         ),
     },
     {
       id: "measurement",
-      header: "Measurement",
+      header: m.review_col_measurement(),
       sortValue: (f) => f.measure,
-      cell: (f) => <StatusBadge kind="measurement" value={MEASURE_WORD[f.measure].value} label={MEASURE_WORD[f.measure].label} />,
+      cell: (f) => {
+        const badge = measureBadge(m, f.measure)
+        return <StatusBadge kind="measurement" value={badge.value} label={badge.label} />
+      },
     },
     {
       id: "availability",
-      header: "Copy",
+      header: m.review_col_copy(),
       sortValue: (f) => f.availability,
       cell: (f) => <StatusBadge kind="availability" value={f.availability} label={STATUS.availability[f.availability].label} />,
     },
@@ -227,6 +240,7 @@ export function FrameTable({
   ...props
 }: ListProps & { columns: FrameColumn[]; sort: SortState; onSort: (sort: SortState) => void; strip: boolean }) {
   const { frames, activeId, selected, onActivate, onToggleSelected } = props
+  const m = useMessages()
   const box = useFollowFocus(activeId, "frame-row")
   const shown = strip ? frames.filter((f) => f.asset.id === activeId).slice(0, 1) : frames
   const allSelected = frames.length > 0 && frames.every((f) => selected.has(f.asset.id))
@@ -242,12 +256,12 @@ export function FrameTable({
       className={cn("relative min-h-0 flex-1 overflow-auto bg-background", strip ? "overflow-hidden" : "scroll-pt-[calc(var(--row-h)+1px)]")}
     >
       <table className="w-full text-sm">
-        <caption className="sr-only">{strip ? "Current frame" : "Frames in this review"}</caption>
+        <caption className="sr-only">{strip ? m.review_current_frame() : m.review_frames_in_review()}</caption>
         <thead data-chrome className="sticky top-0 z-10 bg-[color-mix(in_oklch,var(--chrome)_70%,var(--background))] text-[0.6875rem] font-medium text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
           <tr>
             <th scope="col" className="h-(--row-h) w-9 px-3">
               <Checkbox
-                aria-label={`Select all ${frames.length} shown`}
+                aria-label={m.table_select_all({ count: frames.length })}
                 checked={allSelected}
                 indeterminate={someSelected && !allSelected}
                 disabled={frames.length === 0}
@@ -273,7 +287,7 @@ export function FrameTable({
                     {column.header}
                     {active ? sort.direction === "asc" ? <ArrowUp aria-hidden="true" className="size-3" /> : <ArrowDown aria-hidden="true" className="size-3" /> : <ArrowUpDown aria-hidden="true" className="size-3 opacity-50" />}
                   </button>
-                  {column.note ? <NoteMarker n={column.note} label={`${column.header} source`} rows={COLUMN_NOTE[column.note]} className="ml-0.5" /> : null}
+                  {column.note ? <NoteMarker n={column.note} label={m.review_column_source({ column: column.header })} rows={columnNote(m, column.note)} className="ml-0.5" /> : null}
                 </th>
               )
             })}
@@ -309,7 +323,7 @@ export function FrameTable({
                   )}
                 >
                   <td className="w-9 px-3">
-                    <Checkbox tabIndex={-1} aria-label={`Select ${props.names.get(id)}`} checked={isSelected} onCheckedChange={(on) => onToggleSelected(id, on)} />
+                    <Checkbox tabIndex={-1} aria-label={m.table_select_row({ name: props.names.get(id) ?? "" })} checked={isSelected} onCheckedChange={(on) => onToggleSelected(id, on)} />
                   </td>
                   {columns.map((column) => {
                     const Cell = column.id === "frame" ? "th" : "td"
@@ -340,19 +354,21 @@ export function FrameTable({
 }
 
 function Thumbnail({ frame, disk, catalog, className }: { frame: ReviewFrame; disk: Disk; catalog: Catalog; className?: string }) {
+  const m = useMessages()
   const file = frame.availability === "available" ? currentFile(disk, catalog, frame.asset) : undefined
   const reason = frame.availability === "available" ? null : previewUnavailableReason(frame.availability)
   const thumb = useThumbnail(frame.asset.id, file, reason)
   if (thumb.state === "ready") return <img src={thumb.url} alt="" className={cn("block h-full w-full rounded-[2px] bg-plate object-contain", className)} draggable={false} />
   return (
-    <div className={cn("flex h-full w-full flex-col items-center justify-center gap-1 rounded-[2px] bg-plate px-1 text-center text-[0.625rem] leading-3 text-white/70", className)} title={thumb.state === "unreadable" ? thumb.reason : "Decoding thumbnail"}>
+    <div className={cn("flex h-full w-full flex-col items-center justify-center gap-1 rounded-[2px] bg-plate px-1 text-center text-[0.625rem] leading-3 text-white/70", className)} title={thumb.state === "unreadable" ? thumb.reason : m.review_decoding_thumbnail()}>
       {thumb.state === "pending" ? <Loader aria-hidden="true" className="size-3.5 animate-spin" /> : <ImageOff aria-hidden="true" className="size-3.5" />}
-      <span>{thumb.state === "pending" ? "Pending" : "Unreadable"}</span>
+      <span>{thumb.state === "pending" ? m.status_pending() : m.status_unreadable()}</span>
     </div>
   )
 }
 
 function ThumbCell({ frame, props, disk, catalog, size, tabbable }: { frame: ReviewFrame; props: ListProps; disk: Disk; catalog: Catalog; size: "strip" | "grid"; tabbable: boolean }) {
+  const m = useMessages()
   const id = frame.asset.id
   const isActive = props.activeId === id
   const isSelected = props.selected.has(id)
@@ -368,7 +384,7 @@ function ThumbCell({ frame, props, disk, catalog, size, tabbable }: { frame: Rev
         tabIndex={tabbable ? 0 : -1}
         aria-current={isActive ? "true" : undefined}
         aria-pressed={isSelected}
-        aria-label={`${props.names.get(id)}, ${qualityWord(frame)}`}
+        aria-label={`${props.names.get(id)}, ${qualityWord(m, frame)}`}
         title={frame.asset.copies[0]?.path}
         onClick={(event) => props.onActivate(id, modeOf(event))}
         className={cn(
@@ -399,6 +415,7 @@ function tabbableId(props: ListProps): AssetId | null {
 }
 
 export function Filmstrip({ disk, catalog, ...props }: ListProps & { disk: Disk; catalog: Catalog }) {
+  const m = useMessages()
   const box = useFollowFocus(props.activeId, "frame-thumb")
   const tabbable = tabbableId(props)
   return (
@@ -406,7 +423,7 @@ export function Filmstrip({ disk, catalog, ...props }: ListProps & { disk: Disk;
       {props.frames.length === 0 ? (
         <div className="p-3">{props.empty}</div>
       ) : (
-        <ul aria-label="Filmstrip" className="flex gap-1 p-1">
+        <ul aria-label={m.review_view_filmstrip()} className="flex gap-1 p-1">
           {props.frames.map((f) => (
             <ThumbCell key={f.asset.id} frame={f} props={props} disk={disk} catalog={catalog} size="strip" tabbable={f.asset.id === tabbable} />
           ))}
@@ -420,6 +437,7 @@ const GRID_MIN = 152
 const GRID_GAP = 4
 
 export function FrameGrid({ disk, catalog, onColumns, ...props }: ListProps & { disk: Disk; catalog: Catalog; onColumns: (cols: number) => void }) {
+  const m = useMessages()
   const box = useFollowFocus(props.activeId, "frame-thumb")
   const tabbable = tabbableId(props)
   const [ref, size] = useSize<HTMLDivElement>()
@@ -437,7 +455,7 @@ export function FrameGrid({ disk, catalog, onColumns, ...props }: ListProps & { 
         {props.frames.length === 0 ? (
           <div className="p-3">{props.empty}</div>
         ) : (
-          <ul aria-label="Frame grid" className="grid p-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: GRID_GAP }}>
+          <ul aria-label={m.review_frame_grid()} className="grid p-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: GRID_GAP }}>
             {props.frames.map((f) => (
               <ThumbCell key={f.asset.id} frame={f} props={props} disk={disk} catalog={catalog} size="grid" tabbable={f.asset.id === tabbable} />
             ))}

@@ -9,33 +9,32 @@
 import { copyAvailability, preferredCopy } from "@/domain/library"
 import { fileKey } from "@/domain/disk"
 import type { AssetId, Catalog, Disk, Metric, MetricKey } from "@/domain/types"
+import { m } from "@/lib/i18n"
 
 export const SUBFRAME_SELECTOR_PATH = "/Volumes/Astro-T7/Work/Measurements/NGC7000_30Sep_SubframeSelector.csv"
-export const IMPORT_METHOD = { method: "PixInsight SubframeSelector", version: "1.8.9-2, as recorded in the export" } as const
+/** As recorded in the export; the version is data, never translated. */
+export const IMPORT_METHOD = { method: "PixInsight SubframeSelector", version: "1.8.9-2" } as const
+/** The supported export format: a product name, never translated. */
+export const IMPORT_FORMAT = `${IMPORT_METHOD.method} CSV`
 /** Subframe scale recorded in the export header (arcsec/px). */
-const EXPORT_SCALE = 3.1
+export const EXPORT_SCALE = 3.1
 
 export interface CsvColumn {
   name: string
   unit: string | null
   maps: MetricKey | null
   status: "identity" | "mapped" | "not-imported" | "unavailable"
-  note: string
+  /** Read in the chosen language. */
+  readonly note: string
 }
 
 export const CSV_COLUMNS: CsvColumn[] = [
-  { name: "File", unit: null, maps: null, status: "identity", note: "Frame identity: matched to an indexed copy by path, then by file name" },
-  { name: "Approved", unit: null, maps: null, status: "not-imported", note: "Rejection decisions stay yours" },
-  { name: "FWHM", unit: "arcsec", maps: "fwhm", status: "mapped", note: "Shown next to built-in FWHM" },
-  { name: "Eccentricity", unit: "ratio", maps: "eccentricity", status: "mapped", note: "Shown next to built-in eccentricity" },
-  { name: "Stars", unit: "stars", maps: "star-count", status: "mapped", note: "Shown next to built-in star count" },
-  {
-    name: "PSFSignalWeight",
-    unit: null,
-    maps: null,
-    status: "unavailable",
-    note: "No units and no PlateVault equivalent; never shown as FWHM or HFR.",
-  },
+  { name: "File", unit: null, maps: null, status: "identity", get note() { return m.importdlg_note_file() } },
+  { name: "Approved", unit: null, maps: null, status: "not-imported", get note() { return m.importdlg_note_approved() } },
+  { name: "FWHM", unit: "arcsec", maps: "fwhm", status: "mapped", get note() { return m.importdlg_note_fwhm() } },
+  { name: "Eccentricity", unit: "ratio", maps: "eccentricity", status: "mapped", get note() { return m.importdlg_note_eccentricity() } },
+  { name: "Stars", unit: "stars", maps: "star-count", status: "mapped", get note() { return m.importdlg_note_stars() } },
+  { name: "PSFSignalWeight", unit: null, maps: null, status: "unavailable", get note() { return m.importdlg_note_psf_signal_weight() } },
 ]
 
 export interface CsvRow {

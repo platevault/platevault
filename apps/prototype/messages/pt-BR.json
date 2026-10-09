@@ -1223,7 +1223,6 @@
   "mosaic_subject_not_saved": "O objeto do mosaico não foi salvo.",
   "project_subject_gone": "Este objeto não existe mais.",
   "mosaic_profile_not_saved": "Grupo iniciado; perfil não salvo: {message}",
-  "wrapup_no_session": "Sem sessão",
   "wrapup_offer_rejected": [
     {
       "declarations": [
@@ -1539,7 +1538,6 @@
   "project_col_session": "Sessão",
   "project_col_subject": "Objeto",
   "project_col_rig": "Setup",
-  "project_col_in_run": "Em execução",
   "project_unreviewed_count": [
     {
       "declarations": [
@@ -2192,7 +2190,6 @@
   "mosaic_included_panel": "Painel incluído",
   "mosaic_default_name": "Mosaico {name}",
   "mosaic_place_on": "Posicionar em",
-  "mosaic_panel": "Painel {n}",
   "mosaic_by_pointing": "Pelo apontamento",
   "mosaic_leave_out": "Deixar de fora",
   "mosaic_run": "Execução de mosaico",
@@ -2992,7 +2989,6 @@
   "run_profile_application": "Aplicativo",
   "run_sha256": "SHA-256",
   "run_open_project": "Abrir o Projeto",
-  "run_open_select": "Abrir Selecionar",
   "run_subject_fixed": "Objeto (fixo)",
   "run_rig_fixed": "Equipamento (fixo)",
   "run_restore_returns_to": "Restaurar devolve para {step}",
@@ -4928,5 +4924,827 @@
     }
   ],
   "equipment_no_rigs": "Nenhum setup",
-  "settings_lookup_test_heading": "Teste"
+  "settings_lookup_test_heading": "Teste",
+  "review_filter_all": "Todos",
+  "review_picked": "Aprovado",
+  "review_rejected": "Rejeitado",
+  "review_run_in_trash": "execução na Lixeira",
+  "review_run_complete": "Execução completa",
+  "review_run_complete_help": "A participação se mantém. As marcações alteram a qualidade na biblioteca e as rejeições do Projeto.",
+  "review_panel_complete": "Painel completo",
+  "review_panel_complete_help": "Uma execução de painel completa mantém sua participação. As marcações alteram apenas a qualidade na biblioteca.",
+  "review_panel_n": "Painel {n}",
+  "review_frames_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame",
+        "countPlural=*": "{count} frames"
+      }
+    }
+  ],
+  "review_mark_announcement": "{mark}: {what}. Escopo da biblioteca.",
+  "review_mark_draft_removed": "Removido do rascunho da execução como Rejeitado.",
+  "review_mark_draft_back": "De volta ao rascunho da execução.",
+  "review_mark_draft_still_out": "Ainda fora do rascunho da execução: rejeitado neste Projeto.",
+  "review_name_file": "Nome do arquivo",
+  "review_name_filter_night": "Filtro, noite, número",
+  "review_name_target_filter": "Alvo, filtro, exposição, número",
+  "review_name_night_camera": "Noite, câmera, ganho, temperatura, número",
+  "review_quality_rejected_both": "Rejeitado · Biblioteca e este Projeto",
+  "review_quality_rejected_both_short": "Rejeitado · ambos",
+  "review_quality_rejected_library": "Rejeitado · Biblioteca",
+  "review_quality_rejected_project": "Rejeitado · Este Projeto",
+  "review_quality_unreviewed_changed": "Não revisado · conteúdo alterado",
+  "review_quality_unreviewed_pending": "Não revisado · verificação pendente",
+  "review_quality_rejected_project_compact": "Rejeitado · Projeto",
+  "review_quality_library_title": "Biblioteca: {word}",
+  "review_member_included": "Incluído",
+  "review_member_rejected": "Fora do rascunho · Rejeitado",
+  "review_member_excluded": "Excluído da execução",
+  "review_key_prev_next": "Frame anterior ou seguinte",
+  "review_key_pick": "Aprovar",
+  "review_key_reject": "Rejeitar",
+  "review_key_mark_next": "Marcar e ir para o seguinte",
+  "review_key_zoom": "Zoom: Ajustar ou 1:1",
+  "review_key_fullscreen": "Tela cheia",
+  "review_compare": "Comparar",
+  "review_corner_inspector": "Inspetor de cantos",
+  "review_frame_inspector": "Inspetor do frame",
+  "review_key_grid": "Grade, ou voltar",
+  "review_table_height": "Altura da tabela",
+  "review_key_filter": "Filtro: Todos, Aprovados, Rejeitados, Não revisados",
+  "review_select_all_shown": "Selecionar todos os exibidos",
+  "review_key_toggle_selection": "Alternar seleção",
+  "review_key_escape": "Sair da tela cheia, depois limpar a seleção",
+  "review_key_shortcuts": "Atalhos",
+  "review_shortcuts_title": "Atalhos da revisão",
+  "review_shortcuts_description": "Tabela, tira e grade. Uma marcação vale para toda a seleção.",
+  "review_auto_advance": "Avanço automático",
+  "review_auto_advance_help": "Ajuda do avanço automático",
+  "review_auto_advance_tip": "Depois de P, X ou U, o frame seguinte passa a ser o atual.",
+  "review_all_shortcuts": "Todos os atalhos do app",
+  "review_done": "Concluído",
+  "measure_frames_not_measured": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame não medido",
+        "countPlural=*": "{count} frames não medidos"
+      }
+    }
+  ],
+  "measure_all_have_value": "Todo frame legível tem um valor integrado.",
+  "measure_canceled_summary": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Medição cancelada; {count} não medido.",
+        "countPlural=*": "Medição cancelada; {count} não medidos."
+      }
+    }
+  ],
+  "measure_started": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Medindo {count} frame, começando pelo atual.",
+        "countPlural=*": "Medindo {count} frames, começando pelo atual."
+      }
+    }
+  ],
+  "measure_interrupted_restart": "Interrompido por um reinício",
+  "measure_verifying_cached": "Verificando valores em cache",
+  "measure_measuring": "Medindo",
+  "measure_progress_label": "Progresso da medição",
+  "measure_progress_text": "{word}: {done} de {total}",
+  "measure_frames_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame ilegível.",
+        "countPlural=*": "{count} frames ilegíveis."
+      }
+    }
+  ],
+  "measure_all_measured": "Tudo medido",
+  "measure_blocked": "Medição bloqueada · {reason}",
+  "measure_frames_action": "Medir frames",
+  "measure_metric_fwhm": "FWHM",
+  "measure_metric_hfr": "HFR",
+  "measure_metric_eccentricity": "Excentricidade",
+  "measure_metric_star_count": "Contagem de estrelas",
+  "measure_metric_background": "Fundo",
+  "measure_metric_snr": "SNR",
+  "measure_not_reported": "Não informado",
+  "review_copy_location": "{location}: ",
+  "review_unknown_location": "Local desconhecido",
+  "review_close_inspector": "Fechar o inspetor",
+  "review_in_run": "Na execução: {state}",
+  "review_panel_run": "Execução do painel {n}",
+  "review_subject": "Objeto: {name}",
+  "review_library_quality": "Qualidade na biblioteca",
+  "review_library_quality_frames": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Qualidade na biblioteca: {count} frame",
+        "countPlural=*": "Qualidade na biblioteca: {count} frames"
+      }
+    }
+  ],
+  "review_clear_project_reject": "Desfazer rejeição no Projeto",
+  "review_reject_for_project": "Rejeitar neste Projeto",
+  "review_reject_for_project_frames": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Rejeitar neste Projeto: {count} frame",
+        "countPlural=*": "Rejeitar neste Projeto: {count} frames"
+      }
+    }
+  ],
+  "review_mark_scope_help": "Escopo da marcação",
+  "review_mark_scope_tip": "P, X e U marcam a biblioteca, em todos os Projetos. Uma rejeição no Projeto vale só neste Projeto.",
+  "review_no_pixels": "Sem pixels",
+  "review_tab_values": "Valores",
+  "review_tab_stars": "Estrelas",
+  "review_show_stars": "Mostrar estrelas",
+  "review_detected_stars": "Estrelas detectadas, as {count} mais brilhantes",
+  "frame_star": "Estrela {id}",
+  "frame_note_method": "Método",
+  "frame_note_basis": "Base",
+  "frame_note_match": "Correspondência",
+  "frame_match_file_name": "Nome do arquivo, não verificado",
+  "review_linear_data": "Dados lineares",
+  "review_imported_csv": "CSV importado",
+  "review_col_frame": "Frame",
+  "review_col_panel": "Painel",
+  "review_col_subject": "Objeto",
+  "review_col_session": "Sessão",
+  "review_col_time": "Hora",
+  "review_col_exposure": "Exposição",
+  "review_col_quality": "Qualidade",
+  "review_col_member": "Na execução",
+  "review_no_session": "Sem sessão",
+  "review_ecc_short": "Exc.",
+  "review_col_fwhm_imported": "FWHM importado",
+  "review_imported_unverified": "Importado, não verificado",
+  "review_imported_unverified_sr": ", importado, não verificado",
+  "review_none": "Nenhum",
+  "review_col_measurement": "Medição",
+  "review_col_copy": "Cópia",
+  "review_current_frame": "Frame atual",
+  "review_frames_in_review": "Frames nesta revisão",
+  "review_column_source": "Origem de {column}",
+  "review_decoding_thumbnail": "Decodificando miniatura",
+  "review_view_filmstrip": "Tira",
+  "review_frame_grid": "Grade de frames",
+  "review_no_pixel_data": "Sem dados de pixel para este arquivo.",
+  "review_tile_top_left": "Superior esquerdo",
+  "review_tile_top": "Superior",
+  "review_tile_top_right": "Superior direito",
+  "review_tile_left": "Esquerdo",
+  "review_tile_centre": "Centro",
+  "review_tile_right": "Direito",
+  "review_tile_bottom_left": "Inferior esquerdo",
+  "review_tile_bottom": "Inferior",
+  "review_tile_bottom_right": "Inferior direito",
+  "review_corners_group": "{label}, cantos em 1:1",
+  "review_tile_title": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input fwhm",
+        "input ecc",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: FWHM {fwhm}, excentricidade {ecc}, {count} estrela",
+        "countPlural=*": "{name}: FWHM {fwhm}, excentricidade {ecc}, {count} estrelas"
+      }
+    }
+  ],
+  "review_tile_title_ratio": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input fwhm",
+        "input ratio",
+        "input ecc",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: FWHM {fwhm} (×{ratio} do centro), excentricidade {ecc}, {count} estrela",
+        "countPlural=*": "{name}: FWHM {fwhm} (×{ratio} do centro), excentricidade {ecc}, {count} estrelas"
+      }
+    }
+  ],
+  "review_tile_label": "{name} em 1:1, FWHM {fwhm}, excentricidade {ecc}",
+  "review_tile_ecc": "e {value}",
+  "review_plot_point_rejected": "{name}: {value} (Rejeitado)",
+  "review_plots_label": "Gráficos ao longo da sessão",
+  "review_capture_order": "Ordem de captura · {count}",
+  "review_legend_measured": "medido",
+  "review_legend_selected": "selecionado",
+  "review_zoom_fit": "Ajustar",
+  "review_stretch_linear": "Linear",
+  "review_stretch_auto": "Automático",
+  "review_stretch_strong": "Forte",
+  "review_plate_label": "{label}, {zoom}, esticamento {stretch}",
+  "review_histogram_label": "Histograma dos dados lineares, mediana {median} ADU",
+  "review_histogram_median": "Mediana {median} · MAD {mad}",
+  "review_histogram_saturated": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} saturado",
+        "countPlural=*": "{count} saturados"
+      }
+    }
+  ],
+  "review_histogram_invalid": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} inválido",
+        "countPlural=*": "{count} inválidos"
+      }
+    }
+  ],
+  "review_histogram_note": "Nota do histograma",
+  "review_note_data": "Dados",
+  "review_histogram_range": "ADU linear 0–{max}",
+  "review_note_counts": "Contagens",
+  "review_note_log": "Log",
+  "review_note_samples": "Amostras",
+  "review_note_samples_value": "{count}, região exibida",
+  "review_note_brighter": "Mais claros",
+  "review_announce_frame": "{name}: frame {index} de {total}.",
+  "review_refusal_mark": "Marcação bloqueada",
+  "review_refusal_reject": "Rejeição bloqueada",
+  "review_refusal_clear": "Desfazer bloqueado",
+  "review_refusal_marks": "Marcações bloqueadas",
+  "review_announce_project_reject_cleared": "Rejeição no Projeto desfeita: {what}.",
+  "review_announce_compare": "Comparar: {current} e {reference}",
+  "review_announce_compare_none": "Comparar: {current} e nenhuma referência",
+  "review_no_frame": "nenhum frame",
+  "review_announce_corners_off": "Inspetor de cantos desativado",
+  "review_announce_corners_on": "Inspetor de cantos ativado",
+  "review_announce_revealed": "Revelado {path}",
+  "review_announce_no_copy": "Nenhuma cópia para revelar",
+  "review_announce_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame selecionado.",
+        "countPlural=*": "{count} frames selecionados."
+      }
+    }
+  ],
+  "review_announce_threshold_above": [
+    {
+      "declarations": [
+        "input count",
+        "input metric",
+        "input value",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame com {metric} acima de {value} selecionado. A qualidade não muda até você marcá-lo.",
+        "countPlural=*": "{count} frames com {metric} acima de {value} selecionados. A qualidade não muda até você marcá-los."
+      }
+    }
+  ],
+  "review_announce_threshold_below": [
+    {
+      "declarations": [
+        "input count",
+        "input metric",
+        "input value",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame com {metric} abaixo de {value} selecionado. A qualidade não muda até você marcá-lo.",
+        "countPlural=*": "{count} frames com {metric} abaixo de {value} selecionados. A qualidade não muda até você marcá-los."
+      }
+    }
+  ],
+  "review_announce_filter": "Filtro: {label}, {frames}.",
+  "review_announce_selection_cleared": "Seleção limpa.",
+  "review_cmd_next": "Frame seguinte",
+  "review_cmd_previous": "Frame anterior",
+  "review_cmd_pick": "Marcar como Aprovado",
+  "review_cmd_reject": "Marcar como Rejeitado",
+  "review_cmd_unreviewed": "Marcar como Não revisado",
+  "review_cmd_zoom": "Zoom Ajustar ou 1:1",
+  "review_cmd_fullscreen": "Prévia em tela cheia",
+  "review_cmd_compare": "Comparar frames",
+  "review_cmd_grid": "Visualização em grade",
+  "review_cmd_height": "Alternar altura da tabela",
+  "review_cmd_select_all": "Selecionar todos os frames exibidos",
+  "review_open_select": "Abrir Seleção",
+  "review_reveal_path": "Revelar caminho",
+  "review_empty_none": "Nenhum frame",
+  "review_empty_picked": "Nenhum frame Aprovado",
+  "review_empty_rejected": "Nenhum frame Rejeitado",
+  "review_empty_unreviewed": "Nenhum frame Não revisado",
+  "review_show_all": "Mostrar todos",
+  "review_frame_position": "Frame {index} de {total}",
+  "review_cfa_title": "Plano do mosaico como gravado, sem debayer",
+  "review_cfa": "CFA {cfa}",
+  "review_corners": "Cantos",
+  "review_fwhm_overlay": "Sobreposição de FWHM",
+  "review_ecc_overlay": "Sobreposição de excentricidade",
+  "review_zoom": "Zoom",
+  "review_pan_help": "Ajuda do deslocamento",
+  "review_pan_tip": "Arraste ou use as setas para deslocar. Com Shift, desloca mais.",
+  "review_display_stretch": "Esticamento de exibição",
+  "review_leave_fullscreen": "Sair da tela cheia",
+  "review_no_current_frame": "Nenhum frame atual",
+  "review_compare_current": "Atual: {name}",
+  "review_preview_of": "Prévia de {name}",
+  "review_reference_label": "Referência:",
+  "review_compare_reference": "Referência da comparação",
+  "review_choose_frame": "Escolha um frame",
+  "review_no_reference": "Sem referência",
+  "review_reference_of": "Referência {name}",
+  "review_draft_panel_runs_unsaved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} execução de painel não salva",
+        "countPlural=*": "{count} execuções de painel não salvas"
+      }
+    }
+  ],
+  "review_announce_saved_revision": "{name} salva como revisão {revision}.",
+  "review_announce_runs_saved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} execução salva.",
+        "countPlural=*": "{count} execuções salvas."
+      }
+    }
+  ],
+  "review_announce_discarded": "Alterações não salvas descartadas.",
+  "review_panel_in_trash": "{name} na Lixeira",
+  "review_trash_help": "Não listado nem contado.",
+  "review_quality_filter": "Filtro de qualidade",
+  "review_panel_filter": "Filtro de painel",
+  "review_all_panels": "Todos os painéis",
+  "review_view": "Visualização",
+  "review_view_table": "Tabela",
+  "review_view_grid": "Grade",
+  "review_height_rows": "Cerca de 8 linhas",
+  "review_height_strip": "Faixa de uma linha",
+  "review_height_full": "Altura total",
+  "review_table_height_title": "Altura da tabela: {current}. {key} muda para {next}.",
+  "review_table_height_sr": ", altura da tabela",
+  "review_select": "Selecionar",
+  "review_select_all_shown_count": "Selecionar todos os exibidos ({count})",
+  "review_select_by_threshold_menu": "Selecionar por limite…",
+  "review_select_by_threshold": "Selecionar por limite",
+  "review_display": "Exibição",
+  "review_frame_names": "Nomes dos frames",
+  "review_columns": "Colunas",
+  "review_auto_advance_after_mark": "Avançar automaticamente após marcar",
+  "review_show_inspector": "Mostrar o inspetor",
+  "review_threshold_prefix": "Selecionar frames com",
+  "review_threshold_metric": "Métrica do limite",
+  "review_direction": "Direção",
+  "review_above": "acima de",
+  "review_below": "abaixo de",
+  "review_threshold_value": "Valor do limite",
+  "review_threshold_value_in": "Valor do limite em {unit}",
+  "review_select_frames": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Selecionar {count} frame",
+        "countPlural=*": "Selecionar {count} frames"
+      }
+    }
+  ],
+  "review_add_to_selection": "Adicionar à seleção",
+  "review_not_measured_never_selected": "Frames não medidos nunca são selecionados",
+  "review_count_not_measured": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} não medido",
+        "countPlural=*": "{count} não medidos"
+      }
+    }
+  ],
+  "review_threshold_help": "Ajuda do limite",
+  "review_threshold_tip": "Clique em um gráfico para definir o valor. Selecionar nunca altera a qualidade.",
+  "review_close_threshold": "Fechar seleção por limite",
+  "review_status_line": "Status da revisão",
+  "review_shown_of": [
+    {
+      "declarations": [
+        "input count",
+        "input total",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame exibido de {total}",
+        "countPlural=*": "{count} frames exibidos de {total}"
+      }
+    }
+  ],
+  "review_hidden_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} oculto",
+        "countPlural=*": "{count} ocultos"
+      }
+    }
+  ],
+  "review_help_named": "Ajuda: {name}",
+  "review_dismiss_path": "Dispensar caminho",
+  "review_discard": "Descartar",
+  "review_save_runs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Salvar execução",
+        "countPlural=*": "Salvar execuções"
+      }
+    }
+  ],
+  "review_confirm_reject_title": "Rejeitar {what} em {project}?",
+  "review_confirm_reject_description": "Só neste Projeto. A qualidade na biblioteca se mantém.",
+  "review_confirm_reject_change": "Rejeitado · Este Projeto: {frames}",
+  "review_confirm_out_of_totals": "Fora dos totais de {project}",
+  "review_confirm_out_of_draft": "Fora do rascunho de {runs}",
+  "review_confirm_reject_label": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Rejeitar {count} frame",
+        "countPlural=*": "Rejeitar {count} frames"
+      }
+    }
+  ],
+  "review_announce_rejected_for": "Rejeitado em {project}: {frames}.",
+  "review_about_rows": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Cerca de {count} linha",
+        "countPlural=*": "Cerca de {count} linhas"
+      }
+    }
+  ],
+  "review_imports_hide_rows": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} importação de medições: ocultar linhas",
+        "countPlural=*": "{count} importações de medições: ocultar linhas"
+      }
+    }
+  ],
+  "review_imports_review_rows": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} importação de medições: revisar linhas",
+        "countPlural=*": "{count} importações de medições: revisar linhas"
+      }
+    }
+  ],
+  "frame_cutout_observed": "Observado",
+  "frame_fitted": "Ajustado",
+  "frame_cutout_residual": "Resíduo",
+  "frame_warning_saturated": "Saturada: o núcleo está cortado em 65.535 ADU, por isso o ajuste da PSF falhou",
+  "frame_warning_near_edge": "Perto da borda do frame: parte do perfil pode estar cortada",
+  "frame_no_fit": "Sem ajuste",
+  "frame_cutout_label": "Recorte {kind} da estrela {id}",
+  "frame_fit_failed": "O ajuste falhou",
+  "frame_fit_note": "Nota do ajuste",
+  "frame_linear_source_pixels": "Linear, pixels de origem",
+  "frame_half_flux_radius": "Raio de meio fluxo",
+  "frame_location": "Posição",
+  "frame_star_location": "x {x}, y {y} px",
+  "frame_psf_model": "Modelo de PSF",
+  "frame_no_model": "Sem modelo",
+  "frame_clipped_profile": "Perfil cortado",
+  "frame_angle": "Ângulo",
+  "frame_peak": "Pico",
+  "frame_note_input": "Entrada",
+  "frame_input_current": "SHA-256 {hash}… (atual)",
+  "frame_input_earlier": "SHA-256 {hash}… (anterior)",
+  "frame_note_state": "Estado",
+  "frame_does_not_apply": "Não se aplica",
+  "frame_note_units": "Unidades",
+  "frame_unit_none": "nenhuma",
+  "frame_note_history": "Histórico",
+  "frame_imported_earlier": "Importado para um conteúdo anterior",
+  "frame_metrics_caption": "Medições do frame atual, com suas origens",
+  "frame_col_metric": "Métrica",
+  "frame_builtin_source": "Origem integrada",
+  "frame_col_imported": "Importado",
+  "frame_imported_source": "Origem importada",
+  "frame_value_imported_sr": "{unit}, importado, não verificado",
+  "frame_value_history_sr": "{unit}, histórico",
+  "frame_header_caption": "Metadados do cabeçalho",
+  "importdlg_unknown_frame": "Frame desconhecido",
+  "importdlg_blocked_no_export": "Nenhuma exportação em um volume montado para revisar.",
+  "importdlg_blocked_choose": "Escolha um arquivo de exportação para revisar o mapeamento.",
+  "importdlg_blocked_unsupported": "Este arquivo não pode ser importado.",
+  "importdlg_blocked_no_match": "Nenhuma linha corresponde a um frame indexado.",
+  "importdlg_title": "Importar medições",
+  "importdlg_description_choose": "Escolha uma exportação compatível. Protótipo: seletor de arquivos simulado que lista os CSV dos volumes montados.",
+  "importdlg_description_review": "Revise como a exportação corresponde aos frames e às métricas antes de anexar qualquer coisa.",
+  "importdlg_no_csv_title": "Nenhuma exportação CSV em um volume montado",
+  "importdlg_no_csv_body": "Compatível: {format}. Monte o volume que contém a exportação ou copie-a para um local montado.",
+  "importdlg_export_file": "Arquivo de exportação",
+  "importdlg_file_meta": "{size} · modificado em {date}",
+  "importdlg_unsupported_title": "Este arquivo não é uma exportação compatível",
+  "importdlg_unsupported_body": "{path} não tem as colunas File e FWHM do SubframeSelector, então nada pode ser mapeado. Escolha um {format}.",
+  "importdlg_summary": [
+    {
+      "declarations": [
+        "input count",
+        "input scale",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} linha · escala do subframe {scale} conforme gravada na exportação",
+        "countPlural=*": "{count} linhas · escala do subframe {scale} conforme gravada na exportação"
+      }
+    }
+  ],
+  "importdlg_source_note": "Origem: importado · método {method} {version}, conforme gravado na exportação. A exportação não registra a identidade do conteúdo, então os valores anexados ficam como conteúdo não verificado. O PlateVault registra o SHA-256 atual de cada frame só para perceber alterações futuras.",
+  "importdlg_column_mapping": "Mapeamento de colunas",
+  "importdlg_col_csv": "Coluna do CSV",
+  "importdlg_col_unit": "Unidade",
+  "importdlg_col_mapping": "Mapeamento",
+  "importdlg_no_unit": "Sem unidade",
+  "importdlg_not_imported": "Não importado",
+  "importdlg_rows": "Linhas",
+  "importdlg_rows_matched": [
+    {
+      "declarations": [
+        "input count",
+        "input byPath",
+        "input byName",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} linha corresponde a frames indexados ({byPath} pelo caminho, {byName} pelo nome de arquivo único)",
+        "countPlural=*": "{count} linhas correspondem a frames indexados ({byPath} pelo caminho, {byName} pelo nome de arquivo único)"
+      }
+    }
+  ],
+  "importdlg_outside_view": "({count} fora desta visualização; seus valores ainda são anexados ao frame)",
+  "importdlg_attach_none": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} não é anexada a nenhum frame até ser revisada",
+        "countPlural=*": "{count} não são anexadas a nenhum frame até serem revisadas"
+      }
+    }
+  ],
+  "importdlg_changed_heading": "Precisa de revisão: conteúdo alterado desde que o PlateVault o registrou",
+  "importdlg_badge_unreadable": "Precisa de revisão: não pode ser lido",
+  "importdlg_badge_changed": "Precisa de revisão: conteúdo alterado",
+  "importdlg_row_n": "Linha {n}",
+  "importdlg_unreadable_body": "{frame} não pode ser lido agora (offline ou acesso negado), então o PlateVault não consegue registrar qual conteúdo esses valores descrevem. A linha não é anexada a nada.",
+  "importdlg_changed_body_measured": "Os bytes atuais de {frame} (sha256 {current}…) diferem do resumo que o PlateVault registrou ao medir o frame ({recorded}…). Esses valores podem descrever outro conteúdo, então não são anexados a nada.",
+  "importdlg_changed_body_indexed": "Os bytes atuais de {frame} (sha256 {current}…) diferem do resumo que o PlateVault registrou ao indexar o frame ({recorded}…). Esses valores podem descrever outro conteúdo, então não são anexados a nada.",
+  "importdlg_ambiguous": "Ambíguo",
+  "importdlg_unmatched": "Sem correspondência",
+  "importdlg_ambiguous_body": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "O nome do arquivo corresponde a {count} frame indexado: {frames}. A linha não é anexada a nenhum até você escolher um em Revisar frames.",
+        "countPlural=*": "O nome do arquivo corresponde a {count} frames indexados: {frames}. A linha não é anexada a nenhum até você escolher um em Revisar frames."
+      }
+    }
+  ],
+  "importdlg_unmatched_body": "Nenhum frame indexado tem este caminho ou nome de arquivo. A linha não é anexada a nada.",
+  "importdlg_does_not_title": "O que a importação não faz",
+  "importdlg_does_not_body": "Não substitui nenhum valor integrado, não exclui nem restaura frames e não altera nenhuma decisão de qualidade. A coluna Approved nunca é importada.",
+  "importdlg_review_mapping": "Revisar mapeamento",
+  "importdlg_import_rows": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Importar {count} linha correspondente",
+        "countPlural=*": "Importar {count} linhas correspondentes"
+      }
+    }
+  ],
+  "importdlg_row_attached_by_you": "Anexada por você",
+  "importdlg_row_ambiguous": "Ambígua: não anexada a nenhum frame",
+  "importdlg_row_changed": "Conteúdo alterado: não anexada a nenhum frame",
+  "importdlg_row_unreadable": "Ilegível: não anexada a nenhum frame",
+  "importdlg_row_unmatched": "Sem correspondência: não anexada a nenhum frame",
+  "importdlg_attached_summary": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} linha anexada como valores importados, conteúdo não verificado",
+        "countPlural=*": "{count} linhas anexadas como valores importados, conteúdo não verificado"
+      }
+    }
+  ],
+  "importdlg_outside_run": "({count} a frames fora desta execução)",
+  "importdlg_column_unavailable": "{name} indisponível",
+  "importdlg_column_not_imported": "{name} não importado",
+  "importdlg_every_row_reviewed": "Todas as linhas foram revisadas.",
+  "importdlg_attached_to": "Anexada a {frame}.",
+  "importdlg_unmatched_stay": "Nenhum frame indexado tem este caminho ou nome de arquivo. Seus valores continuam sem anexar.",
+  "importdlg_changed_stay": "Na importação, {frame} tinha bytes diferentes do resumo que o PlateVault registrou para ele. Seus valores continuam sem anexar.",
+  "importdlg_unreadable_stay": "Na importação, {frame} não pôde ser lido, então nada liga esses valores ao conteúdo dele. Seus valores continuam sem anexar.",
+  "importdlg_attach_to": "Anexar a",
+  "importdlg_choose_frame": "Escolha o frame que esta linha mediu",
+  "importdlg_choose_first": "Escolha o frame que esta linha mediu antes de anexá-la.",
+  "importdlg_attach_row": "Anexar linha",
+  "importdlg_row_not_found": "A linha da importação não foi encontrada; abra Importar medições de novo.",
+  "importdlg_row_not_attached_unreadable": "Linha não anexada: os bytes do frame não podem ser lidos agora, então o PlateVault não consegue registrar qual conteúdo os valores descrevem.",
+  "importdlg_row_not_attached_measured": "Linha não anexada: os bytes do frame diferem do resumo que o PlateVault registrou ao medi-lo. Indexe a pasta dele e revise os frames de novo antes de anexá-la.",
+  "importdlg_row_not_attached_indexed": "Linha não anexada: os bytes do frame diferem do resumo que o PlateVault registrou quando ele foi indexado. Indexe a pasta dele e revise os frames de novo antes de anexá-la.",
+  "importdlg_note_file": "Identidade do frame: corresponde a uma cópia indexada pelo caminho, depois pelo nome do arquivo",
+  "importdlg_note_approved": "As decisões de rejeição continuam suas",
+  "importdlg_note_fwhm": "Exibido ao lado do FWHM integrado",
+  "importdlg_note_eccentricity": "Exibido ao lado da excentricidade integrada",
+  "importdlg_note_stars": "Exibido ao lado da contagem de estrelas integrada",
+  "importdlg_note_psf_signal_weight": "Sem unidades nem equivalente no PlateVault; nunca é exibido como FWHM ou HFR."
 }
