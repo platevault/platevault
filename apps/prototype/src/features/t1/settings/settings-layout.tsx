@@ -1,29 +1,16 @@
 /**
- * Settings layout (J10 S1): the page h1 and a section menu; each section
+ * Settings layout (S16): the page h1 and a section menu; each section
  * renders its own `PageHeader level={2}`. Every section applies changes as
- * they are made; there is no global Save button.
+ * they are made; there is no global Save button. The sections are
+ * `SETTINGS_SECTIONS` in app/navigation.ts.
  */
 import { Link, Outlet, useSearch } from "@tanstack/react-router"
 import { Undo2 } from "lucide-react"
+import { SETTINGS_SECTIONS as SECTIONS } from "@/app/navigation"
 import { Notice } from "@/components/app/feedback"
 import { ListDetail, PageHeader } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-
-const SECTIONS: Array<{ group: string; items: Array<{ to: string; label: string }> }> = [
-  { group: "General", items: [{ to: "/settings/appearance", label: "Appearance" }] },
-  {
-    group: "Library",
-    items: [
-      { to: "/settings/locations", label: "Locations" },
-      { to: "/settings/equipment", label: "Equipment" },
-      { to: "/settings/sites", label: "Observing sites" },
-      { to: "/settings/targets", label: "Target lookup" },
-    ],
-  },
-  { group: "Processing", items: [{ to: "/settings/applications", label: "Applications" }] },
-  { group: "Prototype", items: [{ to: "/settings/about", label: "About this prototype" }] },
-]
 
 function SettingsMenu() {
   return (
@@ -81,9 +68,9 @@ function safeReturnPath(value: string | undefined): string | null {
 
 function returnLabel(path: string): string {
   if (/^\/sessions\/[^/]+$/.test(path)) return "Back to the session"
-  if (/^\/targets\/[^/]+\/plan$/.test(path)) return "Back to the plan"
+  if (path.startsWith("/plan")) return "Back to the Plan"
   if (/^\/targets\/[^/]+$/.test(path)) return "Back to the Target"
-  if (path.startsWith("/views/")) return "Back to the View"
+  if (/^\/projects\/[^/]+\/(runs|groups)\//.test(path)) return "Back to the run"
   if (path.startsWith("/storage")) return "Back to Storage"
   if (path.startsWith("/projects/")) return "Back to the Project"
   return "Go back"

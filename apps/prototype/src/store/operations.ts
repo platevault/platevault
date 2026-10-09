@@ -1,11 +1,12 @@
 /**
  * Simulated operations (foundation-owned runner).
  *
- * Long app-owned work (indexing, measurement, preparation, cleanup, archive,
- * filing, master adoption) runs as an Operation with visible progress,
- * per-item outcomes and exactly one settled status. A track owns an
- * operation kind by registering an `OperationHandler` in its slice
- * definition; the runner advances every running operation once per tick.
+ * Long app-owned work (indexing, measurement, import, preparation, cleanup,
+ * archive, OS Trash moves, master adoption) runs as an Operation with
+ * visible progress, per-item outcomes and exactly one settled status. The
+ * foundation owns "index" (here) and "trash" (`store/actions/trash.ts`); a
+ * slice owns another kind by registering an `OperationHandler` in its slice
+ * definition. The runner advances every running operation once per tick.
  *
  * After a restart, operations that were running become "interrupted" with
  * their recorded items intact; Retry resumes from the recorded state and
@@ -154,18 +155,21 @@ export function cancelOperation(id: OperationId) {
       next = patchOperation(next, id, { items })
     }
     // A canceled operation still links to its owning surface in Activity (seam 16).
-    const viewId = op.scope.viewIds?.[0]
-    const area = { measure: "frames", "import-measurements": "frames", prepare: "prepare", cleanup: "cleanup" } as Partial<Record<OperationKind, string>>
+    const runId = op.scope.runIds?.[0]
+    const run = runId ? next.catalog.runs[runId] : undefined
+    const step = { measure: "review", "import-measurements": "review", prepare: "prepare", cleanup: "done" } as Partial<Record<OperationKind, string>>
     const href =
       op.kind === "index"
         ? "/settings/locations"
-        : op.kind === "archive" || op.kind === "filing"
-          ? `/storage/transfers/${op.id}`
-          : op.kind === "adopt-master"
-            ? "/calibration"
-            : viewId && area[op.kind]
-              ? `/views/${viewId}/${area[op.kind]}`
-              : null
+        : op.kind === "adopt-master"
+          ? "/calibration"
+          : op.kind === "import"
+            ? "/sessions"
+            : run && step[op.kind]
+              ? `/projects/${run.projectId}/runs/${run.id}/${step[op.kind]}`
+              : op.scope.projectId
+                ? `/projects/${op.scope.projectId}`
+                : null
     return settleOperation(
       next,
       id,
@@ -174,15 +178,6 @@ export function cancelOperation(id: OperationId) {
       href,
     )
   })
-}
-
-/**
- * Unsettled operations (running, paused or interrupted) that affect a View;
- * Mark complete waits for them (RES-AC-07, D09). Archive and filing list
- * every View whose members they move in `scope.viewIds`.
- */
-export function unsettledOperationsForView(state: PrototypeState, viewId: string): Operation[] {
-  return Object.values(state.operations).filter((op) => op.scope.viewIds?.includes(viewId) && !isSettled(op.status))
 }
 
 let timer: number | null = null
@@ -235,11 +230,15 @@ interface IndexPayload {
   queue: LocationId[]
   current: { locationId: LocationId; pending: string[]; observed: string[] } | null
   counts: { discovered: number; read: number; unsupported: number; unreadableFolders: number }
+  /** Ticks spent on the current network-share location (D-W12 pacing). */
+  ticks?: number
 }
 
 const BATCH = 14
 /** Files per tick while `faults.slowIndexing` is on. */
 const SLOW_BATCH = 2
+/** A network share is hashed over the network: one file every this many ticks (D-W12). */
+const NETWORK_TICKS_PER_FILE = 5
 
 function startNextLocation(state: PrototypeState, op: Operation, payload: IndexPayload): { state: PrototypeState; payload: IndexPayload } {
   let next = state
@@ -288,12 +287,15 @@ const indexHandler: OperationHandler = {
     const current = payload.current!
     const location = next.catalog.locations[current.locationId]!
     const volumeMounted = next.disk.volumes[location.volumeId]?.mounted
-    const batchPaths = volumeMounted ? current.pending.slice(0, next.faults.slowIndexing ? SLOW_BATCH : BATCH) : []
+    const volume = next.disk.volumes[location.volumeId]
+    const ticks = (payload.ticks ?? 0) + 1
+    const size = volume?.network ? (ticks % NETWORK_TICKS_PER_FILE === 0 ? 1 : 0) : next.faults.slowIndexing ? SLOW_BATCH : BATCH
+    const batchPaths = volumeMounted ? current.pending.slice(0, size) : []
     const files = batchPaths.map((p) => next.disk.files[fileKey(location.volumeId, p)]).filter((f) => f !== undefined)
     if (files.length > 0) next = { ...next, catalog: readFiles(next.catalog, location, files, nowIso()) }
     const observed = [...current.observed, ...batchPaths]
     const pending = current.pending.slice(batchPaths.length)
-    payload = { ...payload, current: { ...current, pending, observed }, counts: { ...payload.counts, read: payload.counts.read + files.length } }
+    payload = { ...payload, ticks, current: { ...current, pending, observed }, counts: { ...payload.counts, read: payload.counts.read + files.length } }
 
     if (!volumeMounted || pending.length === 0) {
       next = { ...next, catalog: settleLocationScan(next.catalog, next.disk, current.locationId, new Set(observed), nowIso()) }

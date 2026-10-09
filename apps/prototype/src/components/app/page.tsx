@@ -185,36 +185,61 @@ export function StepIndicator({ steps, current, completed = [], label }: { steps
   )
 }
 
-export interface PlaceholderPageProps {
+/** One row of the harness v5 screen table (HARNESS-V5-IA.md § Screens). */
+export interface PlaceholderScreen {
+  id: string
   title: string
   route: string
-  owner: { track: "T1" | "T2" | "T3" | "T4" | "T5"; name: string }
-  /** Journeys and specs this screen serves. */
-  covers: string
-  /** Child route outlet, for pre-created layout routes. */
+  slice: string
+  contract: string
+  mustShow: string
+}
+
+export interface PlaceholderPageProps {
+  screen: PlaceholderScreen
+  /** Overrides the screen title, e.g. with the record name. */
+  title?: string
+  /** The path control before the title, e.g. the parent Project. */
+  eyebrow?: ReactNode
+  /** Facts from the live store the screen agent builds on, shown above the IA row. */
+  facts?: Array<{ label: string; value: ReactNode }>
+  /** Child route outlet or nested content. */
   children?: ReactNode
-  /** 2 for areas rendered inside a layout route that owns the h1. */
+  /** 2 for areas rendered inside a layout that owns the h1. */
   level?: 1 | 2
 }
 
 /**
- * Pre-created page for a track (foundation scaffold). Shows only the screen
- * title, its fixed route and the owning track; the track replaces the body.
+ * Foundation placeholder for a harness v5 screen: names the screen and its
+ * IA row and says it is built next. The slice's screen agent replaces the
+ * file that renders it (HARNESS-V5-IA.md § Foundation contract).
  */
-export function PlaceholderPage({ title, route, owner, covers, children, level = 1 }: PlaceholderPageProps) {
+export function PlaceholderPage({ screen, title, eyebrow, facts = [], children, level = 1 }: PlaceholderPageProps) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-placeholder-page={owner.track}>
-      <PageHeader title={title} level={level} />
+    <div className="flex min-h-0 flex-1 flex-col" data-placeholder-page={screen.id}>
+      <PageHeader title={title ?? screen.title} eyebrow={eyebrow} level={level} description={`${screen.id} · slice ${screen.slice} · built next`} />
       <PageBody>
-        <dl className="grid max-w-xl grid-cols-[8rem_1fr] gap-x-4 gap-y-2 rounded-lg border p-4 text-sm">
-          <dt className="text-muted-foreground">Route</dt>
-          <dd className="font-mono text-xs leading-5">#{route}</dd>
-          <dt className="text-muted-foreground">Owner</dt>
+        <dl className="grid max-w-3xl grid-cols-[8rem_minmax(0,1fr)] gap-x-4 gap-y-2 border-y border-separator py-3 text-sm">
+          {facts.map((fact, index) => (
+            <div key={`${index}-${fact.label}`} className="contents">
+              <dt className="text-muted-foreground">{fact.label}</dt>
+              <dd className="min-w-0">{fact.value}</dd>
+            </div>
+          ))}
+          <dt className="text-muted-foreground">Screen</dt>
           <dd>
-            Track {owner.track}: {owner.name}
+            {screen.id} {screen.title}: built next
           </dd>
-          <dt className="text-muted-foreground">Covers</dt>
-          <dd>{covers}</dd>
+          <dt className="text-muted-foreground">Route</dt>
+          <dd className="font-mono text-xs leading-5">{screen.route.startsWith("/") ? `#${screen.route}` : screen.route}</dd>
+          {screen.contract ? (
+            <>
+              <dt className="text-muted-foreground">Contract</dt>
+              <dd>{screen.contract}</dd>
+            </>
+          ) : null}
+          <dt className="text-muted-foreground">Must show</dt>
+          <dd className="max-w-[75ch] text-pretty">{screen.mustShow}</dd>
         </dl>
       </PageBody>
       {children}

@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { ApplicationProfile } from "@/domain/types"
 import { useStore } from "@/store/core"
-import { checkExecutable, setLaunchArgs, updateApp } from "./actions"
+import { checkExecutable, setLaunchArgs, updateApp } from "@/store/actions/settings"
 import { ProfileBadge } from "./badges"
 import { CapabilityList, ExecutableState, LocateApplicationDialog } from "./profile-parts"
 import { PrototypeControls } from "./prototype-controls"
@@ -82,7 +82,7 @@ function ProfileCard({ profile, onLocate }: { profile: ApplicationProfile; onLoc
 export function SettingsApplicationsPage() {
   const search = useSearch({ strict: false }) as { return?: string }
   const profiles = useStore((s) => s.catalog.profiles)
-  const apps = useStore((s) => s.slices.t4.world.apps)
+  const apps = useStore((s) => s.disk.apps)
   const [locating, setLocating] = useState<ApplicationProfile | null>(null)
   const list = Object.values(profiles).sort((a, b) => ORDER.indexOf(a.application) - ORDER.indexOf(b.application))
   const back = search.return && search.return.startsWith("/") ? search.return : null

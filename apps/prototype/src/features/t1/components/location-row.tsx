@@ -10,7 +10,7 @@ import { PathText } from "@/components/app/data"
 import { Notice } from "@/components/app/feedback"
 import { StatusBadge, statusMeta } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
-import { locationAvailability } from "@/domain/derive"
+import { locationAvailability } from "@/domain/library"
 import type { Location, Operation, OperationItem } from "@/domain/types"
 import { formatCount, formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -67,7 +67,6 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
   const facts = [
     location.lastIndexedAt ? `${denied ? "Last attempt" : "Last indexed"} ${formatDateTime(location.lastIndexedAt)}` : null,
     frames > 0 || (location.lastIndexedAt && !denied) ? `${formatCount(frames)} ${frames === 1 ? "frame" : "frames"} read` : null,
-    location.managed ? "Accepts reviewed filing" : null,
   ].filter((fact) => fact !== null)
   const nominal = [
     !offline && !retired && location.access === "ok" ? statusMeta("access", "ok").label : null,

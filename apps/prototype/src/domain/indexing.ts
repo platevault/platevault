@@ -7,7 +7,7 @@
  * (progressively, a batch per tick), so both produce identical catalogs.
  */
 import { correctedExposureS } from "./corrections"
-import { isRetiredAsset } from "./derive"
+import { isRetiredAsset } from "./library"
 import { angularSeparationDeg, normalizeName, SKY_OBJECTS } from "./sky"
 import type {
   Asset,
@@ -173,6 +173,7 @@ function ensureTargetFor(catalog: Catalog, name: string, now: IsoDateTime): Targ
     coordinateSource: "catalog",
     resolver: null,
     notes: "",
+    favourite: false,
     createdAt: now,
     revision: 1,
   }
@@ -250,7 +251,7 @@ function findOrDetectCamera(catalog: Catalog, header: NonNullable<DiskFile["head
     widthPx: header.widthPx * header.binning,
     heightPx: header.heightPx * header.binning,
     pixelSizeUm: header.pixelSizeUm ?? 0,
-    color: header.bayerPattern !== null,
+    kind: header.bayerPattern !== null ? "osc" : "mono",
   }
   catalog.cameras[camera.id] = camera
   return camera
@@ -270,6 +271,7 @@ function trainFor(catalog: Catalog, camera: Camera, telescope: Telescope): Optic
     telescopeId: telescope.id,
     effectiveFocalLengthMm: telescope.focalLengthMm,
     notes: "",
+    filters: [],
   }
   catalog.opticalTrains[train.id] = train
   return train
@@ -436,10 +438,14 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
         ? existing.copies.map((c) => (c.locationId === location.id && c.path === file.path ? copy : c))
         : [...existing.copies, copy]
       // Re-reading the bytes finishes any pending verification of this decision.
-      const quality = existing.quality.verificationPending ? { ...existing.quality, verificationPending: false } : existing.quality
+      let quality = existing.quality.verificationPending ? { ...existing.quality, verificationPending: false } : existing.quality
+      // Put back from the OS Trash and rescanned: the record returns as Unusable (D-W43).
+      if (existing.trashed) quality = { value: "unusable", decidedAt: now, basisSha256: file.sha256 }
       // The identity follows the bytes only while every copy outside a retired location agrees.
       const agreed = copies.every((c) => c.sha256 === file.sha256 || catalog.locations[c.locationId]?.retiredAt)
-      catalog.assets[existing.id] = agreed ? { ...existing, sha256: file.sha256, sizeBytes: file.sizeBytes, copies, quality } : { ...existing, copies, quality }
+      catalog.assets[existing.id] = agreed
+        ? { ...existing, sha256: file.sha256, sizeBytes: file.sizeBytes, copies, quality, trashed: null }
+        : { ...existing, copies, quality, trashed: null }
       continue
     }
     // A retired asset can hold this path's id; a re-registered file gets its own.
@@ -467,7 +473,7 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
         frameCount: null,
         createdAt: header.dateObs,
         state: "adopted",
-        origin: { kind: "library", viewId: null, sourcePath: file.path },
+        origin: { kind: "library", runId: null, sourcePath: file.path },
         adoption: null,
       }
     }
@@ -519,6 +525,7 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
       sessionId: sessionId ?? null,
       copies: [copy],
       quality: { value: "unreviewed", decidedAt: null, basisSha256: null },
+      trashed: null,
     }
   }
   for (const sessionId of touched) catalog.sessions[sessionId] = rebuildSession(catalog, catalog.sessions[sessionId]!, now)

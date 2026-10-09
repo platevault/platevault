@@ -4,7 +4,7 @@
  * (`access`, `scanScope`, `unreadablePaths`, `lastIndexedAt`) is written by the
  * foundation `index` operation.
  */
-import { locationAvailability } from "@/domain/derive"
+import { locationAvailability } from "@/domain/library"
 import { fileAt, volumeForPath } from "@/domain/disk"
 import { isUnder, stableHash } from "@/domain/indexing"
 import type { Availability, Catalog, Disk, Location, LocationId, LocationRole, Volume } from "@/domain/types"
@@ -96,7 +96,6 @@ export function registerLocation(draft: LocationDraft, href: string): { result: 
     path: draft.path,
     volumeId,
     role: draft.role,
-    managed: false,
     registeredAt: nowIso(),
     access: "unknown",
     lastIndexedAt: null,
@@ -123,7 +122,6 @@ export function registerLocation(draft: LocationDraft, href: string): { result: 
 export interface LocationEdit {
   displayName: string
   role: LocationRole
-  managed: boolean
 }
 
 export function updateLocation(id: LocationId, edit: LocationEdit, href: string): CommitResult {
@@ -132,7 +130,7 @@ export function updateLocation(id: LocationId, edit: LocationEdit, href: string)
     withCatalog(s, (c) => {
       const current = c.locations[id]
       if (!current) return c
-      return { ...c, locations: { ...c.locations, [id]: { ...current, displayName: name, role: edit.role, managed: edit.managed } } }
+      return { ...c, locations: { ...c.locations, [id]: { ...current, displayName: name, role: edit.role } } }
     }),
   )
 }
@@ -195,7 +193,7 @@ export interface RetireReview {
   availability: Availability
   frames: number
   sessions: string[]
-  views: string[]
+  runs: string[]
   projects: string[]
   results: string[]
 }
@@ -209,11 +207,11 @@ export function reviewRetire(state: PrototypeState, locationId: LocationId): Ret
   const sessions = Object.values(catalog.sessions)
     .filter((s) => !s.supersededBy && s.assetIds.some((id) => assetIds.has(id)))
     .sort((a, b) => a.night.localeCompare(b.night))
-  const views = Object.values(catalog.views).filter((v) =>
-    [...v.revisions, ...(v.draft ? [v.draft] : [])].some((m) => [...m.included, ...m.excluded, ...m.unresolved].some((id) => assetIds.has(id))),
+  const runs = Object.values(catalog.runs).filter((r) =>
+    [...r.revisions, ...(r.draft ? [r.draft] : [])].some((m) => [...m.included, ...m.excluded, ...m.rejected, ...m.unresolved].some((id) => assetIds.has(id))),
   )
-  const viewIds = new Set(views.map((v) => v.id))
-  const projectIds = new Set(views.map((v) => v.projectId).filter((id) => id !== null))
+  const runIds = new Set(runs.map((r) => r.id))
+  const projectIds = new Set(runs.map((r) => r.projectId))
   return {
     locationId,
     displayName: location.displayName,
@@ -221,10 +219,10 @@ export function reviewRetire(state: PrototypeState, locationId: LocationId): Ret
     availability: locationAvailability(disk, location),
     frames: assetIds.size,
     sessions: sessions.map((s) => [formatNight(s.night), s.channel ?? "No filter", formatExposure(s.exposureS)].join(" · ")),
-    views: views.map((v) => v.name),
+    runs: runs.map((r) => r.name),
     projects: [...projectIds].map((id) => catalog.projects[id]?.name ?? id),
     results: Object.values(catalog.results)
-      .filter((r) => viewIds.has(r.viewId))
+      .filter((r) => r.runId !== null && runIds.has(r.runId))
       .map((r) => r.path.slice(r.path.lastIndexOf("/") + 1)),
   }
 }

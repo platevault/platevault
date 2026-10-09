@@ -1,9 +1,9 @@
 /**
  * Simulation controls (foundation-owned, prototype only). Reach offline,
  * unreadable, drift, restore, copy, collision, new-arrival, failed-write,
- * resolver, clock and permission states without a real filesystem. Opened
- * from the header "Prototype" button; T1 may embed `SimulationControls` in
- * Settings › About.
+ * resolver, clock, permission and no-site states without a real
+ * filesystem. Opened from the toolbar "Prototype" button; Settings › About
+ * embeds `SimulationControls`.
  */
 import { FlaskConical, RotateCcw } from "lucide-react"
 import { useId, useMemo, useRef, useState } from "react"
@@ -17,7 +17,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Switch } from "@/components/ui/switch"
 import { fileAt } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
-import { displayZone, formatZonedDateTime, reminderSiteOf, wallTimeToIso } from "@/features/t5/lib/planning"
+import { displayZone, formatZonedDateTime, reminderSiteOf, wallTimeToIso } from "@/domain/planning"
 import { cn } from "@/lib/utils"
 import { store, useStore } from "@/store/core"
 import { resetPrototype } from "@/store"
@@ -328,6 +328,12 @@ export function SimulationControls() {
             checked={faults.slowIndexing}
             onChange={(value) => setFault("slowIndexing", value)}
           />
+          <ToggleRow
+            label="No observing site"
+            detail={'Planning sees no saved site: Home Tonight, Plan and Targets show "Add an observing site in Settings"'}
+            checked={faults.noSite}
+            onChange={(value) => setFault("noSite", value)}
+          />
         </div>
       </Section>
 
@@ -388,8 +394,8 @@ export function SimulationControls() {
           description="This replaces all prototype data in this browser. It cannot be undone."
           changes={[
             confirmSeed === "demo"
-              ? "Replace the catalog with the indexed demo library (M 31, NGC 7000, Heart and Soul mosaic)"
-              : "Remove every location, session, Project and View; onboarding starts again",
+              ? "Replace the catalog with the demo library (Cygnus HOO 2026, M 31 LRGB, Heart and Soul)"
+              : "Remove every location, session, Project and run; onboarding starts again",
             "Discard running operations and Activity",
           ]}
           unchanged={["Theme and density", "No real files exist; nothing on your computer is touched"]}

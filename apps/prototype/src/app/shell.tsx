@@ -1,9 +1,10 @@
 /**
- * App shell (foundation-owned): root providers, the main layout with sidebar,
- * header and status area, and the minimal onboarding layout.
+ * App shell (foundation-owned): root providers, the main layout with source
+ * list, unified toolbar and status bar, and the minimal onboarding layout.
+ * Harness v5 keeps v4's window: the page never scrolls, only panes do.
  */
 import { Link, Outlet, useRouterState } from "@tanstack/react-router"
-import { Aperture, FlaskConical, HardDrive, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Play, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
+import { Aperture, Download, FlaskConical, HardDrive, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Play, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { EmptyState, LiveAnnouncer } from "@/components/app/feedback"
 import { useDocumentTitle } from "@/components/app/page"
@@ -21,23 +22,18 @@ import { Kbd } from "@/components/ui/kbd"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { t1Shell } from "@/features/t1/shell"
-import { t2Shell } from "@/features/t2/shell"
-import { t3Shell } from "@/features/t3/shell"
-import { t4Shell } from "@/features/t4/shell"
-import { t5Shell } from "@/features/t5/shell"
+import { groupPipeline, type NextAction, projectNext, runPipeline, type RunStepState } from "@/domain/derive"
 import { cn } from "@/lib/utils"
-import { useStore } from "@/store/core"
+import { nowIso, useStore } from "@/store/core"
 import { CommandPalette } from "./command-palette"
+import { SHELLS } from "./contributions"
 import { NAV_GROUPS, type NavItem, PRIMARY_ITEMS, UTILITY_ITEMS } from "./navigation"
-import { GATE_LABEL, stageForPath, viewPipeline } from "./pipeline"
-import { StageGlyph, useFollowLink } from "./pipeline-ui"
+import { ProjectOutline, useActiveRoute } from "./outline"
 import { setTheme, type ThemePreference, usePreferences } from "./preferences"
+import { StepGlyph, useFollowLink } from "./run-ui"
 import { MOD_LABEL, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
 import { SimulationSheet } from "./simulation-panel"
-import { openPanel, toggleSidebar, useShellUi } from "./ui-state"
-
-const SHELLS = [t1Shell, t2Shell, t3Shell, t4Shell, t5Shell]
+import { openPanel, openSheet, toggleSidebar, useShellUi } from "./ui-state"
 
 export function RootLayout() {
   useGlobalShortcuts()
@@ -73,6 +69,7 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const link = (
     <Link
       to={item.to}
+      activeOptions={{ exact: item.to === "/" }}
       className={cn(
         "flex h-6.5 items-center gap-2 rounded-[0.3125rem] px-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:text-link",
         "data-[status=active]:bg-sidebar-primary data-[status=active]:font-medium data-[status=active]:text-sidebar-primary-foreground data-[status=active]:[&>svg]:text-sidebar-primary-foreground",
@@ -110,94 +107,68 @@ function useNarrowViewport(): boolean {
   )
 }
 
-/** The open View and its pipeline, derived from the route; null outside a View. */
-function useActivePipeline() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const viewId = pathname.match(/^\/views\/([^/]+)/)?.[1]
-  const state = useStore((s) => s)
-  const view = viewId && viewId !== "new" ? state.catalog.views[viewId] : undefined
-  const pipeline = useMemo(() => (view ? viewPipeline(state, view) : null), [state, view])
-  return { pathname, view, pipeline }
-}
-
 /**
- * The pipeline navigator (Xcode-style): under Pipeline, the open View's seven
- * numbered stages with their gate state. The current area is the selected row.
+ * The open context's one Next action and step list, derived from the route:
+ * a run's or run group's Next (its six steps), else the open Project's Next
+ * (D-W35). Null on other pages.
  */
-function PipelineOutline() {
-  const { pathname, view, pipeline } = useActivePipeline()
-  if (!view || !pipeline) return null
-  const here = stageForPath(pathname)
-  return (
-    <div className="mt-0.5 mb-1 ml-3 border-l border-sidebar-border pl-1.5">
-      <p className="truncate px-1.5 py-1 text-[0.6875rem] font-semibold text-sidebar-foreground" title={view.name}>
-        {view.name}
-      </p>
-      <ol aria-label={`Pipeline of ${view.name}`} className="space-y-px">
-        {pipeline.stages.map((stage) => (
-          <li key={stage.id}>
-            <Link
-              to={stage.link.to as never}
-              params={stage.link.params as never}
-              aria-current={here === stage.id ? "page" : undefined}
-              className={cn(
-                "flex h-6 items-center gap-1.5 rounded-[0.3125rem] px-1.5 text-[0.75rem] hover:bg-sidebar-accent",
-                here === stage.id && "bg-sidebar-accent font-medium",
-                pipeline.current.id === stage.id && here !== stage.id && "shadow-[inset_2px_0_0_var(--link)]",
-              )}
-            >
-              <span className="w-3 text-right text-muted-foreground tabular-nums">{stage.n}</span>
-              <StageGlyph state={stage.state} />
-              <span className="min-w-0 flex-1 truncate">{stage.label}</span>
-              <span className="max-w-24 truncate text-[0.6875rem] text-muted-foreground">
-                <span className="sr-only">{GATE_LABEL[stage.state]}: </span>
-                {stage.status}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ol>
-    </div>
-  )
+function useContextNext(): { next: NextAction | null; steps: RunStepState[] | null } {
+  const active = useActiveRoute()
+  const state = useStore((s) => s)
+  return useMemo(() => {
+    const run = active.runId ? state.catalog.runs[active.runId] : undefined
+    if (run) {
+      const pipeline = runPipeline(state, run)
+      return { next: pipeline.next, steps: pipeline.steps }
+    }
+    const group = active.groupId ? state.catalog.runGroups[active.groupId] : undefined
+    if (group) {
+      const pipeline = groupPipeline(state, group)
+      return { next: pipeline.next, steps: pipeline.steps }
+    }
+    const project = active.projectId ? state.catalog.projects[active.projectId] : undefined
+    if (project) return { next: projectNext(state, project, Date.parse(nowIso())), steps: null }
+    return { next: null, steps: null }
+  }, [active, state])
 }
 
 /**
- * The one Next action of the open View, in the toolbar like a Run button:
- * ⌘↩ runs it, ⌃1–⌃7 jump to a stage.
+ * The one Next action, in the toolbar like a Run button: ⌘↩ runs it, ⌃1–⌃6
+ * jump to a step of the open run or run group.
  */
 function NextActionButton() {
-  const { pipeline } = useActivePipeline()
+  const context = useContextNext()
   const follow = useFollowLink()
   const followRef = useRef(follow)
   followRef.current = follow
-  const pipelineRef = useRef(pipeline)
-  pipelineRef.current = pipeline
+  const contextRef = useRef(context)
+  contextRef.current = context
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      const current = pipelineRef.current
-      if (!current) return
+      const current = contextRef.current
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter" && current.next) {
         event.preventDefault()
         followRef.current(current.next.link)
         return
       }
       const n = Number(event.key)
-      if (event.ctrlKey && !event.metaKey && n >= 1 && n <= 7) {
+      if (event.ctrlKey && !event.metaKey && current.steps && n >= 1 && n <= current.steps.length) {
         event.preventDefault()
-        followRef.current(current.stages[n - 1]!.link)
+        followRef.current(current.steps[n - 1]!.link)
       }
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
-  if (!pipeline?.next) return null
-  const next = pipeline.next
+  const next = context.next
+  if (!next) return null
   return (
     <div className="flex min-w-0 items-center gap-2">
       <span className="hidden min-w-0 items-center gap-1.5 truncate text-[0.75rem] text-muted-foreground lg:flex" title={next.reason}>
-        <StageGlyph state={next.stage.state} />
+        {next.step ? <StepGlyph state={next.step.state} /> : null}
         <span className="truncate">
-          {next.stage.n} {next.stage.label} · {next.reason}
+          {next.step ? `${next.step.n} ${next.step.label} · ` : ""}
+          {next.reason}
         </span>
       </span>
       <Button size="sm" onClick={() => follow(next.link)} title={`${next.reason} (${MOD_LABEL}↩)`}>
@@ -220,7 +191,7 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
           {PRIMARY_ITEMS.map((item) => (
             <li key={item.to}>
               <NavLink item={item} collapsed={collapsed} />
-              {item.to === "/views" && !collapsed ? <PipelineOutline /> : null}
+              {item.to === "/projects" && !collapsed ? <ProjectOutline /> : null}
             </li>
           ))}
         </ul>
@@ -488,6 +459,10 @@ function AppFrame({ children }: { children: ReactNode }) {
             )}
             <NextActionButton />
             <div className="min-w-0 flex-1" />
+            <Button variant="ghost" size={narrow ? "icon-sm" : "sm"} onClick={() => openSheet({ kind: "import" })} title="Import from a card, folder or network share">
+              <Download data-icon="inline-start" aria-hidden="true" />
+              <span className={cn(narrow && "sr-only")}>Import</span>
+            </Button>
             <PaletteTrigger narrow={narrow} />
             <Button variant="ghost" size={narrow ? "icon-sm" : "sm"} onClick={() => openPanel("simulation")}>
               <FlaskConical data-icon="inline-start" aria-hidden="true" />
@@ -525,8 +500,8 @@ export function NotFoundPage() {
           titleAs="h1"
           description="The link may come from an older prototype build. Your library is unchanged."
           action={
-            <Button render={<Link to="/targets" />} size="sm">
-              Go to Targets
+            <Button render={<Link to="/" />} size="sm">
+              Go to Home
             </Button>
           }
         />

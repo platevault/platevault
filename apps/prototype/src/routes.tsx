@@ -1,22 +1,46 @@
 /**
- * Route table (foundation-owned). Every path is fixed here and in
- * HIGH-LEVEL-DESIGN.md §4; tracks provide only the page components through
- * `src/features/<track>/routes.tsx`. Hash history keeps the static build
- * portable (Tauri in production).
+ * Route table (foundation-owned). Every path of HARNESS-V5-IA.md is fixed
+ * here; screens provide only their page components, from the stable files
+ * listed in HARNESS-V5-IA.md § Foundation contract. Hash history keeps the
+ * static build portable (Tauri in production).
  *
- * Search params are loose string maps so tracks can add keys without a
- * foundation change; the documented keys are listed in HLD §4.
+ * Search params are loose string maps so screens can add keys without a
+ * foundation change. Documented keys: `/projects/$projectId?start=run`
+ * (open Start a run), `?sheet=done` (Done / Archive), `?candidates=unreviewed`;
+ * `/projects/$projectId/runs/$runId/review?filter=unreviewed`; `/plan?project=`.
  */
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
 import type { ReactNode } from "react"
-import { AppShell, NotFoundPage, RootLayout, SetupShell } from "@/app/shell"
 import { DesignSystemPage } from "@/app/design-system-page"
-import { isLibraryEmpty } from "@/domain/derive"
-import { t1Pages } from "@/features/t1/routes"
-import { t2Pages } from "@/features/t2/routes"
-import { t3Pages } from "@/features/t3/routes"
-import { t4Pages } from "@/features/t4/routes"
-import { t5Pages } from "@/features/t5/routes"
+import { AppShell, NotFoundPage, RootLayout, SetupShell } from "@/app/shell"
+import { isLibraryEmpty } from "@/domain/library"
+import { AboutPage } from "@/features/t1/settings/about-page"
+import { AppearancePage } from "@/features/t1/settings/appearance-page"
+import { LocationsPage } from "@/features/t1/settings/locations-page"
+import { SettingsLayout } from "@/features/t1/settings/settings-layout"
+import { SitesPage } from "@/features/t1/settings/sites-page"
+import { TargetLookupPage } from "@/features/t1/settings/target-lookup-page"
+import { SetupIndexingPage, SetupLocationsPage, WelcomePage } from "@/features/t1/setup/setup-pages"
+import { SettingsApplicationsPage } from "@/features/t4/applications"
+import { HomePage } from "@/features/v5/a-home/home"
+import { ImportRoute } from "@/features/v5/a-home/import"
+import { SessionPage } from "@/features/v5/a-home/session"
+import { SessionsPage } from "@/features/v5/a-home/sessions"
+import { ProjectPage } from "@/features/v5/b-projects/project"
+import { ProjectsPage } from "@/features/v5/b-projects/projects"
+import { ProjectTrashPage } from "@/features/v5/b-projects/trash"
+import { RunGroupPage } from "@/features/v5/c-runs/group"
+import { RunPage } from "@/features/v5/c-runs/run"
+import { ActivityPage } from "@/features/v5/e-targets-plan-settings/activity"
+import { CalibrationPage } from "@/features/v5/e-targets-plan-settings/calibration"
+import { PlanPage } from "@/features/v5/e-targets-plan-settings/plan"
+import { EquipmentSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-equipment"
+import { GoalTemplatesSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-goal-templates"
+import { NamingSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-naming"
+import { StoragePage } from "@/features/v5/e-targets-plan-settings/storage"
+import { TargetPage } from "@/features/v5/e-targets-plan-settings/target"
+import { TargetsPage } from "@/features/v5/e-targets-plan-settings/targets"
+import { runPipeline } from "@/domain/derive"
 import { store } from "@/store/core"
 
 export type SearchParams = Record<string, string | undefined>
@@ -51,21 +75,55 @@ function page<TPath extends string>(path: TPath, component: () => ReactNode) {
   return createRoute({ getParentRoute: () => appLayout, path, component, validateSearch: looseSearch })
 }
 
-const indexRoute = createRoute({
+// Onboarding (v4, minimal shell).
+const welcomeRoute = createRoute({ getParentRoute: () => setupLayout, path: "/welcome", component: WelcomePage, validateSearch: looseSearch })
+const setupLocationsRoute = createRoute({ getParentRoute: () => setupLayout, path: "/setup/locations", component: SetupLocationsPage, validateSearch: looseSearch })
+const setupIndexingRoute = createRoute({ getParentRoute: () => setupLayout, path: "/setup/indexing", component: SetupIndexingPage, validateSearch: looseSearch })
+
+// S1 Home is the start page (D-W39); S13 Import is a sheet over `/import`.
+const homeRoute = page("/", HomePage)
+const importRoute = page("/import", ImportRoute)
+
+// S2, S3, S8: Projects. S4 New Project and S9 Done / Archive are sheets.
+const projectsRoute = page("/projects", ProjectsPage)
+const projectRoute = page("/projects/$projectId", ProjectPage)
+const projectTrashRoute = page("/projects/$projectId/trash", ProjectTrashPage)
+
+// S5 Run (S6 Review is its review step) and S7 Run group. A bare run or group opens its current step.
+const runIndexRoute = createRoute({
   getParentRoute: () => appLayout,
-  path: "/",
-  beforeLoad: () => {
-    // Harness v4: the start page is the Pipeline board (Views by stage), not Targets.
-    throw redirect({ to: "/views" })
+  path: "/projects/$projectId/runs/$runId",
+  beforeLoad: ({ params }) => {
+    const state = store.getState()
+    const run = state.catalog.runs[params.runId]
+    const step = run ? runPipeline(state, run).current.id : "select"
+    throw redirect({ to: "/projects/$projectId/runs/$runId/$step", params: { ...params, step } })
   },
 })
+const runRoute = page("/projects/$projectId/runs/$runId/$step", RunPage)
+const groupIndexRoute = createRoute({
+  getParentRoute: () => appLayout,
+  path: "/projects/$projectId/groups/$groupId",
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/projects/$projectId/groups/$groupId/$step", params: { ...params, step: "select" } })
+  },
+})
+const groupRoute = page("/projects/$projectId/groups/$groupId/$step", RunGroupPage)
 
-// T1: onboarding (minimal shell) and Settings.
-const welcomeRoute = createRoute({ getParentRoute: () => setupLayout, path: "/welcome", component: t1Pages.welcome, validateSearch: looseSearch })
-const setupLocationsRoute = createRoute({ getParentRoute: () => setupLayout, path: "/setup/locations", component: t1Pages.setupLocations, validateSearch: looseSearch })
-const setupIndexingRoute = createRoute({ getParentRoute: () => setupLayout, path: "/setup/indexing", component: t1Pages.setupIndexing, validateSearch: looseSearch })
+// S10 Targets, S11 Plan.
+const targetsRoute = page("/targets", TargetsPage)
+const targetRoute = page("/targets/$targetId", TargetPage)
+const planRoute = page("/plan", PlanPage)
 
-const settingsRoute = page("/settings", t1Pages.settingsLayout)
+// Library: S12 Sessions, S14 Calibration, S15 Storage. Footer: S17 Activity.
+const sessionsRoute = page("/sessions", SessionsPage)
+const sessionRoute = page("/sessions/$sessionId", SessionPage)
+const calibrationRoute = page("/calibration", CalibrationPage)
+const storageRoute = page("/storage", StoragePage)
+const activityRoute = page("/activity", ActivityPage)
+
+// S16 Settings: v4's settled sections plus Equipment, Goal templates and Naming.
+const settingsRoute = page("/settings", SettingsLayout)
 const settingsIndexRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "/",
@@ -73,76 +131,45 @@ const settingsIndexRoute = createRoute({
     throw redirect({ to: "/settings/appearance" })
   },
 })
+function settingsChild<TPath extends string>(path: TPath, component: () => ReactNode) {
+  return createRoute({ getParentRoute: () => settingsRoute, path, component, validateSearch: looseSearch })
+}
 const settingsChildren = [
-  createRoute({ getParentRoute: () => settingsRoute, path: "appearance", component: t1Pages.settingsAppearance, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => settingsRoute, path: "locations", component: t1Pages.settingsLocations, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => settingsRoute, path: "equipment", component: t1Pages.settingsEquipment, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => settingsRoute, path: "sites", component: t1Pages.settingsSites, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => settingsRoute, path: "targets", component: t1Pages.settingsTargets, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => settingsRoute, path: "applications", component: t4Pages.settingsApplications, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => settingsRoute, path: "about", component: t1Pages.settingsAbout, validateSearch: looseSearch }),
+  settingsChild("appearance", AppearancePage),
+  settingsChild("locations", LocationsPage),
+  settingsChild("equipment", EquipmentSettingsPage),
+  settingsChild("goal-templates", GoalTemplatesSettingsPage),
+  settingsChild("naming", NamingSettingsPage),
+  settingsChild("sites", SitesPage),
+  settingsChild("targets", TargetLookupPage),
+  settingsChild("applications", SettingsApplicationsPage),
+  settingsChild("about", AboutPage),
 ]
 
-// T2: library.
-const libraryRoutes = [
-  page("/targets", t2Pages.targets),
-  page("/targets/$targetId", t2Pages.target),
-  page("/sessions", t2Pages.sessions),
-  page("/sessions/$sessionId", t2Pages.session),
-  page("/projects", t2Pages.projects),
-  page("/projects/new", t2Pages.projectNew),
-  page("/projects/$projectId", t2Pages.project),
-  page("/activity", t2Pages.activity),
-]
-
-// T3: Views and the workspace host; T4 and T5 contribute workspace areas.
-const viewsRoute = page("/views", t3Pages.views)
-const viewNewRoute = page("/views/new", t3Pages.viewNew)
-const viewRoute = page("/views/$viewId", t3Pages.viewWorkspace)
-const viewIndexRoute = createRoute({
-  getParentRoute: () => viewRoute,
-  path: "/",
-  beforeLoad: ({ params }) => {
-    throw redirect({ to: "/views/$viewId/sessions", params })
-  },
-})
-const viewChildren = [
-  createRoute({ getParentRoute: () => viewRoute, path: "sessions", component: t3Pages.viewSessions, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => viewRoute, path: "frames", component: t3Pages.viewFrames, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => viewRoute, path: "refresh", component: t3Pages.viewRefresh, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => viewRoute, path: "calibration", component: t4Pages.viewCalibration, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => viewRoute, path: "prepare", component: t4Pages.viewPrepare, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => viewRoute, path: "results", component: t5Pages.viewResults, validateSearch: looseSearch }),
-  createRoute({ getParentRoute: () => viewRoute, path: "cleanup", component: t5Pages.viewCleanup, validateSearch: looseSearch }),
-]
-
-// T4: calibration library.
-const calibrationRoutes = [page("/calibration", t4Pages.calibration), page("/calibration/$calibrationId", t4Pages.calibrationItem)]
-
-// Foundation: design-system reference (not in the sidebar; palette only).
+// Foundation: design-system reference (not in the source list; palette only).
 const designSystemRoute = page("/design-system", DesignSystemPage)
-
-// T5: storage custody and plans.
-const custodyRoutes = [
-  page("/storage", t5Pages.storage),
-  page("/storage/archive", t5Pages.storageArchive),
-  page("/storage/filing", t5Pages.storageFiling),
-  page("/storage/transfers/$operationId", t5Pages.storageTransfer),
-  page("/plans", t5Pages.plans),
-  page("/targets/$targetId/plan", t5Pages.targetPlan),
-]
 
 const routeTree = rootRoute.addChildren([
   setupLayout.addChildren([welcomeRoute, setupLocationsRoute, setupIndexingRoute]),
   appLayout.addChildren([
-    indexRoute,
+    homeRoute,
+    importRoute,
+    projectsRoute,
+    projectRoute,
+    projectTrashRoute,
+    runIndexRoute,
+    runRoute,
+    groupIndexRoute,
+    groupRoute,
+    targetsRoute,
+    targetRoute,
+    planRoute,
+    sessionsRoute,
+    sessionRoute,
+    calibrationRoute,
+    storageRoute,
+    activityRoute,
     settingsRoute.addChildren([settingsIndexRoute, ...settingsChildren]),
-    ...libraryRoutes,
-    viewsRoute,
-    viewNewRoute,
-    viewRoute.addChildren([viewIndexRoute, ...viewChildren]),
-    ...calibrationRoutes,
-    ...custodyRoutes,
     designSystemRoute,
   ]),
 ])

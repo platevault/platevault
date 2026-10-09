@@ -1,7 +1,8 @@
 /**
  * Command palette (foundation-owned): ⌘K / Ctrl+K. Jump to any surface or
- * named record, or run a global action. Built on Base UI Dialog and
- * Autocomplete (one primitive system; no cmdk).
+ * named record (Projects, runs and run groups, Targets, sessions), or run a
+ * global action. Slices add commands through their shell contribution.
+ * Built on Base UI Dialog and Autocomplete (one primitive system; no cmdk).
  */
 import { Autocomplete } from "@base-ui/react/autocomplete"
 import { useRouter } from "@tanstack/react-router"
@@ -9,20 +10,17 @@ import { CornerDownLeft, Search } from "lucide-react"
 import { useMemo, useRef } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Kbd } from "@/components/ui/kbd"
-import { t1Shell } from "@/features/t1/shell"
-import { t2Shell } from "@/features/t2/shell"
-import { t3Shell } from "@/features/t3/shell"
-import { t4Shell } from "@/features/t4/shell"
-import { t5Shell } from "@/features/t5/shell"
+import { isTrashedSession } from "@/domain/derive"
 import { formatExposure, formatNight } from "@/lib/format"
 import { useStore } from "@/store/core"
+import { SHELLS } from "./contributions"
 import { ALL_NAV_ITEMS, STATIC_DESTINATIONS } from "./navigation"
 import { setSingleKeyShortcuts, setTheme } from "./preferences"
 import type { PaletteCommand } from "./shell-contract"
 import { closePanel, openPanel, toggleSidebar, useShellUi } from "./ui-state"
 
 const NO_COMMANDS = (): PaletteCommand[] => []
-const contributed = [t1Shell, t2Shell, t3Shell, t4Shell, t5Shell].map((shell) => shell.useCommands ?? NO_COMMANDS)
+const contributed = SHELLS.map((shell) => shell.useCommands ?? NO_COMMANDS)
 
 interface Group {
   value: string
@@ -30,10 +28,7 @@ interface Group {
 }
 
 function useCommands(): Group[] {
-  const targets = useStore((s) => s.catalog.targets)
-  const projects = useStore((s) => s.catalog.projects)
-  const views = useStore((s) => s.catalog.views)
-  const sessions = useStore((s) => s.catalog.sessions)
+  const catalog = useStore((s) => s.catalog)
   const extra = contributed.flatMap((hook) => hook())
   return useMemo(() => {
     const groups: Group[] = [
@@ -46,20 +41,25 @@ function useCommands(): Group[] {
       },
       {
         value: "Targets",
-        items: Object.values(targets).map((t) => ({ id: `target:${t.id}`, label: t.name, group: "Targets", to: `/targets/${t.id}`, keywords: t.aliases.join(" ") })),
+        items: Object.values(catalog.targets).map((t) => ({ id: `target:${t.id}`, label: t.name, group: "Targets", to: `/targets/${t.id}`, keywords: t.aliases.join(" ") })),
       },
       {
         value: "Projects",
-        items: Object.values(projects).map((p) => ({ id: `project:${p.id}`, label: p.name, group: "Projects", to: `/projects/${p.id}` })),
+        items: Object.values(catalog.projects).map((p) => ({ id: `project:${p.id}`, label: p.name, group: "Projects", to: `/projects/${p.id}` })),
       },
       {
-        value: "Views",
-        items: Object.values(views).map((v) => ({ id: `view:${v.id}`, label: v.name, group: "Views", to: `/views/${v.id}` })),
+        value: "Runs",
+        items: [
+          ...Object.values(catalog.runs)
+            .filter((r) => !r.trashedAt && !r.groupId)
+            .map((r) => ({ id: `run:${r.id}`, label: r.name, group: "Runs", keywords: "processing run", to: `/projects/${r.projectId}/runs/${r.id}/select` })),
+          ...Object.values(catalog.runGroups).map((g) => ({ id: `group:${g.id}`, label: g.name, group: "Runs", keywords: "run group mosaic panels", to: `/projects/${g.projectId}/groups/${g.id}/select` })),
+        ],
       },
       {
         value: "Sessions",
-        items: Object.values(sessions)
-          .filter((s) => s.imageType === "light")
+        items: Object.values(catalog.sessions)
+          .filter((s) => s.imageType === "light" && !s.supersededBy && !isTrashedSession(catalog, s))
           .map((s) => ({
             id: `session:${s.id}`,
             label: `${formatNight(s.night)} · ${s.channel ?? "No filter"} · ${formatExposure(s.exposureS)} · ${s.objectLabel ?? "Missing OBJECT"}`,
@@ -85,7 +85,7 @@ function useCommands(): Group[] {
     const otherGroups = [...new Set(extra.filter((c) => c.group !== "Actions").map((c) => c.group))]
     for (const value of otherGroups) groups.push({ value, items: extra.filter((c) => c.group === value) })
     return groups.filter((g) => g.items.length > 0)
-  }, [targets, projects, views, sessions, extra])
+  }, [catalog, extra])
 }
 
 export function CommandPalette() {

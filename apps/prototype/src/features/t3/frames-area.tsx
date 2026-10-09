@@ -1,9 +1,11 @@
 /**
- * Review frames (`/views/$viewId/frames`, product flow D1-D6): built-in
- * measurement with cached values first, the row/plot/preview linkage, pixel
- * inspection, Exclude from View, the three scoped library and Project
- * decisions, and imported measurements with their provenance. Measurements
- * never exclude, reject or mark frames Usable (PIX-FR-08).
+ * Frame review (v4's Review frames, kept for slice D and adapted to runs):
+ * built-in measurement with cached values first, the row/plot/preview
+ * linkage, pixel inspection, Exclude from run, the scoped library and
+ * Project decisions, and imported measurements with their provenance.
+ * Measurements never exclude, reject or mark frames Usable (PIX-FR-08).
+ * Mount it as `<FramesArea runId=… />` inside the run's Review step. Inside,
+ * `view` names the run: the domain's word for it (D-W3).
  */
 import { Link, useSearch } from "@tanstack/react-router"
 import { ImageOff, PanelRightClose, PanelRightOpen, Upload } from "lucide-react"
@@ -18,13 +20,19 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
-import { assetAvailability, measurementApplies, qualityApplicability, targetCoverage } from "@/domain/derive"
+import { assetAvailability, measurementApplies, qualityApplicability, targetCoverage } from "@/domain/library"
 import type { Asset, AssetId, Catalog, Disk, MeasurementImport, Metric, MetricKey, Operation, Session } from "@/domain/types"
 import { formatDuration, formatNight, plural } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { cancelOperation, isSettled } from "@/store/operations"
-import { defaultFrameUi } from "@/store/slices/t3"
-import { rejectForProject, resolveImportRow, setFrameUi, setLibraryQuality } from "./actions"
+import { findSubject, workingContent } from "@/domain/derive"
+import { emptyContent } from "@/domain/membership"
+import type { MembershipContent } from "@/domain/types"
+import { markFrames, rejectForProjectOnly } from "@/store/actions/library"
+import { updateRunDraft } from "@/store/actions/runs"
+import type { PrototypeState } from "@/store/core"
+import { defaultFrameUi } from "@/store/slices/d"
+import { resolveImportRow, setFrameUi } from "./actions"
 import { SelectField } from "./fields"
 import { FramePreview } from "./frame-preview"
 import { frameName, ImportDialog } from "./import-dialog"
@@ -52,9 +60,8 @@ import {
   previewUnavailableReason,
   restoreFrames,
   sessionLabel,
-} from "./model"
+} from "@/domain/membership"
 import { registerFrameCommands } from "./shell"
-import { useDraftEditor, useWorkspace } from "./workspace"
 
 interface FrameRow {
   asset: Asset
@@ -226,7 +233,7 @@ function ImportReview({ record, catalog }: { record: MeasurementImport; catalog:
         <span className="font-medium">{record.path.slice(record.path.lastIndexOf("/") + 1)}</span>
         <span className="text-muted-foreground">
           {" "}
-          · {plural(record.matched, "row")} attached as imported values, content unverified{record.outsideView > 0 ? ` (${record.outsideView} to frames outside this View)` : ""}
+          · {plural(record.matched, "row")} attached as imported values, content unverified{record.outsideRun > 0 ? ` (${record.outsideRun} to frames outside this run)` : ""}
           {CSV_COLUMNS.filter((c) => c.status === "unavailable" || c.status === "not-imported")
             .map((c) => ` · ${c.name} ${c.status === "unavailable" ? "unavailable" : "not imported"}`)
             .join("")}
@@ -300,14 +307,26 @@ function ImportReview({ record, catalog }: { record: MeasurementImport; catalog:
   )
 }
 
-export function FramesArea() {
-  const { view, content, readOnlyReason } = useWorkspace()
+export function FramesArea({ runId }: { runId: string }) {
+  const view = useStore((s) => s.catalog.runs[runId])!
+  const content: MembershipContent = workingContent(view) ?? emptyContent()
+  const readOnlyReason = view.trashedAt ? "This run is in the Project's Trash; Restore it first." : view.completion === "complete" ? "This run is Complete; Reopen it to change its membership." : null
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
-  const ui = useStore((s) => s.slices.t3.frames[view.id]) ?? defaultFrameUi()
+  const ui = useStore((s) => s.slices.d.frames[view.id]) ?? defaultFrameUi()
   const op = useStore((s) => latestMeasureOp(s, view.id))
-  const imports = useStore((s) => Object.values(s.catalog.measurementImports).filter((i) => i.viewId === view.id))
-  const { edit, errorNode } = useDraftEditor(view.id)
+  const imports = useStore((s) => Object.values(s.catalog.measurementImports).filter((i) => i.runId === view.id))
+  const [editError, setEditError] = useState<string | null>(null)
+  const errorNode = editError ? (
+    <p role="alert" className="text-sm text-destructive">
+      {editError}
+    </p>
+  ) : null
+  const edit = (label: string, change: (content: MembershipContent, state: PrototypeState) => MembershipContent) => {
+    const result = updateRunDraft(view.id, label, change)
+    setEditError(result.ok ? null : result.message)
+    return result
+  }
   const [importOpen, setImportOpen] = useState(false)
   const [confirm, setConfirm] = useState<"usable" | "unusable" | "reject" | null>(null)
   const [announcement, setAnnouncement] = useState("")
@@ -563,7 +582,7 @@ export function FramesArea() {
             title="No frames to review yet"
             description="Frames appear here once the View includes sessions."
             action={
-              <Button size="sm" render={<Link to="/views/$viewId/sessions" params={{ viewId: view.id }} />}>
+              <Button size="sm" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: view.projectId, runId: view.id, step: "select" }} />}>
                 Choose sessions
               </Button>
             }
@@ -575,7 +594,7 @@ export function FramesArea() {
 
   const activeFile = active ? currentFile(disk, catalog, active.asset) : undefined
   const activeAvailability = active ? assetAvailability(disk, catalog, active.asset) : "available"
-  const targetId = view.targetId ?? project?.targetIds[0] ?? null
+  const targetId = (project ? findSubject(project, view.subjectId)?.targetId : null) ?? null
   const targetName = targetId ? (catalog.targets[targetId]?.name ?? "the Target") : null
   const usableAfterMark = confirm === "usable" ? usableAfter(disk, catalog, targetId, checkedIncluded, "usable") : null
   const unusableAfterMark = confirm === "unusable" ? usableAfter(disk, catalog, targetId, checked, "unusable") : null
@@ -780,7 +799,7 @@ export function FramesArea() {
           "Other Views' membership",
         ]}
         confirmLabel={`Mark ${plural(checkedIncluded.length, "frame")} Usable`}
-        onConfirm={() => setLibraryQuality(checkedIncluded, "usable", `/views/${view.id}/frames`)}
+        onConfirm={() => markFrames(checkedIncluded, "usable", view.id, `/projects/${view.projectId}/runs/${view.id}/review`)}
       />
       <ConfirmDialog
         open={confirm === "unusable"}
@@ -798,7 +817,7 @@ export function FramesArea() {
         unchanged={["This View's membership: frames stay included or excluded as they are", "Project rejection records", "Source files and headers"]}
         confirmLabel={`Mark ${plural(checked.length, "frame")} Unusable`}
         tone="destructive"
-        onConfirm={() => setLibraryQuality(checked, "unusable", `/views/${view.id}/frames`)}
+        onConfirm={() => markFrames(checked, "unusable", view.id, `/projects/${view.projectId}/runs/${view.id}/review`)}
       />
       {project ? (
         <ConfirmDialog
@@ -809,7 +828,7 @@ export function FramesArea() {
           changes={[`Record ${plural(checked.length, "frame")} as rejected for Project ${project.name}`]}
           unchanged={["Library quality of these frames", `${targetName ?? "Target"} library-usable totals`, `This View's membership: ${content.included.length} included`]}
           confirmLabel={`Reject ${plural(checked.length, "frame")} for Project`}
-          onConfirm={() => rejectForProject(project.id, checked, `/views/${view.id}/frames`)}
+          onConfirm={() => rejectForProjectOnly(view.id, checked, true)}
         />
       ) : null}
     </div>

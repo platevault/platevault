@@ -22,7 +22,7 @@ import { HEADER_KEYWORDS } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, formatMetric, historyImportedMetrics, METRIC_LABEL } from "./measure"
-import { formatMetricFixed } from "./model"
+import { formatMetricFixed } from "@/domain/membership"
 import { type CutoutKind, detectedStars, renderCutout, renderWindow, type StarField, type StarRecord, starField, type Stretch, type ViewWindow } from "./raster"
 
 type Zoom = "fit" | "1" | "2"

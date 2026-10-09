@@ -6,7 +6,7 @@
  * (`Approved`) are never imported; a column without units or a PlateVault
  * equivalent stays unavailable instead of being relabelled.
  */
-import { copyAvailability, preferredCopy } from "@/domain/derive"
+import { copyAvailability, preferredCopy } from "@/domain/library"
 import { fileKey } from "@/domain/disk"
 import type { AssetId, Catalog, Disk, Metric, MetricKey } from "@/domain/types"
 

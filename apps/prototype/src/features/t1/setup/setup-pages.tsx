@@ -13,7 +13,7 @@ import { OperationPanel } from "@/components/app/operation-panel"
 import { PageHeader, StepIndicator } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
-import { isLibraryEmpty } from "@/domain/derive"
+import { isLibraryEmpty } from "@/domain/library"
 import type { Location, LocationRole, Operation, OperationId } from "@/domain/types"
 import { formatCount, plural } from "@/lib/format"
 import { resetPrototype } from "@/store"
@@ -42,7 +42,7 @@ function SetupHeader({ step, title, description }: { step: "welcome" | "location
 }
 
 function rememberRun(id: OperationId) {
-  updateSlice("t1", (slice) => ({ ...slice, setupOperationIds: [...slice.setupOperationIds, id] }))
+  updateSlice("e", (slice) => ({ ...slice, setupOperationIds: [...slice.setupOperationIds, id] }))
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +303,7 @@ function indexCounts(payload: Record<string, unknown>): IndexCounts | null {
 export function SetupIndexingPage() {
   const navigate = useNavigate()
   const locations = useStore((s) => Object.values(s.catalog.locations).sort((a, b) => a.registeredAt.localeCompare(b.registeredAt)))
-  const runIds = useStore((s) => s.slices.t1.setupOperationIds)
+  const runIds = useStore((s) => s.slices.e.setupOperationIds)
   const operations = useStore((s) => s.operations)
   const library = useStore((s) => {
     const sessions = Object.values(s.catalog.sessions).filter((x) => !x.supersededBy && x.imageType === "light")

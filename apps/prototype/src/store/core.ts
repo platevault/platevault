@@ -3,14 +3,15 @@
  * memory, read with `useStore(selector)` (useSyncExternalStore) and persisted
  * to localStorage. No state library.
  *
- * Contract for tracks:
+ * Contract for screens:
  * - Read with `useStore((s) => …)`. Selectors may return new objects; the
  *   result is cached per state version and selector identity.
  * - Write durable catalog changes through `commit()`, which honours the
  *   simulated failed-write fault and stale-revision refusal (D08), and bumps
  *   the `expect` entity's revision on success. Never report success unless
- *   `commit()` returned `{ ok: true }`.
- * - Keep track-local UI state in your slice (`updateSlice`).
+ *   `commit()` returned `{ ok: true }`. The shared actions in
+ *   `src/store/actions/` already do this.
+ * - Keep screen-local UI state in your slice (`updateSlice`).
  * - Slice modules must not call store functions at module top level.
  */
 import { useRef, useSyncExternalStore } from "react"
@@ -18,8 +19,8 @@ import type { SeedData } from "@/domain/seed"
 import type { ActivityEvent, Catalog } from "@/domain/types"
 import type { SliceId, SliceStates } from "./slices"
 
-/** Bump when a domain shape changes; saved data of an older version restarts its seed. 5: `catalog.measurementImports`. */
-export const SCHEMA_VERSION = 5
+/** Bump when a domain shape changes; saved data of an older version restarts its seed. 6: harness v5 runs. */
+export const SCHEMA_VERSION = 6
 
 export interface PrototypeState extends SeedData {
   schemaVersion: number
@@ -87,11 +88,13 @@ export function recordActivity(event: Omit<ActivityEvent, "id" | "at">) {
   store.setState((s) => ({ ...s, activity: [entry, ...s.activity].slice(0, 200) }))
 }
 
-type RevisionedCollection = "views" | "projects" | "sessions" | "targets"
+type RevisionedCollection = "runs" | "runGroups" | "projects" | "sessions" | "targets"
 
 export type CommitResult =
   | { ok: true }
   | { ok: false; reason: "write-failed" | "stale"; message: string }
+  /** A contract rule refused the action; `reasons` names each blocker (e.g. RES-FR-10). Nothing was written. */
+  | { ok: false; reason: "refused"; message: string; reasons: string[] }
 
 export interface CommitOptions {
   /**
@@ -129,7 +132,7 @@ export function commit(label: string, mutate: (state: PrototypeState) => Prototy
     const { collection, id, revision } = options.expect
     const entity = (current.catalog[collection] as Catalog[RevisionedCollection])[id]
     if (entity && entity.revision !== revision) {
-      // The record version is internal (D08); it is not the View membership "Revision N" a page shows, so the message names no number.
+      // The record version is internal (D08); it is not the run membership "Revision N" a page shows, so the message names no number.
       const message = `${label} was refused: this record was changed elsewhere since you opened it. Review the current version before saving again.`
       recordActivity({ kind: "write-refused", title: `${label} refused`, detail: message, operationId: null, href: options.href ?? null })
       return { ok: false, reason: "stale", message }

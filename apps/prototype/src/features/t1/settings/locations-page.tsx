@@ -21,8 +21,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { Switch } from "@/components/ui/switch"
-import { locationAvailability } from "@/domain/derive"
+import { locationAvailability } from "@/domain/library"
 import type { Location, LocationRole } from "@/domain/types"
 import { formatDateTime, plural } from "@/lib/format"
 import { store, useStore } from "@/store/core"
@@ -50,17 +49,15 @@ const HREF = "/settings/locations"
 function EditLocationDialog({ location, onClose }: { location: Location | null; onClose: () => void }) {
   const [name, setName] = useState("")
   const [role, setRole] = useState<LocationRole>("captures")
-  const [managed, setManaged] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [writeError, setWriteError] = useState<string | null>(null)
   const form = useRef<HTMLFormElement>(null)
-  const ids = { name: useId(), role: useId(), managed: useId() }
+  const ids = { name: useId(), role: useId() }
 
   useEffect(() => {
     if (!location) return
     setName(location.displayName)
     setRole(location.role)
-    setManaged(location.managed)
     setError(undefined)
     setWriteError(null)
   }, [location])
@@ -73,7 +70,7 @@ function EditLocationDialog({ location, onClose }: { location: Location | null; 
       focusFirstInvalid(form.current)
       return
     }
-    const result = updateLocation(location.id, { displayName: name, role, managed }, HREF)
+    const result = updateLocation(location.id, { displayName: name, role }, HREF)
     if (!result.ok) {
       setWriteError(result.message)
       return
@@ -115,17 +112,6 @@ function EditLocationDialog({ location, onClose }: { location: Location | null; 
             </Select>
             <p className="text-xs text-muted-foreground">{ROLE_COPY[role].description}</p>
           </Field>
-          <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-            <div className="space-y-0.5">
-              <label htmlFor={ids.managed} className="text-sm font-medium">
-                Accepts reviewed filing
-              </label>
-              <p id={`${ids.managed}-hint`} className="text-xs text-muted-foreground">
-                File into library may copy reviewed sessions here. Nothing is filed without your review.
-              </p>
-            </div>
-            <Switch id={ids.managed} aria-describedby={`${ids.managed}-hint`} checked={managed} onCheckedChange={(checked) => setManaged(checked)} />
-          </div>
           {writeError ? <ActionError message={writeError} onRetry={submit} /> : null}
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
@@ -163,7 +149,6 @@ function LocationDetail({ location, onClose, actions }: { location: Location | n
                   { label: "Last indexed", value: location.lastIndexedAt ? formatDateTime(location.lastIndexedAt) : "Not indexed yet" },
                   { label: "Indexed frames", value: plural(framesInLocation(catalog, location.id), "frame") },
                   { label: "Sessions", value: plural(sessionsInLocation(catalog, location.id), "session") },
-                  { label: "Reviewed filing", value: location.managed ? "Accepts reviewed filing" : "Not a filing destination" },
                   { label: "OS Trash", value: volume ? <StatusBadge kind="trash" value={volume.trash} /> : "Unknown" },
                   {
                     label: "Links",
@@ -227,7 +212,7 @@ function RetireReviewPanel({
           { label: "Availability at review", value: <StatusBadge kind="availability" value={review.availability} /> },
           { label: "Copies", value: plural(review.frames, "copy", "copies") },
           { label: "Sessions", value: review.sessions.length ? `${review.sessions.length}: ${review.sessions.join(", ")}` : "None" },
-          { label: "Views", value: none(review.views) },
+          { label: "Runs", value: none(review.runs) },
           { label: "Projects", value: none(review.projects) },
           { label: "Results", value: none(review.results) },
         ]}

@@ -3,7 +3,7 @@
  * uses each frame's last completed verification and labels it; reading these
  * values starts no rehash and writes nothing.
  */
-import { isRetiredAsset, qualityApplicability } from "./derive"
+import { isRetiredAsset, qualityApplicability } from "./library"
 import type { Asset, AssetId, Catalog, IsoDateTime } from "./types"
 
 /**

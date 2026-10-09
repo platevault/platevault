@@ -17,7 +17,7 @@ import { normalizeName, SKY_OBJECTS } from "@/domain/sky"
 import type { AppSettings } from "@/domain/types"
 import { formatDateTime, formatDec, formatRa } from "@/lib/format"
 import { nowIso, store, updateSlice, useStore } from "@/store/core"
-import type { TargetLookupTest } from "@/store/slices/t1"
+import type { TargetLookupTest } from "@/store/slices/e"
 import { TextField } from "../components/form-field"
 import { save } from "../lib/writes"
 import { ReturnNotice } from "./settings-layout"
@@ -37,7 +37,7 @@ const LOOKUP_MS = 700
 export function TargetLookupPage() {
   const lookup = useStore((s) => s.settings.targetLookup)
   const targets = useStore((s) => Object.keys(s.catalog.targets).length)
-  const last = useStore((s) => s.slices.t1.lastLookupTest)
+  const last = useStore((s) => s.slices.e.lastLookupTest)
   const [query, setQuery] = useState("NGC 7000")
   const [running, setRunning] = useState(false)
   const [writeError, setWriteError] = useState<{ message: string; retry: () => void } | null>(null)
@@ -64,7 +64,7 @@ export function TargetLookupPage() {
   }
 
   function record(test: TargetLookupTest) {
-    updateSlice("t1", (slice) => ({ ...slice, lastLookupTest: test }))
+    updateSlice("e", (slice) => ({ ...slice, lastLookupTest: test }))
   }
 
   function runTest() {

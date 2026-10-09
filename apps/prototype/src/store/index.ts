@@ -3,6 +3,7 @@
  */
 import { createSeed, defaultFaults } from "@/domain/seed"
 import type { SeedName } from "@/domain/types"
+import { FOUNDATION_HANDLERS } from "./actions/trash"
 import { type PrototypeState, recordActivity, SCHEMA_VERSION, store } from "./core"
 import { ensureTicker, interruptRunningOperations, registerOperationHandlers } from "./operations"
 import { initialSliceStates, SLICES, type SliceId, sliceVersions } from "./slices"
@@ -67,6 +68,8 @@ let initialized = false
 export function initializeStore() {
   if (initialized) return
   initialized = true
+  // Foundation handlers first, so a slice that owns the same kind replaces it.
+  registerOperationHandlers(FOUNDATION_HANDLERS)
   for (const slice of Object.values(SLICES)) if (slice.operations) registerOperationHandlers(slice.operations)
   store.replace(interruptRunningOperations(load() ?? fromSeed("empty")))
   store.subscribe(() => {

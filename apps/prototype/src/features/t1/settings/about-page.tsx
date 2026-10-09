@@ -1,11 +1,11 @@
 /**
- * Settings › About this prototype (J10 S9; J18 S5, S16-S17). Names the build
- * as a prototype, shows where its data lives, holds the onboarding controls
- * and embeds the simulation controls, including Reset to a seed.
+ * Settings › About this prototype. Names the build as a prototype, shows
+ * where its data lives, offers Restart first-run setup and embeds the
+ * simulation controls, including Reset to a seed.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { FlaskConical } from "lucide-react"
-import { useId, useState } from "react"
+import { useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList } from "@/components/app/data"
 import { Notice } from "@/components/app/feedback"
@@ -16,7 +16,7 @@ import { SimulationControls } from "@/app/simulation-panel"
 import { STORAGE_KEY } from "@/store"
 import { formatDateTime, plural } from "@/lib/format"
 import { nowIso, useStore } from "@/store/core"
-import { replayTour, restartSetup, setChecklistHidden } from "../lib/writes"
+import { restartSetup } from "../lib/writes"
 
 const VERSION = "0.0.0 · prototype build"
 
@@ -27,12 +27,10 @@ export function AboutPage() {
     locations: Object.keys(s.catalog.locations).length,
     sessions: Object.values(s.catalog.sessions).filter((x) => !x.supersededBy && x.imageType === "light").length,
     frames: Object.keys(s.catalog.assets).length,
-    views: Object.keys(s.catalog.views).length,
+    runs: Object.keys(s.catalog.runs).length,
   }))
-  const onboarding = useStore((s) => s.settings.onboarding)
   const clockOffset = useStore((s) => s.faults.clockOffsetMs)
   const [confirmRestart, setConfirmRestart] = useState(false)
-  const ids = { restore: useId() }
 
   return (
     <div>
@@ -61,52 +59,15 @@ export function AboutPage() {
               { label: "Stored in", value: `This browser, localStorage key ${STORAGE_KEY}`, mono: false },
               {
                 label: "Catalog",
-                value: `${plural(counts.locations, "location")} · ${plural(counts.sessions, "light session")} · ${plural(counts.frames, "frame")} · ${plural(counts.views, "View")}`,
+                value: `${plural(counts.locations, "location")} · ${plural(counts.sessions, "light session")} · ${plural(counts.frames, "frame")} · ${plural(counts.runs, "processing run")}`,
               },
               { label: "PlateVault clock", value: clockOffset ? `${formatDateTime(nowIso())} (simulated)` : "Matches this computer" },
             ]}
           />
         </Section>
 
-        <Section title="Onboarding" level={3} description="The orientation tour and the Getting started checklist are independent.">
+        <Section title="Onboarding" level={3}>
           <ul className="divide-y rounded-lg border">
-            <li className="flex flex-wrap items-center justify-between gap-3 p-3">
-              <div className="min-w-0 space-y-0.5">
-                <p className="text-sm font-medium">Orientation tour</p>
-                <p className="text-xs text-muted-foreground">
-                  {onboarding.tourCompletedAt ? `Finished or skipped ${formatDateTime(onboarding.tourCompletedAt)}. It never starts again by itself.` : "Starts once after setup."}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  replayTour()
-                  void navigate({ to: "/targets" })
-                }}
-              >
-                Replay orientation
-              </Button>
-            </li>
-            <li className="flex flex-wrap items-center justify-between gap-3 p-3">
-              <div className="min-w-0 space-y-0.5">
-                <p className="text-sm font-medium">Getting started checklist</p>
-                <p id={ids.restore} className="text-xs text-muted-foreground">
-                  {onboarding.checklistHidden ? "Removed from the sidebar. Restoring it shows progress from your current library." : "Getting started is shown in the sidebar."}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                disabled={!onboarding.checklistHidden}
-                aria-describedby={ids.restore}
-                onClick={() => {
-                  setChecklistHidden(false)
-                  // This button disables itself; move focus to the restored sidebar entry so it is not lost.
-                  requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-getting-started-trigger]")?.focus())
-                }}
-              >
-                Restore Getting started
-              </Button>
-            </li>
             <li className="flex flex-wrap items-center justify-between gap-3 p-3">
               <div className="min-w-0 space-y-0.5">
                 <p className="text-sm font-medium">First-run setup</p>

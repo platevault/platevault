@@ -1,56 +1,61 @@
 /**
  * Slice registry contract (foundation-owned).
  *
- * Each track owns exactly one slice module, `src/store/slices/<track>.ts`,
- * that exports a `SliceDefinition`. The foundation registers all five here;
- * tracks never edit this file. A slice holds track-local state (drafts, UI
- * choices, review progress) and may register operation handlers for the
- * operation kinds the track owns. Durable domain data lives in the shared
- * catalog (`src/domain/types.ts`), not in slices.
+ * Each harness-v5 screen slice owns exactly one slice module,
+ * `src/store/slices/<slice>.ts`, that exports a `SliceDefinition`:
+ *
+ * | Slice | Screens |
+ * |---|---|
+ * | a | S1 Home, S12 Sessions, S13 Import |
+ * | b | S2 Projects list, S3 Project, S4 New Project, S8 Trash, S9 Done / Archive |
+ * | c | S5 Run (Select, Calibrate, Prepare, Results, Done), S7 Run group |
+ * | d | S6 Review (frame review) |
+ * | e | S10 Targets, S11 Plan, S16 Settings, S14 Calibration, S15 Storage, S17 Activity |
+ *
+ * The foundation registers all five here; slices never edit this file. A
+ * slice holds screen-local state (drafts, UI choices, review progress) and
+ * may register operation handlers for the operation kinds it owns. Durable
+ * domain data lives in the shared catalog (`src/domain/types.ts`), not in
+ * slices. Bump a slice's `version` when its state shape changes.
  */
 import type { OperationHandler } from "../operations"
-import { t1Slice, type T1State } from "./t1"
-import { t2Slice, type T2State } from "./t2"
-import { t3Slice, type T3State } from "./t3"
-import { t4Slice, type T4State } from "./t4"
-import { t5Slice, type T5State } from "./t5"
+import { aSlice, type AState } from "./a"
+import { bSlice, type BState } from "./b"
+import { cSlice, type CState } from "./c"
+import { dSlice, type DState } from "./d"
+import { eSlice, type EState } from "./e"
 
 export interface SliceDefinition<S> {
   id: SliceId
   /** Bump when the slice state shape changes; a stored mismatch resets the slice. */
   version: number
   initial: () => S
-  /** Handlers for operation kinds this track owns (see operations.ts). */
+  /** Handlers for operation kinds this slice owns (see operations.ts). */
   operations?: OperationHandler[]
 }
 
-export type SliceId = "t1" | "t2" | "t3" | "t4" | "t5"
+export type SliceId = "a" | "b" | "c" | "d" | "e"
 
 export const SLICES = {
-  t1: t1Slice,
-  t2: t2Slice,
-  t3: t3Slice,
-  t4: t4Slice,
-  t5: t5Slice,
+  a: aSlice,
+  b: bSlice,
+  c: cSlice,
+  d: dSlice,
+  e: eSlice,
 } as const
 
 export interface SliceStates {
-  t1: T1State
-  t2: T2State
-  t3: T3State
-  t4: T4State
-  t5: T5State
+  a: AState
+  b: BState
+  c: CState
+  d: DState
+  e: EState
 }
+
 export function initialSliceStates(): SliceStates {
-  return {
-    t1: t1Slice.initial(),
-    t2: t2Slice.initial(),
-    t3: t3Slice.initial(),
-    t4: t4Slice.initial(),
-    t5: t5Slice.initial(),
-  }
+  return { a: aSlice.initial(), b: bSlice.initial(), c: cSlice.initial(), d: dSlice.initial(), e: eSlice.initial() }
 }
 
 export function sliceVersions(): Record<SliceId, number> {
-  return { t1: t1Slice.version, t2: t2Slice.version, t3: t3Slice.version, t4: t4Slice.version, t5: t5Slice.version }
+  return { a: aSlice.version, b: bSlice.version, c: cSlice.version, d: dSlice.version, e: eSlice.version }
 }

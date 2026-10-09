@@ -5,7 +5,7 @@
 import { Check, CircleHelp, X } from "lucide-react"
 import { useRef, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
-import type { QualityBreakdown } from "@/domain/derive"
+import type { QualityBreakdown } from "@/domain/library"
 import type { Evidence } from "@/domain/types"
 import { formatDateTime, formatDuration, plural } from "@/lib/format"
 import { cn } from "@/lib/utils"

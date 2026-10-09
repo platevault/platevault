@@ -1,9 +1,10 @@
 /**
- * T1 write helpers. Durable catalog and settings changes go through `commit()`
+ * Settings and setup write helpers (v4 T1, kept for the settled Settings
+ * sections). Durable catalog and settings changes go through `commit()`
  * (failed writes stay unsaved with Retry, D08); a `saved` Activity event is
  * recorded only after the commit returned ok, so Activity doubles as the
- * settings audit trail (J10 S3, J15 S5, HLD §14). Onboarding progress flags are
- * UI progress and are written directly.
+ * settings audit trail. Onboarding progress flags are UI progress and are
+ * written directly.
  */
 import type { AppSettings, LocationRole } from "@/domain/types"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice } from "@/store/core"
@@ -37,43 +38,11 @@ export function completeOnboarding() {
 /** Settings › About: reopen the setup steps; locations and data stay. Earlier setup runs no longer describe this setup. */
 export function restartSetup() {
   setOnboarding({ completedAt: null })
-  updateSlice("t1", (slice) => ({ ...slice, setupOperationIds: [] }))
+  updateSlice("e", (slice) => ({ ...slice, setupOperationIds: [] }))
 }
 
 export function setRoleDeferred(role: LocationRole, deferred: boolean) {
   const current = store.getState().settings.onboarding.deferredRoles
   const next = deferred ? [...new Set([...current, role])] : current.filter((r) => r !== role)
   setOnboarding({ deferredRoles: next })
-}
-
-/** Finish and Skip are the same terminal outcome of the one-time walk (J18 S3). */
-export function endTour() {
-  if (!store.getState().settings.onboarding.tourCompletedAt) setOnboarding({ tourCompletedAt: nowIso() })
-  updateSlice("t1", (slice) => ({ ...slice, tour: { replaying: false, stop: 0 } }))
-}
-
-export function setTourStop(stop: number) {
-  updateSlice("t1", (slice) => ({ ...slice, tour: { ...slice.tour, stop } }))
-}
-
-/** Replay from Settings or the checklist (J18 S5); the checklist state is untouched. */
-export function replayTour() {
-  updateSlice("t1", (slice) => ({ ...slice, tour: { replaying: true, stop: 0 } }))
-}
-
-/** Restoring reseeds every tick from the catalog; hiding keeps them. */
-export function setChecklistHidden(hidden: boolean) {
-  setOnboarding({ checklistHidden: hidden })
-  if (!hidden) updateSlice("t1", (slice) => ({ ...slice, checklistDone: {} }))
-}
-
-/** Record items that read done for the first time, so they never untick on their own (J18 SC8). */
-export function recordChecklistDone(ids: string[]) {
-  if (ids.length === 0) return
-  const at = nowIso()
-  updateSlice("t1", (slice) => ({ ...slice, checklistDone: { ...slice.checklistDone, ...Object.fromEntries(ids.map((id) => [id, at])) } }))
-}
-
-export function setChecklistCollapsed(collapsed: boolean) {
-  updateSlice("t1", (slice) => ({ ...slice, checklistCollapsed: collapsed }))
 }

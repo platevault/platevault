@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { emptyBreakdown, sessionBreakdown } from "@/domain/derive"
+import { emptyBreakdown, sessionBreakdown } from "@/domain/library"
 import type { Session } from "@/domain/types"
 import { formatDuration, formatExposure, formatNight, plural } from "@/lib/format"
 import { useStore } from "@/store/core"

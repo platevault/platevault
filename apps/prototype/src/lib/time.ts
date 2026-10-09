@@ -3,7 +3,7 @@
  * reads in the session's capture site zone, and every time column names that
  * zone. A session whose headers match no saved site reads in UTC.
  */
-import { captureSite } from "@/domain/derive"
+import { captureSite } from "@/domain/library"
 import type { Catalog, Session } from "@/domain/types"
 
 /** IANA zone a session's capture times read in: its capture site's, else "UTC". */

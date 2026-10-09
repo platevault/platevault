@@ -12,9 +12,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import type { ApplicationProfile } from "@/domain/types"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
-import { locateExecutable } from "./actions"
+import { locateExecutable } from "@/store/actions/settings"
 import { T4Badge } from "./badges"
-import { MODE_LABEL, PRODUCT_KIND_LABEL } from "./domain"
+import { MODE_LABEL, PRODUCT_KIND_LABEL } from "@/domain/labels"
 
 export function CapabilityList({ profile }: { profile: ApplicationProfile }) {
   const c = profile.capability
@@ -66,7 +66,7 @@ export interface LocateDialogProps {
 
 /** Prototype: simulated application chooser listing bundles on the simulated computer. */
 export function LocateApplicationDialog({ profile, onOpenChange, onLocated }: LocateDialogProps) {
-  const apps = useStore((s) => s.slices.t4.world.apps)
+  const apps = useStore((s) => s.disk.apps)
   const [path, setPath] = useState("")
   const [error, setError] = useState<string | null>(null)
   const legendId = useId()

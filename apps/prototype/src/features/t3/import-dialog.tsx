@@ -23,7 +23,7 @@ import { formatBytes, formatDateTime, plural } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { importMeasurements } from "./actions"
 import { attaches, CSV_COLUMNS, IMPORT_METHOD, mapRows, readSubframeSelectorCsv } from "./csv"
-import { sessionLabel } from "./model"
+import { sessionLabel } from "@/domain/membership"
 
 export function frameName(catalog: Catalog, id: AssetId): string {
   const asset = catalog.assets[id]
