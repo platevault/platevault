@@ -1,31 +1,45 @@
 /**
- * S5 Calibrate: the readiness line ("dark 3/3 · flat 2/3 · bias ✓"), the
- * calibration policy (automatic on by default, D-W55), a master found in
- * Results offered once with Dismiss, and Review matches: the requirement
- * table with its criteria, the automatic assignments with the SHA-256 they
- * hand off, ties and exceptions (D-W5, CAL-FR-08).
+ * S5 Calibrate (masters only, P-CAL3): readiness per kind as pills, the
+ * automatic policy (on by default, D-W55), masters found in Results with a
+ * reversible Dismiss (P-CAL2), and Matches: the requirement table with its
+ * criteria, the master each requirement hands off with its SHA-256, ties and
+ * exceptions (D-W5, CAL-FR-08). A requirement no master matches offers
+ * "Stack from <calibration session>", which opens that session's
+ * calibration process in the Calibration library.
  */
-import { Link } from "@tanstack/react-router"
-import { ChevronDown, MoreHorizontal } from "lucide-react"
+import { useNavigate } from "@tanstack/react-router"
+import { ChevronDown, CircleSlash, Layers, ListRestart, PauseCircle, RotateCcw, Sparkles } from "lucide-react"
 import { useId, useState } from "react"
-import { Notice } from "@/components/app/feedback"
+import { Box } from "@/components/app/box"
 import { type Column, DataTable } from "@/components/app/data-table"
-import { Section } from "@/components/app/page"
+import { CountBadge, Pill } from "@/components/app/pill"
+import type { MenuEntry } from "@/components/app/row-menu"
+import { RowContextMenu } from "@/components/app/row-menu"
 import { StatusBadge } from "@/components/app/status"
+import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { basisFiles, type CalSource, calibrationPlan, CRITERION_LABEL, KIND_LABEL, readinessLine, type RequirementRow, summaryText } from "@/domain/calibration"
+import { basisFiles, type CalSource, calibrationPlan, CRITERION_LABEL, KIND_LABEL, type RequirementRow, summaryText } from "@/domain/calibration"
 import { runSetup, workingContent } from "@/domain/derive"
 import type { MatchCriterion, Run } from "@/domain/types"
 import { fileName, formatNight, plural } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { acceptCalibration, answerMasterOffer, calibrationException, clearCalibration, deferCalibration, setCalibrationPolicy } from "./actions"
-import { type RunContext, readinessText, runLock, tieOf } from "./model"
-import { OutcomeNotice, Sha, useOutcome } from "./parts"
+import { type RunContext, readinessByKind, runLock, type StackOffer, stackOffers, tieOf } from "./model"
+import { OutcomeNotice, RowActions, Sha, useOutcome } from "./parts"
+
+type Act = ReturnType<typeof useOutcome>["act"]
+type ExceptionRequest = { row: RequirementRow; source: CalSource | null; criteria: MatchCriterion[] }
+
+/** The calibration process of a raw session in the Calibration library (E2's deep link). */
+export function processLink(processId: string) {
+  return { to: "/calibration", search: { process: processId } }
+}
+
+const DISMISSED_LINK = { to: "/calibration", search: { filter: "dismissed" } }
 
 export function CalibrateStep({ ctx }: { ctx: RunContext }) {
   const state = useStore((s) => s)
@@ -37,66 +51,78 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
   const expanded = open ?? plan.needsReview.length > 0
   const lock = runLock(run)
   const switchId = useId()
-  const [exception, setException] = useState<{ row: RequirementRow; source: CalSource | null; criteria: MatchCriterion[] } | null>(null)
+  const [exception, setException] = useState<ExceptionRequest | null>(null)
+  const kinds = readinessByKind(plan).filter((k) => k.total > 0)
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <OutcomeNotice outcome={outcome.outcome} onDismiss={outcome.clear} />
-      <section aria-labelledby="cal-readiness" className="flex flex-wrap items-start justify-between gap-4 border-b border-separator pb-4">
-        <div className="min-w-0 space-y-1">
-          <h2 id="cal-readiness" className="text-[0.75rem] font-medium text-muted-foreground">
-            Calibration readiness
-          </h2>
-          <p className="font-mono text-base tabular-nums" data-readiness>
-            {readinessText(plan)}
-          </p>
-          <p className="text-[0.75rem] text-muted-foreground">{readinessLine(plan)}</p>
+      <Box
+        id="cal-readiness"
+        level={2}
+        title="Readiness"
+        actions={
+          <span className="flex items-center gap-2">
+            <Switch id={switchId} disabled={lock !== null} checked={setup.calibrationPolicy === "automatic"} onCheckedChange={(checked) => outcome.act(setCalibrationPolicy(run.id, checked ? "automatic" : "off"))} />
+            <Label htmlFor={switchId} className="text-xs">
+              Auto-assign
+            </Label>
+          </span>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-1.5" data-readiness>
+          {plan.policy === "off" ? (
+            <Pill tone="muted" icon={CircleSlash}>
+              Off
+            </Pill>
+          ) : kinds.length === 0 ? (
+            <Pill tone="muted">No sessions</Pill>
+          ) : (
+            kinds.map((k) => (
+              <Pill key={k.kind} tone={k.matched === k.total ? "success" : "warning"}>
+                {KIND_LABEL[k.kind]} {k.automatic ? "✓" : `${k.matched}/${k.total}`}
+              </Pill>
+            ))
+          )}
+          {plan.needsReview.length > 0 ? <Pill tone="warning">{plural(plan.needsReview.length, "to review", "to review")}</Pill> : null}
+          {group ? (
+            <Pill tone="info" icon={Layers} link={{ to: "/projects/$projectId/groups/$groupId/$step", params: { projectId: group.projectId, groupId: group.id, step: "calibrate" } }} title="Policy shared by every panel">
+              {group.name}
+            </Pill>
+          ) : null}
+          {lock ? <Pill tone="muted">{lock}</Pill> : null}
         </div>
-        <div className="flex max-w-sm items-start gap-2.5">
-          <Switch id={switchId} className="mt-0.5" disabled={lock !== null} checked={setup.calibrationPolicy === "automatic"} onCheckedChange={(checked) => outcome.act(setCalibrationPolicy(run.id, checked ? "automatic" : "off"))} />
-          <div className="space-y-0.5">
-            <Label htmlFor={switchId}>Assign compatible calibration automatically</Label>
-            <p className="text-[0.75rem] text-muted-foreground">
-              {setup.calibrationPolicy === "automatic" ? "On: every requirement with a compatible input is assigned without a click; only the rest need you." : "Off: no calibration is handed off and nothing needs review."}
-              {group ? (
-                <>
-                  {" "}
-                  Shared by every panel of{" "}
-                  <Link className="text-link underline-offset-4 hover:underline" to="/projects/$projectId/groups/$groupId/$step" params={{ projectId: group.projectId, groupId: group.id, step: "calibrate" }}>
-                    {group.name}
-                  </Link>
-                  .
-                </>
-              ) : null}
-            </p>
-          </div>
-        </div>
-      </section>
+      </Box>
 
       <MasterOffers run={run} onOutcome={outcome.act} />
 
-      {plan.policy === "automatic" && plan.rows.length > 0 ? (
-        <Section
-          title="Review matches"
+      {plan.policy === "automatic" ? (
+        <Box
           id="cal-matches"
-          description={`${plural(plan.rows.length, "requirement")}: ${plan.counts.automatic} automatic, ${plan.counts.accepted} accepted, ${plan.counts.exception} exceptions, ${plan.needsReview.length} need review.`}
+          level={2}
+          flush
+          title={
+            <span className="flex items-center gap-1.5">
+              Matches <CountBadge count={plan.rows.length} label={plural(plan.rows.length, "requirement")} />
+            </span>
+          }
           actions={
-            <Button size="sm" variant="outline" aria-expanded={expanded} aria-controls="cal-matches-table" onClick={() => setOpen(!expanded)}>
-              <ChevronDown aria-hidden="true" data-icon="inline-start" className={expanded ? "rotate-180" : undefined} />
-              {expanded ? "Hide matches" : "Review matches"}
-            </Button>
+            plan.rows.length > 0 ? (
+              <Button size="xs" variant="ghost" aria-expanded={expanded} aria-controls="cal-matches-table" onClick={() => setOpen(!expanded)}>
+                <ChevronDown aria-hidden="true" data-icon="inline-start" className={expanded ? "rotate-180" : undefined} />
+                {expanded ? "Hide" : "Show"}
+              </Button>
+            ) : null
           }
         >
-          {expanded ? (
+          {plan.rows.length === 0 ? (
+            <p className="px-3 py-3 text-sm text-muted-foreground">No sessions saved</p>
+          ) : expanded ? (
             <div id="cal-matches-table">
               <RequirementTable run={run} rows={plan.rows} lock={lock} onOutcome={outcome.act} onException={setException} />
             </div>
           ) : null}
-        </Section>
-      ) : plan.policy === "automatic" ? (
-        <Notice tone="info" title="No requirements yet">
-          Save a selection with included frames in Select; each session then needs a dark, a flat and a bias.
-        </Notice>
+        </Box>
       ) : null}
 
       <ExceptionDialog
@@ -112,28 +138,61 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
 }
 
 function stateBadge(row: RequirementRow) {
-  if (row.drift) return <StatusBadge kind="content" value="drifted" label="Drifted: review" />
+  if (row.drift) return <StatusBadge kind="content" value="drifted" label="Drifted" />
   if (row.state === "automatic") return <StatusBadge kind="assignment" value="accepted" label="Automatic" />
   return <StatusBadge kind="assignment" value={row.state} />
 }
 
-function RequirementTable({
-  run,
-  rows,
-  lock,
-  onOutcome,
-  onException,
-}: {
-  run: Run
-  rows: RequirementRow[]
-  lock: string | null
-  onOutcome: ReturnType<typeof useOutcome>["act"]
-  onException: (v: { row: RequirementRow; source: CalSource | null; criteria: MatchCriterion[] }) => void
-}) {
+/** The note behind a row's state: drift, an exception's reason, or a tie. */
+function stateNote(row: RequirementRow): string | null {
+  if (row.drift) return row.drift
+  if (row.assignment?.exception) return `Exception · ${row.assignment.exception.reason}`
+  const tie = tieOf(row)
+  if (tie.length > 1 && row.state === "automatic") return `Tie · ${plural(tie.length, "equal master")} · nearest night wins`
+  return null
+}
+
+function StackPill({ offer }: { offer: StackOffer }) {
+  return (
+    <Pill tone={offer.waiting ? "info" : "muted"} icon={Sparkles} link={processLink(offer.view.process.id)} title={`${offer.view.name} · ${plural(offer.view.frames, "frame")}`}>
+      {offer.waiting ? `Stack from ${offer.view.name}` : `Stacking ${offer.view.name}`}
+    </Pill>
+  )
+}
+
+function RequirementTable({ run, rows, lock, onOutcome, onException }: { run: Run; rows: RequirementRow[]; lock: string | null; onOutcome: Act; onException: (v: ExceptionRequest) => void }) {
   const state = useStore((s) => s)
+  const navigate = useNavigate()
   const shaOf = (row: RequirementRow): string | null => {
     if (row.assignment?.basis?.files[0]) return row.assignment.basis.files[0].sha256
     return row.input ? (basisFiles(state.catalog, state.disk, row.input)[0]?.sha256 ?? null) : null
+  }
+  const rowName = (r: RequirementRow) => `${KIND_LABEL[r.kind]} · ${formatNight(r.member.session.night)} ${r.member.session.channel ?? "No filter"}`
+  const entries = (r: RequirementRow): MenuEntry[] => {
+    const offers = stackOffers(state, r)
+    const kind = KIND_LABEL[r.kind].toLowerCase()
+    const seen = new Set<string>()
+    const unique = (label: string, detail: string | null) => {
+      let out = seen.has(label) && detail ? `${label} · ${detail}` : label
+      for (let n = 2; seen.has(out); n += 1) out = `${label} (${n})`
+      seen.add(out)
+      return out
+    }
+    const masters: MenuEntry[] = r.candidates.slice(0, 6).map((c) => ({
+      label: unique(c.summary.allCompatible ? `Use ${c.source.name}` : `Use ${c.source.name} as exception…`, c.source.cameraName),
+      icon: c.summary.allCompatible ? undefined : CircleSlash,
+      onSelect: () => (c.summary.allCompatible ? onOutcome(acceptCalibration(run.id, r.member.session.id, r.kind, c.source, c.criteria)) : onException({ row: r, source: c.source, criteria: c.criteria })),
+    }))
+    const stack: MenuEntry[] = offers.map((o) => ({ label: o.waiting ? `Stack from ${o.view.name}` : `Open ${o.view.name}`, icon: Sparkles, onSelect: () => void navigate(processLink(o.view.process.id) as never) }))
+    const decisions: MenuEntry[] = lock
+      ? []
+      : [
+          { separator: true },
+          { label: `Process without ${kind}…`, icon: CircleSlash, onSelect: () => onException({ row: r, source: null, criteria: [] }) },
+          { label: "Defer", icon: PauseCircle, onSelect: () => onOutcome(deferCalibration(run.id, r.member.session.id, r.kind)) },
+          ...(r.assignment ? [{ label: "Use automatic", icon: RotateCcw, onSelect: () => onOutcome(clearCalibration(run.id, r.member.session.id, r.kind)) }] : []),
+        ]
+    return [{ heading: rowName(r) }, ...(lock ? [] : masters), ...(lock || masters.length === 0 ? [] : stack.length > 0 ? [{ separator: true } as const] : []), ...stack, ...decisions, ...(r.candidates.length === 0 && stack.length === 0 ? [{ label: "No master", disabled: true, onSelect: () => {} }] : [])]
   }
   const columns: Column<RequirementRow>[] = [
     {
@@ -154,43 +213,41 @@ function RequirementTable({
       id: "state",
       header: "State",
       cell: (r) => {
-        const tie = tieOf(r)
-        const note = r.drift
-          ? <span className="text-warning">{r.drift}</span>
-          : r.assignment?.exception
-            ? <span>Exception: {r.assignment.exception.reason}</span>
-            : tie.length > 1 && r.state === "automatic"
-              ? <span className="text-warning">Tie: {plural(tie.length, "equal candidate")}; masters first, then the nearest night</span>
-              : r.state === "unresolved"
-                ? <span className="text-warning">No compatible input</span>
-                : null
+        const note = stateNote(r)
         return (
-          <span className="flex max-w-[16rem] flex-col gap-0.5">
+          <span className="flex items-center gap-1">
             {stateBadge(r)}
-            {note ? <span className="text-[0.6875rem] text-pretty">{note}</span> : null}
+            {note ? <NoteMarker label={`${rowName(r)} note`}>{note}</NoteMarker> : null}
           </span>
         )
       },
     },
     {
       id: "input",
-      header: "Input · hands off",
-      cell: (r) => (
-        <span className="flex max-w-[18rem] flex-col">
-          {r.source ? (
-            <span className="truncate" title={r.source.path}>
-              {r.source.name}
-            </span>
-          ) : r.state === "exception" ? (
-            <span className="text-muted-foreground">Without {KIND_LABEL[r.kind].toLowerCase()}</span>
-          ) : r.closest ? (
-            <span className="truncate text-muted-foreground">Closest: {r.closest.source.name}</span>
-          ) : (
-            <span className="text-muted-foreground">No candidate</span>
-          )}
-          {r.input ? <Sha value={shaOf(r)} /> : null}
-        </span>
-      ),
+      header: "Master",
+      cell: (r) => {
+        const offers = r.source ? [] : stackOffers(state, r)
+        return (
+          <span className="flex max-w-[18rem] flex-col items-start gap-0.5">
+            {r.source ? (
+              <span className="max-w-full truncate" title={r.source.path}>
+                {r.source.name}
+              </span>
+            ) : r.state === "exception" ? (
+              <span className="text-muted-foreground">Without {KIND_LABEL[r.kind].toLowerCase()}</span>
+            ) : offers[0] ? (
+              <StackPill offer={offers[0]} />
+            ) : r.closest ? (
+              <span className="max-w-full truncate text-muted-foreground" title={summaryText(r.closest.criteria)}>
+                Closest · {r.closest.source.name}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">No master</span>
+            )}
+            {r.input ? <Sha value={shaOf(r)} /> : null}
+          </span>
+        )
+      },
     },
     {
       id: "criteria",
@@ -214,39 +271,7 @@ function RequirementTable({
           </details>
         ),
     },
-    {
-      id: "actions",
-      header: "",
-      cell: (r) =>
-        lock ? null : (
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" className="-my-1" aria-label={`Choose the ${KIND_LABEL[r.kind].toLowerCase()} for ${formatNight(r.member.session.night)} ${r.member.session.channel ?? ""}`} />}>
-              <MoreHorizontal aria-hidden="true" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>Use</DropdownMenuLabel>
-                {r.candidates.slice(0, 6).map((c) => (
-                  <DropdownMenuItem
-                    key={c.source.id}
-                    onClick={() => (c.summary.allCompatible ? onOutcome(acceptCalibration(run.id, r.member.session.id, r.kind, c.source, c.criteria)) : onException({ row: r, source: c.source, criteria: c.criteria }))}
-                  >
-                    <span className="flex flex-col">
-                      <span>{c.source.name}</span>
-                      <span className="text-xs text-muted-foreground">{c.summary.allCompatible ? `Compatible · master${c.source.night ? ` · ${formatNight(c.source.night)}` : ""}` : `${summaryText(c.criteria)} · needs an exception reason`}</span>
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-                {r.candidates.length === 0 ? <DropdownMenuItem disabled>No candidate in the calibration library</DropdownMenuItem> : null}
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onException({ row: r, source: null, criteria: [] })}>Process without {KIND_LABEL[r.kind].toLowerCase()}…</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onOutcome(deferCalibration(run.id, r.member.session.id, r.kind))}>Defer</DropdownMenuItem>
-              {r.assignment ? <DropdownMenuItem onClick={() => onOutcome(clearCalibration(run.id, r.member.session.id, r.kind))}>Back to the automatic choice</DropdownMenuItem> : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ),
-    },
+    { id: "actions", header: "", cell: (r) => <RowActions entries={entries(r)} label={`Choose the ${rowName(r)}`} /> },
   ]
   return (
     <DataTable
@@ -257,11 +282,12 @@ function RequirementTable({
       scroll="none"
       groups={{ key: (r) => r.groupLabel, label: (key, groupRows) => `${key} · ${plural(groupRows.length, "requirement")}` }}
       rowClassName={(r) => (r.drift || r.state === "unresolved" || r.state === "deferred" ? "bg-warning/[0.05]" : undefined)}
+      contextMenu={entries}
     />
   )
 }
 
-function ExceptionDialog({ value, onClose, onConfirm }: { value: { row: RequirementRow; source: CalSource | null; criteria: MatchCriterion[] } | null; onClose: () => void; onConfirm: (reason: string) => boolean }) {
+function ExceptionDialog({ value, onClose, onConfirm }: { value: ExceptionRequest | null; onClose: () => void; onConfirm: (reason: string) => boolean }) {
   const [reason, setReason] = useState("")
   const id = useId()
   if (!value) return null
@@ -280,14 +306,12 @@ function ExceptionDialog({ value, onClose, onConfirm }: { value: { row: Requirem
           className="space-y-4"
         >
           <DialogHeader>
-            <DialogTitle>{value.source ? `Use ${value.source.name} as an exception` : `Process without a ${kind}`}</DialogTitle>
-            <DialogDescription>
-              {value.source ? `It is not fully compatible: ${summaryText(value.criteria)}.` : `No ${kind} is handed off for ${formatNight(value.row.member.session.night)} ${value.row.member.session.channel ?? ""}.`} The exception applies to this run only and never changes the master's evidence.
-            </DialogDescription>
+            <DialogTitle>{value.source ? `Exception: ${value.source.name}` : `Without ${kind}`}</DialogTitle>
+            <DialogDescription>{value.source ? summaryText(value.criteria) : `${formatNight(value.row.member.session.night)} ${value.row.member.session.channel ?? ""} · this run only`}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
             <Label htmlFor={id}>Reason</Label>
-            <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Dark library lacks 300 s at gain 100; dithered data" autoFocus />
+            <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Dithered; no 300 s dark at gain 100" autoFocus />
           </div>
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
@@ -301,33 +325,79 @@ function ExceptionDialog({ value, onClose, onConfirm }: { value: { row: Requirem
   )
 }
 
-/** A master found in this run's Results, offered once: Add to the calibration library, or Dismiss (D-W55). */
-export function MasterOffers({ run, onOutcome }: { run: Run; onOutcome: ReturnType<typeof useOutcome>["act"] }) {
+/**
+ * Masters found in this run's Results: Add files a copy into structured
+ * calibration storage; Dismiss is reversible from the Calibration library's
+ * Dismissed filter (P-CAL2). Candidates never match until they are added.
+ */
+export function MasterOffers({ run, onOutcome }: { run: Run; onOutcome: Act }) {
   const state = useStore((s) => s)
   const pending = run.masterOffers.filter((o) => o.state === "pending").map((o) => state.catalog.masters[o.masterId]).filter((m) => m !== undefined)
-  if (pending.length === 0) return null
+  const dismissed = run.masterOffers.filter((o) => o.state === "dismissed").length
+  if (pending.length === 0 && dismissed === 0) return null
+  const add = (masterId: string, name: string) => onOutcome(answerMasterOffer(run.id, masterId, "adopt"), { title: `${name} added`, tone: "info" })
+  const dismiss = (masterId: string, name: string) => onOutcome(answerMasterOffer(run.id, masterId, "dismiss"), { title: `${name} dismissed`, tone: "info" })
   return (
-    <div className="space-y-2">
-      {pending.map((master) => (
-        <Notice
-          key={master.id}
-          tone="info"
-          title={`${KIND_LABEL[master.kind]} master found in Results: ${fileName(master.origin.sourcePath)}`}
-          actions={
-            <>
-              <Button size="sm" onClick={() => onOutcome(answerMasterOffer(run.id, master.id, "adopt"), { title: `Added ${fileName(master.path)} to the calibration library`, reasons: ["It is reusable for matching now; the Results copy stays."], tone: "info" })}>
-                Add to calibration library
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => onOutcome(answerMasterOffer(run.id, master.id, "dismiss"))}>
-                Dismiss
-              </Button>
-            </>
-          }
-        >
-          {master.channel ? `${master.channel} · ` : ""}
-          {master.widthPx > 0 ? `${master.widthPx} × ${master.heightPx} · ` : ""}bin {master.binning}. Offered once: Dismiss keeps the file and never asks again. Candidates are never matched until they are added.
-        </Notice>
-      ))}
-    </div>
+    <Box
+      id={`offers-${run.id}`}
+      level={2}
+      flush
+      title={
+        <span className="flex items-center gap-1.5">
+          Masters found <CountBadge count={pending.length} label={plural(pending.length, "master")} />
+        </span>
+      }
+      actions={
+        dismissed > 0 ? (
+          <Pill tone="muted" icon={ListRestart} link={DISMISSED_LINK} title="Restore in the Calibration library">
+            {dismissed} dismissed
+          </Pill>
+        ) : null
+      }
+    >
+      {pending.length === 0 ? (
+        <p className="px-3 py-2 text-sm text-muted-foreground">None pending</p>
+      ) : (
+        <ul className="divide-y divide-separator" data-master-offers>
+          {pending.map((master) => {
+            const name = fileName(master.origin.sourcePath)
+            return (
+              <RowContextMenu
+                key={master.id}
+                entries={[
+                  { heading: name },
+                  { label: "Add to library", onSelect: () => add(master.id, name) },
+                  { label: "Dismiss", onSelect: () => dismiss(master.id, name) },
+                ]}
+              >
+                <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate font-medium" title={master.origin.sourcePath}>
+                    {name}
+                  </span>
+                  <span className="flex flex-wrap items-center gap-1">
+                    <Pill tone="info">{KIND_LABEL[master.kind]}</Pill>
+                    {master.channel ? <Pill tone="neutral">{master.channel}</Pill> : null}
+                    {master.widthPx > 0 ? (
+                      <Pill tone="muted">
+                        {master.widthPx} × {master.heightPx}
+                      </Pill>
+                    ) : null}
+                    <Pill tone="muted">bin {master.binning}</Pill>
+                  </span>
+                  <span className="flex gap-1.5">
+                    <Button size="xs" onClick={() => add(master.id, name)}>
+                      Add to library
+                    </Button>
+                    <Button size="xs" variant="outline" onClick={() => dismiss(master.id, name)}>
+                      Dismiss
+                    </Button>
+                  </span>
+                </li>
+              </RowContextMenu>
+            )
+          })}
+        </ul>
+      )}
+    </Box>
   )
 }

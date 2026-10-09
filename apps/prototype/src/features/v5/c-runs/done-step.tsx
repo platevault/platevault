@@ -1,19 +1,22 @@
 /**
  * S5 Done: Complete (it needs no Result and removes nothing) and the Clean
  * up review: only the entries the run's preparations created, every one
- * preselected. A Direct-source preparation creates no entries, so its list
- * is empty. Clean up moves the chosen entries to the OS Trash as an
- * operation (D-W26, PREP-FR-14, RES-FR-06). Complete on a run with open
- * steps shows a preview first (`CompleteButton`).
+ * preselected, with the run's footprint. A Direct-source preparation creates
+ * no entries, so its list is empty. Clean up moves the chosen entries to the
+ * OS Trash as an operation (D-W26, PREP-FR-14, RES-FR-06). Complete on a run
+ * with open steps shows a preview first (`CompleteButton`). The Project's
+ * Wrap up takes over once every run is Complete (P-WRAP1).
  */
 import { Link, useNavigate } from "@tanstack/react-router"
-import { RotateCcw, ShieldCheck, Wand2 } from "lucide-react"
+import { CircleCheck, Copy, ListChecks, ListX, RotateCcw, ShieldCheck, Trash2, Wand2 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
+import { GateLabel } from "@/app/run-ui"
+import { Box } from "@/components/app/box"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { Notice } from "@/components/app/feedback"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { OperationPanel } from "@/components/app/operation-panel"
-import { Section } from "@/components/app/page"
+import { CountBadge, Pill } from "@/components/app/pill"
+import type { MenuEntry } from "@/components/app/row-menu"
 import { Button } from "@/components/ui/button"
 import { GATE_LABEL, runPipeline } from "@/domain/derive"
 import { STEP_LABEL } from "@/domain/labels"
@@ -23,6 +26,8 @@ import { useStore } from "@/store/core"
 import { startCleanup } from "./actions"
 import { type CleanupEntry, cleanupReview, type RunContext } from "./model"
 import type { useOutcome } from "./parts"
+import { FootprintPill } from "./prepare-step"
+import { WrapUpLink } from "./results-step"
 
 /**
  * Complete, from the run header or the Done step. A run whose earlier steps are not all Done (Blocked at
@@ -35,7 +40,7 @@ export function CompleteButton({ ctx, onOutcome, variant = "default" }: { ctx: R
   const open = runPipeline(state, run)
     .steps.slice(0, 5)
     .filter((s) => s.state !== "done")
-  const success = { title: `${run.name} is Complete`, reasons: ["Nothing was removed. Clean up is offered in Done."], tone: "info" as const }
+  const success = { title: `${run.name} Complete`, tone: "info" as const }
   return (
     <>
       <Button size="sm" variant={variant} onClick={() => (open.length > 0 ? setPreview(true) : onOutcome(completeRun(run.id), success))}>
@@ -46,10 +51,9 @@ export function CompleteButton({ ctx, onOutcome, variant = "default" }: { ctx: R
         open={preview}
         onOpenChange={setPreview}
         title={`Complete ${run.name} with ${plural(open.length, "open step")}?`}
-        description="Complete records that processing is done. Steps that are not Done stay as they are and stop holding Next."
-        changes={[`${run.name} reads Complete; Reopen returns it to ${STEP_LABEL[runPipeline(state, run).current.id]}`, ...open.map((s) => `${s.label} stays ${GATE_LABEL[s.state]}: ${s.items.find((i) => i.met === false)?.detail ?? s.status}`)]}
-        unchanged={["Nothing is removed: prepared folders, Results and library frames stay", "Membership and calibration decisions"]}
-        confirmLabel={`Complete with ${plural(open.length, "open step")}`}
+        description="Nothing is removed."
+        changes={[`Reopen returns it to ${STEP_LABEL[runPipeline(state, run).current.id]}`, ...open.map((s) => `${s.label} stays ${GATE_LABEL[s.state]} · ${s.items.find((i) => i.met === false)?.detail ?? s.status}`)]}
+        confirmLabel="Complete"
         onConfirm={() => {
           const result = completeRun(run.id)
           onOutcome(result, success)
@@ -60,10 +64,16 @@ export function CompleteButton({ ctx, onOutcome, variant = "default" }: { ctx: R
   )
 }
 
+const KIND_WORD: Record<CleanupEntry["kind"], string> = { link: "Link", list: "Source list", copy: "Copy or clone" }
+
+function copyPath(path: string) {
+  void navigator.clipboard?.writeText(path).catch(() => {})
+}
+
 export function DoneStep({ ctx, outcome }: { ctx: RunContext; outcome: ReturnType<typeof useOutcome> }) {
   const state = useStore((s) => s)
   const navigate = useNavigate()
-  const { run } = ctx
+  const { run, project } = ctx
   const pipeline = runPipeline(state, run)
   const review = cleanupReview(state, run)
   const paths = review.entries.map((e) => e.path)
@@ -72,31 +82,43 @@ export function DoneStep({ ctx, outcome }: { ctx: RunContext; outcome: ReturnTyp
   // Every prepared entry starts selected; the list changes after a Clean up or a new preparation.
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset only when the listed entries change
   useEffect(() => setSelected(paths), [key])
-  const [confirm, setConfirm] = useState(false)
+  const [confirm, setConfirm] = useState<string[] | null>(null)
   const cleanups = Object.values(state.operations)
     .filter((op) => op.kind === "cleanup" && op.scope.runIds?.includes(run.id))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const lastCleanup = cleanups[0]
-  const chosen = review.entries.filter((e) => selected.includes(e.path))
+  const chosenPaths = confirm ?? selected
+  const chosen = review.entries.filter((e) => chosenPaths.includes(e.path))
   const bytes = chosen.reduce((n, e) => n + e.sizeBytes, 0)
   const folders = useMemo(() => [...new Set(review.entries.map((e) => e.prep.folderPath))], [review.entries])
   const complete = run.completion === "complete"
+  const canClean = complete && !run.trashedAt
+  const entries = (e: CleanupEntry): MenuEntry[] => {
+    const on = selected.includes(e.path)
+    return [
+      { heading: fileName(e.path) },
+      ...(run.trashedAt ? [] : [{ label: on ? "Exclude" : "Include", icon: on ? ListX : ListChecks, onSelect: () => setSelected((cur) => (on ? cur.filter((p) => p !== e.path) : [...cur, e.path])) }]),
+      ...(canClean ? [{ label: "Clean up this…", icon: Trash2, destructive: true, onSelect: () => setConfirm([e.path]) }] : []),
+      { separator: true },
+      { label: "Copy path", icon: Copy, onSelect: () => copyPath(e.path) },
+    ]
+  }
   const columns: Column<CleanupEntry>[] = [
     { id: "file", header: "Entry", rowHeader: true, truncate: true, cell: (e) => <span title={e.path}>{e.path.slice(e.prep.folderPath.length + 1)}</span>, sortValue: (e) => e.path },
-    { id: "kind", header: "Kind", cell: (e) => (e.kind === "link" ? "Link" : e.kind === "list" ? "Handoff list" : "Copy or clone") },
-    { id: "size", header: "Size", align: "right", cell: (e) => (e.kind === "link" ? "0 B" : formatBytes(e.sizeBytes)), sortValue: (e) => e.sizeBytes },
+    { id: "kind", header: "Kind", cell: (e) => KIND_WORD[e.kind] },
+    { id: "size", header: "Size", align: "right", cell: (e) => formatBytes(e.sizeBytes), sortValue: (e) => e.sizeBytes },
   ]
 
   return (
-    <div className="space-y-6">
-      <Section
-        title="Completion"
+    <div className="space-y-4">
+      <Box
         id="done-complete"
-        description={complete ? `Complete since ${formatDateTime(run.completedAt ?? "")}. Reopen returns the run to ${STEP_LABEL[run.stageBeforeComplete ?? "select"]}.` : "Complete records that processing is done; it needs no accepted Result and removes nothing."}
+        level={2}
+        title="Completion"
         actions={
           run.trashedAt ? null : complete ? (
             <Button
-              size="sm"
+              size="xs"
               variant="outline"
               onClick={() => {
                 const { result, step } = reopenRun(run.id)
@@ -111,48 +133,61 @@ export function DoneStep({ ctx, outcome }: { ctx: RunContext; outcome: ReturnTyp
           )
         }
       >
-        <ul className="grid gap-1 text-xs sm:grid-cols-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {complete ? (
+            <Pill tone="success" icon={CircleCheck} title={`Reopen returns it to ${STEP_LABEL[run.stageBeforeComplete ?? "select"]}`}>
+              Complete · {formatDateTime(run.completedAt ?? "")}
+            </Pill>
+          ) : null}
           {pipeline.steps.slice(0, 5).map((s) => (
-            <li key={s.id} className="flex gap-2">
-              <span className="w-20 text-muted-foreground">{s.label}</span>
-              <span>
-                {s.state === "done" ? "" : `${GATE_LABEL[s.state]} · `}
-                {s.status}
-              </span>
-            </li>
+            <span key={s.id} className="inline-flex items-center gap-1 rounded-full px-2 text-xs ring-1 ring-border ring-inset">
+              <span className="text-muted-foreground">{s.label}</span>
+              <GateLabel state={s.state} label={s.status} />
+            </span>
           ))}
-        </ul>
-      </Section>
+        </div>
+      </Box>
 
-      <Section
-        title="Clean up"
-        id="cleanup"
-        description="Only the links, clones and copies this run's preparations created; originals, Results and rejected frames are never listed."
+      {/* The header's and Run group's Clean up links land here (`#cleanup`); Box ids name only its heading. */}
+      <div id="cleanup">
+      <Box
+        id="cleanup-box"
+        level={2}
+        flush
+        title={
+          <span className="flex items-center gap-1.5">
+            Clean up <CountBadge count={review.entries.length} label={plural(review.entries.length, "entry", "entries")} />
+          </span>
+        }
         actions={
-          complete && !run.trashedAt ? (
-            <Button
-              size="sm"
-              disabled={chosen.length === 0}
-              onClick={() => setConfirm(true)}
-            >
-              <Wand2 aria-hidden="true" data-icon="inline-start" />
-              Clean up {plural(chosen.length, "entry", "entries")}…
-            </Button>
-          ) : null
+          <>
+            <FootprintPill run={run} />
+            <WrapUpLink project={project} />
+            {canClean ? (
+              <Button size="xs" disabled={selected.length === 0} onClick={() => setConfirm(selected)}>
+                <Wand2 aria-hidden="true" data-icon="inline-start" />
+                Clean up…
+              </Button>
+            ) : null}
+          </>
         }
       >
-        {!complete && !run.trashedAt ? <p className="text-xs text-muted-foreground">Clean up comes after Complete. The list below is what it will offer.</p> : null}
-        {review.directSource.length > 0 ? (
-          <Notice tone="info" title={`${plural(review.directSource.length, "Direct-source preparation")}: nothing to clean up`}>
-            Direct source passed exact original paths and created no links, clones or copies.
-          </Notice>
+        {(!complete && !run.trashedAt) || review.directSource.length > 0 || review.refused.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3 py-2">
+            {!complete && !run.trashedAt ? <Pill tone="muted">After Complete</Pill> : null}
+            {review.directSource.length > 0 ? <Pill tone="muted">{plural(review.directSource.length, "Direct-source preparation")} · nothing to clean</Pill> : null}
+            {review.refused.map((r) => (
+              <Pill key={r.path} tone="warning" title={r.path}>
+                {fileName(r.path)} · {r.reason}
+              </Pill>
+            ))}
+          </div>
         ) : null}
-        {review.refused.map((r) => (
-          <Notice key={r.path} tone="offline" title={`${fileName(r.path)} cannot be listed`}>
-            {r.reason}. Its entries are kept until it is back.
-          </Notice>
-        ))}
-        {lastCleanup ? <OperationPanel operationId={lastCleanup.id} /> : null}
+        {lastCleanup ? (
+          <div className="border-b border-border px-3 py-2">
+            <OperationPanel operationId={lastCleanup.id} />
+          </div>
+        ) : null}
         <DataTable
           label={`Prepared entries of ${run.name}`}
           rows={review.entries}
@@ -161,30 +196,31 @@ export function DoneStep({ ctx, outcome }: { ctx: RunContext; outcome: ReturnTyp
           scroll="none"
           groups={{ key: (e) => e.prep.folderPath, label: (folder, rows) => `${fileName(folder)}/ · ${plural(rows.length, "entry", "entries")}` }}
           selection={{ selected, onChange: setSelected, rowLabel: (e) => fileName(e.path), isSelectable: () => !run.trashedAt }}
+          contextMenu={entries}
           empty={
-            <p className="px-3 py-6 text-sm text-muted-foreground">
-              {review.directSource.length > 0 && folders.length === 0 ? "Empty: a Direct-source run has no prepared entries." : lastCleanup ? "Every prepared entry is already in the OS Trash." : "No prepared entries. "}
+            <p className="flex flex-wrap items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
+              {review.directSource.length > 0 && folders.length === 0 ? "No prepared entries" : lastCleanup ? "All in the OS Trash" : "Nothing prepared"}
               {lastCleanup || review.directSource.length > 0 ? null : (
-                <Link className="text-link underline-offset-4 hover:underline" to="/projects/$projectId/runs/$runId/$step" params={{ projectId: run.projectId, runId: run.id, step: "prepare" }}>
+                <Button size="xs" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: run.projectId, runId: run.id, step: "prepare" }} />}>
                   Open Prepare
-                </Link>
+                </Button>
               )}
             </p>
           }
         />
-      </Section>
+      </Box>
+      </div>
 
       <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
+        open={confirm !== null}
+        onOpenChange={(o) => !o && setConfirm(null)}
         title={`Clean up ${run.name}?`}
-        description="The chosen prepared entries move to the OS Trash, where you can put them back."
-        changes={[`Moves ${plural(chosen.length, "prepared entry", "prepared entries")} (${formatBytes(bytes)}) to the OS Trash`, ...folders.map((f) => `From ${f}/`)]}
-        unchanged={["Original frames and Direct-source paths", "The Results folder and every accepted Result", "Library quality decisions and the run's membership", "Nothing is deleted permanently"]}
-        confirmLabel={`Move ${plural(chosen.length, "entry", "entries")} to the OS Trash`}
+        description="Restorable from the OS Trash."
+        changes={[`Moves ${plural(chosen.length, "prepared entry", "prepared entries")} · ${formatBytes(bytes)}`, ...[...new Set(chosen.map((e) => e.prep.folderPath))].map((f) => `From ${fileName(f)}/`)]}
+        confirmLabel={`Move ${plural(chosen.length, "entry", "entries")} to Trash`}
         tone="destructive"
         onConfirm={() => {
-          const r = startCleanup(run.id, selected)
+          const r = startCleanup(run.id, chosenPaths)
           outcome.act(r)
           return r.result
         }}

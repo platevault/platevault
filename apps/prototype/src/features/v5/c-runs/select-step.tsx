@@ -3,17 +3,21 @@
  * their reason (D-W49); Refresh offers new candidates and flags a member that
  * no longer matches its subject, with Remove (D-W45); accepted Results of
  * other runs as product inputs, shown with their rig (D-W4, D-W56); Save
- * makes the next membership revision.
+ * makes the next membership revision. Rows have a right-click menu.
  */
+import { useNavigate } from "@tanstack/react-router"
+import { Copy, Eye, ListChecks, ListX, Plus, X } from "lucide-react"
 import { useMemo, useState } from "react"
-import { Notice } from "@/components/app/feedback"
+import { Box } from "@/components/app/box"
 import { type Column, DataTable } from "@/components/app/data-table"
-import { Section } from "@/components/app/page"
+import { CountBadge, Pill } from "@/components/app/pill"
+import type { MenuEntry } from "@/components/app/row-menu"
+import { HelpTip, NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { latestRevision, liveAssetIds, rigName, runCandidates, runRefresh, subjectName, workingContent } from "@/domain/derive"
+import { latestRevision, liveAssetIds, rigName, runCandidates, runRefresh, workingContent } from "@/domain/derive"
 import { RESULT_KIND_LABEL } from "@/domain/labels"
 import { describeDiff, diffContent, REASON_LABEL, sessionExposureS } from "@/domain/membership"
 import type { ResultRecord, Run, SelectionReason, Session } from "@/domain/types"
@@ -21,7 +25,7 @@ import { fileName, formatDateTime, formatDuration, formatNight, plural } from "@
 import { addRunSessions, discardRunDraft, removeRunSessions, saveRun, setProductInputs } from "@/store/actions/runs"
 import { type PrototypeState, updateSlice, useStore } from "@/store/core"
 import { type RunContext, runLock } from "./model"
-import { OutcomeNotice, Sha, useOutcome } from "./parts"
+import { OutcomeNotice, RowActions, Sha, useOutcome } from "./parts"
 
 interface SelectRow {
   session: Session
@@ -36,7 +40,8 @@ interface SelectRow {
 export function SelectStep({ ctx }: { ctx: RunContext }) {
   const state = useStore((s) => s)
   const { catalog } = state
-  const { run, subject } = ctx
+  const { run } = ctx
+  const navigate = useNavigate()
   const outcome = useOutcome()
   const content = workingContent(run)
   const lock = runLock(run)
@@ -94,6 +99,18 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
     if (removed.length > 0) outcome.act(removeRunSessions(run.id, removed))
   }
 
+  const rowLabel = (r: SelectRow) => `${formatNight(r.session.night)} ${r.session.channel ?? "No filter"}`
+  const sessionEntries = (r: SelectRow): MenuEntry[] => [
+    { heading: rowLabel(r) },
+    ...(lock
+      ? []
+      : r.member
+        ? [{ label: "Remove from run", icon: ListX, onSelect: () => outcome.act(removeRunSessions(run.id, [r.session.id])) }]
+        : [{ label: "Add to run", icon: ListChecks, onSelect: () => outcome.act(addRunSessions(run.id, [r.session.id], reasonFor(r))) }]),
+    { separator: true },
+    { label: "Open session", icon: Eye, onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: r.session.id } }) },
+  ]
+
   const columns: Column<SelectRow>[] = [
     { id: "night", header: "Night", rowHeader: true, cell: (r) => formatNight(r.session.night, true), sortValue: (r) => r.session.night },
     { id: "channel", header: "Channel", cell: (r) => r.session.channel ?? "No filter", sortValue: (r) => r.session.channel ?? "" },
@@ -116,8 +133,8 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
       header: "State",
       cell: (r) =>
         r.noLongerMatching ? (
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-[0.75rem] font-medium text-warning">No longer matches subject</span>
+          <span className="flex flex-wrap items-center gap-1">
+            <Pill tone="warning">No longer matches</Pill>
             {!lock ? (
               <Button size="xs" variant="outline" onClick={() => outcome.act(removeRunSessions(run.id, [r.session.id]))} aria-label={`Remove ${formatNight(r.session.night)} ${r.session.channel ?? ""} from the run`}>
                 Remove
@@ -130,41 +147,49 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
           <span className="text-[0.75rem] text-muted-foreground">Candidate</span>
         ),
     },
+    { id: "actions", header: "", cell: (r) => <RowActions entries={sessionEntries(r)} label={`Actions for ${rowLabel(r)}`} /> },
   ]
 
   const latest = latestRevision(run)
   const diff = run.draft ? describeDiff(catalog, diffContent(latest, run.draft)) : []
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <OutcomeNotice outcome={outcome.outcome} onDismiss={outcome.clear} />
-      {refresh.newCandidates.length > 0 ? (
-        <Notice
-          tone="info"
-          title={`${plural(refresh.newCandidates.length, "new candidate")} for ${subject ? subjectName(catalog, subject) : "this subject"} on ${rigName(catalog, run.rigId)}`}
-          actions={
-            lock ? null : (
-              <Button size="sm" onClick={() => outcome.act(addRunSessions(run.id, refresh.newCandidates.map((c) => c.session.id), { kind: "refresh-added", detail: refresh.newCandidates[0]!.reason }))}>
-                Add {plural(refresh.newCandidates.length, "new session")}
-              </Button>
-            )
-          }
-        >
-          {refresh.newCandidates.map((c) => `${formatNight(c.session.night)} ${c.session.channel ?? "No filter"}`).join(", ")}
-          {lock ? ` · ${lock}` : ""}
-        </Notice>
-      ) : null}
-      {refresh.noLongerMatching.length > 0 ? (
-        <Notice tone="warning" title={`${plural(refresh.noLongerMatching.length, "member")} no longer match${refresh.noLongerMatching.length === 1 ? "es" : ""} the subject`}>
-          Its Target or rig changed since it was selected. It stays in the run and still counts in project until you remove it.
-        </Notice>
+      {refresh.newCandidates.length > 0 || refresh.noLongerMatching.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1.5" data-refresh>
+          {refresh.newCandidates.length > 0 ? (
+            <>
+              <Pill tone="info" title={refresh.newCandidates.map((c) => `${formatNight(c.session.night)} ${c.session.channel ?? "No filter"}`).join(", ")}>
+                {plural(refresh.newCandidates.length, "new candidate")}
+              </Pill>
+              {lock ? null : (
+                <Button size="xs" onClick={() => outcome.act(addRunSessions(run.id, refresh.newCandidates.map((c) => c.session.id), { kind: "refresh-added", detail: refresh.newCandidates[0]!.reason }))}>
+                  <Plus aria-hidden="true" data-icon="inline-start" />
+                  Add {refresh.newCandidates.length}
+                </Button>
+              )}
+            </>
+          ) : null}
+          {refresh.noLongerMatching.length > 0 ? (
+            <span className="inline-flex items-center gap-1">
+              <Pill tone="warning">{plural(refresh.noLongerMatching.length, "member")} no longer match</Pill>
+              <NoteMarker label="Why members no longer match">Target or rig changed · counts until removed</NoteMarker>
+            </span>
+          ) : null}
+        </div>
       ) : null}
 
-      <Section
-        title="Sessions"
+      <Box
         id="select-sessions"
-        description={`Candidates are this subject's sessions on ${rigName(catalog, run.rigId)}${run.panelId ? ", placed on this panel by pointing" : ""}. Every candidate starts selected.`}
+        level={2}
+        flush
+        title={
+          <span className="flex items-center gap-1.5">
+            Sessions <CountBadge count={selected.length} label={plural(selected.length, "selected session")} />
+          </span>
+        }
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <>
             <ToggleGroup
               aria-label="Channel"
               size="sm"
@@ -176,9 +201,7 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
                 setFilter({ channel: !v || v === "all" ? null : v })
               }}
             >
-              <ToggleGroupItem value="all">
-                All
-              </ToggleGroupItem>
+              <ToggleGroupItem value="all">All</ToggleGroupItem>
               {channels.map((c) => (
                 <ToggleGroupItem key={c} value={c}>
                   {c}
@@ -189,7 +212,7 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
               <Checkbox checked={filter.selectedOnly} onCheckedChange={(checked) => setFilter({ selectedOnly: checked === true })} />
               Selected only
             </label>
-          </div>
+          </>
         }
       >
         <DataTable
@@ -198,10 +221,11 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
           columns={columns}
           getRowId={(r) => r.session.id}
           scroll="none"
-          selection={{ selected, onChange: onSelection, rowLabel: (r) => `${formatNight(r.session.night)} ${r.session.channel ?? "No filter"}`, isSelectable: () => !lock }}
-          empty={<p className="px-3 py-6 text-sm text-muted-foreground">No candidate sessions on this rig yet. Import or confirm sessions with this Target and rig.</p>}
+          selection={{ selected, onChange: onSelection, rowLabel, isSelectable: () => !lock }}
+          contextMenu={sessionEntries}
+          empty={<p className="px-3 py-4 text-sm text-muted-foreground">No candidates on {rigName(catalog, run.rigId)}</p>}
         />
-      </Section>
+      </Box>
 
       <ProductInputs run={run} lock={lock} onOutcome={outcome.act} />
 
@@ -213,19 +237,19 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
             </>
           ) : latest ? (
             <>
-              Revision {latest.revision} saved {formatDateTime(latest.savedAt)} · {latest.accepted.join("; ")}
+              Revision {latest.revision} · {formatDateTime(latest.savedAt)} · {latest.accepted.join("; ")}
             </>
           ) : (
-            "Not saved yet"
+            "Not saved"
           )}
         </p>
         <div className="flex gap-1.5">
           {run.draft ? (
             <Button size="sm" variant="outline" onClick={() => outcome.act(discardRunDraft(run.id))}>
-              Discard changes
+              Discard
             </Button>
           ) : null}
-          <Button id="save-run" size="sm" disabled={!run.draft} onClick={() => outcome.act(saveRun(run.id), { title: `Saved revision ${(latest?.revision ?? 0) + 1}`, reasons: ["Calibrate and Prepare use this revision."], tone: "info" })}>
+          <Button id="save-run" size="sm" disabled={!run.draft} onClick={() => outcome.act(saveRun(run.id), { title: `Saved revision ${(latest?.revision ?? 0) + 1}`, tone: "info" })}>
             Save revision {(latest?.revision ?? 0) + 1}
           </Button>
         </div>
@@ -267,6 +291,12 @@ function ProductInputs({ run, lock, onOutcome }: { run: Run; lock: string | null
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
   const pickable = pickableProducts(state, run)
+  const remove = (r: ProductRow) => onOutcome(setProductInputs(run.id, ids.filter((x) => x !== r.record.id)))
+  const entries = (r: ProductRow): MenuEntry[] => [
+    { heading: fileName(r.record.path) },
+    ...(lock ? [] : [{ label: "Remove", icon: X, onSelect: () => remove(r) }]),
+    { label: "Copy path", icon: Copy, onSelect: () => void navigator.clipboard?.writeText(r.record.path).catch(() => {}) },
+  ]
   const columns: Column<ProductRow>[] = [
     { id: "file", header: "Product", rowHeader: true, truncate: true, cell: (r) => <span title={r.record.path}>{fileName(r.record.path)}</span> },
     { id: "kind", header: "Kind", cell: (r) => (r.record.kind ? RESULT_KIND_LABEL[r.record.kind] : "Unknown kind") },
@@ -275,64 +305,61 @@ function ProductInputs({ run, lock, onOutcome }: { run: Run; lock: string | null
       id: "rig",
       header: "Rig",
       cell: (r) => (
-        <span>
+        <span className="flex flex-wrap items-center gap-1">
           {rigName(state.catalog, r.rigId)}
-          {r.rigId && r.rigId !== run.rigId ? <span className="text-muted-foreground"> · another rig</span> : null}
+          {r.rigId && r.rigId !== run.rigId ? <Pill tone="info">Another rig</Pill> : null}
         </span>
       ),
     },
     { id: "sha", header: "Accepted bytes", cell: (r) => <Sha value={r.record.sha256} /> },
-    {
-      id: "remove",
-      header: "",
-      cell: (r) =>
-        lock ? null : (
-          <Button size="xs" variant="ghost" onClick={() => onOutcome(setProductInputs(run.id, ids.filter((x) => x !== r.record.id)))} aria-label={`Remove ${fileName(r.record.path)}`}>
-            Remove
-          </Button>
-        ),
-    },
+    { id: "actions", header: "", cell: (r) => <RowActions entries={entries(r)} label={`Actions for ${fileName(r.record.path)}`} /> },
   ]
   return (
-    <Section
-      title="Product inputs"
+    <Box
       id="select-products"
-      description="Accepted Results of other runs, any Project and any rig. The one-rig rule applies to raw frames only."
+      level={2}
+      flush
+      title={
+        <span className="flex items-center gap-1.5">
+          Product inputs <CountBadge count={rows.length} label={plural(rows.length, "product input")} />
+          <HelpTip label="Product inputs">Accepted Results, any Project and rig. The one-rig rule covers raw frames only.</HelpTip>
+        </span>
+      }
       actions={
         <Button
-          size="sm"
+          size="xs"
           variant="outline"
           onClick={() => {
             if (lock) {
-              onOutcome({ ok: false, reason: "refused", message: `Add accepted results refused: ${lock}.`, reasons: [lock] })
+              onOutcome({ ok: false, reason: "refused", message: `Add products refused: ${lock}.`, reasons: [lock] })
               return
             }
             setPicked(ids)
             setOpen(true)
           }}
         >
-          Add accepted results…
+          <Plus aria-hidden="true" data-icon="inline-start" />
+          Add products…
         </Button>
       }
     >
-      <DataTable label="Product inputs" rows={rows} columns={columns} getRowId={(r) => r.record.id} scroll="none" empty={<p className="px-3 py-4 text-sm text-muted-foreground">No product inputs. Add an accepted Result to stack or combine it in this run.</p>} />
+      <DataTable label="Product inputs" rows={rows} columns={columns} getRowId={(r) => r.record.id} scroll="none" contextMenu={entries} empty={<p className="px-3 py-3 text-sm text-muted-foreground">None</p>} />
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Add accepted results</DialogTitle>
-            <DialogDescription>Accepted products from runs outside the Trash, in any Project. A product from another rig shows its rig.</DialogDescription>
+            <DialogTitle>Add products</DialogTitle>
           </DialogHeader>
           <ul className="max-h-80 space-y-1 overflow-y-auto">
-            {pickable.length === 0 ? <li className="text-sm text-muted-foreground">No accepted product is available yet.</li> : null}
+            {pickable.length === 0 ? <li className="text-sm text-muted-foreground">No accepted products</li> : null}
             {pickable.map((p) => (
               <li key={p.record.id}>
                 <label className="flex items-start gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/60">
                   <Checkbox className="mt-0.5" checked={picked.includes(p.record.id)} onCheckedChange={(checked) => setPicked((cur) => (checked ? [...cur, p.record.id] : cur.filter((x) => x !== p.record.id)))} />
                   <span className="min-w-0">
                     <span className="block font-medium">{fileName(p.record.path)}</span>
-                    <span className="block text-xs text-muted-foreground">
+                    <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                       {p.record.kind ? RESULT_KIND_LABEL[p.record.kind] : "Unknown kind"} · {p.origin} · {rigName(state.catalog, p.rigId)}
-                      {p.rigId !== run.rigId ? " (another rig)" : ""}
+                      {p.rigId !== run.rigId ? <Pill tone="info">Another rig</Pill> : null}
                     </span>
                   </span>
                 </label>
@@ -351,6 +378,6 @@ function ProductInputs({ run, lock, onOutcome }: { run: Run; lock: string | null
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Section>
+    </Box>
   )
 }

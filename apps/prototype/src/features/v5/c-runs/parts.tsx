@@ -1,19 +1,23 @@
 /**
  * Slice C UI parts shared by the run and run group pages: the step bar (the
- * pane's gate bar, glyph plus word), the inline outcome of an action
- * (refusals name each blocker), radio option cards, the Prototype menu for
+ * pane's gate bar, glyph plus word), the inline outcome of an action (a
+ * refusal is the foundation's terse `Refusal` with its blockers as chips; a
+ * success is one status line), radio option cards, the Prototype menu for
  * simulated-disk controls, and small read-outs. The run status is the shared
  * `StatusBadge kind="run"`.
  */
-import { FlaskConical } from "lucide-react"
+import { CircleCheck, FlaskConical, MoreHorizontal, X } from "lucide-react"
 import { type ReactNode, useCallback, useState } from "react"
 import { CurrentLink, StepGlyph } from "@/app/run-ui"
-import { Notice } from "@/components/app/feedback"
+import { Refusal } from "@/components/app/refusal"
 import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import type { MenuEntry } from "@/components/app/row-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { RadioGroupItem } from "@/components/ui/radio-group"
-import { GATE_LABEL, type RunStepState } from "@/domain/derive"
-import type { RunStep } from "@/domain/types"
+import { GATE_LABEL, type RunStepState, type StepLink } from "@/domain/derive"
+import type { Catalog, RunStep } from "@/domain/types"
+import { profileOptions } from "@/features/v5/b-projects/start-run"
+import { plural } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { CommitResult } from "@/store/core"
 
@@ -73,9 +77,18 @@ export function StepBar({ steps, here, nextId, linkFor, label }: { steps: RunSte
 // ---------------------------------------------------------------------------
 
 export interface Outcome {
+  /** "Prepare M 31 blocked", or a success: "Prepared". */
   title: string
-  reasons: string[]
+  /** Blockers of a refusal; the reason of a failure. A success carries none. */
+  reasons?: string[]
   tone: "refusal" | "warning" | "info"
+}
+
+/** A store refusal title ("Prepare M 31 refused") in the terse form: "Prepare M 31 blocked". */
+function refusalTitle(r: Extract<CommitResult, { reason: "refused" }>): string {
+  const suffix = `: ${r.reasons.join("; ")}.`
+  const title = r.message.endsWith(suffix) ? r.message.slice(0, -suffix.length) : "Blocked"
+  return title.endsWith(" refused") ? `${title.slice(0, -" refused".length)} blocked` : title
 }
 
 /**
@@ -91,39 +104,40 @@ export function useOutcome(resetKey?: string) {
       setOutcome(success ? { value: success, key: resetKey } : null)
       return true
     }
-    if (r.reason === "refused") {
-      const suffix = `: ${r.reasons.join("; ")}.`
-      const title = r.message.endsWith(suffix) ? r.message.slice(0, -suffix.length) : "Refused"
-      setOutcome({ value: { title, reasons: r.reasons, tone: "refusal" }, key: resetKey })
-    } else setOutcome({ value: { title: r.reason === "stale" ? "Changed elsewhere" : "Not saved", reasons: [r.message], tone: "warning" }, key: resetKey })
+    if (r.reason === "refused") setOutcome({ value: { title: refusalTitle(r), reasons: r.reasons, tone: "refusal" }, key: resetKey })
+    else setOutcome({ value: { title: r.reason === "stale" ? "Changed elsewhere" : "Not saved", reasons: [r.message], tone: "warning" }, key: resetKey })
     return false
   }, [resetKey])
   return { outcome: outcome && outcome.key === resetKey ? outcome.value : null, act, clear: () => setOutcome(null) }
 }
 
-export function OutcomeNotice({ outcome, onDismiss, className }: { outcome: Outcome | null; onDismiss: () => void; className?: string }) {
+/** The outcome beside its control: `<Action> blocked · N blockers ▸` with chips (linked through `linkFor`), or one status line. */
+export function OutcomeNotice({ outcome, onDismiss, className, linkFor }: { outcome: Outcome | null; onDismiss: () => void; className?: string; linkFor?: (blocker: string) => StepLink | undefined }) {
   if (!outcome) return null
+  const reasons = outcome.reasons ?? []
+  const dismiss = (
+    <Button size="icon-xs" variant="ghost" onClick={onDismiss} aria-label="Dismiss" title="Dismiss">
+      <X aria-hidden="true" />
+    </Button>
+  )
+  if (outcome.tone === "info") {
+    return (
+      <div role="status" className={cn("flex min-w-0 items-center gap-1.5 text-sm", className)} data-outcome="info">
+        <CircleCheck aria-hidden="true" className="size-3.5 shrink-0 text-success" />
+        <span className="min-w-0 truncate">{outcome.title}</span>
+        {dismiss}
+      </div>
+    )
+  }
   return (
-    <Notice
-      tone={outcome.tone}
-      title={outcome.title}
-      className={className}
-      actions={
-        <Button size="sm" variant="outline" onClick={onDismiss}>
-          Dismiss
-        </Button>
-      }
-    >
-      {outcome.reasons.length === 1 ? (
-        <p>{outcome.reasons[0]}</p>
+    <div className={cn("flex min-w-0 items-start gap-1.5", className)} data-outcome={outcome.tone}>
+      {outcome.tone === "refusal" ? (
+        <Refusal className="min-w-0 flex-1" action={outcome.title} reason={plural(reasons.length, "blocker")} blockers={reasons.map((label) => ({ label, link: linkFor?.(label) }))} />
       ) : (
-        <ul className="list-disc space-y-0.5 pl-4">
-          {outcome.reasons.map((r) => (
-            <li key={r}>{r}</li>
-          ))}
-        </ul>
+        <Refusal className="min-w-0 flex-1" action={outcome.title} reason={reasons[0] ?? "try again"} blockers={[]} />
       )}
-    </Notice>
+      {dismiss}
+    </div>
   )
 }
 
@@ -180,6 +194,45 @@ export function PrototypeMenu({ actions, label = "Prototype" }: { actions: Proto
       </DropdownMenuContent>
     </DropdownMenu>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Row actions
+// ---------------------------------------------------------------------------
+
+/**
+ * The ⋯ button of a row: the same `MenuEntry` list its right-click menu
+ * shows, so every context-menu item is reachable from the row itself.
+ * Headings label the right-click menu only.
+ */
+export function RowActions({ entries, label }: { entries: MenuEntry[]; label: string }) {
+  const items = entries.filter((e) => !("heading" in e))
+  if (!items.some((e) => "label" in e)) return null
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button size="icon-sm" variant="ghost" className="-my-1" aria-label={label} />}>
+        <MoreHorizontal aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        {items.map((e, i) =>
+          "separator" in e ? (
+            // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity
+            <DropdownMenuSeparator key={`sep-${i}`} />
+          ) : "label" in e ? (
+            <DropdownMenuItem key={e.label} disabled={e.disabled} variant={e.destructive ? "destructive" : "default"} onClick={e.onSelect}>
+              {e.icon ? <e.icon aria-hidden="true" /> : null}
+              {e.label}
+            </DropdownMenuItem>
+          ) : null,
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** A profile's name as the pickers show it (one convention with Start run): the generic launcher reads "Other app". */
+export function profileLabel(catalog: Catalog, profileId: string | null): string {
+  return profileOptions(catalog).find((o) => o.value === profileId)?.label ?? "Application"
 }
 
 // ---------------------------------------------------------------------------

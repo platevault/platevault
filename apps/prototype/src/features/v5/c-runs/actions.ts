@@ -9,10 +9,12 @@
  * exercise discovery and re-verification.
  */
 import { basisFiles, type CalSource } from "@/domain/calibration"
+import { calibrationStorage, masterStoragePath } from "@/domain/calibration-process"
 import { completeRefusals, groupHref, groupPipeline, latestRevision, runHref, runPreparations, runSetup, workingContent } from "@/domain/derive"
 import { createFolder, fakeSha256, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { stableHash } from "@/domain/indexing"
 import { RESULT_KIND_LABEL } from "@/domain/labels"
+import { namingValues } from "@/domain/templates"
 import { memberSessions } from "@/domain/membership"
 import type {
   CalibrationAssignment,
@@ -50,7 +52,7 @@ import type { PreparePayload } from "./operations"
 export function groupSetupRefusals(state: PrototypeState, group: RunGroup): string[] {
   return livePanelRuns(state, group)
     .filter((r) => r.completion === "complete")
-    .map((r) => `${r.name} is Complete; Reopen it before the shared setup changes`)
+    .map((r) => `${r.name} Complete`)
 }
 
 export function changeRunSetup(runId: string, patch: Partial<RunSetup>): CommitResult {
@@ -68,7 +70,7 @@ export function changeGroupSetup(groupId: string, patch: Partial<RunSetup>): Com
   const group = state.catalog.runGroups[groupId]
   if (!group) return MISSING
   const blockers = groupSetupRefusals(state, group)
-  if (blockers.length > 0) return refuse(`Shared setup change for ${group.name} refused`, blockers, groupHref(group, "prepare"))
+  if (blockers.length > 0) return refuse(`Shared setup change refused`, blockers, groupHref(group, "prepare"))
   return setGroupSetup(groupId, patch)
 }
 
@@ -158,7 +160,7 @@ export function calibrationException(runId: string, sessionId: string, kind: Cal
   const trimmed = reason.trim()
   if (!trimmed) {
     const run = store.getState().catalog.runs[runId]
-    return refuse("Exception refused", ["An exception needs a reason"], run ? runHref(run, "calibrate") : null)
+    return refuse("Exception refused", ["No reason"], run ? runHref(run, "calibrate") : null)
   }
   return decide(runId, sessionId, kind, { input: source?.input ?? null, state: "exception", criteria, exception: { reason: trimmed, at: nowIso() }, basis: basisOf(source?.input ?? null) }, source ? `Exception: ${source.name}` : `Exception: no ${kind}`)
 }
@@ -172,29 +174,49 @@ export function clearCalibration(runId: string, sessionId: string, kind: Calibra
   return decide(runId, sessionId, kind, null, `Automatic ${kind}`)
 }
 
-/** A master found in Results is offered once: Add to the calibration library, or Dismiss (D-W55). */
+/**
+ * A master found in Results is offered: Add to the calibration library, which
+ * files a copy into structured calibration storage (P-CAL3), or Dismiss,
+ * which the Calibration library's Dismissed filter can restore (P-CAL2).
+ */
 export function answerMasterOffer(runId: string, masterId: string, answer: "adopt" | "dismiss"): CommitResult {
   const state = store.getState()
   const run = state.catalog.runs[runId]
   const master = state.catalog.masters[masterId]
   if (!run || !master) return MISSING
   const href = runHref(run, "calibrate")
-  if (!run.masterOffers.some((o) => o.masterId === masterId && o.state === "pending")) return refuse("Offer already answered", [`${fileName(master.path)} was offered once and already answered`], href)
+  const name = fileName(master.origin.sourcePath)
+  if (!run.masterOffers.some((o) => o.masterId === masterId && o.state === "pending")) return refuse("Offer refused", ["Already answered"], href)
   if (answer === "dismiss") {
     const result = editRun(run.id, "Dismiss master offer", (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "dismissed", at: nowIso() } : o)) }), { step: "calibrate", record: false })
-    if (result.ok) recordSaved(`Dismissed ${fileName(master.path)}`, "Calibration › Dismissed can restore the offer.", href)
+    if (result.ok) recordSaved(`Dismissed ${name}`, "Calibration › Dismissed", "/calibration?filter=dismissed")
     return result
   }
+  const title = `Add ${name} refused`
   const source = fileAt(state.disk, master.origin.sourcePath)
-  if (!source) return refuse(`Add ${fileName(master.path)} refused`, [`${master.origin.sourcePath} cannot be read now`], href)
-  if (source.growing) return refuse(`Add ${fileName(master.path)} refused`, ["The application is still writing it"], href)
-  const location = Object.values(state.catalog.locations).find((l) => l.role === "calibration" && !l.retiredAt)
-  if (!location) return refuse(`Add ${fileName(master.path)} refused`, ["No Calibration library location is registered; add one in Settings › Locations"], href)
+  if (!source) return refuse(title, ["Unreadable now"], href)
+  if (source.growing) return refuse(title, ["Still being written"], href)
+  const location = calibrationStorage(state.catalog)
+  if (!location) return refuse(title, ["No Calibration location"], href)
   const volume = state.disk.volumes[location.volumeId]
-  if (!volume?.mounted) return refuse(`Add ${fileName(master.path)} refused`, [`${location.displayName} is offline`], href)
-  if (!volume.writable) return refuse(`Add ${fileName(master.path)} refused`, [`${location.displayName} is not writable`], href)
-  const destinationPath = `${location.path}/Masters/${fileName(master.path)}`
-  if (fileAt(state.disk, destinationPath)) return refuse(`Add ${fileName(master.path)} refused`, [`${destinationPath} already exists; nothing was overwritten`], href)
+  if (!volume?.mounted) return refuse(title, [`${location.displayName} offline`], href)
+  if (!volume.writable) return refuse(title, [`${location.displayName} not writable`], href)
+  const night = master.createdAt.slice(0, 10)
+  const values = namingValues({
+    target: null,
+    filter: master.channel,
+    night,
+    frameType: `master-${master.kind}`,
+    camera: master.cameraName,
+    exposureS: master.kind === "bias" ? null : master.exposureS,
+    gain: master.gain,
+    offset: master.offset,
+    binning: master.binning,
+    ccdTempC: master.ccdTempC,
+    train: master.opticalTrainId ? (state.catalog.opticalTrains[master.opticalTrainId]?.name ?? null) : null,
+  })
+  const destinationPath = masterStoragePath(location, state.settings.naming, master.kind, values, night, source.path.slice(source.path.lastIndexOf(".") + 1))
+  if (fileAt(state.disk, destinationPath)) return refuse(title, ["Name taken"], href)
   const at = nowIso()
   const copy = makeFile({ path: destinationPath, volumeId: location.volumeId, sizeBytes: source.sizeBytes, kind: source.kind, header: source.header, sha256: source.sha256, modifiedAt: at })
   const result = editRun(
@@ -210,7 +232,7 @@ export function answerMasterOffer(runId: string, masterId: string, answer: "adop
       }),
     },
   )
-  if (result.ok) recordSaved(`Added ${fileName(master.path)} to the calibration library`, `Copied to ${destinationPath}; SHA-256 verified. The Results copy stays.`, "/calibration")
+  if (result.ok) recordSaved(`Added ${name} to the calibration library`, destinationPath, "/calibration")
   return result
 }
 
@@ -220,7 +242,7 @@ export function answerMasterOffer(runId: string, masterId: string, answer: "adop
 
 function blockingReasons(plan: ReturnType<typeof preparePlan>): string[] {
   const reasons = plan.checks.filter((c) => c.blocking && !c.ok).map((c) => `${c.label}: ${c.detail}`)
-  if (reasons.length === 0 && plan.entries.every((e) => e.unavailable)) reasons.push("Every input is unreadable now; nothing could be prepared")
+  if (reasons.length === 0 && plan.entries.every((e) => e.unavailable)) reasons.push("Every input unreadable")
   return reasons
 }
 
@@ -309,7 +331,7 @@ export function prepareAll(groupId: string): { result: CommitResult; operationId
   if (!group) return { result: MISSING, operationIds: [] }
   const panels = livePanelRuns(state, group).filter((r) => r.completion !== "complete")
   const href = groupHref(group, "prepare")
-  if (panels.length === 0) return { result: refuse(`Prepare all ${group.name} refused`, ["Every panel outside the Trash is Complete; Reopen a panel first"], href), operationIds: [] }
+  if (panels.length === 0) return { result: refuse(`Prepare all ${group.name} refused`, ["Every panel Complete"], href), operationIds: [] }
   const groupRevision = Math.max(0, ...Object.values(state.catalog.preparations).filter((p) => p.groupId === group.id).map((p) => p.prepRevision)) + 1
   const choices = prepareChoices(state, group.id)
   const blockers: string[] = []
@@ -330,10 +352,10 @@ export function prepareAll(groupId: string): { result: CommitResult; operationId
 
 function launchOutcome(state: PrototypeState, profileId: string): { outcome: "opened" | "missing-executable" | "launch-failed"; refusal: string | null } {
   const profile = state.catalog.profiles[profileId]
-  if (!profile) return { outcome: "missing-executable", refusal: "The preparation's profile is no longer configured" }
+  if (!profile) return { outcome: "missing-executable", refusal: "Profile removed" }
   if (profile.executableState === "found") return { outcome: "opened", refusal: null }
-  if (profile.executableState === "launch-fails") return { outcome: "launch-failed", refusal: `${profile.name} did not launch. Check it in Settings › Applications` }
-  return { outcome: "missing-executable", refusal: `${profile.name} is not located. Locate the executable in Settings › Applications` }
+  if (profile.executableState === "launch-fails") return { outcome: "launch-failed", refusal: `${profile.name} did not launch` }
+  return { outcome: "missing-executable", refusal: `${profile.name} not located` }
 }
 
 /**
@@ -347,8 +369,8 @@ export function openPreparation(runId: string): CommitResult {
   if (!run) return MISSING
   const href = runHref(run, "prepare")
   const prep = currentPreparation(run, runPreparations(state.catalog, run.id))
-  if (!prep) return refuse(`Open ${run.name} refused`, ["Prepare the latest revision first"], href)
-  if (prep.state !== "prepared") return refuse(`Open ${run.name} refused`, [prep.state === "partial" ? `The preparation is Partial: ${plural(prep.blocked.length, "input")} could not be prepared. Prepare again once they are readable` : `The preparation is ${prep.state}`], href)
+  if (!prep) return refuse(`Open ${run.name} refused`, ["Not prepared"], href)
+  if (prep.state !== "prepared") return refuse(`Open ${run.name} refused`, [prep.state === "partial" ? `Partial · ${plural(prep.blocked.length, "input")} blocked` : `Preparation ${prep.state}`], href)
   const check = verifyPreparation(state, prep)
   const at = nowIso()
   if (check.changed.length > 0) {
@@ -372,7 +394,7 @@ export function openGroupFolder(groupId: string): CommitResult {
   const pipeline = groupPipeline(state, group)
   if (!pipeline.allVerified) {
     const waiting = pipeline.panels.filter((p) => !p.trashed && p.pipeline.steps[3]!.state !== "done").map((p) => `${p.run.name}: ${p.pipeline.steps[3]!.status}`)
-    return refuse(`Open ${group.name} refused`, ["Every panel outside the Trash must be prepared and verified", ...waiting], href)
+    return refuse(`Open ${group.name} refused`, waiting, href)
   }
   const at = nowIso()
   const changed: Array<{ prepId: string; run: Run; items: Array<{ path: string; reason: string }> }> = []
@@ -500,7 +522,7 @@ export function discoverResults(target: { runId?: string; groupId?: string }): {
     const candidates = records.filter((r) => !r.intermediate).length
     recordSaved(
       `Results found: ${run?.name ?? group!.name}`,
-      [candidates > 0 ? plural(candidates, "candidate") : null, records.length - candidates > 0 ? plural(records.length - candidates, "intermediate") : null, masters.length > 0 ? plural(masters.length, "calibration master") : null].filter(Boolean).join(", ") + ". None is accepted until you accept it.",
+      [candidates > 0 ? plural(candidates, "candidate") : null, records.length - candidates > 0 ? plural(records.length - candidates, "intermediate") : null, masters.length > 0 ? plural(masters.length, "calibration master") : null].filter(Boolean).join(", "),
       href,
     )
   }
@@ -516,13 +538,13 @@ export function attachResult(target: { runId?: string; groupId?: string }, path:
   const href = run ? runHref(run, "results") : groupHref(group!, "results")
   const title = `Attach ${fileName(path) || "Result"} refused`
   const trimmed = path.trim()
-  if (!trimmed.startsWith("/")) return refuse(title, ["Enter the file's full path, starting with /"], href)
-  if (run?.trashedAt) return refuse(title, [`${run.name} is in the Project's Trash`], href)
+  if (!trimmed.startsWith("/")) return refuse(title, ["Not a full path"], href)
+  if (run?.trashedAt) return refuse(title, ["In the Project Trash"], href)
   const file = fileAt(state.disk, trimmed)
-  if (!file) return refuse(title, [`Nothing readable at ${trimmed}: the file is missing or its volume is offline`], href)
-  if (Object.values(state.catalog.results).some((r) => r.path === trimmed && !r.trashed)) return refuse(title, ["That file is already listed as a Result"], href)
-  if (recognize(file, false).type === "ignored") return refuse(title, ["Logs and text files are not image products"], href)
-  if (kind === "assembled-mosaic" && !group) return refuse(title, ["Assembled mosaic is a run group's Result; attach it on the run group"], href)
+  if (!file) return refuse(title, ["Unreadable or offline"], href)
+  if (Object.values(state.catalog.results).some((r) => r.path === trimmed && !r.trashed)) return refuse(title, ["Already listed"], href)
+  if (recognize(file, false).type === "ignored") return refuse(title, ["Not an image"], href)
+  if (kind === "assembled-mosaic" && !group) return refuse(title, ["Run group only"], href)
   const owner = run ? { runId: run.id, groupId: run.groupId } : { runId: null, groupId: group!.id }
   const record = newRecord(owner, file, kind, channel?.trim() || null, false, "attached")
   const result = commit("Attach Result", (s) => withCatalog(s, (c) => ({ ...c, results: { ...c.results, [record.id]: record } })), { href })
@@ -548,7 +570,7 @@ export function inspectResult(resultId: string): CommitResult {
   if (!record) return MISSING
   const href = resultHref(state, record)
   const file = fileAt(state.disk, record.path)
-  if (!file) return refuse(`Inspect ${fileName(record.path)} refused`, ["The file cannot be read now"], href)
+  if (!file) return refuse(`Inspect ${fileName(record.path)} refused`, ["Unreadable now"], href)
   const result = editResult(resultId, "Inspect Result", (r) => ({ ...r, sha256: file.sha256, processingState: file.growing ? "pending" : "written", contentState: "unchanged" }), href)
   if (result.ok) recordSaved(`Inspected ${fileName(record.path)}`, `SHA-256 ${file.sha256.slice(0, 12)}… recorded.`, href)
   return result
@@ -561,15 +583,15 @@ export function acceptResult(resultId: string): CommitResult {
   if (!record) return MISSING
   const href = resultHref(state, record)
   const title = `Accept ${fileName(record.path)} refused`
-  if (record.intermediate) return refuse(title, ["Processing intermediates are never candidates"], href)
+  if (record.intermediate) return refuse(title, ["Intermediate"], href)
   const file = fileAt(state.disk, record.path)
-  if (!file) return refuse(title, ["The file cannot be read now"], href)
-  if (file.growing) return refuse(title, ["Pending: the application is still writing it"], href)
-  if (file.sha256 !== record.sha256) return refuse(title, ["Its bytes changed since inspection (SHA-256 differs). Inspect it again first"], href)
-  if (record.kind === null) return refuse(title, ["Choose its kind first"], href)
+  if (!file) return refuse(title, ["Unreadable now"], href)
+  if (file.growing) return refuse(title, ["Still being written"], href)
+  if (file.sha256 !== record.sha256) return refuse(title, ["Changed since inspection"], href)
+  if (record.kind === null) return refuse(title, ["No kind"], href)
   const at = nowIso()
   const result = editResult(resultId, "Accept Result", (r) => ({ ...r, acceptance: "accepted", acceptedAt: at, processingState: "written" }), href)
-  if (result.ok) recordSaved(`Accepted ${fileName(record.path)}`, `Bound to SHA-256 ${file.sha256.slice(0, 12)}…; protected Keep, never listed by Clean up.`, href)
+  if (result.ok) recordSaved(`Accepted ${fileName(record.path)}`, `SHA-256 ${file.sha256.slice(0, 12)}…`, href)
   return result
 }
 
@@ -587,10 +609,10 @@ export function startRunWithResult(resultId: string, projectId: string, subjectI
   const project = state.catalog.projects[projectId]
   if (!record || !project) return { result: MISSING, runId: null }
   const href = resultHref(state, record)
-  const title = `Use ${fileName(record.path)} as an input refused`
-  if (record.acceptance !== "accepted" || record.intermediate) return { result: refuse(title, ["Accept it first: only accepted products are inputs"], href), runId: null }
+  const title = `Use ${fileName(record.path)} refused`
+  if (record.acceptance !== "accepted" || record.intermediate) return { result: refuse(title, ["Not accepted"], href), runId: null }
   const subject = project.subjects.find((s) => s.id === subjectId)
-  if (subject?.mosaic) return { result: refuse(title, ["A mosaic subject starts a run group; add the product in a panel run's Select step"], href), runId: null }
+  if (subject?.mosaic) return { result: refuse(title, ["Mosaic subject"], href), runId: null }
   const started = startRun(projectId, subjectId, rigId)
   if (!started.result.ok || !started.runId) return { result: started.result, runId: null }
   const run = store.getState().catalog.runs[started.runId]
@@ -610,14 +632,14 @@ export function startCleanup(runId: string, paths: string[]): { result: CommitRe
   if (!run) return { result: MISSING, operationId: null }
   const href = runHref(run, "done")
   const title = `Clean up ${run.name} refused`
-  if (run.trashedAt) return { result: refuse(title, [`${run.name} is in the Project's Trash; Empty Trash handles its folders`], href), operationId: null }
-  if (run.completion !== "complete") return { result: refuse(title, ["Clean up comes after Complete: mark the run Complete first"], href), operationId: null }
+  if (run.trashedAt) return { result: refuse(title, ["In the Project Trash"], href), operationId: null }
+  if (run.completion !== "complete") return { result: refuse(title, ["Not Complete"], href), operationId: null }
   const running = completeRefusals(state, run)
   if (running.length > 0) return { result: refuse(title, running, href), operationId: null }
   const review = cleanupReview(state, run)
   const allowed = new Set(review.entries.map((e) => e.path))
   const chosen = paths.filter((p) => allowed.has(p))
-  if (chosen.length === 0) return { result: refuse(title, ["No prepared entry is selected"], href), operationId: null }
+  if (chosen.length === 0) return { result: refuse(title, ["Nothing selected"], href), operationId: null }
   const operationId = moveToOsTrash({
     kind: "run-cleanup",
     title: `Clean up ${run.name}`,
@@ -637,7 +659,7 @@ export function completeAllPanels(groupId: string): CommitResult {
   const group = state.catalog.runGroups[groupId]
   if (!group) return MISSING
   const open = livePanelRuns(state, group).filter((r) => r.completion !== "complete")
-  if (open.length === 0) return refuse(`Complete all ${group.name} refused`, ["Every panel outside the Trash is already Complete"], groupHref(group, "done"))
+  if (open.length === 0) return refuse(`Complete all ${group.name} refused`, ["Every panel Complete"], groupHref(group, "done"))
   const blockers = open.flatMap((r) => completeRefusals(state, r).map((reason) => `${r.name}: ${reason}`))
   if (blockers.length > 0) return refuse(`Complete all ${group.name} refused`, blockers, groupHref(group, "done"))
   for (const run of open) {

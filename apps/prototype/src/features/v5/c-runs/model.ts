@@ -5,7 +5,8 @@
  * list and the calibration readiness line. Nothing here writes; the slice's
  * actions and operation handlers in `actions.ts` and `operations.ts` do.
  */
-import { calibrationPlan, type CalibrationPlan, handoffCalibration, KIND_LABEL, KINDS, type RequirementRow } from "@/domain/calibration"
+import { calibrationPlan, type CalibrationPlan, handoffCalibration, KIND_LABEL, KINDS, lightGeometry, matchCriteria, type RequirementRow, summarize } from "@/domain/calibration"
+import { calibrationProcesses, type ProcessView } from "@/domain/calibration-process"
 import { latestCorrection } from "@/domain/corrections"
 import { findPanel, findSubject, latestRevision, runPreparations, runSetup, savedContent, workingContent } from "@/domain/derive"
 import { fileAt, filesUnder, freeBytes, volumeForPath } from "@/domain/disk"
@@ -58,8 +59,8 @@ export function runContext(state: PrototypeState, runId: string): RunContext | n
 
 /** Why a run's setup, calibration or preparation cannot change now; null when it can. */
 export function runLock(run: Run): string | null {
-  if (run.trashedAt) return `${run.name} is in the Project's Trash. Restore it first.`
-  if (run.completion === "complete") return `${run.name} is Complete. Reopen it to change it.`
+  if (run.trashedAt) return "In the Project Trash"
+  if (run.completion === "complete") return "Complete · Reopen to change"
   return null
 }
 
@@ -109,12 +110,12 @@ export function pathOccupied(state: PrototypeState, path: string): boolean {
 }
 
 export function parentProblem(state: PrototypeState, parent: OutputParent): ParentProblem | null {
-  if (!parent.path) return { kind: "none", message: "Choose an output folder. PlateVault assumes no root on first use." }
+  if (!parent.path) return { kind: "none", message: "No output folder" }
   const volumeId = volumeForPath(state.disk, parent.path)
   const volume = volumeId ? state.disk.volumes[volumeId] : undefined
-  if (!volume || !volume.mounted) return { kind: "offline", message: `${volume?.name ?? parent.path} is offline. Choose another output folder; PlateVault never substitutes another drive.` }
-  if (!folderExists(state, parent.path)) return { kind: "missing", message: `${parent.path} no longer exists. Choose another output folder.` }
-  if (!volume.writable || state.disk.readOnlyPaths.some((p) => isUnder(parent.path!, p))) return { kind: "read-only", message: `PlateVault cannot write to ${parent.path}: write permission is removed. Choose another output folder.` }
+  if (!volume || !volume.mounted) return { kind: "offline", message: `${volume?.name ?? parent.path} offline` }
+  if (!folderExists(state, parent.path)) return { kind: "missing", message: `${fileName(parent.path)} missing` }
+  if (!volume.writable || state.disk.readOnlyPaths.some((p) => isUnder(parent.path!, p))) return { kind: "read-only", message: `${fileName(parent.path)} not writable` }
   return null
 }
 
@@ -434,24 +435,24 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
   const readOnlyProfile = profile?.capability.verified === true && profile.capability.inputWrite === "read-only"
   const modes: ModeOption[] = MODES.map((m) => {
     const reasons: string[] = []
-    if (profile && !profile.capability.inputModes.includes(m)) reasons.push(`${profile.name} has no recorded support for ${MODE_LABEL[m]}.`)
+    if (profile && !profile.capability.inputModes.includes(m)) reasons.push(`${profile.name}: not supported`)
     if ((m === "linked" || m === "direct-source") && profile && !readOnlyProfile) {
-      reasons.push(`${profile.name} has ${profile.capability.inputWrite === "write-prone" ? "write-prone" : "unknown"} input-write behaviour, so it could write into your originals. Use Copy or Clone (D04).`)
+      reasons.push(`${profile.name}: ${profile.capability.inputWrite === "write-prone" ? "write-prone" : "input writes unknown"}`)
     }
     if (m === "linked" && destination) {
       const can = choices.linkType === "hardlink" ? destination.links.hardlink : destination.links.symlink
-      if (!can) reasons.push(`${destName} does not support ${choices.linkType === "hardlink" ? "hard links" : "symbolic links"}.`)
-      else if (choices.linkType === "hardlink" && [...sourceVolumes].some((v) => v !== destination.id)) reasons.push(`Hard links need every source on ${destName}; some sources are on another volume.`)
+      if (!can) reasons.push(`${destName}: no ${choices.linkType === "hardlink" ? "hard links" : "symbolic links"}`)
+      else if (choices.linkType === "hardlink" && [...sourceVolumes].some((v) => v !== destination.id)) reasons.push("Sources on another volume")
     }
     if (m === "direct-source" && profile?.capability.directSource === "whole-folder" && (content?.excluded.length ?? 0) > 0) {
-      reasons.push(`${profile.name} reads whole folders, which would hand off ${plural(content!.excluded.length, "excluded frame")}. Use a prepared mode.`)
+      reasons.push(`Reads whole folders · ${plural(content!.excluded.length, "excluded frame")}`)
     }
-    if (m === "direct-source" && profile?.capability.directSource === "none") reasons.push(`${profile.name} records no way to pass exact source paths.`)
+    if (m === "direct-source" && profile?.capability.directSource === "none") reasons.push(`${profile.name}: no source paths`)
     if (m === "clone" && destination) {
-      if (!destination.links.clone) reasons.push(`${destName} does not support clones.`)
-      else if ([...sourceVolumes].some((v) => v !== destination.id)) reasons.push(`Clones need every source on ${destName}; some sources are on another volume.`)
+      if (!destination.links.clone) reasons.push(`${destName}: no clones`)
+      else if ([...sourceVolumes].some((v) => v !== destination.id)) reasons.push("Sources on another volume")
     }
-    if (m === "copy" && free !== null && totalBytes > free) reasons.push(`Copy needs ${formatBytes(totalBytes)}; ${destName} has ${formatBytes(free)} free.`)
+    if (m === "copy" && free !== null && totalBytes > free) reasons.push(`Needs ${formatBytes(totalBytes)} · ${formatBytes(free)} free`)
     const footprintBytes = m === "copy" ? totalBytes : m === "clone" ? Math.round(totalBytes * 0.001) : 0
     return { mode: m, allowed: reasons.length === 0, reasons, semantics: modeSemantics(m, choices.linkType), footprintBytes }
   })
@@ -459,16 +460,16 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
   const chosen = mode ? modes.find((m) => m.mode === mode)! : null
   const isolated = mode === "copy" || mode === "clone"
   const checks: PlanCheck[] = []
-  checks.push({ id: "membership", label: "Saved membership", ok: revision !== null, blocking: true, detail: revision ? `Revision ${revision.revision}, saved` : run.draft ? "Save the run's selection first: Prepare uses a saved revision." : "Save a selection first." })
+  checks.push({ id: "membership", label: "Saved membership", ok: revision !== null, blocking: true, detail: revision ? `Revision ${revision.revision}` : run.draft ? "Unsaved changes" : "Not saved" })
   const calOk = calibration.policy === "off" || (calibration.rows.length > 0 && calibration.needsReview.length === 0) || (members.length === 0 && (content?.productInputs.length ?? 0) > 0)
   checks.push({
     id: "calibration",
     label: "Calibration",
     ok: calOk,
     blocking: true,
-    detail: calibration.policy === "off" ? "Calibration off: none is handed off." : calOk ? `${plural(handoffCalibration(catalog, calibration).length, "input")} for ${plural(calibration.rows.length, "requirement")}` : `${plural(calibration.needsReview.length, "requirement")} need review in Calibrate.`,
+    detail: calibration.policy === "off" ? "Off" : calOk ? `${plural(handoffCalibration(catalog, calibration).length, "master")}` : `${plural(calibration.needsReview.length, "requirement")} to review`,
   })
-  checks.push({ id: "profile", label: "Application profile", ok: profile !== null, blocking: true, detail: profile ? profile.name : "Choose an application profile." })
+  checks.push({ id: "profile", label: "Application profile", ok: profile !== null, blocking: true, detail: profile ? profile.name : "Not chosen" })
   const products = (content?.productInputs ?? []).map((id) => catalog.results[id]).filter((r): r is ResultRecord => r !== undefined)
   if (products.length > 0 && profile) {
     const unsupported = products.filter((r) => r.kind === null || !profile.capability.productInputKinds.includes(r.kind))
@@ -480,7 +481,7 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
       detail:
         unsupported.length === 0
           ? `${profile.name} reads ${[...new Set(products.map((r) => (r.kind ? PRODUCT_KIND_LABEL[r.kind] : "unknown kind")))].join(" and ")}`
-          : `${profile.name} has no recorded support for ${unsupported.map((r) => `${fileName(r.path)} (${r.kind ? PRODUCT_KIND_LABEL[r.kind] : "unknown kind"})`).join(", ")}. Choose another application or remove it in Select.`,
+          : `Unsupported: ${unsupported.map((r) => fileName(r.path)).join(", ")}`,
     })
   }
   const undecided = diffs.filter((d) => !metadata[d.key])
@@ -493,21 +494,21 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
     blocking: true,
     detail:
       diffs.length === 0
-        ? "No catalog value differs from the source headers."
+        ? "None"
         : undecided.length > 0
-          ? `Choose how ${plural(undecided.length, "correction")} reach${undecided.length === 1 ? "es" : ""} the application.`
+          ? `${plural(undecided.length, "correction")} to decide`
           : badPatch.length > 0
-            ? `Patched copies need Copy or Clone; the mode is ${mode ? MODE_LABEL[mode] : "not chosen"}.`
+            ? "Patched copies need Copy or Clone"
             : badConfig.length > 0
-              ? `${profile?.name ?? "This application"} cannot read corrected values through configuration.`
-              : `${plural(diffs.length, "decision")} recorded`,
+              ? `${profile?.name ?? "Application"}: no configuration`
+              : `${plural(diffs.length, "decision")}`,
   })
   checks.push({
     id: "mode",
     label: "Input mode",
     ok: chosen?.allowed === true,
     blocking: true,
-    detail: !chosen ? "Choose an input mode." : chosen.allowed ? `${MODE_LABEL[chosen.mode]}${chosen.mode === "linked" ? ` (${choices.linkType === "hardlink" ? "hard links" : "symbolic links"})` : ""}` : chosen.reasons.join(" "),
+    detail: !chosen ? "Not chosen" : chosen.allowed ? `${MODE_LABEL[chosen.mode]}${chosen.mode === "linked" ? ` (${choices.linkType === "hardlink" ? "hard links" : "symbolic links"})` : ""}` : chosen.reasons.join(" · "),
   })
   const folderTaken = layout.folderPath ? pathOccupied(state, layout.folderPath) : false
   checks.push({
@@ -515,19 +516,19 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
     label: "Run folder",
     ok: parentIssue === null && !folderTaken,
     blocking: true,
-    detail: parentIssue ? parentIssue.message : folderTaken ? `${layout.folderPath} already exists. PlateVault never reuses or clears a folder; choose another output folder.` : `${layout.folderPath} is free; write permission checked.`,
+    detail: parentIssue ? parentIssue.message : folderTaken ? `${fileName(layout.folderPath ?? "")} exists` : (layout.folderPath ?? ""),
   })
   const footprintBytes = chosen?.footprintBytes ?? 0
-  checks.push({ id: "space", label: "Free space", ok: free === null || footprintBytes <= free, blocking: true, detail: free === null ? "Known once an output folder is chosen." : `${formatBytes(footprintBytes)} needed, ${formatBytes(free)} free on ${destName}` })
+  checks.push({ id: "space", label: "Free space", ok: free === null || footprintBytes <= free, blocking: true, detail: free === null ? "–" : `${formatBytes(footprintBytes)} of ${formatBytes(free)} free` })
   const unavailable = entries.filter((e) => e.unavailable !== null)
   checks.push({
     id: "sources",
     label: "Source presence",
     ok: unavailable.length === 0,
     blocking: false,
-    detail: unavailable.length === 0 ? `${plural(entries.length, "source")} readable now` : `${plural(unavailable.length, "source")} cannot be read now; ${unavailable.length === 1 ? "it is" : "they are"} blocked and the outcome is Partial.`,
+    detail: unavailable.length === 0 ? `${plural(entries.length, "source")} readable` : `${plural(unavailable.length, "source")} unreadable · Partial`,
   })
-  if (entries.length === 0) checks.push({ id: "entries", label: "Inputs", ok: false, blocking: true, detail: "Nothing to prepare: the saved membership has no included frames or product inputs." })
+  if (entries.length === 0) checks.push({ id: "entries", label: "Inputs", ok: false, blocking: true, detail: "No included frames" })
   const lock = runLock(run)
   if (lock) checks.unshift({ id: "lock", label: "Run state", ok: false, blocking: true, detail: lock })
   return {
@@ -793,8 +794,8 @@ export function readinessByKind(plan: CalibrationPlan): KindReadiness[] {
 
 /** "dark 3/3 · flat 2/3 · bias ✓": ✓ when every requirement of the kind matched automatically. */
 export function readinessText(plan: CalibrationPlan): string {
-  if (plan.policy === "off") return "Calibration off: nothing is handed off"
-  if (plan.rows.length === 0) return "No requirements yet: select and save sessions first"
+  if (plan.policy === "off") return "Off"
+  if (plan.rows.length === 0) return "No sessions"
   return readinessByKind(plan)
     .filter((k) => k.total > 0)
     .map((k) => `${KIND_LABEL[k.kind].toLowerCase()} ${k.automatic ? "✓" : `${k.matched}/${k.total}`}`)
@@ -809,4 +810,35 @@ export function tieOf(row: RequirementRow): RequirementRow["candidates"] {
   const distance = (n: string | null) => (n ? Math.abs(new Date(n).getTime() - new Date(night).getTime()) : Number.POSITIVE_INFINITY)
   const tied = row.candidates.filter((c) => c.summary.allCompatible && distance(c.source.night) === distance(first.source.night))
   return tied.length > 1 ? tied : []
+}
+
+/** A raw calibration session whose master would match a requirement: "Stack from Flat Ha · 19 Sep" (P-CAL3). */
+export interface StackOffer {
+  view: ProcessView
+  /** Stack has not started (or failed): the process waits for the user. */
+  waiting: boolean
+}
+
+const NIGHT_MS = (a: string, b: string) => Math.abs(new Date(a).getTime() - new Date(b).getTime())
+
+/**
+ * When no master matches a requirement, the raw calibration sessions that
+ * would stack into a compatible one, nearest night first. Runs are assigned
+ * masters only, so a raw session is offered as its calibration process,
+ * never as an input. A finished process is a master already.
+ */
+export function stackOffers(state: PrototypeState, row: RequirementRow): StackOffer[] {
+  if (row.suggestion || row.state === "accepted" || row.state === "exception") return []
+  const { catalog } = state
+  const light = lightGeometry(catalog, row.member.session)
+  const night = row.member.session.night
+  return calibrationProcesses(catalog)
+    .filter((v) => v.process.kind === row.kind && v.session !== null && (v.status === "awaiting-stack" || v.status === "failed" || v.status === "stacking" || v.status === "importing"))
+    .filter((v) => {
+      const g = lightGeometry(catalog, v.session!)
+      const criteria = matchCriteria(catalog, light, { ...g, kind: row.kind, imageTypeLabel: KIND_LABEL[row.kind] })
+      return summarize(criteria).allCompatible
+    })
+    .sort((a, b) => NIGHT_MS(night, a.session!.night) - NIGHT_MS(night, b.session!.night))
+    .map((view) => ({ view, waiting: view.status === "awaiting-stack" || view.status === "failed" }))
 }
