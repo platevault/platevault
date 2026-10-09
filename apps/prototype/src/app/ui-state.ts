@@ -17,7 +17,7 @@ export type GlobalPanel = "palette" | "shortcuts" | "simulation" | null
 export type WorkflowSheet =
   /** S13 Import (slice A): the Lightroom-style entry (D-W11). */
   | { kind: "import" }
-  /** S4 New Project (slice B); `fromSessionId` prefills its Target and rig (LIB-FR-17). */
+  /** S4 New Project (slice B); `fromSessionId` prefills its Target and rig (LIB-FR-17); `targetId` prefills a subject (S10 Target detail). */
   | { kind: "new-project"; fromSessionId?: SessionId; targetId?: TargetId }
   /** S9 Done / Archive sheet on a Project (slice B). */
   | { kind: "done-archive"; projectId: ProjectId }

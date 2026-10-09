@@ -1,7 +1,23 @@
 /**
- * Slice E shell contribution (see `src/app/shell-contract.ts`). Slice E owns
- * this file; it may add palette commands (presets, Plan tonight) or an overlay.
+ * Slice E shell contribution (see `src/app/shell-contract.ts`): palette
+ * actions for Plan tonight, each built-in Targets preset and each saved
+ * preset. Slice E owns this file.
  */
-import type { ShellContribution } from "@/app/shell-contract"
+import type { PaletteCommand, ShellContribution } from "@/app/shell-contract"
+import { useStore } from "@/store/core"
+import { BUILT_IN_PRESETS } from "./targets-model"
 
-export const eShell: ShellContribution = {}
+function useCommands(): PaletteCommand[] {
+  const saved = useStore((s) => s.slices.e.savedPresets)
+  return [
+    { id: "e:plan-tonight", label: "Plan tonight", group: "Actions", keywords: "tonight window moon darkness timeline planner", to: "/plan" },
+    // Presets that need a rig stay on the Targets toolbar, where the rig is chosen.
+    ...BUILT_IN_PRESETS.filter((p) => p.needs !== "rig").map((p) => ({ id: `e:preset:${p.id}`, label: `Targets: ${p.label}`, group: "Actions", keywords: `preset targets ${p.definition}`, to: `/targets?preset=${p.id}` })),
+    ...saved.map((p) => {
+      const query = new URLSearchParams({ saved: p.id, ...Object.fromEntries(Object.entries(p.view).filter((e): e is [string, string] => Boolean(e[1]))) })
+      return { id: `e:saved:${p.id}`, label: `Targets: ${p.name}`, group: "Actions", keywords: "saved preset targets", to: `/targets?${query.toString()}` }
+    }),
+  ]
+}
+
+export const eShell: ShellContribution = { useCommands }
