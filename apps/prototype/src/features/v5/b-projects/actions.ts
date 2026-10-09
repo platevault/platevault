@@ -1,12 +1,13 @@
 /**
  * Slice B writes that the foundation does not provide: the "archive"
- * operation, Archive of a Done Project and Restore of its archived sessions
- * after Reopen (STO-FR-13, D-W69), one reviewed transfer per approval. Each
- * session moves whole or stays: every frame is verified (volume, bytes
+ * operation, Archive at Wrap up and Restore of archived sessions after
+ * Reopen (STO-FR-13, D-W69, P-ARC1), one reviewed transfer per approval.
+ * Each session moves whole or stays: every frame is verified (volume, bytes
  * against the reviewed digest, a free destination) before any frame of that
  * session moves. Prepared links pointing at a moved copy are rebuilt to its
- * new path, so no run reference dangles (STO-FR-06). New subjects become
- * Targets through the shared `addTarget` (store/actions/library).
+ * new path, so no run reference dangles (STO-FR-06). The slice registry
+ * imports this module for its handler; subject and mosaic writes live in
+ * `subject-actions.ts`.
  */
 import { fileKey, removeFile, writeFiles } from "@/domain/disk"
 import { stableHash } from "@/domain/indexing"
@@ -119,7 +120,7 @@ function finish(state: PrototypeState, id: OperationId, payload: ArchivePayload)
     next = withCatalog(next, (c) => ({ ...c, projects: { ...c.projects, [project.id]: { ...project, archive, revision: project.revision + 1 } } }))
   }
   const verb = payload.direction === "archive" ? "archived" : "restored"
-  const summary = `${plural(moved, "session")} ${verb}${refused > 0 ? `; ${plural(refused, "session")} kept in place with the reason named` : ""}. Run membership and totals unchanged.`
+  const summary = `${plural(moved, "session")} ${verb}${refused > 0 ? ` · ${refused} kept` : ""}`
   return settleOperation(next, id, moved === 0 && refused > 0 ? "failed" : refused > 0 ? "partial" : "succeeded", summary, payload.href)
 }
 

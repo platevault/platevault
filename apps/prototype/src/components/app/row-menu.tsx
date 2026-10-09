@@ -13,7 +13,7 @@
  */
 import type { LucideIcon } from "lucide-react"
 import { type MouseEvent, type ReactElement, type ReactNode, useState } from "react"
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu"
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { cn } from "@/lib/utils"
 
 export type MenuEntry =
@@ -26,7 +26,13 @@ export function MenuEntries({ entries }: { entries: MenuEntry[] }) {
     <>
       {entries.map((entry, index) => {
         if ("separator" in entry) return <ContextMenuSeparator key={`sep-${index}`} />
-        if ("heading" in entry) return <ContextMenuLabel key={`head-${entry.heading}`}>{entry.heading}</ContextMenuLabel>
+        // Base UI labels need a group context.
+        if ("heading" in entry)
+          return (
+            <ContextMenuGroup key={`head-${entry.heading}`}>
+              <ContextMenuLabel>{entry.heading}</ContextMenuLabel>
+            </ContextMenuGroup>
+          )
         const Icon = entry.icon
         return (
           <ContextMenuItem key={entry.label} disabled={entry.disabled} onClick={entry.onSelect} className={cn(entry.destructive && "text-destructive")}>

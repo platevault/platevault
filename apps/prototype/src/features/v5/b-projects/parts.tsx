@@ -1,40 +1,69 @@
 /**
  * Slice B UI parts shared by the Project screens and sheets: the subject
- * search (My targets, the bundled catalogues and SIMBAD, D-W17), the mosaic
- * panel editor (centre and rotation, D-W38, D-W73) and the inline commit
- * error. The Project state is the shared `StatusBadge kind="project"`; a
- * run's six-step rail is `StepRail` in `src/app/run-ui.tsx`.
+ * search (My targets, the bundled catalogues and SIMBAD, D-W17) and the
+ * commit outcome beside a control: a refusal reads as the terse `Refusal`
+ * line with its blocker chips, any other failure as an inline error. The
+ * Project state is the shared `StatusBadge kind="project"`; a run's six-step
+ * rail is `StepRail` in `src/app/run-ui.tsx`.
  */
 import { Loader, Search } from "lucide-react"
-import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { ClearableInput } from "@/components/app/clearable-input"
 import { ActionError, Notice } from "@/components/app/feedback"
+import { type Blocker, Refusal, refusalFrom } from "@/components/app/refusal"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { myTargets } from "@/domain/derive"
-import { BUNDLED_CATALOGUE, type CatalogueEntry, type FieldOfView, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
+import { BUNDLED_CATALOGUE, type CatalogueEntry, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
 import type { Catalog, TargetId } from "@/domain/types"
-import { formatDec, formatDegrees, formatRa } from "@/lib/format"
+import { formatDec, formatRa } from "@/lib/format"
 import type { CommitResult } from "@/store/core"
 import { store, useStore } from "@/store/core"
 
 // ---------------------------------------------------------------------------
-// Commit errors beside the control
+// Commit outcome beside the control
 // ---------------------------------------------------------------------------
 
 /** Runs a store action and keeps its refusal or failure next to the control (D08). */
 export function useCommitError() {
-  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<CommitResult | null>(null)
   function run(action: () => CommitResult): boolean {
-    const result = action()
-    setError(result.ok ? null : result.message)
-    return result.ok
+    const next = action()
+    setResult(next.ok ? null : next)
+    return next.ok
   }
-  return { error, setError, run }
+  const error = result && !result.ok ? result.message : null
+  const setError = (message: string | null) => setResult(message ? { ok: false, reason: "write-failed", message } : null)
+  return { error, result, setError, run }
 }
 
 export function InlineError({ message, className }: { message: string | null; className?: string }) {
   return message ? <ActionError message={message} className={className} /> : null
+}
+
+/**
+ * A failed store action: a refusal as `<action> · <reason> ▸` with its
+ * blockers as chips, anything else as an inline error. `reason` words the
+ * count ("used by 6 runs"); `blockers` maps the action's reasons to chips.
+ */
+export function CommitOutcome({
+  result,
+  action,
+  reason,
+  blockers,
+  className,
+}: {
+  result: CommitResult | null
+  action: string
+  reason?: (count: number) => string
+  blockers?: (reasons: string[]) => Blocker[]
+  className?: string
+}) {
+  if (!result || result.ok) return null
+  const refusal = refusalFrom(result, action)
+  if (!refusal || result.reason !== "refused") return <ActionError message={result.message} className={className} />
+  const chips = blockers ? blockers(result.reasons) : refusal.blockers
+  return <Refusal {...refusal} reason={reason ? reason(chips.length) : refusal.reason} blockers={chips} className={className} />
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +106,6 @@ export function SubjectSearch({ taken, onPick, autoFocus = false }: { taken: str
   const [simbad, setSimbad] = useState<LookupState>(null)
   const timer = useRef<number | null>(null)
   const inputId = useId()
-  const hintId = useId()
   useEffect(() => () => window.clearTimeout(timer.current ?? undefined), [])
 
   const groups = useMemo(() => localResults(catalog, query), [catalog, query])
@@ -87,7 +115,7 @@ export function SubjectSearch({ taken, onPick, autoFocus = false }: { taken: str
     const text = query.trim()
     if (!text || simbad?.status === "running") return
     if (!lookup.enabled) {
-      setSimbad({ query: text, status: "off", message: "Online lookup is off in Settings › Target lookup, so nothing was sent. My targets and the catalogues still search offline." })
+      setSimbad({ query: text, status: "off", message: "Turn on in Settings › Target lookup." })
       return
     }
     setSimbad({ query: text, status: "running" })
@@ -95,7 +123,7 @@ export function SubjectSearch({ taken, onPick, autoFocus = false }: { taken: str
       const state = store.getState()
       if (state.faults.failNextResolverLookup) {
         store.setState((s) => ({ ...s, faults: { ...s.faults, failNextResolverLookup: false } }))
-        setSimbad({ query: text, status: "failed", message: `${providerName} did not respond: the lookup failed as if offline. Nothing was added; My targets and the catalogues still work.` })
+        setSimbad({ query: text, status: "failed", message: `${providerName} did not respond.` })
         return
       }
       const known = new Set(groups.flatMap((g) => g.rows.map((r) => normalizeName(r.pick.name))))
@@ -112,15 +140,15 @@ export function SubjectSearch({ taken, onPick, autoFocus = false }: { taken: str
   return (
     <div className="space-y-2">
       <div className="grid gap-1.5">
-        <Label htmlFor={inputId}>Search targets</Label>
+        <Label htmlFor={inputId}>Target</Label>
         <div className="flex gap-2">
-          <Input
+          <ClearableInput
             id={inputId}
+            wrapperClassName="flex-1"
             value={query}
             autoFocus={autoFocus}
-            aria-describedby={hintId}
-            placeholder="Name, alias or catalogue number, e.g. IC 1396"
-            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Name or catalogue number"
+            onValueChange={setQuery}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault()
@@ -130,22 +158,17 @@ export function SubjectSearch({ taken, onPick, autoFocus = false }: { taken: str
           />
           <Button variant="outline" onClick={searchSimbad} disabled={!shown} aria-busy={simbadCurrent?.status === "running" || undefined}>
             {simbadCurrent?.status === "running" ? <Loader aria-hidden="true" className="motion-safe:animate-spin" data-icon="inline-start" /> : <Search aria-hidden="true" data-icon="inline-start" />}
-            Search SIMBAD
+            SIMBAD
           </Button>
         </div>
-        <p id={hintId} className="text-xs text-muted-foreground">
-          My targets and the bundled catalogues match as you type. Enter or Search SIMBAD asks {providerName}.
-        </p>
       </div>
       {shown ? (
         <div className="max-h-72 overflow-y-auto rounded-md border" role="group" aria-label="Search results">
           {groups.map((group) => (
             <ResultGroup key={group.title} title={group.title} rows={group.rows} taken={taken} onPick={onPick} />
           ))}
-          {simbadCurrent?.status === "done" ? <ResultGroup title={`SIMBAD (${providerName})`} rows={simbadCurrent.rows} taken={taken} onPick={onPick} empty={`${providerName} returned nothing new for “${simbadCurrent.query}”.`} /> : null}
-          {groups.every((g) => g.rows.length === 0) && !simbadCurrent ? (
-            <p className="px-3 py-2 text-sm text-muted-foreground">Nothing in My targets or the catalogues matches. Press Enter to search SIMBAD.</p>
-          ) : null}
+          {simbadCurrent?.status === "done" ? <ResultGroup title={`SIMBAD (${providerName})`} rows={simbadCurrent.rows} taken={taken} onPick={onPick} empty="No new match" /> : null}
+          {groups.every((g) => g.rows.length === 0) && !simbadCurrent ? <p className="px-3 py-2 text-sm text-muted-foreground">No match · Enter searches SIMBAD</p> : null}
           {simbadCurrent?.status === "running" ? (
             <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
               Asking {providerName}…
@@ -225,174 +248,5 @@ function ResultGroup({ title, rows, taken, onPick, empty }: { title: string; row
         })}
       </ul>
     </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Mosaic panels: centre and rotation (D-W38, D-W73)
-// ---------------------------------------------------------------------------
-
-export interface PanelDraft {
-  id: string
-  ra: number
-  dec: number
-  rotationDeg: number
-}
-
-export interface MosaicDraft {
-  name: string
-  centre: { ra: number; dec: number }
-  panels: PanelDraft[]
-}
-
-let panelCounter = 0
-export function panelId(): string {
-  panelCounter += 1
-  return `pnl_${Date.now().toString(36)}_${panelCounter}`
-}
-
-/** A cols × rows grid of panels around the centre, overlapping 10% on the rig's field (or the Target's size). */
-export function layoutPanels(centre: { ra: number; dec: number }, cols: number, rows: number, fov: FieldOfView | null, size: { width: number; height: number } | null): PanelDraft[] {
-  const width = fov ? fov.widthDeg * 0.9 : (size?.width ?? 1) / cols
-  const height = fov ? fov.heightDeg * 0.9 : (size?.height ?? 1) / rows
-  const cos = Math.max(0.1, Math.cos((centre.dec * Math.PI) / 180))
-  const out: PanelDraft[] = []
-  for (let r = 0; r < rows; r += 1) {
-    for (let c = 0; c < cols; c += 1) {
-      const ra = (centre.ra + ((c - (cols - 1) / 2) * width) / cos + 360) % 360
-      out.push({ id: panelId(), ra: Number(ra.toFixed(3)), dec: Number((centre.dec + (r - (rows - 1) / 2) * height).toFixed(3)), rotationDeg: 0 })
-    }
-  }
-  return out
-}
-
-const LAYOUTS: Array<[number, number]> = [
-  [2, 1],
-  [3, 1],
-  [2, 2],
-  [3, 2],
-]
-
-/** Explicit panels by centre and rotation, each editable; the run group ties one panel run to each (D-W73). */
-export function PanelsEditor({ mosaic, onChange, fov, size, fovLabel }: { mosaic: MosaicDraft; onChange: (next: MosaicDraft) => void; fov: FieldOfView | null; size: { width: number; height: number } | null; fovLabel: string }) {
-  const nameId = useId()
-  const update = (index: number, patch: Partial<PanelDraft>) => onChange({ ...mosaic, panels: mosaic.panels.map((p, i) => (i === index ? { ...p, ...patch } : p)) })
-  return (
-    <div className="space-y-3 rounded-md border p-3">
-      <div className="grid gap-1.5">
-        <Label htmlFor={nameId}>Mosaic name</Label>
-        <Input id={nameId} value={mosaic.name} onChange={(event) => onChange({ ...mosaic, name: event.target.value })} />
-      </div>
-      <p className="text-xs text-muted-foreground tabular-nums">
-        Centre {formatRa(mosaic.centre.ra)} {formatDec(mosaic.centre.dec)}. Tonight&apos;s windows use this centre. Layouts use {fovLabel}.
-      </p>
-      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Lay out panels">
-        <span className="text-xs text-muted-foreground">Lay out</span>
-        {LAYOUTS.map(([cols, rows]) => (
-          <Button key={`${cols}x${rows}`} size="sm" variant="outline" onClick={() => onChange({ ...mosaic, panels: layoutPanels(mosaic.centre, cols, rows, fov, size) })}>
-            {cols} × {rows}
-          </Button>
-        ))}
-      </div>
-      {mosaic.panels.length === 0 ? <p className="text-sm text-muted-foreground">No panels yet. Choose a layout or add a panel; a mosaic needs two or more.</p> : null}
-      <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <caption className="sr-only">Panels of {mosaic.name || "the mosaic"}</caption>
-        <thead className="text-[0.6875rem] text-muted-foreground" data-chrome>
-          <tr className="border-b">
-            <th scope="col" className="py-1 pr-2 text-left font-medium">
-              Panel
-            </th>
-            <th scope="col" className="py-1 pr-2 text-left font-medium">
-              RA (°)
-            </th>
-            <th scope="col" className="py-1 pr-2 text-left font-medium">
-              Dec (°)
-            </th>
-            <th scope="col" className="py-1 pr-2 text-left font-medium">
-              Rotation (°)
-            </th>
-            <th scope="col" className="py-1 text-right font-medium">
-              <span className="sr-only">Remove</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {mosaic.panels.map((panel, index) => (
-            <tr key={panel.id} className="border-b last:border-0">
-              <th scope="row" className="py-1 pr-2 text-left font-medium whitespace-nowrap" title={`${formatRa(panel.ra)} ${formatDec(panel.dec)} · ${formatDegrees(panel.rotationDeg, 0)}`}>
-                Panel {index + 1}
-              </th>
-              <td className="py-1 pr-2">
-                <NumberCell label={`Panel ${index + 1} RA in degrees`} value={panel.ra} onChange={(ra) => update(index, { ra })} />
-              </td>
-              <td className="py-1 pr-2">
-                <NumberCell label={`Panel ${index + 1} Dec in degrees`} value={panel.dec} onChange={(dec) => update(index, { dec })} />
-              </td>
-              <td className="py-1 pr-2">
-                <NumberCell label={`Panel ${index + 1} rotation in degrees`} value={panel.rotationDeg} onChange={(rotationDeg) => update(index, { rotationDeg })} />
-              </td>
-              <td className="py-1 text-right">
-                <Button size="sm" variant="ghost" onClick={() => onChange({ ...mosaic, panels: mosaic.panels.filter((_, i) => i !== index) })}>
-                  Remove<span className="sr-only"> panel {index + 1}</span>
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => {
-          const last = mosaic.panels.at(-1)
-          const step = fov ? fov.widthDeg * 0.9 : 0.5
-          const base = last ?? { ra: mosaic.centre.ra, dec: mosaic.centre.dec, rotationDeg: 0 }
-          onChange({ ...mosaic, panels: [...mosaic.panels, { id: panelId(), ra: last ? Number(((base.ra + step / Math.max(0.1, Math.cos((base.dec * Math.PI) / 180))) % 360).toFixed(3)) : base.ra, dec: base.dec, rotationDeg: base.rotationDeg }] })
-        }}
-      >
-        Add panel
-      </Button>
-    </div>
-  )
-}
-
-function NumberCell({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  const [text, setText] = useState(String(value))
-  useEffect(() => setText(String(value)), [value])
-  return (
-    <Input
-      aria-label={label}
-      type="number"
-      step="0.01"
-      inputMode="decimal"
-      className="h-6 w-20 tabular-nums"
-      value={text}
-      onChange={(event) => {
-        setText(event.target.value)
-        const next = Number(event.target.value)
-        if (event.target.value !== "" && Number.isFinite(next)) onChange(next)
-      }}
-    />
-  )
-}
-
-/** A labelled group of controls inside a sheet, with hairline separators instead of cards. */
-export function SheetSection({ title, description, children, actions, id }: { title: string; description?: ReactNode; children: ReactNode; actions?: ReactNode; id?: string }) {
-  const headingId = useId()
-  return (
-    <section aria-labelledby={headingId} id={id} className="space-y-2 border-t border-separator px-4 py-3 first:border-t-0">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <h3 id={headingId} className="text-sm font-semibold">
-            {title}
-          </h3>
-          {description ? <p className="mt-0.5 text-[0.75rem] text-pretty text-muted-foreground">{description}</p> : null}
-        </div>
-        {actions ? <div className="flex flex-wrap gap-1.5">{actions}</div> : null}
-      </div>
-      {children}
-    </section>
   )
 }

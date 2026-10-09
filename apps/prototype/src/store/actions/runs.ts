@@ -72,14 +72,24 @@ export interface StartRunOutcome {
   groupId: RunGroupId | null
 }
 
+export interface StartRunOptions {
+  /** Start from a selection: only these candidates are preselected. */
+  sessionIds?: SessionId[]
+  /** Mosaic: the panels that get a panel run; every panel by default. */
+  panelIds?: string[]
+  /** Mosaic: the user's placement of a candidate, overriding its pointing; null leaves it out of every panel. */
+  placements?: Record<SessionId, string | null>
+}
+
 /**
  * Start a processing run (PRJ-FR-10, D-W49, D-W50): one subject and one rig
  * of the Project, fixed for good. The draft starts with every available
- * candidate selected, each with its reason. A mosaic subject creates a run
- * group instead, with each candidate placed on a panel by its pointing;
+ * candidate selected (or the chosen ones), each with its reason. A mosaic
+ * subject creates a run group instead, one panel run per included panel,
+ * with each candidate placed on a panel by its pointing or by the user;
  * flagged sessions are left for the user to place (D-W38).
  */
-export function startRun(projectId: ProjectId, subjectId: string, rigId: OpticalTrainId): StartRunOutcome {
+export function startRun(projectId: ProjectId, subjectId: string, rigId: OpticalTrainId, options: StartRunOptions = {}): StartRunOutcome {
   const state = store.getState()
   const { catalog, disk } = state
   const project = catalog.projects[projectId]
@@ -87,7 +97,8 @@ export function startRun(projectId: ProjectId, subjectId: string, rigId: Optical
   if (!project || !subject) return { result: MISSING, runId: null, groupId: null }
   if (!project.rigIds.includes(rigId)) return { result: refuse("Start run refused", [`${rigName(catalog, rigId)} is not one of ${project.name}'s rigs`], `/projects/${projectId}`), runId: null, groupId: null }
   if (project.state !== "open") return { result: refuse("Start run refused", [`${project.name} is Done; Reopen it first`], `/projects/${projectId}`), runId: null, groupId: null }
-  const candidates = projectCandidates(catalog, project).filter((c) => c.subject.id === subjectId && c.rigId === rigId)
+  const chosen = options.sessionIds ? new Set(options.sessionIds) : null
+  const candidates = projectCandidates(catalog, project).filter((c) => c.subject.id === subjectId && c.rigId === rigId && (!chosen || chosen.has(c.session.id)))
   const setup: RunSetup = { profileId: null, inputMode: null, calibrationPolicy: "automatic" }
   const rigShort = catalog.opticalTrains[rigId]?.name.split(" / ")[0] ?? "rig"
   if (!subject.mosaic) {
@@ -99,11 +110,18 @@ export function startRun(projectId: ProjectId, subjectId: string, rigId: Optical
     if (result.ok) recordSaved(`Run started: ${run.name}`, `${plural(candidates.length, "candidate session")} preselected on ${rigName(catalog, rigId)}.`, runHref(run))
     return { result, runId: result.ok ? id : null, groupId: null }
   }
+  const included = options.panelIds ? new Set(options.panelIds) : null
+  const panels = subject.mosaic.panels.filter((p) => !included || included.has(p.id))
+  if (panels.length === 0) return { result: refuse("Start run group refused", ["no panel is included"], `/projects/${projectId}`), runId: null, groupId: null }
+  const placements = options.placements ?? {}
   const groupId = freshId("grp", `${projectId}|${subjectId}|${rigId}`)
-  const runs: Run[] = subject.mosaic.panels.map((panel) => {
-    const placed = candidates.flatMap((c) => {
+  const runs: Run[] = panels.map((panel) => {
+    const placed = candidates.flatMap((c): Array<{ session: typeof c.session; reason: SelectionReason }> => {
+      if (c.session.id in placements) {
+        return placements[c.session.id] === panel.id ? [{ session: c.session, reason: { kind: "panel-assigned", detail: `${c.reason} · placed on ${panelLabel(panel)}` } }] : []
+      }
       const p = panelForSession(catalog, subject, c.session, rigId)
-      return p.panelId === panel.id ? [{ session: c.session, reason: { kind: "panel-pointing" as const, detail: `${c.reason} · ${p.detail}` } }] : []
+      return p.panelId === panel.id ? [{ session: c.session, reason: { kind: "panel-pointing", detail: `${c.reason} · ${p.detail}` } }] : []
     })
     return newRun(
       { id: freshId("run", `${groupId}|${panel.id}`), name: `${subject.mosaic!.name} ${panelLabel(panel)}`, projectId, subjectId, panelId: panel.id, groupId, rigId, setup: null },

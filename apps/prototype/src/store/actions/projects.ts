@@ -112,6 +112,32 @@ export function removeSubject(projectId: ProjectId, subjectId: string, expectRev
   return editProject(projectId, "Remove subject", expectRevision, (p) => ({ ...p, subjects: p.subjects.filter((s) => s.id !== subjectId), goals: p.goals.filter((g) => g.subjectId !== subjectId) }))
 }
 
+/**
+ * Set a subject's mosaic panels (D-W38, D-W73): a Target subject becomes a
+ * mosaic, or panels are added or removed. New panels get the Project's goal
+ * set; a removed panel's goals go. Refused while a run uses a removed panel,
+ * or a plain run uses a subject that would become a mosaic.
+ */
+export function setSubjectMosaic(projectId: ProjectId, subjectId: string, mosaic: NonNullable<Subject["mosaic"]>, expectRevision: number): CommitResult {
+  const { catalog } = store.getState()
+  const project = catalog.projects[projectId]
+  const subject = project?.subjects.find((s) => s.id === subjectId)
+  if (!project || !subject) return MISSING
+  const kept = new Set(mosaic.panels.map((p) => p.id))
+  const users = Object.values(catalog.runs).filter((r) => r.projectId === projectId && r.subjectId === subjectId && (r.panelId === null || !kept.has(r.panelId)))
+  if (users.length > 0) return refuse("Mosaic panels refused", users.map((r) => `${r.name} uses it`), projectHref(projectId))
+  const before = new Set(subject.mosaic?.panels.map((p) => p.id) ?? [])
+  const added = mosaic.panels.filter((p) => !before.has(p.id))
+  return editProject(projectId, "Mosaic panels", expectRevision, (p) => ({
+    ...p,
+    subjects: p.subjects.map((s) => (s.id === subjectId ? { ...s, mosaic } : s)),
+    goals: [
+      ...p.goals.filter((g) => g.subjectId !== subjectId || (g.panelId !== null && kept.has(g.panelId))),
+      ...goalsFromValues(projectGoalSet(p), { ...subject, mosaic: { ...mosaic, panels: added } }),
+    ],
+  }))
+}
+
 /** Adding a rig changes candidates only, never a run's membership (PRJ-FR-02). */
 export function addRig(projectId: ProjectId, rigId: OpticalTrainId, expectRevision: number): CommitResult {
   return editProject(projectId, "Add rig", expectRevision, (p) => (p.rigIds.includes(rigId) ? p : { ...p, rigIds: [...p.rigIds, rigId] }))

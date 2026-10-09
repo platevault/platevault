@@ -1,41 +1,38 @@
 /**
  * S3 Project (`/projects/$projectId`; D-W9, D-W16, D-W26, D-W29, D-W33,
- * D-W36, D-W37, D-W38, D-W46, D-W59, D-W65, D-W72). The header holds the
- * state (Open / Done / Archived) and its actions: Mark Done names each run
- * that is not Complete and stays disabled until each is completed or
- * trashed; Done opens the Done / Archive sheet; Reopen returns the Project
- * to open without moving a file. The toolbar Next is the one primary
- * action, so the header's actions are secondary. The Project's own work
- * comes first: runs and run groups, then goals, subjects and rigs,
- * candidates (summarised, with the candidate review one link away),
- * planning, archived sessions and Trash.
+ * D-W36, D-W37, D-W38, D-W46, D-W59, D-W65, D-W69, D-W72, P-WRAP1). The
+ * header carries the stage strip, Open → Runs → Wrap up → Done (or
+ * Archived), from `projectStageStrip`; Runs opens the Project's work and
+ * Wrap up its stage page. A Done Project offers Reopen, which moves no file.
+ * The toolbar Next is the one primary action, so the header has none.
  *
- * Search keys (routes.tsx): `?sheet=done` opens the Done / Archive sheet,
- * `?start=run` opens Start a processing run, and `?candidates=unreviewed`
- * opens frame review over the candidates filtered to Unreviewed (PIX-FR-18).
+ * Search keys (routes.tsx): `?start=run` opens Start run; `?stage=wrap-up`
+ * opens the Wrap up stage; `?candidates=unreviewed|all` opens frame review
+ * over the candidates (PIX-FR-18, with `&filter=` and `&assetId=`);
+ * `?mosaic=new|<subjectId>` opens the mosaic editor (`&rig=`, `&profile=`,
+ * `&sessions=`).
  */
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
-import { Archive, CheckCheck, Play, RotateCcw } from "lucide-react"
-import { useEffect, useId, useState } from "react"
+import { Check, ChevronRight, RotateCcw } from "lucide-react"
+import { useEffect } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
-import { StatusBadge } from "@/components/app/status"
+import { Pill } from "@/components/app/pill"
+import type { Tone } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { MissingRecord } from "@/app/missing-record"
-import { GateLabel } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
-import { GATE_LABEL, markDoneBlockers, projectStatus, rigName, runPipeline, subjectName } from "@/domain/derive"
-import type { Project, Run } from "@/domain/types"
+import { type ProjectStageId, projectGroups, projectLink, projectRuns, projectStageStrip, projectWrapUp, type StepLink } from "@/domain/derive"
+import type { Project } from "@/domain/types"
 import { plural } from "@/lib/format"
-import { markProjectDone, reopenProject } from "@/store/actions/projects"
-import { completeRun, trashRun } from "@/store/actions/runs"
+import { reopenProject } from "@/store/actions/projects"
 import { useStore } from "@/store/core"
-import { projectChannels } from "./model"
-import { InlineError, useCommitError } from "./parts"
 import { CandidateReview } from "../d-review/review"
-import { ArchivedSection, CandidatesSection, GoalsSection, PlanningSection, RigsSection, RunsSection, SubjectsSection, TrashSection } from "./project-sections"
+import { MosaicEditor } from "./mosaic-editor"
+import { ArchivedSection, CandidatesSection, GoalsSection, PlanningSection, RigsSection, RunsSection, SubjectsSection } from "./project-sections"
+import { WrapUpStage } from "./wrap-up"
+
+type View = "runs" | "wrap-up"
 
 export function ProjectPage() {
   const { projectId = "" } = useParams({ strict: false }) as { projectId?: string }
@@ -43,24 +40,32 @@ export function ProjectPage() {
   const navigate = useNavigate()
   const project = useStore((s) => s.catalog.projects[projectId])
 
-  // Documented entry points open their sheet once, then leave a clean URL.
+  // `?start=run` opens its sheet once, then leaves a clean URL.
   useEffect(() => {
-    if (!project) return
-    const sheet = search.sheet === "done" ? "done-archive" : search.start === "run" ? "start-run" : null
-    if (!sheet) return
-    openSheet(sheet === "done-archive" ? { kind: "done-archive", projectId: project.id } : { kind: "start-run", projectId: project.id })
-    void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: search.candidates ? { candidates: search.candidates } : {}, replace: true })
-  }, [project, search.sheet, search.start, search.candidates, navigate])
+    if (!project || search.start !== "run") return
+    openSheet({ kind: "start-run", projectId: project.id })
+    void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: {}, replace: true })
+  }, [project, search.start, navigate])
 
   if (!project) return <MissingRecord noun="Project" backTo="/projects" backLabel="Open Projects" />
-  if (search.candidates === "unreviewed") return <CandidateReviewPage project={project} />
-  return <ProjectDetail project={project} />
+  if (search.candidates) return <CandidateReviewPage project={project} />
+  if (search.mosaic) {
+    return (
+      <MosaicEditor
+        key={`${search.mosaic}|${search.sessions ?? ""}`}
+        project={project}
+        subjectId={search.mosaic === "new" ? null : search.mosaic}
+        rigId={search.rig}
+        profileId={search.profile}
+        sessionIds={search.sessions ? search.sessions.split(",") : undefined}
+      />
+    )
+  }
+  return <ProjectDetail project={project} view={search.stage === "wrap-up" ? "wrap-up" : "runs"} />
 }
 
-function ProjectDetail({ project }: { project: Project }) {
-  const catalog = useStore((s) => s.catalog)
-  const status = projectStatus(project)
-  const reopen = useCommitError()
+function ProjectDetail({ project, view }: { project: Project; view: View }) {
+  const archived = project.archive?.sessionIds.length ?? 0
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
@@ -70,187 +75,73 @@ function ProjectDetail({ project }: { project: Project }) {
           </Link>
         }
         title={project.name}
-        meta={<StatusBadge kind="project" value={status} />}
-        description={project.notes || `${plural(project.subjects.length, "subject")} · ${plural(project.rigIds.length, "rig")}`}
+        meta={<StageStrip project={project} view={view} />}
+        description={project.notes || undefined}
         actions={
-          project.state === "open" ? (
-            <>
-              <MarkDoneButton project={project} />
-              <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId: project.id })}>
-                <Play aria-hidden="true" data-icon="inline-start" />
-                Start a processing run
-              </Button>
-            </>
-          ) : (
-            <>
-              <ConfirmDialog
-                trigger={
-                  <Button size="sm" variant="outline">
-                    <RotateCcw aria-hidden="true" data-icon="inline-start" />
-                    Reopen…
-                  </Button>
-                }
-                title={`Reopen ${project.name}?`}
-                description="The Project returns to open with its runs, goals and members unchanged."
-                changes={["Project state Done → Open", ...(project.archive ? [`${plural(project.archive.sessionIds.length, "archived session")} keep reading Archived until you restore them`] : [])]}
-                unchanged={["No file moves", "Every run, goal and member"]}
-                confirmLabel="Reopen"
-                onConfirm={() => reopenProject(project.id)}
-              />
-              <Button size="sm" variant="outline" data-done-archive-trigger onClick={() => openSheet({ kind: "done-archive", projectId: project.id })}>
-                <Archive aria-hidden="true" data-icon="inline-start" />
-                Done / Archive…
-              </Button>
-            </>
-          )
+          project.state === "done" ? (
+            <ConfirmDialog
+              trigger={
+                <Button size="sm" variant="outline">
+                  <RotateCcw aria-hidden="true" data-icon="inline-start" />
+                  Reopen…
+                </Button>
+              }
+              title={`Reopen ${project.name}?`}
+              description="No file moves."
+              changes={["Project Done → Open"]}
+              unchanged={archived > 0 ? [`${plural(archived, "session")} stay archived until restored`] : undefined}
+              confirmLabel="Reopen"
+              onConfirm={() => reopenProject(project.id)}
+            />
+          ) : null
         }
       />
-      <PageBody>
-        <InlineError message={reopen.error} />
-        {project.state === "done" ? (
-          <p className="text-sm text-muted-foreground">
-            {status === "archived"
-              ? `${plural(project.archive!.sessionIds.length, "session")} archived; the remaining offers stay on the Done / Archive sheet. Reopen to start new runs.`
-              : "Archive and the trash offers wait on the Done / Archive sheet, each approved on its own. Reopen to start new runs."}
-          </p>
-        ) : null}
-        <RunsSection project={project} />
-        <GoalsSection project={project} channels={projectChannels(catalog, project.rigIds)} />
-        <SubjectsSection project={project} />
-        <RigsSection project={project} />
-        <CandidatesSection project={project} />
-        <PlanningSection project={project} />
-        <ArchivedSection project={project} />
-        <TrashSection project={project} />
+      <PageBody className="space-y-4">
+        {view === "wrap-up" ? (
+          <WrapUpStage project={project} />
+        ) : (
+          <>
+            <RunsSection project={project} />
+            <CandidatesSection project={project} />
+            <GoalsSection project={project} />
+            <div className="grid gap-4 xl:grid-cols-2">
+              <SubjectsSection project={project} />
+              <RigsSection project={project} />
+            </div>
+            <PlanningSection project={project} />
+            <ArchivedSection project={project} />
+          </>
+        )}
       </PageBody>
     </div>
   )
 }
 
-// ---------------------------------------------------------------------------
-// Mark Done (PRJ-FR-14, D-W46, D-W72)
-// ---------------------------------------------------------------------------
+const STAGE_TONE: Record<"done" | "current" | "todo", Tone> = { done: "success", current: "info", todo: "muted" }
 
-function MarkDoneButton({ project }: { project: Project }) {
-  const [open, setOpen] = useState(false)
-  const blockers = useStore((s) => markDoneBlockers(s.catalog, project))
-  const done = useCommitError()
-  const reasonId = useId()
+/** Open → Runs → Wrap up → Done / Archived; Runs and Wrap up switch the page between the Project's work and its Wrap up stage. */
+function StageStrip({ project, view }: { project: Project; view: View }) {
+  const strip = useStore((s) => projectStageStrip(s.catalog, project))
+  const runs = useStore((s) => projectRuns(s.catalog, project.id).filter((r) => !r.groupId).length + projectGroups(s.catalog, project.id).length)
+  const wrapOpen = useStore((s) => projectWrapUp(s.catalog, project).available) || project.state === "done"
+  const link = (id: ProjectStageId): StepLink | undefined => (id === "runs" && view !== "runs" ? projectLink(project.id) : id === "wrap-up" && wrapOpen && view !== "wrap-up" ? projectLink(project.id, { stage: "wrap-up" }) : undefined)
   return (
-    <>
-      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        <CheckCheck aria-hidden="true" data-icon="inline-start" />
-        Mark Done…
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Mark {project.name} Done?</DialogTitle>
-            <DialogDescription>Done opens the Done / Archive sheet. No file moves until you approve an offer there, and you can Reopen at any time.</DialogDescription>
-          </DialogHeader>
-          {blockers.length > 0 ? (
-            <div className="space-y-2 text-sm">
-              <Notice tone="refusal" title={`Mark Done refused: ${plural(blockers.length, "run")} not Complete`}>
-                <p id={reasonId}>Complete each run below, or move it to the Project&apos;s Trash.</p>
-              </Notice>
-              <ul className="divide-y divide-separator rounded-[0.3125rem] border border-separator">
-                {blockers.map((run) => (
-                  <BlockerRow key={run.id} run={run} onNavigate={() => setOpen(false)} />
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <div className="divide-y divide-separator rounded-[0.3125rem] border border-separator text-sm">
-              <p className="px-3 py-2">Project state Open → Done; the Done / Archive sheet opens with Archive and the trash offers.</p>
-              <p className="bg-muted/40 px-3 py-2 text-muted-foreground">Unchanged: every run, goal and member. Reaching goals never marks a Project Done; only you do.</p>
-            </div>
-          )}
-          <InlineError message={done.error} />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              {blockers.length > 0 ? "Close" : "Cancel"}
-            </Button>
-            <Button
-              disabled={blockers.length > 0}
-              focusableWhenDisabled
-              aria-describedby={blockers.length > 0 ? reasonId : undefined}
-              onClick={() => {
-                if (done.run(() => markProjectDone(project.id))) {
-                  setOpen(false)
-                  openSheet({ kind: "done-archive", projectId: project.id })
-                }
-              }}
-            >
-              Mark Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  )
-}
-
-/** A run that keeps Mark Done refused, with its way out. Complete on a run with open steps previews them inline first. */
-function BlockerRow({ run, onNavigate }: { run: Run; onNavigate: () => void }) {
-  const state = useStore((s) => s)
-  const pipeline = runPipeline(state, run)
-  const project = state.catalog.projects[run.projectId]
-  const subject = project?.subjects.find((s) => s.id === run.subjectId)
-  const action = useCommitError()
-  const [preview, setPreview] = useState(false)
-  const open = pipeline.steps.slice(0, 5).filter((s) => s.state !== "done")
-  return (
-    <li className="space-y-1 px-3 py-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <span className="font-medium">{run.name}</span>
-          <span className="block text-xs text-muted-foreground">
-            {subject ? subjectName(state.catalog, subject) : "Unknown subject"} · {rigName(state.catalog, run.rigId)}
-          </span>
-        </div>
-        <GateLabel state={pipeline.current.state} label={`${GATE_LABEL[pipeline.current.state]} at ${pipeline.current.label}: ${pipeline.current.status}`} />
-      </div>
-      {preview ? (
-        <div className="space-y-1.5 rounded-[0.3125rem] border border-separator bg-muted/40 px-2.5 py-2 text-xs">
-          <p className="font-medium">Complete {run.name} with {plural(open.length, "open step")}?</p>
-          <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
-            {open.map((s) => (
-              <li key={s.id}>
-                {s.label} stays {GATE_LABEL[s.state]}: {s.items.find((i) => i.met === false)?.detail ?? s.status}
-              </li>
-            ))}
-          </ul>
-          <p className="text-muted-foreground">Nothing is removed; Reopen returns the run to {pipeline.current.label}.</p>
-          <div className="flex gap-1.5">
-            <Button size="sm" variant="outline" onClick={() => setPreview(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => action.run(() => completeRun(run.id))}>
-              Complete anyway<span className="sr-only"> {run.name}</span>
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-wrap gap-1.5">
-          <Button size="sm" variant="outline" render={<Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: run.projectId, runId: run.id, step: pipeline.current.id }} onClick={onNavigate} />}>
-            Open run
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => (open.length > 0 ? setPreview(true) : action.run(() => completeRun(run.id)))}>
-            Complete{open.length > 0 ? "…" : ""}
-            <span className="sr-only"> {run.name}</span>
-          </Button>
-          <Button size="sm" variant="destructive" onClick={() => action.run(() => trashRun(run.id))}>
-            Move to Trash<span className="sr-only"> {run.name}</span>
-          </Button>
-        </div>
-      )}
-      <InlineError message={action.error} />
-    </li>
+    <ol aria-label="Project stage" className="flex flex-wrap items-center gap-1">
+      {strip.stages.map((stage, index) => (
+        <li key={stage.id} aria-current={stage.state === "current" ? "step" : undefined} className="flex items-center gap-1">
+          {index > 0 ? <ChevronRight aria-hidden="true" className="size-3 text-muted-foreground" /> : null}
+          <Pill tone={STAGE_TONE[stage.state]} icon={stage.state === "done" ? Check : undefined} link={link(stage.id)} className={view === stage.id ? "ring-2 ring-ring/60" : undefined}>
+            {stage.id === "runs" ? `Runs · ${runs}` : stage.label}
+            {stage.state === "current" ? <span className="sr-only"> (current stage)</span> : null}
+          </Pill>
+        </li>
+      ))}
+    </ol>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Candidate review (`?candidates=unreviewed`, PIX-FR-18)
+// Candidate review (`?candidates=`, PIX-FR-18)
 // ---------------------------------------------------------------------------
 
 function CandidateReviewPage({ project }: { project: Project }) {
@@ -262,11 +153,10 @@ function CandidateReviewPage({ project }: { project: Project }) {
             {project.name}
           </Link>
         }
-        title="Review new frames"
-        description="Frame review over the Project's candidate sessions, filtered to Unreviewed."
+        title="Candidate frames"
         actions={
           <Button size="sm" variant="outline" render={<Link to="/projects/$projectId" params={{ projectId: project.id }} />}>
-            Back to {project.name}
+            Done
           </Button>
         }
       />

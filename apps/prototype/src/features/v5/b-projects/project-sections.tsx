@@ -1,27 +1,32 @@
 /**
- * S3 Project sections (slice B): subjects, rigs, goals, candidates, runs and
- * run groups, planning, archived sessions and Trash. Each edit goes through
- * a foundation store action and keeps its refusal beside the control; no
- * section edits a run's membership (PRJ-FR-05, PRJ-FR-08).
+ * S3 Project sections (slice B), each a hairline Box: runs and run groups
+ * first, then candidates (review frames, start a run from a selection),
+ * goals (structured kinds and channel chips), subjects (with the mosaic
+ * editor), rigs, planning and archived sessions. Each edit goes through a
+ * foundation store action and keeps its refusal beside the control as a
+ * terse `Refusal`; no section edits a run's membership (PRJ-FR-05,
+ * PRJ-FR-08). Lists carry right-click menus.
  */
-import { Link } from "@tanstack/react-router"
-import { ChevronDown, ChevronRight, CircleCheck, FolderKanban, MapPinOff, Play, Trash2, TriangleAlert } from "lucide-react"
-import { useId, useState } from "react"
+import { Link, useNavigate } from "@tanstack/react-router"
+import { CheckCheck, Eye, Grid2x2Plus, Layers, Pencil, Play, Plus, Trash2, X } from "lucide-react"
+import { useState } from "react"
+import { Box } from "@/components/app/box"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PathText } from "@/components/app/data"
-import { EmptyState, Notice } from "@/components/app/feedback"
+import { type Column, DataTable, SelectionBar } from "@/components/app/data-table"
 import { OperationPanel } from "@/components/app/operation-panel"
-import { Section } from "@/components/app/page"
+import { CountBadge, Pill } from "@/components/app/pill"
+import { Refusal } from "@/components/app/refusal"
+import { type MenuEntry, RowContextMenu } from "@/components/app/row-menu"
 import { StatusBadge } from "@/components/app/status"
+import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
 import { GateLabel, StepRail, useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
 import {
   formatHours,
   GATE_LABEL,
-  findPanel,
   goalProgress,
   groupPipeline,
   latestRevision,
@@ -39,32 +44,36 @@ import {
   rigName,
   runPipeline,
   runRefresh,
+  runStepLink,
   subjectCentre,
   subjectName,
   subjectTarget,
 } from "@/domain/derive"
-import { isGoalChannel, qualityBarLabel } from "@/domain/labels"
+import { qualityBarLabel } from "@/domain/labels"
 import { qualityApplicability } from "@/domain/library"
 import { bestWindowTonight, defaultCriteria, tonightAt } from "@/domain/planning"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
+import type { Catalog, Goal, GoalChannel, MosaicPanel, Project, Run, Session, Subject } from "@/domain/types"
 import { formatDec, formatDegrees, formatNight, formatRa, formatTime, plural } from "@/lib/format"
-import type { Catalog, Goal, GoalChannel, MosaicPanel, Project, Session, Subject } from "@/domain/types"
-import { addRig, addSubject, applyGoalTemplate, removeRig, removeSubject, setGoals } from "@/store/actions/projects"
+import { addRig, addSubject, applyGoalTemplate, goalsFromTemplate, removeRig, removeSubject, setGoals } from "@/store/actions/projects"
+import { completeRun, startRun, trashRun } from "@/store/actions/runs"
 import { freshId } from "@/store/actions/shared"
-import { nowIso, type PrototypeState, useStore } from "@/store/core"
+import { type CommitResult, nowIso, type PrototypeState, useStore } from "@/store/core"
 import { SelectField } from "@/features/t3/fields"
 import { startArchiveTransfer } from "./actions"
-import { restorePlan, sessionLabel, subjectGaps } from "./model"
-import { draftFromPick, draftProblem, resolveDraft, type SubjectDraft, SubjectDraftRow } from "./new-project"
-import { InlineError, SubjectSearch, useCommitError } from "./parts"
+import { ChannelChips, DEFAULT_GOAL, GoalKindsFields } from "./goals"
+import { projectChannels, restorePlan, sessionLabel, subjectGaps } from "./model"
+import { CommitOutcome, SubjectSearch, useCommitError } from "./parts"
+import { resolvePick } from "./subject-actions"
 import { rememberApproval } from "./trash"
 
 const TH = "py-1 pr-3 text-left text-[0.6875rem] font-medium text-muted-foreground"
 const TD = "py-1.5 pr-3 align-top"
 
+/** A native-looking table that fills a flush Box. */
 function SimpleTable({ caption, headers, children }: { caption: string; headers: string[]; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-[0.3125rem] border border-separator">
+    <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead className="bg-chrome" data-chrome>
@@ -82,622 +91,107 @@ function SimpleTable({ caption, headers, children }: { caption: string; headers:
   )
 }
 
-function runsUsing(catalog: Catalog, project: Project, test: (run: { subjectId: string; rigId: string }) => boolean): string[] {
-  return Object.values(catalog.runs)
-    .filter((r) => r.projectId === project.id && test(r))
-    .map((r) => `${r.name}${r.trashedAt ? " (in the Trash)" : ""}`)
+const Empty = ({ children }: { children: React.ReactNode }) => <p className="px-3 py-2 text-sm text-muted-foreground">{children}</p>
+
+function runsUsing(catalog: Catalog, project: Project, test: (run: Run) => boolean): Run[] {
+  return Object.values(catalog.runs).filter((r) => r.projectId === project.id && test(r))
 }
 
-// ---------------------------------------------------------------------------
-// Subjects
-// ---------------------------------------------------------------------------
-
-export function SubjectsSection({ project }: { project: Project }) {
-  const catalog = useStore((s) => s.catalog)
-  const remove = useCommitError()
-  const [adding, setAdding] = useState(false)
-  const [draft, setDraft] = useState<SubjectDraft | null>(null)
-  const [addError, setAddError] = useState<string | null>(null)
-  const editable = project.state === "open"
-
-  function add() {
-    if (!draft) return
-    const problem = draftProblem(draft)
-    if (problem) {
-      setAddError(problem)
-      return
-    }
-    const resolved = resolveDraft(draft)
-    if (!resolved.ok) {
-      setAddError(resolved.message)
-      return
-    }
-    const result = addSubject(project.id, { targetId: resolved.targetId, mosaic: resolved.mosaic }, project.revision)
-    if (!result.ok) {
-      setAddError(result.message)
-      return
-    }
-    setDraft(null)
-    setAdding(false)
-    setAddError(null)
-  }
-
-  return (
-    <Section
-      id="subjects"
-      title={`Subjects (${project.subjects.length})`}
-      description="Targets or mosaics; each mosaic panel gets its own goals and panel run."
-      actions={
-        editable && !adding ? (
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-            Add subject…
-          </Button>
-        ) : null
-      }
-    >
-      <SimpleTable caption={`Subjects of ${project.name}`} headers={["Subject", "Kind", "Centre", "Panels (centre · rotation)", "Runs", ""]}>
-        {project.subjects.map((subject) => {
-          const target = subjectTarget(catalog, subject)
-          const centre = subjectCentre(catalog, subject)
-          const users = runsUsing(catalog, project, (r) => r.subjectId === subject.id)
-          return (
-            <tr key={subject.id}>
-              <th scope="row" className={`${TD} text-left font-medium`}>
-                {target ? (
-                  <Link to="/targets/$targetId" params={{ targetId: target.id }} className="underline-offset-2 hover:underline">
-                    {subjectName(catalog, subject)}
-                  </Link>
-                ) : (
-                  subjectName(catalog, subject)
-                )}
-              </th>
-              <td className={TD}>{subject.mosaic ? `Mosaic of ${target?.name ?? "its Target"}` : "Target"}</td>
-              <td className={`${TD} whitespace-nowrap tabular-nums`}>{centre ? `${formatRa(centre.ra)} ${formatDec(centre.dec)}` : <span className="text-muted-foreground">Position unknown</span>}</td>
-              <td className={TD}>
-                {subject.mosaic ? (
-                  <ul className="space-y-0.5 text-xs tabular-nums">
-                    {subject.mosaic.panels.map((p) => (
-                      <li key={p.id} className="whitespace-nowrap">
-                        <span className="font-medium">{panelLabel(p)}</span> {formatRa(p.ra)} {formatDec(p.dec)} · {formatDegrees(p.rotationDeg, 0)}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <span className="text-muted-foreground">-</span>
-                )}
-              </td>
-              <td className={`${TD} text-xs`}>{users.length > 0 ? users.join(", ") : <span className="text-muted-foreground">None</span>}</td>
-              <td className={`${TD} text-right`}>
-                {editable ? (
-                  <Button size="sm" variant="ghost" onClick={() => remove.run(() => removeSubject(project.id, subject.id, project.revision))}>
-                    Remove<span className="sr-only"> {subjectName(catalog, subject)}</span>
-                  </Button>
-                ) : null}
-              </td>
-            </tr>
-          )
-        })}
-      </SimpleTable>
-      <InlineError message={remove.error} />
-      {adding ? (
-        <div className="space-y-3 rounded-[0.3125rem] border border-separator p-3">
-          {draft ? (
-            <ul>
-              <SubjectDraftRow draft={draft} rigIds={project.rigIds} onChange={setDraft} onRemove={() => setDraft(null)} />
-            </ul>
-          ) : (
-            <SubjectSearch autoFocus taken={project.subjects.map((s) => subjectTarget(catalog, s)?.name ?? "")} onPick={(pick) => setDraft(draftFromPick(pick))} />
-          )}
-          <p className="text-xs text-muted-foreground">
-            Adding a subject changes candidates only, never a run. It copies the Project's goal set.
-          </p>
-          <InlineError message={addError} />
-          <div className="flex gap-2">
-            <Button size="sm" onClick={add} disabled={!draft} focusableWhenDisabled>
-              Add to Project
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setAdding(false)
-                setDraft(null)
-                setAddError(null)
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : null}
-    </Section>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Rigs
-// ---------------------------------------------------------------------------
-
-export function RigsSection({ project }: { project: Project }) {
-  const catalog = useStore((s) => s.catalog)
-  const candidates = useStore((s) => projectCandidates(s.catalog, project))
-  const remove = useCommitError()
-  const add = useCommitError()
-  const others = Object.values(catalog.opticalTrains).filter((r) => !project.rigIds.includes(r.id))
-  const [choice, setChoice] = useState("")
-  const editable = project.state === "open"
-  const chosen = others.find((r) => r.id === choice) ?? others[0]
-  return (
-    <Section id="rigs" title={`Rigs (${project.rigIds.length})`} description="Each run uses exactly one rig; adding or removing one changes candidates only.">
-      <SimpleTable caption={`Rigs of ${project.name}`} headers={["Rig", "Camera", "Filters", "Field of view", "Candidates", "Runs", ""]}>
-        {project.rigIds.map((id) => {
-          const rig = catalog.opticalTrains[id]
-          const fov = rig ? rigFieldOfView(catalog, rig) : null
-          const kind = rig ? rigCameraKind(catalog, rig) : null
-          const users = runsUsing(catalog, project, (r) => r.rigId === id)
-          return (
-            <tr key={id}>
-              <th scope="row" className={`${TD} text-left font-medium`}>
-                {rigName(catalog, id)}
-              </th>
-              <td className={TD}>{kind === "osc" ? "OSC" : kind === "mono" ? "Mono" : "Unknown"}</td>
-              <td className={TD}>{rig?.filters.map((f) => f.name).join(", ") || <span className="text-muted-foreground">None</span>}</td>
-              <td className={`${TD} whitespace-nowrap tabular-nums`}>{fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)}` : <span className="text-muted-foreground">Unknown</span>}</td>
-              <td className={`${TD} tabular-nums`}>{candidates.filter((c) => c.rigId === id).length}</td>
-              <td className={`${TD} text-xs`}>{users.length > 0 ? users.join(", ") : <span className="text-muted-foreground">None</span>}</td>
-              <td className={`${TD} text-right`}>
-                {editable ? (
-                  <Button size="sm" variant="ghost" onClick={() => remove.run(() => removeRig(project.id, id, project.revision))}>
-                    Remove<span className="sr-only"> {rigName(catalog, id)}</span>
-                  </Button>
-                ) : null}
-              </td>
-            </tr>
-          )
-        })}
-      </SimpleTable>
-      <InlineError message={remove.error} />
-      {editable && chosen ? (
-        <div className="flex flex-wrap items-end gap-2">
-          <SelectField className="w-72" label="Add a rig" value={chosen.id} onChange={setChoice} options={others.map((r) => ({ value: r.id, label: r.name }))} />
-          <Button size="sm" variant="outline" onClick={() => add.run(() => addRig(project.id, chosen.id, project.revision))}>
-            Add rig
-          </Button>
-        </div>
-      ) : null}
-      <InlineError message={add.error} />
-    </Section>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Goals
-// ---------------------------------------------------------------------------
-
-type BarChoice = "none" | "usable-only" | "max-fwhm" | "usable-max-fwhm"
-
-export function GoalsSection({ project, channels: rigChannels }: { project: Project; channels: string[] }) {
-  const channels = rigChannels.filter(isGoalChannel)
-  const catalog = useStore((s) => s.catalog)
-  const progress = useStore((s) => goalProgress(s.catalog, project))
-  const warnings = useStore((s) => projectWarnings(s.disk, s.catalog, project))
-  const [editing, setEditing] = useState<Goal[] | null>(null)
-  const [templateId, setTemplateId] = useState(BUILT_IN_GOAL_TEMPLATES[0]!.id)
-  const save = useCommitError()
-  const templates = [...BUILT_IN_GOAL_TEMPLATES, ...Object.values(catalog.goalTemplates)]
-  const template = templates.find((t) => t.id === templateId)
-  const editable = project.state === "open"
-  const groups = project.subjects.flatMap<{ subject: Subject; panel: MosaicPanel | null }>((subject) =>
-    subject.mosaic ? subject.mosaic.panels.map((p) => ({ subject, panel: p })) : [{ subject, panel: null }],
-  )
-
-  function edit(id: string, patch: Partial<Goal>) {
-    setEditing((list) => list?.map((g) => (g.id === id ? { ...g, ...patch } : g)) ?? null)
-  }
-
-  return (
-    <Section
-      id="goals"
-      title="Goals"
-      description="Per subject, panel and channel. “In project” counts the Project's runs, “captured” adds every candidate; goals never block a run."
-      actions={
-        editable && !editing ? (
-          <Button size="sm" variant="outline" onClick={() => setEditing(project.goals.map((g) => ({ ...g })))}>
-            Edit goals
-          </Button>
-        ) : null
-      }
-    >
-      {groups.map(({ subject, panel }) => {
-        const key = `${subject.id}|${panel?.id ?? ""}`
-        const rows = (editing ?? project.goals).filter((g) => g.subjectId === subject.id && (g.panelId ?? null) === (panel?.id ?? null))
-        const subjectWarnings = panel ? [] : warnings.filter((w) => w.subjectId === subject.id && !rows.some((g) => g.channel === w.channel))
-        return (
-          <div key={key} className="space-y-1">
-            <h3 className="text-sm font-medium">
-              {subjectName(catalog, subject)}
-              {panel ? ` · ${panelLabel(panel)}` : ""}
-            </h3>
-            {rows.length === 0 && !editing ? <p className="text-sm text-muted-foreground">No goals for this {panel ? "panel" : "subject"}.</p> : null}
-            <ul className="divide-y divide-separator rounded-[0.3125rem] border border-separator">
-              {rows.map((goal) => {
-                const p = progress.find((x) => x.goal.id === goal.id)
-                const rowWarnings = warnings.filter((w) => w.subjectId === subject.id && w.channel === goal.channel)
-                return (
-                  <li key={goal.id} className="space-y-1 px-3 py-1.5 text-sm">
-                    {editing ? (
-                      <GoalEditor goal={goal} channels={channels} onChange={(patch) => edit(goal.id, patch)} onRemove={() => setEditing((list) => list?.filter((g) => g.id !== goal.id) ?? null)} />
-                    ) : (
-                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
-                        <span className="font-medium tabular-nums">{p?.line ?? goal.channel}</span>
-                        <span className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                          {p?.met ? (
-                            <span className="inline-flex items-center gap-1 font-medium text-success">
-                              <CircleCheck aria-hidden="true" className="size-3.5" />
-                              Goal met
-                            </span>
-                          ) : p && p.remainingS !== null ? (
-                            <span className="tabular-nums">{formatHours(p.remainingS)} to go in project</span>
-                          ) : null}
-                          <span>{qualityBarLabel(goal.qualityBar)}</span>
-                        </span>
-                      </div>
-                    )}
-                    {p && p.unknownQuality > 0 && !editing ? <p className="text-xs text-muted-foreground">{plural(p.unknownQuality, "member")} not measured for the quality bar: they read unknown and do not count.</p> : null}
-                    {!editing
-                      ? rowWarnings.map((w) => (
-                          <p key={w.message} className="flex items-start gap-1.5 text-xs text-warning">
-                            <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-                            {w.kind === "exposure-mismatch" ? "Exposure mismatch" : "Missing calibration"}: {w.message}
-                          </p>
-                        ))
-                      : null}
-                  </li>
-                )
-              })}
-              {editing ? (
-                <li className="px-3 py-1.5">
-                  <AddGoal
-                    channels={channels.filter((c) => !rows.some((g) => g.channel === c))}
-                    onAdd={(channel) =>
-                      setEditing((list) => [...(list ?? []), { id: freshId("goal", `${subject.id}|${panel?.id ?? ""}|${channel}`), subjectId: subject.id, panelId: panel?.id ?? null, channel, integrationS: 10 * 3600, frameCount: null, qualityBar: null }])
-                    }
-                  />
-                </li>
-              ) : null}
-            </ul>
-            {subjectWarnings.map((w) => (
-              <p key={w.message} className="flex items-start gap-1.5 text-xs text-warning">
-                <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-                {w.kind === "exposure-mismatch" ? "Exposure mismatch" : "Missing calibration"}: {w.message}
-              </p>
-            ))}
-          </div>
-        )
-      })}
-      {editing ? (
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            onClick={() => {
-              if (save.run(() => setGoals(project.id, editing, project.revision))) setEditing(null)
-            }}
-          >
-            Save goals
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setEditing(null)}>
-            Cancel
-          </Button>
-        </div>
-      ) : null}
-      <InlineError message={save.error} />
-      {editable && !editing ? (
-        <div className="flex flex-wrap items-end gap-2">
-          <SelectField className="w-56" label="Goal template" value={templateId} onChange={setTemplateId} options={templates.map((t) => ({ value: t.id, label: t.name }))} />
-          <ConfirmDialog
-            trigger={
-              <Button size="sm" variant="outline">
-                Apply template…
-              </Button>
-            }
-            title={`Apply ${template?.name ?? "template"} to ${project.name}?`}
-            description="Its values are copied in. The copy stands alone and stays editable; editing the template later changes no Project."
-            changes={[
-              `Replaces the ${plural(project.goals.length, "current goal")} with ${template?.values.map((v) => `${v.channel} ${v.integrationS !== null ? formatHours(v.integrationS) : plural(v.frameCount ?? 0, "frame")}`).join(", ") || "no goals"}`,
-              `For each of ${plural(groups.length, "subject and panel", "subjects and panels")}`,
-            ]}
-            unchanged={["Every run and its membership", "Library quality and captured frames"]}
-            confirmLabel="Apply template"
-            onConfirm={() => applyGoalTemplate(project.id, templateId, project.revision)}
-          />
-        </div>
-      ) : null}
-    </Section>
-  )
-}
-
-function GoalEditor({ goal, channels, onChange, onRemove }: { goal: Goal; channels: GoalChannel[]; onChange: (patch: Partial<Goal>) => void; onRemove: () => void }) {
-  const bar: BarChoice = goal.qualityBar?.kind ?? "none"
-  const limit = goal.qualityBar && goal.qualityBar.kind !== "usable-only" ? goal.qualityBar.maxArcsec : 3
-  const id = useId()
-  return (
-    <div className="flex flex-wrap items-end gap-2">
-      <SelectField className="w-32" label="Channel" value={goal.channel} onChange={(channel) => (isGoalChannel(channel) ? onChange({ channel }) : undefined)} options={[...new Set([goal.channel, ...channels])].map((c) => ({ value: c, label: c }))} />
-      <div className="grid gap-1.5">
-        <label htmlFor={`${id}-h`} className="text-sm font-medium">
-          Integration (h)
-        </label>
-        <Input
-          id={`${id}-h`}
-          type="number"
-          min={0}
-          step={0.5}
-          className="w-24 tabular-nums"
-          value={goal.integrationS === null ? "" : String(goal.integrationS / 3600)}
-          onChange={(e) => onChange({ integrationS: e.target.value === "" ? null : Math.round(Number(e.target.value) * 3600) })}
-        />
-      </div>
-      <div className="grid gap-1.5">
-        <label htmlFor={`${id}-f`} className="text-sm font-medium">
-          Frames
-        </label>
-        <Input id={`${id}-f`} type="number" min={0} className="w-20 tabular-nums" value={goal.frameCount === null ? "" : String(goal.frameCount)} onChange={(e) => onChange({ frameCount: e.target.value === "" ? null : Math.round(Number(e.target.value)) })} />
-      </div>
-      <SelectField
-        className="w-44"
-        label="Quality bar"
-        value={bar}
-        onChange={(value) => onChange({ qualityBar: value === "none" ? null : value === "usable-only" ? { kind: "usable-only" } : { kind: value === "usable-max-fwhm" ? "usable-max-fwhm" : "max-fwhm", maxArcsec: limit } })}
-        options={[
-          { value: "none", label: "None" },
-          { value: "usable-only", label: "Usable frames only" },
-          { value: "max-fwhm", label: "Median FWHM limit" },
-          { value: "usable-max-fwhm", label: "Usable and FWHM limit" },
-        ]}
-      />
-      {goal.qualityBar && goal.qualityBar.kind !== "usable-only" ? (
-        <div className="grid gap-1.5">
-          <label htmlFor={`${id}-fwhm`} className="text-sm font-medium">
-            FWHM ≤ (″)
-          </label>
-          <Input id={`${id}-fwhm`} type="number" min={0.5} step={0.1} className="w-20 tabular-nums" value={String(limit)} onChange={(e) => onChange({ qualityBar: { kind: goal.qualityBar?.kind === "usable-max-fwhm" ? "usable-max-fwhm" : "max-fwhm", maxArcsec: Number(e.target.value) || 0 } })} />
-        </div>
-      ) : null}
-      <Button size="sm" variant="ghost" onClick={onRemove}>
-        Remove<span className="sr-only"> {goal.channel} goal</span>
-      </Button>
-    </div>
-  )
-}
-
-function AddGoal({ channels, onAdd }: { channels: GoalChannel[]; onAdd: (channel: GoalChannel) => void }) {
-  const [channel, setChannel] = useState("")
-  if (channels.length === 0) return <p className="text-xs text-muted-foreground">Every channel the Project's rigs capture has a goal here.</p>
-  const value = channels.find((c) => c === channel) ?? channels[0]!
-  return (
-    <div className="flex flex-wrap items-end gap-2">
-      <SelectField className="w-40" label="Add a goal for" value={value} onChange={setChannel} options={channels.map((c) => ({ value: c, label: c }))} />
-      <Button size="sm" variant="outline" onClick={() => onAdd(value)}>
-        Add goal
-      </Button>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Candidates
-// ---------------------------------------------------------------------------
-
-function unreviewed(catalog: Catalog, session: Session): number {
-  return liveAssetIds(catalog, session).filter((id) => {
-    const asset = catalog.assets[id]
-    return asset ? asset.quality.value === "unreviewed" || qualityApplicability(asset) !== "applicable" : false
-  }).length
-}
-
-export type CandidateFilter = "all" | "unreviewed" | "ready"
-
-interface CandidateRow {
-  session: Session
-  subject: string
-  placement: string | null
-  rig: string
-  frames: number
-  unreviewed: number
-  reason: string
-  runs: string[]
-}
-
-function candidateRows(state: PrototypeState, project: Project): CandidateRow[] {
-  const { catalog } = state
-  const runs = projectRuns(catalog, project.id)
-  return projectCandidates(catalog, project).map((c) => {
-    const placed = c.subject.mosaic ? panelForSession(catalog, c.subject, c.session, c.rigId) : null
-    const panel = placed?.panelId ? findPanel(c.subject, placed.panelId) : undefined
-    return {
-      session: c.session,
-      subject: subjectName(catalog, c.subject),
-      placement: placed ? (panel ? panelLabel(panel) : placed.detail) : null,
-      rig: rigName(catalog, c.rigId),
-      frames: liveAssetIds(catalog, c.session).length,
-      unreviewed: unreviewed(catalog, c.session),
-      reason: c.reason,
-      runs: runs.filter((r) => latestRevision(r)?.sessions.some((m) => m.sessionId === c.session.id)).map((r) => r.name),
-    }
+/** "used by 6 runs" chips: each run linked to its current step (a trashed one to the Trash). */
+function runBlockers(state: PrototypeState, project: Project, reasons: string[]) {
+  const runs = Object.values(state.catalog.runs).filter((r) => r.projectId === project.id)
+  return reasons.map((reason) => {
+    const run = runs.find((r) => reason.startsWith(`${r.name} `))
+    if (!run) return { label: reason }
+    return { label: run.name, link: run.trashedAt ? { to: "/projects/$projectId/trash", params: { projectId: project.id } } : runStepLink(run, runPipeline(state, run).current.id) }
   })
-}
-
-export function CandidatesTable({ project, filter }: { project: Project; filter: CandidateFilter }) {
-  const rows = useStore((s) => candidateRows(s, project))
-  const shown = rows.filter((r) => (filter === "unreviewed" ? r.unreviewed > 0 : filter === "ready" ? r.runs.length === 0 : true))
-  if (shown.length === 0)
-    return (
-      <p className="text-sm text-muted-foreground">
-        {filter === "unreviewed" ? "No candidate has Unreviewed frames." : filter === "ready" ? "Every candidate is in one of the Project's runs." : "No candidates: a session becomes one when its confirmed Target is a subject and its rig is one of the Project's rigs."}
-      </p>
-    )
-  return (
-    <SimpleTable caption={`Candidate sessions of ${project.name}`} headers={["Session", "Subject", "Rig", "Frames", "Unreviewed", "Why", "In runs"]}>
-      {shown.map((r) => (
-        <tr key={r.session.id}>
-          <th scope="row" className={`${TD} text-left font-medium whitespace-nowrap`}>
-            <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="underline-offset-2 hover:underline">
-              {formatNight(r.session.night)} · {r.session.channel ?? "No filter"}
-            </Link>
-          </th>
-          <td className={TD}>
-            {r.subject}
-            {r.placement ? <span className="block text-[0.6875rem] text-muted-foreground">{r.placement}</span> : null}
-          </td>
-          <td className={TD}>{r.rig}</td>
-          <td className={`${TD} tabular-nums`}>{r.frames}</td>
-          <td className={`${TD} tabular-nums`}>{r.unreviewed > 0 ? <span className="text-warning">{r.unreviewed}</span> : 0}</td>
-          <td className={`${TD} text-xs text-muted-foreground`}>{r.reason}</td>
-          <td className={`${TD} text-xs`}>{r.runs.length > 0 ? r.runs.join(", ") : <span className="text-muted-foreground">Ready to add to a run</span>}</td>
-        </tr>
-      ))}
-    </SimpleTable>
-  )
-}
-
-/**
- * Candidates, summarised: counts, a link to the candidate review and a disclosure for the table, so the
- * Project's runs and goals stay first on the page.
- */
-export function CandidatesSection({ project }: { project: Project }) {
-  const [filter, setFilter] = useState<CandidateFilter>("all")
-  const [open, setOpen] = useState(false)
-  const tableId = useId()
-  const rows = useStore((s) => candidateRows(s, project))
-  const flagged = useStore((s) =>
-    projectRuns(s.catalog, project.id).flatMap((run) => runRefresh(s.catalog, run).noLongerMatching.map((sessionId) => ({ run, session: s.catalog.sessions[sessionId] }))),
-  )
-  const catalog = useStore((s) => s.catalog)
-  const unreviewedFrames = rows.reduce((n, r) => n + r.unreviewed, 0)
-  const ready = rows.filter((r) => r.runs.length === 0).length
-  return (
-    <Section
-      id="candidates"
-      title={`Candidates (${rows.length})`}
-      description="Sessions of a subject on one of the Project's rigs; they join the Project only through a run."
-      actions={
-        rows.length > 0 ? (
-          <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={tableId} onClick={() => setOpen((o) => !o)}>
-            {open ? <ChevronDown aria-hidden="true" data-icon="inline-start" /> : <ChevronRight aria-hidden="true" data-icon="inline-start" />}
-            {open ? "Hide candidates" : "Show candidates"}
-          </Button>
-        ) : null
-      }
-    >
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-        <span className="tabular-nums">
-          {rows.length === 0 ? "No candidate sessions yet." : `${plural(rows.length, "session")} · ${plural(ready, "session")} in no run yet`}
-        </span>
-        {unreviewedFrames > 0 ? (
-          <Link to="/projects/$projectId" params={{ projectId: project.id }} search={{ candidates: "unreviewed" } as never} className="text-link underline-offset-2 hover:underline">
-            Review {plural(unreviewedFrames, "new frame")}
-          </Link>
-        ) : rows.length > 0 ? (
-          <span className="text-muted-foreground">Every candidate frame has a quality decision.</span>
-        ) : null}
-      </p>
-      {open ? (
-        <div id={tableId} className="space-y-2">
-          <div className="flex gap-1" role="group" aria-label="Candidates filter">
-            {(
-              [
-                ["all", "All"],
-                ["unreviewed", "Unreviewed"],
-                ["ready", "In no run yet"],
-              ] as const
-            ).map(([value, label]) => (
-              <Button key={value} size="sm" variant={filter === value ? "secondary" : "ghost"} aria-pressed={filter === value} onClick={() => setFilter(value)}>
-                {label}
-              </Button>
-            ))}
-          </div>
-          <CandidatesTable project={project} filter={filter} />
-        </div>
-      ) : null}
-      {flagged.length > 0 ? (
-        <Notice tone="warning" title={`${plural(flagged.length, "member")} no longer ${flagged.length === 1 ? "matches its" : "match their"} subject`}>
-          <ul className="space-y-1">
-            {flagged.map(({ run, session }) => (
-              <li key={`${run.id}|${session?.id}`}>
-                {session ? sessionLabel(catalog, session) : "A session"} in {run.name} stays in the run and still counts.{" "}
-                <Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: project.id, runId: run.id, step: "select" }} className="text-link underline-offset-2 hover:underline">
-                  Review it in Select
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Notice>
-      ) : null}
-    </Section>
-  )
 }
 
 // ---------------------------------------------------------------------------
 // Runs and run groups
 // ---------------------------------------------------------------------------
 
+type RunDialog = { kind: "complete" | "trash"; run: Run } | null
+
 export function RunsSection({ project }: { project: Project }) {
   const state = useStore((s) => s)
   const follow = useFollowLink()
+  const navigate = useNavigate()
   const runs = projectRuns(state.catalog, project.id).filter((r) => !r.groupId)
   const groups = projectGroups(state.catalog, project.id)
+  const trashed = projectTrash(state.catalog, project.id).length
+  const [dialog, setDialog] = useState<RunDialog>(null)
+  const action = useCommitError()
+  const open = project.state === "open"
+  const pending = dialog ? runPipeline(state, dialog.run) : null
+  const openSteps = pending ? pending.steps.slice(0, 5).filter((s) => s.state !== "done") : []
+
+  const menu = (run: Run, step: string): MenuEntry[] => [
+    { heading: run.name },
+    { label: "Open", icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: project.id, runId: run.id, step } }) },
+    ...(open && run.completion !== "complete" ? [{ label: "Complete…", icon: CheckCheck, onSelect: () => setDialog({ kind: "complete", run }) }] : []),
+    ...(open ? [{ separator: true } as const, { label: "Move to Trash…", icon: Trash2, destructive: true, onSelect: () => setDialog({ kind: "trash", run }) }] : []),
+  ]
+
   return (
-    <Section
+    <Box
       id="runs"
-      title="Runs"
-      description="Each run with its steps and its Next; a mosaic's run group lists its panel runs together."
+      level={2}
+      flush
+      title={
+        <span className="flex items-center gap-1.5">
+          Runs <CountBadge count={runs.length + groups.length} label={plural(runs.length + groups.length, "run")} />
+        </span>
+      }
       actions={
-        project.state === "open" ? (
-          <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId: project.id })}>
-            <Play aria-hidden="true" data-icon="inline-start" />
-            Start a processing run
-          </Button>
-        ) : null
+        <>
+          {trashed > 0 ? (
+            <Button size="sm" variant="ghost" render={<Link to="/projects/$projectId/trash" params={{ projectId: project.id }} />}>
+              <Trash2 aria-hidden="true" data-icon="inline-start" />
+              Trash <CountBadge count={trashed} label={plural(trashed, "trashed run")} />
+            </Button>
+          ) : null}
+          {open ? (
+            <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId: project.id })}>
+              <Play aria-hidden="true" data-icon="inline-start" />
+              Start run
+            </Button>
+          ) : null}
+        </>
       }
     >
+      <CommitOutcome
+        result={action.result}
+        action={dialog?.kind === "trash" ? "Can't trash run" : "Can't complete run"}
+        reason={(n) => plural(n, "blocker")}
+        className="border-b border-border px-3 py-2"
+      />
       {runs.length === 0 && groups.length === 0 ? (
-        <EmptyState
-          icon={FolderKanban}
-          title="No runs yet"
-          description="A run takes one subject and one rig; its candidates start selected."
-          action={
-            project.state === "open" ? (
-              <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId: project.id })}>
-                Start a processing run
-              </Button>
-            ) : (
-              <span className="text-sm text-muted-foreground">Reopen the Project to start a run.</span>
-            )
-          }
-        />
+        <Empty>No runs yet</Empty>
       ) : (
-        <ul className="divide-y divide-separator rounded-[0.3125rem] border border-separator">
+        <ul className="divide-y divide-separator">
           {runs.map((run) => {
             const pipeline = runPipeline(state, run)
             const held = pipeline.blocker ? pipeline.steps.find((s) => s.id === pipeline.blocker!.step) : undefined
             const subject = project.subjects.find((s) => s.id === run.subjectId)
             return (
-              <li key={run.id} className="grid gap-x-4 gap-y-1 px-3 py-2 lg:grid-cols-[minmax(12rem,1fr)_auto_auto] lg:items-center">
-                <div className="min-w-0">
-                  <Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: project.id, runId: run.id, step: pipeline.current.id }} className="font-medium underline-offset-2 hover:underline">
-                    {run.name}
-                  </Link>
-                  <span className="block text-[0.6875rem] text-muted-foreground">
-                    {subject ? subjectName(state.catalog, subject) : "Unknown subject"} · {rigName(state.catalog, run.rigId)}
-                  </span>
-                  <span className="flex flex-wrap items-center gap-x-1.5 text-[0.6875rem]">
-                    <StatusBadge kind="run" value={pipeline.status} />
-                    {held ? <GateLabel state={held.state} label={`${GATE_LABEL[held.state]} at ${held.label}: ${pipeline.blocker!.message}`} /> : null}
-                  </span>
-                </div>
-                <StepRail steps={pipeline.steps} current={pipeline.current.id} label={`Steps of ${run.name}`} />
-                <NextButton next={pipeline.next} onFollow={follow} runName={run.name} />
-              </li>
+              <RowContextMenu key={run.id} entries={menu(run, pipeline.current.id)}>
+                <li className="grid gap-x-4 gap-y-1 px-3 py-2 lg:grid-cols-[minmax(12rem,1fr)_auto_auto] lg:items-center">
+                  <div className="min-w-0">
+                    <Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: project.id, runId: run.id, step: pipeline.current.id }} className="font-medium underline-offset-2 hover:underline">
+                      {run.name}
+                    </Link>
+                    <span className="flex flex-wrap items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
+                      {subject ? subjectName(state.catalog, subject) : "Unknown subject"} · {rigName(state.catalog, run.rigId)}
+                      <StatusBadge kind="run" value={pipeline.status} />
+                      {held ? <GateLabel state={held.state} label={`${GATE_LABEL[held.state]} at ${held.label}`} /> : null}
+                      {held ? <NoteMarker label={`Why ${run.name} is held`}>{pipeline.blocker!.message}</NoteMarker> : null}
+                    </span>
+                  </div>
+                  <StepRail steps={pipeline.steps} current={pipeline.current.id} label={`Steps of ${run.name}`} />
+                  <NextButton next={pipeline.next} onFollow={follow} runName={run.name} />
+                </li>
+              </RowContextMenu>
             )
           })}
           {groups.map((group) => {
@@ -710,53 +204,633 @@ export function RunsSection({ project }: { project: Project }) {
                     <Link to="/projects/$projectId/groups/$groupId/$step" params={{ projectId: project.id, groupId: group.id, step: current.id }} className="font-medium underline-offset-2 hover:underline">
                       {group.name}
                     </Link>
-                    <span className="block text-[0.6875rem] text-muted-foreground">
-                      Run group · {plural(pipeline.panels.length, "panel run")} · {rigName(state.catalog, group.rigId)}
+                    <span className="flex flex-wrap items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
+                      <Pill tone="info" icon={Layers}>
+                        {plural(pipeline.panels.length, "panel")}
+                      </Pill>
+                      {rigName(state.catalog, group.rigId)}
                     </span>
                   </div>
                   <StepRail steps={pipeline.steps} current={current.id} label={`Steps of ${group.name}`} />
                   <NextButton next={pipeline.next} onFollow={follow} runName={group.name} />
                 </div>
                 <ul className="ml-3 space-y-1 border-l border-separator pl-3">
-                  {pipeline.panels.map((p) => (
-                    <li key={p.run.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                      {p.trashed ? (
-                        <>
-                          <span className="w-16 font-medium">{panelLabel(p.panel)}</span>
-                          <StatusBadge kind="run" value="trashed" />
-                          <span className="text-xs text-muted-foreground">Its frames leave the group counts.</span>
-                          <Link to="/projects/$projectId/trash" params={{ projectId: project.id }} className="text-xs text-link underline-offset-2 hover:underline">
-                            Open Trash
-                          </Link>
-                        </>
-                      ) : (
-                        <>
+                  {pipeline.panels.map((p) =>
+                    p.trashed ? (
+                      <li key={p.run.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                        <span className="w-16 font-medium">{panelLabel(p.panel)}</span>
+                        <StatusBadge kind="run" value="trashed" />
+                      </li>
+                    ) : (
+                      <RowContextMenu key={p.run.id} entries={menu(p.run, p.pipeline.current.id)}>
+                        <li className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                           <Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: project.id, runId: p.run.id, step: p.pipeline.current.id }} className="w-16 font-medium underline-offset-2 hover:underline">
                             {panelLabel(p.panel)}
                           </Link>
                           <StepRail compact steps={p.pipeline.steps} current={p.pipeline.current.id} label={`Steps of ${p.run.name}`} />
                           <GateLabel state={p.pipeline.current.state} label={`${p.pipeline.current.label}: ${p.pipeline.current.status}`} className="text-muted-foreground" />
-                        </>
-                      )}
-                    </li>
-                  ))}
+                        </li>
+                      </RowContextMenu>
+                    ),
+                  )}
                 </ul>
               </li>
             )
           })}
         </ul>
       )}
-    </Section>
+      <ConfirmDialog
+        open={dialog?.kind === "complete"}
+        onOpenChange={(next) => !next && setDialog(null)}
+        title={`Complete ${dialog?.run.name ?? "run"}?`}
+        description="Reopen returns it to its step."
+        changes={[`${dialog?.run.name ?? "Run"} → Complete`]}
+        unchanged={openSteps.length > 0 ? openSteps.map((s) => `${s.label} stays ${GATE_LABEL[s.state]}`) : undefined}
+        confirmLabel="Complete run"
+        onConfirm={() => {
+          if (dialog) action.run(() => completeRun(dialog.run.id))
+        }}
+      />
+      <ConfirmDialog
+        open={dialog?.kind === "trash"}
+        onOpenChange={(next) => !next && setDialog(null)}
+        title={`Move ${dialog?.run.name ?? "run"} to Trash?`}
+        description="Restore brings it back as it was."
+        changes={[`${dialog?.run.name ?? "Run"} → Project Trash`, "Its members stop counting toward goals"]}
+        confirmLabel="Move to Trash"
+        tone="destructive"
+        onConfirm={() => {
+          if (dialog) action.run(() => trashRun(dialog.run.id))
+        }}
+      />
+    </Box>
   )
 }
 
 function NextButton({ next, onFollow, runName }: { next: ReturnType<typeof runPipeline>["next"]; onFollow: (link: NonNullable<ReturnType<typeof runPipeline>["next"]>["link"]) => void; runName: string }) {
-  if (!next) return <span className="text-xs text-muted-foreground">Nothing waiting</span>
+  if (!next) return <span className="text-xs text-muted-foreground">–</span>
   return (
     <Button size="sm" variant="outline" title={next.reason} onClick={() => onFollow(next.link)}>
-      Next: {next.label}
+      {next.label}
       <span className="sr-only"> for {runName}</span>
     </Button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Candidates: review frames, start a run from a selection
+// ---------------------------------------------------------------------------
+
+function unreviewed(catalog: Catalog, session: Session): number {
+  return liveAssetIds(catalog, session).filter((id) => {
+    const asset = catalog.assets[id]
+    return asset ? asset.quality.value === "unreviewed" && qualityApplicability(asset) === "applicable" : false
+  }).length
+}
+
+export type CandidateFilter = "all" | "unreviewed" | "ready"
+
+interface CandidateRow {
+  session: Session
+  subject: Subject
+  rigId: string
+  placement: string | null
+  frames: number
+  unreviewed: number
+  runs: string[]
+  firstAssetId: string | null
+}
+
+function candidateRows(state: PrototypeState, project: Project): CandidateRow[] {
+  const { catalog } = state
+  const runs = projectRuns(catalog, project.id)
+  return projectCandidates(catalog, project).map((c) => {
+    const placed = c.subject.mosaic ? panelForSession(catalog, c.subject, c.session, c.rigId) : null
+    const panel = placed?.panelId ? c.subject.mosaic?.panels.find((p) => p.id === placed.panelId) : undefined
+    const assets = liveAssetIds(catalog, c.session)
+    return {
+      session: c.session,
+      subject: c.subject,
+      rigId: c.rigId,
+      placement: placed ? (panel ? panelLabel(panel) : placed.flag === "ambiguous" ? "Ambiguous" : placed.flag === "off-panel" ? "Off panel" : "No pointing") : null,
+      frames: assets.length,
+      unreviewed: unreviewed(catalog, c.session),
+      runs: runs.filter((r) => latestRevision(r)?.sessions.some((m) => m.sessionId === c.session.id)).map((r) => r.name),
+      firstAssetId: assets[0] ?? null,
+    }
+  })
+}
+
+const FILTERS: Array<[CandidateFilter, string]> = [
+  ["all", "All"],
+  ["unreviewed", "Unreviewed"],
+  ["ready", "Not in a run"],
+]
+
+export function CandidatesSection({ project }: { project: Project }) {
+  const navigate = useNavigate()
+  const [filter, setFilter] = useState<CandidateFilter>("all")
+  const [selected, setSelected] = useState<string[]>([])
+  const [refusal, setRefusal] = useState<{ action: string; reason: string; blockers: Array<{ label: string }> } | null>(null)
+  const start = useCommitError()
+  const rows = useStore((s) => candidateRows(s, project))
+  const catalog = useStore((s) => s.catalog)
+  const flagged = useStore((s) =>
+    projectRuns(s.catalog, project.id).flatMap((run) => runRefresh(s.catalog, run).noLongerMatching.map((sessionId) => ({ run, session: s.catalog.sessions[sessionId] }))),
+  )
+  const shown = rows.filter((r) => (filter === "unreviewed" ? r.unreviewed > 0 : filter === "ready" ? r.runs.length === 0 : true))
+  const unreviewedFrames = rows.reduce((n, r) => n + r.unreviewed, 0)
+  const ready = rows.filter((r) => r.runs.length === 0).length
+  const open = project.state === "open"
+  const live = selected.filter((id) => rows.some((r) => r.session.id === id))
+
+  const review = (assetId?: string | null) =>
+    void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { candidates: unreviewedFrames > 0 && !assetId ? "unreviewed" : "all", ...(assetId ? { filter: "all", assetId } : {}) } })
+
+  function startFrom(ids: string[]) {
+    setRefusal(null)
+    const picked = rows.filter((r) => ids.includes(r.session.id))
+    const combos = [...new Map(picked.map((r) => [`${r.subject.id}|${r.rigId}`, r])).values()]
+    if (combos.length !== 1) {
+      setRefusal({ action: "Can't start run", reason: `${combos.length} subject and rig pairs`, blockers: combos.map((r) => ({ label: `${subjectName(catalog, r.subject)} · ${rigName(catalog, r.rigId)}` })) })
+      return
+    }
+    const { subject, rigId } = combos[0]!
+    if (subject.mosaic) {
+      void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { mosaic: subject.id, rig: rigId, sessions: ids.join(",") } })
+      return
+    }
+    const outcome = startRun(project.id, subject.id, rigId, { sessionIds: ids })
+    start.run(() => outcome.result)
+    if (outcome.runId) {
+      setSelected([])
+      void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: project.id, runId: outcome.runId, step: "select" } })
+    }
+  }
+
+  const columns: Column<CandidateRow>[] = [
+    {
+      id: "session",
+      header: "Session",
+      rowHeader: true,
+      sortValue: (r) => r.session.night,
+      cell: (r) => (
+        <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium whitespace-nowrap underline-offset-2 hover:underline">
+          {formatNight(r.session.night)} · {r.session.channel ?? "No filter"}
+        </Link>
+      ),
+    },
+    {
+      id: "subject",
+      header: "Subject",
+      sortValue: (r) => subjectName(catalog, r.subject),
+      cell: (r) => (
+        <span className="flex flex-wrap items-center gap-1">
+          {subjectName(catalog, r.subject)}
+          {r.placement ? <Pill tone={r.placement.startsWith("Panel") ? "muted" : "warning"}>{r.placement}</Pill> : null}
+        </span>
+      ),
+    },
+    { id: "rig", header: "Rig", cell: (r) => rigName(catalog, r.rigId), truncate: true },
+    { id: "frames", header: "Frames", align: "right", sortValue: (r) => r.frames, cell: (r) => <span className="tabular-nums">{r.frames}</span> },
+    {
+      id: "unreviewed",
+      header: "Unreviewed",
+      align: "right",
+      sortValue: (r) => r.unreviewed,
+      cell: (r) => (r.unreviewed > 0 ? <CountBadge count={r.unreviewed} tone="warning" label={`${r.unreviewed} unreviewed`} /> : <span className="text-muted-foreground">0</span>),
+    },
+    { id: "runs", header: "In run", cell: (r) => (r.runs.length > 0 ? <span className="text-xs">{r.runs.join(", ")}</span> : <Pill tone="info">Ready</Pill>) },
+  ]
+
+  const menu = (r: CandidateRow): MenuEntry[] => {
+    const ids = live.includes(r.session.id) && live.length > 1 ? live : [r.session.id]
+    return [
+      { heading: ids.length > 1 ? plural(ids.length, "session") : `${formatNight(r.session.night)} · ${r.session.channel ?? "No filter"}` },
+      { label: "Review frames", icon: Eye, onSelect: () => review(r.firstAssetId) },
+      ...(open ? [{ label: ids.length > 1 ? `Start run (${ids.length})` : "Start run", icon: Play, onSelect: () => startFrom(ids) }] : []),
+      { separator: true },
+      { label: "Open session", onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: r.session.id } }) },
+    ]
+  }
+
+  return (
+    <Box
+      id="candidates"
+      level={2}
+      flush
+      title={
+        <span className="flex items-center gap-1.5">
+          Candidates <CountBadge count={rows.length} label={plural(rows.length, "session")} />
+        </span>
+      }
+      actions={
+        rows.length > 0 ? (
+          <>
+            {ready > 0 ? <Pill tone="info">{ready} ready</Pill> : null}
+            <Button size="sm" variant="outline" onClick={() => review()}>
+              <Eye aria-hidden="true" data-icon="inline-start" />
+              Review frames
+              {unreviewedFrames > 0 ? <CountBadge count={unreviewedFrames} tone="warning" label={`${unreviewedFrames} unreviewed`} /> : null}
+            </Button>
+          </>
+        ) : null
+      }
+    >
+      {flagged.length > 0 ? (
+        <div className="border-b border-border px-3 py-2">
+          <Refusal
+            action={`${plural(flagged.length, "member")} no longer match`}
+            reason="subject changed"
+            blockers={flagged.map(({ run, session }) => ({ label: `${session ? sessionLabel(catalog, session) : "Session"} · ${run.name}`, link: runStepLink(run, "select") }))}
+          />
+        </div>
+      ) : null}
+      {rows.length === 0 ? (
+        <Empty>No candidates</Empty>
+      ) : (
+        <div className="space-y-2 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex gap-1" role="group" aria-label="Candidates filter">
+              {FILTERS.map(([value, label]) => (
+                <Button key={value} size="sm" variant={filter === value ? "secondary" : "ghost"} aria-pressed={filter === value} onClick={() => setFilter(value)}>
+                  {label}
+                </Button>
+              ))}
+            </div>
+            {live.length > 0 ? (
+              <SelectionBar
+                count={live.length}
+                noun="session"
+                onClear={() => setSelected([])}
+                actions={
+                  open ? (
+                    <Button size="sm" onClick={() => startFrom(live)}>
+                      <Play aria-hidden="true" data-icon="inline-start" />
+                      Start run
+                    </Button>
+                  ) : null
+                }
+              />
+            ) : null}
+          </div>
+          {refusal ? <Refusal {...refusal} /> : null}
+          <CommitOutcome result={start.result} action="Can't start run" />
+          <DataTable
+            label={`Candidate sessions of ${project.name}`}
+            rows={shown}
+            columns={columns}
+            getRowId={(r) => r.session.id}
+            selection={open ? { selected: live, onChange: setSelected, rowLabel: (r) => sessionLabel(catalog, r.session) } : undefined}
+            contextMenu={menu}
+            scroll="none"
+            empty={<Empty>{filter === "unreviewed" ? "None unreviewed" : "Every candidate is in a run"}</Empty>}
+          />
+        </div>
+      )}
+    </Box>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Goals: structured kinds and channel chips (D-W29, D-W30)
+// ---------------------------------------------------------------------------
+
+function kindsLine(goal: Pick<Goal, "integrationS" | "frameCount" | "qualityBar">): string {
+  const parts = [goal.integrationS !== null ? formatHours(goal.integrationS) : null, goal.frameCount !== null ? plural(goal.frameCount, "frame") : null, goal.qualityBar ? qualityBarLabel(goal.qualityBar) : null].filter(Boolean)
+  return parts.join(" · ") || "No target"
+}
+
+/** What applying a template changes, grouped by channel and change: "Ha 10h → 15h · 4 goals". Unchanged goals are not listed. */
+export function templateChanges(project: Project, next: Goal[]): string[] {
+  const key = (g: Goal) => `${g.subjectId}|${g.panelId ?? ""}|${g.channel}`
+  const before = new Map(project.goals.map((g) => [key(g), g]))
+  const after = new Map(next.map((g) => [key(g), g]))
+  const counts = new Map<string, number>()
+  const bump = (line: string) => counts.set(line, (counts.get(line) ?? 0) + 1)
+  for (const [k, g] of after) {
+    const old = before.get(k)
+    if (!old) bump(`+ ${g.channel} ${kindsLine(g)}`)
+    else if (kindsLine(old) !== kindsLine(g)) bump(`${g.channel} ${kindsLine(old)} → ${kindsLine(g)}`)
+  }
+  for (const [k, g] of before) if (!after.has(k)) bump(`− ${g.channel} ${kindsLine(g)}`)
+  return [...counts].map(([line, n]) => (n > 1 ? `${line} · ${plural(n, "goal")}` : line))
+}
+
+export function GoalsSection({ project }: { project: Project }) {
+  const catalog = useStore((s) => s.catalog)
+  const progress = useStore((s) => goalProgress(s.catalog, project))
+  const warnings = useStore((s) => projectWarnings(s.disk, s.catalog, project))
+  const channels = projectChannels(catalog, project.rigIds)
+  const [editing, setEditing] = useState<Goal[] | null>(null)
+  const [templateId, setTemplateId] = useState(BUILT_IN_GOAL_TEMPLATES[0]!.id)
+  const save = useCommitError()
+  const templates = [...BUILT_IN_GOAL_TEMPLATES, ...Object.values(catalog.goalTemplates)]
+  const template = templates.find((t) => t.id === templateId)
+  const editable = project.state === "open"
+  const groups = project.subjects.flatMap<{ subject: Subject; panel: MosaicPanel | null }>((subject) =>
+    subject.mosaic ? subject.mosaic.panels.map((p) => ({ subject, panel: p })) : [{ subject, panel: null }],
+  )
+  const preview = template ? templateChanges(project, project.subjects.flatMap((s) => goalsFromTemplate(template, s))) : []
+
+  const edit = (id: string, patch: Partial<Goal>) => setEditing((list) => list?.map((g) => (g.id === id ? { ...g, ...patch } : g)) ?? null)
+
+  return (
+    <Box
+      id="goals"
+      level={2}
+      title="Goals"
+      actions={
+        editable ? (
+          editing ? (
+            <>
+              <Button size="sm" variant="outline" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={() => save.run(() => setGoals(project.id, editing, project.revision)) && setEditing(null)}>
+                Save goals
+              </Button>
+            </>
+          ) : (
+            <>
+              <SelectField className="w-44 [&>label]:sr-only" label="Goal template" value={templateId} onChange={setTemplateId} options={templates.map((t) => ({ value: t.id, label: t.name }))} />
+              <ConfirmDialog
+                trigger={
+                  <Button size="sm" variant="ghost">
+                    Apply
+                  </Button>
+                }
+                title={`Apply ${template?.name ?? "template"}?`}
+                description="Values are copied in and stay editable."
+                changes={preview.length > 0 ? preview : ["No goal changes"]}
+                confirmLabel="Apply template"
+                onConfirm={() => applyGoalTemplate(project.id, templateId, project.revision)}
+              />
+              <Button size="sm" variant="outline" onClick={() => setEditing(project.goals.map((g) => ({ ...g })))}>
+                <Pencil aria-hidden="true" data-icon="inline-start" />
+                Edit
+              </Button>
+            </>
+          )
+        ) : null
+      }
+    >
+      <div className="space-y-3">
+        <CommitOutcome result={save.result} action="Can't save goals" />
+        {groups.length === 0 ? <p className="text-sm text-muted-foreground">No subjects</p> : null}
+        {groups.map(({ subject, panel }) => {
+          const rows = (editing ?? project.goals).filter((g) => g.subjectId === subject.id && (g.panelId ?? null) === (panel?.id ?? null))
+          return (
+            <div key={`${subject.id}|${panel?.id ?? ""}`} className="space-y-1">
+              <h3 className="flex items-center gap-1.5 text-sm font-medium">
+                {subjectName(catalog, subject)}
+                {panel ? <Pill tone="muted">{panelLabel(panel)}</Pill> : null}
+              </h3>
+              {rows.length === 0 && !editing ? <p className="text-xs text-muted-foreground">No goals</p> : null}
+              {rows.length > 0 ? (
+                <ul className="divide-y divide-separator rounded-md border border-border">
+                  {rows.map((goal) => {
+                    const p = progress.find((x) => x.goal.id === goal.id)
+                    const rowWarnings = panel ? [] : warnings.filter((w) => w.subjectId === subject.id && w.channel === goal.channel)
+                    return (
+                      <li key={goal.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-sm">
+                        <Pill tone="info">{goal.channel}</Pill>
+                        {editing ? (
+                          <>
+                            <GoalKindsFields channel={goal.channel} value={goal} onChange={(patch) => edit(goal.id, patch)} />
+                            <Button size="icon-sm" variant="ghost" className="ml-auto" aria-label={`Remove ${goal.channel} goal`} onClick={() => setEditing((list) => list?.filter((g) => g.id !== goal.id) ?? null)}>
+                              <X aria-hidden="true" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="min-w-0 flex-1 tabular-nums">{p?.line.replace(new RegExp(`^${goal.channel} `), "") ?? kindsLine(goal)}</span>
+                            {goal.qualityBar ? <Pill tone="muted">{qualityBarLabel(goal.qualityBar)}</Pill> : null}
+                            {p && p.unknownQuality > 0 ? <NoteMarker label="Unmeasured members">{plural(p.unknownQuality, "member")} unmeasured · not counted</NoteMarker> : null}
+                            {rowWarnings.map((w) => (
+                              <Pill key={w.message} tone="warning" title={w.message}>
+                                {w.kind === "exposure-mismatch" ? "Exposure mismatch" : "Missing calibration"}
+                              </Pill>
+                            ))}
+                            {p?.met ? (
+                              <Pill tone="success">Met</Pill>
+                            ) : p && p.remainingS !== null ? (
+                              <span className="text-xs text-muted-foreground tabular-nums">{formatHours(p.remainingS)} to go</span>
+                            ) : null}
+                          </>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : null}
+              {editing ? (
+                <ChannelChips
+                  label={`Add goal for ${subjectName(catalog, subject)}${panel ? ` ${panelLabel(panel)}` : ""}`}
+                  channels={channels}
+                  taken={rows.map((g) => g.channel)}
+                  onAdd={(channel: GoalChannel) =>
+                    setEditing((list) => [...(list ?? []), { id: freshId("goal", `${subject.id}|${panel?.id ?? ""}|${channel}`), subjectId: subject.id, panelId: panel?.id ?? null, channel, ...DEFAULT_GOAL }])
+                  }
+                />
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </Box>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Subjects (with the mosaic editor)
+// ---------------------------------------------------------------------------
+
+export function SubjectsSection({ project }: { project: Project }) {
+  const state = useStore((s) => s)
+  const catalog = state.catalog
+  const navigate = useNavigate()
+  const remove = useCommitError()
+  const add = useCommitError()
+  const [adding, setAdding] = useState(false)
+  const editable = project.state === "open"
+  const mosaicLink = (subjectId: string) => void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { mosaic: subjectId } })
+
+  const menu = (subject: Subject): MenuEntry[] => {
+    const target = subjectTarget(catalog, subject)
+    return [
+      { heading: subjectName(catalog, subject) },
+      ...(target ? [{ label: "Open Target", onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: target.id } }) }] : []),
+      ...(editable ? [{ label: subject.mosaic ? "Start mosaic run" : "Make mosaic", icon: Grid2x2Plus, onSelect: () => mosaicLink(subject.id) }] : []),
+      ...(editable ? [{ separator: true } as const, { label: "Remove", icon: X, destructive: true, onSelect: () => remove.run(() => removeSubject(project.id, subject.id, project.revision)) }] : []),
+    ]
+  }
+
+  return (
+    <Box
+      id="subjects"
+      level={2}
+      flush
+      title={
+        <span className="flex items-center gap-1.5">
+          Subjects <CountBadge count={project.subjects.length} label={plural(project.subjects.length, "subject")} />
+        </span>
+      }
+      actions={
+        editable && !adding ? (
+          <>
+            <Button size="sm" variant="ghost" onClick={() => mosaicLink("new")}>
+              <Grid2x2Plus aria-hidden="true" data-icon="inline-start" />
+              New mosaic
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+              <Plus aria-hidden="true" data-icon="inline-start" />
+              Add
+            </Button>
+          </>
+        ) : null
+      }
+    >
+      <CommitOutcome result={remove.result} action="Can't remove subject" reason={(n) => `used by ${plural(n, "run")}`} blockers={(reasons) => runBlockers(state, project, reasons)} className="border-b border-border px-3 py-2" />
+      {adding ? (
+        <div className="space-y-2 border-b border-border p-3">
+          <SubjectSearch
+            autoFocus
+            taken={project.subjects.map((s) => subjectTarget(catalog, s)?.name ?? "")}
+            onPick={(pick) => {
+              const resolved = resolvePick(pick)
+              if (!resolved.ok) {
+                add.setError(resolved.message)
+                return
+              }
+              if (add.run(() => addSubject(project.id, { targetId: resolved.targetId, mosaic: null }, project.revision))) setAdding(false)
+            }}
+          />
+          <CommitOutcome result={add.result} action="Can't add subject" />
+          <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : null}
+      {project.subjects.length === 0 ? (
+        <Empty>No subjects</Empty>
+      ) : (
+        <SimpleTable caption={`Subjects of ${project.name}`} headers={["Subject", "Kind", "Centre", "Runs"]}>
+          {project.subjects.map((subject) => {
+            const target = subjectTarget(catalog, subject)
+            const centre = subjectCentre(catalog, subject)
+            const users = runsUsing(catalog, project, (r) => r.subjectId === subject.id && !r.trashedAt)
+            return (
+              <RowContextMenu key={subject.id} entries={menu(subject)}>
+                <tr>
+                  <th scope="row" className={`${TD} text-left font-medium`}>
+                    {target ? (
+                      <Link to="/targets/$targetId" params={{ targetId: target.id }} className="underline-offset-2 hover:underline">
+                        {subjectName(catalog, subject)}
+                      </Link>
+                    ) : (
+                      subjectName(catalog, subject)
+                    )}
+                  </th>
+                  <td className={TD}>
+                    {subject.mosaic ? (
+                      <button type="button" className="rounded-full" onClick={() => editable && mosaicLink(subject.id)} disabled={!editable} aria-label={`Mosaic of ${plural(subject.mosaic.panels.length, "panel")}: start mosaic run`}>
+                        <Pill tone="info" icon={Grid2x2Plus}>
+                          {plural(subject.mosaic.panels.length, "panel")}
+                        </Pill>
+                      </button>
+                    ) : (
+                      <Pill tone="muted">Target</Pill>
+                    )}
+                  </td>
+                  <td className={`${TD} whitespace-nowrap tabular-nums`}>{centre ? `${formatRa(centre.ra)} ${formatDec(centre.dec)}` : "–"}</td>
+                  <td className={`${TD} tabular-nums`}>{users.length}</td>
+                </tr>
+              </RowContextMenu>
+            )
+          })}
+        </SimpleTable>
+      )}
+    </Box>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Rigs
+// ---------------------------------------------------------------------------
+
+export function RigsSection({ project }: { project: Project }) {
+  const state = useStore((s) => s)
+  const catalog = state.catalog
+  const navigate = useNavigate()
+  const candidates = projectCandidates(catalog, project)
+  const remove = useCommitError()
+  const add = useCommitError()
+  const [choice, setChoice] = useState("")
+  const editable = project.state === "open"
+  const others = Object.values(catalog.opticalTrains).filter((r) => !project.rigIds.includes(r.id))
+  const chosen = others.find((r) => r.id === choice) ?? others[0]
+
+  const menu = (id: string): MenuEntry[] => [
+    { heading: rigName(catalog, id) },
+    { label: "Open in Equipment", onSelect: () => void navigate({ to: "/settings/equipment" as never }) },
+    ...(editable ? [{ separator: true } as const, { label: "Remove", icon: X, destructive: true, onSelect: () => remove.run(() => removeRig(project.id, id, project.revision)) }] : []),
+  ]
+
+  return (
+    <Box
+      id="rigs"
+      level={2}
+      flush
+      title={
+        <span className="flex items-center gap-1.5">
+          Rigs <CountBadge count={project.rigIds.length} label={plural(project.rigIds.length, "rig")} />
+        </span>
+      }
+    >
+      <CommitOutcome result={remove.result} action="Can't remove rig" reason={(n) => `used by ${plural(n, "run")}`} blockers={(reasons) => runBlockers(state, project, reasons)} className="border-b border-border px-3 py-2" />
+      {project.rigIds.length === 0 ? (
+        <Empty>No rigs</Empty>
+      ) : (
+        <SimpleTable caption={`Rigs of ${project.name}`} headers={["Rig", "Camera", "Channels", "Field", "Candidates"]}>
+          {project.rigIds.map((id) => {
+            const rig = catalog.opticalTrains[id]
+            const fov = rig ? rigFieldOfView(catalog, rig) : null
+            const kind = rig ? rigCameraKind(catalog, rig) : null
+            const chips = projectChannels(catalog, [id])
+            return (
+              <RowContextMenu key={id} entries={menu(id)}>
+                <tr>
+                  <th scope="row" className={`${TD} text-left font-medium`}>
+                    {rigName(catalog, id)}
+                  </th>
+                  <td className={TD}>
+                    <Pill tone="muted">{kind === "osc" ? "OSC" : kind === "mono" ? "Mono" : "Unknown"}</Pill>
+                  </td>
+                  <td className={TD}>
+                    <span className="flex flex-wrap gap-1">
+                      {chips.length > 0 ? chips.map((c) => <Pill key={c}>{c}</Pill>) : "–"}
+                    </span>
+                  </td>
+                  <td className={`${TD} whitespace-nowrap tabular-nums`}>{fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)}` : "–"}</td>
+                  <td className={`${TD} tabular-nums`}>{candidates.filter((c) => c.rigId === id).length}</td>
+                </tr>
+              </RowContextMenu>
+            )
+          })}
+        </SimpleTable>
+      )}
+      {editable && chosen ? (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2">
+          <SelectField className="min-w-0 flex-1 [&>label]:sr-only" label="Add a rig" value={chosen.id} onChange={setChoice} options={others.map((r) => ({ value: r.id, label: r.name }))} />
+          <Button size="sm" variant="outline" onClick={() => add.run(() => addRig(project.id, chosen.id, project.revision))}>
+            <Plus aria-hidden="true" data-icon="inline-start" />
+            Add rig
+          </Button>
+          <CommitOutcome result={add.result} action="Can't add rig" className="basis-full" />
+        </div>
+      ) : null}
+    </Box>
   )
 }
 
@@ -769,82 +843,84 @@ export function PlanningSection({ project }: { project: Project }) {
   const site = planningSite(state)
   const now = Date.parse(nowIso())
   const tonight = site ? tonightAt(site, now) : null
-  const open = (
-    <Button size="sm" variant="outline" render={<Link to="/plan" search={{ project: project.id }} />}>
-      Open in Planner
-    </Button>
-  )
   return (
-    <Section id="planning" title="Planning" description="Tonight for this Project's subjects and what each goal still needs." actions={open}>
+    <Box
+      id="planning"
+      level={2}
+      flush
+      title={
+        <span className="flex flex-wrap items-center gap-1.5">
+          Tonight
+          {site && tonight ? (
+            <>
+              <Pill tone="muted">{site.name}</Pill>
+              <Pill tone="muted">Moon {Math.round(tonight.moon.illuminationPct)}%</Pill>
+              <Pill tone={tonight.darkness ? "muted" : "warning"}>
+                {tonight.darkness ? `Dark ${formatTime(tonight.darkness.start, site.timeZone)}–${formatTime(tonight.darkness.end, site.timeZone)}` : "No darkness"}
+              </Pill>
+            </>
+          ) : null}
+        </span>
+      }
+      actions={
+        <Button size="sm" variant="outline" render={<Link to="/plan" search={{ project: project.id }} />}>
+          Planner
+        </Button>
+      }
+    >
       {!site || !tonight ? (
-        <Notice
-          tone="info"
-          title="Add an observing site in Settings"
-          actions={
-            <Button size="sm" variant="outline" render={<Link to="/settings/sites" />}>
-              <MapPinOff aria-hidden="true" data-icon="inline-start" />
-              Observing sites
-            </Button>
-          }
-        >
-          Tonight&apos;s windows need a site. Goals and gaps below still read as usual.
-        </Notice>
-      ) : (
-        <p className="text-xs text-muted-foreground tabular-nums">
-          {site.name} ({site.timeZone}) · night of {formatNight(tonight.night)} · Moon {tonight.moon.phase.toLowerCase()}, {Math.round(tonight.moon.illuminationPct)}% ·{" "}
-          {tonight.darkness ? `dark ${formatTime(tonight.darkness.start, site.timeZone)}–${formatTime(tonight.darkness.end, site.timeZone)}` : "no full darkness tonight"}
-        </p>
-      )}
-      <SimpleTable caption={`Planning for the subjects of ${project.name}`} headers={["Subject", "Best window tonight", "Gaps (in project · captured)"]}>
+        <div className="border-b border-border px-3 py-2">
+          <Refusal action="No windows" reason="no observing site" blockers={[{ label: "Settings › Sites", link: { to: "/settings/sites" } }]} />
+        </div>
+      ) : null}
+      <SimpleTable caption={`Planning for the subjects of ${project.name}`} headers={["Subject", "Best window", "To go"]}>
         {project.subjects.map((subject) => {
           const target = subjectTarget(state.catalog, subject)
           const centre = subjectCentre(state.catalog, subject)
           const window = site && target && centre ? bestWindowTonight({ ...target, ra: centre.ra, dec: centre.dec }, site, defaultCriteria(site), now) : null
-          const gaps = subjectGaps(state.catalog, project, subject)
+          const gaps = subjectGaps(state.catalog, project, subject).filter((g) => !g.met)
           return (
             <tr key={subject.id}>
               <th scope="row" className={`${TD} text-left font-medium`}>
                 {subjectName(state.catalog, subject)}
-                {subject.mosaic ? <span className="block text-[0.6875rem] font-normal text-muted-foreground">Centre of {plural(subject.mosaic.panels.length, "panel")}</span> : null}
               </th>
               <td className={`${TD} tabular-nums`}>
-                {!site ? (
-                  <span className="text-muted-foreground">No site</span>
-                ) : !centre ? (
-                  <span className="text-muted-foreground">Position unknown</span>
+                {!site || !centre ? (
+                  "–"
                 ) : window ? (
-                  `${formatTime(window.start, site.timeZone)}–${formatTime(window.end, site.timeZone)} · max ${Math.round(window.maxAltitudeDeg)}° · Moon ${Math.round(window.moonSeparationDeg)}° away`
+                  <span className="inline-flex items-center gap-1.5">
+                    {formatTime(window.start, site.timeZone)}–{formatTime(window.end, site.timeZone)}
+                    <Pill tone="muted">{Math.round(window.maxAltitudeDeg)}°</Pill>
+                    <Pill tone="muted">Moon {Math.round(window.moonSeparationDeg)}°</Pill>
+                  </span>
                 ) : (
-                  <span className="text-muted-foreground">No window tonight</span>
+                  <span className="text-muted-foreground">None tonight</span>
                 )}
               </td>
               <td className={TD}>
                 {gaps.length === 0 ? (
-                  <span className="text-muted-foreground">No integration goals</span>
+                  "–"
                 ) : (
-                  <ul className="space-y-0.5 text-xs tabular-nums">
-                    {gaps.map((gap) => {
-                      const panel = gap.panelId ? findPanel(subject, gap.panelId) : undefined
-                      return (
-                        <li key={`${gap.panelId}|${gap.channel}`} className={gap.met ? "text-success" : undefined}>
-                          {panel ? `${panelLabel(panel)}: ` : ""}
-                          {gap.line}
-                        </li>
-                      )
-                    })}
-                  </ul>
+                  <span className="flex flex-wrap gap-1">
+                    {gaps.map((gap) => (
+                      <Pill key={`${gap.panelId}|${gap.channel}`} tone="neutral" title={gap.line}>
+                        {gap.panelId ? `P${subject.mosaic?.panels.find((p) => p.id === gap.panelId)?.n ?? "?"} · ` : ""}
+                        {gap.line.replace(/ to go in project.*$/, "")}
+                      </Pill>
+                    ))}
+                  </span>
                 )}
               </td>
             </tr>
           )
         })}
       </SimpleTable>
-    </Section>
+    </Box>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Archived sessions (D-W69) and Trash
+// Archived sessions (D-W69)
 // ---------------------------------------------------------------------------
 
 export function ArchivedSection({ project }: { project: Project }) {
@@ -858,24 +934,27 @@ export function ArchivedSection({ project }: { project: Project }) {
   if (ids.length === 0 && !operationId) return null
   const open = project.state === "open"
   return (
-    <Section
+    <Box
       id="archived"
-      title={`Archived sessions (${ids.length})`}
-      description={open ? "This Project was reopened after Archive. Its archived sessions stay Archived until you restore them; reopening moved no file." : "Archived when the Project was Done. Reopen the Project to restore them."}
+      level={2}
+      flush
+      title={
+        <span className="flex items-center gap-1.5">
+          Archived <CountBadge count={ids.length} label={plural(ids.length, "session")} />
+        </span>
+      }
       actions={
         open && live.length > 0 ? (
           <ConfirmDialog
-            trigger={<Button size="sm">Restore {plural(live.length, "session")}…</Button>}
+            trigger={<Button size="sm">Restore ({live.length})…</Button>}
             title={`Restore ${plural(live.length, "session")}?`}
-            description="A reviewed transfer back to where Archive found each frame."
+            description="Back to where Archive found each frame."
             changes={[
-              ...plan.rows.map((r) => `${sessionLabel(catalog, r.session)}: ${plural(r.moves.length, "frame")} back to ${r.folder}`),
-              ...plan.refused.map((r) => `${sessionLabel(catalog, r.session)} stays archived: ${r.reason}`),
-              "Verifies each frame's SHA-256 before it moves and rebuilds prepared links",
+              ...plan.rows.map((r) => `${sessionLabel(catalog, r.session)} → ${r.folder}`),
+              ...plan.refused.map((r) => `${sessionLabel(catalog, r.session)} stays · ${r.reason}`),
             ]}
-            unchanged={["Run membership and totals", "Sessions you did not choose"]}
             confirmLabel="Restore"
-            onConfirm={() => {
+            onConfirm={(): CommitResult => {
               if (plan.rows.length === 0) return { ok: false, reason: "refused", message: plan.blocked ?? "Nothing chosen can be restored now.", reasons: [] }
               rememberApproval(project.id, "restore", startArchiveTransfer(project.id, plan.rows, "restore"))
               setChosen([])
@@ -886,7 +965,7 @@ export function ArchivedSection({ project }: { project: Project }) {
       }
     >
       {ids.length > 0 ? (
-        <SimpleTable caption={`Archived sessions of ${project.name}`} headers={[open ? "Restore" : "", "Session", "State", "Archive path"]}>
+        <SimpleTable caption={`Archived sessions of ${project.name}`} headers={[open ? "Restore" : "", "Session", "Archive path"]}>
           {ids.map((id) => {
             const session = catalog.sessions[id]
             if (!session) return null
@@ -902,7 +981,6 @@ export function ArchivedSection({ project }: { project: Project }) {
                     {sessionLabel(catalog, session)}
                   </Link>
                 </th>
-                <td className={TD}>Archived</td>
                 <td className={TD}>
                   <PathText path={path.split("/").slice(0, -1).join("/")} />
                 </td>
@@ -911,30 +989,11 @@ export function ArchivedSection({ project }: { project: Project }) {
           })}
         </SimpleTable>
       ) : null}
-      {operationId ? <OperationPanel operationId={operationId} headingLevel={3} /> : null}
-    </Section>
-  )
-}
-
-export function TrashSection({ project }: { project: Project }) {
-  const trashed = useStore((s) => projectTrash(s.catalog, project.id))
-  return (
-    <Section
-      id="trash"
-      title={`Trash (${trashed.length})`}
-      description="Hidden everywhere else and out of the totals; nothing moved on disk."
-      actions={
-        <Button size="sm" variant="outline" render={<Link to="/projects/$projectId/trash" params={{ projectId: project.id }} />}>
-          <Trash2 aria-hidden="true" data-icon="inline-start" />
-          Open Trash
-        </Button>
-      }
-    >
-      {trashed.length === 0 ? (
-        <p className="text-sm text-muted-foreground">The Trash is empty.</p>
-      ) : (
-        <p className="text-sm">{trashed.map((r) => r.name).join(", ")}</p>
-      )}
-    </Section>
+      {operationId ? (
+        <div className="p-3">
+          <OperationPanel operationId={operationId} headingLevel={3} />
+        </div>
+      ) : null}
+    </Box>
   )
 }
