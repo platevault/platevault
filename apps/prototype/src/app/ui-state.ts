@@ -6,7 +6,7 @@
  * open panels and sheets without prop drilling.
  */
 import { useSyncExternalStore } from "react"
-import type { ProjectId, SessionId } from "@/domain/types"
+import type { ProjectId, SessionId, TargetId } from "@/domain/types"
 
 export type GlobalPanel = "palette" | "shortcuts" | "simulation" | null
 
@@ -18,7 +18,7 @@ export type WorkflowSheet =
   /** S13 Import (slice A): the Lightroom-style entry (D-W11). */
   | { kind: "import" }
   /** S4 New Project (slice B); `fromSessionId` prefills its Target and rig (LIB-FR-17). */
-  | { kind: "new-project"; fromSessionId?: SessionId }
+  | { kind: "new-project"; fromSessionId?: SessionId; targetId?: TargetId }
   /** S9 Done / Archive sheet on a Project (slice B). */
   | { kind: "done-archive"; projectId: ProjectId }
   /** "Start a processing run": one subject and one rig of the Project (slice B, PRJ-FR-10). */
