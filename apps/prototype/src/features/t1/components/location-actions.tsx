@@ -5,6 +5,7 @@
  * per-row feedback and the dialogs the page renders once.
  */
 import { useState, type ReactNode } from "react"
+import { useMessages } from "@/app/preferences"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { ActionError, Notice } from "@/components/app/feedback"
 import { FolderPicker } from "@/components/app/folder-picker"
@@ -12,7 +13,8 @@ import { Pill } from "@/components/app/pill"
 import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import type { Location, LocationId, OperationId } from "@/domain/types"
-import { plural } from "@/lib/format"
+import { formatCount } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import { store } from "@/store/core"
 import { startIndexing } from "@/store/operations"
 import { applyRemap, computeRemap, framesInLocation, type RemapProof, repointLocation, validateLocation } from "../lib/locations"
@@ -22,12 +24,21 @@ type Feedback =
   | { tone: "error"; message: string; retry: () => void }
   | { tone: "done"; message: string }
 
-function listNames(entries: { fileName: string }[]): string {
-  const names = entries.slice(0, 3).map((e) => e.fileName)
-  return entries.length > 3 ? `${names.join(", ")} and ${entries.length - 3} more` : names.join(", ")
+function listNames(m: Messages, entries: { fileName: string }[]): string {
+  const names = entries
+    .slice(0, 3)
+    .map((e) => e.fileName)
+    .join(", ")
+  return entries.length > 3 ? m.location_names_more({ names, count: entries.length - 3 }) : names
+}
+
+/** A frame count for a variant message: `count` selects the plural form, `frames` is the formatted number. */
+function frames(count: number) {
+  return { count, frames: formatCount(count) }
 }
 
 export function useLocationActions({ href, onIndexStarted }: { href: string; onIndexStarted?: (operationId: OperationId) => void }) {
+  const m = useMessages()
   const [picker, setPicker] = useState<{ location: Location; mode: "again" | "locate" } | null>(null)
   const [proof, setProof] = useState<RemapProof | null>(null)
   const [feedback, setFeedback] = useState<{ locationId: LocationId; value: Feedback } | null>(null)
@@ -43,7 +54,7 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
     const { catalog, disk } = store.getState()
     const next = computeRemap(catalog, disk, location.id, path)
     if (next.refusal) {
-      setFeedback({ locationId: location.id, value: { tone: "refusal", title: "Remap refused", message: next.refusal, locate: true } })
+      setFeedback({ locationId: location.id, value: { tone: "refusal", title: m.location_remap_refused(), message: next.refusal, locate: true } })
       return
     }
     setFeedback(null)
@@ -58,7 +69,7 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
     if (framesInLocation(catalog, location.id) > 0) return review(location, path)
     const errors = validateLocation(catalog, { path, displayName: location.displayName, role: location.role }, location.id)
     if (errors.path) {
-      setFeedback({ locationId: location.id, value: { tone: "refusal", title: "Folder not changed", message: errors.path } })
+      setFeedback({ locationId: location.id, value: { tone: "refusal", title: m.location_folder_unchanged(), message: errors.path } })
       return
     }
     const attempt = () => {
@@ -80,10 +91,11 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
       return (
         <Notice
           tone="info"
-          title="Remap saved"
+          title={m.location_remap_saved()}
           actions={
             <Button size="sm" variant="outline" onClick={() => index(location)}>
-              Rescan<span className="sr-only"> {location.displayName}</span>
+              {m.location_rescan()}
+              <span className="sr-only"> {location.displayName}</span>
             </Button>
           }
         >
@@ -97,7 +109,7 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
         actions={
           value.locate ? (
             <Button size="sm" variant="outline" onClick={() => setPicker({ location, mode: "locate" })}>
-              Choose again
+              {m.location_choose_again()}
             </Button>
           ) : undefined
         }
@@ -114,26 +126,26 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
       <FolderPicker
         open={picker !== null}
         onOpenChange={(open) => !open && setPicker(null)}
-        title={picker?.mode === "locate" ? `Locate ${picker.location.displayName}` : `Choose folder for ${picker?.location.displayName ?? "this location"}`}
+        title={picker ? (picker.mode === "locate" ? m.location_locate_title({ name: picker.location.displayName }) : m.location_choose_folder_for({ name: picker.location.displayName })) : m.location_choose_folder()}
         initialPath={picker?.location.path}
-        chooseVerb={picker?.mode === "locate" ? "Review" : "Choose"}
+        chooseVerb={picker?.mode === "locate" ? m.verb_review() : m.verb_choose()}
         onChoose={(path) => picker && chosen(picker.location, picker.mode, path)}
       />
       <ConfirmDialog
         open={proof !== null && proofLocation !== undefined}
         onOpenChange={(open) => !open && setProof(null)}
-        title={`Remap ${proofLocation?.displayName ?? "location"} to ${proof?.toPath ?? ""}?`}
+        title={m.location_remap_title({ name: proofLocation?.displayName ?? "", path: proof?.toPath ?? "" })}
         description={
           proof ? (
             <span className="flex flex-wrap items-center gap-1 tabular-nums">
-              <Pill tone="success">{`${proof.verified.length} same bytes`}</Pill>
-              {proof.differs.length > 0 ? <Pill tone="danger">{`${proof.differs.length} differ`}</Pill> : null}
-              {proof.notFound.length > 0 ? <Pill tone="warning">{`${proof.notFound.length} not found`}</Pill> : null}
+              <Pill tone="success">{m.location_remap_same_bytes(frames(proof.verified.length))}</Pill>
+              {proof.differs.length > 0 ? <Pill tone="danger">{m.location_remap_differ(frames(proof.differs.length))}</Pill> : null}
+              {proof.notFound.length > 0 ? <Pill tone="warning">{m.location_remap_not_found(frames(proof.notFound.length))}</Pill> : null}
               <NoteMarker
-                label="Volume evidence"
+                label={m.location_volume_evidence()}
                 rows={[
-                  { label: "From", value: proof.fromVolume ? `${proof.fromVolume.name} · ${proof.fromVolume.volumeUuid}` : "–" },
-                  { label: "To", value: proof.toVolume ? `${proof.toVolume.name} · ${proof.toVolume.volumeUuid}` : "–" },
+                  { label: m.location_from(), value: proof.fromVolume ? `${proof.fromVolume.name} · ${proof.fromVolume.volumeUuid}` : "–" },
+                  { label: m.location_to(), value: proof.toVolume ? `${proof.toVolume.name} · ${proof.toVolume.volumeUuid}` : "–" },
                 ]}
               />
             </span>
@@ -142,15 +154,15 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
         changes={
           proof
             ? [
-                `${plural(proof.verified.length, "frame")} move to ${proof.toPath}, verified by SHA-256`,
-                ...(proof.differs.length > 0 ? [`${plural(proof.differs.length, "frame")} refused, bytes differ: ${listNames(proof.differs)}`] : []),
-                ...(proof.notFound.length > 0 ? [`${plural(proof.notFound.length, "frame")} not found in the new folder: ${listNames(proof.notFound)}`] : []),
-                ...(refused.length > 0 ? ["Refused frames read Not found here"] : []),
-                `${proofLocation?.displayName ?? "The location"} points to ${proof.toPath}`,
+                m.location_remap_change_move({ ...frames(proof.verified.length), path: proof.toPath }),
+                ...(proof.differs.length > 0 ? [m.location_remap_change_differ({ ...frames(proof.differs.length), names: listNames(m, proof.differs) })] : []),
+                ...(proof.notFound.length > 0 ? [m.location_remap_change_not_found({ ...frames(proof.notFound.length), names: listNames(m, proof.notFound) })] : []),
+                ...(refused.length > 0 ? [m.location_remap_change_refused_note()] : []),
+                m.location_remap_change_points({ name: proofLocation?.displayName ?? "", path: proof.toPath }),
               ]
             : []
         }
-        confirmLabel={`Remap ${plural(proof?.verified.length ?? 0, "frame")}`}
+        confirmLabel={m.location_remap_confirm(frames(proof?.verified.length ?? 0))}
         onConfirm={() => {
           if (!proof || !proofLocation) return
           const result = applyRemap(proof, href)
@@ -159,7 +171,9 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
               locationId: proof.locationId,
               value: {
                 tone: "done",
-                message: `${plural(proof.verified.length, "frame")} → ${proof.toPath}${refused.length ? ` · ${plural(refused.length, "frame")} refused` : ""}`,
+                message: refused.length
+                  ? m.location_remap_done_refused({ ...frames(proof.verified.length), path: proof.toPath, refused: formatCount(refused.length) })
+                  : m.location_remap_done({ ...frames(proof.verified.length), path: proof.toPath }),
               },
             })
             setProof(null)

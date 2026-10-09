@@ -497,5 +497,506 @@
   "tips_help": "Help",
   "tips_note": "Note {number}",
   "page_step_done": "(done)",
-  "ui_breadcrumb": "Breadcrumb"
+  "ui_breadcrumb": "Breadcrumb",
+  "location_role_captures_description": "Light frames to index. Add as many folders as you like.",
+  "location_role_captures_add": "Add capture location",
+  "location_role_captures_picker": "Choose a capture folder",
+  "location_role_captures_list": "Capture locations",
+  "location_role_calibration_description": "Darks, flats, bias frames and calibration masters.",
+  "location_role_calibration_add": "Add calibration location",
+  "location_role_calibration_picker": "Choose a calibration folder",
+  "location_role_calibration_list": "Calibration locations",
+  "location_role_results_description": "Finished images and processing products PlateVault should find. Output folders can also be chosen per View.",
+  "location_role_results_add": "Add results location",
+  "location_role_results_picker": "Choose a results folder",
+  "location_role_results_list": "Results locations",
+  "location_role_archive_description": "Destinations for verified archive transfers.",
+  "location_role_archive_add": "Add archive location",
+  "location_role_archive_picker": "Choose an archive folder",
+  "location_role_archive_list": "Archive locations",
+  "location_error_name_empty": "Display name: enter a name, for example Astro-T7 captures.",
+  "location_error_name_taken": "Display name: {name} is already used by another location.",
+  "location_error_path_registered": "Folder: {path} is already registered as {name}.",
+  "location_error_path_inside": "Folder: inside {name}, which already indexes this folder. Choose a folder outside registered locations.",
+  "location_error_path_contains": "Folder: contains {name}. Choose a folder that does not hold a registered location.",
+  "location_error_unknown_volume": "Folder: {path} is not on a known volume.",
+  "location_retire_stale": "{name} is no longer registered as reviewed. Nothing was retired.",
+  "location_retire_availability_changed": "Retire location refused: {name} reads {now} now, but this review was made while it read {then}. Nothing was retired. Close this review and choose Retire location again for a new review.",
+  "location_retire_busy": "Retire location refused: {title} is not finished. Nothing was retired.",
+  "location_remap_same_folder": "{path} is the folder {name} already uses. Choose a different folder, or use Rescan to read it again.",
+  "location_remap_overlaps": "{path} overlaps {name}. Choose a folder outside other registered locations.",
+  "location_remap_no_frames": "{name} holds no indexed frames, so there is nothing to remap. Use Choose folder again to point it at another folder.",
+  "location_remap_no_match": "Remap refused: no indexed frame in {name} has the same bytes in {path}. Matching names are not enough. Nothing changed.",
+  "location_remap_unavailable": "Remap not saved: the location or volume is no longer available.",
+  "location_remap_hash_failed": [
+    {
+      "declarations": [
+        "input count",
+        "input volume",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remap not saved: hash verification of {count} file on {volume} failed. Nothing changed; choose Retry.",
+        "countPlural=*": "Remap not saved: hash verification of {count} files on {volume} failed. Nothing changed; choose Retry."
+      }
+    }
+  ],
+  "site_error_name_empty": "Name: enter a name, for example Backyard.",
+  "site_error_name_taken": "Name: {name} is already a saved site.",
+  "site_error_latitude": "Latitude: enter degrees from −90 to 90; north is positive.",
+  "site_error_longitude": "Longitude: enter degrees from −180 to 180; east is positive.",
+  "site_error_elevation": "Elevation: enter metres as a number, or leave it empty.",
+  "site_error_min_altitude": "Minimum altitude: enter degrees from 0 to 90.",
+  "site_error_time_zone_unknown": "Time zone: {zone} is not an IANA time zone. Choose one from the list.",
+  "site_error_time_zone_empty": "Time zone: choose the site's IANA time zone, for example Europe/Amsterdam.",
+  "site_coordinates": "{latitude}° {ns}, {longitude}° {ew}",
+  "site_north": "N",
+  "site_south": "S",
+  "site_east": "E",
+  "site_west": "W",
+  "location_not_saved": "Location registration was not saved.",
+  "location_choose_folder": "Choose a folder",
+  "location_add": "Add location",
+  "location_folder": "Folder",
+  "location_change": "Change",
+  "location_display_name": "Display name",
+  "location_role": "Role",
+  "location_names_more": "{names} and {count} more",
+  "location_remap_refused": "Remap refused",
+  "location_folder_unchanged": "Folder not changed",
+  "location_remap_saved": "Remap saved",
+  "location_rescan": "Rescan",
+  "location_choose_again": "Choose again",
+  "location_locate_title": "Locate {name}",
+  "location_choose_folder_for": "Choose folder for {name}",
+  "location_remap_title": "Remap {name} to {path}?",
+  "location_remap_same_bytes": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} same bytes",
+        "countPlural=*": "{frames} same bytes"
+      }
+    }
+  ],
+  "location_remap_differ": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} differs",
+        "countPlural=*": "{frames} differ"
+      }
+    }
+  ],
+  "location_remap_not_found": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} not found",
+        "countPlural=*": "{frames} not found"
+      }
+    }
+  ],
+  "location_volume_evidence": "Volume evidence",
+  "location_from": "From",
+  "location_to": "To",
+  "location_remap_change_move": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame moves to {path}, verified by SHA-256",
+        "countPlural=*": "{frames} frames move to {path}, verified by SHA-256"
+      }
+    }
+  ],
+  "location_remap_change_differ": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input names",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame refused, bytes differ: {names}",
+        "countPlural=*": "{frames} frames refused, bytes differ: {names}"
+      }
+    }
+  ],
+  "location_remap_change_not_found": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input names",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame not found in the new folder: {names}",
+        "countPlural=*": "{frames} frames not found in the new folder: {names}"
+      }
+    }
+  ],
+  "location_remap_change_refused_note": "Refused frames read Not found here",
+  "location_remap_change_points": "{name} points to {path}",
+  "location_remap_confirm": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remap {frames} frame",
+        "countPlural=*": "Remap {frames} frames"
+      }
+    }
+  ],
+  "location_remap_done": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame → {path}",
+        "countPlural=*": "{frames} frames → {path}"
+      }
+    }
+  ],
+  "location_remap_done_refused": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "input refused",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame → {path} · {refused} refused",
+        "countPlural=*": "{frames} frames → {path} · {refused} refused"
+      }
+    }
+  ],
+  "location_last_attempt": "Last attempt {date}",
+  "location_indexed": "Indexed {date}",
+  "location_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "location_state_group": "{name} state",
+  "location_indexing": "Indexing",
+  "location_volume_not_mounted": "{name} not mounted",
+  "location_volume_missing": "Volume not mounted",
+  "location_locate_or_remap": "Locate or remap",
+  "location_retire": "Retire location",
+  "location_choose_folder_again": "Choose folder again",
+  "location_incomplete_unread": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Incomplete scope · {count} folder unread",
+        "countPlural=*": "Incomplete scope · {count} folders unread"
+      }
+    }
+  ],
+  "location_retired_copies": [
+    {
+      "declarations": [
+        "input count",
+        "input date",
+        "input copies",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Retired {date} · {copies} copy",
+        "countPlural=*": "Retired {date} · {copies} copies"
+      }
+    }
+  ],
+  "location_more_actions": "More actions for {name}",
+  "settings_actions": "Actions",
+  "settings_sections": "Settings sections",
+  "settings_back_to_session": "Back to session",
+  "settings_back_to_plan": "Back to Plan",
+  "settings_back_to_target": "Back to Target",
+  "settings_back_to_run": "Back to run",
+  "settings_back_to_storage": "Back to Storage",
+  "settings_back_to_calibration": "Back to Calibration",
+  "settings_back_to_project": "Back to Project",
+  "settings_go_back": "Go back",
+  "about_simulated_data": "Simulated data",
+  "about_no_files_touched": "No files touched",
+  "about_no_network": "No network",
+  "about_this_build": "This build",
+  "about_version": "Version",
+  "about_version_value": "{version} · prototype build",
+  "about_data": "Data",
+  "about_data_demo": "Demo library",
+  "about_data_empty": "Empty (first run)",
+  "about_stored_in": "Stored in",
+  "about_catalog": "Catalog",
+  "about_count_locations": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} location",
+        "countPlural=*": "{n} locations"
+      }
+    }
+  ],
+  "about_count_light_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} light session",
+        "countPlural=*": "{n} light sessions"
+      }
+    }
+  ],
+  "about_count_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "about_count_runs": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} processing run",
+        "countPlural=*": "{n} processing runs"
+      }
+    }
+  ],
+  "about_clock": "PlateVault clock",
+  "about_clock_simulated": "{date} (simulated)",
+  "about_clock_system": "This computer",
+  "about_onboarding": "Onboarding",
+  "about_first_run_setup": "First-run setup",
+  "about_restart_setup": "Restart setup",
+  "about_simulation": "Simulation",
+  "about_restart_title": "Restart first-run setup?",
+  "about_restart_change": "Open the Choose locations step",
+  "settings_density_compact": "Compact",
+  "settings_density_comfortable": "Comfortable",
+  "settings_density_spacious": "Spacious",
+  "settings_at_defaults": "Already at the defaults",
+  "settings_restore_defaults": "Restore defaults",
+  "settings_density": "Density",
+  "settings_keyboard": "Keyboard",
+  "settings_shortcuts_about": "About single-key shortcuts",
+  "settings_shortcuts_help": "?, /, [ and G sequences. ⌘K and Ctrl+K always work.",
+  "settings_restore_title": "Restore appearance defaults?",
+  "settings_restore_density": "Density: {name}",
+  "settings_restore_shortcuts_on": "Single-key shortcuts: on",
+  "location_edit_title": "Edit {name}",
+  "settings_save": "Save",
+  "location_path": "Path",
+  "location_volume": "Volume",
+  "location_volume_identity": "{name} · identity {uuid}",
+  "location_volume_unknown": "Unknown volume",
+  "location_availability": "Availability",
+  "location_access": "Access",
+  "location_scan_scope": "Scan scope",
+  "location_last_indexed": "Last indexed",
+  "location_not_indexed_yet": "Not indexed yet",
+  "location_indexed_frames": "Indexed frames",
+  "location_sessions_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} session",
+        "countPlural=*": "{n} sessions"
+      }
+    }
+  ],
+  "location_os_trash": "OS Trash",
+  "location_links": "Links",
+  "location_link_symlinks": "Symlinks",
+  "location_link_hardlinks": "Hardlinks",
+  "location_link_clones": "Clones",
+  "location_links_none": "Not supported",
+  "location_unreadable_folders": "Unreadable folders at the last scan",
+  "location_none": "None",
+  "location_retire_review_title": "Review: retire {name}",
+  "location_label": "Location",
+  "location_root": "Root",
+  "location_availability_at_review": "Availability at review",
+  "location_copies": "Copies",
+  "location_copies_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} copy",
+        "countPlural=*": "{n} copies"
+      }
+    }
+  ],
+  "location_sessions_list": "{count}: {list}",
+  "location_changes": "Changes",
+  "location_copies_read_retired": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} copy reads Retired",
+        "countPlural=*": "{n} copies read Retired"
+      }
+    }
+  ],
+  "location_leaves_totals": "Leaves totals",
+  "location_no_file_changes": "No file changes",
+  "location_availability_changed": "Availability changed",
+  "location_close_review": "Close review",
+  "location_make_default_blocked": "Make default blocked",
+  "location_make_default_not_saved": "Make default not saved",
+  "location_details": "Details",
+  "location_index_now": "Index now",
+  "location_make_default": "Make default",
+  "location_edit": "Edit",
+  "location_remove_with_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remove · {n} frame",
+        "countPlural=*": "Remove · {n} frames"
+      }
+    }
+  ],
+  "location_remove": "Remove",
+  "location_last_indexing": "Last indexing",
+  "location_default": "Default",
+  "location_remove_title": "Remove {name}?",
+  "location_remove_change": "Unregister {path}",
+  "location_remove_confirm": "Remove location"
 }

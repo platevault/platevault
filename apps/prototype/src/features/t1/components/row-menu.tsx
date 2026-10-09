@@ -6,9 +6,11 @@
  */
 import { MoreHorizontal } from "lucide-react"
 import { Fragment, useRef } from "react"
+import { useMessages } from "@/app/preferences"
 import type { Column } from "@/components/app/data-table"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { m } from "@/lib/i18n"
 
 export interface RowMenuItem {
   label: string
@@ -24,11 +26,12 @@ export const ROW_MENU_ROW = "group/row"
  * The pinned column. Opaque surfaces stop scrolled cells showing through: the
  * header keeps the table head's card surface, and body cells mix the row hover
  * colour over the page background exactly as `hover:bg-muted/60` composites.
+ * Call it during render so the header follows the language.
  */
 export function rowMenuColumn<T>(name: (row: T) => string, items: (row: T) => RowMenuItem[]): Column<T> {
   return {
     id: "actions",
-    header: "Actions",
+    header: m.settings_actions(),
     align: "right",
     className:
       "sticky right-0 w-px bg-background shadow-[inset_1px_0_0_var(--border)] [&:is(th)]:bg-card group-hover/row:bg-[color-mix(in_srgb,var(--muted)_60%,var(--background))]",
@@ -37,12 +40,13 @@ export function rowMenuColumn<T>(name: (row: T) => string, items: (row: T) => Ro
 }
 
 function RowMenu({ name, items }: { name: string; items: RowMenuItem[] }) {
+  const m = useMessages()
   const trigger = useRef<HTMLButtonElement>(null)
   const destructiveFrom = items.findIndex((item) => item.destructive)
   return (
     <DropdownMenu>
       {/* -my-1 keeps the 28 px trigger inside the row's --row-h height instead of growing the row. */}
-      <DropdownMenuTrigger render={<Button ref={trigger} size="icon-sm" variant="ghost" className="-my-1" aria-label={`More actions for ${name}`} />}>
+      <DropdownMenuTrigger render={<Button ref={trigger} size="icon-sm" variant="ghost" className="-my-1" aria-label={m.location_more_actions({ name })} />}>
         <MoreHorizontal aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">

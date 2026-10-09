@@ -5,6 +5,7 @@
  * the user starts indexing.
  */
 import { useId, useRef, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { ActionError } from "@/components/app/feedback"
 import { FolderPicker } from "@/components/app/folder-picker"
 import { PathText } from "@/components/app/data"
@@ -31,6 +32,7 @@ export interface AddLocationFlowProps {
 }
 
 export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = ROLE_ORDER }: AddLocationFlowProps) {
+  const m = useMessages()
   const [step, setStep] = useState<"pick" | "details">("pick")
   const [path, setPath] = useState("")
   const [displayName, setDisplayName] = useState("")
@@ -75,7 +77,7 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
     }
     const { result, id } = registerLocation(draft, href)
     if (!result.ok || !id) {
-      setWriteError(result.ok ? "Location registration was not saved." : result.message)
+      setWriteError(result.ok ? m.location_not_saved() : result.message)
       return
     }
     close()
@@ -98,7 +100,7 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
           if (path) setStep("details")
           else close()
         }}
-        title={role ? copy.picker : "Choose a folder"}
+        title={role ? copy.picker : m.location_choose_folder()}
         initialPath={path || lastParent}
         onChoose={chose}
       />
@@ -114,11 +116,11 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
             }}
           >
             <DialogHeader>
-              <DialogTitle>Add location</DialogTitle>
+              <DialogTitle>{m.location_add()}</DialogTitle>
             </DialogHeader>
             <Field className="gap-1.5" data-invalid={errors.path ? true : undefined}>
               <span id={ids.path} className="text-sm font-medium">
-                Folder
+                {m.location_folder()}
               </span>
               <div
                 role="group"
@@ -131,14 +133,14 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
               >
                 <PathText path={path} className="min-w-0 flex-1" />
                 <Button type="button" size="sm" variant="ghost" onClick={() => setStep("pick")}>
-                  Change
+                  {m.location_change()}
                 </Button>
               </div>
               <FieldMessage id={`${ids.path}-error`} message={errors.path} />
             </Field>
             <TextField
               id={ids.name}
-              label="Display name"
+              label={m.location_display_name()}
               value={displayName}
               onChange={setDisplayName}
               error={errors.displayName}
@@ -146,7 +148,7 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
             />
             {role ? null : (
               <Field className="gap-1.5">
-                <FieldLabel id={ids.role}>Role</FieldLabel>
+                <FieldLabel id={ids.role}>{m.location_role()}</FieldLabel>
                 <Select
                   items={roles.map((r) => ({ value: r, label: ROLE_COPY[r].title }))}
                   value={chosenRole}
@@ -167,8 +169,8 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
             )}
             {writeError ? <ActionError message={writeError} onRetry={submit} /> : null}
             <DialogFooter>
-              <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-              <Button type="submit">Add location</Button>
+              <DialogClose render={<Button type="button" variant="outline" />}>{m.verb_cancel()}</DialogClose>
+              <Button type="submit">{m.location_add()}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

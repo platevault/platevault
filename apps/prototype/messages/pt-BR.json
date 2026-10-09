@@ -497,5 +497,506 @@
   "tips_help": "Ajuda",
   "tips_note": "Nota {number}",
   "page_step_done": "(concluído)",
-  "ui_breadcrumb": "Trilha de navegação"
+  "ui_breadcrumb": "Trilha de navegação",
+  "location_role_captures_description": "Light frames para indexar. Adicione quantas pastas quiser.",
+  "location_role_captures_add": "Adicionar local de capturas",
+  "location_role_captures_picker": "Escolher pasta de capturas",
+  "location_role_captures_list": "Locais de capturas",
+  "location_role_calibration_description": "Darks, flats, bias e masters de calibração.",
+  "location_role_calibration_add": "Adicionar local de calibração",
+  "location_role_calibration_picker": "Escolher pasta de calibração",
+  "location_role_calibration_list": "Locais de calibração",
+  "location_role_results_description": "Imagens finalizadas e produtos de processamento que o PlateVault deve encontrar. Pastas de saída também podem ser escolhidas por View.",
+  "location_role_results_add": "Adicionar local de resultados",
+  "location_role_results_picker": "Escolher pasta de resultados",
+  "location_role_results_list": "Locais de resultados",
+  "location_role_archive_description": "Destinos para transferências verificadas ao arquivo.",
+  "location_role_archive_add": "Adicionar local de arquivo",
+  "location_role_archive_picker": "Escolher pasta de arquivo",
+  "location_role_archive_list": "Locais de arquivo",
+  "location_error_name_empty": "Nome de exibição: informe um nome, por exemplo Capturas Astro-T7.",
+  "location_error_name_taken": "Nome de exibição: {name} já é usado por outro local.",
+  "location_error_path_registered": "Pasta: {path} já está registrada como {name}.",
+  "location_error_path_inside": "Pasta: dentro de {name}, que já indexa esta pasta. Escolha uma pasta fora dos locais registrados.",
+  "location_error_path_contains": "Pasta: contém {name}. Escolha uma pasta que não contenha um local registrado.",
+  "location_error_unknown_volume": "Pasta: {path} não está em um volume conhecido.",
+  "location_retire_stale": "{name} não está mais registrado como na revisão. Nada foi aposentado.",
+  "location_retire_availability_changed": "Aposentar local recusado: {name} está {now} agora, mas esta revisão foi feita quando estava {then}. Nada foi aposentado. Feche esta revisão e escolha Aposentar local de novo para uma nova revisão.",
+  "location_retire_busy": "Aposentar local recusado: {title} não terminou. Nada foi aposentado.",
+  "location_remap_same_folder": "{path} é a pasta que {name} já usa. Escolha outra pasta, ou use Reescanear para lê-la de novo.",
+  "location_remap_overlaps": "{path} se sobrepõe a {name}. Escolha uma pasta fora dos outros locais registrados.",
+  "location_remap_no_frames": "{name} não tem frames indexados, então não há nada para remapear. Use Escolher pasta de novo para apontá-lo para outra pasta.",
+  "location_remap_no_match": "Remapeamento recusado: nenhum frame indexado em {name} tem os mesmos bytes em {path}. Nomes iguais não bastam. Nada mudou.",
+  "location_remap_unavailable": "Remapeamento não salvo: o local ou o volume não está mais disponível.",
+  "location_remap_hash_failed": [
+    {
+      "declarations": [
+        "input count",
+        "input volume",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remapeamento não salvo: a verificação de hash de {count} arquivo em {volume} falhou. Nada mudou; escolha Tentar de novo.",
+        "countPlural=*": "Remapeamento não salvo: a verificação de hash de {count} arquivos em {volume} falhou. Nada mudou; escolha Tentar de novo."
+      }
+    }
+  ],
+  "site_error_name_empty": "Nome: informe um nome, por exemplo Quintal.",
+  "site_error_name_taken": "Nome: {name} já é um local salvo.",
+  "site_error_latitude": "Latitude: informe graus de −90 a 90; norte é positivo.",
+  "site_error_longitude": "Longitude: informe graus de −180 a 180; leste é positivo.",
+  "site_error_elevation": "Altitude do local: informe metros como número, ou deixe vazio.",
+  "site_error_min_altitude": "Altura mínima: informe graus de 0 a 90.",
+  "site_error_time_zone_unknown": "Fuso horário: {zone} não é um fuso IANA. Escolha um da lista.",
+  "site_error_time_zone_empty": "Fuso horário: escolha o fuso IANA do local, por exemplo America/Sao_Paulo.",
+  "site_coordinates": "{latitude}° {ns}, {longitude}° {ew}",
+  "site_north": "N",
+  "site_south": "S",
+  "site_east": "L",
+  "site_west": "O",
+  "location_not_saved": "O registro do local não foi salvo.",
+  "location_choose_folder": "Escolher uma pasta",
+  "location_add": "Adicionar local",
+  "location_folder": "Pasta",
+  "location_change": "Alterar",
+  "location_display_name": "Nome de exibição",
+  "location_role": "Função",
+  "location_names_more": "{names} e mais {count}",
+  "location_remap_refused": "Remapeamento recusado",
+  "location_folder_unchanged": "Pasta não alterada",
+  "location_remap_saved": "Remapeamento salvo",
+  "location_rescan": "Reescanear",
+  "location_choose_again": "Escolher de novo",
+  "location_locate_title": "Localizar {name}",
+  "location_choose_folder_for": "Escolher pasta para {name}",
+  "location_remap_title": "Remapear {name} para {path}?",
+  "location_remap_same_bytes": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} com os mesmos bytes",
+        "countPlural=*": "{frames} com os mesmos bytes"
+      }
+    }
+  ],
+  "location_remap_differ": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} difere",
+        "countPlural=*": "{frames} diferem"
+      }
+    }
+  ],
+  "location_remap_not_found": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} não encontrado",
+        "countPlural=*": "{frames} não encontrados"
+      }
+    }
+  ],
+  "location_volume_evidence": "Evidência do volume",
+  "location_from": "De",
+  "location_to": "Para",
+  "location_remap_change_move": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame vai para {path}, verificado por SHA-256",
+        "countPlural=*": "{frames} frames vão para {path}, verificados por SHA-256"
+      }
+    }
+  ],
+  "location_remap_change_differ": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input names",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame recusado, bytes diferentes: {names}",
+        "countPlural=*": "{frames} frames recusados, bytes diferentes: {names}"
+      }
+    }
+  ],
+  "location_remap_change_not_found": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input names",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame não encontrado na nova pasta: {names}",
+        "countPlural=*": "{frames} frames não encontrados na nova pasta: {names}"
+      }
+    }
+  ],
+  "location_remap_change_refused_note": "Frames recusados ficam Não encontrado aqui",
+  "location_remap_change_points": "{name} aponta para {path}",
+  "location_remap_confirm": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remapear {frames} frame",
+        "countPlural=*": "Remapear {frames} frames"
+      }
+    }
+  ],
+  "location_remap_done": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame → {path}",
+        "countPlural=*": "{frames} frames → {path}"
+      }
+    }
+  ],
+  "location_remap_done_refused": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "input refused",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame → {path} · {refused} recusados",
+        "countPlural=*": "{frames} frames → {path} · {refused} recusados"
+      }
+    }
+  ],
+  "location_last_attempt": "Última tentativa {date}",
+  "location_indexed": "Indexado {date}",
+  "location_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "location_state_group": "Estado de {name}",
+  "location_indexing": "Indexando",
+  "location_volume_not_mounted": "{name} não montado",
+  "location_volume_missing": "Volume não montado",
+  "location_locate_or_remap": "Localizar ou remapear",
+  "location_retire": "Aposentar local",
+  "location_choose_folder_again": "Escolher pasta de novo",
+  "location_incomplete_unread": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Escopo incompleto · {count} pasta não lida",
+        "countPlural=*": "Escopo incompleto · {count} pastas não lidas"
+      }
+    }
+  ],
+  "location_retired_copies": [
+    {
+      "declarations": [
+        "input count",
+        "input date",
+        "input copies",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Aposentado {date} · {copies} cópia",
+        "countPlural=*": "Aposentado {date} · {copies} cópias"
+      }
+    }
+  ],
+  "location_more_actions": "Mais ações para {name}",
+  "settings_actions": "Ações",
+  "settings_sections": "Seções das configurações",
+  "settings_back_to_session": "Voltar à sessão",
+  "settings_back_to_plan": "Voltar ao Plano",
+  "settings_back_to_target": "Voltar ao Alvo",
+  "settings_back_to_run": "Voltar à execução",
+  "settings_back_to_storage": "Voltar ao Armazenamento",
+  "settings_back_to_calibration": "Voltar à Calibração",
+  "settings_back_to_project": "Voltar ao Projeto",
+  "settings_go_back": "Voltar",
+  "about_simulated_data": "Dados simulados",
+  "about_no_files_touched": "Nenhum arquivo alterado",
+  "about_no_network": "Sem rede",
+  "about_this_build": "Esta versão",
+  "about_version": "Versão",
+  "about_version_value": "{version} · versão de protótipo",
+  "about_data": "Dados",
+  "about_data_demo": "Biblioteca de demonstração",
+  "about_data_empty": "Vazia (primeiro uso)",
+  "about_stored_in": "Armazenado em",
+  "about_catalog": "Catálogo",
+  "about_count_locations": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} local",
+        "countPlural=*": "{n} locais"
+      }
+    }
+  ],
+  "about_count_light_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} sessão de lights",
+        "countPlural=*": "{n} sessões de lights"
+      }
+    }
+  ],
+  "about_count_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "about_count_runs": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} execução de processamento",
+        "countPlural=*": "{n} execuções de processamento"
+      }
+    }
+  ],
+  "about_clock": "Relógio do PlateVault",
+  "about_clock_simulated": "{date} (simulado)",
+  "about_clock_system": "Este computador",
+  "about_onboarding": "Primeiros passos",
+  "about_first_run_setup": "Configuração inicial",
+  "about_restart_setup": "Reiniciar configuração",
+  "about_simulation": "Simulação",
+  "about_restart_title": "Reiniciar a configuração inicial?",
+  "about_restart_change": "Abrir a etapa Escolher locais",
+  "settings_density_compact": "Compacta",
+  "settings_density_comfortable": "Confortável",
+  "settings_density_spacious": "Espaçosa",
+  "settings_at_defaults": "Já está no padrão",
+  "settings_restore_defaults": "Restaurar padrões",
+  "settings_density": "Densidade",
+  "settings_keyboard": "Teclado",
+  "settings_shortcuts_about": "Sobre atalhos de uma tecla",
+  "settings_shortcuts_help": "?, /, [ e sequências com G. ⌘K e Ctrl+K sempre funcionam.",
+  "settings_restore_title": "Restaurar o padrão da aparência?",
+  "settings_restore_density": "Densidade: {name}",
+  "settings_restore_shortcuts_on": "Atalhos de uma tecla: ativados",
+  "location_edit_title": "Editar {name}",
+  "settings_save": "Salvar",
+  "location_path": "Caminho",
+  "location_volume": "Volume",
+  "location_volume_identity": "{name} · identidade {uuid}",
+  "location_volume_unknown": "Volume desconhecido",
+  "location_availability": "Disponibilidade",
+  "location_access": "Acesso",
+  "location_scan_scope": "Escopo da varredura",
+  "location_last_indexed": "Última indexação",
+  "location_not_indexed_yet": "Ainda não indexado",
+  "location_indexed_frames": "Frames indexados",
+  "location_sessions_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} sessão",
+        "countPlural=*": "{n} sessões"
+      }
+    }
+  ],
+  "location_os_trash": "Lixeira do sistema",
+  "location_links": "Links",
+  "location_link_symlinks": "Links simbólicos",
+  "location_link_hardlinks": "Hard links",
+  "location_link_clones": "Clones",
+  "location_links_none": "Sem suporte",
+  "location_unreadable_folders": "Pastas ilegíveis na última varredura",
+  "location_none": "Nenhum",
+  "location_retire_review_title": "Revisão: aposentar {name}",
+  "location_label": "Local",
+  "location_root": "Raiz",
+  "location_availability_at_review": "Disponibilidade na revisão",
+  "location_copies": "Cópias",
+  "location_copies_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} cópia",
+        "countPlural=*": "{n} cópias"
+      }
+    }
+  ],
+  "location_sessions_list": "{count}: {list}",
+  "location_changes": "Alterações",
+  "location_copies_read_retired": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} cópia fica Aposentada",
+        "countPlural=*": "{n} cópias ficam Aposentadas"
+      }
+    }
+  ],
+  "location_leaves_totals": "Sai dos totais",
+  "location_no_file_changes": "Nenhum arquivo alterado",
+  "location_availability_changed": "Disponibilidade mudou",
+  "location_close_review": "Fechar revisão",
+  "location_make_default_blocked": "Tornar padrão bloqueado",
+  "location_make_default_not_saved": "Tornar padrão não salvo",
+  "location_details": "Detalhes",
+  "location_index_now": "Indexar agora",
+  "location_make_default": "Tornar padrão",
+  "location_edit": "Editar",
+  "location_remove_with_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remover · {n} frame",
+        "countPlural=*": "Remover · {n} frames"
+      }
+    }
+  ],
+  "location_remove": "Remover",
+  "location_last_indexing": "Última indexação",
+  "location_default": "Padrão",
+  "location_remove_title": "Remover {name}?",
+  "location_remove_change": "Cancelar o registro de {path}",
+  "location_remove_confirm": "Remover local"
 }
