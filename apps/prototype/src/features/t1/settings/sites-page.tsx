@@ -110,7 +110,7 @@ function SiteDialog({
             <Combobox items={TIME_ZONES} value={values.timeZone || null} onValueChange={(value) => set("timeZone")((value as string | null) ?? "")}>
               <ComboboxInput
                 id={`${id}-zone`}
-                placeholder="Europe/Amsterdam"
+                placeholder={m.site_time_zone_placeholder()}
                 className="w-full"
                 aria-invalid={errors.timeZone ? true : undefined}
                 aria-describedby={errors.timeZone ? `${id}-zone-error` : undefined}
@@ -300,7 +300,7 @@ export function SitesPage() {
         title={m.settings_remove_title({ name: removing?.name ?? "" })}
         description={null}
         changes={[
-          m.site_remove_change({ name: removing?.name ?? "" }),
+          m.settings_remove_named({ name: removing?.name ?? "" }),
           ...(removing && removing.id === defaultSiteId ? [nextDefault ? m.site_default_change({ name: nextDefault.name }) : m.site_no_default()] : []),
           ...(removing && removing.id === planningSiteId ? [m.site_clear_planning()] : []),
           ...(removing && reminders.siteId === removing.id && reminders.enabled ? [m.status_notifications_off()] : []),

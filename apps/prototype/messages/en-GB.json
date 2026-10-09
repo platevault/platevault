@@ -1040,7 +1040,7 @@
     }
   ],
   "site_add_as_site": "Add as site",
-  "site_remove_change": "Remove {name}",
+  "settings_remove_named": "Remove {name}",
   "site_default_change": "Default: {name}",
   "site_clear_planning": "Clear the planning site",
   "site_remove_confirm": "Remove site",
@@ -1101,5 +1101,123 @@
   "settings_lookup_object_type": "Object type",
   "settings_lookup_aliases": "Aliases",
   "settings_lookup_failed_title": "Lookup failed",
-  "settings_lookup_off_title": "Online lookup off"
+  "settings_lookup_off_title": "Online lookup off",
+  "setup_step_welcome": "Welcome",
+  "setup_step_index": "Index",
+  "setup_progress": "Setup progress",
+  "setup_welcome_title": "Welcome to PlateVault",
+  "setup_welcome_description": "PlateVault catalogs your astrophotography captures where they already are, groups them into sessions and prepares exact inputs for PixInsight, Siril and other processing apps.",
+  "setup_does_title": "What PlateVault does",
+  "setup_does_index": "Indexes FITS and XISF folders in place",
+  "setup_does_sessions": "Groups frames into sessions, one per filter, exposure and camera",
+  "setup_does_coverage": "Shows Target coverage and optional Project goals",
+  "setup_does_views": "Prepares reviewed Views for your processing app",
+  "setup_never_title": "What it never does",
+  "setup_never_move": "Moves, renames or deletes files without a reviewed operation",
+  "setup_never_headers": "Changes the headers of your source files",
+  "setup_never_process": "Calibrates, stacks or stretches images",
+  "setup_never_account": "Needs an account or a network connection",
+  "setup_next_empty": "Next, choose the folders that hold your captures. Only a Captures location is required.",
+  "setup_next_registered": "Your locations are registered. Continue to review them and start indexing.",
+  "setup_set_up_locations": "Set up locations",
+  "setup_continue": "Continue setup",
+  "setup_later": "Set up later",
+  "setup_later_hint": "Opens the library now. Add locations any time in Settings › Locations.",
+  "setup_demo_title": "Prototype: demo library",
+  "setup_demo_load": "Load demo library",
+  "setup_demo_body": "Skips setup and loads a realistic indexed library: M 31, NGC 7000, a mosaic Project and an offline drive. It replaces the prototype data in this browser.",
+  "setup_demo_confirm_title": "Load the demo library?",
+  "setup_demo_confirm_description": "Prototype only. The demo replaces everything in this browser's prototype data.",
+  "setup_demo_change_replace": "Replace locations, sessions, Projects and Views with the demo library",
+  "setup_demo_change_skip": "Skip setup and open Targets",
+  "setup_demo_unchanged_appearance": "Theme and density",
+  "setup_demo_unchanged_files": "No real files exist; nothing on your computer is touched",
+  "setup_locations_title": "Choose locations",
+  "setup_locations_description": "Register the folders that already hold your files. Registering only records access and indexing intent; nothing is copied, renamed, moved or deleted.",
+  "setup_required": "Required",
+  "setup_add_another": "Add another location",
+  "setup_captures_needed": "Add at least one folder with light frames to continue.",
+  "setup_deferred": "You chose to set this up later. Add it any time in Settings › Locations.",
+  "setup_optional_unset": "Leave it unset if you do not keep these files in one place yet.",
+  "setup_nothing_else_title": "Nothing else is needed now",
+  "setup_nothing_else_body": "View folders are chosen when you prepare a View. Setup asks for no workspace folder, processing app, Project or account.",
+  "setup_continue_reason": "Add a capture location to continue. Captures is the only required role.",
+  "setup_continue_short": "Continue",
+  "setup_remove_description": "Removes the registration only. Nothing was indexed from this folder yet.",
+  "setup_remove_change": "Stop tracking {path}",
+  "setup_remove_unchanged": "The folder and every file in it",
+  "setup_footer_running": "You can browse sessions already read while indexing continues.",
+  "setup_footer_interrupted": "Indexing was interrupted. Continue it above, or open the library to browse sessions already read.",
+  "setup_footer_canceled": "Indexing was canceled. Sessions already read are kept; rescan the rest here or later in Settings › Locations.",
+  "setup_footer_unindexed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} location not indexed yet. Index it now, or later in Settings › Locations.",
+        "countPlural=*": "{n} locations not indexed yet. Index them now, or later in Settings › Locations."
+      }
+    }
+  ],
+  "setup_footer_finished": "Indexing finished. Open the library to review sessions.",
+  "setup_indexing_title": "Index your captures",
+  "setup_indexing_description": "PlateVault reads metadata from each location. Files stay where they are and are never changed.",
+  "setup_indexing_progress": "Indexing progress",
+  "setup_latest_run": "Latest run: {title}",
+  "setup_scan": "Setup scan",
+  "setup_stat_discovered": "Files discovered",
+  "setup_stat_read": "Metadata read",
+  "setup_stat_unsupported": "Unsupported",
+  "setup_stat_unsupported_hint": "Skipped, left as they are",
+  "setup_stat_unreadable": "Unreadable folders",
+  "setup_stat_unreadable_hint": "Read Unknown, never missing",
+  "setup_stat_complete_value": "{done} of {total}",
+  "setup_stat_complete_hint": "locations, now",
+  "setup_library_so_far": "Library so far: {sessions} · {frames} (lights and calibration)",
+  "setup_library_covers": " · covers {names}",
+  "setup_locations_to_index": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} location to index",
+        "countPlural=*": "{n} locations to index"
+      }
+    }
+  ],
+  "setup_index_all_hint": "Every registered location is read. Calibration frames are indexed too; they never appear as light sessions.",
+  "setup_registered_locations": "Registered locations",
+  "setup_index_new": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Index {n} new location",
+        "countPlural=*": "Index {n} new locations"
+      }
+    }
+  ],
+  "setup_open_library": "Open library",
+  "setup_index_later_hint": "Index later keeps the locations registered; start indexing from Settings › Locations.",
+  "setup_index_later": "Index later",
+  "setup_start_indexing": "Start indexing",
+  "site_time_zone_placeholder": "Europe/Amsterdam"
 }

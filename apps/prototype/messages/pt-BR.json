@@ -1040,7 +1040,7 @@
     }
   ],
   "site_add_as_site": "Adicionar como local",
-  "site_remove_change": "Remover {name}",
+  "settings_remove_named": "Remover {name}",
   "site_default_change": "Padrão: {name}",
   "site_clear_planning": "Limpar o local de planejamento",
   "site_remove_confirm": "Remover local",
@@ -1101,5 +1101,123 @@
   "settings_lookup_object_type": "Tipo de objeto",
   "settings_lookup_aliases": "Apelidos",
   "settings_lookup_failed_title": "Busca falhou",
-  "settings_lookup_off_title": "Busca online desativada"
+  "settings_lookup_off_title": "Busca online desativada",
+  "setup_step_welcome": "Boas-vindas",
+  "setup_step_index": "Indexar",
+  "setup_progress": "Progresso da configuração",
+  "setup_welcome_title": "Boas-vindas ao PlateVault",
+  "setup_welcome_description": "O PlateVault cataloga suas capturas de astrofotografia onde elas já estão, agrupa-as em sessões e prepara entradas exatas para o PixInsight, o Siril e outros apps de processamento.",
+  "setup_does_title": "O que o PlateVault faz",
+  "setup_does_index": "Indexa pastas FITS e XISF no lugar",
+  "setup_does_sessions": "Agrupa frames em sessões, uma por filtro, exposição e câmera",
+  "setup_does_coverage": "Mostra a cobertura dos Alvos e metas opcionais de Projeto",
+  "setup_does_views": "Prepara Views revisadas para seu app de processamento",
+  "setup_never_title": "O que ele nunca faz",
+  "setup_never_move": "Mover, renomear ou apagar arquivos sem uma operação revisada",
+  "setup_never_headers": "Alterar os cabeçalhos dos seus arquivos de origem",
+  "setup_never_process": "Calibrar, empilhar ou esticar imagens",
+  "setup_never_account": "Exigir uma conta ou conexão de rede",
+  "setup_next_empty": "Agora, escolha as pastas com suas capturas. Só um local de Capturas é obrigatório.",
+  "setup_next_registered": "Seus locais estão registrados. Continue para revisá-los e começar a indexação.",
+  "setup_set_up_locations": "Configurar locais",
+  "setup_continue": "Continuar configuração",
+  "setup_later": "Configurar depois",
+  "setup_later_hint": "Abre a biblioteca agora. Adicione locais quando quiser em Configurações › Locais.",
+  "setup_demo_title": "Protótipo: biblioteca de demonstração",
+  "setup_demo_load": "Carregar biblioteca de demonstração",
+  "setup_demo_body": "Pula a configuração e carrega uma biblioteca indexada realista: M 31, NGC 7000, um Projeto de mosaico e um disco offline. Substitui os dados do protótipo neste navegador.",
+  "setup_demo_confirm_title": "Carregar a biblioteca de demonstração?",
+  "setup_demo_confirm_description": "Só no protótipo. A demonstração substitui todos os dados do protótipo neste navegador.",
+  "setup_demo_change_replace": "Substituir locais, sessões, Projetos e Views pela biblioteca de demonstração",
+  "setup_demo_change_skip": "Pular a configuração e abrir Alvos",
+  "setup_demo_unchanged_appearance": "Tema e densidade",
+  "setup_demo_unchanged_files": "Não há arquivos reais; nada no seu computador é alterado",
+  "setup_locations_title": "Escolher locais",
+  "setup_locations_description": "Registre as pastas que já guardam seus arquivos. O registro só anota o acesso e a intenção de indexar; nada é copiado, renomeado, movido ou apagado.",
+  "setup_required": "Obrigatório",
+  "setup_add_another": "Adicionar outro local",
+  "setup_captures_needed": "Adicione pelo menos uma pasta com light frames para continuar.",
+  "setup_deferred": "Você escolheu configurar isto depois. Adicione quando quiser em Configurações › Locais.",
+  "setup_optional_unset": "Deixe sem definir se você ainda não guarda esses arquivos em um só lugar.",
+  "setup_nothing_else_title": "Nada mais é necessário agora",
+  "setup_nothing_else_body": "As pastas de View são escolhidas ao preparar uma View. A configuração não pede pasta de trabalho, app de processamento, Projeto nem conta.",
+  "setup_continue_reason": "Adicione um local de capturas para continuar. Capturas é a única função obrigatória.",
+  "setup_continue_short": "Continuar",
+  "setup_remove_description": "Remove só o registro. Nada desta pasta foi indexado ainda.",
+  "setup_remove_change": "Parar de acompanhar {path}",
+  "setup_remove_unchanged": "A pasta e todos os arquivos nela",
+  "setup_footer_running": "Você pode navegar pelas sessões já lidas enquanto a indexação continua.",
+  "setup_footer_interrupted": "A indexação foi interrompida. Continue-a acima, ou abra a biblioteca para ver as sessões já lidas.",
+  "setup_footer_canceled": "A indexação foi cancelada. As sessões já lidas foram mantidas; reescaneie o resto aqui ou depois em Configurações › Locais.",
+  "setup_footer_unindexed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} local ainda não indexado. Indexe-o agora, ou depois em Configurações › Locais.",
+        "countPlural=*": "{n} locais ainda não indexados. Indexe-os agora, ou depois em Configurações › Locais."
+      }
+    }
+  ],
+  "setup_footer_finished": "Indexação concluída. Abra a biblioteca para revisar as sessões.",
+  "setup_indexing_title": "Indexar suas capturas",
+  "setup_indexing_description": "O PlateVault lê os metadados de cada local. Os arquivos ficam onde estão e nunca são alterados.",
+  "setup_indexing_progress": "Progresso da indexação",
+  "setup_latest_run": "Última execução: {title}",
+  "setup_scan": "Varredura da configuração",
+  "setup_stat_discovered": "Arquivos encontrados",
+  "setup_stat_read": "Metadados lidos",
+  "setup_stat_unsupported": "Sem suporte",
+  "setup_stat_unsupported_hint": "Ignorados, deixados como estão",
+  "setup_stat_unreadable": "Pastas ilegíveis",
+  "setup_stat_unreadable_hint": "Ficam Desconhecido, nunca ausentes",
+  "setup_stat_complete_value": "{done} de {total}",
+  "setup_stat_complete_hint": "locais, agora",
+  "setup_library_so_far": "Biblioteca até agora: {sessions} · {frames} (lights e calibração)",
+  "setup_library_covers": " · cobre {names}",
+  "setup_locations_to_index": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} local para indexar",
+        "countPlural=*": "{n} locais para indexar"
+      }
+    }
+  ],
+  "setup_index_all_hint": "Todo local registrado é lido. Frames de calibração também são indexados; nunca aparecem como sessões de lights.",
+  "setup_registered_locations": "Locais registrados",
+  "setup_index_new": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Indexar {n} novo local",
+        "countPlural=*": "Indexar {n} novos locais"
+      }
+    }
+  ],
+  "setup_open_library": "Abrir biblioteca",
+  "setup_index_later_hint": "Indexar depois mantém os locais registrados; comece a indexação em Configurações › Locais.",
+  "setup_index_later": "Indexar depois",
+  "setup_start_indexing": "Iniciar indexação",
+  "site_time_zone_placeholder": "America/Sao_Paulo"
 }
