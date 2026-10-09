@@ -1,36 +1,43 @@
 /**
- * S12 Sessions (slice A): library light sessions only (D-W24); calibration
- * frames live in the Calibration library. Filters All, Needs a Target, Not in
- * any Project and Trashed, with counts (D-W25, D-W43; Trashed sessions show
- * only under Trashed). Row actions: Choose Target, Add to Project (also adds
- * the rig, with a visible note, D-W59) and Create Project (prefilled). After
- * an Import, `?import=<operation>` highlights the sessions it filled.
+ * S12 Sessions (slice A): library light sessions only (D-W24). Raw
+ * calibration frames never show here: Import and indexing route them into a
+ * calibration process (P-CAL3, the Calibration library). Filters All, Needs
+ * a Target, Not in any Project and Trashed, with counts (D-W25, D-W43;
+ * Trashed sessions show only under Trashed); the search is clearable. Row
+ * actions: Choose Target, Review (the session detail's review region,
+ * `?view=review`) and Add to Project (also adds the rig, D-W59); right click
+ * opens the row's menu. After an Import, `?import=<operation>` highlights the
+ * sessions it filled.
  */
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
-import { Download, Layers } from "lucide-react"
+import { Download, Eye, Layers, ListChecks, Target } from "lucide-react"
 import { useState } from "react"
 import { openSheet } from "@/app/ui-state"
 import { type Column, DataTable, TableToolbar } from "@/components/app/data-table"
 import { EmptyState, Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
+import { CountBadge, Pill } from "@/components/app/pill"
+import type { MenuEntry } from "@/components/app/row-menu"
 import { StatusBadge } from "@/components/app/status"
+import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { formatHours } from "@/domain/derive"
+import { sessionLabel } from "@/domain/membership"
 import { formatCount, formatNight, plural } from "@/lib/format"
 import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
 import type { ImportPayload } from "./import-run"
-import { AddToProjectMenu, type AddedNotice } from "./parts"
-import { FILTER_LABEL, filterCounts, matchesFilter, parseFilter, type SessionFilter, type SessionRow, sessionRows } from "./session-model"
+import { AddToProjectDialog, AddToProjectMenu, type AddedNotice, addToProjectEntries, type PendingAdd } from "./parts"
+import { FILTER_LABEL, filterCounts, matchesFilter, parseFilter, type SessionFilter, type SessionRow, sessionReviewSearch, sessionRows } from "./session-model"
 
 const FILTERS: SessionFilter[] = ["all", "needs-target", "not-in-project", "trashed"]
 
-const EMPTY_COPY: Record<SessionFilter, { title: string; description: string }> = {
-  all: { title: "No light sessions yet", description: "Import from a card, folder or network share, or add an existing library folder to index it in place." },
-  "needs-target": { title: "Every session has a Target", description: "A session needs a Target when its OBJECT and pointing do not settle one." },
-  "not-in-project": { title: "Every session with a Target is in a Project", description: "A session is in a Project when its Target is a subject and its rig is one of the Project's rigs." },
-  trashed: { title: "No Trashed sessions", description: "A session shows here when every frame of it went to the OS Trash from a Done / Archive sheet." },
+const EMPTY_TITLE: Record<SessionFilter, string> = {
+  all: "No light sessions",
+  "needs-target": "None need a Target",
+  "not-in-project": "All in a Project",
+  trashed: "None trashed",
 }
 
 export function SessionsPage() {
@@ -40,8 +47,10 @@ export function SessionsPage() {
   const query = search.q ?? ""
   const importId = search.import
   const rows = useStore(sessionRows)
+  const catalog = useStore((s) => s.catalog)
   const importOp = useStore((s) => (importId ? s.operations[importId] : undefined))
   const [notice, setNotice] = useState<AddedNotice | null>(null)
+  const [adding, setAdding] = useState<PendingAdd | null>(null)
   const imported = new Set(importOp ? (importOp.payload as unknown as ImportPayload).sessionIds : [])
   const counts = filterCounts(rows)
 
@@ -65,6 +74,9 @@ export function SessionsPage() {
   // Imported sessions first while their highlight is on.
   if (imported.size > 0) shown.sort((a, b) => Number(imported.has(b.session.id)) - Number(imported.has(a.session.id)))
 
+  const open = (r: SessionRow, extra?: { hash?: string; search?: Record<string, string> }) => void navigate({ to: "/sessions/$sessionId", params: { sessionId: r.session.id }, hash: extra?.hash, search: extra?.search ?? {} })
+  const review = (r: SessionRow) => open(r, { search: sessionReviewSearch(r.unreviewed) })
+
   const columns: Column<SessionRow>[] = [
     {
       id: "session",
@@ -72,11 +84,11 @@ export function SessionsPage() {
       rowHeader: true,
       sortValue: (r) => `${r.session.night}|${r.session.channel ?? ""}`,
       cell: (r) => (
-        <span className="flex min-w-0 items-baseline gap-x-2 whitespace-nowrap">
+        <span className="flex min-w-0 items-center gap-x-2 whitespace-nowrap">
           <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium underline-offset-2 hover:underline" title={r.session.objectLabel ? `OBJECT ${r.session.objectLabel}` : "No OBJECT"}>
             {formatNight(r.session.night, true)} · {r.session.channel ?? "No filter"}
           </Link>
-          {imported.has(r.session.id) ? <span className="text-xs font-medium text-link">Imported</span> : null}
+          {imported.has(r.session.id) ? <Pill tone="info">New</Pill> : null}
         </span>
       ),
     },
@@ -110,14 +122,28 @@ export function SessionsPage() {
         </span>
       ),
     },
-    { id: "unreviewed", header: "Unreviewed", align: "right", sortValue: (r) => r.unreviewed, cell: (r) => (r.unreviewed > 0 ? <span className="tabular-nums">{formatCount(r.unreviewed)}</span> : <span className="text-muted-foreground">0</span>) },
+    {
+      id: "review",
+      header: "Review",
+      sortValue: (r) => r.unreviewed,
+      cell: (r) =>
+        r.trashed ? (
+          <span className="text-muted-foreground">–</span>
+        ) : (
+          <Button size="xs" variant="outline" className="-my-1" onClick={() => review(r)} data-review-session={r.session.id}>
+            Review
+            {r.unreviewed > 0 ? <CountBadge count={r.unreviewed} tone="warning" label={`${plural(r.unreviewed, "frame")} unreviewed`} /> : null}
+            <span className="sr-only"> {sessionLabel(r.session)}</span>
+          </Button>
+        ),
+    },
     {
       id: "projects",
       header: "Projects · runs",
       sortValue: (r) => r.candidateOf.map((c) => c.project.name).join(","),
       cell: (r) =>
         r.trashed ? (
-          <span className="text-muted-foreground">Trashed</span>
+          <Pill tone="muted">Trashed</Pill>
         ) : r.candidateOf.length > 0 ? (
           <span className="truncate" title={[...r.candidateOf.map((c) => c.project.name), ...r.runs.map((run) => `Run ${run.name}`)].join(", ")}>
             {r.candidateOf.map((c) => c.project.name).join(", ")}
@@ -125,13 +151,25 @@ export function SessionsPage() {
           </span>
         ) : r.notInProject ? (
           <span className="-my-1 flex items-center gap-2 whitespace-nowrap">
-            <span className="text-warning">Not in any Project</span>
+            <Pill tone="warning">No Project</Pill>
             <AddToProjectMenu sessionId={r.session.id} size="xs" onAdded={setNotice} />
           </span>
         ) : (
-          <span className="text-muted-foreground">Needs a Target first</span>
+          <span className="text-muted-foreground">–</span>
         ),
     },
+  ]
+
+  const menu = (r: SessionRow): MenuEntry[] => [
+    { heading: sessionLabel(r.session) },
+    { label: "Open", icon: Eye, onSelect: () => open(r) },
+    ...(r.trashed
+      ? []
+      : [
+          { label: "Review frames", icon: ListChecks, onSelect: () => review(r) },
+          { separator: true } as const,
+          ...(r.needsTarget ? [{ label: "Choose Target", icon: Target, onSelect: () => open(r, { hash: "target" }) }] : addToProjectEntries(catalog, r.session.id, setAdding)),
+        ]),
   ]
 
   const importSummary = importOp && importOp.status !== "running" ? importOp.summary : null
@@ -140,7 +178,7 @@ export function SessionsPage() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         title="Sessions"
-        description="Library light sessions. Calibration frames are in the Calibration library."
+        meta={<CountBadge count={counts.all} label={plural(counts.all, "light session")} />}
         actions={
           <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "import" })}>
             <Download data-icon="inline-start" aria-hidden="true" />
@@ -152,49 +190,51 @@ export function SessionsPage() {
         {importOp ? (
           <Notice
             tone="info"
-            title={importOp.status === "running" ? `${importOp.title}: running` : `${importOp.title}: ${plural(imported.size, "session")} highlighted`}
+            title={importOp.status === "running" ? `${importOp.title} · running` : `${importOp.title} · ${plural(imported.size, "session")}`}
             actions={
               <Button size="xs" variant="ghost" onClick={() => setParams({ import: undefined })}>
-                Clear highlight
+                Clear
               </Button>
             }
           >
-            {importSummary ?? `${formatCount(importOp.progress.done)} of ${formatCount(importOp.progress.total)} frames copied so far.`}
+            {importSummary ?? `${formatCount(importOp.progress.done)} of ${formatCount(importOp.progress.total)} frames`}
           </Notice>
         ) : null}
         {notice ? (
           <Notice tone="info" title={notice.title} actions={<Button size="xs" variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>
-            {notice.note ?? "No rig was added: the Project already has it."}
+            {notice.note}
           </Notice>
         ) : null}
         <TableToolbar
           search={{ label: "Search sessions", placeholder: "OBJECT, Target, rig, night", value: query, onChange: (value) => setParams({ q: value }) }}
           filters={
-            <ToggleGroup aria-label="Filter sessions" size="sm" variant="outline" spacing={0} value={[filter]} onValueChange={(value) => value[0] && setParams({ filter: value[0] as string })}>
-              {FILTERS.map((f) => (
-                <ToggleGroupItem key={f} value={f} data-filter={f}>
-                  {FILTER_LABEL[f]} <span className="text-muted-foreground tabular-nums">{formatCount(counts[f])}</span>
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+            <>
+              <ToggleGroup aria-label="Filter sessions" size="sm" variant="outline" spacing={0} value={[filter]} onValueChange={(value) => value[0] && setParams({ filter: value[0] as string })}>
+                {FILTERS.map((f) => (
+                  <ToggleGroupItem key={f} value={f} data-filter={f} className="gap-1.5">
+                    {FILTER_LABEL[f]}
+                    <CountBadge count={counts[f]} tone={counts[f] > 0 && (f === "needs-target" || f === "not-in-project") ? "warning" : "neutral"} />
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              {filter === "trashed" ? <HelpTip label="About Trashed sessions">Kept for traceability; hidden from pickers, candidates, goals and totals. Put back from the OS Trash and rescan to restore them as Unusable.</HelpTip> : null}
+            </>
           }
         />
-        {filter === "trashed" && counts.trashed > 0 ? (
-          <p className="text-xs text-muted-foreground">Trashed sessions stay for traceability only: they are hidden from pickers, candidates, goals and totals. Put back from the OS Trash plus a rescan restores the frames as Unusable.</p>
-        ) : null}
         <DataTable
           label={`Sessions: ${FILTER_LABEL[filter]}`}
           rows={shown}
           columns={columns}
           getRowId={(r) => r.session.id}
           stickyFirstColumn
+          contextMenu={menu}
           initialSort={imported.size > 0 ? undefined : { columnId: "session", direction: "desc" }}
           rowClassName={(r) => (imported.has(r.session.id) ? "bg-link/[0.07]" : undefined)}
           empty={
             <EmptyState
               icon={Layers}
-              title={needle ? "No session matches this search" : EMPTY_COPY[filter].title}
-              description={needle ? `Nothing under ${FILTER_LABEL[filter]} mentions “${query}”.` : EMPTY_COPY[filter].description}
+              title={needle ? "No match" : EMPTY_TITLE[filter]}
+              description={null}
               className="m-3"
               action={
                 needle ? (
@@ -207,7 +247,7 @@ export function SessionsPage() {
                   </Button>
                 ) : (
                   <Button size="sm" variant="outline" onClick={() => setParams({ filter: undefined })}>
-                    Show all sessions
+                    Show all
                   </Button>
                 )
               }
@@ -215,6 +255,7 @@ export function SessionsPage() {
           }
         />
       </PageBody>
+      <AddToProjectDialog pending={adding} onClose={() => setAdding(null)} onAdded={setNotice} />
     </div>
   )
 }

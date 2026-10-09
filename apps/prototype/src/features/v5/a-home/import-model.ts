@@ -1,25 +1,32 @@
 /**
  * S13 Import model (slice A): the pure import plan the sheet previews and
- * the operation runs (D-W11, D-W12, D-W20, D-W24). The demo's saved source
- * is the ASIAIR SD card (Prototype › Insert ASIAIR card).
+ * the operation runs (D-W11, D-W12, D-W20, D-W24), plus the new-frame counts
+ * the Removable devices and Saved sources rows show.
  *
  * The plan sorts every file under the source into exactly one bucket:
- * - a destination in Captures (lights) or Calibration (everything else),
- *   resolved from the per-type naming template;
+ * - a destination, resolved from the per-type naming template: lights go to
+ *   Captures and become sessions; raw calibration frames go to Calibration
+ *   (`Raw/…`) and each new raw session becomes a calibration process awaiting
+ *   Stack (P-CAL3, routed by `readFiles`); a master stacked elsewhere goes
+ *   straight to structured calibration storage (`masterStoragePath`) and is a
+ *   library master;
  * - a hold: Unclassified (no frame type; typing it releases it) or still
  *   being written (held until it settles);
  * - a skip: a byte-identical duplicate of a library frame (SHA-256), a file
  *   already imported from this saved source (Import new), a non-image file,
  *   or a destination name already taken by different bytes.
- * Nothing here writes state.
+ * Blockers are terse chips ("Astro-T7 offline"). Nothing here writes state.
  */
+import { masterStoragePath } from "@/domain/calibration-process"
 import { fileAt, freeBytes, volumeForPath } from "@/domain/disk"
-import { isUnder } from "@/domain/indexing"
+import { isUnder, nightOf } from "@/domain/indexing"
 import { locationAvailability } from "@/domain/library"
 import { headerNamingValues, namingTemplate, resolveNamingTemplate } from "@/domain/templates"
+import type { Blocker } from "@/components/app/refusal"
 import { formatBytes } from "@/lib/format"
 import type {
   AssetId,
+  CalibrationKind,
   Catalog,
   Disk,
   DiskFile,
@@ -59,6 +66,20 @@ export const TYPE_LABEL: Record<ImageType, string> = {
   unknown: "Unclassified",
 }
 
+/** Where an imported frame ends up: a light session, a calibration process awaiting Stack, or a library master. */
+export type ImportRoute = "sessions" | "stack" | "masters"
+
+export const ROUTE_LABEL: Record<ImportRoute, string> = {
+  sessions: "Sessions",
+  stack: "Calibration → stack",
+  masters: "Calibration library",
+}
+
+export function routeFor(type: ImageType): ImportRoute {
+  if (type === "light") return "sessions"
+  return type.startsWith("master-") ? "masters" : "stack"
+}
+
 export interface PlanItem {
   file: DiskFile
   /** Effective frame type: the header's, or the one the user typed. */
@@ -75,6 +96,7 @@ export interface PlanItem {
 export interface DestinationGroup {
   key: string
   role: ImportRole
+  route: ImportRoute
   location: Location
   /** Folder relative to the location root, as the template resolved it. */
   relative: string
@@ -98,7 +120,7 @@ export interface DestinationCheck {
   neededBytes: number
   freeBytes: number
   writable: boolean
-  /** Why this destination refuses the import; null when it is ready. */
+  /** Why this destination refuses the import, as a chip ("Cold-1 offline"); null when it is ready. */
   problem: string | null
 }
 
@@ -119,10 +141,11 @@ export interface ImportPlan {
     nameTaken: Array<{ file: DiskFile; destPath: string }>
   }
   destinations: DestinationCheck[]
+  /** Move needs a writable source with an OS Trash; `reason` is a chip ("No OS Trash"). */
   move: { allowed: boolean; reason: string | null }
   bytes: number
-  /** Reasons the Import button is refused, each naming its fix. */
-  blockers: string[]
+  /** Why Import is refused, one chip each. */
+  blockers: Blocker[]
 }
 
 const NAMING_TYPE: Record<Exclude<ImageType, "unknown">, NamingFrameType> = {
@@ -159,10 +182,10 @@ export function destinationLocations(catalog: Catalog, role: ImportRole): Locati
 
 function locationWritable(disk: Disk, location: Location): { writable: boolean; problem: string | null; volume: Volume | null } {
   const volume = disk.volumes[location.volumeId] ?? null
-  if (locationAvailability(disk, location) !== "online" || !volume?.mounted) return { writable: false, volume, problem: `${location.displayName} is offline: connect ${volume?.name ?? "its volume"} or choose another location` }
-  if (!volume.writable) return { writable: false, volume, problem: `${volume.name} is read-only: choose another ${location.role} location` }
-  if (disk.readOnlyPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: `${location.displayName} has no write permission: choose another location` }
-  if (disk.deniedPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: `${location.displayName} is access-denied: choose another location` }
+  if (locationAvailability(disk, location) !== "online" || !volume?.mounted) return { writable: false, volume, problem: `${location.displayName} offline` }
+  if (!volume.writable) return { writable: false, volume, problem: `${volume.name} read-only` }
+  if (disk.readOnlyPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: `${location.displayName}: no write permission` }
+  if (disk.deniedPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: `${location.displayName}: access denied` }
   return { writable: true, volume, problem: null }
 }
 
@@ -194,10 +217,46 @@ function librarySha(catalog: Catalog): Map<string, { assetId: AssetId; sessionId
   return out
 }
 
+/** Image files under a connected source folder (links are followed nowhere). */
+function sourceFiles(disk: Disk, volume: Volume, path: string): DiskFile[] {
+  return Object.values(disk.files)
+    .filter((f) => f.volumeId === volume.id && isUnder(f.path, path) && f.path !== path && !f.linkTarget)
+    .sort((a, b) => a.path.localeCompare(b.path))
+}
+
+/**
+ * New frames under a source: images the library does not hold (SHA-256) and,
+ * for a saved source, not imported from it before. Held files count: they
+ * are new, only not ready yet. Zero when the source is not connected.
+ */
+export function freshFrameCount(state: PrototypeState, path: string): number {
+  const volumeId = volumeForPath(state.disk, path)
+  const volume = volumeId ? state.disk.volumes[volumeId] : undefined
+  if (!volume?.mounted) return 0
+  const known = librarySha(state.catalog)
+  const before = new Set(savedSourceAt(state.catalog, path)?.importedSha256 ?? [])
+  return sourceFiles(state.disk, volume, path).filter((f) => isImage(f) && !known.has(f.sha256) && !before.has(f.sha256)).length
+}
+
+/** Where a planned frame is written: the type's naming template, or structured storage for a master. */
+function destinationFor(state: PrototypeState, location: Location, file: DiskFile, type: Exclude<ImageType, "unknown">): { destFolder: string; destPath: string; fallbacks: NamingToken[] } {
+  const header = file.header!
+  if (routeFor(type) === "masters") {
+    const kind = type.slice("master-".length) as CalibrationKind
+    const ext = file.path.slice(file.path.lastIndexOf(".") + 1)
+    const destPath = masterStoragePath(location, state.settings.naming, kind, headerNamingValues(header, type), nightOf(header.dateObs), ext)
+    const resolved = resolveNamingTemplate(namingTemplate(state.settings.naming, NAMING_TYPE[type]), headerNamingValues(header, type))
+    return { destFolder: destPath.slice(0, destPath.lastIndexOf("/") + 1), destPath, fallbacks: resolved.fallbacks }
+  }
+  const resolved = resolveNamingTemplate(namingTemplate(state.settings.naming, NAMING_TYPE[type]), headerNamingValues(header, type))
+  const destFolder = joinPath(location.path, resolved.path.endsWith("/") ? resolved.path : `${resolved.path}/`)
+  return { destFolder, destPath: `${destFolder}${file.path.slice(file.path.lastIndexOf("/") + 1)}`, fallbacks: resolved.fallbacks }
+}
+
 export function planImport(state: PrototypeState, draft: ImportDraft): ImportPlan | null {
   const source = sourcePathOf(state, draft)
   if (!source) return null
-  const { disk, catalog, settings } = state
+  const { disk, catalog } = state
   const volumeId = volumeForPath(disk, source.path)
   const volume = volumeId ? (disk.volumes[volumeId] ?? null) : null
   const online = Boolean(volume?.mounted) && !disk.deniedPaths.some((p) => isUnder(source.path, p))
@@ -217,11 +276,13 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
     blockers: [],
   }
   const destinations: Record<ImportRole, Location | null> = { captures: chosenDestination(state, draft, "captures"), calibration: chosenDestination(state, draft, "calibration") }
-  const files = online && volume ? Object.values(disk.files).filter((f) => f.volumeId === volume.id && isUnder(f.path, source.path) && f.path !== source.path && !f.linkTarget).sort((a, b) => a.path.localeCompare(b.path)) : []
+  const files = online && volume ? sourceFiles(disk, volume, source.path) : []
   const known = librarySha(catalog)
   const importedBefore = draft.newOnly && source.saved ? new Set(source.saved.importedSha256) : new Set<string>()
   const unclassified = new Map<string, DiskFile[]>()
   const groups = new Map<string, DestinationGroup>()
+  // Destination paths this plan already writes, so two sources never land on one name.
+  const planned = new Map<string, string>()
 
   for (const file of files) {
     if (!isImage(file)) {
@@ -252,48 +313,48 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
     const role = roleFor(type)
     const location = destinations[role]
     if (!location) continue
-    const resolved = resolveNamingTemplate(namingTemplate(settings.naming, NAMING_TYPE[type]), headerNamingValues(header, type))
-    const destFolder = joinPath(location.path, resolved.path.endsWith("/") ? resolved.path : `${resolved.path}/`)
-    const destPath = `${destFolder}${file.path.slice(file.path.lastIndexOf("/") + 1)}`
-    const existing = fileAt(disk, destPath)
-    if (existing && existing.sha256 !== file.sha256) {
+    const { destFolder, destPath, fallbacks } = destinationFor(state, location, file, type)
+    const existing = fileAt(disk, destPath)?.sha256 ?? planned.get(destPath)
+    if (existing !== undefined && existing !== file.sha256) {
       plan.skipped.nameTaken.push({ file, destPath })
       continue
     }
-    const item: PlanItem = { file, type, typed: typedAs !== undefined, role, location, destFolder, destPath, fallbacks: resolved.fallbacks }
+    planned.set(destPath, file.sha256)
+    const item: PlanItem = { file, type, typed: typedAs !== undefined, role, location, destFolder, destPath, fallbacks }
     plan.items.push(item)
     plan.bytes += file.sizeBytes
     const key = `${location.id}|${destFolder}|${type}`
-    const group = groups.get(key) ?? { key, role, location, relative: destFolder.slice(location.path.length + 1), type, items: [], bytes: 0, fallbacks: [] }
+    const group = groups.get(key) ?? { key, role, route: routeFor(type), location, relative: destFolder.slice(location.path.length + 1), type, items: [], bytes: 0, fallbacks: [] }
     group.items.push(item)
     group.bytes += file.sizeBytes
-    group.fallbacks = [...new Set([...group.fallbacks, ...resolved.fallbacks])]
+    group.fallbacks = [...new Set([...group.fallbacks, ...fallbacks])]
     groups.set(key, group)
   }
   plan.held.unclassified = [...unclassified.entries()].map(([folder, list]) => ({ folder, files: list, objectLabel: list[0]?.header?.object ?? null }))
-  plan.groups = [...groups.values()].sort((a, b) => a.role.localeCompare(b.role) || a.relative.localeCompare(b.relative))
+  const routeOrder: ImportRoute[] = ["sessions", "stack", "masters"]
+  plan.groups = [...groups.values()].sort((a, b) => routeOrder.indexOf(a.route) - routeOrder.indexOf(b.route) || a.relative.localeCompare(b.relative))
 
   for (const role of ["captures", "calibration"] as const) {
     const location = destinations[role]
     const needed = plan.items.filter((i) => i.role === role).reduce((n, i) => n + i.file.sizeBytes, 0)
     if (!location) {
-      plan.destinations.push({ role, location: null, volume: null, neededBytes: needed, freeBytes: 0, writable: false, problem: needed > 0 ? `No ${role === "captures" ? "Captures" : "Calibration"} location: add one in Settings › Locations` : null })
+      plan.destinations.push({ role, location: null, volume: null, neededBytes: needed, freeBytes: 0, writable: false, problem: needed > 0 ? `No ${role === "captures" ? "Captures" : "Calibration"} location` : null })
       continue
     }
     const check = locationWritable(disk, location)
     const free = check.volume ? freeBytes(disk, check.volume.id) : 0
-    const problem = needed === 0 ? null : (check.problem ?? (free < needed ? `${check.volume?.name ?? location.displayName} has ${formatBytes(free)} free; this import needs ${formatBytes(needed)}` : null))
+    const problem = needed === 0 ? null : (check.problem ?? (free < needed ? `${check.volume?.name ?? location.displayName} ${formatBytes(needed - free)} short` : null))
     plan.destinations.push({ role, location, volume: check.volume, neededBytes: needed, freeBytes: free, writable: check.writable, problem })
   }
 
-  if (!volume?.mounted) plan.move = { allowed: false, reason: "The source is not connected" }
-  else if (!volume.writable || disk.readOnlyPaths.some((p) => isUnder(source.path, p))) plan.move = { allowed: false, reason: `${volume.name} is read-only, so its files cannot go to the OS Trash. Copy works.` }
-  else if (volume.trash === "unsupported") plan.move = { allowed: false, reason: `${volume.name} has no OS Trash, and PlateVault never deletes permanently. Copy works.` }
+  if (!volume?.mounted) plan.move = { allowed: false, reason: "Not connected" }
+  else if (!volume.writable || disk.readOnlyPaths.some((p) => isUnder(source.path, p))) plan.move = { allowed: false, reason: "Read-only source" }
+  else if (volume.trash === "unsupported") plan.move = { allowed: false, reason: "No OS Trash" }
   else plan.move = { allowed: true, reason: null }
 
-  if (!online) plan.blockers.push(volume?.mounted ? `${source.label} is access-denied: choose another folder` : `${source.label} is not connected`)
-  else if (plan.items.length === 0) plan.blockers.push(plan.held.unclassified.length > 0 ? "Nothing to import yet: type the Unclassified files or wait for held files to settle" : "Nothing new to import from this source")
-  for (const d of plan.destinations) if (d.problem) plan.blockers.push(d.problem)
-  if (draft.mode === "move" && !plan.move.allowed && plan.move.reason) plan.blockers.push(`Move is unavailable: ${plan.move.reason}`)
+  if (!online) plan.blockers.push({ label: volume?.mounted ? `${source.label}: access denied` : `${source.label} not connected` })
+  else if (plan.items.length === 0) plan.blockers.push({ label: plan.held.unclassified.length > 0 || plan.held.settling.length > 0 ? "Only held files" : "Nothing new" })
+  for (const d of plan.destinations) if (d.problem) plan.blockers.push({ label: d.problem })
+  if (draft.mode === "move" && !plan.move.allowed && plan.move.reason) plan.blockers.push({ label: `Move: ${plan.move.reason}` })
   return plan
 }
