@@ -172,3 +172,18 @@ The user reviewed `186686b8`. This file is the work order for round 2. Its propo
   - Right: running work (each operation with progress, cancel on hover) and the last notification ("Import finished · 54 frames") with a history popover.
   - Context: the selection count when a list has a selection.
   - It shares its data with the Issues hub.
+
+## Round 2c (user, 2026-10-10)
+
+- **P-SB2: the status bar carries more issues and notifications (user: "we are wasting the majority of the bottom bar").** Measured on `1b2b70e5` with the demo library at 1920 px: the chip slot was 1356 px wide and its four chips used 510 px. Five of the twelve issue kinds (`not-in-project`, `work-failed`, `work-interrupted`, `master-offer` and `drift`) had no chip, so the bar showed 7 of the hub's 8 issues.
+  - **Every issue kind has a chip.** New chips: "{n} failed" (work-failed + work-interrupted), "{n} not in a Project", "{n} masters offered", "{n} changed" (drift). Invariant: the issues the chips cover are exactly the hub's issues, so their counts agree.
+  - **Order:** severity (danger, warning, info), then hub group order.
+  - **Density follows the room:**
+    1. Each issue becomes its own named pill ("M 31 LRGB blocked", "Cold-1 offline"), linking to its action.
+    2. If those don't fit, group by kind ("2 blocked").
+    3. If still short, the last chips go under "+N".
+
+    The ruler measures every level, so the row never wraps or clips.
+  - **Notifications inline:** the right slot shows up to three unread notifications, newest first, with dividers between them; when short of room, the oldest goes first. The history trigger has an unread count, and opening it marks them read.
+  - **No issues:** a muted "No issues" with a check, rather than empty space.
+  - **Check:** at 1024, 1440 and 1920 px with the demo library, nothing wraps, clips or overlaps. Below 768 px, unchanged.

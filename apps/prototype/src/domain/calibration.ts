@@ -192,8 +192,11 @@ function criterion(name: MatchCriterion["name"], light: string | null, calibrati
 
 const str = (value: number | string | null) => (value === null ? null : String(value))
 
+/** The calibration facts the D13 criteria compare: a master's, or a raw calibration session's before it is stacked. */
+export type MatchSource = Pick<CalSource, "kind" | "cameraName" | "widthPx" | "heightPx" | "binning" | "gain" | "offset" | "exposureS" | "channel" | "opticalTrainId" | "imageTypeLabel">
+
 /** D13 criteria for one light session and one calibration source; temperature is never compared. */
-export function matchCriteria(catalog: Catalog, light: LightGeometry, source: CalSource): MatchCriterion[] {
+export function matchCriteria(catalog: Catalog, light: LightGeometry, source: MatchSource): MatchCriterion[] {
   const lightDims = light.widthPx === null || light.heightPx === null ? null : `${light.widthPx} × ${light.heightPx}`
   const sourceDims = source.widthPx === null || source.heightPx === null ? null : `${source.widthPx} × ${source.heightPx}`
   const list: MatchCriterion[] = [

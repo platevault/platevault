@@ -8,8 +8,8 @@ import { FlaskConical } from "lucide-react"
 import { useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList } from "@/components/app/data"
-import { Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
+import { Pill } from "@/components/app/pill"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { SimulationControls } from "@/app/simulation-panel"
@@ -43,44 +43,39 @@ export function AboutPage() {
             Prototype
           </Badge>
         }
-        description="A design prototype of PlateVault. It is not the production app and makes no claim about backend behaviour."
       />
       <PageBody>
-        <Notice tone="info" title="Simulated data only">
-          Folders, volumes, files and operations are fixture data held in this browser. Nothing on your computer is read, moved or changed, and no request leaves this
-          browser.
-        </Notice>
+        <p className="flex flex-wrap items-center gap-1.5">
+          <Pill tone="info">Simulated data</Pill>
+          <Pill tone="muted">No files touched</Pill>
+          <Pill tone="muted">No network</Pill>
+        </p>
 
         <Section title="This build" level={3}>
           <KeyValueList
             items={[
               { label: "Version", value: VERSION },
-              { label: "Data", value: seed === "demo" ? "Demo library" : "Started empty (first run)" },
-              { label: "Stored in", value: `This browser, localStorage key ${STORAGE_KEY}`, mono: false },
+              { label: "Data", value: seed === "demo" ? "Demo library" : "Empty (first run)" },
+              { label: "Stored in", value: `localStorage · ${STORAGE_KEY}`, mono: false },
               {
                 label: "Catalog",
                 value: `${plural(counts.locations, "location")} · ${plural(counts.sessions, "light session")} · ${plural(counts.frames, "frame")} · ${plural(counts.runs, "processing run")}`,
               },
-              { label: "PlateVault clock", value: clockOffset ? `${formatDateTime(nowIso())} (simulated)` : "Matches this computer" },
+              { label: "PlateVault clock", value: clockOffset ? `${formatDateTime(nowIso())} (simulated)` : "This computer" },
             ]}
           />
         </Section>
 
         <Section title="Onboarding" level={3}>
-          <ul className="divide-y rounded-lg border">
-            <li className="flex flex-wrap items-center justify-between gap-3 p-3">
-              <div className="min-w-0 space-y-0.5">
-                <p className="text-sm font-medium">First-run setup</p>
-                <p className="text-xs text-muted-foreground">Reopens the setup steps. Locations and library data stay.</p>
-              </div>
-              <Button variant="outline" onClick={() => setConfirmRestart(true)}>
-                Restart first-run setup
-              </Button>
-            </li>
-          </ul>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3">
+            <span className="text-sm font-medium">First-run setup</span>
+            <Button variant="outline" onClick={() => setConfirmRestart(true)}>
+              Restart setup
+            </Button>
+          </div>
         </Section>
 
-        <Section title="Simulation controls" level={3} description="The same controls as the header Prototype button: volumes, folder access, external file changes, faults, clock and seeds.">
+        <Section title="Simulation" level={3}>
           <SimulationControls />
         </Section>
       </PageBody>
@@ -89,9 +84,8 @@ export function AboutPage() {
         open={confirmRestart}
         onOpenChange={setConfirmRestart}
         title="Restart first-run setup?"
-        description="You go back to the setup steps; the library is not reset."
-        changes={["Open the Choose locations step", "Library pages wait until you open the library again"]}
-        unchanged={["Registered locations, sessions, decisions and Views", "The orientation tour and the checklist"]}
+        description={null}
+        changes={["Open the Choose locations step"]}
         confirmLabel="Restart setup"
         onConfirm={() => {
           restartSetup()

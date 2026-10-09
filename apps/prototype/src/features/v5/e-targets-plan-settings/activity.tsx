@@ -3,13 +3,15 @@
  * paused and interrupted operations with their controls, then every
  * recorded outcome (operations, refusals, failed and refused writes, saves),
  * each linking to the surface that owns it (LIB-FR-10). A refusal names its
- * reasons, as the store recorded them.
+ * reasons, as the store recorded them. Right-click on an entry opens it or
+ * shows its items.
  */
 import { Activity as ActivityIcon } from "lucide-react"
 import { Fragment, useState } from "react"
 import { EmptyState } from "@/components/app/feedback"
 import { OperationPanel } from "@/components/app/operation-panel"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
+import { ContextMenuArea, type MenuEntry, menuKey } from "@/components/app/row-menu"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -62,6 +64,7 @@ const SETTINGS_AREA: Record<string, string> = {
   sites: "Observing sites",
   targets: "Target lookup",
   applications: "Applications",
+  calibration: "Calibration",
   about: "About",
 }
 
@@ -124,12 +127,11 @@ function Detail({ event }: { event: ActivityEvent }) {
   )
 }
 
-function ActivityRow({ event, operation }: { event: ActivityEvent; operation: Operation | undefined }) {
-  const [open, setOpen] = useState(false)
+function ActivityRow({ event, operation, open, onToggle }: { event: ActivityEvent; operation: Operation | undefined; open: boolean; onToggle: () => void }) {
   const panelId = `activity-${event.id}-items`
   return (
     <Fragment>
-      <tr className="h-(--row-h) border-b align-top last:border-0">
+      <tr {...menuKey(event.id)} className="h-(--row-h) border-b align-top last:border-0">
         <td className={cn("px-3 whitespace-nowrap", DENSITY_CELL)}>
           <time dateTime={event.at} className="text-xs text-muted-foreground tabular-nums">
             {formatDateTime(event.at)}
@@ -147,7 +149,7 @@ function ActivityRow({ event, operation }: { event: ActivityEvent; operation: Op
         <td className={cn("px-3", ACTION_CELL)}>
           <div className="flex justify-end gap-1">
             {operation && operation.items.length > 0 ? (
-              <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen((v) => !v)}>
+              <Button size="sm" variant="ghost" aria-expanded={open} aria-controls={panelId} onClick={onToggle}>
                 {open ? "Hide items" : "Show items"}
               </Button>
             ) : null}
@@ -178,17 +180,34 @@ export function ActivityPage() {
     .filter((op) => !isSettled(op.status))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const [filter, setFilter] = useState<Filter>("all")
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const current = FILTERS.find((f) => f.value === filter) ?? FILTERS[0]!
   const counts = Object.fromEntries(FILTERS.map((f) => [f.value, f.value === "all" ? activity.length : activity.filter((e) => f.kinds.includes(e.kind)).length])) as Record<Filter, number>
   const shown = filter === "all" ? activity : activity.filter((e) => current.kinds.includes(e.kind))
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const menu = (id: string): MenuEntry[] => {
+    const event = shown.find((e) => e.id === id)
+    if (!event) return []
+    const operation = event.operationId ? operations[event.operationId] : undefined
+    return [
+      ...(event.href ? [{ label: `Open ${destinationLabel(event.href)}`, onSelect: () => void (window.location.hash = event.href!) }] : []),
+      ...(operation && operation.items.length > 0 ? [{ label: expanded.has(id) ? "Hide items" : "Show items", onSelect: () => toggle(id) }] : []),
+    ]
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Activity" description="Running work, refusals, failed writes and outcomes. Every entry links to the surface that owns it." />
+      <PageHeader title="Activity" />
       <PageBody>
         <Section id="in-progress" title="In progress">
           {unsettled.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing is running.</p>
+            <p className="text-sm text-muted-foreground">Nothing running</p>
           ) : (
             <div className="space-y-3">
               {unsettled.map((op) => (
@@ -213,8 +232,7 @@ export function ActivityPage() {
           {activity.length === 0 ? (
             <EmptyState
               icon={ActivityIcon}
-              title="No activity yet"
-              description="Imports, saves, refusals and failed writes appear here as they happen."
+              title="No activity"
               action={
                 <Button size="sm" render={<a href="#/" />}>
                   Go to Home
@@ -224,8 +242,7 @@ export function ActivityPage() {
           ) : shown.length === 0 ? (
             <EmptyState
               icon={ActivityIcon}
-              title={`No ${current.label.toLowerCase()} yet`}
-              description="Nothing of this kind has been recorded."
+              title={`No ${current.label.toLowerCase()}`}
               action={
                 <Button size="sm" variant="outline" onClick={() => setFilter("all")}>
                   Show all
@@ -233,7 +250,7 @@ export function ActivityPage() {
               }
             />
           ) : (
-            <div className="relative overflow-x-auto rounded-lg border">
+            <ContextMenuArea menu={menu} className="relative block overflow-x-auto rounded-lg border">
               <table className="w-full text-sm">
                 <caption className="sr-only">Activity history, newest first</caption>
                 <thead className="text-xs text-muted-foreground">
@@ -254,11 +271,11 @@ export function ActivityPage() {
                 </thead>
                 <tbody>
                   {shown.map((event) => (
-                    <ActivityRow key={event.id} event={event} operation={event.operationId ? operations[event.operationId] : undefined} />
+                    <ActivityRow key={event.id} event={event} operation={event.operationId ? operations[event.operationId] : undefined} open={expanded.has(event.id)} onToggle={() => toggle(event.id)} />
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ContextMenuArea>
           )}
         </Section>
       </PageBody>

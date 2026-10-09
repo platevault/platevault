@@ -9,7 +9,7 @@ import { ActionError } from "@/components/app/feedback"
 import { FolderPicker } from "@/components/app/folder-picker"
 import { PathText } from "@/components/app/data"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { LocationId, LocationRole } from "@/domain/types"
@@ -99,7 +99,6 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
           else close()
         }}
         title={role ? copy.picker : "Choose a folder"}
-        description="Prototype folder chooser: volumes and folders come from the simulated disk. Choosing a folder does not change it."
         initialPath={path || lastParent}
         onChoose={chose}
       />
@@ -116,7 +115,6 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
           >
             <DialogHeader>
               <DialogTitle>Add location</DialogTitle>
-              <DialogDescription>Registering records access and indexing intent. Nothing in the folder is copied, renamed, moved or deleted.</DialogDescription>
             </DialogHeader>
             <Field className="gap-1.5" data-invalid={errors.path ? true : undefined}>
               <span id={ids.path} className="text-sm font-medium">
@@ -133,7 +131,7 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
               >
                 <PathText path={path} className="min-w-0 flex-1" />
                 <Button type="button" size="sm" variant="ghost" onClick={() => setStep("pick")}>
-                  Choose a different folder
+                  Change
                 </Button>
               </div>
               <FieldMessage id={`${ids.path}-error`} message={errors.path} />
@@ -144,7 +142,6 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
               value={displayName}
               onChange={setDisplayName}
               error={errors.displayName}
-              description="Shown in lists and status messages. You can change it later."
               autoFocus
             />
             {role ? null : (
@@ -166,13 +163,12 @@ export function AddLocationFlow({ role, open, onClose, onAdded, href, roles = RO
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">{ROLE_COPY[chosenRole].description}</p>
               </Field>
             )}
             {writeError ? <ActionError message={writeError} onRetry={submit} /> : null}
             <DialogFooter>
               <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-              <Button type="submit">Add {copy.noun} location</Button>
+              <Button type="submit">Add location</Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -57,7 +57,8 @@ export function LiveAnnouncer() {
 export interface EmptyStateProps {
   icon: LucideIcon
   title: string
-  description: ReactNode
+  /** Optional: an empty state is one line plus one action. */
+  description?: ReactNode
   /** The one next action. Required: an empty state always says what to do. */
   action: ReactNode
   className?: string
@@ -73,7 +74,7 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
           <Icon aria-hidden="true" />
         </EmptyMedia>
         <Title className="text-sm font-medium text-balance">{title}</Title>
-        <EmptyDescription className="text-pretty">{description}</EmptyDescription>
+        {description ? <EmptyDescription className="text-pretty">{description}</EmptyDescription> : null}
       </EmptyHeader>
       <EmptyContent>{action}</EmptyContent>
     </Empty>

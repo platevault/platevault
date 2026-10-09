@@ -34,6 +34,7 @@ import { RunPage } from "@/features/v5/c-runs/run"
 import { ActivityPage } from "@/features/v5/e-targets-plan-settings/activity"
 import { CalibrationPage } from "@/features/v5/e-targets-plan-settings/calibration"
 import { PlanPage } from "@/features/v5/e-targets-plan-settings/plan"
+import { CalibrationSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-calibration"
 import { EquipmentSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-equipment"
 import { GoalTemplatesSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-goal-templates"
 import { NamingSettingsPage } from "@/features/v5/e-targets-plan-settings/settings-naming"
@@ -140,6 +141,7 @@ const settingsChildren = [
   settingsChild("equipment", EquipmentSettingsPage),
   settingsChild("goal-templates", GoalTemplatesSettingsPage),
   settingsChild("naming", NamingSettingsPage),
+  settingsChild("calibration", CalibrationSettingsPage),
   settingsChild("sites", SitesPage),
   settingsChild("targets", TargetLookupPage),
   settingsChild("applications", SettingsApplicationsPage),

@@ -60,7 +60,7 @@ export interface Destination {
   keywords: string
 }
 
-/** Settings sections (S16): v4's settled sections plus Equipment, Goal templates and Naming. */
+/** Settings sections (S16): v4's settled sections plus Equipment, Goal templates, Naming and Calibration. */
 export const SETTINGS_SECTIONS: Array<{ readonly group: string; items: Destination[] }> = [
   {
     get group() { return m.settings_group_general() },
@@ -72,6 +72,7 @@ export const SETTINGS_SECTIONS: Array<{ readonly group: string; items: Destinati
       { to: "/settings/locations", get label() { return m.common_locations() }, keywords: "folders captures calibration results archive" },
       { to: "/settings/equipment", get label() { return m.settings_equipment() }, keywords: "rig optical train camera telescope filter mono osc" },
       { to: "/settings/naming", get label() { return m.settings_naming() }, keywords: "naming template tokens import archive folder" },
+      { to: "/settings/calibration", get label() { return m.nav_calibration() }, keywords: "calibration raw frames keep trash masters stacking" },
       { to: "/settings/sites", get label() { return m.settings_sites() }, keywords: "site default location latitude" },
       { to: "/settings/targets", get label() { return m.settings_target_lookup() }, keywords: "simbad sesame resolver online provider" },
     ],

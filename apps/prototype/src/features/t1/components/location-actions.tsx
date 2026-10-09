@@ -8,6 +8,8 @@ import { useState, type ReactNode } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { ActionError, Notice } from "@/components/app/feedback"
 import { FolderPicker } from "@/components/app/folder-picker"
+import { Pill } from "@/components/app/pill"
+import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import type { Location, LocationId, OperationId } from "@/domain/types"
 import { plural } from "@/lib/format"
@@ -81,7 +83,7 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
           title="Remap saved"
           actions={
             <Button size="sm" variant="outline" onClick={() => index(location)}>
-              Rescan {location.displayName}
+              Rescan<span className="sr-only"> {location.displayName}</span>
             </Button>
           }
         >
@@ -95,7 +97,7 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
         actions={
           value.locate ? (
             <Button size="sm" variant="outline" onClick={() => setPicker({ location, mode: "locate" })}>
-              Choose another folder
+              Choose again
             </Button>
           ) : undefined
         }
@@ -112,12 +114,7 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
       <FolderPicker
         open={picker !== null}
         onOpenChange={(open) => !open && setPicker(null)}
-        title={picker?.mode === "locate" ? `Locate ${picker.location.displayName}` : `Choose folder again for ${picker?.location.displayName ?? "this location"}`}
-        description={
-          picker?.mode === "locate"
-            ? "Prototype folder chooser. Choose the folder that now holds these frames; frames are matched by content hash, never by name."
-            : "Prototype folder chooser. Choosing the same folder retries it, and it reads Access denied until access is restored (Prototype: Simulation controls › Folder access). A different folder replaces this registration's folder."
-        }
+        title={picker?.mode === "locate" ? `Locate ${picker.location.displayName}` : `Choose folder for ${picker?.location.displayName ?? "this location"}`}
         initialPath={picker?.location.path}
         chooseVerb={picker?.mode === "locate" ? "Review" : "Choose"}
         onChoose={(path) => picker && chosen(picker.location, picker.mode, path)}
@@ -128,17 +125,17 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
         title={`Remap ${proofLocation?.displayName ?? "location"} to ${proof?.toPath ?? ""}?`}
         description={
           proof ? (
-            <span className="block space-y-1">
-              <span className="block">
-                Volume evidence: {proof.fromVolume ? `${proof.fromVolume.name} (${proof.fromVolume.volumeUuid})` : "unknown"} →{" "}
-                {proof.toVolume ? `${proof.toVolume.name} (${proof.toVolume.volumeUuid})` : "unknown"}.
-                {proof.fromVolume && proof.toVolume && proof.fromVolume.name === proof.toVolume.name && proof.fromVolume.volumeUuid !== proof.toVolume.volumeUuid
-                  ? " Same name, different volume identity."
-                  : ""}
-              </span>
-              <span className="block tabular-nums">
-                Same bytes: {proof.verified.length} · Bytes differ: {proof.differs.length} · Not found: {proof.notFound.length}
-              </span>
+            <span className="flex flex-wrap items-center gap-1 tabular-nums">
+              <Pill tone="success">{`${proof.verified.length} same bytes`}</Pill>
+              {proof.differs.length > 0 ? <Pill tone="danger">{`${proof.differs.length} differ`}</Pill> : null}
+              {proof.notFound.length > 0 ? <Pill tone="warning">{`${proof.notFound.length} not found`}</Pill> : null}
+              <NoteMarker
+                label="Volume evidence"
+                rows={[
+                  { label: "From", value: proof.fromVolume ? `${proof.fromVolume.name} · ${proof.fromVolume.volumeUuid}` : "–" },
+                  { label: "To", value: proof.toVolume ? `${proof.toVolume.name} · ${proof.toVolume.volumeUuid}` : "–" },
+                ]}
+              />
             </span>
           ) : null
         }
@@ -148,12 +145,11 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
                 `${plural(proof.verified.length, "frame")} move to ${proof.toPath}, verified by SHA-256`,
                 ...(proof.differs.length > 0 ? [`${plural(proof.differs.length, "frame")} refused, bytes differ: ${listNames(proof.differs)}`] : []),
                 ...(proof.notFound.length > 0 ? [`${plural(proof.notFound.length, "frame")} not found in the new folder: ${listNames(proof.notFound)}`] : []),
-                ...(refused.length > 0 ? ["Refused frames stay in the catalog with their decisions and read Not found in this location"] : []),
+                ...(refused.length > 0 ? ["Refused frames read Not found here"] : []),
                 `${proofLocation?.displayName ?? "The location"} points to ${proof.toPath}`,
               ]
             : []
         }
-        unchanged={["Frame identities, quality decisions and View membership", "Every file on both volumes; remap changes the catalog only"]}
         confirmLabel={`Remap ${plural(proof?.verified.length ?? 0, "frame")}`}
         onConfirm={() => {
           if (!proof || !proofLocation) return
@@ -163,7 +159,7 @@ export function useLocationActions({ href, onIndexStarted }: { href: string; onI
               locationId: proof.locationId,
               value: {
                 tone: "done",
-                message: `${plural(proof.verified.length, "frame")} now point to ${proof.toPath}${refused.length ? `; ${plural(refused.length, "frame")} refused` : ""}. Rescan to read any other files in the folder.`,
+                message: `${plural(proof.verified.length, "frame")} → ${proof.toPath}${refused.length ? ` · ${plural(refused.length, "frame")} refused` : ""}`,
               },
             })
             setProof(null)

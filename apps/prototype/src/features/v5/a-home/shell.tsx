@@ -7,7 +7,7 @@ import { openSheet } from "@/app/ui-state"
 import { ImportSheet } from "./import"
 
 function useCommands(): PaletteCommand[] {
-  return [{ id: "a:import", label: "Import…", group: "Actions", keywords: "import copy move sd card source captures", run: () => openSheet({ kind: "import" }) }]
+  return [{ id: "a:import", label: "Import…", group: "Actions", keywords: "import copy move removable device usb sd source folder captures calibration", run: () => openSheet({ kind: "import" }) }]
 }
 
 export const aShell: ShellContribution = { Overlay: ImportSheet, useCommands }

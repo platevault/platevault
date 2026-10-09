@@ -8,17 +8,20 @@
  * A FILTER value seen on a rig's sessions that matches no filter prompts
  * "Add {value} to {rig}"; declining keeps the prompt available.
  */
-import { useSearch } from "@tanstack/react-router"
-import { Pencil, Plus, Trash2 } from "lucide-react"
+import { Link, useSearch } from "@tanstack/react-router"
+import { Camera, Pencil, Plus, Trash2 } from "lucide-react"
 import { type FormEvent, useEffect, useId, useRef, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { KeyValueList } from "@/components/app/data"
-import { ActionError, Notice, UnknownValue } from "@/components/app/feedback"
+import { ActionError, EmptyState, Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
+import { CountBadge, Pill } from "@/components/app/pill"
+import { ContextMenuArea, type MenuEntry, menuKey } from "@/components/app/row-menu"
 import { StatusBadge } from "@/components/app/status"
+import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { liveLightSessions, rigBands, rigCameraKind, rigFieldOfView, sessionRigId, unknownFilterValues } from "@/domain/derive"
 import { BANDS, NARROW_BANDS } from "@/domain/labels"
 import { fieldOfView } from "@/domain/sky"
@@ -85,9 +88,9 @@ function FilterDialog({ rig, draft, onClose }: { rig: OpticalTrain; draft: Filte
     if (!values) return
     const name = values.name.trim()
     const next: typeof errors = {}
-    if (!name) next.name = "Name: enter the filter's name, for example Ha."
-    else if (rig.filters.some((f) => f.id !== values.id && f.name.toLowerCase() === name.toLowerCase())) next.name = `Name: ${rig.name} already has a filter named ${name}.`
-    if (values.bands.length === 0) next.bands = "Bands: choose at least one band the filter passes."
+    if (!name) next.name = "Name required"
+    else if (rig.filters.some((f) => f.id !== values.id && f.name.toLowerCase() === name.toLowerCase())) next.name = "Name taken"
+    if (values.bands.length === 0) next.bands = "Pick a band"
     setErrors(next)
     if (next.name || next.bands) return
     const matches = parseAliases(values.matches)
@@ -101,25 +104,20 @@ function FilterDialog({ rig, draft, onClose }: { rig: OpticalTrain; draft: Filte
     else setFailure(result.message)
   }
 
-  const title = values.fromHeader ? `Add ${values.fromHeader} to ${rig.name}` : values.id ? `Edit filter ${values.name}` : `Add a filter to ${rig.name}`
+  const title = values.fromHeader ? `Add ${values.fromHeader}` : values.id ? `Edit ${values.name}` : "Add filter"
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <form onSubmit={submit} noValidate className="space-y-3">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>
-              {values.fromHeader
-                ? "Only this rig's settings change. The sessions' header bytes and observed values stay as read."
-                : "A filter names the FITS FILTER values it matches and the bands it passes. A dual-band filter passes two."}
-            </DialogDescription>
           </DialogHeader>
           <TextField id={ids.name} label="Name" value={values.name} onChange={(name) => setValues({ ...values, name })} error={errors.name} readOnly={Boolean(values.fromHeader)} />
           {values.fromHeader ? null : (
-            <TextField id={ids.matches} label="Matches FILTER values" description="Comma-separated, compared case-insensitively. Empty: the name only." value={values.matches} onChange={(matches) => setValues({ ...values, matches })} mono />
+            <TextField id={ids.matches} label="Matches FILTER" placeholder="Comma-separated" value={values.matches} onChange={(matches) => setValues({ ...values, matches })} mono />
           )}
           <fieldset className="space-y-1.5" aria-describedby={errors.bands ? `${ids.bands}-error` : undefined}>
-            <legend className="text-sm font-medium">Bands it passes</legend>
+            <legend className="text-sm font-medium">Bands</legend>
             <div className="flex flex-wrap gap-3">
               {BANDS.map((band) => (
                 <label key={band} className="inline-flex items-center gap-1.5 text-sm">
@@ -138,7 +136,7 @@ function FilterDialog({ rig, draft, onClose }: { rig: OpticalTrain; draft: Filte
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit">{failure ? "Retry" : values.fromHeader ? `Add ${values.fromHeader}` : "Save filter"}</Button>
+            <Button type="submit">{failure ? "Retry" : values.fromHeader ? "Add" : "Save"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -178,10 +176,10 @@ function OpticsDialog({ rig, open, onClose }: { rig: OpticalTrain; open: boolean
     event.preventDefault()
     const positive = (v: number | null, whole: boolean) => v !== null && !Number.isNaN(v) && v > 0 && (!whole || Number.isInteger(v))
     const next: Record<string, string | undefined> = {
-      width: camera && !positive(width, true) ? "Sensor width: enter a whole number of pixels greater than 0." : undefined,
-      height: camera && !positive(height, true) ? "Sensor height: enter a whole number of pixels greater than 0." : undefined,
-      pixel: camera && !positive(pixel, false) ? "Pixel size: enter micrometres greater than 0, for example 3.76." : undefined,
-      focal: !positive(focal, false) ? "Effective focal length: enter millimetres greater than 0, for example 250." : undefined,
+      width: camera && !positive(width, true) ? "Whole pixels > 0" : undefined,
+      height: camera && !positive(height, true) ? "Whole pixels > 0" : undefined,
+      pixel: camera && !positive(pixel, false) ? "µm > 0" : undefined,
+      focal: !positive(focal, false) ? "mm > 0" : undefined,
     }
     setErrors(next)
     if (Object.values(next).some(Boolean)) return
@@ -195,14 +193,10 @@ function OpticsDialog({ rig, open, onClose }: { rig: OpticalTrain; open: boolean
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit} noValidate className="space-y-3">
           <DialogHeader>
-            <DialogTitle>Optics of {rig.name}</DialogTitle>
-            <DialogDescription>
-              {camera
-                ? sharing.length > 1
-                  ? `Camera values belong to ${camera.name} and change for every rig that uses it (${sharing.map((r) => r.name).join(", ")}). The focal length is this rig's own.`
-                  : `Camera values belong to ${camera.name}. The focal length is this rig's own.`
-                : "This rig has no camera record, so its field of view stays unknown. The focal length is this rig's own."}
-            </DialogDescription>
+            <DialogTitle className="inline-flex items-center gap-1.5">
+              Optics of {rig.name}
+              {camera && sharing.length > 1 ? <HelpTip label="Shared camera">{`Camera values change for ${sharing.map((r) => r.name).join(", ")}.`}</HelpTip> : null}
+            </DialogTitle>
           </DialogHeader>
           {camera ? (
             <>
@@ -217,7 +211,6 @@ function OpticsDialog({ rig, open, onClose }: { rig: OpticalTrain; open: boolean
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground">Mono or OSC comes from the camera, never from the filter list. An OSC camera captures R, G and B without a filter.</p>
               </fieldset>
               <div className="grid grid-cols-3 gap-3">
                 <TextField id={ids.width} label="Sensor width (px)" inputMode="numeric" value={values.width} onChange={(width) => setValues({ ...values, width })} error={errors.width} />
@@ -227,16 +220,16 @@ function OpticsDialog({ rig, open, onClose }: { rig: OpticalTrain; open: boolean
             </>
           ) : null}
           <TextField id={ids.focal} label="Effective focal length (mm)" inputMode="decimal" value={values.focal} onChange={(f) => setValues({ ...values, focal: f })} error={errors.focal} className="max-w-56" />
-          <p className="text-sm" aria-live="polite">
-            <span className="text-muted-foreground">Field of view: </span>
-            {preview ? `${formatDegrees(preview.widthDeg, 2)} × ${formatDegrees(preview.heightDeg, 2)} · ${preview.pixelScaleArcsec.toFixed(2)}″/px` : "unknown until every value is set"}
+          <p className="text-sm tabular-nums" aria-live="polite">
+            <span className="text-muted-foreground">Field of view </span>
+            {preview ? `${formatDegrees(preview.widthDeg, 2)} × ${formatDegrees(preview.heightDeg, 2)} · ${preview.pixelScaleArcsec.toFixed(2)}″/px` : "–"}
           </p>
           {failure ? <ActionError message={failure} /> : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit">{failure ? "Retry" : "Save optics"}</Button>
+            <Button type="submit">{failure ? "Retry" : "Save"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -264,6 +257,12 @@ function RigBlock({ rig, highlighted }: { rig: OpticalTrain; highlighted: boolea
   const unknown = unknownFilterValues(catalog, rig.id)
   const projects = Object.values(catalog.projects).filter((p) => p.rigIds.includes(rig.id))
   const headingId = `rig-${rig.id}`
+  const editFilter = (f: RigFilter) => setFilterDraft({ id: f.id, name: f.name, matches: f.matches.join(", "), bands: f.bands, fromHeader: null })
+  const filterMenu = (id: string): MenuEntry[] => {
+    const f = rig.filters.find((x) => x.id === id)
+    if (!f) return []
+    return [{ label: "Edit", onSelect: () => editFilter(f) }, { separator: true }, { label: "Remove", destructive: true, onSelect: () => setRemoving(f) }]
+  }
 
   return (
     <section ref={ref} aria-labelledby={headingId} className={cn("scroll-mt-14 space-y-3 rounded-md border p-3", highlighted && "border-primary")} data-rig={rig.id}>
@@ -272,7 +271,7 @@ function RigBlock({ rig, highlighted }: { rig: OpticalTrain; highlighted: boolea
           {rig.name}
         </h3>
         <StatusBadge kind="source" value={rig.source} />
-        <span className="text-[0.75rem] text-muted-foreground">{kind === "osc" ? "OSC" : kind === "mono" ? "Mono" : "Camera unknown"}</span>
+        <Pill tone="muted">{kind === "osc" ? "OSC" : kind === "mono" ? "Mono" : "Camera unknown"}</Pill>
         <div className="flex-1" />
         <Button size="sm" variant="ghost" onClick={() => setRenaming(true)}>
           <Pencil aria-hidden="true" data-icon="inline-start" />
@@ -288,92 +287,126 @@ function RigBlock({ rig, highlighted }: { rig: OpticalTrain; highlighted: boolea
           <Notice
             key={value}
             tone="warning"
-            title={`FILTER “${value}” matches no filter on ${rig.name}`}
+            title={`Unknown FILTER “${value}” · ${plural(sessionsWithValue(catalog, rig.id, value), "session")}`}
             actions={
               <>
                 <Button size="sm" onClick={() => setFilterDraft({ id: null, name: value, matches: value, bands: guessBands(value), fromHeader: value })}>
-                  Add {value} to {rig.name}
+                  Add filter<span className="sr-only"> {value}</span>
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setDeclined([...declined, value])}>
                   Not now
                 </Button>
               </>
             }
-          >
-            Seen on {plural(sessionsWithValue(catalog, rig.id, value), "session")}. Until it is added, those sessions show the filter as unknown and count toward no band.
-          </Notice>
+          />
         ))}
       {declined.filter((v) => unknown.includes(v)).length > 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Not added: {declined.filter((v) => unknown.includes(v)).join(", ")}.{" "}
-          <button type="button" className="text-link hover:underline" onClick={() => setDeclined([])}>
-            Show the prompt again
-          </button>
+        <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          Hidden
+          {declined
+            .filter((v) => unknown.includes(v))
+            .map((v) => (
+              <Pill key={v} tone="muted">
+                {v}
+              </Pill>
+            ))}
+          <Button size="xs" variant="ghost" onClick={() => setDeclined([])}>
+            Show
+          </Button>
         </p>
       ) : null}
       <KeyValueList
         columns={2}
         items={[
-          { label: "Camera", value: camera ? `${camera.name} · ${camera.kind === "osc" ? "OSC" : "Mono"}` : <UnknownValue label="Not set" reason="No camera record, so the field of view is unknown" /> },
-          { label: "Sensor", value: camera ? `${camera.widthPx} × ${camera.heightPx} px · ${camera.pixelSizeUm} µm` : <UnknownValue label="Unknown" /> },
-          { label: "Telescope", value: telescope ? `${telescope.name}${telescope.apertureMm ? ` · ${telescope.apertureMm} mm aperture` : ""}` : <UnknownValue label="Not set" /> },
-          { label: "Focal length", value: `${rig.effectiveFocalLengthMm} mm effective` },
+          { label: "Camera", value: camera ? `${camera.name} · ${camera.kind === "osc" ? "OSC" : "Mono"}` : "–" },
+          { label: "Sensor", value: camera ? `${camera.widthPx} × ${camera.heightPx} px · ${camera.pixelSizeUm} µm` : "–" },
+          { label: "Telescope", value: telescope ? `${telescope.name}${telescope.apertureMm ? ` · ${telescope.apertureMm} mm` : ""}` : "–" },
+          { label: "Focal length", value: `${rig.effectiveFocalLengthMm} mm` },
+          { label: "Field of view", value: fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)} · ${fov.pixelScaleArcsec.toFixed(2)}″/px` : "–", source: fov ? "Derived" : undefined },
           {
-            label: "Field of view",
-            value: fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)} · ${fov.pixelScaleArcsec.toFixed(2)}″/px` : <UnknownValue label="FOV unknown" reason="Needs the camera's sensor and pixel size and the focal length; Fit reads – until then" />,
-            source: fov ? "Derived" : undefined,
+            label: "Bands",
+            value:
+              bands.length > 0 ? (
+                <span className="inline-flex flex-wrap gap-1">
+                  {bands.map((b) => (
+                    <Pill key={b} tone="info">
+                      {b}
+                    </Pill>
+                  ))}
+                </span>
+              ) : (
+                "–"
+              ),
+            source: kind === "osc" ? "OSC camera" : undefined,
           },
-          { label: "Bands", value: bands.length > 0 ? bands.join(", ") : "None: add a filter", source: kind === "osc" ? "R, G, B from the OSC camera" : undefined },
-          { label: "Used by", value: projects.length > 0 ? projects.map((p) => p.name).join(", ") : "No Project" },
+          { label: "Used by", value: projects.length > 0 ? projects.map((p) => p.name).join(", ") : "–" },
         ]}
       />
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2" data-chrome>
-          <h4 className="text-[0.75rem] font-medium text-muted-foreground">Filters · {rig.filters.length}</h4>
+          <h4 className="inline-flex items-center gap-1.5 text-[0.75rem] font-medium text-muted-foreground">
+            Filters <CountBadge count={rig.filters.length} />
+          </h4>
           <Button size="sm" variant="outline" onClick={() => setFilterDraft({ id: null, name: "", matches: "", bands: [], fromHeader: null })}>
             <Plus aria-hidden="true" data-icon="inline-start" />
             Add filter<span className="sr-only"> to {rig.name}</span>
           </Button>
         </div>
         {rig.filters.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{kind === "osc" ? "No filters: the camera captures R, G and B." : "No filters yet. A mono rig passes no band until a filter is listed."}</p>
+          <p className="text-sm text-muted-foreground">{kind === "osc" ? "No filters · OSC" : "No filters"}</p>
         ) : (
-          <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
-              <caption className="sr-only">Filters of {rig.name}</caption>
-              <thead className="bg-[color-mix(in_oklch,var(--chrome)_70%,var(--background))] text-[0.6875rem] text-muted-foreground">
-                <tr className="border-b">
-                  <th scope="col" className="h-(--row-h) px-3 text-left font-medium">Filter</th>
-                  <th scope="col" className="px-3 text-left font-medium">Matches FILTER</th>
-                  <th scope="col" className="px-3 text-left font-medium">Bands</th>
-                  <th scope="col" className="px-3 text-right font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rig.filters.map((f) => (
-                  <tr key={f.id} className="h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022]">
-                    <th scope="row" className="px-3 text-left font-medium">
-                      {f.name}
+          <ContextMenuArea menu={filterMenu}>
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full text-sm">
+                <caption className="sr-only">Filters of {rig.name}</caption>
+                <thead className="text-[0.6875rem] text-muted-foreground">
+                  <tr className="border-b">
+                    <th scope="col" className="h-(--row-h) px-3 text-left font-medium">
+                      Filter
                     </th>
-                    <td className="px-3 font-mono text-xs">{f.matches.join(", ")}</td>
-                    <td className="px-3">
-                      {f.bands.join(" + ")}
-                      {f.bands.filter((b) => NARROW_BANDS.includes(b)).length >= 2 ? <span className="ml-1.5 text-xs text-muted-foreground">dual-band</span> : null}
-                    </td>
-                    <td className="px-3 py-0.5 text-right whitespace-nowrap">
-                      <Button size="xs" variant="ghost" onClick={() => setFilterDraft({ id: f.id, name: f.name, matches: f.matches.join(", "), bands: f.bands, fromHeader: null })}>
-                        Edit<span className="sr-only"> {f.name}</span>
-                      </Button>
-                      <Button size="xs" variant="ghost" onClick={() => setRemoving(f)}>
-                        <Trash2 aria-hidden="true" data-icon="inline-start" />
-                        Remove<span className="sr-only"> {f.name}</span>
-                      </Button>
-                    </td>
+                    <th scope="col" className="px-3 text-left font-medium">
+                      Matches FILTER
+                    </th>
+                    <th scope="col" className="px-3 text-left font-medium">
+                      Bands
+                    </th>
+                    <th scope="col" className="px-3 text-right font-medium">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {rig.filters.map((f) => (
+                    <tr key={f.id} {...menuKey(f.id)} className="h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022]">
+                      <th scope="row" className="px-3 text-left font-medium">
+                        {f.name}
+                      </th>
+                      <td className="px-3 font-mono text-xs">{f.matches.join(", ")}</td>
+                      <td className="px-3">
+                        <span className="inline-flex flex-wrap items-center gap-1">
+                          {f.bands.map((b) => (
+                            <Pill key={b} tone="info">
+                              {b}
+                            </Pill>
+                          ))}
+                          {f.bands.filter((b) => NARROW_BANDS.includes(b)).length >= 2 ? <Pill tone="muted">Dual-band</Pill> : null}
+                        </span>
+                      </td>
+                      <td className="px-3 py-0.5 text-right whitespace-nowrap">
+                        <Button size="xs" variant="ghost" onClick={() => editFilter(f)}>
+                          Edit<span className="sr-only"> {f.name}</span>
+                        </Button>
+                        <Button size="xs" variant="ghost" onClick={() => setRemoving(f)}>
+                          <Trash2 aria-hidden="true" data-icon="inline-start" />
+                          Remove<span className="sr-only"> {f.name}</span>
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </ContextMenuArea>
         )}
       </div>
 
@@ -383,7 +416,7 @@ function RigBlock({ rig, highlighted }: { rig: OpticalTrain; highlighted: boolea
         open={renaming}
         onOpenChange={setRenaming}
         title={`Rename ${rig.name}`}
-        description="The name shows wherever the rig appears: Projects, runs, Targets and Sessions."
+        description=""
         label="Rig name"
         initial={rig.name}
         confirmLabel="Rename"
@@ -399,15 +432,12 @@ function RigBlock({ rig, highlighted }: { rig: OpticalTrain; highlighted: boolea
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
         title={`Remove ${removing?.name ?? ""} from ${rig.name}?`}
-        description="The rig's filter list drives the Targets band strip, the narrowband presets and goal channels."
+        description={null}
         changes={[
-          `Removes the filter ${removing?.name ?? ""} (${removing?.bands.join(" + ") ?? ""}) from ${rig.name}`,
-          removing && sessionsWithValue(catalog, rig.id, removing.name) > 0
-            ? `${plural(sessionsWithValue(catalog, rig.id, removing.name), "session")} with FILTER ${removing.name} will show the filter as unknown, with a prompt to add it again`
-            : "No session on this rig uses it now",
+          `Remove ${removing?.name ?? ""} (${removing?.bands.join(" + ") ?? ""})`,
+          ...(removing && sessionsWithValue(catalog, rig.id, removing.name) > 0 ? [`${plural(sessionsWithValue(catalog, rig.id, removing.name), "session")} read the filter as unknown`] : []),
         ]}
-        unchanged={["Session headers and observed values", "Goal templates", "Runs and their membership"]}
-        confirmLabel={`Remove ${removing?.name ?? "filter"}`}
+        confirmLabel="Remove"
         tone="destructive"
         onConfirm={() => (removing ? setRigFilters(rig.id, rig.filters.filter((f) => f.id !== removing.id)) : undefined)}
       />
@@ -420,11 +450,11 @@ export function EquipmentSettingsPage() {
   const rigs = useStore((s) => Object.values(s.catalog.opticalTrains).sort((a, b) => a.name.localeCompare(b.name)))
   return (
     <div>
-      <PageHeader level={2} title="Equipment" description="Each rig is one optical train: camera, telescope and a plain filter list. The list drives the Targets band strip, narrowband presets and Fit." />
+      <PageHeader level={2} title="Equipment" />
       <PageBody>
-        <ReturnNotice task="Equipment" />
+        <ReturnNotice />
         {rigs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No rigs yet. Rigs are detected from session headers when a capture location is indexed.</p>
+          <EmptyState icon={Camera} title="No rigs" action={<Button render={<Link to="/settings/locations" />}>Add location</Button>} />
         ) : (
           rigs.map((rig) => <RigBlock key={rig.id} rig={rig} highlighted={search.rig === rig.id} />)
         )}
