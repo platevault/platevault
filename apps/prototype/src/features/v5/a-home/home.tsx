@@ -58,11 +58,12 @@ import {
   targetStatus,
   type GoalProgress,
 } from "@/domain/derive"
+import { OPERATION_UNIT_NAME } from "@/domain/labels"
 import { sessionLabel, sessionLongLabel } from "@/domain/membership"
 import { bestWindowTonight, defaultCriteria, tonightAt, zoneAbbreviation } from "@/domain/planning"
 import type { Operation, Project, Session, SessionId } from "@/domain/types"
 import { formatCount, formatTime } from "@/lib/format"
-import { type Messages } from "@/lib/i18n"
+import { type Messages, msg, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { SearchParams } from "@/routes"
 import { addRunSessions } from "@/store/actions/runs"
@@ -172,7 +173,7 @@ function ReviewSheet({ sessionId, onClose }: { sessionId: string | null; onClose
         {session ? (
           <>
             <SheetHeader className="flex-row items-center gap-2 border-b border-separator py-2 pr-12" data-chrome>
-              <SheetTitle className="truncate">{sessionLongLabel(session)}</SheetTitle>
+              <SheetTitle className="truncate">{sessionLongLabel(m, session)}</SheetTitle>
               <Button size="xs" variant="ghost" render={<Link to="/sessions/$sessionId" params={{ sessionId: session.id }} search={{ view: "review" }} />}>
                 {m.project_open_session()}
               </Button>
@@ -261,9 +262,9 @@ function NextButton({ state, project }: { state: PrototypeState; project: Projec
   const run = runId ? state.catalog.runs[runId] : undefined
   const blocked = run ? runPipeline(state, run).blocker !== null : false
   return (
-    <Button size="sm" variant="outline" className="max-w-[12rem] min-w-0" onClick={() => follow(next.link)} title={`${next.label}: ${next.reason}`} data-next={project.id}>
+    <Button size="sm" variant="outline" className="max-w-[12rem] min-w-0" onClick={() => follow(next.link)} title={`${say(m, next.label)}: ${say(m, next.reason)}`} data-next={project.id}>
       {blocked ? <StepGlyph state="blocked" /> : null}
-      <span className="truncate">{next.label}</span>
+      <span className="truncate">{say(m, next.label)}</span>
       <span className="sr-only"> {m.projects_next_for({ name: project.name })}</span>
     </Button>
   )
@@ -283,12 +284,12 @@ function StageCell({ state, project }: { state: PrototypeState; project: Project
           <button type="button" className="rounded-sm underline-offset-2 hover:underline" onClick={() => follow(runStepLink(run, blocker.step))} data-gate="blocked">
             <GateLabel state="blocked" label={m.home_blocked_at({ step: stepName(m, blocker.step) })} className="text-destructive" />
           </button>
-          <NoteMarker label={m.home_why_blocked({ name: run.name })} rows={[{ label: run.name, value: blocker.message }]} />
+          <NoteMarker label={m.home_why_blocked({ name: run.name })} rows={[{ label: run.name, value: say(m, blocker.message) }]} />
         </span>
       )
     }
   }
-  return <GateLabel state={stage.state} label={stage.label} className="mt-1" />
+  return <GateLabel state={stage.state} label={say(m, stage.label)} className="mt-1" />
 }
 
 function ProjectsBox({ state, className }: { state: PrototypeState; className?: string }) {
@@ -317,7 +318,7 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
             {p.state === "done" ? <Pill tone="muted">{projectStatus(p) === "archived" ? m.status_archived() : m.status_done()}</Pill> : null}
           </div>
           <div className="text-xs text-pretty text-muted-foreground">
-            {p.subjects.map((s) => subjectName(state.catalog, s)).join(", ") || m.projects_no_subjects()} · {m.home_rig_count({ count: p.rigIds.length })}
+            {p.subjects.map((s) => subjectName(m, state.catalog, s)).join(", ") || m.projects_no_subjects()} · {m.home_rig_count({ count: p.rigIds.length })}
           </div>
           <StageCell state={state} project={p} />
         </div>
@@ -331,7 +332,7 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
     return [
       { heading: p.name },
       { label: m.verb_open(), icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId", params: { projectId: p.id } }) },
-      ...(next ? [{ label: next.label, onSelect: () => follow(next.link) }] : []),
+      ...(next ? [{ label: say(m, next.label), onSelect: () => follow(next.link) }] : []),
       ...(p.state === "open"
         ? [
             { separator: true } as const,
@@ -421,11 +422,12 @@ function WorkGroup({ title, count, filter, children }: { title: string; count: n
 }
 
 function WorkRow({ session, detail, action }: { session: Session; detail: ReactNode; action: ReactNode }) {
+  const m = useMessages()
   return (
     <li {...menuKey(session.id)} className="flex min-h-(--row-h) flex-wrap items-center justify-between gap-x-3 gap-y-1 py-1 text-sm">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <Link to="/sessions/$sessionId" params={{ sessionId: session.id }} className="truncate font-medium underline-offset-2 hover:underline">
-          {sessionLongLabel(session)}
+          {sessionLongLabel(m, session)}
         </Link>
         <span className="flex min-w-0 shrink items-center gap-1 truncate text-xs text-muted-foreground">{detail}</span>
       </div>
@@ -453,7 +455,7 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
     const session = catalog.sessions[sessionId]
     if (!session) return []
     return [
-      { heading: sessionLabel(session) },
+      { heading: sessionLabel(m, session) },
       { label: m.verb_open(), icon: Eye, onSelect: () => openSession(sessionId) },
       { label: m.session_review_frames(), icon: ListChecks, onSelect: () => onReview(sessionId) },
       { separator: true },
@@ -565,11 +567,11 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
                             variant="outline"
                             title={m.target_add_to_named({ name: run.name })}
                             onClick={() => {
-                              const reason = runCandidates(catalog, run).find((c) => c.session.id === session.id)?.reason ?? m.home_candidate_of({ name: run.name })
+                              const reason = runCandidates(catalog, run).find((c) => c.session.id === session.id)?.reason ?? msg("home_candidate_of", { name: run.name })
                               const result = addRunSessions(run.id, [session.id], { kind: "candidate", detail: reason })
                               setRefusal(refusalOf(result, m.session_cant_add()))
                               if (!result.ok) return
-                              announce(m.home_added_to_draft({ session: sessionLabel(session), run: run.name }))
+                              announce(m.home_added_to_draft({ session: sessionLabel(m, session), run: run.name }))
                               follow(runStepLink(run, "select"))
                             }}
                           >
@@ -627,7 +629,7 @@ function TonightBox({ state, className }: { state: PrototypeState; className?: s
       const centre = subjectCentre(state.catalog, subject)
       if (!centre) continue
       const key = subject.mosaic ? `${subject.targetId}#mosaic` : subject.targetId
-      const entry = entries.get(key) ?? { name: subjectName(state.catalog, subject), ra: centre.ra, dec: centre.dec, favourite: Boolean(state.catalog.targets[subject.targetId]?.favourite), projects: [] }
+      const entry = entries.get(key) ?? { name: subjectName(m, state.catalog, subject), ra: centre.ra, dec: centre.dec, favourite: Boolean(state.catalog.targets[subject.targetId]?.favourite), projects: [] }
       if (!entry.projects.includes(project.name)) entry.projects.push(project.name)
       entries.set(key, entry)
     }
@@ -723,7 +725,7 @@ function GoalsBox({ state, className }: { state: PrototypeState; className?: str
   const m = useMessages()
   const rows: GoalRow[] = targetStatus(state.catalog).map(({ project, subject, progress }) => {
     const panel = findPanel(subject, progress.goal.panelId)
-    const name = subjectName(state.catalog, subject)
+    const name = subjectName(m, state.catalog, subject)
     return { key: `${project.id}-${progress.goal.id}`, subject: panel ? m.home_panel({ name, n: panel.n }) : name, project, progress }
   })
   const unit = (p: GoalProgress) => (p.goal.integrationS !== null ? "seconds" : "frames")
@@ -849,16 +851,18 @@ function WorkBox({ state, className }: { state: PrototypeState; className?: stri
           {ops.map((op) => {
             const href = operationHref(state, op)
             const value = op.progress.total > 0 ? Math.min(100, (op.progress.done / op.progress.total) * 100) : null
+            const title = say(m, op.title)
+            const unit = say(m, OPERATION_UNIT_NAME[op.progress.unit])
             return (
               <li key={op.id} className="space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <a href={`#${href}`} className="min-w-0 truncate text-sm font-medium underline-offset-2 hover:underline">
-                    {op.title}
+                    {title}
                   </a>
                   <div className="flex shrink-0 items-center gap-0.5">
                     <StatusBadge kind="operation" value={op.status} />
                     {op.status === "running" && op.canPause ? (
-                      <Button size="icon-xs" variant="ghost" aria-label={m.home_pause_named({ name: op.title })} onClick={() => pauseOperation(op.id)}>
+                      <Button size="icon-xs" variant="ghost" aria-label={m.home_pause_named({ name: title })} onClick={() => pauseOperation(op.id)}>
                         <Pause aria-hidden="true" />
                       </Button>
                     ) : null}
@@ -866,22 +870,22 @@ function WorkBox({ state, className }: { state: PrototypeState; className?: stri
                       <Button
                         size="icon-xs"
                         variant="ghost"
-                        aria-label={op.status === "paused" ? m.home_resume_named({ name: op.title }) : m.home_retry_named({ name: op.title })}
+                        aria-label={op.status === "paused" ? m.home_resume_named({ name: title }) : m.home_retry_named({ name: title })}
                         onClick={() => resumeOperation(op.id)}
                       >
                         <Play aria-hidden="true" />
                       </Button>
                     ) : null}
                     {op.canCancel ? (
-                      <Button size="icon-xs" variant="ghost" aria-label={m.home_cancel_named({ name: op.title })} onClick={() => cancelOperation(op.id)}>
+                      <Button size="icon-xs" variant="ghost" aria-label={m.home_cancel_named({ name: title })} onClick={() => cancelOperation(op.id)}>
                         <X aria-hidden="true" />
                       </Button>
                     ) : null}
                   </div>
                 </div>
-                <Progress value={value} aria-label={m.operation_progress_label({ title: op.title })} className="gap-1">
+                <Progress value={value} aria-label={m.operation_progress_label({ title })} className="gap-1">
                   <span className="text-xs text-muted-foreground tabular-nums" aria-hidden="true">
-                    {value === null ? op.progress.unit : m.operation_progress_count({ done: formatCount(op.progress.done), total: formatCount(op.progress.total), unit: op.progress.unit })}
+                    {value === null ? unit : m.operation_progress_count({ done: formatCount(op.progress.done), total: formatCount(op.progress.total), unit })}
                   </span>
                 </Progress>
               </li>

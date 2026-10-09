@@ -8,8 +8,10 @@ import { useEffect, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import { Progress, ProgressValue } from "@/components/ui/progress"
+import { OPERATION_UNIT_NAME } from "@/domain/labels"
 import type { OperationId, OperationItemStatus } from "@/domain/types"
 import { formatCount, formatDateTime } from "@/lib/format"
+import { say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { cancelOperation, isSettled, pauseOperation, resumeOperation } from "@/store/operations"
@@ -57,13 +59,16 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
     acc[item.status] = (acc[item.status] ?? 0) + 1
     return acc
   }, {})
+  const title = say(m, op.title)
+  const summary = op.summary ? say(m, op.summary) : null
+  const unit = say(m, OPERATION_UNIT_NAME[op.progress.unit])
 
   return (
     <section aria-labelledby={`${op.id}-title`} className="space-y-3 rounded-lg border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Heading ref={heading} id={`${op.id}-title`} tabIndex={-1} className="text-sm font-semibold outline-none">
-            {op.title}
+            {title}
           </Heading>
           <StatusBadge kind="operation" value={op.status} />
         </div>
@@ -93,10 +98,8 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
 
       <Progress
         value={value}
-        aria-label={m.operation_progress_label({ title: op.title })}
-        getAriaValueText={(formatted) =>
-          m.operation_progress_value({ done: formatCount(op.progress.done), total: formatCount(op.progress.total), unit: op.progress.unit, percent: formatted ?? "" })
-        }
+        aria-label={m.operation_progress_label({ title })}
+        getAriaValueText={(formatted) => m.operation_progress_value({ done: formatCount(op.progress.done), total: formatCount(op.progress.total), unit, percent: formatted ?? "" })}
         className={cn(
           // The bar ends in the colour of the outcome; a partial run never reads as success.
           op.status === "succeeded" && "[&_[data-slot=progress-indicator]]:bg-success",
@@ -107,16 +110,16 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
       >
         {/* Plain text, not ProgressLabel: the label would replace the bar's stable name with a changing count. */}
         <span className="text-xs text-muted-foreground tabular-nums" aria-hidden="true">
-          {m.operation_progress_count({ done: formatCount(op.progress.done), total: formatCount(op.progress.total), unit: op.progress.unit })}
+          {m.operation_progress_count({ done: formatCount(op.progress.done), total: formatCount(op.progress.total), unit })}
         </span>
         <ProgressValue className="text-xs" aria-hidden="true" />
       </Progress>
 
       <p className="sr-only" aria-live="polite">
-        {settled ? `${op.title}: ${op.summary ?? statusMeta("operation", op.status).label}` : ""}
+        {settled ? `${title}: ${summary ?? statusMeta("operation", op.status).label}` : ""}
       </p>
 
-      {op.summary ? <p className="text-sm text-pretty">{op.summary}</p> : null}
+      {summary ? <p className="text-sm text-pretty">{summary}</p> : null}
 
       {op.items.length > 0 ? (
         <div className="space-y-1.5">
@@ -130,9 +133,9 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
             {shown.map((item) => (
               <li key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-0.5 py-1.5 text-sm">
                 <div className="min-w-0">
-                  <div className="truncate">{item.label}</div>
+                  <div className="truncate">{say(m, item.label)}</div>
                   {item.path ? <PathText path={item.path} className="text-muted-foreground" /> : null}
-                  {item.detail ? <div className="text-xs text-pretty text-muted-foreground">{item.detail}</div> : null}
+                  {item.detail ? <div className="text-xs text-pretty text-muted-foreground">{say(m, item.detail)}</div> : null}
                 </div>
                 <div className="flex items-center gap-2">
                   {item.phase ? <span className="text-xs text-muted-foreground">{item.phase}</span> : null}

@@ -23,11 +23,11 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { basisFiles, type CalSource, calibrationPlan, CRITERION_LABEL, KIND_LABEL, type RequirementRow, summaryText } from "@/domain/calibration"
+import { basisFiles, type CalSource, calibrationPlan, CRITERION_NAME, KIND_NAME, type RequirementRow, summaryRef } from "@/domain/calibration"
 import { runSetup, workingContent } from "@/domain/derive"
 import type { CalibrationKind, MatchCriterion, Run } from "@/domain/types"
 import { fileName, formatNight } from "@/lib/format"
-import { type Messages, m } from "@/lib/i18n"
+import { type Messages, m, type MessageRef, say } from "@/lib/i18n"
 import { useStore } from "@/store/core"
 import { acceptCalibration, answerMasterOffer, calibrationException, clearCalibration, deferCalibration, setCalibrationPolicy } from "./actions"
 import { type RunContext, readinessByKind, runLock, type StackOffer, stackOffers, tieOf } from "./model"
@@ -91,7 +91,7 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
           ) : (
             kinds.map((k) => (
               <Pill key={k.kind} tone={k.matched === k.total ? "success" : "warning"}>
-                {KIND_LABEL[k.kind]} {k.automatic ? "✓" : `${k.matched}/${k.total}`}
+                {say(m, KIND_NAME[k.kind])} {k.automatic ? "✓" : `${k.matched}/${k.total}`}
               </Pill>
             ))
           )}
@@ -101,7 +101,7 @@ export function CalibrateStep({ ctx }: { ctx: RunContext }) {
               {group.name}
             </Pill>
           ) : null}
-          {lock ? <Pill tone="muted">{lock}</Pill> : null}
+          {lock ? <Pill tone="muted">{say(m, lock)}</Pill> : null}
         </div>
       </Box>
 
@@ -165,14 +165,15 @@ function stateNote(row: RequirementRow): string | null {
 
 function StackPill({ offer }: { offer: StackOffer }) {
   const m = useMessages()
+  const name = say(m, offer.view.name)
   return (
-    <Pill tone={offer.waiting ? "info" : "muted"} icon={Sparkles} link={processLink(offer.view.process.id)} title={`${offer.view.name} · ${m.run_frames_count({ count: offer.view.frames })}`}>
-      {offer.waiting ? m.run_cal_stack_from({ name: offer.view.name }) : m.run_cal_stacking({ name: offer.view.name })}
+    <Pill tone={offer.waiting ? "info" : "muted"} icon={Sparkles} link={processLink(offer.view.process.id)} title={`${name} · ${m.run_frames_count({ count: offer.view.frames })}`}>
+      {offer.waiting ? m.run_cal_stack_from({ name }) : m.run_cal_stacking({ name })}
     </Pill>
   )
 }
 
-function RequirementTable({ run, rows, lock, onOutcome, onException }: { run: Run; rows: RequirementRow[]; lock: string | null; onOutcome: Act; onException: (v: ExceptionRequest) => void }) {
+function RequirementTable({ run, rows, lock, onOutcome, onException }: { run: Run; rows: RequirementRow[]; lock: MessageRef | null; onOutcome: Act; onException: (v: ExceptionRequest) => void }) {
   const m = useMessages()
   const state = useStore((s) => s)
   const navigate = useNavigate()
@@ -180,7 +181,7 @@ function RequirementTable({ run, rows, lock, onOutcome, onException }: { run: Ru
     if (row.assignment?.basis?.files[0]) return row.assignment.basis.files[0].sha256
     return row.input ? (basisFiles(state.catalog, state.disk, row.input)[0]?.sha256 ?? null) : null
   }
-  const rowName = (r: RequirementRow) => `${KIND_LABEL[r.kind]} · ${formatNight(r.member.session.night)} ${r.member.session.channel ?? m.palette_session_no_filter()}`
+  const rowName = (r: RequirementRow) => `${say(m, KIND_NAME[r.kind])} · ${formatNight(r.member.session.night)} ${r.member.session.channel ?? m.palette_session_no_filter()}`
   const assignBlocked = { blocked: m.run_cal_assign_blocked() }
   const entries = (r: RequirementRow): MenuEntry[] => {
     const offers = stackOffers(state, r)
@@ -197,7 +198,7 @@ function RequirementTable({ run, rows, lock, onOutcome, onException }: { run: Ru
       icon: c.summary.allCompatible ? undefined : CircleSlash,
       onSelect: () => (c.summary.allCompatible ? onOutcome(acceptCalibration(run.id, r.member.session.id, r.kind, c.source, c.criteria), assignBlocked) : onException({ row: r, source: c.source, criteria: c.criteria })),
     }))
-    const stack: MenuEntry[] = offers.map((o) => ({ label: o.waiting ? m.run_cal_stack_from({ name: o.view.name }) : m.activity_open_destination({ name: o.view.name }), icon: Sparkles, onSelect: () => void navigate(processLink(o.view.process.id) as never) }))
+    const stack: MenuEntry[] = offers.map((o) => ({ label: o.waiting ? m.run_cal_stack_from({ name: say(m, o.view.name) }) : m.activity_open_destination({ name: say(m, o.view.name) }), icon: Sparkles, onSelect: () => void navigate(processLink(o.view.process.id) as never) }))
     const decisions: MenuEntry[] = lock
       ? []
       : [
@@ -216,7 +217,7 @@ function RequirementTable({ run, rows, lock, onOutcome, onException }: { run: Ru
       cell: (r) => (
         <span className="flex flex-col">
           <span>
-            {formatNight(r.member.session.night)} · {r.member.session.channel ?? m.palette_session_no_filter()} · {KIND_LABEL[r.kind]}
+            {formatNight(r.member.session.night)} · {r.member.session.channel ?? m.palette_session_no_filter()} · {say(m, KIND_NAME[r.kind])}
           </span>
           <span className="text-[0.6875rem] text-muted-foreground">{m.run_frames_count({ count: r.member.included.length })}</span>
         </span>
@@ -252,7 +253,7 @@ function RequirementTable({ run, rows, lock, onOutcome, onException }: { run: Ru
             ) : offers[0] ? (
               <StackPill offer={offers[0]} />
             ) : r.closest ? (
-              <span className="max-w-full truncate text-muted-foreground" title={summaryText(r.closest.criteria)}>
+              <span className="max-w-full truncate text-muted-foreground" title={say(m, summaryRef(r.closest.criteria))}>
                 {m.run_cal_closest({ name: r.closest.source.name })}
               </span>
             ) : (
@@ -271,13 +272,13 @@ function RequirementTable({ run, rows, lock, onOutcome, onException }: { run: Ru
           <span className="text-muted-foreground">–</span>
         ) : (
           <details className="group">
-            <summary className="cursor-default text-[0.75rem] marker:text-muted-foreground">{summaryText(r.criteria)}</summary>
+            <summary className="cursor-default text-[0.75rem] marker:text-muted-foreground">{say(m, summaryRef(r.criteria))}</summary>
             <ul className="mt-1 space-y-0.5 text-[0.75rem]">
               {r.criteria.map((c) => (
                 <li key={c.name} className="flex flex-wrap gap-x-2">
-                  <span className="w-24 text-muted-foreground">{CRITERION_LABEL[c.name]}</span>
-                  <span>{c.lightValue}</span>
-                  <span className="text-muted-foreground">{m.run_cal_vs({ value: c.calibrationValue })}</span>
+                  <span className="w-24 text-muted-foreground">{say(m, CRITERION_NAME[c.name])}</span>
+                  <span>{say(m, c.lightValue)}</span>
+                  <span className="text-muted-foreground">{m.run_cal_vs({ value: say(m, c.calibrationValue) })}</span>
                   <StatusBadge kind="match" value={c.result} />
                 </li>
               ))}
@@ -322,7 +323,7 @@ function ExceptionDialog({ value, onClose, onConfirm }: { value: ExceptionReques
         >
           <DialogHeader>
             <DialogTitle>{value.source ? m.run_cal_exception_title({ name: value.source.name }) : m.run_cal_without({ kind })}</DialogTitle>
-            <DialogDescription>{value.source ? summaryText(value.criteria) : `${formatNight(value.row.member.session.night)} ${value.row.member.session.channel ?? ""} · ${m.run_cal_this_run_only()}`}</DialogDescription>
+            <DialogDescription>{value.source ? say(m, summaryRef(value.criteria)) : `${formatNight(value.row.member.session.night)} ${value.row.member.session.channel ?? ""} · ${m.run_cal_this_run_only()}`}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
             <Label htmlFor={id}>{m.run_col_reason()}</Label>
@@ -391,7 +392,7 @@ export function MasterOffers({ run, onOutcome }: { run: Run; onOutcome: Act }) {
                     {name}
                   </span>
                   <span className="flex flex-wrap items-center gap-1">
-                    <Pill tone="info">{KIND_LABEL[master.kind]}</Pill>
+                    <Pill tone="info">{say(m, KIND_NAME[master.kind])}</Pill>
                     {master.channel ? <Pill tone="neutral">{master.channel}</Pill> : null}
                     {master.widthPx > 0 ? (
                       <Pill tone="muted">

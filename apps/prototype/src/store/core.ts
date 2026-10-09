@@ -17,10 +17,11 @@
 import { useRef, useSyncExternalStore } from "react"
 import type { SeedData } from "@/domain/seed"
 import type { ActivityEvent, Catalog } from "@/domain/types"
+import { type MessageRef, m, msg, say } from "@/lib/i18n"
 import type { SliceId, SliceStates } from "./slices"
 
-/** Bump when a domain shape changes; saved data of an older version restarts its seed. 8: calibration processes, masters only (P-CAL3). */
-export const SCHEMA_VERSION = 8
+/** Bump when a domain shape changes; saved data of an older version restarts its seed. 9: operation and Activity copy stored as message refs, worded at render. */
+export const SCHEMA_VERSION = 9
 
 export interface PrototypeState extends SeedData {
   schemaVersion: number
@@ -112,9 +113,11 @@ export interface CommitOptions {
 
 /**
  * Durable catalog write. Failed writes stay unsaved: the caller keeps the
- * edited value on screen, marks it "Not saved" and offers Retry.
+ * edited value on screen, marks it "Not saved" and offers Retry. `label`
+ * names the write in Activity ("Save run"); the returned message is worded
+ * now, the Activity entry when it is read.
  */
-export function commit(label: string, mutate: (state: PrototypeState) => PrototypeState, options: CommitOptions = {}): CommitResult {
+export function commit(label: MessageRef, mutate: (state: PrototypeState) => PrototypeState, options: CommitOptions = {}): CommitResult {
   if (options.expect && store.getState().faults.staleNextWrite) {
     // Simulated concurrent writer: the record moves to a newer revision first.
     const { collection, id } = options.expect
@@ -135,16 +138,16 @@ export function commit(label: string, mutate: (state: PrototypeState) => Prototy
     const entity = (current.catalog[collection] as Catalog[RevisionedCollection])[id]
     if (entity && entity.revision !== revision) {
       // The record version is internal (D08); it is not the run membership "Revision N" a page shows, so the message names no number.
-      const message = `${label} was refused: this record was changed elsewhere since you opened it. Review the current version before saving again.`
-      recordActivity({ kind: "write-refused", title: `${label} refused`, detail: message, operationId: null, href: options.href ?? null })
-      return { ok: false, reason: "stale", message }
+      const message = msg("store_stale_message", { label })
+      recordActivity({ kind: "write-refused", title: msg("store_refused", { label }), detail: message, operationId: null, href: options.href ?? null })
+      return { ok: false, reason: "stale", message: say(m, message) }
     }
   }
   if (current.faults.failNextCatalogWrite) {
-    const message = `${label} was not saved: the catalog write failed. Your change is kept on screen; choose Retry.`
+    const message = msg("store_not_saved_message", { label })
     store.setState((s) => ({ ...s, faults: { ...s.faults, failNextCatalogWrite: false } }))
-    recordActivity({ kind: "write-failed", title: `${label} not saved`, detail: message, operationId: null, href: options.href ?? null })
-    return { ok: false, reason: "write-failed", message }
+    recordActivity({ kind: "write-failed", title: msg("store_not_saved_title", { label }), detail: message, operationId: null, href: options.href ?? null })
+    return { ok: false, reason: "write-failed", message: say(m, message) }
   }
   store.setState((s) => {
     const next = mutate(s)

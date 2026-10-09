@@ -28,11 +28,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMessages } from "@/app/preferences"
-import { liveAssetIds, PANEL_FLAG_LABEL, type PanelFlag, panelForSession, projectCandidates, rigFieldOfView, rigName } from "@/domain/derive"
+import { liveAssetIds, PANEL_FLAG_NAME, type PanelFlag, panelForSession, projectCandidates, rigFieldOfView, rigName } from "@/domain/derive"
 import type { FieldOfView } from "@/domain/sky"
 import type { MosaicPanel, Project, Session, SessionId, Subject } from "@/domain/types"
 import { formatCount, formatDec, formatNight, formatRa } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import { type CommitResult, useStore } from "@/store/core"
 import { SelectField } from "@/features/t3/fields"
 import { CommitOutcome, type SubjectPick, SubjectSearch } from "./parts"
@@ -107,7 +107,7 @@ interface Placement {
   panelId: string | null
   byUser: boolean
   flag: PanelFlag | null
-  detail: string
+  detail: MessageRef
 }
 
 interface SessionRow {
@@ -155,10 +155,10 @@ export function MosaicEditor({ project, subjectId, rigId: initialRig, profileId:
         const own: string | null | undefined = c.session.id in placements ? (placements[c.session.id] ?? null) : chosen && !chosen.has(c.session.id) ? null : undefined
         const auto = panelForSession(catalog, draft, c.session, rigId)
         const placement: Placement =
-          own !== undefined ? { panelId: own, byUser: true, flag: null, detail: own ? m.mosaic_placed_by_you() : m.mosaic_left_out() } : { panelId: auto.panelId, byUser: false, flag: auto.flag, detail: auto.detail }
+          own !== undefined ? { panelId: own, byUser: true, flag: null, detail: own ? msg("mosaic_placed_by_you") : msg("mosaic_left_out") } : { panelId: auto.panelId, byUser: false, flag: auto.flag, detail: auto.detail }
         return { session: c.session, frames: liveAssetIds(catalog, c.session).length, placement }
       })
-  }, [m, catalog, project, subject, draft, targetId, rigId, placements, sessionIds])
+  }, [catalog, project, subject, draft, targetId, rigId, placements, sessionIds])
 
   const included = panels.filter((p) => p.include)
   const countOn = (panelId: string) => rows.filter((r) => r.placement.panelId === panelId).length
@@ -283,7 +283,7 @@ export function MosaicEditor({ project, subjectId, rigId: initialRig, profileId:
                 <Label htmlFor={ids.name}>{m.newproject_field_name()}</Label>
                 <Input id={ids.name} className="w-48" value={name} onChange={(e) => setName(e.target.value)} placeholder={m.mosaic_name_placeholder()} />
               </div>
-              <SelectField className="w-56" label={m.project_col_rig()} value={rigId} onChange={setRigId} options={project.rigIds.map((id) => ({ value: id, label: rigName(catalog, id) }))} />
+              <SelectField className="w-56" label={m.project_col_rig()} value={rigId} onChange={setRigId} options={project.rigIds.map((id) => ({ value: id, label: rigName(m, catalog, id) }))} />
               <SelectField className="w-44" label={m.startrun_profile_optional()} value={profileId} onChange={setProfileId} options={profileOptions(catalog)} />
             </div>
             {!subject && !pick ? (
@@ -371,7 +371,7 @@ export function MosaicEditor({ project, subjectId, rigId: initialRig, profileId:
           }
         >
           {rows.length === 0 ? (
-            <p className="px-3 py-2 text-sm text-muted-foreground">{targetId || pick ? m.mosaic_no_sessions_on({ rig: rig ? rigName(catalog, rigId) : m.mosaic_this_rig() }) : m.mosaic_pick_target()}</p>
+            <p className="px-3 py-2 text-sm text-muted-foreground">{targetId || pick ? m.mosaic_no_sessions_on({ rig: rig ? rigName(m, catalog, rigId) : m.mosaic_this_rig() }) : m.mosaic_pick_target()}</p>
           ) : (
             <ContextMenuArea menu={menu}>
               <ul className="divide-y divide-separator" aria-label={m.mosaic_sessions_to_place()}>
@@ -441,15 +441,15 @@ function SessionItem({ row, panels, onAssign }: { row: SessionRow; panels: Panel
         <span className="block truncate font-medium tabular-nums">{label}</span>
         <span className="flex items-center gap-1">
           {placement.flag ? (
-            <Pill tone="warning" title={placement.detail}>
-              {placement.flag === "ambiguous" ? m.project_placement_ambiguous() : placement.flag === "off-panel" ? m.project_placement_off_panel() : PANEL_FLAG_LABEL[placement.flag]}
+            <Pill tone="warning" title={say(m, placement.detail)}>
+              {placement.flag === "ambiguous" ? m.project_placement_ambiguous() : placement.flag === "off-panel" ? m.project_placement_off_panel() : say(m, PANEL_FLAG_NAME[placement.flag])}
             </Pill>
           ) : panel ? (
-            <Pill tone={placement.byUser ? "info" : "success"} title={placement.detail}>
+            <Pill tone={placement.byUser ? "info" : "success"} title={say(m, placement.detail)}>
               {m.review_panel_n({ n: panel.n })}
             </Pill>
           ) : (
-            <Pill tone="muted" title={placement.detail}>
+            <Pill tone="muted" title={say(m, placement.detail)}>
               {placement.panelId ? m.mosaic_excluded_panel() : m.mosaic_left_out()}
             </Pill>
           )}

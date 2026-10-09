@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import type { QualityBreakdown } from "@/domain/library"
 import type { Evidence } from "@/domain/types"
 import { formatCount, formatDateTime, formatDuration } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 export interface KeyValueItem {
@@ -88,11 +88,12 @@ export function EvidenceList({ evidence, caption }: { evidence: Evidence[]; capt
           {evidence.map((item) => {
             const agreement = AGREEMENT[item.agrees === true ? "agrees" : item.agrees === false ? "conflicts" : "unknown"]
             const Icon = agreement.icon
+            const label = say(m, item.label)
             return (
-              <tr key={`${item.source}-${item.label}`} className="border-b last:border-0">
+              <tr key={`${item.source}-${label}`} className="border-b last:border-0">
                 <td className="py-1.5 pr-2 text-muted-foreground">{sourceName(m, item.source)}</td>
-                <td className="py-1.5 pr-2 font-mono text-xs">{item.label}</td>
-                <td className="py-1.5 pr-2 [overflow-wrap:anywhere]">{item.value}</td>
+                <td className="py-1.5 pr-2 font-mono text-xs">{label}</td>
+                <td className="py-1.5 pr-2 [overflow-wrap:anywhere]">{say(m, item.value)}</td>
                 <td className={cn("py-1.5", agreement.className)}>
                   <span className="inline-flex items-center gap-1">
                     <Icon aria-hidden="true" className="size-3.5" />

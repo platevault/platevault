@@ -19,11 +19,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { latestRevision, liveAssetIds, rigName, runCandidates, runRefresh, workingContent } from "@/domain/derive"
-import { RESULT_KIND_LABEL } from "@/domain/labels"
-import { describeDiff, diffContent, REASON_LABEL, sessionExposureS } from "@/domain/membership"
+import { RESULT_KIND_NAME } from "@/domain/labels"
+import { describeDiff, diffContent, REASON_NAME, sessionExposureS } from "@/domain/membership"
 import type { ResultRecord, Run, SelectionReason, Session } from "@/domain/types"
 import { fileName, formatDateTime, formatDuration, formatNight } from "@/lib/format"
-import { m } from "@/lib/i18n"
+import { joinRefs, m, type MessageRef, msg, say } from "@/lib/i18n"
 import { addRunSessions, discardRunDraft, removeRunSessions, saveRun, setProductInputs } from "@/store/actions/runs"
 import { type PrototypeState, updateSlice, useStore } from "@/store/core"
 import { type RunContext, runLock } from "./model"
@@ -33,7 +33,7 @@ interface SelectRow {
   session: Session
   member: boolean
   reason: SelectionReason | null
-  candidateReason: string | null
+  candidateReason: MessageRef | null
   noLongerMatching: boolean
   included: number
   frames: number
@@ -88,7 +88,7 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
   const selected = rows.filter((r) => r.member).map((r) => r.session.id)
   const setFilter = (patch: Partial<typeof filter>) => updateSlice("c", (c) => ({ ...c, selectFilter: { ...c.selectFilter, [run.id]: { ...filter, ...patch } } }))
   const reasonFor = (row: SelectRow): SelectionReason =>
-    run.panelId ? { kind: "panel-pointing", detail: row.candidateReason ?? m.run_select_pointing_inside_panel() } : { kind: "candidate", detail: row.candidateReason ?? m.status_candidate() }
+    run.panelId ? { kind: "panel-pointing", detail: row.candidateReason ?? msg("run_select_pointing_inside_panel") } : { kind: "candidate", detail: row.candidateReason ?? msg("status_candidate") }
   const selectionBlocked = { blocked: m.run_selection_blocked() }
 
   const onSelection = (ids: string[]) => {
@@ -132,10 +132,10 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
       cell: (r) =>
         r.reason ? (
           <span>
-            <span className="text-foreground">{REASON_LABEL[r.reason.kind]}</span> <span className="text-muted-foreground">· {r.reason.detail}</span>
+            <span className="text-foreground">{say(m, REASON_NAME[r.reason.kind])}</span> <span className="text-muted-foreground">· {say(m, r.reason.detail)}</span>
           </span>
         ) : (
-          <span className="text-muted-foreground">{m.run_select_not_selected({ reason: r.candidateReason ?? "" })}</span>
+          <span className="text-muted-foreground">{m.run_select_not_selected({ reason: r.candidateReason ? say(m, r.candidateReason) : "" })}</span>
         ),
     },
     {
@@ -233,7 +233,7 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
           scroll="none"
           selection={{ selected, onChange: onSelection, rowLabel, isSelectable: () => !lock }}
           contextMenu={sessionEntries}
-          empty={<p className="px-3 py-4 text-sm text-muted-foreground">{m.run_select_no_candidates({ rig: rigName(catalog, run.rigId) })}</p>}
+          empty={<p className="px-3 py-4 text-sm text-muted-foreground">{m.run_select_no_candidates({ rig: rigName(m, catalog, run.rigId) })}</p>}
         />
       </Box>
 
@@ -243,11 +243,11 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
         <p className="min-w-0 text-[0.75rem] text-muted-foreground">
           {run.draft ? (
             <>
-              <span className="font-medium text-warning">{m.status_unsaved_changes()}</span> · {diff.join("; ")}
+              <span className="font-medium text-warning">{m.status_unsaved_changes()}</span> · {say(m, joinRefs(diff, "; "))}
             </>
           ) : latest ? (
             <>
-              {m.run_select_revision({ revision: latest.revision })} · {formatDateTime(latest.savedAt)} · {latest.accepted.join("; ")}
+              {m.run_select_revision({ revision: latest.revision })} · {formatDateTime(latest.savedAt)} · {say(m, joinRefs(latest.accepted, "; "))}
             </>
           ) : (
             m.status_not_saved()
@@ -293,7 +293,7 @@ export function pickableProducts(state: PrototypeState, run: Run): ProductRow[] 
     .map((r) => productRow(state, r))
 }
 
-function ProductInputs({ run, lock, onOutcome }: { run: Run; lock: string | null; onOutcome: ReturnType<typeof useOutcome>["act"] }) {
+function ProductInputs({ run, lock, onOutcome }: { run: Run; lock: MessageRef | null; onOutcome: ReturnType<typeof useOutcome>["act"] }) {
   const m = useMessages()
   const state = useStore((s) => s)
   const content = workingContent(run)
@@ -311,14 +311,14 @@ function ProductInputs({ run, lock, onOutcome }: { run: Run; lock: string | null
   ]
   const columns: Column<ProductRow>[] = [
     { id: "file", header: m.run_col_product(), rowHeader: true, truncate: true, cell: (r) => <span title={r.record.path}>{fileName(r.record.path)}</span> },
-    { id: "kind", header: m.run_col_kind(), cell: (r) => (r.record.kind ? RESULT_KIND_LABEL[r.record.kind] : m.run_unknown_kind()) },
+    { id: "kind", header: m.run_col_kind(), cell: (r) => (r.record.kind ? say(m, RESULT_KIND_NAME[r.record.kind]) : m.run_unknown_kind()) },
     { id: "from", header: m.run_col_from(), cell: (r) => r.origin },
     {
       id: "rig",
       header: m.run_col_rig(),
       cell: (r) => (
         <span className="flex flex-wrap items-center gap-1">
-          {rigName(state.catalog, r.rigId)}
+          {rigName(m, state.catalog, r.rigId)}
           {r.rigId && r.rigId !== run.rigId ? <Pill tone="info">{m.run_another_rig()}</Pill> : null}
         </span>
       ),
@@ -343,7 +343,8 @@ function ProductInputs({ run, lock, onOutcome }: { run: Run; lock: string | null
           variant="outline"
           onClick={() => {
             if (lock) {
-              onOutcome({ ok: false, reason: "refused", message: `${m.run_products_blocked()}: ${lock}`, reasons: [lock] }, productsBlocked)
+              const reason = say(m, lock)
+              onOutcome({ ok: false, reason: "refused", message: `${m.run_products_blocked()}: ${reason}`, reasons: [reason] }, productsBlocked)
               return
             }
             setPicked(ids)
@@ -370,7 +371,7 @@ function ProductInputs({ run, lock, onOutcome }: { run: Run; lock: string | null
                   <span className="min-w-0">
                     <span className="block font-medium">{fileName(p.record.path)}</span>
                     <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                      {p.record.kind ? RESULT_KIND_LABEL[p.record.kind] : m.run_unknown_kind()} · {p.origin} · {rigName(state.catalog, p.rigId)}
+                      {p.record.kind ? say(m, RESULT_KIND_NAME[p.record.kind]) : m.run_unknown_kind()} · {p.origin} · {rigName(m, state.catalog, p.rigId)}
                       {p.rigId !== run.rigId ? <Pill tone="info">{m.run_another_rig()}</Pill> : null}
                     </span>
                   </span>

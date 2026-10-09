@@ -98,7 +98,7 @@ function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: bo
       <SelectionBar
         count={selected.length}
         hiddenByFilters={hidden}
-        noun="session"
+        label={`${plural(selected.length, "session")} selected`}
         onShowSelected={() => setQuery("")}
         onClear={() => setSelected([])}
         clearDisabledReason={locked ? "Selection is locked while the View is being prepared." : undefined}

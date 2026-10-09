@@ -4,6 +4,7 @@
  * builds the same way, and the pure template resolution that New Project,
  * Import, Archive, review names and Settings share. Nothing here writes state.
  */
+import { type MessageRef, msg } from "@/lib/i18n"
 import { nightOf } from "./indexing"
 import type { FrameHeader, GoalChannel, GoalTemplate, GoalTemplateValue, NamingFrameType, NamingToken, QualityBar } from "./types"
 
@@ -33,18 +34,18 @@ export const BUILT_IN_GOAL_TEMPLATES: GoalTemplate[] = [
 // ---------------------------------------------------------------------------
 
 /** Token order in the chip editor, each with the fallback used when metadata lacks it. */
-export const NAMING_TOKENS: Array<{ token: NamingToken; fallback: string; label: string }> = [
-  { token: "target", fallback: "unclassified", label: "Target" },
-  { token: "filter", fallback: "nofilter", label: "Filter" },
-  { token: "date", fallback: "undated", label: "Observing night" },
-  { token: "frame_type", fallback: "unknown", label: "Frame type" },
-  { token: "train", fallback: "unknown-train", label: "Optical train" },
-  { token: "camera", fallback: "unknown-camera", label: "Camera" },
-  { token: "exposure", fallback: "unknown-exposure", label: "Exposure" },
-  { token: "gain", fallback: "unknown-gain", label: "Gain" },
-  { token: "offset", fallback: "unknown-offset", label: "Offset" },
-  { token: "binning", fallback: "1x1", label: "Binning" },
-  { token: "set_temp", fallback: "untempered", label: "Set temperature" },
+export const NAMING_TOKENS: Array<{ token: NamingToken; fallback: string; label: MessageRef }> = [
+  { token: "target", fallback: "unclassified", label: msg("domain_token_target") },
+  { token: "filter", fallback: "nofilter", label: msg("session_filter") },
+  { token: "date", fallback: "undated", label: msg("session_observing_night") },
+  { token: "frame_type", fallback: "unknown", label: msg("session_frame_type") },
+  { token: "train", fallback: "unknown-train", label: msg("domain_optical_train") },
+  { token: "camera", fallback: "unknown-camera", label: msg("session_camera") },
+  { token: "exposure", fallback: "unknown-exposure", label: msg("domain_criterion_exposure") },
+  { token: "gain", fallback: "unknown-gain", label: msg("domain_criterion_gain") },
+  { token: "offset", fallback: "unknown-offset", label: msg("domain_criterion_offset") },
+  { token: "binning", fallback: "1x1", label: msg("domain_criterion_binning") },
+  { token: "set_temp", fallback: "untempered", label: msg("domain_token_set_temp") },
 ]
 
 /**
@@ -135,17 +136,17 @@ const RESERVED = new Set(["con", "prn", "aux", "nul", "com1", "lpt1", ".", ".."]
 const MAX_SEGMENT = 80
 
 /** Errors a template has before it is saved or resolved: unknown tokens, `..` and reserved names. */
-export function validateNamingTemplate(template: string): string[] {
-  const errors: string[] = []
+export function validateNamingTemplate(template: string): MessageRef[] {
+  const errors: MessageRef[] = []
   const known = new Set(NAMING_TOKENS.map((t) => t.token))
   for (const match of template.matchAll(/\{([^}]*)\}/g)) {
-    if (!known.has(match[1] as NamingToken)) errors.push(`Unknown token {${match[1]}}`)
+    if (!known.has(match[1] as NamingToken)) errors.push(msg("domain_naming_unknown_token", { token: match[0] }))
   }
   for (const segment of template.split("/")) {
-    if (segment === "..") errors.push("A folder cannot be `..`")
-    else if (RESERVED.has(segment.toLowerCase())) errors.push(`"${segment}" is a reserved name`)
+    if (segment === "..") errors.push(msg("domain_naming_parent_folder"))
+    else if (RESERVED.has(segment.toLowerCase())) errors.push(msg("domain_naming_reserved", { name: segment }))
   }
-  if (template.startsWith("/")) errors.push("A template is relative to its location; remove the leading /")
+  if (template.startsWith("/")) errors.push(msg("domain_naming_leading_slash"))
   return errors
 }
 

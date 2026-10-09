@@ -29,7 +29,7 @@ import { formatHours, goalProgress, liveLightSessions, planList, projectGoalSet,
 import { matchesQuery } from "@/domain/sky"
 import type { Project } from "@/domain/types"
 import { formatDec, formatDegrees, formatNight, formatRa } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { SearchParams } from "@/routes"
 import { setFavourite } from "@/store/actions/library"
@@ -165,7 +165,7 @@ export function TargetPage() {
   const m = useMessages()
   const { targetId = "" } = useParams({ strict: false }) as { targetId?: string }
   const exists = useStore((s) => Boolean(s.catalog.targets[targetId]))
-  if (!exists) return <MissingRecord noun="Target" backTo="/targets" backLabel={m.target_open_targets()} />
+  if (!exists) return <MissingRecord title={m.target_missing_title()} backTo="/targets" backLabel={m.target_open_targets()} />
   return (
     <ListDetail listLabel={m.target_finder()} list={<TargetFinder activeId={targetId} />} detail={<TargetDetail key={targetId} targetId={targetId} />} className="grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)]" />
   )
@@ -432,7 +432,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
                       <tr key={f.rigId} {...menuKey(f.rigId)} className="h-(--row-h) border-b border-border/50 last:border-0">
                         <th scope="row" className="px-3 text-left font-normal">
                           <Link to="/settings/equipment" search={{ rig: f.rigId }} className="hover:underline">
-                            {f.rigName}
+                            {say(m, f.rig)}
                           </Link>
                         </th>
                         <td className="px-3 tabular-nums">{fov ? `${formatDegrees(fov.widthDeg, 2)} × ${formatDegrees(fov.heightDeg, 2)}` : <UnknownValue label="–" reason={m.target_fov_unknown()} />}</td>
@@ -473,7 +473,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
                             .filter((s) => s.mosaic)
                             .map((s) => (
                               <Pill key={s.id} tone="muted">
-                                {m.target_mosaic_panels({ name: subjectName(catalog, s), count: s.mosaic!.panels.length })}
+                                {m.target_mosaic_panels({ name: subjectName(m, catalog, s), count: s.mosaic!.panels.length })}
                               </Pill>
                             ))}
                           {p.state === "open" ? (
@@ -491,7 +491,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
                                     {m.target_panel({ number: subjects.flatMap((s) => s.mosaic?.panels ?? []).find((x) => x.id === g.goal.panelId)?.n ?? "?" })}
                                   </Pill>
                                 ) : null}
-                                {g.line}
+                                {say(m, g.line)}
                                 {g.met ? (
                                   <Pill tone="success" className="h-4 px-1.5 text-[0.625rem]">
                                     {m.status_met()}
@@ -555,7 +555,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
                         </th>
                         <td className="px-3">{s.channel ?? "–"}</td>
                         <td className="px-3 text-right tabular-nums">{s.assetIds.filter((id) => !catalog.assets[id]?.trashed).length}</td>
-                        <td className="px-3">{rigName(catalog, sessionRigId(s))}</td>
+                        <td className="px-3">{rigName(m, catalog, sessionRigId(s))}</td>
                       </tr>
                     ))}
                   </tbody>

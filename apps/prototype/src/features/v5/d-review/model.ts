@@ -170,7 +170,7 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
     project = catalog.projects[context.projectId] ?? null
     if (!project) return null
     for (const candidate of projectCandidates(catalog, project)) {
-      const label = subjectName(catalog, candidate.subject)
+      const label = subjectName(m, catalog, candidate.subject)
       for (const assetId of liveAssetIds(catalog, candidate.session)) sources.push({ assetId, run: null, panel: null, subject: label })
     }
     href = `/projects/${project.id}?candidates=unreviewed`

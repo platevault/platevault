@@ -276,8 +276,6 @@
   "step_prepare": "Prepare",
   "step_results": "Results",
   "step_done": "Done",
-  "record_missing_doc_title": "{noun} not found",
-  "record_missing_title": "This {noun} is not in the catalog",
   "record_missing_description": "The link may come from an older prototype build, or the record was removed by Empty Trash. Your library is unchanged.",
   "status_online": "Online",
   "status_offline": "Offline",
@@ -422,22 +420,6 @@
   ],
   "table_select_row": "Select {name}",
   "table_no_rows": "No rows.",
-  "selection_count": [
-    {
-      "declarations": [
-        "input count",
-        "input noun",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} {noun} selected",
-        "countPlural=*": "{count} {noun}s selected"
-      }
-    }
-  ],
   "selection_outside_filters": "Selected outside current filters: {count}",
   "selection_region": "Selection",
   "selection_show": "Show selected",
@@ -2860,70 +2842,6 @@
   "notice_finished": "{name} finished",
   "notice_partial": "{name} partial",
   "notice_canceled": "{name} canceled",
-  "notice_frames": [
-    {
-      "declarations": [
-        "input count",
-        "input frames",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{frames} frame",
-        "countPlural=*": "{frames} frames"
-      }
-    }
-  ],
-  "notice_files": [
-    {
-      "declarations": [
-        "input count",
-        "input files",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{files} file",
-        "countPlural=*": "{files} files"
-      }
-    }
-  ],
-  "notice_entries": [
-    {
-      "declarations": [
-        "input count",
-        "input entries",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{entries} entry",
-        "countPlural=*": "{entries} entries"
-      }
-    }
-  ],
-  "notice_sessions": [
-    {
-      "declarations": [
-        "input count",
-        "input sessions",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{sessions} session",
-        "countPlural=*": "{sessions} sessions"
-      }
-    }
-  ],
   "run_step_title": "{n} {step}: {gate}",
   "run_step_holds_next": "holds Next",
   "run_step_next": "Next",
@@ -5690,5 +5608,1618 @@
   "importdlg_note_fwhm": "Shown next to built-in FWHM",
   "importdlg_note_eccentricity": "Shown next to built-in eccentricity",
   "importdlg_note_stars": "Shown next to built-in star count",
-  "importdlg_note_psf_signal_weight": "No units and no PlateVault equivalent; never shown as FWHM or HFR."
+  "importdlg_note_psf_signal_weight": "No units and no PlateVault equivalent; never shown as FWHM or HFR.",
+  "domain_mode_linked": "Linked run",
+  "domain_mode_copy": "Copy",
+  "domain_mode_clone": "Clone",
+  "domain_result_final_image": "Final image",
+  "domain_result_linear_integration": "Linear integration",
+  "domain_result_channel_product": "Channel product",
+  "domain_result_mosaic_panel": "Mosaic panel",
+  "domain_result_assembled_mosaic": "Assembled mosaic",
+  "domain_products_final_image": "final images",
+  "domain_products_linear_integration": "linear integrations",
+  "domain_products_channel_product": "channel products",
+  "domain_products_mosaic_panel": "mosaic panels",
+  "domain_products_assembled_mosaic": "assembled mosaics",
+  "domain_quality_any": "Any quality",
+  "domain_quality_max_fwhm": "FWHM ≤ {arcsec}″",
+  "domain_quality_usable_max_fwhm": "Usable, FWHM ≤ {arcsec}″",
+  "domain_rig_unknown": "Unknown rig",
+  "domain_panel_flag_ambiguous": "Falls in more than one panel",
+  "domain_panel_flag_off_panel": "Outside every panel",
+  "domain_fov_unknown": "Field of view unknown",
+  "domain_panel_pointing_inside": "Pointing inside {panel}",
+  "domain_candidate_reason": "Target {target} on {rig}",
+  "domain_goal_target_both": "{hours} and {frames}",
+  "domain_goal_amounts": "{inProject} in project · {captured} captured · goal {target}",
+  "domain_goal_amounts_no_target": "{inProject} in project · {captured} captured",
+  "domain_goal_line": "{channel} {amounts}",
+  "warning_exposure_mismatch": "{rig}: {channel} {exposure} lights have no matching dark (darks at {others})",
+  "warning_missing_dark": "{rig}: no compatible dark for {channel} {exposure} lights",
+  "warning_missing_flat": "{rig}: no compatible {channel} flat",
+  "domain_gate_sessions_selected": "Sessions selected",
+  "domain_gate_no_sessions": "No sessions yet.",
+  "domain_gate_no_unresolved": "No unresolved inputs",
+  "domain_gate_all_readable": "Every selected frame is readable now.",
+  "domain_gate_members_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} member cannot be read.",
+        "countPlural=*": "{n} members cannot be read."
+      }
+    }
+  ],
+  "domain_gate_membership_saved": "Membership saved",
+  "domain_gate_revision_saved": "Revision {revision} saved.",
+  "domain_gate_review_unsaved": "Review has unsaved changes: save them in Review.",
+  "domain_gate_unsaved_on_revision": "Unsaved changes on revision {revision}.",
+  "domain_gate_not_saved_yet": "Not saved yet.",
+  "domain_gate_new_candidates": "New candidates",
+  "domain_next_add_new_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Add {count} new session",
+        "countPlural=*": "Add {count} new sessions"
+      }
+    }
+  ],
+  "domain_gate_no_longer_matches": "No longer matches subject",
+  "domain_gate_members_flagged": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} member flagged",
+        "countPlural=*": "{count} members flagged"
+      }
+    }
+  ],
+  "domain_status_unresolved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} unresolved",
+        "countPlural=*": "{count} unresolved"
+      }
+    }
+  ],
+  "domain_status_saved_revision": "Saved r{revision}",
+  "domain_status_unsaved": "Unsaved",
+  "domain_next_select_sessions": "Select sessions",
+  "domain_next_resolve_inputs": "Resolve inputs",
+  "domain_next_save_run": "Save run",
+  "domain_next_edit_selection": "Edit selection",
+  "domain_review_rejected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} rejected",
+        "countPlural=*": "{count} rejected"
+      }
+    }
+  ],
+  "domain_review_restored": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} restored",
+        "countPlural=*": "{count} restored"
+      }
+    }
+  ],
+  "domain_review_unsaved": "{changes}, unsaved",
+  "domain_gate_review_saved": "Review changes saved",
+  "domain_gate_review_save_detail": "{note}: Save run keeps them as the next revision.",
+  "domain_gate_frames_reviewed": "Frames reviewed",
+  "domain_gate_no_frames": "No frames yet.",
+  "domain_gate_frames_decided": "{done} of {total} have a quality decision.",
+  "domain_gate_calibration_matched": "Calibration matched",
+  "domain_gate_policy_off": "Calibration policy is off.",
+  "domain_gate_select_first": "Select sessions first.",
+  "domain_gate_requirements_matched": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} requirement matched.",
+        "countPlural=*": "{count} requirements matched."
+      }
+    }
+  ],
+  "domain_gate_requirements_need_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} requirement needs review.",
+        "countPlural=*": "{count} requirements need review."
+      }
+    }
+  ],
+  "domain_gate_master_found": "Master found in Results",
+  "domain_gate_masters_offered": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master offered once.",
+        "countPlural=*": "{count} masters offered once."
+      }
+    }
+  ],
+  "domain_status_need_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} needs review",
+        "countPlural=*": "{count} need review"
+      }
+    }
+  ],
+  "domain_next_review_matches": "Review matches",
+  "domain_gate_revision": "Revision {revision}.",
+  "domain_gate_save_first": "Save the run first.",
+  "domain_gate_handoff_settled": "Handoff calibration is settled.",
+  "domain_gate_profile_chosen": "Application profile chosen",
+  "domain_gate_choose_profile": "Choose a profile in Prepare.",
+  "domain_status_prepared_revision": "Prepared (rev {revision})",
+  "domain_gate_all_prepared": "All inputs prepared",
+  "domain_gate_inputs_not_prepared": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} input could not be prepared.",
+        "countPlural=*": "{n} inputs could not be prepared."
+      }
+    }
+  ],
+  "domain_gate_preparation_succeeded": "Preparation succeeded",
+  "domain_gate_last_preparation_failed": "The last preparation failed.",
+  "domain_status_revision_only": "r{revision} only",
+  "domain_status_to_do": "{count} to do",
+  "domain_gate_run_prepared": "Run prepared",
+  "domain_gate_entries_at": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entry at {path}",
+        "countPlural=*": "{n} entries at {path}"
+      }
+    }
+  ],
+  "domain_gate_complete": "Complete.",
+  "domain_next_open_in_application": "Open in application",
+  "domain_next_resolve_preparation": "Resolve preparation",
+  "domain_next_watch_preparation": "Watch preparation",
+  "domain_next_review_preparation": "Review preparation",
+  "domain_status_awaiting_outputs": "Awaiting outputs",
+  "domain_status_accepted_of": "{accepted} of {total} accepted",
+  "domain_gate_results_folder": "Results are looked for in the Results folder.",
+  "domain_gate_prepare_first": "Prepare the run first.",
+  "domain_gate_results_accepted": "Results accepted",
+  "domain_gate_no_outputs": "No outputs found yet.",
+  "domain_next_accept_results": "Accept results",
+  "domain_next_look_for_results": "Look for results",
+  "domain_status_cleaned_up": "Cleaned up",
+  "domain_status_cleanup_available": "Cleanup available",
+  "domain_gate_cleanup_reviewable": "Complete: Clean up can be reviewed.",
+  "domain_gate_complete_when_done": "Complete when processing is done; it removes nothing.",
+  "domain_gate_cleanup_reviewed": "Clean up reviewed",
+  "domain_gate_finished": "Finished.",
+  "domain_gate_cleanup_lists": "Clean up lists prepared entries only.",
+  "domain_next_clean_up_run": "Clean up run",
+  "blocker_unreadable_inputs": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} input cannot be read",
+        "countPlural=*": "{n} inputs cannot be read"
+      }
+    }
+  ],
+  "blocker_calibration_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} calibration requirement needs review",
+        "countPlural=*": "{count} calibration requirements need review"
+      }
+    }
+  ],
+  "blocker_preparation_failed": "The last preparation failed",
+  "blocker_inputs_not_prepared": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} input could not be prepared",
+        "countPlural=*": "{n} inputs could not be prepared"
+      }
+    }
+  ],
+  "domain_operation_running": "{title} is running",
+  "domain_operation_paused": "{title} is paused",
+  "domain_operation_interrupted": "{title} is interrupted",
+  "domain_refusal_uses_result": "{name} uses one of its Results as an input",
+  "domain_panels_done": [
+    {
+      "declarations": [
+        "input count",
+        "input done",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{done} of {count} panel",
+        "countPlural=*": "{done} of {count} panels"
+      }
+    }
+  ],
+  "domain_next_prepare_all": "Prepare all",
+  "domain_next_review_new_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Review {n} new frame",
+        "countPlural=*": "Review {n} new frames"
+      }
+    }
+  ],
+  "domain_reason_candidates_unreviewed": "Candidates have Unreviewed frames.",
+  "domain_reason_step_blocker": "{step}: {message}.",
+  "domain_reason_wrap_up_next": "{step} is next.",
+  "domain_reason_wrap_up_settled": "Every step is settled; mark the Project Done.",
+  "domain_reason_window_tonight": "{line}; {subject} has a window tonight.",
+  "domain_next_start_run": "Start a processing run",
+  "domain_reason_choose_subject_rig": "Choose a subject and a rig.",
+  "domain_stage_held_at": "{gate} at {step}",
+  "fit_fits": "fits ({percent}%)",
+  "fit_tiny": "tiny",
+  "op_unit_files": "files",
+  "op_unit_frames": "frames",
+  "op_unit_entries": "entries",
+  "op_unit_prepared_entries": "prepared entries",
+  "op_unit_sessions": "sessions",
+  "op_unit_items": "items",
+  "op_count_files": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} file",
+        "countPlural=*": "{n} files"
+      }
+    }
+  ],
+  "op_count_entries": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entry",
+        "countPlural=*": "{n} entries"
+      }
+    }
+  ],
+  "op_count_prepared_entries": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} prepared entry",
+        "countPlural=*": "{n} prepared entries"
+      }
+    }
+  ],
+  "op_count_items": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} item",
+        "countPlural=*": "{n} items"
+      }
+    }
+  ],
+  "op_canceled_summary": "Canceled. {done} of {total} items finished before cancel; nothing else was changed.",
+  "op_index_canceled_item": "Canceled after {files}. Incomplete until indexed again.",
+  "op_index_not_started": "Not started: indexing was canceled.",
+  "op_interrupted_summary": "PlateVault restarted while this was running. Recorded progress is kept; Retry resumes it.",
+  "op_index_offline": "Offline. Last-observed metadata and decisions are kept.",
+  "op_index_files_to_read": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} file to read",
+        "countPlural=*": "{n} files to read"
+      }
+    }
+  ],
+  "op_index_went_offline": "Went offline after {files}. Files read so far are kept.",
+  "op_index_access_denied": "Access denied. Choose folder again or Retry.",
+  "op_index_incomplete": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Incomplete: {count} folder unreadable. Readable folders were indexed.",
+        "countPlural=*": "Incomplete: {count} folders unreadable. Readable folders were indexed."
+      }
+    }
+  ],
+  "op_index_files_read": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} file read",
+        "countPlural=*": "{n} files read"
+      }
+    }
+  ],
+  "op_index_unsupported": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} unsupported",
+        "countPlural=*": "{count} unsupported"
+      }
+    }
+  ],
+  "op_index_unreadable_folders": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} unreadable folder",
+        "countPlural=*": "{count} unreadable folders"
+      }
+    }
+  ],
+  "op_index_scope_incomplete": "scope incomplete or unavailable",
+  "op_index_locations_incomplete": "{blocked} of {count} locations incomplete or unavailable",
+  "op_index_locations_complete": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} location complete",
+        "countPlural=*": "{count} locations complete"
+      }
+    }
+  ],
+  "op_index_title_one": "Indexing {name}",
+  "op_index_title_many": "Indexing {count} locations",
+  "op_settled_succeeded": "finished",
+  "op_settled_partial": "partial",
+  "op_settled_failed": "failed",
+  "op_settled_canceled": "canceled",
+  "op_settled_title": "{title}: {outcome}",
+  "store_stale_message": "{label} was refused: this record was changed elsewhere since you opened it. Review the current version before saving again.",
+  "store_not_saved_title": "{label} not saved",
+  "store_not_saved_message": "{label} was not saved: the catalog write failed. Your change is kept on screen; choose Retry.",
+  "store_persist_failed_title": "Prototype data not saved in this browser",
+  "store_persist_failed_detail": "Browser storage refused the write. Changes stay in this tab until it closes.",
+  "store_refusal_message": "{title}: {reasons}.",
+  "store_record_missing": "This record no longer exists in the catalog. Reload the page to see the current library.",
+  "store_refused": "{label} refused",
+  "store_run_started_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input rig",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} candidate session preselected on {rig}.",
+        "countPlural=*": "{n} candidate sessions preselected on {rig}."
+      }
+    }
+  ],
+  "store_reason_rig_not_in_project": "{rig} is not one of {project}'s rigs",
+  "store_reason_project_done": "{project} is Done; Reopen it first",
+  "store_label_start": "Start {name}",
+  "store_saved_run_started": "Run started: {name}",
+  "store_label_start_group": "Start run group",
+  "store_reason_no_panel": "no panel is included",
+  "store_placed_on": "placed on {panel}",
+  "store_saved_group_started": "Run group started: {name}",
+  "store_group_started_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input rig",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} panel run on {rig}.",
+        "countPlural=*": "{n} panel runs on {rig}."
+      }
+    }
+  ],
+  "store_lock_trashed": "{name} is in the Project's Trash; Restore it first",
+  "store_lock_complete": "{name} is Complete; Reopen it to change its membership",
+  "store_label_add_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Add {n} session",
+        "countPlural=*": "Add {n} sessions"
+      }
+    }
+  ],
+  "store_label_remove_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remove {n} session",
+        "countPlural=*": "Remove {n} sessions"
+      }
+    }
+  ],
+  "store_label_exclude_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Exclude {n} frame",
+        "countPlural=*": "Exclude {n} frames"
+      }
+    }
+  ],
+  "store_label_restore_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Restore {n} frame",
+        "countPlural=*": "Restore {n} frames"
+      }
+    }
+  ],
+  "store_label_product_inputs": "Product inputs ({count})",
+  "store_label_discard": "Discard changes",
+  "store_label_rename_run": "Rename run",
+  "store_label_run_setup": "Run setup",
+  "store_label_group_setup": "Group setup",
+  "store_group_setup_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Applies to {n} panel run.",
+        "countPlural=*": "Applies to {n} panel runs."
+      }
+    }
+  ],
+  "store_reason_in_trash": "{name} is in the Project's Trash",
+  "store_label_complete_named": "Complete {name}",
+  "store_label_move_to_trash_named": "Move {name} to Trash",
+  "store_reason_no_trashed_run": "no trashed run was chosen",
+  "store_runs_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} run",
+        "countPlural=*": "{n} runs"
+      }
+    }
+  ],
+  "domain_session_no_filter": "{night} no filter",
+  "domain_reason_panel_pointing": "Panel by pointing",
+  "domain_reason_panel_assigned": "Panel assigned by you",
+  "domain_reason_refresh_added": "Refresh: added",
+  "domain_reason_manual": "Manual inclusion",
+  "domain_diff_session_missing": "a session no longer in the library",
+  "domain_diff_added": "Added {sessions}",
+  "domain_diff_removed": "Removed {sessions}",
+  "domain_diff_excluded": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame excluded from the run",
+        "countPlural=*": "{n} frames excluded from the run"
+      }
+    }
+  ],
+  "domain_diff_rejected": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame rejected",
+        "countPlural=*": "{n} frames rejected"
+      }
+    }
+  ],
+  "domain_diff_restored": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame restored to the run",
+        "countPlural=*": "{n} frames restored to the run"
+      }
+    }
+  ],
+  "domain_diff_frames": "{added} frames added, {removed} removed",
+  "domain_diff_none": "No membership change; details only",
+  "domain_criterion_camera": "Camera",
+  "domain_criterion_dimensions": "Dimensions",
+  "domain_criterion_binning": "Binning",
+  "domain_criterion_gain": "Gain",
+  "domain_criterion_offset": "Offset",
+  "domain_criterion_image_type": "Image type",
+  "domain_criterion_exposure": "Exposure",
+  "domain_criterion_channel": "Channel",
+  "domain_criterion_rig": "Rig",
+  "domain_criterion_temperature": "Temperature",
+  "domain_not_recorded": "Not recorded",
+  "domain_criteria_all_compatible": "All {count} criteria compatible",
+  "domain_criterion_incompatible": "{criterion} incompatible",
+  "domain_criterion_unknown": "{criterion} unknown",
+  "domain_process_imported": "{kind} · imported",
+  "domain_stack_not_raw": "not a raw calibration session",
+  "domain_stack_already_stacking": "already stacking",
+  "domain_stack_master_registered": "master already registered",
+  "domain_stack_no_profile": "no tool profile",
+  "domain_stack_cannot_stack": "{name} cannot stack",
+  "domain_stack_not_set_up": "{name} not set up",
+  "domain_stack_no_frames": "no frames outside the Trash",
+  "store_blocked": "{label} blocked",
+  "store_cal_tool_output_not_found": "Tool output not found",
+  "store_cal_nothing_detected": "Nothing detected",
+  "store_cal_master_unreadable": "Master not readable",
+  "store_cal_master_changed": "Master changed after Detect",
+  "store_cal_write_permission_removed": "Write permission removed",
+  "store_cal_copy_not_verified": "Copy did not verify",
+  "store_cal_master_missing": "Master missing from storage",
+  "store_cal_not_a_master": "Not a master",
+  "store_cal_trash_raws_title": "Trash raws of {name}",
+  "store_cal_failed_at": "{reason} at {step}.",
+  "store_cal_registered_from": "{file} registered from {frames}.",
+  "store_cal_process_missing": "The calibration process is no longer recorded.",
+  "store_cal_stack_with": "Stack with {name}",
+  "store_cal_stack_title": "Stack {name}",
+  "store_cal_process_not_found": "process not found",
+  "store_cal_stack_first": "Stack first",
+  "store_cal_already_detected": "master already detected",
+  "store_cal_detect_master": "Detect master",
+  "store_cal_nothing_detected_yet": "nothing detected yet",
+  "store_cal_import_master": "Import master",
+  "store_cal_no_raw_frames": "no raw frames",
+  "store_cal_not_registered_yet": "master not registered yet",
+  "store_cal_already_trashing": "already moving to the OS Trash",
+  "store_cal_raws_in_trash": "raws already in the OS Trash",
+  "store_cal_path_unreadable": "{path} cannot be read",
+  "store_cal_not_master_imagetyp": "not a master (IMAGETYP)",
+  "store_cal_already_in_library": "already in the library",
+  "store_cal_import_kind_master": "Import {kind} master",
+  "store_cal_restore_offer": "Restore offer",
+  "store_cal_offer_missing": "the offer is no longer recorded",
+  "store_cal_restore_master_offer": "Restore master offer",
+  "indexing_pointing_from_centre": "{angle} from {name} centre",
+  "indexing_pointing_outside_targets": "Outside every known Target",
+  "indexing_pointing_none": "No pointing in header",
+  "indexing_train_focal_match": "{name} (focal length matches, telescope name does not)",
+  "indexing_train_detected": "{name} (detected)",
+  "domain_optical_train": "Optical train",
+  "domain_token_target": "Target",
+  "domain_token_set_temp": "Set temperature",
+  "domain_trash_read_only": "Write permission removed; kept in place",
+  "domain_trash_no_volume": "Outside every known volume",
+  "domain_trash_unsupported": "{name} has no OS Trash; kept, nothing deleted",
+  "domain_trash_not_found": "Not found at its recorded path",
+  "domain_preview_retired": "Preview unavailable: the frame is Retired. Its location was retired, so PlateVault never reads this copy again or offers it as an input.",
+  "domain_preview_offline": "Preview unavailable: the frame is offline.",
+  "domain_preview_unreadable": "Preview unavailable: the frame is unreadable (access denied).",
+  "domain_preview_absent": "Preview unavailable: the frame is not found at its last complete scan.",
+  "domain_naming_unknown_token": "Unknown token {token}",
+  "domain_naming_parent_folder": "A folder cannot be `..`",
+  "domain_naming_reserved": "\"{name}\" is a reserved name",
+  "domain_naming_leading_slash": "A template is relative to its location; remove the leading /",
+  "run_verify_frame_not_in_catalog": "A prepared frame is no longer in the catalog.",
+  "op_trash_other_copy_refused": "Another copy was refused: {reason}",
+  "op_trash_moved": "Moved to the OS Trash",
+  "op_trash_summary": "{trashed} moved to the OS Trash ({bytes}); {refused} kept with a reason. Nothing was deleted permanently.",
+  "op_trash_frames_kept": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame kept",
+        "countPlural=*": "{n} frames kept"
+      }
+    }
+  ],
+  "store_cal_output_folder_offline": "Output folder offline",
+  "store_label_mark_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input quality",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mark {n} frame {quality}",
+        "countPlural=*": "Mark {n} frames {quality}"
+      }
+    }
+  ],
+  "store_saved_frames_marked": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input quality",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame marked {quality}",
+        "countPlural=*": "{n} frames marked {quality}"
+      }
+    }
+  ],
+  "store_library_scope_detail": "Library scope: every run and Target sees this decision.",
+  "store_label_rejected_in_review": "Rejected in Review",
+  "store_label_unrejected_in_review": "Un-rejected in Review",
+  "store_catalog_only_detail": "{name}. Catalog only; source headers unchanged.",
+  "store_label_add_to_my_targets": "Add {name} to My targets",
+  "store_label_remove_from_my_targets": "Remove {name} from My targets",
+  "store_target_from_resolver": "Coordinates, size and type from {resolver}.",
+  "store_target_from_bundled": "From the bundled {catalogues} catalogue.",
+  "store_target_from_reference": "From the bundled reference catalogue.",
+  "store_saved_added_to_my_targets": "★ {name} added to My targets",
+  "store_saved_target_added": "Target added: {name}",
+  "store_reason_run_uses_it": "{name} uses it",
+  "store_label_create": "Create {name}",
+  "store_saved_project_created": "Project created: {name}",
+  "store_saved_label_name": "{label}: {name}",
+  "store_label_project_details": "Project details",
+  "store_label_add_subject": "Add subject",
+  "store_label_remove_subject": "Remove subject",
+  "store_label_remove_rig": "Remove rig",
+  "store_label_apply_named": "Apply {name}",
+  "store_label_archive_destination": "Archive destination",
+  "store_reason_not_archive_location": "not an archive location",
+  "store_reason_not_complete": "{name} is not Complete",
+  "store_label_step_done": "{step} done",
+  "store_label_step_skipped": "{step} skipped",
+  "store_label_step_reset": "{step} reset",
+  "store_reason_no_confirmed_target": "the session has no confirmed Target",
+  "store_reason_no_confirmed_rig": "the session has no confirmed rig",
+  "store_note_adds_rig": "Also adds the rig {rig} to {project}.",
+  "store_label_mark_named_done": "Mark {name} Done",
+  "store_reason_not_complete_fix": "{name} is not Complete: complete it or move it to Trash",
+  "store_label_reject_for_project_only": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Reject {n} frame for {name} only",
+        "countPlural=*": "Reject {n} frames for {name} only"
+      }
+    }
+  ],
+  "store_label_undo_project_reject": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Undo Project reject of {n} frame",
+        "countPlural=*": "Undo Project reject of {n} frames"
+      }
+    }
+  ],
+  "store_label_default_archive_location": "Default archive location",
+  "store_saved_default_archive": "Default archive: {name}",
+  "store_label_moon_constraint": "Moon constraint for {band}",
+  "store_saved_filters": "Filters saved: {name}",
+  "store_saved_rig_renamed": "Rig renamed: {name}",
+  "store_label_goal_template": "Goal template {name}",
+  "store_saved_goal_template": "Goal template saved: {name}",
+  "store_saved_goal_template_deleted": "Goal template deleted: {name}",
+  "store_goal_template_deleted_detail": "Projects keep the values copied from it.",
+  "store_label_naming_template": "Naming template for {type}",
+  "store_saved_naming_default": "Naming default restored: {type}",
+  "store_saved_naming_template": "Naming template saved: {type}",
+  "store_label_locate_application": "Locate application",
+  "store_label_check_named": "Check {name}",
+  "store_reason_scan_running": "a scan is running",
+  "op_no_duplicates": "No duplicates.",
+  "op_duplicates_found": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input bytes",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame with extra copies · {bytes}",
+        "countPlural=*": "{n} frames with extra copies · {bytes}"
+      }
+    }
+  ],
+  "store_label_setup_change": "Setup change",
+  "store_label_shared_setup_change": "Shared setup change",
+  "store_saved_output_folder": "Output folder: {name}",
+  "store_label_output_folder_change": "Output folder change",
+  "store_reason_no_reason": "No reason",
+  "store_label_exception_no_kind": "Exception: no {kind}",
+  "store_label_defer_kind": "Defer {kind}",
+  "store_label_automatic_kind": "Automatic {kind}",
+  "store_label_offer": "Offer",
+  "store_reason_already_answered": "Already answered",
+  "store_label_dismiss_master_offer": "Dismiss master offer",
+  "store_saved_dismissed": "Dismissed {name}",
+  "store_label_add_named": "Add {name}",
+  "store_reason_unreadable_now": "Unreadable now",
+  "store_reason_still_being_written": "Still being written",
+  "store_label_add_master_to_library": "Add master to the calibration library",
+  "store_saved_added_to_library": "Added {name} to the calibration library",
+  "store_reason_every_input_unreadable": "Every input unreadable",
+  "store_label_prepare_named": "Prepare {name}",
+  "op_prepare_title_rev": "Prepare {name} (rev {revision})",
+  "store_label_prepare_all_named": "Prepare all {name}",
+  "store_saved_prepare_all": "Prepare all: {name}",
+  "store_prepare_all_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input revision",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} panel run into group revision {revision}.",
+        "countPlural=*": "{n} panel runs into group revision {revision}."
+      }
+    }
+  ],
+  "store_reason_profile_removed": "Profile removed",
+  "store_reason_did_not_launch": "{name} did not launch",
+  "store_reason_not_located": "{name} not located",
+  "store_reason_partial_blocked": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Partial · {n} input blocked",
+        "countPlural=*": "Partial · {n} inputs blocked"
+      }
+    }
+  ],
+  "store_reason_preparation_state": "Preparation {state}",
+  "store_label_mark_unverified": "Mark preparation unverified",
+  "store_reason_more_entries": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "and {n} more entry",
+        "countPlural=*": "and {n} more entries"
+      }
+    }
+  ],
+  "store_saved_opened_in": "Opened {name} in {app}",
+  "store_saved_opened_in_application": "Opened {name} in the application",
+  "store_opened_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} entry re-verified before launch; {path}.",
+        "countPlural=*": "{n} entries re-verified before launch; {path}."
+      }
+    }
+  ],
+  "store_label_mark_unverified_many": "Mark preparations unverified",
+  "store_reason_entries_changed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input name",
+        "input file",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {n} entry changed ({file})",
+        "countPlural=*": "{name}: {n} entries changed ({file})"
+      }
+    }
+  ],
+  "store_label_open_group_folder": "Open group folder",
+  "store_group_opened_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input folder",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Group folder {folder}; {n} panel re-verified before launch.",
+        "countPlural=*": "Group folder {folder}; {n} panels re-verified before launch."
+      }
+    }
+  ],
+  "store_label_discover_results": "Discover Results",
+  "store_candidates_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} candidate",
+        "countPlural=*": "{n} candidates"
+      }
+    }
+  ],
+  "store_intermediates_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} intermediate",
+        "countPlural=*": "{n} intermediates"
+      }
+    }
+  ],
+  "store_calibration_masters_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} calibration master",
+        "countPlural=*": "{n} calibration masters"
+      }
+    }
+  ],
+  "store_saved_results_found": "Results found: {name}",
+  "store_label_attach_named": "Attach {name}",
+  "store_label_attach_result": "Attach Result",
+  "store_reason_not_full_path": "Not a full path",
+  "store_reason_unreadable_or_offline": "Unreadable or offline",
+  "store_reason_already_listed": "Already listed",
+  "store_reason_not_image": "Not an image",
+  "store_reason_run_group_only": "Run group only",
+  "store_saved_attached": "Attached {name}",
+  "store_attached_detail": "{kind}, User-linked to {name}; lineage Unknown.",
+  "store_label_inspect_named": "Inspect {name}",
+  "store_label_inspect_result": "Inspect Result",
+  "store_saved_inspected": "Inspected {name}",
+  "store_sha_recorded": "SHA-256 {hash}… recorded.",
+  "store_reason_changed_since_inspection": "Changed since inspection",
+  "store_reason_no_kind": "No kind",
+  "store_label_accept_result": "Accept Result",
+  "store_saved_accepted": "Accepted {name}",
+  "store_sha_short": "SHA-256 {hash}…",
+  "store_label_result_kind": "Result kind",
+  "store_reason_not_accepted": "Not accepted",
+  "store_reason_mosaic_subject": "Mosaic subject",
+  "store_label_clean_up_named": "Clean up {name}",
+  "store_reason_not_complete_short": "Not Complete",
+  "store_reason_nothing_selected": "Nothing selected",
+  "store_label_complete_all_named": "Complete all {name}",
+  "store_label_simulated_output": "Simulated output",
+  "store_reason_prepare_first": "Prepare the run first: the application writes into the recorded Results folder",
+  "store_label_proto_app_output": "Prototype: application output",
+  "store_saved_proto_outputs": "Prototype: the application wrote outputs",
+  "store_proto_outputs_detail": "{files} in {folder}.",
+  "store_label_proto_finished_writing": "Prototype: file finished writing",
+  "store_label_simulated_correction": "Simulated correction",
+  "store_reason_no_saved_member": "The run has no saved member session",
+  "store_reason_already_corrected": "This session already carries that correction",
+  "store_label_proto_catalog_correction": "Prototype: catalog correction",
+  "store_label_simulated_change": "Simulated change",
+  "store_reason_no_prepared_source": "No readable prepared source frame",
+  "store_label_proto_source_changed": "Prototype: source frame changed",
+  "op_prep_unavailable": "{reason}. Nothing was written for it.",
+  "op_prep_denied": "Unreadable: read access to {path} is denied. Nothing was written for it.",
+  "op_prep_not_reachable": "Not readable now: nothing is reachable at {path}. Nothing was written for it.",
+  "op_prep_not_in_selection": "Not in the reviewed selection.",
+  "op_prep_source_changed": "Source changed since it was indexed: its bytes differ from the catalog fingerprint. Rescan and review it first.",
+  "op_prep_direct_verified": "Exact source path listed; identity matches its snapshot.",
+  "op_prep_destination_exists": "Destination exists: {path}. Nothing was overwritten.",
+  "op_prep_write_removed": "Write permission removed at {folder}. Nothing was written.",
+  "op_prep_destination_offline": "Destination offline: {folder} is on a volume that is not mounted.",
+  "op_prep_reread_failed": "The entry at {path} did not re-read to the expected digest.",
+  "op_prep_patched_verified": "Patched copy verified: {patches}; original unchanged.",
+  "op_prep_written_verified": "Written and re-read against its snapshot.",
+  "op_prep_source_drift": "Source drift before completion: {source} no longer matches its snapshot. Not counted as prepared.",
+  "op_prep_record_missing": "The preparation record is missing; nothing was settled.",
+  "op_prep_calibration_note": "Calibration: {done} of {total} files.",
+  "op_prep_prepared": "Prepared: {prepared} of {total} entries match the reviewed membership and their source snapshots.",
+  "op_prep_failed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Failed: no entry could be prepared; {n} input blocked. Sources are untouched.",
+        "countPlural=*": "Failed: no entry could be prepared; {n} inputs blocked. Sources are untouched."
+      }
+    }
+  ],
+  "op_prep_partial": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input prepared",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Partial: {prepared} prepared, {n} input blocked.",
+        "countPlural=*": "Partial: {prepared} prepared, {n} inputs blocked."
+      }
+    }
+  ],
+  "op_prep_partial_open_waits": "Open waits until every entry is prepared; sources are untouched.",
+  "op_archive_title": "Archive {name}",
+  "op_restore_title": "Restore archived sessions of {name}",
+  "op_archive_went_offline": "{name} went offline",
+  "op_archive_changed": "{path} changed since the review (SHA-256 differs)",
+  "op_archive_destination_volume": "The destination volume",
+  "op_archive_sessions_archived": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} session archived",
+        "countPlural=*": "{n} sessions archived"
+      }
+    }
+  ],
+  "op_archive_sessions_restored": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} session restored",
+        "countPlural=*": "{n} sessions restored"
+      }
+    }
+  ],
+  "op_archive_kept": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} kept",
+        "countPlural=*": "{count} kept"
+      }
+    }
+  ],
+  "op_archive_hash_failed": "SHA-256 verification failed (simulated): nothing of this session moved",
+  "op_archived_to": "Archived to {folder} · {frames}",
+  "op_restored_to": "Restored to {folder} · {frames}",
+  "op_import_group_failed": "{done} of {total} verified · {failed} failed: {reason}",
+  "op_import_group_verified": "{done} of {total} verified",
+  "op_import_source_gone": "source gone",
+  "op_import_destination_not_writable": "destination not writable",
+  "op_import_sha_mismatch": "SHA-256 mismatch",
+  "op_import_to_stack": "{count} calibration → stack",
+  "op_import_masters": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} master",
+        "countPlural=*": "{n} masters"
+      }
+    }
+  ],
+  "op_import_duplicates_skipped": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} duplicate skipped",
+        "countPlural=*": "{n} duplicates skipped"
+      }
+    }
+  ],
+  "op_import_held": "{count} held",
+  "op_import_failed_kept": "{count} failed, kept",
+  "op_import_sources_to_trash": "sources → OS Trash",
+  "op_import_no_source_moved": "no source moved",
+  "op_import_move_sources_title": "Move import sources to the OS Trash",
+  "op_import_frames_to_copy": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame to copy",
+        "countPlural=*": "{n} frames to copy"
+      }
+    }
+  ],
+  "op_import_move_from": "Move from {name}",
+  "op_import_from": "Import from {name}",
+  "store_import_source_name_needed": "Name needed",
+  "store_reason_no_name": "no name",
+  "store_label_save_import_source": "Save Import source {name}",
+  "store_saved_import_source": "Import source saved: {name}",
+  "store_label_new_location": "New location {name}",
+  "store_saved_registered": "Registered {name}",
+  "store_location_registered_detail": "{role} location at {path}. Nothing in the folder was changed.",
+  "store_label_changes_to": "Changes to {name}",
+  "store_saved_updated": "Updated {name}",
+  "store_label_folder_change": "Folder change for {name}",
+  "store_saved_now_points_to": "{name} now points to {path}",
+  "store_location_repoint_detail": "No indexed frame referenced the previous folder.",
+  "store_label_removal_of": "Removal of {name}",
+  "store_saved_removed": "Removed {name}",
+  "store_location_removed_detail": "Registration only. {path} and its files are unchanged.",
+  "store_label_retirement_of": "Retirement of {name}",
+  "store_saved_retired": "Retired {name}",
+  "store_location_retired_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} copy at {path} reads Retired and leaves integration totals. No file was deleted, moved or modified.",
+        "countPlural=*": "{n} copies at {path} read Retired and leave integration totals. No file was deleted, moved or modified."
+      }
+    }
+  ],
+  "store_label_remap_of": "Remap of {name}",
+  "store_saved_remapped": "Remapped {name} to {path}",
+  "store_remap_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame verified by content hash.",
+        "countPlural=*": "{n} frames verified by content hash."
+      }
+    }
+  ],
+  "store_remap_detail_refused": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input refused",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame verified by content hash; {refused} refused (bytes differ or not found).",
+        "countPlural=*": "{n} frames verified by content hash; {refused} refused (bytes differ or not found)."
+      }
+    }
+  ],
+  "store_remap_identity_note": "Same volume name, different identity ({from} → {to}).",
+  "store_label_new_site": "New site {name}",
+  "store_label_changes_to_site": "Changes to site {name}",
+  "store_saved_site_added": "Added observing site {name}",
+  "store_saved_site_updated": "Updated observing site {name}",
+  "store_site_default_detail": "{name} is the default site.",
+  "store_label_default_site": "Default site {name}",
+  "store_saved_default_site": "{name} is the default site",
+  "store_site_reminders_moved": "Reminders now use {name}; no site's fields changed.",
+  "store_site_pointer_moved": "Only the default pointer moved; no site's fields changed.",
+  "store_label_removal_of_site": "Removal of site {name}",
+  "store_saved_site_removed": "Removed observing site {name}",
+  "store_label_target_lookup": "Target lookup setting",
+  "store_saved_lookup_on": "Online Target lookup on ({provider})",
+  "store_saved_lookup_off": "Online Target lookup off",
+  "store_lookup_off_detail": "Local Target search keeps working offline.",
+  "store_saved_measurements_imported": "Measurements imported",
+  "store_measurements_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input path",
+        "input rows",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} row attached as imported values, content unverified, from {path}. {rows} rows attach to no frame. No frame was excluded and no quality changed.",
+        "countPlural=*": "{n} rows attached as imported values, content unverified, from {path}. {rows} rows attach to no frame. No frame was excluded and no quality changed."
+      }
+    }
+  ],
+  "store_measurements_detail_changed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input path",
+        "input rows",
+        "input changed",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} row attached as imported values, content unverified, from {path}. {rows} rows attach to no frame ({changed} because the frame's bytes differ from what PlateVault recorded, or cannot be read). No frame was excluded and no quality changed.",
+        "countPlural=*": "{n} rows attached as imported values, content unverified, from {path}. {rows} rows attach to no frame ({changed} because the frame's bytes differ from what PlateVault recorded, or cannot be read). No frame was excluded and no quality changed."
+      }
+    }
+  ],
+  "store_label_attach_imported_row": "Attach imported row",
+  "op_measure_no_session": "Frames without a session",
+  "op_measure_progress_skipped": "{done} of {total} frames; {skipped} not readable",
+  "op_measure_measured": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame measured",
+        "countPlural=*": "{n} frames measured"
+      }
+    }
+  ],
+  "op_measure_cached_valid": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} cached value still valid",
+        "countPlural=*": "{count} cached values still valid"
+      }
+    }
+  ],
+  "op_measure_not_measured": "{count} not measured: no readable copy",
+  "op_measure_summary": "{parts}.",
+  "store_optics_camera": "{kind}, {width} × {height} px, {pixel} µm",
+  "store_saved_optics": "Optics saved: {name}",
+  "store_saved_preset": "Targets preset saved: {name}",
+  "store_saved_preset_renamed": "Targets preset renamed: {name}",
+  "store_preset_was": "Was “{name}”.",
+  "store_saved_preset_deleted": "Targets preset deleted: {name}",
+  "store_saved_planning_site": "Planning site: {name}",
+  "op_offer_to_trash": "{offer} of {name} to Trash",
+  "seed_cleanup_summary": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} prepared link moved to the OS Trash. Sources, Results and library frames unchanged.",
+        "countPlural=*": "{n} prepared links moved to the OS Trash. Sources, Results and library frames unchanged."
+      }
+    }
+  ],
+  "seed_move_rejected_title": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {n} rejected frame to Trash",
+        "countPlural=*": "Move {n} rejected frames to Trash"
+      }
+    }
+  ],
+  "seed_trash_m31_detail": "{frames} ({session}) moved to the OS Trash. Put back plus a rescan restores them as Unusable.",
+  "seed_prep_p2_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input volume",
+        "input entries",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} input offline on {volume}; {entries} prepared.",
+        "countPlural=*": "{n} inputs offline on {volume}; {entries} prepared."
+      }
+    }
+  ],
+  "project_sessions_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session selected",
+        "countPlural=*": "{count} sessions selected"
+      }
+    }
+  ],
+  "session_missing_title": "This session is not in the catalog",
+  "project_missing_title": "This Project is not in the catalog",
+  "run_missing_title": "This run is not in the catalog",
+  "run_step_missing_title": "This run step does not exist",
+  "rungroup_missing_title": "This run group is not in the catalog",
+  "target_missing_title": "This Target is not in the catalog"
 }

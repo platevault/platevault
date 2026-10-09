@@ -429,7 +429,7 @@ export function TableToolbar({
 export function SelectionBar({
   count,
   hiddenByFilters = 0,
-  noun,
+  label,
   onShowSelected,
   onClear,
   clearDisabledReason,
@@ -437,8 +437,8 @@ export function SelectionBar({
 }: {
   count: number
   hiddenByFilters?: number
-  /** Singular noun, e.g. "session". */
-  noun: string
+  /** The count line as one complete message, so the caller's noun agrees in gender and number: `m.project_sessions_selected({ count })`. */
+  label: string
   onShowSelected?: () => void
   onClear: () => void
   /** When set, Clear selection stays focusable but disabled, with this reason beside it. */
@@ -451,7 +451,7 @@ export function SelectionBar({
     <span className={count === 0 ? undefined : "font-medium tabular-nums"} aria-live="polite">
       {count === 0 ? null : (
         <>
-          {m.selection_count({ count, noun })}
+          {label}
           {hiddenByFilters > 0 ? <span className="font-normal text-muted-foreground"> · {m.selection_outside_filters({ count: hiddenByFilters })}</span> : null}
         </>
       )}

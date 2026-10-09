@@ -26,12 +26,32 @@ import type {
   Session,
 } from "./types"
 import { fileName, formatExposure, plural } from "@/lib/format"
+import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 
 export const KINDS: CalibrationKind[] = ["dark", "flat", "bias"]
 
-export const KIND_LABEL: Record<CalibrationKind, string> = { dark: "Dark", flat: "Flat", bias: "Bias", "dark-flat": "Dark flat" }
+/** "Dark", "Flat", "Bias", "Dark flat". */
+export const KIND_NAME: Record<CalibrationKind, MessageRef> = {
+  dark: msg("calibration_kind_dark"),
+  flat: msg("calibration_kind_flat"),
+  bias: msg("calibration_kind_bias"),
+  "dark-flat": msg("calibration_kind_dark_flat"),
+}
 
-const MASTER_TYPE_LABEL: Record<CalibrationKind, string> = { dark: "Master dark", flat: "Master flat", bias: "Master bias", "dark-flat": "Master dark flat" }
+/** The kind mid-sentence: "dark", "flat", "bias" ("Dark flat" keeps its capital: a lowercase copy would duplicate its catalogue value). */
+export const KIND_NOUN: Record<CalibrationKind, MessageRef> = {
+  dark: msg("run_cal_kind_dark"),
+  flat: msg("run_cal_kind_flat"),
+  bias: msg("run_cal_kind_bias"),
+  "dark-flat": msg("calibration_kind_dark_flat"),
+}
+
+const MASTER_TYPE_NAME: Record<CalibrationKind, MessageRef> = {
+  dark: msg("import_type_master_dark"),
+  flat: msg("import_type_master_flat"),
+  bias: msg("calibration_caption_bias"),
+  "dark-flat": msg("import_type_master_dark_flat"),
+}
 
 /** One reusable calibration input: an adopted master. */
 export interface CalSource {
@@ -54,7 +74,7 @@ export interface CalSource {
   opticalTrainId: string | null
   ccdTempC: number | null
   frameCount: number | null
-  imageTypeLabel: string
+  imageTypeLabel: MessageRef
   /** Master file path. */
   path: string
   /** Files handed off for this input. */
@@ -83,7 +103,7 @@ export function masterSource(catalog: Catalog, masterId: string): CalSource | nu
     opticalTrainId: master.opticalTrainId,
     ccdTempC: master.ccdTempC,
     frameCount: master.frameCount,
-    imageTypeLabel: MASTER_TYPE_LABEL[master.kind],
+    imageTypeLabel: MASTER_TYPE_NAME[master.kind],
     path: master.path,
     files: [{ assetId: asset?.id ?? null, path: master.path, sizeBytes: asset?.sizeBytes ?? 0, fileName: fileName(master.path) }],
   }
@@ -187,7 +207,8 @@ export function trainName(catalog: Catalog, id: string | null): string | null {
 
 function criterion(name: MatchCriterion["name"], light: string | null, calibration: string | null): MatchCriterion {
   const result = light === null || calibration === null ? "unknown" : light === calibration ? "compatible" : "incompatible"
-  return { name, result, lightValue: light ?? "Not recorded", calibrationValue: calibration ?? "Not recorded" }
+  const value = (v: string | null) => (v === null ? msg("domain_not_recorded") : verbatim(v))
+  return { name, result, lightValue: value(light), calibrationValue: value(calibration) }
 }
 
 const str = (value: number | string | null) => (value === null ? null : String(value))
@@ -205,7 +226,7 @@ export function matchCriteria(catalog: Catalog, light: LightGeometry, source: Ma
     criterion("binning", `${light.binning}×${light.binning}`, `${source.binning}×${source.binning}`),
     criterion("gain", str(light.gain), str(source.gain)),
     criterion("offset", str(light.offset), str(source.offset)),
-    { name: "image-type", result: "compatible", lightValue: "Light", calibrationValue: source.imageTypeLabel },
+    { name: "image-type", result: "compatible", lightValue: msg("import_type_light"), calibrationValue: source.imageTypeLabel },
   ]
   if (source.kind === "dark") {
     list.push(criterion("exposure", formatExposure(light.exposureS), source.exposureS === null ? null : formatExposure(source.exposureS)))
@@ -217,17 +238,17 @@ export function matchCriteria(catalog: Catalog, light: LightGeometry, source: Ma
   return list
 }
 
-export const CRITERION_LABEL: Record<MatchCriterion["name"], string> = {
-  camera: "Camera",
-  dimensions: "Dimensions",
-  binning: "Binning",
-  gain: "Gain",
-  offset: "Offset",
-  "image-type": "Image type",
-  exposure: "Exposure",
-  channel: "Channel",
-  "optical-train": "Rig",
-  temperature: "Temperature",
+export const CRITERION_NAME: Record<MatchCriterion["name"], MessageRef> = {
+  camera: msg("domain_criterion_camera"),
+  dimensions: msg("domain_criterion_dimensions"),
+  binning: msg("domain_criterion_binning"),
+  gain: msg("domain_criterion_gain"),
+  offset: msg("domain_criterion_offset"),
+  "image-type": msg("domain_criterion_image_type"),
+  exposure: msg("domain_criterion_exposure"),
+  channel: msg("domain_criterion_channel"),
+  "optical-train": msg("domain_criterion_rig"),
+  temperature: msg("domain_criterion_temperature"),
 }
 
 export interface MatchSummary {
@@ -245,10 +266,13 @@ export function summarize(criteria: MatchCriterion[]): MatchSummary {
 }
 
 /** "All 8 criteria compatible", or the criteria that are not: "Rig unknown". */
-export function summaryText(criteria: MatchCriterion[]): string {
+export function summaryRef(criteria: MatchCriterion[]): MessageRef {
   const bad = criteria.filter((c) => c.result !== "compatible")
-  if (bad.length === 0) return `All ${criteria.length} criteria compatible`
-  return bad.map((c) => `${CRITERION_LABEL[c.name]} ${c.result}`).join(", ")
+  if (bad.length === 0) return msg("domain_criteria_all_compatible", { count: criteria.length })
+  return joinRefs(
+    bad.map((c) => msg(c.result === "unknown" ? "domain_criterion_unknown" : "domain_criterion_incompatible", { criterion: CRITERION_NAME[c.name] })),
+    ", ",
+  )
 }
 
 export interface Candidate {

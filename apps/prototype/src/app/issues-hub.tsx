@@ -13,7 +13,7 @@ import type { Tone } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ISSUE_GROUPS, type Issue, type IssueGroup, type IssueSeverity } from "@/domain/issues"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useIssues } from "@/store/issues"
 import { useMessages } from "./preferences"
@@ -41,7 +41,7 @@ function groupName(m: Messages, group: IssueGroup): string {
  */
 export function issueCopy(m: Messages, issue: Issue): { text: string; action: string } {
   const { count } = issue
-  const name = issue.name ?? ""
+  const name = issue.name === null ? "" : typeof issue.name === "string" ? issue.name : say(m, issue.name)
   switch (issue.kind) {
     case "needs-target":
       return { text: m.issue_needs_target({ count }), action: m.verb_assign() }

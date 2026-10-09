@@ -6,7 +6,7 @@
 import { stableHash } from "@/domain/indexing"
 import { removeSite } from "@/domain/sites"
 import type { Catalog, ObservingSite, SiteId } from "@/domain/types"
-import { m } from "@/lib/i18n"
+import { m, msg } from "@/lib/i18n"
 import { type CommitResult, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { parseNumber } from "../components/form-field"
 import { save } from "./writes"
@@ -80,9 +80,9 @@ export function saveSite(values: SiteValues, id: SiteId | null, makeDefault: boo
   }
   return save(
     {
-      label: `${id ? "Changes to" : "New"} site ${name}`,
-      saved: `${id ? "Updated" : "Added"} observing site ${name}`,
-      detail: makeDefault ? `${name} is the default site.` : null,
+      label: id ? msg("store_label_changes_to_site", { name }) : msg("store_label_new_site", { name }),
+      saved: id ? msg("store_saved_site_updated", { name }) : msg("store_saved_site_added", { name }),
+      detail: makeDefault ? msg("store_site_default_detail", { name }) : null,
       href: HREF,
     },
     (s) => {
@@ -110,9 +110,9 @@ export function setDefaultSite(site: ObservingSite): CommitResult {
   const moves = remindersMoveWith(store.getState(), site.id)
   return save(
     {
-      label: `Default site ${site.name}`,
-      saved: `${site.name} is the default site`,
-      detail: moves ? `Reminders now use ${site.name}; no site's fields changed.` : "Only the default pointer moved; no site's fields changed.",
+      label: msg("store_label_default_site", { name: site.name }),
+      saved: msg("store_saved_default_site", { name: site.name }),
+      detail: moves ? msg("store_site_reminders_moved", { name: site.name }) : msg("store_site_pointer_moved"),
       href: HREF,
     },
     (s) => withDefaultSite(s, site.id),
@@ -120,7 +120,7 @@ export function setDefaultSite(site: ObservingSite): CommitResult {
 }
 
 export function deleteSite(site: ObservingSite): CommitResult {
-  return save({ label: `Removal of site ${site.name}`, saved: `Removed observing site ${site.name}`, detail: null, href: HREF }, (s) => {
+  return save({ label: msg("store_label_removal_of_site", { name: site.name }), saved: msg("store_saved_site_removed", { name: site.name }), detail: null, href: HREF }, (s) => {
     const next = removeSite(s.catalog, s.settings, site.id)
     return { ...s, catalog: next.catalog, settings: next.settings }
   })

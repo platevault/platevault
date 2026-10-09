@@ -3,6 +3,7 @@
  * These change the world outside PlateVault; only operations a user approved
  * (or prototype controls) call them.
  */
+import { type MessageRef, msg } from "@/lib/i18n"
 import { isUnder, stableHash } from "./indexing"
 import type { Disk, DiskFile, DiskFileKind, DiskFolder, FrameHeader, IsoDateTime, PixelTruth, VolumeId } from "./types"
 
@@ -106,14 +107,14 @@ export function filesUnder(disk: Disk, folder: string): DiskFile[] {
  * Why a path cannot go to the OS Trash now (D-W57, STO-FR-15), or null. Offer
  * previews ask it, and the trash operation asks again for every item it moves.
  */
-export function trashRefusal(disk: Disk, path: string): string | null {
-  if (disk.readOnlyPaths.some((p) => isUnder(path, p))) return "Write permission removed; kept in place"
+export function trashRefusal(disk: Disk, path: string): MessageRef | null {
+  if (disk.readOnlyPaths.some((p) => isUnder(path, p))) return msg("domain_trash_read_only")
   const volumeId = volumeForPath(disk, path)
   const volume = volumeId ? disk.volumes[volumeId] : undefined
-  if (!volume) return "Outside every known volume"
-  if (!volume.mounted) return `${volume.name} is offline`
-  if (volume.trash === "unsupported") return `${volume.name} has no OS Trash; kept, nothing deleted`
-  if (!fileAt(disk, path)) return "Not found at its recorded path"
+  if (!volume) return msg("domain_trash_no_volume")
+  if (!volume.mounted) return msg("run_cleanup_volume_offline", { name: volume.name })
+  if (volume.trash === "unsupported") return msg("domain_trash_unsupported", { name: volume.name })
+  if (!fileAt(disk, path)) return msg("domain_trash_not_found")
   return null
 }
 

@@ -23,11 +23,11 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { projectWrapUp, rigName, runPreparations, subjectName } from "@/domain/derive"
-import { RESULT_KIND_LABEL } from "@/domain/labels"
+import { RESULT_KIND_NAME } from "@/domain/labels"
 import type { Project, ResultKind, ResultRecord } from "@/domain/types"
 import { SelectField } from "@/features/t3/fields"
 import { fileName, formatBytes } from "@/lib/format"
-import { type Messages, m } from "@/lib/i18n"
+import { type Messages, m, say } from "@/lib/i18n"
 import { useStore } from "@/store/core"
 import { acceptResult, attachResult, discoverResults, finishWriting, inspectResult, setResultKind, simulateApplicationOutput, startRunWithResult } from "./actions"
 import { MasterOffers } from "./calibrate-step"
@@ -36,7 +36,7 @@ import { OutcomeNotice, PrototypeMenu, RowActions, Sha, useOutcome } from "./par
 
 type Act = ReturnType<typeof useOutcome>["act"]
 
-const KIND_OPTIONS = (["linear-integration", "channel-product", "final-image", "mosaic-panel"] as ResultKind[]).map((k) => ({ value: k, label: RESULT_KIND_LABEL[k] }))
+const KINDS: ResultKind[] = ["linear-integration", "channel-product", "final-image", "mosaic-panel"]
 
 /** Wrap up on the Project page (P-WRAP1): where intermediates and prepared folders leave, once every run is Complete. */
 export function WrapUpLink({ project }: { project: Project }) {
@@ -120,7 +120,7 @@ export function ResultsStep({ ctx }: { ctx: RunContext }) {
           </span>
         }
       >
-        <ResultsTable rows={products} rigId={run.rigId} onOutcome={outcome.act} onUse={setUsing} kindOptions={KIND_OPTIONS} />
+        <ResultsTable rows={products} rigId={run.rigId} onOutcome={outcome.act} onUse={setUsing} kinds={KINDS} />
       </Box>
 
       <Box
@@ -149,7 +149,7 @@ export function ResultsStep({ ctx }: { ctx: RunContext }) {
         )}
       </Box>
 
-      <AttachDialog open={attaching} onOpenChange={setAttaching} defaultFolder={folders[0] ?? null} kindOptions={KIND_OPTIONS} onAttach={(path, kind, channel) => outcome.act(attachResult({ runId: run.id }, path, kind, channel), { blocked: m.run_results_attach_blocked() })} />
+      <AttachDialog open={attaching} onOpenChange={setAttaching} defaultFolder={folders[0] ?? null} kinds={KINDS} onAttach={(path, kind, channel) => outcome.act(attachResult({ runId: run.id }, path, kind, channel), { blocked: m.run_results_attach_blocked() })} />
       <UseAsInputDialog record={using} onClose={() => setUsing(null)} onOutcome={outcome.act} />
     </div>
   )
@@ -164,7 +164,7 @@ function basisNote(m: Messages, basis: ResultRow["attribution"]["basis"]): strin
 export function attributionCell(r: ResultRow) {
   return (
     <span className="inline-flex items-center gap-1">
-      <span>{r.attribution.label}</span>
+      <span>{say(m, r.attribution.label)}</span>
       <NoteMarker label={m.run_results_attribution_for({ name: fileName(r.record.path) })}>{r.record.discovered === "attached" && r.attribution.basis === "unknown" ? m.run_results_attached_no_evidence() : basisNote(m, r.attribution.basis)}</NoteMarker>
     </span>
   )
@@ -175,7 +175,7 @@ function copyPath(path: string) {
   void navigator.clipboard?.writeText(path).catch(() => {})
 }
 
-export function ResultsTable({ rows, onOutcome, onUse, kindOptions }: { rows: ResultRow[]; rigId: string; onOutcome: Act; onUse?: (r: ResultRecord) => void; kindOptions: Array<{ value: string; label: string }> }) {
+export function ResultsTable({ rows, onOutcome, onUse, kinds }: { rows: ResultRow[]; rigId: string; onOutcome: Act; onUse?: (r: ResultRecord) => void; kinds: ResultKind[] }) {
   const m = useMessages()
   const accept = (r: ResultRow) => onOutcome(acceptResult(r.record.id), { blocked: m.run_results_accept_blocked() })
   const entries = (r: ResultRow): MenuEntry[] => {
@@ -186,7 +186,7 @@ export function ResultsTable({ rows, onOutcome, onUse, kindOptions }: { rows: Re
       ...(candidate ? [{ label: m.run_accept(), icon: Check, onSelect: () => accept(r) }] : []),
       ...(!candidate && onUse ? [{ label: m.run_results_use_as_input(), icon: Play, onSelect: () => onUse(r.record) }] : []),
       ...(r.changed && !r.pending ? [{ label: m.run_results_inspect_again(), icon: ScanSearch, onSelect: () => onOutcome(inspectResult(r.record.id), { blocked: m.run_results_inspect_blocked() }) }] : []),
-      ...(candidate && !r.record.kind ? [{ separator: true } as const, ...kindOptions.map((k) => ({ label: m.run_results_kind_option({ kind: k.label }), onSelect: () => onOutcome(setResultKind(r.record.id, k.value as ResultKind), { blocked: m.run_results_kind_blocked() }) }))] : []),
+      ...(candidate && !r.record.kind ? [{ separator: true } as const, ...kinds.map((k) => ({ label: m.run_results_kind_option({ kind: say(m, RESULT_KIND_NAME[k]) }), onSelect: () => onOutcome(setResultKind(r.record.id, k), { blocked: m.run_results_kind_blocked() }) }))] : []),
       { separator: true },
       { label: m.session_copy_path(), icon: Copy, onSelect: () => copyPath(r.record.path) },
       ...(r.pending ? [{ label: m.run_proto_finish_writing(), icon: FlaskConical, onSelect: () => onOutcome(finishWriting(r.record.id), { blocked: m.run_proto_blocked() }) }] : []),
@@ -212,7 +212,7 @@ export function ResultsTable({ rows, onOutcome, onUse, kindOptions }: { rows: Re
       header: m.run_col_kind(),
       cell: (r) => (
         <span className="flex flex-wrap items-center gap-1">
-          {r.record.kind ? <span>{RESULT_KIND_LABEL[r.record.kind]}</span> : <Pill tone="warning">{r.record.acceptance === "candidate" ? m.run_results_kind_missing() : m.run_unknown_kind()}</Pill>}
+          {r.record.kind ? <span>{say(m, RESULT_KIND_NAME[r.record.kind])}</span> : <Pill tone="warning">{r.record.acceptance === "candidate" ? m.run_results_kind_missing() : m.run_unknown_kind()}</Pill>}
           {r.record.channel ? <Pill tone="neutral">{r.record.channel}</Pill> : null}
         </span>
       ),
@@ -266,10 +266,10 @@ export function ResultsTable({ rows, onOutcome, onUse, kindOptions }: { rows: Re
   )
 }
 
-export function AttachDialog({ open, onOpenChange, defaultFolder, kindOptions, onAttach }: { open: boolean; onOpenChange: (o: boolean) => void; defaultFolder: string | null; kindOptions: Array<{ value: string; label: string }>; onAttach: (path: string, kind: ResultKind, channel: string | null) => boolean }) {
+export function AttachDialog({ open, onOpenChange, defaultFolder, kinds, onAttach }: { open: boolean; onOpenChange: (o: boolean) => void; defaultFolder: string | null; kinds: ResultKind[]; onAttach: (path: string, kind: ResultKind, channel: string | null) => boolean }) {
   const m = useMessages()
   const [path, setPath] = useState("")
-  const [kind, setKind] = useState(kindOptions[0]!.value)
+  const [kind, setKind] = useState<string>(kinds[0]!)
   const [channel, setChannel] = useState("")
   const pathId = useId()
   const channelId = useId()
@@ -299,7 +299,7 @@ export function AttachDialog({ open, onOpenChange, defaultFolder, kindOptions, o
             <Label htmlFor={pathId}>{m.run_results_file_path()}</Label>
             <Input id={pathId} className="font-mono text-xs" value={path} onChange={(e) => setPath(e.target.value)} placeholder={defaultFolder ? `${defaultFolder}/…` : m.run_results_path_placeholder()} autoFocus />
           </div>
-          <SelectField label={m.run_col_kind()} value={kind} options={kindOptions} onChange={setKind} />
+          <SelectField label={m.run_col_kind()} value={kind} options={kinds.map((k) => ({ value: k, label: say(m, RESULT_KIND_NAME[k]) }))} onChange={setKind} />
           <div className="grid gap-1.5">
             <Label htmlFor={channelId}>{m.run_results_channel_optional()}</Label>
             <Input id={channelId} value={channel} onChange={(e) => setChannel(e.target.value)} placeholder={m.run_results_channel_placeholder()} />
@@ -340,7 +340,7 @@ function UseAsInputDialog({ record, onClose, onOutcome }: { record: ResultRecord
             <Pill tone="muted" icon={Layers}>
               {owner?.name ?? m.run_results_run_group()}
             </Pill>
-            <Pill tone="muted">{rigName(state.catalog, owner?.rigId ?? null)}</Pill>
+            <Pill tone="muted">{rigName(m, state.catalog, owner?.rigId ?? null)}</Pill>
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
@@ -355,11 +355,11 @@ function UseAsInputDialog({ record, onClose, onOutcome }: { record: ResultRecord
             }}
           />
           {subjects.length > 0 ? (
-            <SelectField label={m.run_col_subject()} value={subject!.id} options={subjects.map((s) => ({ value: s.id, label: subjectName(state.catalog, s) }))} onChange={setSubjectId} />
+            <SelectField label={m.run_col_subject()} value={subject!.id} options={subjects.map((s) => ({ value: s.id, label: subjectName(m, state.catalog, s) }))} onChange={setSubjectId} />
           ) : (
             <Refusal action={m.run_results_start_blocked()} reason={m.run_results_mosaic_subjects_only()} blockers={[]} />
           )}
-          {rig ? <SelectField label={m.run_col_rig()} value={rig} options={project.rigIds.map((id) => ({ value: id, label: rigName(state.catalog, id) }))} onChange={setRigId} /> : null}
+          {rig ? <SelectField label={m.run_col_rig()} value={rig} options={project.rigIds.map((id) => ({ value: id, label: rigName(m, state.catalog, id) }))} onChange={setRigId} /> : null}
           {rig && owner && rig !== owner.rigId ? (
             <span className="flex items-center gap-1">
               <Pill tone="info">{m.run_another_rig()}</Pill>

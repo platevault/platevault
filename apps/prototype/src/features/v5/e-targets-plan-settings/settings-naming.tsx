@@ -24,7 +24,7 @@ import { DEFAULT_NAMING, NAMING_TOKENS, type NamingValues, namingTemplate, namin
 import type { Catalog, NamingFrameType, NamingToken } from "@/domain/types"
 import { TextField } from "@/features/t1/components/form-field"
 import { ReturnNotice } from "@/features/t1/settings/settings-layout"
-import { m } from "@/lib/i18n"
+import { joinRefs, m, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { setNamingTemplate } from "@/store/actions/settings"
 import { useStore } from "@/store/core"
@@ -83,7 +83,7 @@ function sampleValues(catalog: Catalog, type: NamingFrameType): { values: Naming
         offset: master.offset,
         binning: master.binning,
         ccdTempC: master.ccdTempC,
-        train: master.opticalTrainId ? rigName(catalog, master.opticalTrainId) : null,
+        train: master.opticalTrainId ? rigName(m, catalog, master.opticalTrainId) : null,
       }),
     }
   }
@@ -223,7 +223,7 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
                 data-chip-index={index}
                 aria-label={
                   chip.kind === "token"
-                    ? m.naming_chip_token({ text, label: tokenLabel(chip.token) })
+                    ? m.naming_chip_token({ text, label: say(m, tokenLabel(chip.token)) })
                     : chip.kind === "sep"
                       ? m.naming_chip_separator()
                       : m.naming_chip_text({ text })
@@ -262,7 +262,7 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
               key={t.token}
               size="xs"
               variant="outline"
-              title={m.naming_token_title({ label: t.label, fallback: t.fallback })}
+              title={m.naming_token_title({ label: say(m, t.label), fallback: t.fallback })}
               onClick={() => setChips([...chips, { kind: "token", token: t.token }])}
             >
               <Plus aria-hidden="true" data-icon="inline-start" />
@@ -303,7 +303,7 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
         value={text}
         onChange={setText}
         description={m.settings_default_named({ name: DEFAULT_NAMING[type.type] })}
-        error={errors.length > 0 ? m.naming_not_saved({ errors: errors.join(", ") }) : undefined}
+        error={errors.length > 0 ? m.naming_not_saved({ errors: say(m, joinRefs(errors, ", ")) }) : undefined}
       />
       {failure ? <ActionError message={failure.message} onRetry={failure.retry} /> : null}
 

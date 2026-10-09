@@ -22,18 +22,18 @@ import { HelpTip, NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { RadioGroup } from "@/components/ui/radio-group"
 import { runOperations, runPreparations, runStepLink, type StepLink } from "@/domain/derive"
-import { MODE_LABEL } from "@/domain/labels"
+import { MODE_NAME } from "@/domain/labels"
 import { runFootprint } from "@/domain/storage"
 import type { InputMode, Preparation, Run } from "@/domain/types"
 import { ExecutableState } from "@/features/t4/profile-parts"
 import { NO_PROFILE, profileOptions } from "@/features/v5/b-projects/start-run"
 import { fileName, formatBytes, formatDateTime, formatNight } from "@/lib/format"
-import { m } from "@/lib/i18n"
+import { m, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { chooseMode, chooseProfile, openPreparation, prepareChoices, setOutputParent, simulateObjectCorrection, simulateSourceDrift, startPrepare, updatePrepareChoices } from "./actions"
-import { checkLabel, currentPreparation, FIELD_KEYWORD, fieldLabel, metadataChoiceLabel, type MetadataChoice, type ModeOption, type PlanCheck, type PreparePlan, preparePlan, type RunContext, type RunLayout } from "./model"
+import { CHECK_NAME, currentPreparation, FIELD_KEYWORD, FIELD_NAME, METADATA_CHOICE_NAME, type MetadataChoice, type ModeOption, type PlanCheck, type PreparePlan, preparePlan, type RunContext, type RunLayout } from "./model"
 import { LayoutLine, OptionCard, OutcomeNotice, PrototypeMenu, profileLabel, useOutcome } from "./parts"
 
 type Act = ReturnType<typeof useOutcome>["act"]
@@ -46,7 +46,8 @@ export function PrepareStep({ ctx }: { ctx: RunContext }) {
   const choices = prepareChoices(state, run.id)
   const plan = preparePlan(state, run, choices)
   const running = runOperations(state.operations, run.id).find((op) => op.kind === "prepare")
-  const locked = plan.checks.find((c) => c.id === "lock")?.detail ?? (running ? m.run_prepare_running({ title: running.title }) : null)
+  const lock = plan.checks.find((c) => c.id === "lock")?.detail
+  const locked = lock ? say(m, lock) : running ? m.run_prepare_running({ title: say(m, running.title) }) : null
   const [confirm, setConfirm] = useState(false)
   const target = group ? { groupId: group.id } : { runId: run.id }
   const count = (kind: "light" | "calibration" | "product") => plan.entries.filter((e) => e.kind === kind).length
@@ -118,7 +119,7 @@ export function PrepareStep({ ctx }: { ctx: RunContext }) {
         open={confirm}
         onOpenChange={setConfirm}
         title={plan.layout.prepRevision > 1 ? m.run_prepare_title_rev({ name: run.name, revision: plan.layout.prepRevision }) : m.run_prepare_title({ name: run.name })}
-        description={`${profileLabel(state.catalog, plan.profile?.id ?? null)} · ${plan.mode ? MODE_LABEL[plan.mode] : ""}`}
+        description={`${profileLabel(state.catalog, plan.profile?.id ?? null)} · ${plan.mode ? say(m, MODE_NAME[plan.mode]) : ""}`}
         changes={prepareChanges(plan)}
         confirmLabel={m.run_prepare_confirm({ count: plan.entries.length })}
         onConfirm={() => {
@@ -141,7 +142,7 @@ function parentNote(l: RunLayout): string {
 /** Where a Prepare blocker ("Calibration: 1 requirement to review") is resolved: the check it names, by its label. */
 export function planBlockerLink(run: Run, blocker: string): StepLink | undefined {
   const label = blocker.slice(0, Math.max(0, blocker.indexOf(":")))
-  const named = (id: PlanCheck["id"]) => label.endsWith(checkLabel(id))
+  const named = (id: PlanCheck["id"]) => label.endsWith(say(m, CHECK_NAME[id]))
   const step = named("calibration") ? "calibrate" : named("membership") || named("products") ? "select" : null
   return step ? (runStepLink(run, step) as StepLink) : undefined
 }
@@ -157,18 +158,23 @@ export function prepareChanges(plan: PreparePlan): string[] {
 }
 
 export function ChecksList({ checks }: { checks: PlanCheck[] }) {
+  const m = useMessages()
   return (
     <ul className="divide-y divide-separator text-sm">
-      {checks.map((c) => (
-        <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-1.5" data-check={c.id} data-ok={c.ok}>
-          <span className="w-40 shrink-0">
-            {c.ok ? <StatusBadge kind="checklist" value="met" label={c.label} /> : c.blocking ? <StatusBadge kind="checklist" value="missing" label={c.label} /> : <StatusBadge kind="checklist" value="partial" label={c.label} />}
-          </span>
-          <span className={cn("min-w-0 flex-1 truncate text-[0.75rem]", c.ok ? "text-muted-foreground" : "text-foreground")} title={c.detail}>
-            {c.detail}
-          </span>
-        </li>
-      ))}
+      {checks.map((c) => {
+        const label = say(m, c.label)
+        const detail = say(m, c.detail)
+        return (
+          <li key={c.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-3 py-1.5" data-check={c.id} data-ok={c.ok}>
+            <span className="w-40 shrink-0">
+              {c.ok ? <StatusBadge kind="checklist" value="met" label={label} /> : c.blocking ? <StatusBadge kind="checklist" value="missing" label={label} /> : <StatusBadge kind="checklist" value="partial" label={label} />}
+            </span>
+            <span className={cn("min-w-0 flex-1 truncate text-[0.75rem]", c.ok ? "text-muted-foreground" : "text-foreground")} title={detail}>
+              {detail}
+            </span>
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -234,7 +240,7 @@ export function ModeSection({ modes, mode, linkType, locked, onMode, onLinkType 
     >
       <div className="space-y-2">
         {chosen && !chosen.allowed ? (
-          <Refusal action={m.run_mode_named_blocked({ mode: MODE_LABEL[chosen.mode] })} reason={m.refusal_blockers({ count: chosen.reasons.length })} blockers={chosen.reasons.map((label) => ({ label }))} />
+          <Refusal action={m.run_mode_named_blocked({ mode: say(m, MODE_NAME[chosen.mode]) })} reason={m.refusal_blockers({ count: chosen.reasons.length })} blockers={chosen.reasons.map((r) => ({ label: say(m, r) }))} />
         ) : null}
         <fieldset disabled={locked}>
           <legend className="sr-only">{m.run_check_mode()}</legend>
@@ -242,19 +248,22 @@ export function ModeSection({ modes, mode, linkType, locked, onMode, onLinkType 
             {modes.map((option) => (
               <OptionCard key={option.mode} value={option.mode} current={mode ?? ""} disabled={locked || (!option.allowed && option.mode !== mode)}>
                 <span className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-medium">{MODE_LABEL[option.mode]}</span>
-                  <HelpTip label={`${MODE_LABEL[option.mode]}`}>{option.semantics}</HelpTip>
+                  <span className="font-medium">{say(m, MODE_NAME[option.mode])}</span>
+                  <HelpTip label={say(m, MODE_NAME[option.mode])}>{say(m, option.semantics)}</HelpTip>
                   <Pill tone="muted" icon={HardDrive} className="ml-auto">
                     {option.mode === "copy" || option.mode === "clone" ? formatBytes(option.footprintBytes) : formatBytes(0)}
                   </Pill>
                 </span>
                 {option.reasons.length > 0 ? (
                   <span className="flex flex-wrap gap-1" data-refusal>
-                    {option.reasons.map((r) => (
-                      <Pill key={r} tone="danger" title={r}>
-                        {r}
-                      </Pill>
-                    ))}
+                    {option.reasons.map((ref) => {
+                      const r = say(m, ref)
+                      return (
+                        <Pill key={r} tone="danger" title={r}>
+                          {r}
+                        </Pill>
+                      )
+                    })}
                   </span>
                 ) : null}
               </OptionCard>
@@ -310,7 +319,7 @@ export function MetadataSection({ plan, locked, onChoice }: { plan: PreparePlan;
             <li key={diff.key} className="space-y-2 px-3 py-2">
               <div className="flex flex-wrap items-center gap-1.5 text-sm">
                 <span className="font-medium">
-                  {formatNight(diff.session.night)} {diff.session.channel ?? ""} · {fieldLabel(diff.field)}
+                  {formatNight(diff.session.night)} {diff.session.channel ?? ""} · {say(m, FIELD_NAME[diff.field])}
                 </span>
                 <Pill tone="muted">{m.run_frames_count({ count: diff.assetIds.length })}</Pill>
                 <span className="font-mono text-[0.75rem] text-muted-foreground">
@@ -318,7 +327,7 @@ export function MetadataSection({ plan, locked, onChoice }: { plan: PreparePlan;
                 </span>
               </div>
               <fieldset disabled={locked}>
-                <legend className="sr-only">{m.run_metadata_legend({ field: fieldLabel(diff.field) })}</legend>
+                <legend className="sr-only">{m.run_metadata_legend({ field: say(m, FIELD_NAME[diff.field]) })}</legend>
                 <RadioGroup value={choice ?? ""} onValueChange={(value) => onChoice(diff.key, String(value) as MetadataChoice)} className="grid gap-1.5 lg:grid-cols-2">
                   {(["patched-copy", "accept-source", "excluded", "configuration"] as MetadataChoice[]).map((option) => {
                     const unsupported = option === "configuration" && plan.profile?.capability.correctedMetadata !== "configuration"
@@ -326,7 +335,7 @@ export function MetadataSection({ plan, locked, onChoice }: { plan: PreparePlan;
                     return (
                       <OptionCard key={option} value={option} current={choice ?? ""} disabled={locked || unsupported}>
                         <span className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-medium">{metadataChoiceLabel(option)}</span>
+                          <span className="font-medium">{say(m, METADATA_CHOICE_NAME[option])}</span>
                           {unsupported ? (
                             <Pill tone="danger">{m.run_metadata_not_supported({ name: appName })}</Pill>
                           ) : needsIsolated ? (
@@ -405,7 +414,7 @@ export function PreparationOutcome({ run, onOutcome, compact = false }: { run: R
           <span className="min-w-0 truncate font-mono" title={prep.folderPath}>
             {fileName(prep.folderPath)}/
           </span>
-          <Pill tone="neutral">{MODE_LABEL[prep.mode]}{prep.linkType ? ` · ${prep.linkType === "symlink" ? m.run_link_symbolic() : m.run_link_hard()}` : ""}</Pill>
+          <Pill tone="neutral">{say(m, MODE_NAME[prep.mode])}{prep.linkType ? ` · ${prep.linkType === "symlink" ? m.run_link_symbolic() : m.run_link_hard()}` : ""}</Pill>
           <Pill tone="muted">{m.run_revision_short({ revision: prep.membershipRevision })}</Pill>
           <span>{formatDateTime(prep.createdAt)}</span>
           {lastLaunch ? <Pill tone={lastLaunch.outcome === "opened" ? "success" : "warning"} title={formatDateTime(lastLaunch.at)}>{launchWord(lastLaunch.outcome)}</Pill> : null}
@@ -416,7 +425,7 @@ export function PreparationOutcome({ run, onOutcome, compact = false }: { run: R
           <Refusal
             action={m.run_unverified_since({ date: formatDateTime(prep.unverified.at) })}
             reason={m.run_entries_changed({ count: prep.unverified.changed.length })}
-            blockers={prep.unverified.changed.slice(0, 8).map((c) => ({ label: `${fileName(c.path)} · ${c.reason}` }))}
+            blockers={prep.unverified.changed.slice(0, 8).map((c) => ({ label: `${fileName(c.path)} · ${say(m, c.reason)}` }))}
           />
         ) : null}
         {prep.state === "partial" || prep.state === "failed" || (prep.state === "prepared" && !compact) ? <PreparedLists prep={prep} /> : null}
@@ -458,12 +467,15 @@ function PreparedLists({ prep }: { prep: Preparation }) {
         <details open className="rounded-md border px-3 py-1.5 text-[0.75rem]">
           <summary className="cursor-default">{m.run_blocked_count({ count: prep.blocked.length })}</summary>
           <ul tabIndex={0} aria-label={m.run_blocked_inputs_label({ count: prep.blocked.length })} className="mt-1 max-h-48 space-y-0.5 overflow-y-auto" data-blocked-list>
-            {prep.blocked.map((b) => (
-              <li key={`${b.path}-${b.reason}`} className="flex flex-wrap gap-x-2">
-                <span className="font-mono">{fileName(b.path)}</span>
-                <span className="text-muted-foreground">{b.reason}</span>
-              </li>
-            ))}
+            {prep.blocked.map((b) => {
+              const reason = say(m, b.reason)
+              return (
+                <li key={`${b.path}-${reason}`} className="flex flex-wrap gap-x-2">
+                  <span className="font-mono">{fileName(b.path)}</span>
+                  <span className="text-muted-foreground">{reason}</span>
+                </li>
+              )
+            })}
           </ul>
         </details>
       ) : (

@@ -16,7 +16,7 @@ import { defaultCriteria, tonightAt, zoneAbbreviation } from "@/domain/planning"
 import type { Fit } from "@/domain/derive"
 import type { ObservingSite, PlanCriteria, Project } from "@/domain/types"
 import { formatTime } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { nowIso, useStore } from "@/store/core"
 import { type FilterChip, type FilterGrade, filterReason } from "./good-tonight"
@@ -153,22 +153,24 @@ export function FilterChips({ chips, empty }: { chips: FilterChip[] | null; empt
   )
 }
 
-function fitText(fit: Fit): string {
-  return fit.kind === "fits" && fit.coverage !== null ? `fits (${Math.round(fit.coverage * 100)}%)` : fit.label
+/** Why a Fit is "–"; derive always names it, so the fallback is only the type's null. */
+function fitReason(m: Messages, fit: Fit): string {
+  return fit.reason ? say(m, fit.reason) : m.status_unknown()
 }
 
 /** Fit per rig (D-W62): one value, or one per rig labelled with the rig name; "–" names its reason. */
 export function FitCell({ fits }: { fits: RigFit[] }) {
+  const m = useMessages()
   if (fits.length === 1) {
     const { fit } = fits[0]!
-    return fit.kind === "unknown" ? <UnknownValue label="–" reason={fit.reason ?? "Fit unknown"} /> : <span>{fitText(fit)}</span>
+    return fit.kind === "unknown" ? <UnknownValue label="–" reason={fitReason(m, fit)} /> : <span>{say(m, fit.label)}</span>
   }
   return (
     <span className="flex flex-col gap-0 text-xs leading-4">
       {fits.map((f) => (
         <span key={f.rigId} className="whitespace-nowrap">
-          <span className="text-muted-foreground">{f.rigName.split(" / ")[0]}: </span>
-          {f.fit.kind === "unknown" ? <UnknownValue label="–" reason={f.fit.reason ?? "Fit unknown"} /> : fitText(f.fit)}
+          <span className="text-muted-foreground">{say(m, f.rig).split(" / ")[0]}: </span>
+          {f.fit.kind === "unknown" ? <UnknownValue label="–" reason={fitReason(m, f.fit)} /> : say(m, f.fit.label)}
         </span>
       ))}
     </span>

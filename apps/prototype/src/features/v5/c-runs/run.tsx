@@ -37,8 +37,8 @@ export function RunPage() {
   const { projectId, runId, step } = useParams({ strict: false }) as { projectId?: string; runId?: string; step?: string }
   const state = useStore((s) => s)
   const ctx = runId ? runContext(state, runId) : null
-  if (!ctx || ctx.run.projectId !== projectId) return <MissingRecord noun="run" backTo={projectId ? `/projects/${projectId}` : "/projects"} backLabel={m.run_open_project()} />
-  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord noun="run step" backTo={`/projects/${ctx.project.id}/runs/${ctx.run.id}/select`} backLabel={m.review_open_select()} />
+  if (!ctx || ctx.run.projectId !== projectId) return <MissingRecord title={m.run_missing_title()} backTo={projectId ? `/projects/${projectId}` : "/projects"} backLabel={m.run_open_project()} />
+  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord title={m.run_step_missing_title()} backTo={`/projects/${ctx.project.id}/runs/${ctx.run.id}/select`} backLabel={m.review_open_select()} />
   return <RunScreen ctx={ctx} step={step as RunStep} />
 }
 
@@ -48,7 +48,7 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
   const { run, project, subject, panel, group } = ctx
   const pipeline = runPipeline(state, run)
   const outcome = useOutcome(`${run.id}:${step}`)
-  const subjectText = `${subject ? subjectName(state.catalog, subject) : m.project_unknown_subject()}${panel ? ` · ${panelLabel(panel)}` : ""}`
+  const subjectText = `${subject ? subjectName(m, state.catalog, subject) : m.project_unknown_subject()}${panel ? ` · ${panelLabel(m, panel)}` : ""}`
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-screen="S5">
       <PageHeader
@@ -75,7 +75,7 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
               {subjectText}
             </Pill>
             <Pill tone="muted" icon={Lock} title={m.run_rig_fixed()}>
-              {rigName(state.catalog, run.rigId)}
+              {rigName(m, state.catalog, run.rigId)}
             </Pill>
           </span>
         }

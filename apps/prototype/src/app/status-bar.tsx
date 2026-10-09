@@ -49,7 +49,7 @@ import { type Issue, type IssueSeverity, STATUS_CHIP_OF, type StatusChip, type S
 import { locationAvailability } from "@/domain/library"
 import type { Operation } from "@/domain/types"
 import { formatNight, formatTime } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { useMediaQuery } from "@/lib/use-media-query"
 import { cn } from "@/lib/utils"
 import { nowIso, type PrototypeState, useStore } from "@/store/core"
@@ -370,19 +370,20 @@ function OperationItem({ op, expanded = false }: { op: Operation; expanded?: boo
   const m = useMessages()
   const pct = op.progress.total > 0 ? Math.round((op.progress.done / op.progress.total) * 100) : null
   const word = op.status === "paused" ? m.status_paused() : pct !== null ? `${pct}%` : ""
+  const title = say(m, op.title)
   return (
     <div className={cn("group/op flex min-w-0 items-center gap-1.5", expanded ? "w-full" : "max-w-48")} data-operation={op.id}>
-      <Link to="/activity" className={cn("min-w-0 truncate text-foreground hover:underline", expanded && "flex-1")} title={op.title}>
-        {op.title}
+      <Link to="/activity" className={cn("min-w-0 truncate text-foreground hover:underline", expanded && "flex-1")} title={title}>
+        {title}
       </Link>
-      <MiniProgress value={pct} label={op.title} />
+      <MiniProgress value={pct} label={title} />
       <span className={cn("relative inline-flex h-4 shrink-0 items-center justify-end gap-1 tabular-nums", expanded ? "min-w-12" : "w-8")}>
         <span className={cn(!expanded && op.canCancel && "group-focus-within/op:invisible group-hover/op:invisible")}>{word}</span>
         {op.canCancel ? (
           <button
             type="button"
             onClick={() => cancelOperation(op.id)}
-            aria-label={`${m.verb_cancel()}: ${op.title}`}
+            aria-label={`${m.verb_cancel()}: ${title}`}
             title={m.verb_cancel()}
             className={cn(
               "inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground",
@@ -461,12 +462,13 @@ function NoticeRow({ notice, onNavigate }: { notice: Notice; onNavigate: () => v
   const m = useMessages()
   const { icon: Glyph, className } = NOTICE_GLYPH[notice.tone]
   const words = noticeText(m, notice)
+  const detail = notice.detail ? say(m, notice.detail) : words
   const text = notice.href ? (
-    <Link to={notice.href as never} onClick={onNavigate} className="min-w-0 flex-1 truncate hover:underline" title={notice.detail ?? words}>
+    <Link to={notice.href as never} onClick={onNavigate} className="min-w-0 flex-1 truncate hover:underline" title={detail}>
       {words}
     </Link>
   ) : (
-    <span className="min-w-0 flex-1 truncate" title={notice.detail ?? words}>
+    <span className="min-w-0 flex-1 truncate" title={detail}>
       {words}
     </span>
   )
@@ -486,15 +488,16 @@ function InlineNotice({ notice, width }: { notice: Notice; width: number | null 
   const m = useMessages()
   const { icon: Glyph, className } = NOTICE_GLYPH[notice.tone]
   const words = noticeText(m, notice)
+  const detail = notice.detail ? say(m, notice.detail) : words
   return (
     <li className={NOTICE_INLINE} style={width === null ? undefined : { maxWidth: width }} data-notice-inline={notice.id}>
       <Glyph aria-hidden="true" className={cn("size-3 shrink-0", className)} />
       {notice.href ? (
-        <Link to={notice.href as never} onClick={() => markNoticesRead(notice.id)} className="min-w-0 truncate text-foreground hover:underline" title={notice.detail ?? words}>
+        <Link to={notice.href as never} onClick={() => markNoticesRead(notice.id)} className="min-w-0 truncate text-foreground hover:underline" title={detail}>
           {words}
         </Link>
       ) : (
-        <span className="min-w-0 truncate text-foreground" title={notice.detail ?? words}>
+        <span className="min-w-0 truncate text-foreground" title={detail}>
           {words}
         </span>
       )}

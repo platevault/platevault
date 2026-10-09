@@ -52,7 +52,7 @@ import { useSize } from "@/features/t3/frame-preview"
 import { ImportDialog, ImportReview } from "@/features/t3/import-dialog"
 import { METRIC_LABEL } from "@/features/t3/measure"
 import { frameField, type StarRecord, type ViewWindow } from "@/features/t3/raster"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { discardRunDraft, saveRun } from "@/store/actions/runs"
 import { type CommitResult, useStore } from "@/store/core"
@@ -177,7 +177,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   const field = current ? frameField(current.asset.id, file) : null
   const refFile = reference && reference.availability === "available" ? currentFile(disk, catalog, reference.asset) : undefined
   const refField = reference ? frameField(reference.asset.id, refFile) : null
-  const unavailableReason = current && current.availability !== "available" ? previewUnavailableReason(current.availability) : current && !field ? m.review_no_pixel_data() : null
+  const unavailableReason = current && current.availability !== "available" ? say(m, previewUnavailableReason(current.availability)) : current && !field ? m.review_no_pixel_data() : null
 
   function announce(message: string) {
     setAnnouncement(message)
@@ -476,8 +476,8 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   }, [])
 
   if (!scope) {
-    const noun = { candidates: "Project", group: "run group", run: "run", session: "session" }[context.kind]
-    return context.kind === "session" ? <MissingRecord noun={noun} backTo="/sessions" backLabel={m.session_open_sessions()} /> : <MissingRecord noun={noun} backTo="/projects" backLabel={m.project_back_to_projects()} />
+    const title = { candidates: m.project_missing_title, group: m.rungroup_missing_title, run: m.run_missing_title, session: m.session_missing_title }[context.kind]()
+    return context.kind === "session" ? <MissingRecord title={title} backTo="/sessions" backLabel={m.session_open_sessions()} /> : <MissingRecord title={title} backTo="/projects" backLabel={m.project_back_to_projects()} />
   }
 
   // Right click on a row or thumbnail: the selection when the frame is in it, else that frame.
@@ -662,7 +662,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
               </span>
             }
             field={refField}
-            unavailable={!reference ? m.review_no_reference() : reference.availability !== "available" ? previewUnavailableReason(reference.availability) : !refField ? m.review_no_pixels() : null}
+            unavailable={!reference ? m.review_no_reference() : reference.availability !== "available" ? say(m, previewUnavailableReason(reference.availability)) : !refField ? m.review_no_pixels() : null}
             render={(f) => plateFor(f, m.review_reference_of({ name: reference ? (names.get(reference.asset.id) ?? "") : "" }), false)}
           />
         ) : null}
@@ -718,7 +718,9 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   const confirmRuns = [...new Set(confirmFrames.flatMap((f) => (f.run && f.run.completion === "open" ? [f.run.name] : [])))]
   // Unsaved run drafts this review made: Review's status line offers Save run (the toolbar's Next focuses it).
   const drafts = scope.runs.filter((r) => r.draft && r.completion === "open" && !r.trashedAt)
-  const draftNote = drafts.length === 1 ? (runPipeline(state, drafts[0]!).steps[1]!.status.endsWith("unsaved") ? runPipeline(state, drafts[0]!).steps[1]!.status : m.status_unsaved_changes()) : drafts.length > 1 ? m.review_draft_panel_runs_unsaved({ count: drafts.length }) : null
+  // One draft: its Review step reads the draft note ("2 rejected, unsaved") while its link focuses Save run.
+  const draftReview = drafts.length === 1 ? runPipeline(state, drafts[0]!).steps[1]! : null
+  const draftNote = draftReview ? (draftReview.link.focusId === "review-save" ? say(m, draftReview.status) : m.status_unsaved_changes()) : drafts.length > 1 ? m.review_draft_panel_runs_unsaved({ count: drafts.length }) : null
   const saveDrafts = () => {
     for (const run of drafts) {
       const result = saveRun(run.id)

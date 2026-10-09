@@ -3,6 +3,7 @@
  */
 import { createSeed, defaultFaults } from "@/domain/seed"
 import type { SeedName } from "@/domain/types"
+import { msg } from "@/lib/i18n"
 import { CALIBRATION_HANDLERS } from "./actions/calibration"
 import { STORAGE_HANDLERS } from "./actions/storage"
 import { FOUNDATION_HANDLERS } from "./actions/trash"
@@ -54,13 +55,7 @@ function persistNow() {
   } catch {
     if (persistFailed) return
     persistFailed = true
-    recordActivity({
-      kind: "write-failed",
-      title: "Prototype data not saved in this browser",
-      detail: "Browser storage refused the write. Changes stay in this tab until it closes.",
-      operationId: null,
-      href: null,
-    })
+    recordActivity({ kind: "write-failed", title: msg("store_persist_failed_title"), detail: msg("store_persist_failed_detail"), operationId: null, href: null })
   }
 }
 

@@ -9,36 +9,34 @@
  * read; following one inline marks that one. A reset to a seed starts with
  * every notice unread.
  */
-import type { ActivityEvent, Operation, OperationStatus } from "@/domain/types"
-import { formatCount } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { unitCount } from "@/domain/labels"
+import type { ActivityEvent, Operation, OperationUnit, SettledStatus } from "@/domain/types"
+import { type MessageRef, type Messages, say } from "@/lib/i18n"
 import { type PrototypeState, store, useStore } from "./core"
 import { isSettled } from "./operations"
 
 export type NoticeTone = "success" | "warning" | "danger" | "neutral"
 
 /** How a settled operation ended. */
-export type NoticeOutcome = Exclude<OperationStatus, "running" | "paused" | "interrupted">
+export type NoticeOutcome = SettledStatus
 
+/** Copy is a `MessageRef` as Activity recorded it, worded by `noticeText`. */
 export interface Notice {
   id: string
   at: string
-  /** The operation or event title as recorded: "Import from ASIAIR". */
-  title: string
+  /** The operation or event title: "Import from ASIAIR". */
+  title: MessageRef
   /** A settled operation's outcome; null for a write failure, refusal or save. */
   outcome: NoticeOutcome | null
   /** What the operation got through: 54 frames. */
-  done: { count: number; unit: string } | null
-  detail: string | null
+  done: { count: number; unit: OperationUnit } | null
+  detail: MessageRef | null
   tone: NoticeTone
   /** Hash route of the surface that owns the outcome. */
   href: string | null
 }
 
 const OUTCOME_TONE: Record<NoticeOutcome, NoticeTone> = { succeeded: "success", partial: "warning", failed: "danger", canceled: "neutral" }
-
-/** The word an outcome's Activity title ends in ("Import: finished"), for an outcome whose operation record is gone. */
-const TITLE_WORD_OUTCOME: Record<string, NoticeOutcome> = { finished: "succeeded", partial: "partial", failed: "failed", canceled: "canceled" }
 
 export function noticeOf(event: ActivityEvent, operations: Record<string, Operation>): Notice {
   const base = { id: event.id, at: event.at, detail: event.detail, href: event.href, title: event.title, outcome: null, done: null }
@@ -51,11 +49,8 @@ export function noticeOf(event: ActivityEvent, operations: Record<string, Operat
     const done = op.progress.done > 0 ? { count: op.progress.done, unit: op.progress.unit } : null
     return { ...base, title: op.title, outcome, done, tone: OUTCOME_TONE[outcome] }
   }
-  // An outcome without its operation record reads "<title> <word>" too.
-  const match = event.title.match(/^(.*): (finished|partial|failed|canceled)$/)
-  if (!match) return { ...base, tone: "neutral" }
-  const outcome = TITLE_WORD_OUTCOME[match[2]!]!
-  return { ...base, title: match[1]!, outcome, tone: OUTCOME_TONE[outcome] }
+  // An outcome whose operation record is gone keeps its status on the Activity entry.
+  return event.status ? { ...base, outcome: event.status, tone: OUTCOME_TONE[event.status] } : { ...base, tone: "neutral" }
 }
 
 const OUTCOME_TEXT: Record<NoticeOutcome, (m: Messages, name: string) => string> = {
@@ -65,31 +60,12 @@ const OUTCOME_TEXT: Record<NoticeOutcome, (m: Messages, name: string) => string>
   canceled: (m, name) => m.notice_canceled({ name }),
 }
 
-/** The units operations count in, keyed by `progress.unit`. */
-const UNIT_COUNT: Record<string, (m: Messages, count: number) => string> = {
-  frames: (m, count) => m.notice_frames({ count, frames: formatCount(count) }),
-  files: (m, count) => m.notice_files({ count, files: formatCount(count) }),
-  entries: (m, count) => m.notice_entries({ count, entries: formatCount(count) }),
-  sessions: (m, count) => m.notice_sessions({ count, sessions: formatCount(count) }),
-}
-
-/**
- * A unit a caller names itself (a Trash move's noun, "prepared entries"):
- * the recorded English noun, singular for one, until operations record
- * typed units.
- */
-function recordedCount(count: number, unit: string): string {
-  const one = unit.endsWith("ies") ? `${unit.slice(0, -3)}y` : unit.replace(/s$/, "")
-  return `${formatCount(count)} ${count === 1 ? one : unit}`
-}
-
 /** The notice's words in the chosen language: "Import finished · 54 frames". */
 export function noticeText(m: Messages, notice: Notice): string {
-  if (!notice.outcome) return notice.title
-  const text = OUTCOME_TEXT[notice.outcome](m, notice.title)
-  if (!notice.done) return text
-  const { count, unit } = notice.done
-  return `${text} · ${UNIT_COUNT[unit]?.(m, count) ?? recordedCount(count, unit)}`
+  const title = say(m, notice.title)
+  if (!notice.outcome) return title
+  const text = OUTCOME_TEXT[notice.outcome](m, title)
+  return notice.done ? `${text} · ${say(m, unitCount(notice.done.unit, notice.done.count))}` : text
 }
 
 const HISTORY = 12

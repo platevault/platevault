@@ -5,6 +5,7 @@
 import { defaultCriteria } from "@/domain/planning"
 import { planningSite } from "@/domain/derive"
 import type { TargetId } from "@/domain/types"
+import { msg } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, store, withCatalog } from "@/store/core"
 import { MISSING, recordSaved } from "./shared"
 
@@ -13,7 +14,7 @@ function setPlanned(targetId: TargetId, planned: boolean): CommitResult {
   const target = state.catalog.targets[targetId]
   if (!target) return MISSING
   if ((state.catalog.plans[targetId]?.planned ?? false) === planned) return { ok: true }
-  const label = planned ? `Add ${target.name} to Plan` : `Remove ${target.name} from Plan`
+  const label = planned ? msg("plan_add_named", { name: target.name }) : msg("plan_remove_named", { name: target.name })
   const result = commit(label, (s) =>
     withCatalog(s, (c) => {
       const existing = c.plans[targetId]

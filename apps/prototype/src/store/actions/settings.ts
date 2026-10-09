@@ -7,6 +7,7 @@
  */
 import { validateNamingTemplate } from "@/domain/templates"
 import type { ApplicationProfile, Band, GoalTemplate, GoalTemplateId, LocationId, MoonConstraint, NamingFrameType, OpticalTrainId, ProfileId, RigFilter, SimulatedApp } from "@/domain/types"
+import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
 
@@ -19,16 +20,16 @@ export function setDefaultArchiveLocation(locationId: LocationId): CommitResult 
   const location = store.getState().catalog.locations[locationId]
   const href = "/settings/locations"
   if (!location) return MISSING
-  if (location.role !== "archive" || location.retiredAt) return refuse("Make default refused", ["not an archive location"], href)
-  const result = commit("Default archive location", (s) => ({ ...s, settings: { ...s.settings, defaultArchiveLocationId: locationId } }), { href })
-  if (result.ok) recordSaved(`Default archive: ${location.displayName}`, null, href)
+  if (location.role !== "archive" || location.retiredAt) return refuse(msg("store_refused", { label: msg("settings_make_default") }), [msg("store_reason_not_archive_location")], href)
+  const result = commit(msg("store_label_default_archive_location"), (s) => ({ ...s, settings: { ...s.settings, defaultArchiveLocationId: locationId } }), { href })
+  if (result.ok) recordSaved(msg("store_saved_default_archive", { name: location.displayName }), null, href)
   return result
 }
 
 /** One band's Moon constraint behind "good tonight"; values are clamped to their ranges. */
 export function setMoonConstraint(band: Band, patch: Partial<MoonConstraint>): CommitResult {
   const href = "/plan"
-  return commit(`Moon constraint for ${band}`, (s) => {
+  return commit(msg("store_label_moon_constraint", { band }), (s) => {
     const current = s.settings.moonConstraints[band]
     const next: MoonConstraint = {
       minSeparationDeg: Math.min(180, Math.max(0, patch.minSeparationDeg ?? current.minSeparationDeg)),
@@ -47,8 +48,8 @@ export function setRigFilters(rigId: OpticalTrainId, filters: RigFilter[]): Comm
   const rig = store.getState().catalog.opticalTrains[rigId]
   if (!rig) return MISSING
   const href = "/settings/equipment"
-  const result = commit(`Filters of ${rig.name}`, (s) => withCatalog(s, (c) => ({ ...c, opticalTrains: { ...c.opticalTrains, [rigId]: { ...c.opticalTrains[rigId]!, filters } } })), { href })
-  if (result.ok) recordSaved(`Filters saved: ${rig.name}`, filters.map((f) => f.name).join(", ") || "No filters", href)
+  const result = commit(msg("equipment_filters_of", { name: rig.name }), (s) => withCatalog(s, (c) => ({ ...c, opticalTrains: { ...c.opticalTrains, [rigId]: { ...c.opticalTrains[rigId]!, filters } } })), { href })
+  if (result.ok) recordSaved(msg("store_saved_filters", { name: rig.name }), filters.length > 0 ? verbatim(filters.map((f) => f.name).join(", ")) : msg("tonight_no_filters"), href)
   return result
 }
 
@@ -63,8 +64,8 @@ export function renameRig(rigId: OpticalTrainId, name: string): CommitResult {
   const rig = store.getState().catalog.opticalTrains[rigId]
   if (!rig) return MISSING
   const href = "/settings/equipment"
-  const result = commit(`Rename ${rig.name}`, (s) => withCatalog(s, (c) => ({ ...c, opticalTrains: { ...c.opticalTrains, [rigId]: { ...c.opticalTrains[rigId]!, name: name.trim() } } })), { href })
-  if (result.ok) recordSaved(`Rig renamed: ${name.trim()}`, null, href)
+  const result = commit(msg("equipment_rename_title", { name: rig.name }), (s) => withCatalog(s, (c) => ({ ...c, opticalTrains: { ...c.opticalTrains, [rigId]: { ...c.opticalTrains[rigId]!, name: name.trim() } } })), { href })
+  if (result.ok) recordSaved(msg("store_saved_rig_renamed", { name: name.trim() }), null, href)
   return result
 }
 
@@ -77,8 +78,8 @@ export function saveGoalTemplate(template: Omit<GoalTemplate, "id" | "source"> &
   const id = template.id ?? freshId("gtpl", template.name)
   const record: GoalTemplate = { ...template, id, source: "user" }
   const href = "/settings/goal-templates"
-  const result = commit(`Goal template ${record.name}`, (s) => withCatalog(s, (c) => ({ ...c, goalTemplates: { ...c.goalTemplates, [id]: record } })), { href })
-  if (result.ok) recordSaved(`Goal template saved: ${record.name}`, null, href)
+  const result = commit(msg("store_label_goal_template", { name: record.name }), (s) => withCatalog(s, (c) => ({ ...c, goalTemplates: { ...c.goalTemplates, [id]: record } })), { href })
+  if (result.ok) recordSaved(msg("store_saved_goal_template", { name: record.name }), null, href)
   return { result, id }
 }
 
@@ -86,14 +87,14 @@ export function deleteGoalTemplate(id: GoalTemplateId): CommitResult {
   const template = store.getState().catalog.goalTemplates[id]
   if (!template) return MISSING
   const href = "/settings/goal-templates"
-  const result = commit(`Delete ${template.name}`, (s) =>
+  const result = commit(msg("template_delete_change", { name: template.name }), (s) =>
     withCatalog(s, (c) => {
       const { [id]: _removed, ...goalTemplates } = c.goalTemplates
       return { ...c, goalTemplates }
     }),
     { href },
   )
-  if (result.ok) recordSaved(`Goal template deleted: ${template.name}`, "Projects keep the values copied from it.", href)
+  if (result.ok) recordSaved(msg("store_saved_goal_template_deleted", { name: template.name }), msg("store_goal_template_deleted_detail"), href)
   return result
 }
 
@@ -106,15 +107,15 @@ export function setNamingTemplate(type: NamingFrameType, template: string | null
   const href = "/settings/naming"
   if (template !== null) {
     const errors = validateNamingTemplate(template)
-    if (errors.length > 0) return refuse(`Naming template for ${type} refused`, errors, href)
+    if (errors.length > 0) return refuse(msg("store_refused", { label: msg("store_label_naming_template", { type }) }), errors, href)
   }
-  const result = commit(`Naming template for ${type}`, (s) => {
+  const result = commit(msg("store_label_naming_template", { type }), (s) => {
     const naming = { ...s.settings.naming }
     if (template === null) delete naming[type]
     else naming[type] = template
     return { ...s, settings: { ...s.settings, naming } }
   }, { href })
-  if (result.ok) recordSaved(template === null ? `Naming default restored: ${type}` : `Naming template saved: ${type}`, template, href)
+  if (result.ok) recordSaved(template === null ? msg("store_saved_naming_default", { type }) : msg("store_saved_naming_template", { type }), template === null ? null : verbatim(template), href)
   return result
 }
 
@@ -122,7 +123,7 @@ export function setNamingTemplate(type: NamingFrameType, template: string | null
 // Application profiles and the simulated computer
 // ---------------------------------------------------------------------------
 
-function patchProfile(profileId: ProfileId, label: string, patch: Partial<ApplicationProfile>): CommitResult {
+function patchProfile(profileId: ProfileId, label: MessageRef, patch: Partial<ApplicationProfile>): CommitResult {
   if (!store.getState().catalog.profiles[profileId]) return MISSING
   return commit(label, (s) => withCatalog(s, (c) => ({ ...c, profiles: { ...c.profiles, [profileId]: { ...c.profiles[profileId]!, ...patch } } })), { href: "/settings/applications" })
 }
@@ -135,17 +136,17 @@ export function observeExecutable(path: string | null): "not-configured" | "foun
 
 export function locateExecutable(profileId: ProfileId, path: string): CommitResult {
   const profile = store.getState().catalog.profiles[profileId]
-  return patchProfile(profileId, `Locate ${profile?.name ?? "application"}`, { executablePath: path, executableState: observeExecutable(path) })
+  return patchProfile(profileId, profile ? msg("settings_locate_named", { name: profile.name }) : msg("store_label_locate_application"), { executablePath: path, executableState: observeExecutable(path) })
 }
 
 export function checkExecutable(profileId: ProfileId): CommitResult {
   const profile = store.getState().catalog.profiles[profileId]
   if (!profile) return { ok: true }
-  return patchProfile(profileId, `Check ${profile.name}`, { executableState: observeExecutable(profile.executablePath) })
+  return patchProfile(profileId, msg("store_label_check_named", { name: profile.name }), { executableState: observeExecutable(profile.executablePath) })
 }
 
 export function setLaunchArgs(profileId: ProfileId, launchArgs: string): CommitResult {
-  return patchProfile(profileId, "Launch arguments", { launchArgs })
+  return patchProfile(profileId, msg("apps_launch_arguments"), { launchArgs })
 }
 
 /** Prototype control: move an application bundle away or arm a launch failure. Never writes the catalog. */

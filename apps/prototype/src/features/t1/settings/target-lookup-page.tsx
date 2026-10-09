@@ -19,7 +19,7 @@ import { Switch } from "@/components/ui/switch"
 import { BUNDLED_CATALOGUE, resolverEntryFor } from "@/domain/sky"
 import type { AppSettings } from "@/domain/types"
 import { formatCount, formatDateTime, formatDec, formatRa } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, msg } from "@/lib/i18n"
 import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import type { TargetLookupTest } from "@/store/slices/e"
 import { TextField } from "../components/form-field"
@@ -76,9 +76,9 @@ export function TargetLookupPage() {
     const attempt = () => {
       const result = save(
         {
-          label: "Target lookup setting",
-          saved: next.enabled ? `Online Target lookup on (${PROVIDER_LABEL[next.provider]})` : "Online Target lookup off",
-          detail: next.enabled ? null : "Local Target search keeps working offline.",
+          label: msg("store_label_target_lookup"),
+          saved: next.enabled ? msg("store_saved_lookup_on", { provider: PROVIDER_LABEL[next.provider] }) : msg("store_saved_lookup_off"),
+          detail: next.enabled ? null : msg("store_lookup_off_detail"),
           href: HREF,
         },
         (s) => ({ ...s, settings: { ...s.settings, targetLookup: next } }),
