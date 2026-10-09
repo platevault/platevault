@@ -14,10 +14,9 @@
  * that is not a filter's verdict.
  */
 import { formatHours } from "@/domain/derive"
-import { filterSuitability } from "@/domain/planning"
+import { clearStretches, filterSuitability, type Stretch } from "@/domain/planning"
 import type { Band, MoonConstraint, Target } from "@/domain/types"
 import { m } from "@/lib/i18n"
-import { clearStretches, type Stretch } from "./sky-tonight"
 import type { SkyContext } from "./targets-model"
 
 export type FilterGrade = "good" | "marginal" | "poor"
@@ -87,7 +86,7 @@ export function filtersTonight(ctx: SkyContext, position: { id: string; ra: numb
   return filterSuitability(probe, ctx.site, ctx.grid.night, ctx.criteria, constraints, ordered).map((f): FilterChip => {
     const limit = constraints[f.band]
     const grade: FilterGrade = !f.good ? "poor" : f.minutes < darkMinutes * MARGINAL_SHARE ? "marginal" : "good"
-    const stretches = clearStretches(ctx.grid, altitudes, ra, dec, minAlt, limit).sort((a, b) => b.minutes - a.minutes)
+    const stretches = f.stretches.sort((a, b) => b.minutes - a.minutes)
     return {
       band: f.band,
       grade,

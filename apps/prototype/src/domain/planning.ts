@@ -234,6 +234,80 @@ export function bestWindowTonight(target: Target, site: ObservingSite, criteria:
   return windows.sort((a, b) => b.maxAltitudeDeg - a.maxAltitudeDeg)[0] ?? null
 }
 
+/** One sample of a night on the `computeWindows` grid: the Sun and the Moon at that instant. */
+export interface SkySample {
+  ms: number
+  sunAlt: number
+  moonAlt: number
+  moonRa: number
+  moonDec: number
+  /** Moon illumination, 0-100, rounded. */
+  moonIllum: number
+}
+
+/** A night's samples and the Sun altitude below which a sample counts as dark. */
+export interface SkyNight {
+  samples: SkySample[]
+  sunLimit: number
+}
+
+/** One night at a site: local noon to noon in `SAMPLE_MIN` samples, dark under `darkness`. */
+export function skyNight(site: ObservingSite, night: string, darkness: PlanCriteria["darkness"]): SkyNight {
+  const base = Date.parse(`${night}T12:00:00Z`) - (site.longitude / 15) * 3_600_000
+  const start0 = Math.round(base / (SAMPLE_MIN * 60_000)) * SAMPLE_MIN * 60_000
+  const samples: SkySample[] = []
+  for (let i = 0; i <= (24 * 60) / SAMPLE_MIN; i += 1) {
+    const ms = start0 + i * SAMPLE_MIN * 60_000
+    const jd = julianDay(ms)
+    const sun = sunPosition(jd)
+    const moon = moonPosition(jd)
+    const elongation = angularSeparationDeg(sun.ra, sun.dec, moon.ra, moon.dec)
+    samples.push({
+      ms,
+      sunAlt: altitudeDeg(sun.ra, sun.dec, site.latitude, site.longitude, jd),
+      moonAlt: altitudeDeg(moon.ra, moon.dec, site.latitude, site.longitude, jd),
+      moonRa: moon.ra,
+      moonDec: moon.dec,
+      moonIllum: Math.round(((1 - Math.cos(elongation * RAD)) / 2) * 100),
+    })
+  }
+  return { samples, sunLimit: darkness === "astronomical" ? -18 : -12 }
+}
+
+/** A run of consecutive samples; `end` is the end of its last sample. */
+export interface Stretch {
+  start: string
+  end: string
+  minutes: number
+}
+
+/**
+ * The stretches of a night in which a position is dark, at or above
+ * `minAltitudeDeg`, and clear of the Moon under `limit`: the Moon down, or
+ * up but at least the minimum separation away and lit no more than the
+ * maximum. Without a limit the Moon is ignored. `altitudes` is the
+ * position's altitude at each sample.
+ */
+export function clearStretches(sky: SkyNight, altitudes: number[], ra: number, dec: number, minAltitudeDeg: number, limit: MoonConstraint | null): Stretch[] {
+  const stepMs = SAMPLE_MIN * 60_000
+  const out: Stretch[] = []
+  let first: number | null = null
+  const close = (endIndex: number) => {
+    if (first === null) return
+    const startMs = sky.samples[first]!.ms
+    out.push({ start: new Date(startMs).toISOString(), end: new Date(startMs + (endIndex - first) * stepMs).toISOString(), minutes: (endIndex - first) * SAMPLE_MIN })
+    first = null
+  }
+  sky.samples.forEach((s, i) => {
+    let ok = s.sunAlt <= sky.sunLimit && altitudes[i]! >= minAltitudeDeg
+    if (ok && limit && s.moonAlt > 0) ok = angularSeparationDeg(ra, dec, s.moonRa, s.moonDec) >= limit.minSeparationDeg && s.moonIllum <= limit.maxIlluminationPct
+    if (ok) first ??= i
+    else close(i)
+  })
+  close(sky.samples.length)
+  return out
+}
+
 /** One band's verdict for one Target and night (`filterSuitability`). */
 export interface FilterTonight {
   band: Band
@@ -247,68 +321,39 @@ export interface FilterTonight {
   moonIlluminationPct: number
   /** The Moon is up at that sample. */
   moonUp: boolean
-  /** Every stretch that meets the band's Moon constraint that night, in order; `end` is the end of its last sample. */
-  stretches: Array<{ start: string; end: string }>
+  /** Every stretch that meets the band's Moon constraint that night, in order (`clearStretches`). */
+  stretches: Stretch[]
 }
 
 /**
  * Per-band suitability of a Target on one night (planning, "good tonight").
- * The night's samples are computed once on the `computeWindows` grid: dark
- * and above the altitude limit. Each band keeps the samples where the Moon
- * is down, or up but at least its minimum separation away and lit no more
- * than its maximum, so broadband needs a dark Moon and narrowband
- * tolerates more.
+ * The night's samples are computed once (`skyNight`); each band's verdict
+ * reads its `clearStretches` under the band's Moon constraint, so broadband
+ * needs a dark Moon and narrowband tolerates more.
  */
 export function filterSuitability(target: Target, site: ObservingSite, night: string, criteria: PlanCriteria, constraints: Record<Band, MoonConstraint>, bands: Band[]): FilterTonight[] {
-  if (target.ra === null || target.dec === null) {
+  const { ra, dec } = target
+  if (ra === null || dec === null) {
     return bands.map((band) => ({ band, good: false, minutes: 0, moonSeparationDeg: null, moonIlluminationPct: 0, moonUp: false, stretches: [] }))
   }
-  const sunLimit = criteria.darkness === "astronomical" ? -18 : -12
-  const base = Date.parse(`${night}T12:00:00Z`) - (site.longitude / 15) * 3_600_000
-  const start0 = Math.round(base / (SAMPLE_MIN * 60_000)) * SAMPLE_MIN * 60_000
-  const samples: Array<{ ok: boolean; alt: number; moonUp: boolean; illum: number; sep: number }> = []
-  for (let i = 0; i <= (24 * 60) / SAMPLE_MIN; i += 1) {
-    const jd = julianDay(start0 + i * SAMPLE_MIN * 60_000)
-    const sun = sunPosition(jd)
-    const dark = altitudeDeg(sun.ra, sun.dec, site.latitude, site.longitude, jd) <= sunLimit
-    const alt = dark ? altitudeDeg(target.ra, target.dec, site.latitude, site.longitude, jd) : -90
-    if (!dark || alt < criteria.minAltitudeDeg) {
-      samples.push({ ok: false, alt, moonUp: false, illum: 0, sep: 180 })
-      continue
-    }
-    const moon = moonPosition(jd)
-    const elongation = angularSeparationDeg(sun.ra, sun.dec, moon.ra, moon.dec)
-    samples.push({
-      ok: true,
-      alt,
-      moonUp: altitudeDeg(moon.ra, moon.dec, site.latitude, site.longitude, jd) > 0,
-      illum: Math.round(((1 - Math.cos(elongation * RAD)) / 2) * 100),
-      sep: angularSeparationDeg(target.ra, target.dec, moon.ra, moon.dec),
-    })
+  const sky = skyNight(site, night, criteria.darkness)
+  const altitudes = sky.samples.map((s) => altitudeDeg(ra, dec, site.latitude, site.longitude, julianDay(s.ms)))
+  // The Target's highest sample in darkness above the altitude limit.
+  let peak = -1
+  for (const [i, s] of sky.samples.entries()) {
+    if (s.sunAlt <= sky.sunLimit && altitudes[i]! >= criteria.minAltitudeDeg && (peak < 0 || altitudes[i]! > altitudes[peak]!)) peak = i
   }
-  const usable = samples.filter((s) => s.ok)
-  const peak = usable.length > 0 ? usable.reduce((a, b) => (b.alt > a.alt ? b : a)) : null
-  const sampleMs = SAMPLE_MIN * 60_000
+  const at = peak < 0 ? null : sky.samples[peak]!
   return bands.map((band): FilterTonight => {
-    const limit = constraints[band]
-    let longest = 0
-    let current = 0
-    const stretches: FilterTonight["stretches"] = []
-    for (const [i, s] of samples.entries()) {
-      const fits = s.ok && (!s.moonUp || (s.sep >= limit.minSeparationDeg && s.illum <= limit.maxIlluminationPct))
-      if (fits && current === 0) stretches.push({ start: new Date(start0 + i * sampleMs).toISOString(), end: "" })
-      if (fits) stretches.at(-1)!.end = new Date(start0 + (i + 1) * sampleMs).toISOString()
-      current = fits ? current + 1 : 0
-      longest = Math.max(longest, current)
-    }
-    const minutes = longest * SAMPLE_MIN
+    const stretches = clearStretches(sky, altitudes, ra, dec, criteria.minAltitudeDeg, constraints[band])
+    const minutes = Math.max(0, ...stretches.map((s) => s.minutes))
     return {
       band,
       good: minutes >= criteria.minDurationMin,
       minutes,
-      moonSeparationDeg: peak ? Math.round(peak.sep) : null,
-      moonIlluminationPct: peak?.illum ?? 0,
-      moonUp: peak?.moonUp ?? false,
+      moonSeparationDeg: at ? Math.round(angularSeparationDeg(ra, dec, at.moonRa, at.moonDec)) : null,
+      moonIlluminationPct: at?.moonIllum ?? 0,
+      moonUp: at ? at.moonAlt > 0 : false,
       stretches,
     }
   })

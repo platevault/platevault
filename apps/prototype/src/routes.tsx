@@ -6,7 +6,8 @@
  *
  * Search params are loose string maps so screens can add keys without a
  * foundation change. Documented keys: `/projects/$projectId?start=run`
- * (open Start a run), `?sheet=done` (Done / Archive), `?candidates=unreviewed`;
+ * (open Start a run), `?stage=wrap-up` (the Wrap up stage),
+ * `?candidates=unreviewed`, `?mosaic=new|<subjectId>` (the mosaic editor);
  * `/projects/$projectId/runs/$runId/review?filter=unreviewed`; `/plan?project=`.
  */
 import { createHashHistory, createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router"
@@ -85,7 +86,7 @@ const setupIndexingRoute = createRoute({ getParentRoute: () => setupLayout, path
 const homeRoute = page("/", HomePage)
 const importRoute = page("/import", ImportRoute)
 
-// S2, S3, S8: Projects. S4 New Project and S9 Done / Archive are sheets.
+// S2, S3, S8: Projects. S4 New Project is a sheet; Wrap up is S3's `?stage=wrap-up`.
 const projectsRoute = page("/projects", ProjectsPage)
 const projectRoute = page("/projects/$projectId", ProjectPage)
 const projectTrashRoute = page("/projects/$projectId/trash", ProjectTrashPage)
