@@ -6,23 +6,27 @@
  */
 import { Plus, X } from "lucide-react"
 import { useId } from "react"
+import { useMessages } from "@/app/preferences"
 import { Pill } from "@/components/app/pill"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { GOAL_CHANNELS } from "@/domain/labels"
 import type { GoalChannel, GoalTemplateValue, QualityBar } from "@/domain/types"
+import type { Messages } from "@/lib/i18n"
 import { SelectField } from "@/features/t3/fields"
 
 export type GoalKinds = Pick<GoalTemplateValue, "integrationS" | "frameCount" | "qualityBar">
 
 type BarChoice = "none" | QualityBar["kind"]
 
-const BAR_OPTIONS: Array<{ value: BarChoice; label: string }> = [
-  { value: "none", label: "Any" },
-  { value: "usable-only", label: "Usable" },
-  { value: "max-fwhm", label: "FWHM limit" },
-  { value: "usable-max-fwhm", label: "Usable + FWHM" },
-]
+function barOptions(m: Messages): Array<{ value: BarChoice; label: string }> {
+  return [
+    { value: "none", label: m.goal_bar_any() },
+    { value: "usable-only", label: m.status_usable() },
+    { value: "max-fwhm", label: m.goal_bar_fwhm() },
+    { value: "usable-max-fwhm", label: m.goal_bar_usable_fwhm() },
+  ]
+}
 
 function barOf(choice: BarChoice, limit: number): QualityBar | null {
   if (choice === "none") return null
@@ -32,6 +36,7 @@ function barOf(choice: BarChoice, limit: number): QualityBar | null {
 
 /** Integration (h), frames and quality bar for one channel; an empty kind is no goal of that kind. */
 export function GoalKindsFields({ channel, value, onChange }: { channel: string; value: GoalKinds; onChange: (patch: Partial<GoalKinds>) => void }) {
+  const m = useMessages()
   const id = useId()
   const bar: BarChoice = value.qualityBar?.kind ?? "none"
   const limit = value.qualityBar && value.qualityBar.kind !== "usable-only" ? value.qualityBar.maxArcsec : 3
@@ -39,11 +44,11 @@ export function GoalKindsFields({ channel, value, onChange }: { channel: string;
     <div className="flex flex-wrap items-end gap-2">
       <div className="grid gap-1">
         <label htmlFor={`${id}-h`} className="text-[0.6875rem] text-muted-foreground">
-          Hours
+          {m.goal_hours()}
         </label>
         <Input
           id={`${id}-h`}
-          aria-label={`${channel} integration in hours`}
+          aria-label={m.goal_hours_label({ channel })}
           type="number"
           min={0}
           step={0.5}
@@ -54,11 +59,11 @@ export function GoalKindsFields({ channel, value, onChange }: { channel: string;
       </div>
       <div className="grid gap-1">
         <label htmlFor={`${id}-f`} className="text-[0.6875rem] text-muted-foreground">
-          Frames
+          {m.goal_frames()}
         </label>
         <Input
           id={`${id}-f`}
-          aria-label={`${channel} frame count`}
+          aria-label={m.goal_frames_label({ channel })}
           type="number"
           min={0}
           step={1}
@@ -70,19 +75,19 @@ export function GoalKindsFields({ channel, value, onChange }: { channel: string;
       <SelectField
         className="w-36 gap-1 [&>label]:text-[0.6875rem] [&>label]:font-normal [&>label]:text-muted-foreground"
         triggerClassName="min-h-7"
-        label="Quality"
+        label={m.goal_quality()}
         value={bar}
         onChange={(next) => onChange({ qualityBar: barOf(next as BarChoice, limit) })}
-        options={BAR_OPTIONS}
+        options={barOptions(m)}
       />
       {bar === "max-fwhm" || bar === "usable-max-fwhm" ? (
         <div className="grid gap-1">
           <label htmlFor={`${id}-q`} className="text-[0.6875rem] text-muted-foreground">
-            FWHM ≤ ″
+            {m.goal_fwhm_max()}
           </label>
           <Input
             id={`${id}-q`}
-            aria-label={`${channel} median FWHM limit in arcseconds`}
+            aria-label={m.goal_fwhm_label({ channel })}
             type="number"
             min={0.5}
             step={0.1}
@@ -98,12 +103,13 @@ export function GoalKindsFields({ channel, value, onChange }: { channel: string;
 
 /** "+ Ha" chips for the channels without a goal yet; `channels` are the ones the rigs capture (all chips when none). */
 export function ChannelChips({ channels, taken, onAdd, label }: { channels: GoalChannel[]; taken: GoalChannel[]; onAdd: (channel: GoalChannel) => void; label: string }) {
+  const m = useMessages()
   const offered = (channels.length > 0 ? channels : GOAL_CHANNELS).filter((c) => !taken.includes(c))
   if (offered.length === 0) return null
   return (
     <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1">
       {offered.map((channel) => (
-        <Pill key={channel} tone="muted" icon={Plus} onClick={() => onAdd(channel)} title={`Add ${channel} goal`}>
+        <Pill key={channel} tone="muted" icon={Plus} onClick={() => onAdd(channel)} title={m.goal_add_channel_goal({ channel })}>
           {channel}
         </Pill>
       ))}
@@ -115,6 +121,7 @@ export const DEFAULT_GOAL: GoalKinds = { integrationS: 10 * 3600, frameCount: nu
 
 /** Template values: one row per channel with its goal kinds; chips add a channel. */
 export function GoalValuesEditor({ values, channels, onChange }: { values: GoalTemplateValue[]; channels: GoalChannel[]; onChange: (next: GoalTemplateValue[]) => void }) {
+  const m = useMessages()
   return (
     <div className="space-y-2">
       {values.length > 0 ? (
@@ -125,14 +132,14 @@ export function GoalValuesEditor({ values, channels, onChange }: { values: GoalT
                 {value.channel}
               </Pill>
               <GoalKindsFields channel={value.channel} value={value} onChange={(patch) => onChange(values.map((v) => (v.channel === value.channel ? { ...v, ...patch } : v)))} />
-              <Button size="icon-sm" variant="ghost" className="mb-0.5 ml-auto" aria-label={`Remove ${value.channel}`} onClick={() => onChange(values.filter((v) => v.channel !== value.channel))}>
+              <Button size="icon-sm" variant="ghost" className="mb-0.5 ml-auto" aria-label={m.project_remove_named({ name: value.channel })} onClick={() => onChange(values.filter((v) => v.channel !== value.channel))}>
                 <X aria-hidden="true" />
               </Button>
             </li>
           ))}
         </ul>
       ) : null}
-      <ChannelChips label="Add channel" channels={channels} taken={values.map((v) => v.channel)} onAdd={(channel) => onChange([...values, { channel, ...DEFAULT_GOAL }])} />
+      <ChannelChips label={m.goal_add_channel()} channels={channels} taken={values.map((v) => v.channel)} onAdd={(channel) => onChange([...values, { channel, ...DEFAULT_GOAL }])} />
     </div>
   )
 }
