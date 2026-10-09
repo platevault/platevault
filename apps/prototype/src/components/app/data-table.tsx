@@ -4,7 +4,8 @@
  * - Sorting: header buttons with `aria-sort`; null values sort last.
  * - Selection: controlled checkbox column with a select-all for the rows
  *   shown. Filtering is the caller's job: selection ids are never dropped
- *   here, so callers can report "Selected outside current filters: N".
+ *   here, so callers can report "Selected outside current filters: N". The
+ *   count also shows in the status bar's context slot (`useStatusSelection`).
  * - Keyboard: ↑/↓ move focus to the same column in the adjacent row, across
  *   groups; Tab order stays natural. Row height follows the density token `--row-h`.
  * - Grouping (opt-in `groups`): group header rows inside this one table, so
@@ -17,6 +18,7 @@
  */
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { type KeyboardEvent, type MouseEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useStatusSelection } from "@/app/status-selection"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
@@ -110,6 +112,7 @@ export function DataTable<T>({
   const [menuRowId, setMenuRowId] = useState<string | null>(null)
   const frame = useRef<HTMLDivElement>(null)
   const lastPinnedHeader = useRef<HTMLTableCellElement>(null)
+  useStatusSelection(selection?.selected.length ?? 0)
 
   // Scroll padding the width of the pinned columns, so Tab never leaves a
   // focused cell under them (WCAG 2.4.11); it follows column resizes.

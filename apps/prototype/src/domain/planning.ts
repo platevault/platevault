@@ -247,6 +247,8 @@ export interface FilterTonight {
   moonIlluminationPct: number
   /** The Moon is up at that sample. */
   moonUp: boolean
+  /** Every stretch that meets the band's Moon constraint that night, in order; `end` is the end of its last sample. */
+  stretches: Array<{ start: string; end: string }>
 }
 
 /**
@@ -259,7 +261,7 @@ export interface FilterTonight {
  */
 export function filterSuitability(target: Target, site: ObservingSite, night: string, criteria: PlanCriteria, constraints: Record<Band, MoonConstraint>, bands: Band[]): FilterTonight[] {
   if (target.ra === null || target.dec === null) {
-    return bands.map((band) => ({ band, good: false, minutes: 0, moonSeparationDeg: null, moonIlluminationPct: 0, moonUp: false }))
+    return bands.map((band) => ({ band, good: false, minutes: 0, moonSeparationDeg: null, moonIlluminationPct: 0, moonUp: false, stretches: [] }))
   }
   const sunLimit = criteria.darkness === "astronomical" ? -18 : -12
   const base = Date.parse(`${night}T12:00:00Z`) - (site.longitude / 15) * 3_600_000
@@ -286,12 +288,16 @@ export function filterSuitability(target: Target, site: ObservingSite, night: st
   }
   const usable = samples.filter((s) => s.ok)
   const peak = usable.length > 0 ? usable.reduce((a, b) => (b.alt > a.alt ? b : a)) : null
+  const sampleMs = SAMPLE_MIN * 60_000
   return bands.map((band): FilterTonight => {
     const limit = constraints[band]
     let longest = 0
     let current = 0
-    for (const s of samples) {
+    const stretches: FilterTonight["stretches"] = []
+    for (const [i, s] of samples.entries()) {
       const fits = s.ok && (!s.moonUp || (s.sep >= limit.minSeparationDeg && s.illum <= limit.maxIlluminationPct))
+      if (fits && current === 0) stretches.push({ start: new Date(start0 + i * sampleMs).toISOString(), end: "" })
+      if (fits) stretches.at(-1)!.end = new Date(start0 + (i + 1) * sampleMs).toISOString()
       current = fits ? current + 1 : 0
       longest = Math.max(longest, current)
     }
@@ -303,6 +309,7 @@ export function filterSuitability(target: Target, site: ObservingSite, night: st
       moonSeparationDeg: peak ? Math.round(peak.sep) : null,
       moonIlluminationPct: peak?.illum ?? 0,
       moonUp: peak?.moonUp ?? false,
+      stretches,
     }
   })
 }

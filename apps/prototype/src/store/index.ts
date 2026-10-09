@@ -74,6 +74,8 @@ export function initializeStore() {
   registerOperationHandlers([...FOUNDATION_HANDLERS, ...CALIBRATION_HANDLERS, ...STORAGE_HANDLERS])
   for (const slice of Object.values(SLICES)) if (slice.operations) registerOperationHandlers(slice.operations)
   store.replace(interruptRunningOperations(load() ?? fromSeed("empty")))
+  // Work that survives a restart (a stack's output-folder watch) carries on.
+  if (Object.values(store.getState().operations).some((op) => op.status === "running")) ensureTicker()
   store.subscribe(() => {
     window.clearTimeout(persistTimer ?? undefined)
     persistTimer = window.setTimeout(persistNow, 250)

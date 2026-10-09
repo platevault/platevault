@@ -233,7 +233,7 @@ function RequirementTable({
                   >
                     <span className="flex flex-col">
                       <span>{c.source.name}</span>
-                      <span className="text-xs text-muted-foreground">{c.summary.allCompatible ? `Compatible · ${c.source.isMaster ? "master" : "raw set"}${c.source.night ? ` · ${formatNight(c.source.night)}` : ""}` : `${summaryText(c.criteria)} · needs an exception reason`}</span>
+                      <span className="text-xs text-muted-foreground">{c.summary.allCompatible ? `Compatible · master${c.source.night ? ` · ${formatNight(c.source.night)}` : ""}` : `${summaryText(c.criteria)} · needs an exception reason`}</span>
                     </span>
                   </DropdownMenuItem>
                 ))}

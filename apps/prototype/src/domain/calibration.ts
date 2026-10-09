@@ -4,15 +4,15 @@
  * behind "Review matches", automatic assignment, and the drift checks of
  * accepted inputs. A run matches only against its own rig (CAL-FR-10): the
  * camera criteria cover darks and bias, the optical train criterion covers
- * flats. Nothing here writes state.
+ * flats. Runs are assigned masters only (P-CAL3): raw calibration frames are
+ * input to a calibration process (`calibration-process.ts`), never a run
+ * input. Nothing here writes state.
  */
 import { correctedExposureS } from "./corrections"
-import { preferredCopy } from "./library"
 import { fileAt } from "./disk"
 import { isUnder } from "./indexing"
 import { memberSessions, type MemberSession } from "./membership"
 import type {
-  Asset,
   AssetId,
   CalibrationAssignment,
   CalibrationInput,
@@ -25,29 +25,20 @@ import type {
   Run,
   Session,
 } from "./types"
-import { fileName, formatExposure, formatNight, plural } from "@/lib/format"
+import { fileName, formatExposure, plural } from "@/lib/format"
 
 export const KINDS: CalibrationKind[] = ["dark", "flat", "bias"]
 
 export const KIND_LABEL: Record<CalibrationKind, string> = { dark: "Dark", flat: "Flat", bias: "Bias", "dark-flat": "Dark flat" }
 
-const IMAGE_TYPE_LABEL: Record<string, string> = {
-  dark: "Dark",
-  flat: "Flat",
-  bias: "Bias",
-  "dark-flat": "Dark flat",
-  "master-dark": "Master dark",
-  "master-flat": "Master flat",
-  "master-bias": "Master bias",
-}
+const MASTER_TYPE_LABEL: Record<CalibrationKind, string> = { dark: "Master dark", flat: "Master flat", bias: "Master bias", "dark-flat": "Master dark flat" }
 
-/** One reusable calibration input: an adopted master or a raw calibration set. */
+/** One reusable calibration input: an adopted master. */
 export interface CalSource {
   input: CalibrationInput
-  /** Master id or raw-set session id; also the `/calibration` key. */
+  /** Master id; also the `/calibration` key. */
   id: string
   kind: CalibrationKind
-  isMaster: boolean
   name: string
   night: string | null
   cameraName: string | null
@@ -64,42 +55,10 @@ export interface CalSource {
   ccdTempC: number | null
   frameCount: number | null
   imageTypeLabel: string
-  /** Master file path, or the folder of a raw set. */
+  /** Master file path. */
   path: string
   /** Files handed off for this input. */
   files: Array<{ assetId: AssetId | null; path: string; sizeBytes: number; fileName: string }>
-}
-
-export function rawSetSource(catalog: Catalog, session: Session): CalSource | null {
-  const kind = session.imageType as CalibrationKind
-  if (!["dark", "flat", "bias", "dark-flat"].includes(kind)) return null
-  const assets = session.assetIds.map((id) => catalog.assets[id]).filter((a): a is Asset => a !== undefined && !a.trashed)
-  if (assets.length === 0) return null
-  const first = assets[0]
-  const train = session.equipment.status === "confirmed" || session.equipment.status === "associated" ? session.equipment.value : null
-  return {
-    input: { type: "raw-set", sessionId: session.id },
-    id: session.id,
-    kind,
-    isMaster: false,
-    name: `${first?.fileName.replace(/_\d+\.\w+$/, "") ?? KIND_LABEL[kind]} · ${formatNight(session.night)}`,
-    night: session.night,
-    cameraName: session.cameraName,
-    telescopeName: session.telescopeName,
-    widthPx: first?.observed.widthPx ?? null,
-    heightPx: first?.observed.heightPx ?? null,
-    binning: session.binning,
-    gain: session.gain,
-    offset: session.offset,
-    exposureS: session.exposureS,
-    channel: session.channel,
-    opticalTrainId: train,
-    ccdTempC: session.ccdTempC,
-    frameCount: assets.length,
-    imageTypeLabel: IMAGE_TYPE_LABEL[session.imageType] ?? session.imageType,
-    path: first?.copies[0]?.path.replace(/\/[^/]+$/, "") ?? "",
-    files: assets.map((a) => ({ assetId: a.id, path: a.copies[0]?.path ?? "", sizeBytes: a.sizeBytes, fileName: a.fileName })),
-  }
 }
 
 export function masterSource(catalog: Catalog, masterId: string): CalSource | null {
@@ -110,7 +69,6 @@ export function masterSource(catalog: Catalog, masterId: string): CalSource | nu
     input: { type: "master", masterId: master.id },
     id: master.id,
     kind: master.kind,
-    isMaster: true,
     name: fileName(master.path),
     night: master.createdAt.slice(0, 10),
     cameraName: master.cameraName,
@@ -125,16 +83,14 @@ export function masterSource(catalog: Catalog, masterId: string): CalSource | nu
     opticalTrainId: master.opticalTrainId,
     ccdTempC: master.ccdTempC,
     frameCount: master.frameCount,
-    imageTypeLabel: IMAGE_TYPE_LABEL[`master-${master.kind}`] ?? master.kind,
+    imageTypeLabel: MASTER_TYPE_LABEL[master.kind],
     path: master.path,
     files: [{ assetId: asset?.id ?? null, path: master.path, sizeBytes: asset?.sizeBytes ?? 0, fileName: fileName(master.path) }],
   }
 }
 
 export function sourceFor(catalog: Catalog, input: CalibrationInput): CalSource | null {
-  if (input.type === "master") return masterSource(catalog, input.masterId)
-  const session = catalog.sessions[input.sessionId]
-  return session ? rawSetSource(catalog, session) : null
+  return masterSource(catalog, input.masterId)
 }
 
 /**
@@ -151,30 +107,18 @@ function readableSha(disk: Disk, path: string): string | null {
 /**
  * Why an input's current bytes do not match their basis, or null when they do
  * (CAL-FR-08, D19). An adopted master is checked against its adoption digest,
- * a library master and a raw set against the SHA-256 recorded when they were
- * indexed. A master that cannot be read is unverified.
+ * a library master against the SHA-256 recorded when it was indexed. A master
+ * that cannot be read is unverified.
  */
 export function inputDrift(catalog: Catalog, disk: Disk, input: CalibrationInput): string | null {
-  if (input.type === "master") {
-    const master = catalog.masters[input.masterId]
-    if (!master) return "This master is no longer in the calibration library."
-    const source = masterSource(catalog, master.id)
-    const assetId = source?.files[0]?.assetId
-    const basis = master.adoption?.verifiedSha256 ?? (assetId ? (catalog.assets[assetId]?.sha256 ?? null) : null)
-    const current = readableSha(disk, master.path)
-    if (current === null) return `Unverified: ${master.path} cannot be read, so its bytes cannot be checked against ${master.adoption ? "its adoption digest" : "its recorded SHA-256"}.`
-    if (basis !== null && current !== basis) return master.adoption ? "Drifted: its SHA-256 differs from its adoption digest." : "Drifted: its SHA-256 differs from the digest recorded when it was indexed."
-    return null
-  }
-  const session = catalog.sessions[input.sessionId]
-  if (!session) return "This calibration set is no longer in the catalog."
-  for (const id of session.assetIds) {
-    const asset = catalog.assets[id]
-    if (!asset || asset.trashed) continue
-    const path = preferredCopy(disk, catalog, asset).path
-    const current = readableSha(disk, path)
-    if (current !== null && current !== asset.sha256) return `Drifted: ${fileName(path)} differs from the digest recorded when it was indexed.`
-  }
+  const master = catalog.masters[input.masterId]
+  if (!master) return "This master is no longer in the calibration library."
+  const source = masterSource(catalog, master.id)
+  const assetId = source?.files[0]?.assetId
+  const basis = master.adoption?.verifiedSha256 ?? (assetId ? (catalog.assets[assetId]?.sha256 ?? null) : null)
+  const current = readableSha(disk, master.path)
+  if (current === null) return `Unverified: ${master.path} cannot be read, so its bytes cannot be checked against ${master.adoption ? "its adoption digest" : "its recorded SHA-256"}.`
+  if (basis !== null && current !== basis) return master.adoption ? "Drifted: its SHA-256 differs from its adoption digest." : "Drifted: its SHA-256 differs from the digest recorded when it was indexed."
   return null
 }
 
@@ -195,18 +139,13 @@ function basisDrift(disk: Disk, assignment: CalibrationAssignment): string | nul
   return changed ? `Drifted: ${fileName(changed.path)} changed since this input was accepted (SHA-256 differs).` : null
 }
 
-/** Reusable sources only: adopted masters whose bytes match their basis, and raw sets. Candidates never match (CAL-AC-04). */
+/** Reusable sources only: adopted masters whose bytes match their basis. Candidates never match (CAL-AC-04). */
 export function reusableSources(catalog: Catalog, disk: Disk): CalSource[] {
   const out: CalSource[] = []
   for (const master of Object.values(catalog.masters)) {
     if (master.state !== "adopted") continue
     if (inputDrift(catalog, disk, { type: "master", masterId: master.id })) continue
     const source = masterSource(catalog, master.id)
-    if (source) out.push(source)
-  }
-  for (const session of Object.values(catalog.sessions)) {
-    if (session.supersededBy) continue
-    const source = rawSetSource(catalog, session)
     if (source) out.push(source)
   }
   return out
@@ -321,8 +260,8 @@ function nightDistance(a: string, b: string | null): number {
 }
 
 /**
- * Candidates for one requirement: compatible first, then masters before raw
- * sets, then the nearest night. Night orders only; it is never a criterion.
+ * Candidates for one requirement: compatible first, then the nearest night.
+ * Night orders only; it is never a criterion.
  */
 export function candidatesFor(catalog: Catalog, session: Session, kind: CalibrationKind, sources: CalSource[]): Candidate[] {
   const light = lightGeometry(catalog, session)
@@ -337,18 +276,16 @@ export function candidatesFor(catalog: Catalog, session: Session, kind: Calibrat
         Number(b.summary.allCompatible) - Number(a.summary.allCompatible) ||
         a.summary.incompatible - b.summary.incompatible ||
         a.summary.unknown - b.summary.unknown ||
-        Number(b.source.isMaster) - Number(a.source.isMaster) ||
         nightDistance(session.night, a.source.night) - nightDistance(session.night, b.source.night),
     )
 }
 
 export function sameInput(a: CalibrationInput | null, b: CalibrationInput | null): boolean {
-  if (!a || !b) return false
-  return a.type === "master" ? b.type === "master" && a.masterId === b.masterId : b.type === "raw-set" && a.sessionId === b.sessionId
+  return a !== null && b !== null && a.masterId === b.masterId
 }
 
 export function inputKey(input: CalibrationInput): string {
-  return input.type === "master" ? input.masterId : input.sessionId
+  return input.masterId
 }
 
 /**

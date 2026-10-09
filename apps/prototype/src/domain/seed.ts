@@ -19,17 +19,22 @@
  * - "Heart and Soul" (open): no runs, candidates waiting.
  * - Library: sessions that need a Target, sessions in no Project, a Trashed
  *   session, an offline volume (Cold-1) and a running scan of a network share;
- *   calibration sessions with and without an integrated master; two archive
- *   locations (one Default); two removable devices connected, an ASIAIR card
- *   (recognised layout) and a generic USB stick.
+ *   two archive locations (one Default); two removable devices connected, an
+ *   ASIAIR card (recognised layout) and a generic USB stick.
+ * - Calibration (P-CAL3): masters only, in structured storage. Calibration
+ *   processes: a raw Ha flat session awaiting Stack, 120 s darks mid-stack in
+ *   PixInsight, 300 s darks finished with their raws in the OS Trash, bias
+ *   finished with its raws kept, and an OIII flat whose Stack output was not
+ *   found.
  * - Targets: favourites, a southern Target with no window tonight, a default
  *   site, and a Plan list of two Targets.
  *
  * All names, paths and counts are illustrative fixtures.
  */
-import { plural } from "@/lib/format"
+import { fileName, plural } from "@/lib/format"
+import { processIdFor, stepRecord } from "./calibration-process"
 import { DEFAULT_MOON_CONSTRAINTS } from "./labels"
-import { fakeSha256, fileAt, fileKey, makeFile, writeFiles } from "./disk"
+import { createFolder, fakeSha256, fileAt, fileKey, makeFile, writeFiles } from "./disk"
 import { indexLocationsSync, stableHash } from "./indexing"
 import { addSessions, emptyContent } from "./membership"
 import { simulateMeasurement } from "./measurement"
@@ -63,6 +68,7 @@ import type {
   SimulationFaults,
   Subject,
   Target,
+  TrashEpisodeKind,
   Volume,
   VolumeId,
 } from "./types"
@@ -197,6 +203,7 @@ function captureSet(spec: CaptureSpec): DiskFile[] {
       bayerPattern: spec.rig.bayerPattern,
       siteLat: spec.site?.lat ?? null,
       siteLon: spec.site?.lon ?? null,
+      ncombine: null,
       ...spec.overrides,
     }
     const isLight = spec.imageType === "light"
@@ -230,7 +237,7 @@ function calibrationSet(dir: string, prefix: string, count: number, start: strin
   return captureSet({ volumeId: A, dir, prefix, count, start, imageType, exposureS, filter, object: null, rig, pointing: null, site: null })
 }
 
-function masterFile(name: string, imageType: ImageType, exposureS: number, filter: string | null, date: string, volumeId: VolumeId = A, dir = "Calibration/Masters", rig: Train = REDCAT): DiskFile {
+function masterFile(name: string, imageType: ImageType, exposureS: number, filter: string | null, date: string, volumeId: VolumeId = A, dir = "Calibration/Masters", rig: Train = REDCAT, ncombine: number | null = null): DiskFile {
   const path = `${MOUNT[volumeId]}/${dir}/${name}`
   return makeFile({
     path,
@@ -240,10 +247,17 @@ function masterFile(name: string, imageType: ImageType, exposureS: number, filte
     header: {
       imageType, object: null, filter, exposureS, dateObs: date, instrument: rig.instrument, telescope: imageType === "master-flat" ? rig.telescope : null,
       focalLengthMm: imageType === "master-flat" ? rig.focalLengthMm : null, binning: 1, gain: rig.gain, offset: rig.offset, ccdTempC: rig.ccdTempC,
-      ra: null, dec: null, rotationDeg: null, widthPx: rig.widthPx, heightPx: rig.heightPx, pixelSizeUm: rig.pixelSizeUm, bayerPattern: rig.bayerPattern, siteLat: null, siteLon: null,
+      ra: null, dec: null, rotationDeg: null, widthPx: rig.widthPx, heightPx: rig.heightPx, pixelSizeUm: rig.pixelSizeUm, bayerPattern: rig.bayerPattern, siteLat: null, siteLon: null, ncombine,
     },
     modifiedAt: date,
   })
+}
+
+const MASTER_FILE_PREFIX: Partial<Record<ImageType, string>> = { "master-dark": "MasterDark", "master-flat": "MasterFlat", "master-bias": "MasterBias" }
+
+/** A master in structured calibration storage (P-CAL3): `Calibration/<per-kind folder>/Master<Kind>_<night>.xisf`. */
+function storedMaster(dir: string, night: string, imageType: ImageType, exposureS: number, filter: string | null, date: string, rig: Train, ncombine: number): DiskFile {
+  return masterFile(`${MASTER_FILE_PREFIX[imageType]}_${night}.xisf`, imageType, exposureS, filter, date, A, `Calibration/${dir}`, rig, ncombine)
 }
 
 const rot = 90
@@ -290,22 +304,22 @@ function baseFiles(): DiskFile[] {
     ...fra("Imaging/M31/2026-09-03/B", "Light_M31_120s_B", 20, "2026-09-03T22:40:00Z", 120, "B", "M31", { ra: 10.685, dec: 41.269, rotationDeg: 12 }),
     // M 33: a confirmed Target that no Project names.
     ...fra("Imaging/M33/2026-08-30/L", "Light_M33_120s_L", 40, "2026-08-30T22:00:00Z", 120, "L", "M33", { ra: 23.462, dec: 30.66, rotationDeg: 0 }),
-    // Calibration: raw sets and library masters (day-time sets stay in one night).
-    ...calibrationSet("Calibration/Darks/2026-09-08/300s", "Dark_300s_G100", 30, "2026-09-08T14:00:00Z", "dark", 300, null),
-    ...calibrationSet("Calibration/Darks/2026-09-08/120s", "Dark_120s_G100", 30, "2026-09-08T17:00:00Z", "dark", 120, null),
-    ...calibrationSet("Calibration/Bias/2026-09-08", "Bias_G100", 50, "2026-09-08T18:30:00Z", "bias", 0.000032, null),
-    ...calibrationSet("Calibration/Flats/2026-09-19/Ha", "Flat_RedCat_Ha", 30, "2026-09-19T05:20:00Z", "flat", 1.5, "Ha"),
-    ...calibrationSet("Calibration/Flats/2026-09-26/OIII", "Flat_RedCat_OIII", 30, "2026-09-27T05:25:00Z", "flat", 2.0, "OIII"),
-    ...calibrationSet("Calibration/Flats/2026-09-02/L", "Flat_FRA_L", 20, "2026-09-03T05:00:00Z", "flat", 0.8, "L", FRA400),
-    ...calibrationSet("Calibration/Flats/2026-09-02/R", "Flat_FRA_R", 20, "2026-09-03T05:40:00Z", "flat", 1.1, "R", FRA400),
-    ...calibrationSet("Calibration/Flats/2026-09-02/G", "Flat_FRA_G", 20, "2026-09-03T05:50:00Z", "flat", 1.0, "G", FRA400),
-    ...calibrationSet("Calibration/Flats/2026-09-02/B", "Flat_FRA_B", 20, "2026-09-03T06:00:00Z", "flat", 1.3, "B", FRA400),
-    ...calibrationSet("Calibration/Darks/2026-09-10/533-120s", "Dark_533_120s", 20, "2026-09-10T14:00:00Z", "dark", 120, null, ESPRIT),
-    ...calibrationSet("Calibration/Darks/2026-09-10/533-300s", "Dark_533_300s", 20, "2026-09-10T16:00:00Z", "dark", 300, null, ESPRIT),
-    ...calibrationSet("Calibration/Bias/2026-09-10/533", "Bias_533", 40, "2026-09-10T17:30:00Z", "bias", 0.000032, null, ESPRIT),
-    ...calibrationSet("Calibration/Flats/2026-09-22/LeX", "Flat_Esprit_LeX", 25, "2026-09-22T05:30:00Z", "flat", 3.0, "L-eXtreme", ESPRIT),
-    masterFile("MasterDark_300s_G100_O50_-10C.xisf", "master-dark", 300, null, "2026-09-08T15:00:00Z"),
-    masterFile("MasterBias_G100_O50.xisf", "master-bias", 0.000032, null, "2026-09-08T16:30:00Z"),
+    // Calibration (P-CAL3): raw sessions wait under Raw/ for their calibration process (day-time sets stay in one night);
+    // masters live in structured storage, flats per rig, filter and night, darks and bias per camera and settings.
+    ...calibrationSet("Calibration/Raw/Darks/300s/2026-09-08", "Dark_300s_G100", 30, "2026-09-08T14:00:00Z", "dark", 300, null),
+    ...calibrationSet("Calibration/Raw/Darks/120s/2026-09-08", "Dark_120s_G100", 30, "2026-09-08T17:00:00Z", "dark", 120, null),
+    ...calibrationSet("Calibration/Raw/Bias/2026-09-08", "Bias_G100", 50, "2026-09-08T18:30:00Z", "bias", 0.000032, null),
+    ...calibrationSet("Calibration/Raw/Flats/Ha/2026-09-18", "Flat_RedCat_Ha", 30, "2026-09-19T05:20:00Z", "flat", 1.5, "Ha"),
+    ...calibrationSet("Calibration/Raw/Flats/OIII/2026-09-26", "Flat_RedCat_OIII", 30, "2026-09-27T05:25:00Z", "flat", 2.0, "OIII"),
+    storedMaster("Darks/ZWO ASI2600MM Pro/300s_g100_o50_-10C", "2026-09-08", "master-dark", 300, null, "2026-09-08T19:10:00Z", REDCAT, 30),
+    storedMaster("Bias/ZWO ASI2600MM Pro/g100_o50", "2026-09-08", "master-bias", 0.000032, null, "2026-09-08T20:00:00Z", REDCAT, 50),
+    storedMaster("Flats/RedCat 51 - ASI2600MM/Ha/2026-09-12", "2026-09-12", "master-flat", 1.5, "Ha", "2026-09-13T05:40:00Z", REDCAT, 30),
+    storedMaster("Flats/RedCat 51 - ASI2600MM/OIII/2026-09-12", "2026-09-12", "master-flat", 2.0, "OIII", "2026-09-13T06:10:00Z", REDCAT, 30),
+    ...(["L", "R", "G", "B"] as const).map((f, i) => storedMaster(`Flats/Askar FRA400 - ASI2600MM/${f}/2026-09-02`, "2026-09-02", "master-flat", 1, f, `2026-09-03T07:${String(i * 10).padStart(2, "0")}:00Z`, FRA400, 20)),
+    storedMaster("Darks/ZWO ASI533MC Pro/120s_g101_o50_-5C", "2026-09-10", "master-dark", 120, null, "2026-09-10T18:00:00Z", ESPRIT, 20),
+    storedMaster("Darks/ZWO ASI533MC Pro/300s_g101_o50_-5C", "2026-09-10", "master-dark", 300, null, "2026-09-10T18:10:00Z", ESPRIT, 20),
+    storedMaster("Bias/ZWO ASI533MC Pro/g101_o50", "2026-09-10", "master-bias", 0.000032, null, "2026-09-10T18:20:00Z", ESPRIT, 40),
+    storedMaster("Flats/Esprit 100 - ASI533MC/L-eXtreme/2026-09-21", "2026-09-21", "master-flat", 3.0, "L-eXtreme", "2026-09-22T06:30:00Z", ESPRIT, 25),
   ]
 }
 
@@ -377,7 +391,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         directSource: "file-list",
         productInputKinds: ["linear-integration", "channel-product", "mosaic-panel"],
         correctedMetadata: "none",
-        masterIntegration: true,
+        masterStacking: true,
       },
     },
     {
@@ -395,7 +409,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         directSource: "file-list",
         productInputKinds: ["linear-integration", "channel-product"],
         correctedMetadata: "none",
-        masterIntegration: true,
+        masterStacking: true,
       },
     },
     {
@@ -413,7 +427,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         directSource: "whole-folder",
         productInputKinds: [],
         correctedMetadata: "none",
-        masterIntegration: false,
+        masterStacking: false,
       },
     },
     {
@@ -431,7 +445,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         directSource: "none",
         productInputKinds: [],
         correctedMetadata: "none",
-        masterIntegration: false,
+        masterStacking: false,
       },
     },
   ]
@@ -465,6 +479,7 @@ export function emptyCatalog(): Catalog {
     measurements: {},
     measurementImports: {},
     masters: {},
+    calibrationProcesses: {},
     profiles: builtInProfiles(),
     preparations: {},
     results: {},
@@ -485,6 +500,7 @@ export function defaultSettings(): AppSettings {
     onboarding: { completedAt: null, deferredRoles: [] },
     lastOutputParent: null,
     naming: {},
+    keepRawCalibration: false,
     targetLookup: { enabled: true, provider: "cds-sesame" },
   }
 }
@@ -1014,31 +1030,99 @@ function demoSeed(): SeedData {
     origin: { kind: "generated", runId: m31Run.id, sourcePath: m31Dark.path, sessionId: null }, adoption: null,
   }
   m31Run.masterOffers = [{ masterId: m31DarkId, state: "dismissed", at: "2026-09-08T09:30:00.000Z" }]
-  // P-CAL1: the library's 300 s master dark was integrated from the 8 Sep dark session; the other calibration sessions have no master yet.
-  const dark300 = findSession(catalog, (x) => x.imageType === "dark" && x.exposureS === 300 && x.cameraName === REDCAT.instrument)
-  const master300 = Object.values(catalog.masters).find((m) => m.path.endsWith("/MasterDark_300s_G100_O50_-10C.xisf"))
-  if (master300) {
-    const folder = catalog.assets[dark300.assetIds[0]!]?.copies[0]?.path.replace(/\/[^/]+$/, "") ?? ""
-    catalog.masters[master300.id] = { ...master300, origin: { kind: "integrated", runId: null, sourcePath: folder, sessionId: dark300.id } }
-  }
 
   catalog.runs = Object.fromEntries([runA, runB, runC, runD, p1, p2, p3, m31Run].map((r) => [r.id, r]))
   catalog.runGroups = { [group.id]: group }
 
-  // The 25 Aug M 31 test session was moved to the OS Trash from M 31's Done / Archive sheet.
-  const episodeId = "trash_m31_test"
-  const trashAt = "2026-09-12T09:30:00.000Z"
-  const episodeItems = s.m31test.assetIds.map((id) => {
-    const asset = catalog.assets[id]!
-    const copy = asset.copies[0]!
-    return { path: copy.path, volumeId: copy.volumeId, sizeBytes: asset.sizeBytes, assetId: id, resultId: null, outcome: "trashed" as const, reason: null }
-  })
-  for (const item of episodeItems) {
-    const file = disk.files[fileKey(item.volumeId, item.path)]!
-    disk = { ...disk, files: Object.fromEntries(Object.entries(disk.files).filter(([key]) => key !== fileKey(item.volumeId, item.path))), trash: [...disk.trash, { file, originalPath: item.path, trashedAt: trashAt }] }
-    catalog.assets[item.assetId] = { ...decided(catalog.assets[item.assetId]!, "unusable", "2026-09-06T10:00:00.000Z"), trashed: { at: trashAt, episodeId } }
+  /** Move each frame's copy to the OS Trash as one recorded episode, as the Trash engine would have. */
+  const trashFrames = (episodeId: string, kind: TrashEpisodeKind, at: string, projectId: string | null, assetIds: string[], quality: "unusable" | null) => {
+    const items = assetIds.map((id) => {
+      const asset = catalog.assets[id]!
+      const copy = asset.copies[0]!
+      return { path: copy.path, volumeId: copy.volumeId, sizeBytes: asset.sizeBytes, assetId: id, resultId: null, outcome: "trashed" as const, reason: null }
+    })
+    for (const item of items) {
+      const key = fileKey(item.volumeId, item.path)
+      const { [key]: file, ...files } = disk.files
+      disk = { ...disk, files, trash: [...disk.trash, { file: file!, originalPath: item.path, trashedAt: at }] }
+      const asset = catalog.assets[item.assetId]!
+      catalog.assets[item.assetId] = { ...(quality ? decided(asset, quality, "2026-09-06T10:00:00.000Z") : asset), trashed: { at, episodeId } }
+    }
+    catalog.trashEpisodes = { ...catalog.trashEpisodes, [episodeId]: { id: episodeId, kind, at, projectId, runIds: [], items, operationId: null } }
   }
-  catalog.trashEpisodes = { [episodeId]: { id: episodeId, kind: "rejected-frames", at: trashAt, projectId: PROJECT.m31, runIds: [], items: episodeItems, operationId: null } }
+
+  // The 25 Aug M 31 test session was moved to the OS Trash from M 31's Done / Archive sheet.
+  const trashAt = "2026-09-12T09:30:00.000Z"
+  trashFrames("trash_m31_test", "rejected-frames", trashAt, PROJECT.m31, s.m31test.assetIds, "unusable")
+
+  // Calibration processes (P-CAL3). Indexing routed each raw session into a process awaiting Stack;
+  // the Ha flat still waits. 300 s darks and bias finished in PixInsight (raws trashed, raws kept),
+  // 120 s darks are mid-stack, and the OIII flat's Stack output was not found.
+  const rawSession = (imageType: ImageType, predicate: (x: Session) => boolean) => findSession(catalog, (x) => x.imageType === imageType && x.cameraName === REDCAT.instrument && predicate(x))
+  const dark300 = rawSession("dark", (x) => x.exposureS === 300)
+  const dark120 = rawSession("dark", (x) => x.exposureS === 120)
+  const biasRaw = rawSession("bias", () => true)
+  const flatOiii = rawSession("flat", (x) => x.channel === "OIII")
+  const stacking = `${PROCESSING}/Stacking`
+  const processOf = (session: Session) => catalog.calibrationProcesses[processIdFor(session.id)]!
+  const finishProcess = (session: Session, output: string, masterDir: string, stackedAt: string, at: string, raws: "trashed" | "kept") => {
+    const master = Object.values(catalog.masters).find((m) => m.path.includes(`/Calibration/${masterDir}/`))!
+    const stored = fileAt(disk, master.path)!
+    const toolOutput = makeFile({ path: `${output}/${fileName(master.path)}`, volumeId: A, sizeBytes: stored.sizeBytes, kind: "xisf", header: stored.header, sha256: stored.sha256, modifiedAt: at })
+    disk = writeFiles(disk, [toolOutput])
+    const ncombine = stored.header?.ncombine ?? null
+    catalog.masters[master.id] = { ...master, origin: { kind: "stacked", runId: null, sourcePath: toolOutput.path, sessionId: session.id }, adoption: { destinationPath: master.path, verifiedSha256: stored.sha256, adoptedAt: at } }
+    catalog.calibrationProcesses[processIdFor(session.id)] = {
+      ...processOf(session),
+      profileId: PROFILE_IDS.pixinsight,
+      outputFolder: output,
+      detected: { path: toolOutput.path, sha256: stored.sha256, ncombine },
+      storagePath: master.path,
+      masterId: master.id,
+      raws,
+      steps: { stack: stepRecord("done", stackedAt), detect: stepRecord("done", at), import: stepRecord("done", at), register: stepRecord("done", at), raws: stepRecord("done", at) },
+      updatedAt: at,
+    }
+  }
+  catalog.calibrationProcesses = { ...catalog.calibrationProcesses }
+  finishProcess(dark300, `${stacking}/Dark 300 s 8 Sep`, "Darks/ZWO ASI2600MM Pro/300s_g100_o50_-10C", "2026-09-08T18:20:00.000Z", "2026-09-08T19:10:00.000Z", "trashed")
+  trashFrames("trash_cal_dark300", "calibration-raws", "2026-09-08T19:11:00.000Z", null, dark300.assetIds, null)
+  finishProcess(biasRaw, `${stacking}/Bias 8 Sep`, "Bias/ZWO ASI2600MM Pro/g100_o50", "2026-09-08T19:30:00.000Z", "2026-09-08T20:00:00.000Z", "kept")
+  const dark120Output = `${stacking}/Dark 120 s 8 Sep`
+  disk = createFolder(disk, { volumeId: A, path: dark120Output })
+  const stackDark120: Operation = {
+    id: "op_stack_dark120",
+    kind: "stack-master",
+    title: "Stack Dark 120 s · 8 Sep",
+    status: "running",
+    scope: { sessionIds: [dark120.id] },
+    progress: { done: 0, total: 0, unit: "frames" },
+    items: [],
+    summary: null,
+    canPause: false,
+    canCancel: true,
+    payload: { processId: processIdFor(dark120.id) },
+    createdAt: "2026-10-04T07:50:00.000Z",
+    updatedAt: "2026-10-04T07:50:00.000Z",
+    settledAt: null,
+  }
+  catalog.calibrationProcesses[processIdFor(dark120.id)] = {
+    ...processOf(dark120),
+    profileId: PROFILE_IDS.pixinsight,
+    outputFolder: dark120Output,
+    operationId: stackDark120.id,
+    steps: { ...processOf(dark120).steps, stack: stepRecord("done", stackDark120.createdAt), detect: stepRecord("running", stackDark120.createdAt) },
+    updatedAt: stackDark120.createdAt,
+  }
+  const oiiiOutput = `${stacking}/Flat OIII 26 Sep`
+  disk = writeFiles(disk, [makeFile({ path: `${oiiiOutput}/PixInsight.log`, volumeId: A, sizeBytes: 18_400, kind: "log", modifiedAt: "2026-09-27T09:08:00.000Z" })])
+  catalog.calibrationProcesses[processIdFor(flatOiii.id)] = {
+    ...processOf(flatOiii),
+    profileId: PROFILE_IDS.pixinsight,
+    outputFolder: oiiiOutput,
+    steps: { ...processOf(flatOiii).steps, stack: stepRecord("done", "2026-09-27T08:00:00.000Z"), detect: stepRecord("failed", "2026-09-27T09:10:00.000Z", "Tool output not found") },
+    updatedAt: "2026-09-27T09:10:00.000Z",
+  }
 
   // One drifted-content frame: an M 31 L frame changed on disk after review (LIB-FR-09).
   const driftedId = s.m31.L.assetIds[6]!
@@ -1116,8 +1200,10 @@ function demoSeed(): SeedData {
     { id: "act_trash_m31", at: trashAt, kind: "operation", title: "Move 8 rejected frames to Trash: finished", detail: "8 frames (M 31 25 Aug L) moved to the OS Trash. Put back plus a rescan restores them as Unusable.", operationId: null, href: `/projects/${PROJECT.m31}` },
     { id: "act_cleanup_m31", at: cleanupM31.settledAt!, kind: "operation", title: `${cleanupM31.title}: finished`, detail: cleanupM31.summary, operationId: cleanupM31.id, href: `/projects/${PROJECT.m31}/runs/${m31Run.id}/done` },
     { id: "act_prep_p2", at: "2026-09-27T19:06:00.000Z", kind: "operation", title: "Prepare IC 5070 mosaic Panel 2: partial", detail: `${plural(p2Offline.length, "input")} offline on Cold-1; ${plural(p2Ready.length, "entry", "entries")} prepared.`, operationId: null, href: `/projects/${PROJECT.cygnus}/runs/${p2.id}/prepare` },
+    { id: "act_stack_oiii", at: "2026-09-27T09:10:00.000Z", kind: "operation", title: "Stack Flat OIII · 26 Sep: failed", detail: "Tool output not found at detect.", operationId: null, href: "/calibration" },
+    { id: "act_stack_dark300", at: "2026-09-08T19:10:00.000Z", kind: "operation", title: "Stack Dark 300 s · 8 Sep: finished", detail: "MasterDark_2026-09-08.xisf registered from 30 frames.", operationId: null, href: "/calibration" },
   ]
-  return { seed: "demo", disk, catalog, operations: { [cleanupM31.id]: cleanupM31, [scan.id]: scan }, activity, settings, faults: defaultFaults() }
+  return { seed: "demo", disk, catalog, operations: { [cleanupM31.id]: cleanupM31, [scan.id]: scan, [stackDark120.id]: stackDark120 }, activity, settings, faults: defaultFaults() }
 }
 
 /** A Target record outside the bundled reference objects (or the one indexing created), keyed by `id`. */

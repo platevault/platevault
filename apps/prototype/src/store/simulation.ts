@@ -5,11 +5,35 @@
  * write the catalog directly; PlateVault observes their effects the next time
  * it reads the disk.
  */
+import { rawFrameIds } from "@/domain/calibration-process"
 import { arrivalFiles, deviceFiles, VOLUME_IDS } from "@/domain/seed"
 import { fakeSha256, fileAt, fileKey, filesUnder, makeFile, removeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
-import type { Disk, DiskFile, SimulationFaults, VolumeId } from "@/domain/types"
+import type { CalibrationProcessId, Disk, DiskFile, SimulationFaults, VolumeId } from "@/domain/types"
 import { nowIso, store } from "./core"
+
+const WBPP_PREFIX = { dark: "masterDark", flat: "masterFlat", bias: "masterBias", "dark-flat": "masterDarkFlat" } as const
+
+/**
+ * P-CAL3: the tool a calibration process handed its raws to finishes and
+ * writes the master into the output folder (IMAGETYP master, NCOMBINE = the
+ * raw frames), named as WBPP does. PlateVault's watch detects it on its own.
+ */
+export function toolFinishedStacking(processId: CalibrationProcessId): boolean {
+  const state = store.getState()
+  const process = state.catalog.calibrationProcesses[processId]
+  const session = process?.sessionId ? state.catalog.sessions[process.sessionId] : undefined
+  const first = session ? state.catalog.assets[session.assetIds[0]!]?.observed : undefined
+  const volumeId = process?.outputFolder ? volumeForPath(state.disk, process.outputFolder) : null
+  if (!process?.outputFolder || !first || !volumeId) return false
+  const at = nowIso()
+  const detail = process.kind === "flat" ? `_FILTER-${first.filter ?? "none"}` : process.kind === "bias" ? "" : `_EXPOSURE-${first.exposureS.toFixed(2)}s`
+  const path = `${process.outputFolder}/${WBPP_PREFIX[process.kind]}_BIN-${first.binning}${detail}.xisf`
+  const header = { ...first, imageType: `master-${process.kind}` as const, object: null, dateObs: at, ra: null, dec: null, rotationDeg: null, ncombine: rawFrameIds(state.catalog, process).length }
+  const file = makeFile({ path, volumeId, sizeBytes: first.widthPx * first.heightPx * 4 + 23_040, kind: "xisf", header, sha256: fakeSha256(path, Date.parse(at)), modifiedAt: at })
+  store.setState((s) => ({ ...s, disk: writeFiles(s.disk, [file]) }))
+  return true
+}
 
 export function setVolumeMounted(volumeId: VolumeId, mounted: boolean) {
   store.setState((s) => {

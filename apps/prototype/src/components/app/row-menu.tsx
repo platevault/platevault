@@ -12,28 +12,49 @@
  * Right click, long press, Shift+F10 and the Menu key open it.
  */
 import type { LucideIcon } from "lucide-react"
-import { type MouseEvent, type ReactElement, type ReactNode, useState } from "react"
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu"
+import { Fragment, type MouseEvent, type ReactElement, type ReactNode, useState } from "react"
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { cn } from "@/lib/utils"
 
-export type MenuEntry =
-  | { label: string; onSelect: () => void; icon?: LucideIcon; shortcut?: string; destructive?: boolean; disabled?: boolean }
-  | { separator: true }
-  | { heading: string }
+type MenuItemEntry = { label: string; onSelect: () => void; icon?: LucideIcon; shortcut?: string; destructive?: boolean; disabled?: boolean }
 
+export type MenuEntry = MenuItemEntry | { separator: true } | { heading: string }
+
+function MenuItemView({ entry }: { entry: MenuItemEntry }) {
+  const Icon = entry.icon
+  return (
+    <ContextMenuItem disabled={entry.disabled} onClick={entry.onSelect} className={cn(entry.destructive && "text-destructive")}>
+      {Icon ? <Icon aria-hidden="true" /> : null}
+      {entry.label}
+      {entry.shortcut ? <ContextMenuShortcut>{entry.shortcut}</ContextMenuShortcut> : null}
+    </ContextMenuItem>
+  )
+}
+
+/**
+ * A heading labels the items after it up to the next separator or heading:
+ * they render as one group, as a Base UI group label must sit in a group.
+ */
 export function MenuEntries({ entries }: { entries: MenuEntry[] }) {
+  const blocks: Array<{ key: string; separator: true } | { key: string; heading: string | null; items: MenuItemEntry[] }> = []
+  for (const [index, entry] of entries.entries()) {
+    const last = blocks.at(-1)
+    if ("separator" in entry) blocks.push({ key: `sep-${index}`, separator: true })
+    else if ("heading" in entry) blocks.push({ key: `head-${index}-${entry.heading}`, heading: entry.heading, items: [] })
+    else if (last && "items" in last) last.items.push(entry)
+    else blocks.push({ key: `items-${index}`, heading: null, items: [entry] })
+  }
   return (
     <>
-      {entries.map((entry, index) => {
-        if ("separator" in entry) return <ContextMenuSeparator key={`sep-${index}`} />
-        if ("heading" in entry) return <ContextMenuLabel key={`head-${entry.heading}`}>{entry.heading}</ContextMenuLabel>
-        const Icon = entry.icon
+      {blocks.map((block) => {
+        if ("separator" in block) return <ContextMenuSeparator key={block.key} />
+        const items = block.items.map((entry) => <MenuItemView key={entry.label} entry={entry} />)
+        if (block.heading === null) return <Fragment key={block.key}>{items}</Fragment>
         return (
-          <ContextMenuItem key={entry.label} disabled={entry.disabled} onClick={entry.onSelect} className={cn(entry.destructive && "text-destructive")}>
-            {Icon ? <Icon aria-hidden="true" /> : null}
-            {entry.label}
-            {entry.shortcut ? <ContextMenuShortcut>{entry.shortcut}</ContextMenuShortcut> : null}
-          </ContextMenuItem>
+          <ContextMenuGroup key={block.key}>
+            <ContextMenuLabel>{block.heading}</ContextMenuLabel>
+            {items}
+          </ContextMenuGroup>
         )
       })}
     </>
