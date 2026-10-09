@@ -20,7 +20,8 @@ import { Link, useLocation, useNavigate, useSearch } from "@tanstack/react-route
 import { CalendarClock, CircleCheck, Download, Eye, FolderPlus, ListChecks, Pause, Play, Target, X } from "lucide-react"
 import { type ReactNode, useId, useState } from "react"
 import { IssuePill } from "@/app/issues-hub"
-import { GateLabel, StepGlyph, useFollowLink } from "@/app/run-ui"
+import { useMessages } from "@/app/preferences"
+import { GateLabel, StepGlyph, stepName, useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
 import { Box } from "@/components/app/box"
 import { type Column, DataTable } from "@/components/app/data-table"
@@ -57,11 +58,11 @@ import {
   targetStatus,
   type GoalProgress,
 } from "@/domain/derive"
-import { STEP_LABEL } from "@/domain/labels"
 import { sessionLabel, sessionLongLabel } from "@/domain/membership"
 import { bestWindowTonight, defaultCriteria, tonightAt, zoneAbbreviation } from "@/domain/planning"
 import type { Operation, Project, Session, SessionId } from "@/domain/types"
-import { formatCount, formatTime, plural } from "@/lib/format"
+import { formatCount, formatTime } from "@/lib/format"
+import { type Messages } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { SearchParams } from "@/routes"
 import { addRunSessions } from "@/store/actions/runs"
@@ -99,23 +100,24 @@ function useInPlaceReview() {
 export function HomePage() {
   const state = useStore((s) => s)
   const review = useInPlaceReview()
+  const m = useMessages()
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
-        title="Home"
+        title={m.nav_home()}
         actions={
           <>
             <Button size="sm" variant="outline" render={<Link to="/plan" />}>
               <CalendarClock data-icon="inline-start" aria-hidden="true" />
-              Plan tonight
+              {m.home_plan_tonight()}
             </Button>
             <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "new-project" })}>
               <FolderPlus data-icon="inline-start" aria-hidden="true" />
-              New Project…
+              {m.home_new_project()}
             </Button>
             <Button size="sm" onClick={() => openSheet({ kind: "import" })}>
               <Download data-icon="inline-start" aria-hidden="true" />
-              Import…
+              {m.import_open()}
             </Button>
           </>
         }
@@ -139,11 +141,12 @@ export function HomePage() {
 
 function IssueStrip() {
   const { issues } = useIssues()
+  const m = useMessages()
   return (
-    <section aria-label="Issues" data-home-top-line data-home-issues>
+    <section aria-label={m.issues_title()} data-home-top-line data-home-issues>
       {issues.length === 0 ? (
         <Pill tone="success" icon={CircleCheck}>
-          No issues
+          {m.issues_none()}
         </Pill>
       ) : (
         <ul className="flex flex-wrap gap-1.5">
@@ -162,6 +165,7 @@ function IssueStrip() {
 
 function ReviewSheet({ sessionId, onClose }: { sessionId: string | null; onClose: () => void }) {
   const session = useStore((s) => (sessionId ? s.catalog.sessions[sessionId] : undefined))
+  const m = useMessages()
   return (
     <Sheet open={session !== undefined} onOpenChange={(next) => !next && onClose()}>
       <SheetContent side="right" className="gap-0 p-0 data-[side=right]:w-[96vw] data-[side=right]:max-w-[96vw] data-[side=right]:sm:max-w-[96vw]" data-home-review>
@@ -170,7 +174,7 @@ function ReviewSheet({ sessionId, onClose }: { sessionId: string | null; onClose
             <SheetHeader className="flex-row items-center gap-2 border-b border-separator py-2 pr-12" data-chrome>
               <SheetTitle className="truncate">{sessionLongLabel(session)}</SheetTitle>
               <Button size="xs" variant="ghost" render={<Link to="/sessions/$sessionId" params={{ sessionId: session.id }} search={{ view: "review" }} />}>
-                Open session
+                {m.home_open_session()}
               </Button>
             </SheetHeader>
             <div className="flex min-h-0 flex-1 flex-col">
@@ -214,13 +218,20 @@ function amount(value: number, unit: ChannelGoal["unit"]): string {
   return unit === "seconds" ? formatHours(value) : formatCount(value)
 }
 
+function goalLine(m: Messages, g: ChannelGoal): string {
+  const inProject = amount(g.inProject, g.unit)
+  const captured = amount(g.captured, g.unit)
+  return g.goal !== null ? m.home_goal_line_goal({ inProject, captured, goal: amount(g.goal, g.unit) }) : m.home_goal_line({ inProject, captured })
+}
+
 function GoalLines({ goals }: { goals: ChannelGoal[] }) {
-  if (goals.length === 0) return <span className="text-xs text-muted-foreground">No goals</span>
+  const m = useMessages()
+  if (goals.length === 0) return <span className="text-xs text-muted-foreground">{m.home_goals_none()}</span>
   return (
     <ul className="space-y-1 py-1">
       {goals.map((g) => {
         const scale = Math.max(g.goal ?? 0, g.captured, 1)
-        const line = `${amount(g.inProject, g.unit)} in project / ${amount(g.captured, g.unit)} captured${g.goal !== null ? ` · goal ${amount(g.goal, g.unit)}` : ""}`
+        const line = goalLine(m, g)
         return (
           <li key={g.channel} className="grid grid-cols-[2.5rem_3rem_auto] items-center gap-2 text-xs whitespace-nowrap tabular-nums" title={`${g.channel}: ${line}`}>
             <span className="font-medium">{g.channel}</span>
@@ -243,6 +254,7 @@ function GoalLines({ goals }: { goals: ChannelGoal[] }) {
 
 function NextButton({ state, project }: { state: PrototypeState; project: Project }) {
   const follow = useFollowLink()
+  const m = useMessages()
   const next = projectNext(state, project, Date.parse(nowIso()))
   if (!next) return <span className="text-muted-foreground">–</span>
   const runId = next.step ? next.link.params?.runId : undefined
@@ -252,7 +264,7 @@ function NextButton({ state, project }: { state: PrototypeState; project: Projec
     <Button size="sm" variant="outline" className="max-w-[12rem] min-w-0" onClick={() => follow(next.link)} title={`${next.label}: ${next.reason}`} data-next={project.id}>
       {blocked ? <StepGlyph state="blocked" /> : null}
       <span className="truncate">{next.label}</span>
-      <span className="sr-only"> for {project.name}</span>
+      <span className="sr-only"> {m.home_next_for({ name: project.name })}</span>
     </Button>
   )
 }
@@ -260,6 +272,7 @@ function NextButton({ state, project }: { state: PrototypeState; project: Projec
 /** Stage; a blocked run reads "Blocked at <step>", opens that step, and carries its reason in the note (D-W35, PRJ-FR-18). */
 function StageCell({ state, project }: { state: PrototypeState; project: Project }) {
   const follow = useFollowLink()
+  const m = useMessages()
   const stage = projectStage(state, project)
   if (stage.state === "blocked") {
     for (const run of projectRuns(state.catalog, project.id)) {
@@ -268,9 +281,9 @@ function StageCell({ state, project }: { state: PrototypeState; project: Project
       return (
         <span className="mt-1 inline-flex items-center gap-1">
           <button type="button" className="rounded-sm underline-offset-2 hover:underline" onClick={() => follow(runStepLink(run, blocker.step))} data-gate="blocked">
-            <GateLabel state="blocked" label={`Blocked at ${STEP_LABEL[blocker.step]}`} className="text-destructive" />
+            <GateLabel state="blocked" label={m.home_blocked_at({ step: stepName(m, blocker.step) })} className="text-destructive" />
           </button>
-          <NoteMarker label={`Why ${run.name} is blocked`} rows={[{ label: run.name, value: blocker.message }]} />
+          <NoteMarker label={m.home_why_blocked({ name: run.name })} rows={[{ label: run.name, value: blocker.message }]} />
         </span>
       )
     }
@@ -281,6 +294,7 @@ function StageCell({ state, project }: { state: PrototypeState; project: Project
 function ProjectsBox({ state, className }: { state: PrototypeState; className?: string }) {
   const follow = useFollowLink()
   const navigate = useNavigate()
+  const m = useMessages()
   const showDone = state.slices.a.showDone
   const switchId = useId()
   const all = Object.values(state.catalog.projects).sort((a, b) => Number(a.state === "done") - Number(b.state === "done") || a.name.localeCompare(b.name))
@@ -290,7 +304,7 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
   const columns: Column<Project>[] = [
     {
       id: "project",
-      header: "Project",
+      header: m.home_column_project(),
       rowHeader: true,
       className: "w-[40%] align-top whitespace-normal",
       sortValue: (p) => p.name,
@@ -300,29 +314,29 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
             <Link to="/projects/$projectId" params={{ projectId: p.id }} className="font-medium underline-offset-2 hover:underline">
               {p.name}
             </Link>
-            {p.state === "done" ? <Pill tone="muted">{projectStatus(p) === "archived" ? "Archived" : "Done"}</Pill> : null}
+            {p.state === "done" ? <Pill tone="muted">{projectStatus(p) === "archived" ? m.status_archived() : m.status_done()}</Pill> : null}
           </div>
           <div className="text-xs text-pretty text-muted-foreground">
-            {p.subjects.map((s) => subjectName(state.catalog, s)).join(", ") || "No subjects"} · {plural(p.rigIds.length, "rig")}
+            {p.subjects.map((s) => subjectName(state.catalog, s)).join(", ") || m.home_subjects_none()} · {m.home_rig_count({ count: p.rigIds.length })}
           </div>
           <StageCell state={state} project={p} />
         </div>
       ),
     },
-    { id: "goals", header: "Goals", className: "align-top", cell: (p) => <GoalLines goals={channelGoals(goalProgress(state.catalog, p))} /> },
-    { id: "next", header: "Next", className: "w-[12rem] align-top", cell: (p) => <div className="py-1"><NextButton state={state} project={p} /></div> },
+    { id: "goals", header: m.home_goals(), className: "align-top", cell: (p) => <GoalLines goals={channelGoals(goalProgress(state.catalog, p))} /> },
+    { id: "next", header: m.home_column_next(), className: "w-[12rem] align-top", cell: (p) => <div className="py-1"><NextButton state={state} project={p} /></div> },
   ]
   const menu = (p: Project): MenuEntry[] => {
     const next = projectNext(state, p, Date.parse(nowIso()))
     return [
       { heading: p.name },
-      { label: "Open", icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId", params: { projectId: p.id } }) },
+      { label: m.verb_open(), icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId", params: { projectId: p.id } }) },
       ...(next ? [{ label: next.label, onSelect: () => follow(next.link) }] : []),
       ...(p.state === "open"
         ? [
             { separator: true } as const,
-            { label: "Start run…", icon: Play, onSelect: () => openSheet({ kind: "start-run", projectId: p.id }) },
-            { label: "Plan", icon: CalendarClock, onSelect: () => void navigate({ to: "/plan", search: { project: p.id } }) },
+            { label: m.home_start_run_menu(), icon: Play, onSelect: () => openSheet({ kind: "start-run", projectId: p.id }) },
+            { label: m.nav_plan(), icon: CalendarClock, onSelect: () => void navigate({ to: "/plan", search: { project: p.id } }) },
           ]
         : []),
     ]
@@ -335,34 +349,34 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
       className={className}
       title={
         <span className="flex items-center gap-1.5">
-          Projects <CountBadge count={rows.length} label={plural(rows.length, "Project")} />
+          {m.nav_projects()} <CountBadge count={rows.length} label={m.home_project_count({ count: rows.length })} />
         </span>
       }
       actions={
         <div className="flex items-center gap-2" data-chrome>
           <Switch id={switchId} size="sm" checked={showDone} onCheckedChange={setShowDone} />
           <Label htmlFor={switchId} className="text-xs font-normal">
-            Show done
+            {m.home_show_done()}
           </Label>
-          {!showDone && done.length > 0 ? <Pill tone="muted">{done.length} hidden</Pill> : null}
+          {!showDone && done.length > 0 ? <Pill tone="muted">{m.home_hidden_count({ count: done.length })}</Pill> : null}
         </div>
       }
     >
       {all.length === 0 ? (
         <EmptyState
           icon={FolderPlus}
-          title="No Projects"
+          title={m.home_projects_none()}
           description={null}
           className="m-3"
           action={
             <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "new-project" })}>
-              New Project…
+              {m.home_new_project()}
             </Button>
           }
         />
       ) : (
         <DataTable
-          label="Projects"
+          label={m.nav_projects()}
           rows={rows}
           columns={columns}
           getRowId={(p) => p.id}
@@ -371,9 +385,9 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
           contextMenu={menu}
           empty={
             <div className="flex items-center gap-2 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">All Done</span>
+              <span className="text-muted-foreground">{m.home_all_done()}</span>
               <Button size="xs" variant="outline" onClick={() => setShowDone(true)}>
-                Show done
+                {m.home_show_done()}
               </Button>
             </div>
           }
@@ -388,19 +402,20 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
 type SessionFilterLink = "needs-target" | "not-in-project"
 
 function WorkGroup({ title, count, filter, children }: { title: string; count: number; filter?: SessionFilterLink; children: ReactNode }) {
+  const m = useMessages()
   return (
     <div className="min-w-0">
       <div className="flex min-h-7 items-center justify-between gap-2 border-b border-separator" data-chrome>
         <h3 className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-          {title} <CountBadge count={count} label={plural(count, "session")} />
+          {title} <CountBadge count={count} label={m.session_count({ count })} />
         </h3>
         {filter && count > ROWS_PER_GROUP ? (
           <Link to="/sessions" search={{ filter }} className="text-xs text-link underline-offset-2 hover:underline">
-            All {formatCount(count)}
+            {m.home_all_count({ count: formatCount(count) })}
           </Link>
         ) : null}
       </div>
-      {count === 0 ? <p className="py-1.5 text-xs text-muted-foreground">None</p> : <ul className="divide-y divide-border/60">{children}</ul>}
+      {count === 0 ? <p className="py-1.5 text-xs text-muted-foreground">{m.home_none()}</p> : <ul className="divide-y divide-border/60">{children}</ul>}
     </div>
   )
 }
@@ -423,11 +438,12 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
   const { catalog } = state
   const follow = useFollowLink()
   const navigate = useNavigate()
+  const m = useMessages()
   const work = sessionsNeedingWork(catalog)
   const [notice, setNotice] = useState<AddedNotice | null>(null)
   const [refusal, setRefusal] = useState<RefusalProps | null>(null)
   const [adding, setAdding] = useState<PendingAdd | null>(null)
-  const projectName = (id: string) => catalog.projects[id]?.name ?? "Project"
+  const projectName = (id: string) => catalog.projects[id]?.name ?? m.home_column_project()
   // A session can be a candidate of several Projects; its library review is one.
   const unreviewed = [...new Map(work.unreviewed.map((u) => [u.session.id, u])).values()]
   const total = work.needsTarget.length + work.notInProject.length + unreviewed.length + work.readyToAdd.length
@@ -438,10 +454,10 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
     if (!session) return []
     return [
       { heading: sessionLabel(session) },
-      { label: "Open", icon: Eye, onSelect: () => openSession(sessionId) },
-      { label: "Review frames", icon: ListChecks, onSelect: () => onReview(sessionId) },
+      { label: m.verb_open(), icon: Eye, onSelect: () => openSession(sessionId) },
+      { label: m.session_review_frames(), icon: ListChecks, onSelect: () => onReview(sessionId) },
       { separator: true },
-      ...(sessionTargetId(session) ? addToProjectEntries(catalog, sessionId, setAdding) : [{ label: "Choose Target", icon: Target, onSelect: () => openSession(sessionId, "target") }]),
+      ...(sessionTargetId(session) ? addToProjectEntries(m, catalog, sessionId, setAdding) : [{ label: m.session_choose_target(), icon: Target, onSelect: () => openSession(sessionId, "target") }]),
     ]
   }
 
@@ -452,52 +468,52 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
       className={className}
       title={
         <span className="flex items-center gap-1.5">
-          Sessions <CountBadge count={total} tone={total > 0 ? "warning" : "neutral"} label={`${plural(total, "session")} need work`} />
+          {m.nav_sessions()} <CountBadge count={total} tone={total > 0 ? "warning" : "neutral"} label={m.home_sessions_need_work({ count: total })} />
         </span>
       }
       actions={
         <Button size="xs" variant="ghost" render={<Link to="/sessions" />}>
-          All sessions
+          {m.home_all_sessions()}
         </Button>
       }
     >
       <div className="space-y-3">
         {notice ? (
-          <Notice tone="info" title={notice.title} actions={<Button size="xs" variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>
+          <Notice tone="info" title={notice.title} actions={<Button size="xs" variant="ghost" onClick={() => setNotice(null)}>{m.session_dismiss()}</Button>}>
             {notice.note}
           </Notice>
         ) : null}
         {refusal ? <Refusal {...refusal} /> : null}
         {total === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing to do</p>
+          <p className="text-sm text-muted-foreground">{m.home_nothing_to_do()}</p>
         ) : (
           <ContextMenuArea menu={menu}>
             <div className="grid gap-x-6 gap-y-3 2xl:grid-cols-2">
-              <WorkGroup title="Needs a Target" count={work.needsTarget.length} filter="needs-target">
+              <WorkGroup title={m.sessions_filter_needs_target()} count={work.needsTarget.length} filter="needs-target">
                 {work.needsTarget.slice(0, ROWS_PER_GROUP).map((session) => {
                   const suggestion = session.target.value ? catalog.targets[session.target.value] : undefined
                   return (
                     <WorkRow
                       key={session.id}
                       session={session}
-                      detail={session.objectLabel ? `OBJECT ${session.objectLabel}` : "No OBJECT"}
+                      detail={session.objectLabel ? m.session_object({ name: session.objectLabel }) : m.session_no_object()}
                       action={
                         suggestion ? (
                           <Button
                             size="xs"
                             variant="outline"
-                            title="Suggested by the evidence"
+                            title={m.home_suggested()}
                             onClick={() => {
                               const result = confirmTarget(session.id, suggestion.id, session.revision)
-                              setRefusal(refusalOf(result, "Can't confirm"))
-                              if (result.ok) announce(`Target confirmed: ${suggestion.name}`)
+                              setRefusal(refusalOf(result, m.session_cant_confirm()))
+                              if (result.ok) announce(m.session_target_confirmed({ name: suggestion.name }))
                             }}
                           >
-                            Confirm {suggestion.name}
+                            {m.home_confirm_target({ name: suggestion.name })}
                           </Button>
                         ) : (
                           <Button size="xs" variant="outline" render={<Link to="/sessions/$sessionId" params={{ sessionId: session.id }} hash="target" />}>
-                            Choose Target
+                            {m.session_choose_target()}
                           </Button>
                         )
                       }
@@ -505,7 +521,7 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
                   )
                 })}
               </WorkGroup>
-              <WorkGroup title="Not in any Project" count={work.notInProject.length} filter="not-in-project">
+              <WorkGroup title={m.sessions_filter_not_in_project()} count={work.notInProject.length} filter="not-in-project">
                 {work.notInProject.slice(0, ROWS_PER_GROUP).map((session) => (
                   <WorkRow
                     key={session.id}
@@ -515,26 +531,26 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
                   />
                 ))}
               </WorkGroup>
-              <WorkGroup title="Unreviewed" count={unreviewed.length}>
+              <WorkGroup title={m.status_unreviewed()} count={unreviewed.length}>
                 {unreviewed.slice(0, ROWS_PER_GROUP).map(({ session, projectId, frames }) => (
                   <WorkRow
                     key={session.id}
                     session={session}
                     detail={
                       <>
-                        <CountBadge count={frames} tone="warning" label={`${plural(frames, "frame")} unreviewed`} />
+                        <CountBadge count={frames} tone="warning" label={m.session_frames_unreviewed({ count: frames, frames: formatCount(frames) })} />
                         <span className="truncate">{projectName(projectId)}</span>
                       </>
                     }
                     action={
                       <Button size="xs" variant="outline" onClick={() => onReview(session.id)} data-review-session={session.id}>
-                        Review
+                        {m.verb_review()}
                       </Button>
                     }
                   />
                 ))}
               </WorkGroup>
-              <WorkGroup title="Ready to add" count={work.readyToAdd.length}>
+              <WorkGroup title={m.home_group_ready_to_add()} count={work.readyToAdd.length}>
                 {work.readyToAdd.slice(0, ROWS_PER_GROUP).map(({ session, projectId }) => {
                   const run = runToJoin(catalog, projectId, session.id)
                   return (
@@ -547,21 +563,21 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
                           <Button
                             size="xs"
                             variant="outline"
-                            title={`Add to ${run.name}`}
+                            title={m.home_add_to_named_run({ name: run.name })}
                             onClick={() => {
-                              const reason = runCandidates(catalog, run).find((c) => c.session.id === session.id)?.reason ?? `Candidate of ${run.name}`
+                              const reason = runCandidates(catalog, run).find((c) => c.session.id === session.id)?.reason ?? m.home_candidate_of({ name: run.name })
                               const result = addRunSessions(run.id, [session.id], { kind: "candidate", detail: reason })
-                              setRefusal(refusalOf(result, "Can't add"))
+                              setRefusal(refusalOf(result, m.session_cant_add()))
                               if (!result.ok) return
-                              announce(`${sessionLabel(session)} added to the ${run.name} draft`)
+                              announce(m.home_added_to_draft({ session: sessionLabel(session), run: run.name }))
                               follow(runStepLink(run, "select"))
                             }}
                           >
-                            Add to run
+                            {m.home_add_to_run()}
                           </Button>
                         ) : (
                           <Button size="xs" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId })}>
-                            Start run
+                            {m.home_start_run()}
                           </Button>
                         )
                       }
@@ -582,13 +598,14 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
 
 function TonightBox({ state, className }: { state: PrototypeState; className?: string }) {
   const site = planningSite(state)
+  const m = useMessages()
   if (!site) {
     return (
-      <Box id="home-tonight" level={2} title="Tonight" className={className}>
+      <Box id="home-tonight" level={2} title={m.home_tonight()} className={className}>
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">No site</span>
+          <span className="text-muted-foreground">{m.home_no_site()}</span>
           <Button size="xs" variant="outline" render={<Link to="/settings/sites" />}>
-            Add site
+            {m.home_add_site()}
           </Button>
         </div>
       </Box>
@@ -627,7 +644,7 @@ function TonightBox({ state, className }: { state: PrototypeState; className?: s
     <Box
       id="home-tonight"
       level={2}
-      title="Tonight"
+      title={m.home_tonight()}
       className={className}
       actions={
         <>
@@ -635,55 +652,55 @@ function TonightBox({ state, className }: { state: PrototypeState; className?: s
             {site.name}
           </Pill>
           <Button size="xs" variant="ghost" render={<Link to="/plan" />}>
-            Plan
+            {m.nav_plan()}
           </Button>
         </>
       }
     >
       <div className="space-y-2">
         <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm tabular-nums">
-          <dt className="text-muted-foreground">Darkness</dt>
-          <dd>{tonight.darkness ? `${formatTime(tonight.darkness.start, tz)}–${formatTime(tonight.darkness.end, tz)} ${zone(tonight.darkness.start)}` : "None tonight"}</dd>
-          <dt className="text-muted-foreground">Moon</dt>
+          <dt className="text-muted-foreground">{m.home_darkness()}</dt>
+          <dd>{tonight.darkness ? `${formatTime(tonight.darkness.start, tz)}–${formatTime(tonight.darkness.end, tz)} ${zone(tonight.darkness.start)}` : m.home_darkness_none()}</dd>
+          <dt className="text-muted-foreground">{m.home_moon()}</dt>
           <dd>
             {tonight.moon.phase}, {Math.round(tonight.moon.illuminationPct)}%
             <span className="text-muted-foreground">
-              {tonight.moon.rise ? ` · rises ${formatTime(tonight.moon.rise, tz)}` : ""}
-              {tonight.moon.set ? ` · sets ${formatTime(tonight.moon.set, tz)}` : ""}
+              {tonight.moon.rise ? ` · ${m.home_moon_rises({ time: formatTime(tonight.moon.rise, tz) })}` : ""}
+              {tonight.moon.set ? ` · ${m.home_moon_sets({ time: formatTime(tonight.moon.set, tz) })}` : ""}
             </span>
           </dd>
         </dl>
         <h3 className="border-b border-separator pt-1 pb-1 text-xs font-semibold text-muted-foreground" data-chrome>
-          Windows
+          {m.home_windows()}
         </h3>
         {rows.length === 0 ? (
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">No subjects or favourites</span>
+            <span className="text-muted-foreground">{m.home_no_subjects_or_favourites()}</span>
             <Button size="xs" variant="outline" render={<Link to="/targets" />}>
-              Targets
+              {m.nav_targets()}
             </Button>
           </div>
         ) : (
           <ul className="divide-y divide-border/60 text-sm" data-tonight-windows>
             {withWindow.map((r) => (
               <li key={r.key} className="grid min-h-(--row-h) grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-1">
-                <span className="min-w-0 truncate" title={r.projects.join(", ") || "★ favourite"}>
-                  {r.favourite ? <span role="img" aria-label="Favourite">★ </span> : null}
+                <span className="min-w-0 truncate" title={r.projects.join(", ") || m.home_favourite_title()}>
+                  {r.favourite ? <span role="img" aria-label={m.home_favourite()}>★ </span> : null}
                   {r.name}
                 </span>
                 <span className="text-xs tabular-nums">
                   {formatTime(r.window!.start, tz)}–{formatTime(r.window!.end, tz)}
-                  <span className="text-muted-foreground"> · {Math.round(r.window!.maxAltitudeDeg)}° · Moon {Math.round(r.window!.moonSeparationDeg)}°</span>
+                  <span className="text-muted-foreground"> · {m.home_window_detail({ altitude: Math.round(r.window!.maxAltitudeDeg), separation: Math.round(r.window!.moonSeparationDeg) })}</span>
                 </span>
               </li>
             ))}
             {without.map((r) => (
               <li key={r.key} className="grid min-h-(--row-h) grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-1 text-muted-foreground">
                 <span className="min-w-0 truncate">
-                  {r.favourite ? <span role="img" aria-label="Favourite">★ </span> : null}
+                  {r.favourite ? <span role="img" aria-label={m.home_favourite()}>★ </span> : null}
                   {r.name}
                 </span>
-                <span className="text-xs">No window</span>
+                <span className="text-xs">{m.home_no_window()}</span>
               </li>
             ))}
           </ul>
@@ -703,17 +720,18 @@ interface GoalRow {
 }
 
 function GoalsBox({ state, className }: { state: PrototypeState; className?: string }) {
+  const m = useMessages()
   const rows: GoalRow[] = targetStatus(state.catalog).map(({ project, subject, progress }) => {
     const panel = findPanel(subject, progress.goal.panelId)
     const name = subjectName(state.catalog, subject)
-    return { key: `${project.id}-${progress.goal.id}`, subject: panel ? `${name} · Panel ${panel.n}` : name, project, progress }
+    return { key: `${project.id}-${progress.goal.id}`, subject: panel ? m.home_panel({ name, n: panel.n }) : name, project, progress }
   })
   const unit = (p: GoalProgress) => (p.goal.integrationS !== null ? "seconds" : "frames")
   const val = (p: GoalProgress, t: { frames: number; seconds: number }) => (unit(p) === "seconds" ? formatHours(t.seconds) : formatCount(t.frames))
   const columns: Column<GoalRow>[] = [
     {
       id: "subject",
-      header: "Subject",
+      header: m.home_column_subject(),
       rowHeader: true,
       sortValue: (r) => r.subject,
       cell: (r) => (
@@ -725,35 +743,39 @@ function GoalsBox({ state, className }: { state: PrototypeState; className?: str
         </span>
       ),
     },
-    { id: "channel", header: "Channel", sortValue: (r) => r.progress.goal.channel, cell: (r) => <Pill tone="neutral">{r.progress.goal.channel}</Pill> },
-    { id: "in", header: "In project", align: "right", sortValue: (r) => r.progress.inProject.seconds, cell: (r) => val(r.progress, r.progress.inProject) },
-    { id: "captured", header: "Captured", align: "right", sortValue: (r) => r.progress.captured.seconds, cell: (r) => val(r.progress, r.progress.captured) },
+    { id: "channel", header: m.home_column_channel(), sortValue: (r) => r.progress.goal.channel, cell: (r) => <Pill tone="neutral">{r.progress.goal.channel}</Pill> },
+    { id: "in", header: m.home_column_in_project(), align: "right", sortValue: (r) => r.progress.inProject.seconds, cell: (r) => val(r.progress, r.progress.inProject) },
+    { id: "captured", header: m.coverage_captured(), align: "right", sortValue: (r) => r.progress.captured.seconds, cell: (r) => val(r.progress, r.progress.captured) },
     {
       id: "goal",
-      header: "Goal",
+      header: m.home_column_goal(),
       align: "right",
-      cell: (r) => (r.progress.goal.integrationS !== null ? formatHours(r.progress.goal.integrationS) : r.progress.goal.frameCount !== null ? plural(r.progress.goal.frameCount, "frame") : "Quality bar"),
+      cell: (r) => {
+        const { integrationS, frameCount } = r.progress.goal
+        if (integrationS !== null) return formatHours(integrationS)
+        return frameCount !== null ? m.session_frame_count({ count: frameCount, frames: formatCount(frameCount) }) : m.home_quality_bar()
+      },
     },
     {
       id: "needs",
-      header: "Needs",
+      header: m.home_column_needs(),
       sortValue: (r) => r.progress.remainingS ?? 0,
       cell: (r) => {
         const p = r.progress
         if (p.remainingS === null) {
           const short = Math.max(0, (p.goal.frameCount ?? 0) - p.inProject.frames)
-          return short > 0 ? <span className="tabular-nums">{plural(short, "frame")}</span> : <Pill tone="muted">Quality bar</Pill>
+          return short > 0 ? <span className="tabular-nums">{m.session_frame_count({ count: short, frames: formatCount(short) })}</span> : <Pill tone="muted">{m.home_quality_bar()}</Pill>
         }
         const toCapture = Math.max(0, (p.goal.integrationS ?? 0) - p.captured.seconds)
         return (
           <span className="flex items-center gap-1.5 whitespace-nowrap tabular-nums">
             {formatHours(p.remainingS)}
             {toCapture === 0 ? (
-              <Pill tone="info" title="Captured covers it: add candidates to a run">
-                Captured
+              <Pill tone="info" title={m.home_captured_covers()}>
+                {m.coverage_captured()}
               </Pill>
             ) : (
-              <Pill tone="muted" title="Still to capture">
+              <Pill tone="muted" title={m.home_still_to_capture()}>
                 +{formatHours(toCapture)}
               </Pill>
             )}
@@ -771,18 +793,18 @@ function GoalsBox({ state, className }: { state: PrototypeState; className?: str
       className={className}
       title={
         <span className="flex items-center gap-1.5">
-          Goals <CountBadge count={rows.length} label={`${plural(rows.length, "goal")} unmet`} />
+          {m.home_goals()} <CountBadge count={rows.length} label={m.home_goals_unmet({ count: rows.length })} />
         </span>
       }
     >
       <DataTable
-        label="Unmet goals"
+        label={m.home_unmet_goals()}
         rows={rows}
         columns={columns}
         getRowId={(r) => r.key}
         scroll="none"
         className="rounded-none border-0"
-        empty={<p className="px-3 py-2 text-sm text-muted-foreground">{hasGoals ? "All met" : "No goals"}</p>}
+        empty={<p className="px-3 py-2 text-sm text-muted-foreground">{hasGoals ? m.home_all_met() : m.home_goals_none()}</p>}
       />
     </Box>
   )
@@ -803,24 +825,25 @@ function operationHref(state: PrototypeState, op: Operation): string {
 
 function WorkBox({ state, className }: { state: PrototypeState; className?: string }) {
   const ops = runningWork(state.operations)
+  const m = useMessages()
   return (
     <Box
       id="home-work"
       level={2}
       title={
         <span className="flex items-center gap-1.5">
-          Work {ops.length > 0 ? <CountBadge count={ops.length} tone="info" label={`${ops.length} running`} /> : null}
+          {m.issues_group_work()} {ops.length > 0 ? <CountBadge count={ops.length} tone="info" label={m.home_running_count({ count: ops.length })} /> : null}
         </span>
       }
       className={className}
       actions={
         <Button size="xs" variant="ghost" render={<Link to="/activity" />}>
-          Activity
+          {m.nav_activity()}
         </Button>
       }
     >
       {ops.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nothing running</p>
+        <p className="text-sm text-muted-foreground">{m.home_nothing_running()}</p>
       ) : (
         <ul className="space-y-2.5" data-running-work>
           {ops.map((op) => {
@@ -835,25 +858,30 @@ function WorkBox({ state, className }: { state: PrototypeState; className?: stri
                   <div className="flex shrink-0 items-center gap-0.5">
                     <StatusBadge kind="operation" value={op.status} />
                     {op.status === "running" && op.canPause ? (
-                      <Button size="icon-xs" variant="ghost" aria-label={`Pause ${op.title}`} onClick={() => pauseOperation(op.id)}>
+                      <Button size="icon-xs" variant="ghost" aria-label={m.home_pause_named({ name: op.title })} onClick={() => pauseOperation(op.id)}>
                         <Pause aria-hidden="true" />
                       </Button>
                     ) : null}
                     {op.status === "paused" || op.status === "interrupted" ? (
-                      <Button size="icon-xs" variant="ghost" aria-label={`${op.status === "paused" ? "Resume" : "Retry"} ${op.title}`} onClick={() => resumeOperation(op.id)}>
+                      <Button
+                        size="icon-xs"
+                        variant="ghost"
+                        aria-label={op.status === "paused" ? m.home_resume_named({ name: op.title }) : m.home_retry_named({ name: op.title })}
+                        onClick={() => resumeOperation(op.id)}
+                      >
                         <Play aria-hidden="true" />
                       </Button>
                     ) : null}
                     {op.canCancel ? (
-                      <Button size="icon-xs" variant="ghost" aria-label={`Cancel ${op.title}`} onClick={() => cancelOperation(op.id)}>
+                      <Button size="icon-xs" variant="ghost" aria-label={m.home_cancel_named({ name: op.title })} onClick={() => cancelOperation(op.id)}>
                         <X aria-hidden="true" />
                       </Button>
                     ) : null}
                   </div>
                 </div>
-                <Progress value={value} aria-label={`${op.title} progress`} className="gap-1">
+                <Progress value={value} aria-label={m.operation_progress_label({ title: op.title })} className="gap-1">
                   <span className="text-xs text-muted-foreground tabular-nums" aria-hidden="true">
-                    {value === null ? op.progress.unit : `${formatCount(op.progress.done)} of ${formatCount(op.progress.total)} ${op.progress.unit}`}
+                    {value === null ? op.progress.unit : m.operation_progress_count({ done: formatCount(op.progress.done), total: formatCount(op.progress.total), unit: op.progress.unit })}
                   </span>
                 </Progress>
               </li>

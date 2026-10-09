@@ -497,5 +497,734 @@
   "tips_help": "Ajuda",
   "tips_note": "Nota {number}",
   "page_step_done": "(concluído)",
-  "ui_breadcrumb": "Trilha de navegação"
+  "ui_breadcrumb": "Trilha de navegação",
+  "home_plan_tonight": "Planejar a noite",
+  "home_new_project": "Novo Projeto…",
+  "import_open": "Importar…",
+  "home_open_session": "Abrir sessão",
+  "home_goals_none": "Sem metas",
+  "home_goal_line": "{inProject} no projeto / {captured} capturado",
+  "home_goal_line_goal": "{inProject} no projeto / {captured} capturado · meta {goal}",
+  "home_next_for": "para {name}",
+  "home_blocked_at": "Bloqueado em {step}",
+  "home_why_blocked": "Motivo do bloqueio: {name}",
+  "home_subjects_none": "Sem objetos",
+  "home_rig_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} setup",
+        "countPlural=*": "{count} setups"
+      }
+    }
+  ],
+  "home_column_project": "Projeto",
+  "home_goals": "Metas",
+  "home_column_next": "Próximo",
+  "home_start_run_menu": "Iniciar execução…",
+  "home_project_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Projeto",
+        "countPlural=*": "{count} Projetos"
+      }
+    }
+  ],
+  "home_show_done": "Mostrar concluídos",
+  "home_hidden_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} oculto",
+        "countPlural=*": "{count} ocultos"
+      }
+    }
+  ],
+  "home_projects_none": "Nenhum Projeto",
+  "home_all_done": "Tudo concluído",
+  "session_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão",
+        "countPlural=*": "{count} sessões"
+      }
+    }
+  ],
+  "home_all_count": "Todas as {count}",
+  "home_none": "Nenhuma",
+  "session_review_frames": "Revisar frames",
+  "session_choose_target": "Escolher Alvo",
+  "home_sessions_need_work": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão pendente",
+        "countPlural=*": "{count} sessões pendentes"
+      }
+    }
+  ],
+  "home_all_sessions": "Todas as sessões",
+  "session_dismiss": "Dispensar",
+  "home_nothing_to_do": "Nada a fazer",
+  "sessions_filter_needs_target": "Sem Alvo",
+  "sessions_filter_not_in_project": "Fora de Projetos",
+  "home_group_ready_to_add": "Prontas para adicionar",
+  "session_object": "OBJECT {name}",
+  "session_no_object": "Sem OBJECT",
+  "home_suggested": "Sugerido pelas evidências",
+  "session_cant_confirm": "Não é possível confirmar",
+  "session_target_confirmed": "Alvo confirmado: {name}",
+  "home_confirm_target": "Confirmar {name}",
+  "session_frames_unreviewed": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame não revisado",
+        "countPlural=*": "{frames} frames não revisados"
+      }
+    }
+  ],
+  "home_add_to_named_run": "Adicionar a {name}",
+  "home_candidate_of": "Candidata de {name}",
+  "session_cant_add": "Não é possível adicionar",
+  "home_added_to_draft": "{session} adicionada ao rascunho de {run}",
+  "home_add_to_run": "Adicionar à execução",
+  "home_start_run": "Iniciar execução",
+  "home_tonight": "Esta noite",
+  "home_no_site": "Sem local",
+  "home_add_site": "Adicionar local",
+  "home_darkness": "Escuridão",
+  "home_darkness_none": "Nenhuma esta noite",
+  "home_moon": "Lua",
+  "home_moon_rises": "nasce {time}",
+  "home_moon_sets": "se põe {time}",
+  "home_windows": "Janelas",
+  "home_no_subjects_or_favourites": "Sem objetos nem favoritos",
+  "home_favourite_title": "★ favorito",
+  "home_favourite": "Favorito",
+  "home_window_detail": "{altitude}° · Lua {separation}°",
+  "home_no_window": "Sem janela",
+  "home_panel": "{name} · Painel {n}",
+  "home_column_subject": "Objeto",
+  "home_column_channel": "Canal",
+  "home_column_in_project": "No projeto",
+  "home_column_goal": "Meta",
+  "session_frame_count": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame",
+        "countPlural=*": "{frames} frames"
+      }
+    }
+  ],
+  "home_quality_bar": "Critério de qualidade",
+  "home_column_needs": "Falta",
+  "home_captured_covers": "As capturas cobrem: adicione candidatas a uma execução",
+  "home_still_to_capture": "Ainda a capturar",
+  "home_goals_unmet": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} meta não cumprida",
+        "countPlural=*": "{count} metas não cumpridas"
+      }
+    }
+  ],
+  "home_unmet_goals": "Metas não cumpridas",
+  "home_all_met": "Todas cumpridas",
+  "home_running_count": "{count} em execução",
+  "home_nothing_running": "Nada em execução",
+  "home_pause_named": "Pausar {name}",
+  "home_resume_named": "Retomar {name}",
+  "home_retry_named": "Tentar de novo: {name}",
+  "home_cancel_named": "Cancelar {name}",
+  "session_add_to_project": "Adicionar ao Projeto",
+  "session_create_project_menu": "Criar Projeto…",
+  "session_label": "Sessão",
+  "session_adds_subject": "Adiciona o objeto {name}, com as metas do Projeto",
+  "session_adds_rig": "Adiciona o setup {name}",
+  "session_becomes_candidate": "{name} vira candidata",
+  "session_add_to_project_title": "Adicionar {session} a {project}?",
+  "session_no_rig": "sem setup",
+  "session_no_target": "Sem Alvo",
+  "session_add_session": "Adicionar sessão",
+  "session_choose_project": "Escolha um Projeto.",
+  "session_added_to_project": "{session} adicionada a {project}",
+  "session_add_to": "Adicionar {name} a",
+  "session_plus_rig": "+ setup {name}",
+  "session_no_open_project": "Nenhum Projeto aberto",
+  "session_prefilled": "Preenchido com este Alvo e setup",
+  "session_confirm_to_prefill": "Confirme um Alvo para preencher",
+  "session_create_project": "Criar Projeto",
+  "session_no_target_chosen": "nenhum Alvo escolhido",
+  "session_target_value": "Alvo: {name}",
+  "session_target_for": "Alvo de {name}",
+  "session_choose_a_target": "Escolha um Alvo",
+  "session_confirm_target": "Confirmar Alvo",
+  "session_no_rig_chosen": "nenhum setup escolhido",
+  "session_rig_confirmed": "Setup confirmado: {name}",
+  "session_rig_for": "Setup de {name}",
+  "session_choose_a_rig": "Escolha um setup",
+  "session_confirm_rig": "Confirmar setup",
+  "sessions_filter_all": "Todas",
+  "sessions_empty_all": "Nenhuma sessão de luz",
+  "sessions_empty_needs_target": "Todas têm Alvo",
+  "sessions_empty_not_in_project": "Todas em um Projeto",
+  "sessions_empty_trashed": "Nenhuma na Lixeira",
+  "sessions_new": "Nova",
+  "sessions_column_target": "Alvo",
+  "sessions_column_rig": "Setup",
+  "sessions_rig_needs_review": "Setup precisa de revisão",
+  "sessions_column_frames": "Frames",
+  "sessions_column_projects_runs": "Projetos · execuções",
+  "sessions_run_named": "Execução {name}",
+  "sessions_no_run": "sem execução",
+  "sessions_run_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} execução",
+        "countPlural=*": "{count} execuções"
+      }
+    }
+  ],
+  "sessions_no_project": "Sem Projeto",
+  "sessions_light_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão de luz",
+        "countPlural=*": "{count} sessões de luz"
+      }
+    }
+  ],
+  "sessions_import_running": "{title} · em execução",
+  "sessions_import_progress": "{done} de {total} frames",
+  "sessions_search": "Buscar sessões",
+  "sessions_search_placeholder": "OBJECT, Alvo, setup, noite",
+  "sessions_filter": "Filtrar sessões",
+  "sessions_trashed_help_label": "Sobre sessões na Lixeira",
+  "sessions_trashed_help": "Mantidas para rastreabilidade; ocultas de seletores, candidatas, metas e totais. Restaure-as da Lixeira do sistema e reescaneie para recuperá-las como Inutilizáveis.",
+  "sessions_table_label": "Sessões: {filter}",
+  "sessions_no_match": "Nenhum resultado",
+  "sessions_clear_search": "Limpar busca",
+  "sessions_show_all": "Mostrar todas",
+  "import_type_light": "Light",
+  "import_type_dark": "Dark",
+  "import_type_flat": "Flat",
+  "import_type_bias": "Bias",
+  "import_type_dark_flat": "Dark flat",
+  "import_type_master_dark": "Master dark",
+  "import_type_master_flat": "Master flat",
+  "import_type_master_bias": "Master bias",
+  "import_type_master_dark_flat": "Master dark flat",
+  "import_type_unclassified": "Não classificado",
+  "import_route_stack": "Calibração → empilhar",
+  "import_route_masters": "Biblioteca de calibração",
+  "import_location_read_only": "{name} somente leitura",
+  "import_no_write_permission": "{name}: sem permissão de escrita",
+  "import_no_captures_location": "Sem local de Capturas",
+  "import_no_calibration_location": "Sem local de Calibração",
+  "import_space_short": "{name}: faltam {size}",
+  "import_not_connected": "Não conectado",
+  "import_read_only_source": "Origem somente leitura",
+  "import_no_os_trash": "Sem Lixeira do sistema",
+  "import_source_not_connected": "{name} não conectado",
+  "import_only_held": "Apenas arquivos retidos",
+  "import_nothing_new": "Nada novo",
+  "import_move_blocked": "Mover: {reason}",
+  "session_open_sessions": "Abrir Sessões",
+  "session_process_stacking": "Empilhando",
+  "session_process_importing": "Importando master",
+  "session_process_trashing": "Movendo brutos para a Lixeira",
+  "session_process_done": "Master registrado",
+  "session_open_calibration": "Abrir Calibração",
+  "session_step_failed": "{step} falhou",
+  "session_view": "Visualização da sessão",
+  "session_detail": "Detalhes",
+  "session_in_os_trash": "Na Lixeira do sistema",
+  "session_unsettled": "Pendente",
+  "session_target_evidence": "Evidências de Alvo de {name}",
+  "session_no_evidence": "Sem evidências",
+  "session_rig_evidence": "Evidências de setup de {name}",
+  "session_why_candidate": "Por que {name} a considera",
+  "session_reason": "Motivo",
+  "session_needs_target_first": "Precisa de um Alvo antes",
+  "session_none": "Nenhum",
+  "session_headers": "Cabeçalhos",
+  "session_column_file": "Arquivo",
+  "session_column_quality": "Qualidade",
+  "session_column_exposure": "Exposição",
+  "session_column_availability": "Disponibilidade",
+  "session_os_trash": "Lixeira do sistema",
+  "session_column_copies": "Cópias",
+  "session_column_sha": "SHA-256",
+  "session_copy_path": "Copiar caminho",
+  "session_source_of": "Origem de {value}",
+  "session_header_source": "Cabeçalho {keyword}",
+  "session_observing_night": "Noite de observação",
+  "session_started": "Início",
+  "session_ended": "Fim",
+  "session_frame_type": "Tipo de frame",
+  "session_typed_at_import": "Tipo definido na importação; o cabeçalho não tem",
+  "session_filter": "Filtro",
+  "session_camera": "Câmera",
+  "session_telescope": "Telescópio",
+  "session_gain_offset": "Ganho · offset",
+  "session_sensor_temperature": "Temperatura do sensor",
+  "session_capture_site": "Local de captura",
+  "session_first_frame": "Primeiro frame",
+  "session_raw_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame bruto",
+        "countPlural=*": "{frames} frames brutos"
+      }
+    }
+  ],
+  "import_tab_source": "De uma origem",
+  "import_tab_folder": "Pasta da biblioteca",
+  "import_name_list": "{first} e {last}",
+  "import_cant_import": "Não é possível importar",
+  "import_cant_move": "Não é possível mover",
+  "import_choose_source": "Escolha uma origem",
+  "import_move": "Mover",
+  "import_verifies_copies": "Verifica cada cópia (SHA-256)",
+  "import_selected": "Selecionado",
+  "import_choose_folder": "Escolher pasta…",
+  "import_new": "Importar novos",
+  "import_all": "Importar todos",
+  "import_removable_devices": "Dispositivos removíveis",
+  "import_none_connected": "Nenhum conectado",
+  "import_how_recognised": "Como {name} foi reconhecido",
+  "import_layout": "Layout",
+  "import_from_named": "de {name}",
+  "import_saved_sources": "Origens salvas",
+  "import_none_saved": "Nenhuma salva",
+  "import_last_import": "Última importação {date}",
+  "import_never_imported": "Nunca importado",
+  "import_source_name": "Nome da origem",
+  "import_name_placeholder": "Nome",
+  "import_cant_save": "Não é possível salvar",
+  "import_save_source": "Salvar origem",
+  "import_prototype_controls": "Controles do protótipo",
+  "import_choose_folder_title": "Escolher pasta",
+  "import_choose_folder_description": "Dispositivo, pasta ou compartilhamento montado",
+  "import_from_verb": "Importar de",
+  "import_column_folder": "Pasta",
+  "import_fallback_used": "Sem valor para {tokens}: usa o valor alternativo",
+  "import_fallback": "Alternativo",
+  "import_column_type": "Tipo",
+  "import_type_typed": "{type} (definido)",
+  "import_column_size": "Tamanho",
+  "import_column_into": "Destino",
+  "import_preview": "Prévia",
+  "import_destinations": "Destinos da importação",
+  "import_nothing_to_import": "Nada para importar",
+  "import_destination": "Destino",
+  "import_lights": "Lights",
+  "import_naming_of": "Nomenclatura de {name}",
+  "import_captures_location": "Local de Capturas",
+  "import_calibration_location": "Local de Calibração",
+  "import_no_location": "Sem local",
+  "import_writable": "Gravável",
+  "import_not_writable": "Não gravável",
+  "import_free": "{size} livres",
+  "import_needs": "precisa de {size}",
+  "import_held": "Retidos",
+  "import_why_held": "Por que está retido",
+  "import_type_as": "Definir como…",
+  "import_typed_as": "Definido como {type}",
+  "import_undo": "Desfazer",
+  "import_writing": "Gravando",
+  "import_until_settled": "até o arquivo parar de mudar",
+  "import_import_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Importar {frames} frame",
+        "countPlural=*": "Importar {frames} frames"
+      }
+    }
+  ],
+  "import_move_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {frames} frame",
+        "countPlural=*": "Mover {frames} frames"
+      }
+    }
+  ],
+  "import_move_frames_title": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {frames} frame?",
+        "countPlural=*": "Mover {frames} frames?"
+      }
+    }
+  ],
+  "import_copies_into": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input size",
+        "input locations",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Copia {frames} frame ({size}) para {locations}",
+        "countPlural=*": "Copia {frames} frames ({size}) para {locations}"
+      }
+    }
+  ],
+  "import_sends_to_trash": [
+    {
+      "declarations": [
+        "input count",
+        "input sources",
+        "input volume",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Envia {sources} original verificado em {volume} para a Lixeira do sistema",
+        "countPlural=*": "Envia {sources} originais verificados em {volume} para a Lixeira do sistema"
+      }
+    }
+  ],
+  "import_sends_source_to_trash": [
+    {
+      "declarations": [
+        "input count",
+        "input sources",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Envia {sources} original verificado na origem para a Lixeira do sistema",
+        "countPlural=*": "Envia {sources} originais verificados na origem para a Lixeira do sistema"
+      }
+    }
+  ],
+  "import_file_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} arquivo",
+        "countPlural=*": "{files} arquivos"
+      }
+    }
+  ],
+  "import_new_count": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} novo",
+        "countPlural=*": "{frames} novos"
+      }
+    }
+  ],
+  "import_imported_before": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} importado antes",
+        "countPlural=*": "{count} importados antes"
+      }
+    }
+  ],
+  "import_held_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} arquivo retido",
+        "countPlural=*": "{files} arquivos retidos"
+      }
+    }
+  ],
+  "import_type_files_as": [
+    {
+      "declarations": [
+        "input count",
+        "input folder",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Definir o {count} arquivo em {folder} como",
+        "countPlural=*": "Definir os {count} arquivos em {folder} como"
+      }
+    }
+  ],
+  "import_skipped": "Ignorados",
+  "import_duplicates": "Duplicados",
+  "import_match": "Correspondência",
+  "import_match_sha": "SHA-256 de um frame da biblioteca",
+  "import_hide_sessions": "Ocultar sessões",
+  "import_show_sessions": "Mostrar sessões",
+  "import_name_taken": "Nome em uso",
+  "import_name_taken_detail": "tem bytes diferentes; nada é sobrescrito",
+  "import_library_frames": "Frames da biblioteca · {count}",
+  "import_copy_or_move": "Copiar ou Mover",
+  "import_copy": "Copiar",
+  "import_copy_detail": "verificado por SHA-256; o original fica",
+  "import_move_detail": "verificado por SHA-256; depois o original vai para a Lixeira do sistema",
+  "import_no_longer_recorded": "Não está mais registrado",
+  "import_start_again": "Recomeçar",
+  "import_imported": "Importados",
+  "import_target_set": "Alvo definido",
+  "import_more": "Importar mais",
+  "import_add_another": "Adicionar outra",
+  "import_show_in_calibration": "Mostrar em Calibração",
+  "import_show_in_sessions": "Mostrar em Sessões",
+  "import_index_help_label": "Sobre indexar no local",
+  "import_index_help": "Indexada onde está: nada é copiado, movido ou renomeado, e nenhum modelo de nomenclatura se aplica.",
+  "import_role": "Função",
+  "import_library_role": "Função na biblioteca",
+  "import_choose_a_folder": "Escolha uma pasta",
+  "import_add_and_index": "Adicionar e indexar",
+  "import_choose_library_folder": "Escolher pasta da biblioteca",
+  "import_indexed_in_place": "Indexada no local",
+  "import_skipped_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} arquivo ignorado",
+        "countPlural=*": "{files} arquivos ignorados"
+      }
+    }
+  ],
+  "import_duplicate_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} duplicado",
+        "countPlural=*": "{files} duplicados"
+      }
+    }
+  ],
+  "import_name_taken_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} nome em uso",
+        "countPlural=*": "{count} nomes em uso"
+      }
+    }
+  ],
+  "import_other_file_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} outro arquivo",
+        "countPlural=*": "{files} outros arquivos"
+      }
+    }
+  ],
+  "import_imported_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} importado",
+        "countPlural=*": "{count} importados"
+      }
+    }
+  ],
+  "import_master_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master",
+        "countPlural=*": "{count} masters"
+      }
+    }
+  ],
+  "import_image_file_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} arquivo de imagem",
+        "countPlural=*": "{files} arquivos de imagem"
+      }
+    }
+  ]
 }

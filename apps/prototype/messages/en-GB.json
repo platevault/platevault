@@ -497,5 +497,678 @@
   "tips_help": "Help",
   "tips_note": "Note {number}",
   "page_step_done": "(done)",
-  "ui_breadcrumb": "Breadcrumb"
+  "ui_breadcrumb": "Breadcrumb",
+  "home_plan_tonight": "Plan tonight",
+  "home_new_project": "New Project…",
+  "import_open": "Import…",
+  "home_open_session": "Open session",
+  "home_goals_none": "No goals",
+  "home_goal_line": "{inProject} in project / {captured} captured",
+  "home_goal_line_goal": "{inProject} in project / {captured} captured · goal {goal}",
+  "home_next_for": "for {name}",
+  "home_blocked_at": "Blocked at {step}",
+  "home_why_blocked": "Why {name} is blocked",
+  "home_subjects_none": "No subjects",
+  "home_rig_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} rig",
+        "countPlural=*": "{count} rigs"
+      }
+    }
+  ],
+  "home_column_project": "Project",
+  "home_goals": "Goals",
+  "home_column_next": "Next",
+  "home_start_run_menu": "Start run…",
+  "home_project_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Project",
+        "countPlural=*": "{count} Projects"
+      }
+    }
+  ],
+  "home_show_done": "Show done",
+  "home_hidden_count": "{count} hidden",
+  "home_projects_none": "No Projects",
+  "home_all_done": "All Done",
+  "session_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session",
+        "countPlural=*": "{count} sessions"
+      }
+    }
+  ],
+  "home_all_count": "All {count}",
+  "home_none": "None",
+  "session_review_frames": "Review frames",
+  "session_choose_target": "Choose Target",
+  "home_sessions_need_work": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session needs work",
+        "countPlural=*": "{count} sessions need work"
+      }
+    }
+  ],
+  "home_all_sessions": "All sessions",
+  "session_dismiss": "Dismiss",
+  "home_nothing_to_do": "Nothing to do",
+  "sessions_filter_needs_target": "Needs a Target",
+  "sessions_filter_not_in_project": "Not in any Project",
+  "home_group_ready_to_add": "Ready to add",
+  "session_object": "OBJECT {name}",
+  "session_no_object": "No OBJECT",
+  "home_suggested": "Suggested by the evidence",
+  "session_cant_confirm": "Can't confirm",
+  "session_target_confirmed": "Target confirmed: {name}",
+  "home_confirm_target": "Confirm {name}",
+  "session_frames_unreviewed": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame unreviewed",
+        "countPlural=*": "{frames} frames unreviewed"
+      }
+    }
+  ],
+  "home_add_to_named_run": "Add to {name}",
+  "home_candidate_of": "Candidate of {name}",
+  "session_cant_add": "Can't add",
+  "home_added_to_draft": "{session} added to the {run} draft",
+  "home_add_to_run": "Add to run",
+  "home_start_run": "Start run",
+  "home_tonight": "Tonight",
+  "home_no_site": "No site",
+  "home_add_site": "Add site",
+  "home_darkness": "Darkness",
+  "home_darkness_none": "None tonight",
+  "home_moon": "Moon",
+  "home_moon_rises": "rises {time}",
+  "home_moon_sets": "sets {time}",
+  "home_windows": "Windows",
+  "home_no_subjects_or_favourites": "No subjects or favourites",
+  "home_favourite_title": "★ favourite",
+  "home_favourite": "Favourite",
+  "home_window_detail": "{altitude}° · Moon {separation}°",
+  "home_no_window": "No window",
+  "home_panel": "{name} · Panel {n}",
+  "home_column_subject": "Subject",
+  "home_column_channel": "Channel",
+  "home_column_in_project": "In project",
+  "home_column_goal": "Goal",
+  "session_frame_count": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame",
+        "countPlural=*": "{frames} frames"
+      }
+    }
+  ],
+  "home_quality_bar": "Quality bar",
+  "home_column_needs": "Needs",
+  "home_captured_covers": "Captured covers it: add candidates to a run",
+  "home_still_to_capture": "Still to capture",
+  "home_goals_unmet": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} goal unmet",
+        "countPlural=*": "{count} goals unmet"
+      }
+    }
+  ],
+  "home_unmet_goals": "Unmet goals",
+  "home_all_met": "All met",
+  "home_running_count": "{count} running",
+  "home_nothing_running": "Nothing running",
+  "home_pause_named": "Pause {name}",
+  "home_resume_named": "Resume {name}",
+  "home_retry_named": "Retry {name}",
+  "home_cancel_named": "Cancel {name}",
+  "session_add_to_project": "Add to Project",
+  "session_create_project_menu": "Create Project…",
+  "session_label": "Session",
+  "session_adds_subject": "Adds subject {name}, with the Project's goals",
+  "session_adds_rig": "Adds rig {name}",
+  "session_becomes_candidate": "{name} becomes a candidate",
+  "session_add_to_project_title": "Add {session} to {project}?",
+  "session_no_rig": "no rig",
+  "session_no_target": "No Target",
+  "session_add_session": "Add session",
+  "session_choose_project": "Choose a Project.",
+  "session_added_to_project": "Added {session} to {project}",
+  "session_add_to": "Add {name} to",
+  "session_plus_rig": "+ rig {name}",
+  "session_no_open_project": "No open Project",
+  "session_prefilled": "Prefilled with this Target and rig",
+  "session_confirm_to_prefill": "Confirm a Target to prefill it",
+  "session_create_project": "Create Project",
+  "session_no_target_chosen": "no Target chosen",
+  "session_target_value": "Target: {name}",
+  "session_target_for": "Target for {name}",
+  "session_choose_a_target": "Choose a Target",
+  "session_confirm_target": "Confirm Target",
+  "session_no_rig_chosen": "no rig chosen",
+  "session_rig_confirmed": "Rig confirmed: {name}",
+  "session_rig_for": "Rig for {name}",
+  "session_choose_a_rig": "Choose a rig",
+  "session_confirm_rig": "Confirm rig",
+  "sessions_filter_all": "All",
+  "sessions_empty_all": "No light sessions",
+  "sessions_empty_needs_target": "None need a Target",
+  "sessions_empty_not_in_project": "All in a Project",
+  "sessions_empty_trashed": "None trashed",
+  "sessions_new": "New",
+  "sessions_column_target": "Target",
+  "sessions_column_rig": "Rig",
+  "sessions_rig_needs_review": "Rig needs review",
+  "sessions_column_frames": "Frames",
+  "sessions_column_projects_runs": "Projects · runs",
+  "sessions_run_named": "Run {name}",
+  "sessions_no_run": "no run",
+  "sessions_run_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} run",
+        "countPlural=*": "{count} runs"
+      }
+    }
+  ],
+  "sessions_no_project": "No Project",
+  "sessions_light_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} light session",
+        "countPlural=*": "{count} light sessions"
+      }
+    }
+  ],
+  "sessions_import_running": "{title} · running",
+  "sessions_import_progress": "{done} of {total} frames",
+  "sessions_search": "Search sessions",
+  "sessions_search_placeholder": "OBJECT, Target, rig, night",
+  "sessions_filter": "Filter sessions",
+  "sessions_trashed_help_label": "About Trashed sessions",
+  "sessions_trashed_help": "Kept for traceability; hidden from pickers, candidates, goals and totals. Put back from the OS Trash and rescan to restore them as Unusable.",
+  "sessions_table_label": "Sessions: {filter}",
+  "sessions_no_match": "No match",
+  "sessions_clear_search": "Clear search",
+  "sessions_show_all": "Show all",
+  "import_type_light": "Light",
+  "import_type_dark": "Dark",
+  "import_type_flat": "Flat",
+  "import_type_bias": "Bias",
+  "import_type_dark_flat": "Dark flat",
+  "import_type_master_dark": "Master dark",
+  "import_type_master_flat": "Master flat",
+  "import_type_master_bias": "Master bias",
+  "import_type_master_dark_flat": "Master dark flat",
+  "import_type_unclassified": "Unclassified",
+  "import_route_stack": "Calibration → stack",
+  "import_route_masters": "Calibration library",
+  "import_location_read_only": "{name} read-only",
+  "import_no_write_permission": "{name}: no write permission",
+  "import_no_captures_location": "No Captures location",
+  "import_no_calibration_location": "No Calibration location",
+  "import_space_short": "{name} {size} short",
+  "import_not_connected": "Not connected",
+  "import_read_only_source": "Read-only source",
+  "import_no_os_trash": "No OS Trash",
+  "import_source_not_connected": "{name} not connected",
+  "import_only_held": "Only held files",
+  "import_nothing_new": "Nothing new",
+  "import_move_blocked": "Move: {reason}",
+  "session_open_sessions": "Open Sessions",
+  "session_process_stacking": "Stacking",
+  "session_process_importing": "Importing master",
+  "session_process_trashing": "Trashing raws",
+  "session_process_done": "Master registered",
+  "session_open_calibration": "Open Calibration",
+  "session_step_failed": "{step} failed",
+  "session_view": "Session view",
+  "session_detail": "Detail",
+  "session_in_os_trash": "In the OS Trash",
+  "session_unsettled": "Unsettled",
+  "session_target_evidence": "Target evidence for {name}",
+  "session_no_evidence": "No evidence",
+  "session_rig_evidence": "Rig evidence for {name}",
+  "session_why_candidate": "Why {name} considers it",
+  "session_reason": "Reason",
+  "session_needs_target_first": "Needs a Target first",
+  "session_none": "None",
+  "session_headers": "Headers",
+  "session_column_file": "File",
+  "session_column_quality": "Quality",
+  "session_column_exposure": "Exposure",
+  "session_column_availability": "Availability",
+  "session_os_trash": "OS Trash",
+  "session_column_copies": "Copies",
+  "session_column_sha": "SHA-256",
+  "session_copy_path": "Copy path",
+  "session_source_of": "Source of {value}",
+  "session_header_source": "Header {keyword}",
+  "session_observing_night": "Observing night",
+  "session_started": "Started",
+  "session_ended": "Ended",
+  "session_frame_type": "Frame type",
+  "session_typed_at_import": "Typed at import; the header has none",
+  "session_filter": "Filter",
+  "session_camera": "Camera",
+  "session_telescope": "Telescope",
+  "session_gain_offset": "Gain · offset",
+  "session_sensor_temperature": "Sensor temperature",
+  "session_capture_site": "Capture site",
+  "session_first_frame": "First frame",
+  "session_raw_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} raw frame",
+        "countPlural=*": "{frames} raw frames"
+      }
+    }
+  ],
+  "import_tab_source": "From a source",
+  "import_tab_folder": "Library folder",
+  "import_name_list": "{first} and {last}",
+  "import_cant_import": "Can't import",
+  "import_cant_move": "Can't move",
+  "import_choose_source": "Choose a source",
+  "import_move": "Move",
+  "import_verifies_copies": "Verifies each copy (SHA-256)",
+  "import_selected": "Selected",
+  "import_choose_folder": "Choose folder…",
+  "import_new": "Import new",
+  "import_all": "Import all",
+  "import_removable_devices": "Removable devices",
+  "import_none_connected": "None connected",
+  "import_how_recognised": "How {name} was recognised",
+  "import_layout": "Layout",
+  "import_from_named": "from {name}",
+  "import_saved_sources": "Saved sources",
+  "import_none_saved": "None saved",
+  "import_last_import": "Last import {date}",
+  "import_never_imported": "Never imported",
+  "import_source_name": "Source name",
+  "import_name_placeholder": "Name",
+  "import_cant_save": "Can't save",
+  "import_save_source": "Save source",
+  "import_prototype_controls": "Prototype controls",
+  "import_choose_folder_title": "Choose folder",
+  "import_choose_folder_description": "Device, folder or mounted share",
+  "import_from_verb": "Import from",
+  "import_column_folder": "Folder",
+  "import_fallback_used": "No value for {tokens}: its fallback is used",
+  "import_fallback": "Fallback",
+  "import_column_type": "Type",
+  "import_type_typed": "{type} (typed)",
+  "import_column_size": "Size",
+  "import_column_into": "Into",
+  "import_preview": "Preview",
+  "import_destinations": "Import destinations",
+  "import_nothing_to_import": "Nothing to import",
+  "import_destination": "Destination",
+  "import_lights": "Lights",
+  "import_naming_of": "{name} naming",
+  "import_captures_location": "Captures location",
+  "import_calibration_location": "Calibration location",
+  "import_no_location": "No location",
+  "import_writable": "Writable",
+  "import_not_writable": "Not writable",
+  "import_free": "{size} free",
+  "import_needs": "needs {size}",
+  "import_held": "Held",
+  "import_why_held": "Why it is held",
+  "import_type_as": "Type as…",
+  "import_typed_as": "Typed {type}",
+  "import_undo": "Undo",
+  "import_writing": "Writing",
+  "import_until_settled": "until the file stops changing",
+  "import_import_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Import {frames} frame",
+        "countPlural=*": "Import {frames} frames"
+      }
+    }
+  ],
+  "import_move_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {frames} frame",
+        "countPlural=*": "Move {frames} frames"
+      }
+    }
+  ],
+  "import_move_frames_title": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {frames} frame?",
+        "countPlural=*": "Move {frames} frames?"
+      }
+    }
+  ],
+  "import_copies_into": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input size",
+        "input locations",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Copies {frames} frame ({size}) into {locations}",
+        "countPlural=*": "Copies {frames} frames ({size}) into {locations}"
+      }
+    }
+  ],
+  "import_sends_to_trash": [
+    {
+      "declarations": [
+        "input count",
+        "input sources",
+        "input volume",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Sends {sources} verified source on {volume} to the OS Trash",
+        "countPlural=*": "Sends {sources} verified sources on {volume} to the OS Trash"
+      }
+    }
+  ],
+  "import_sends_source_to_trash": [
+    {
+      "declarations": [
+        "input count",
+        "input sources",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Sends {sources} verified source on the source to the OS Trash",
+        "countPlural=*": "Sends {sources} verified sources on the source to the OS Trash"
+      }
+    }
+  ],
+  "import_file_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} file",
+        "countPlural=*": "{files} files"
+      }
+    }
+  ],
+  "import_new_count": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} new",
+        "countPlural=*": "{frames} new"
+      }
+    }
+  ],
+  "import_imported_before": "{count} imported before",
+  "import_held_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} held file",
+        "countPlural=*": "{files} held files"
+      }
+    }
+  ],
+  "import_type_files_as": [
+    {
+      "declarations": [
+        "input count",
+        "input folder",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Type the {count} file in {folder} as",
+        "countPlural=*": "Type the {count} files in {folder} as"
+      }
+    }
+  ],
+  "import_skipped": "Skipped",
+  "import_duplicates": "Duplicates",
+  "import_match": "Match",
+  "import_match_sha": "SHA-256 of a library frame",
+  "import_hide_sessions": "Hide sessions",
+  "import_show_sessions": "Show sessions",
+  "import_name_taken": "Name taken",
+  "import_name_taken_detail": "holds different bytes; nothing is overwritten",
+  "import_library_frames": "Library frames · {count}",
+  "import_copy_or_move": "Copy or Move",
+  "import_copy": "Copy",
+  "import_copy_detail": "verified by SHA-256; the source stays",
+  "import_move_detail": "verified by SHA-256, then the source goes to the OS Trash",
+  "import_no_longer_recorded": "No longer recorded",
+  "import_start_again": "Start again",
+  "import_imported": "Imported",
+  "import_target_set": "Target set",
+  "import_more": "Import more",
+  "import_add_another": "Add another",
+  "import_show_in_calibration": "Show in Calibration",
+  "import_show_in_sessions": "Show in Sessions",
+  "import_index_help_label": "About indexing in place",
+  "import_index_help": "Indexed where it is: nothing in it is copied, moved or renamed, and no naming template applies.",
+  "import_role": "Role",
+  "import_library_role": "Library role",
+  "import_choose_a_folder": "Choose a folder",
+  "import_add_and_index": "Add and index",
+  "import_choose_library_folder": "Choose library folder",
+  "import_indexed_in_place": "Indexed in place",
+  "import_skipped_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} skipped file",
+        "countPlural=*": "{files} skipped files"
+      }
+    }
+  ],
+  "import_duplicate_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} duplicate",
+        "countPlural=*": "{files} duplicates"
+      }
+    }
+  ],
+  "import_name_taken_count": "{count} name taken",
+  "import_other_file_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} other file",
+        "countPlural=*": "{files} other files"
+      }
+    }
+  ],
+  "import_imported_count": "{count} imported",
+  "import_master_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master",
+        "countPlural=*": "{count} masters"
+      }
+    }
+  ],
+  "import_image_file_count": [
+    {
+      "declarations": [
+        "input count",
+        "input files",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{files} image file",
+        "countPlural=*": "{files} image files"
+      }
+    }
+  ]
 }

@@ -12,6 +12,7 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { Download, Eye, Layers, ListChecks, Target } from "lucide-react"
 import { useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { openSheet } from "@/app/ui-state"
 import { type Column, DataTable, TableToolbar } from "@/components/app/data-table"
 import { EmptyState, Notice } from "@/components/app/feedback"
@@ -24,25 +25,30 @@ import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { formatHours } from "@/domain/derive"
 import { sessionLabel } from "@/domain/membership"
-import { formatCount, formatNight, plural } from "@/lib/format"
+import { formatCount, formatNight } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
 import type { ImportPayload } from "./import-run"
 import { AddToProjectDialog, AddToProjectMenu, type AddedNotice, addToProjectEntries, type PendingAdd } from "./parts"
-import { FILTER_LABEL, filterCounts, matchesFilter, parseFilter, type SessionFilter, type SessionRow, sessionReviewSearch, sessionRows } from "./session-model"
+import { filterCounts, filterLabel, matchesFilter, parseFilter, type SessionFilter, type SessionRow, sessionReviewSearch, sessionRows } from "./session-model"
 
 const FILTERS: SessionFilter[] = ["all", "needs-target", "not-in-project", "trashed"]
 
-const EMPTY_TITLE: Record<SessionFilter, string> = {
-  all: "No light sessions",
-  "needs-target": "None need a Target",
-  "not-in-project": "All in a Project",
-  trashed: "None trashed",
+function emptyTitle(m: Messages, filter: SessionFilter): string {
+  const title: Record<SessionFilter, () => string> = {
+    all: m.sessions_empty_all,
+    "needs-target": m.sessions_empty_needs_target,
+    "not-in-project": m.sessions_empty_not_in_project,
+    trashed: m.sessions_empty_trashed,
+  }
+  return title[filter]()
 }
 
 export function SessionsPage() {
   const search = useSearch({ strict: false }) as SearchParams
   const navigate = useNavigate()
+  const m = useMessages()
   const filter = parseFilter(search.filter)
   const query = search.q ?? ""
   const importId = search.import
@@ -80,40 +86,47 @@ export function SessionsPage() {
   const columns: Column<SessionRow>[] = [
     {
       id: "session",
-      header: "Session",
+      header: m.session_label(),
       rowHeader: true,
       sortValue: (r) => `${r.session.night}|${r.session.channel ?? ""}`,
       cell: (r) => (
         <span className="flex min-w-0 items-center gap-x-2 whitespace-nowrap">
-          <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium underline-offset-2 hover:underline" title={r.session.objectLabel ? `OBJECT ${r.session.objectLabel}` : "No OBJECT"}>
-            {formatNight(r.session.night, true)} · {r.session.channel ?? "No filter"}
+          <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium underline-offset-2 hover:underline" title={r.session.objectLabel ? m.session_object({ name: r.session.objectLabel }) : m.session_no_object()}>
+            {formatNight(r.session.night, true)} · {r.session.channel ?? m.palette_session_no_filter()}
           </Link>
-          {imported.has(r.session.id) ? <Pill tone="info">New</Pill> : null}
+          {imported.has(r.session.id) ? <Pill tone="info">{m.sessions_new()}</Pill> : null}
         </span>
       ),
     },
     {
       id: "target",
-      header: "Target",
+      header: m.sessions_column_target(),
       sortValue: (r) => r.targetName ?? "",
       cell: (r) =>
         r.targetName ? (
           <span className="truncate">{r.targetName}</span>
         ) : (
-          <span className="-my-1 flex items-center gap-2 whitespace-nowrap" title={r.session.objectLabel ? `OBJECT ${r.session.objectLabel}` : "No OBJECT"}>
-            <StatusBadge kind="association" value={r.session.target.status === "needs-review" ? "needs-review" : "unresolved"} label="Needs a Target" />
+          <span className="-my-1 flex items-center gap-2 whitespace-nowrap" title={r.session.objectLabel ? m.session_object({ name: r.session.objectLabel }) : m.session_no_object()}>
+            <StatusBadge kind="association" value={r.session.target.status === "needs-review" ? "needs-review" : "unresolved"} label={m.sessions_filter_needs_target()} />
             {r.trashed ? null : (
               <Button size="xs" variant="outline" render={<Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} hash="target" />}>
-                Choose
+                {m.verb_choose()}
               </Button>
             )}
           </span>
         ),
     },
-    { id: "rig", header: "Rig", sortValue: (r) => r.rigName ?? "", truncate: true, className: "max-w-44", cell: (r) => r.rigName ?? <StatusBadge kind="association" value={r.session.equipment.status === "needs-review" ? "needs-review" : "unresolved"} label="Rig needs review" /> },
+    {
+      id: "rig",
+      header: m.sessions_column_rig(),
+      sortValue: (r) => r.rigName ?? "",
+      truncate: true,
+      className: "max-w-44",
+      cell: (r) => r.rigName ?? <StatusBadge kind="association" value={r.session.equipment.status === "needs-review" ? "needs-review" : "unresolved"} label={m.sessions_rig_needs_review()} />,
+    },
     {
       id: "frames",
-      header: "Frames",
+      header: m.sessions_column_frames(),
       align: "right",
       sortValue: (r) => r.seconds,
       cell: (r) => (
@@ -124,34 +137,34 @@ export function SessionsPage() {
     },
     {
       id: "review",
-      header: "Review",
+      header: m.step_review(),
       sortValue: (r) => r.unreviewed,
       cell: (r) =>
         r.trashed ? (
           <span className="text-muted-foreground">–</span>
         ) : (
           <Button size="xs" variant="outline" className="-my-1" onClick={() => review(r)} data-review-session={r.session.id}>
-            Review
-            {r.unreviewed > 0 ? <CountBadge count={r.unreviewed} tone="warning" label={`${plural(r.unreviewed, "frame")} unreviewed`} /> : null}
+            {m.verb_review()}
+            {r.unreviewed > 0 ? <CountBadge count={r.unreviewed} tone="warning" label={m.session_frames_unreviewed({ count: r.unreviewed, frames: formatCount(r.unreviewed) })} /> : null}
             <span className="sr-only"> {sessionLabel(r.session)}</span>
           </Button>
         ),
     },
     {
       id: "projects",
-      header: "Projects · runs",
+      header: m.sessions_column_projects_runs(),
       sortValue: (r) => r.candidateOf.map((c) => c.project.name).join(","),
       cell: (r) =>
         r.trashed ? (
-          <Pill tone="muted">Trashed</Pill>
+          <Pill tone="muted">{m.status_trashed()}</Pill>
         ) : r.candidateOf.length > 0 ? (
-          <span className="truncate" title={[...r.candidateOf.map((c) => c.project.name), ...r.runs.map((run) => `Run ${run.name}`)].join(", ")}>
+          <span className="truncate" title={[...r.candidateOf.map((c) => c.project.name), ...r.runs.map((run) => m.sessions_run_named({ name: run.name }))].join(", ")}>
             {r.candidateOf.map((c) => c.project.name).join(", ")}
-            <span className="text-muted-foreground"> · {r.runs.length === 0 ? "no run" : plural(r.runs.length, "run")}</span>
+            <span className="text-muted-foreground"> · {r.runs.length === 0 ? m.sessions_no_run() : m.sessions_run_count({ count: r.runs.length })}</span>
           </span>
         ) : r.notInProject ? (
           <span className="-my-1 flex items-center gap-2 whitespace-nowrap">
-            <Pill tone="warning">No Project</Pill>
+            <Pill tone="warning">{m.sessions_no_project()}</Pill>
             <AddToProjectMenu sessionId={r.session.id} size="xs" onAdded={setNotice} />
           </span>
         ) : (
@@ -162,13 +175,13 @@ export function SessionsPage() {
 
   const menu = (r: SessionRow): MenuEntry[] => [
     { heading: sessionLabel(r.session) },
-    { label: "Open", icon: Eye, onSelect: () => open(r) },
+    { label: m.verb_open(), icon: Eye, onSelect: () => open(r) },
     ...(r.trashed
       ? []
       : [
-          { label: "Review frames", icon: ListChecks, onSelect: () => review(r) },
+          { label: m.session_review_frames(), icon: ListChecks, onSelect: () => review(r) },
           { separator: true } as const,
-          ...(r.needsTarget ? [{ label: "Choose Target", icon: Target, onSelect: () => open(r, { hash: "target" }) }] : addToProjectEntries(catalog, r.session.id, setAdding)),
+          ...(r.needsTarget ? [{ label: m.session_choose_target(), icon: Target, onSelect: () => open(r, { hash: "target" }) }] : addToProjectEntries(m, catalog, r.session.id, setAdding)),
         ]),
   ]
 
@@ -177,12 +190,12 @@ export function SessionsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
-        title="Sessions"
-        meta={<CountBadge count={counts.all} label={plural(counts.all, "light session")} />}
+        title={m.nav_sessions()}
+        meta={<CountBadge count={counts.all} label={m.sessions_light_count({ count: counts.all })} />}
         actions={
           <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "import" })}>
             <Download data-icon="inline-start" aria-hidden="true" />
-            Import…
+            {m.import_open()}
           </Button>
         }
       />
@@ -190,39 +203,39 @@ export function SessionsPage() {
         {importOp ? (
           <Notice
             tone="info"
-            title={importOp.status === "running" ? `${importOp.title} · running` : `${importOp.title} · ${plural(imported.size, "session")}`}
+            title={importOp.status === "running" ? m.sessions_import_running({ title: importOp.title }) : `${importOp.title} · ${m.session_count({ count: imported.size })}`}
             actions={
               <Button size="xs" variant="ghost" onClick={() => setParams({ import: undefined })}>
-                Clear
+                {m.verb_clear()}
               </Button>
             }
           >
-            {importSummary ?? `${formatCount(importOp.progress.done)} of ${formatCount(importOp.progress.total)} frames`}
+            {importSummary ?? m.sessions_import_progress({ done: formatCount(importOp.progress.done), total: formatCount(importOp.progress.total) })}
           </Notice>
         ) : null}
         {notice ? (
-          <Notice tone="info" title={notice.title} actions={<Button size="xs" variant="ghost" onClick={() => setNotice(null)}>Dismiss</Button>}>
+          <Notice tone="info" title={notice.title} actions={<Button size="xs" variant="ghost" onClick={() => setNotice(null)}>{m.session_dismiss()}</Button>}>
             {notice.note}
           </Notice>
         ) : null}
         <TableToolbar
-          search={{ label: "Search sessions", placeholder: "OBJECT, Target, rig, night", value: query, onChange: (value) => setParams({ q: value }) }}
+          search={{ label: m.sessions_search(), placeholder: m.sessions_search_placeholder(), value: query, onChange: (value) => setParams({ q: value }) }}
           filters={
             <>
-              <ToggleGroup aria-label="Filter sessions" size="sm" variant="outline" spacing={0} value={[filter]} onValueChange={(value) => value[0] && setParams({ filter: value[0] as string })}>
+              <ToggleGroup aria-label={m.sessions_filter()} size="sm" variant="outline" spacing={0} value={[filter]} onValueChange={(value) => value[0] && setParams({ filter: value[0] as string })}>
                 {FILTERS.map((f) => (
                   <ToggleGroupItem key={f} value={f} data-filter={f} className="gap-1.5">
-                    {FILTER_LABEL[f]}
+                    {filterLabel(m, f)}
                     <CountBadge count={counts[f]} tone={counts[f] > 0 && (f === "needs-target" || f === "not-in-project") ? "warning" : "neutral"} />
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
-              {filter === "trashed" ? <HelpTip label="About Trashed sessions">Kept for traceability; hidden from pickers, candidates, goals and totals. Put back from the OS Trash and rescan to restore them as Unusable.</HelpTip> : null}
+              {filter === "trashed" ? <HelpTip label={m.sessions_trashed_help_label()}>{m.sessions_trashed_help()}</HelpTip> : null}
             </>
           }
         />
         <DataTable
-          label={`Sessions: ${FILTER_LABEL[filter]}`}
+          label={m.sessions_table_label({ filter: filterLabel(m, filter) })}
           rows={shown}
           columns={columns}
           getRowId={(r) => r.session.id}
@@ -233,21 +246,21 @@ export function SessionsPage() {
           empty={
             <EmptyState
               icon={Layers}
-              title={needle ? "No match" : EMPTY_TITLE[filter]}
+              title={needle ? m.sessions_no_match() : emptyTitle(m, filter)}
               description={null}
               className="m-3"
               action={
                 needle ? (
                   <Button size="sm" variant="outline" onClick={() => setParams({ q: undefined })}>
-                    Clear search
+                    {m.sessions_clear_search()}
                   </Button>
                 ) : filter === "all" ? (
                   <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "import" })}>
-                    Import…
+                    {m.import_open()}
                   </Button>
                 ) : (
                   <Button size="sm" variant="outline" onClick={() => setParams({ filter: undefined })}>
-                    Show all
+                    {m.sessions_show_all()}
                   </Button>
                 )
               }
