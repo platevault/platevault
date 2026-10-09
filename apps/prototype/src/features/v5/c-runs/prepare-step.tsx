@@ -21,13 +21,13 @@ import { runOperations, runPreparations } from "@/domain/derive"
 import { isSettled } from "@/store/operations"
 import { MODE_LABEL } from "@/domain/labels"
 import type { InputMode, Preparation, Run } from "@/domain/types"
-import { formatBytes, formatDateTime, formatNight, plural } from "@/lib/format"
+import { fileName, formatBytes, formatDateTime, formatNight, plural } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { CapabilityList, ExecutableState } from "@/features/t4/profile-parts"
 import { useStore } from "@/store/core"
 import { chooseMode, chooseProfile, openPreparation, prepareChoices, setOutputParent, simulateObjectCorrection, simulateSourceDrift, startPrepare, updatePrepareChoices } from "./actions"
 import { currentPreparation, FIELD_KEYWORD, FIELD_LABEL, METADATA_CHOICE_LABEL, type MetadataChoice, type ModeOption, type PlanCheck, type PreparePlan, preparePlan, type RunContext, type RunLayout } from "./model"
-import { fileName, LayoutLine, OptionCard, OutcomeNotice, PrototypeMenu, useOutcome } from "./parts"
+import { LayoutLine, OptionCard, OutcomeNotice, PrototypeMenu, useOutcome } from "./parts"
 
 type Act = ReturnType<typeof useOutcome>["act"]
 

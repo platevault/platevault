@@ -12,10 +12,11 @@ import { PathText } from "@/components/app/data"
 import { EmptyState, Notice } from "@/components/app/feedback"
 import { OperationPanel } from "@/components/app/operation-panel"
 import { Section } from "@/components/app/page"
+import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { GateLabel, useFollowLink } from "@/app/run-ui"
+import { GateLabel, StepRail, useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
 import {
   formatHours,
@@ -53,7 +54,7 @@ import { SelectField } from "@/features/t3/fields"
 import { startArchiveTransfer } from "./actions"
 import { restorePlan, sessionLabel, subjectGaps } from "./model"
 import { draftFromPick, draftProblem, resolveDraft, type SubjectDraft, SubjectDraftRow } from "./new-project"
-import { InlineError, StepRail, SubjectSearch, useCommitError } from "./parts"
+import { InlineError, SubjectSearch, useCommitError } from "./parts"
 import { rememberApproval } from "./trash"
 
 const TH = "py-1 pr-3 text-left text-[0.6875rem] font-medium text-muted-foreground"
@@ -655,8 +656,11 @@ export function RunsSection({ project }: { project: Project }) {
                     {run.name}
                   </Link>
                   <span className="block text-[0.6875rem] text-muted-foreground">
-                    {subject ? subjectName(state.catalog, subject) : "Unknown subject"} · {rigName(state.catalog, run.rigId)} · {pipeline.status === "complete" ? "Complete" : "Open"}
-                    {pipeline.blocker ? <span className="text-destructive"> · Blocked: {pipeline.blocker.message}</span> : null}
+                    {subject ? subjectName(state.catalog, subject) : "Unknown subject"} · {rigName(state.catalog, run.rigId)}
+                  </span>
+                  <span className="flex flex-wrap items-center gap-x-1.5 text-[0.6875rem]">
+                    <StatusBadge kind="run" value={pipeline.status} />
+                    {pipeline.blocker ? <span className="text-destructive">· Blocked: {pipeline.blocker.message}</span> : null}
                   </span>
                 </div>
                 <StepRail steps={pipeline.steps} current={pipeline.current.id} label={`Steps of ${run.name}`} />
@@ -687,10 +691,7 @@ export function RunsSection({ project }: { project: Project }) {
                       {p.trashed ? (
                         <>
                           <span className="w-16 font-medium">{panelLabel(p.panel)}</span>
-                          <span className="inline-flex items-center gap-1 text-[0.75rem] font-medium text-muted-foreground">
-                            <Trash2 aria-hidden="true" className="size-3.5" />
-                            Trashed
-                          </span>
+                          <StatusBadge kind="run" value="trashed" />
                           <span className="text-xs text-muted-foreground">Its frames leave the group counts.</span>
                           <Link to="/projects/$projectId/trash" params={{ projectId: project.id }} className="text-xs text-link underline-offset-2 hover:underline">
                             Open Trash

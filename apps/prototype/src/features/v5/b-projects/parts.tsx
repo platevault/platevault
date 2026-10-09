@@ -1,75 +1,23 @@
 /**
- * Slice B UI parts shared by the Project screens and sheets: the Project
- * state label, a run's six-step rail, the subject search (My targets, the
- * bundled catalogues and SIMBAD, D-W17), the mosaic panel editor (centre and
- * rotation, D-W38, D-W73) and the inline commit error.
+ * Slice B UI parts shared by the Project screens and sheets: the subject
+ * search (My targets, the bundled catalogues and SIMBAD, D-W17), the mosaic
+ * panel editor (centre and rotation, D-W38, D-W73) and the inline commit
+ * error. The Project state is the shared `StatusBadge kind="project"`; a
+ * run's six-step rail is `StepRail` in `src/app/run-ui.tsx`.
  */
-import { Archive, CircleDot, Loader, Search, ShieldCheck } from "lucide-react"
+import { Loader, Search } from "lucide-react"
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react"
 import { ActionError, Notice } from "@/components/app/feedback"
-import { STATUS_CLASS, TONE_CLASS } from "@/components/app/status"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { StepGlyph } from "@/app/run-ui"
-import { GATE_LABEL, myTargets, type ProjectStatus, type RunStepState } from "@/domain/derive"
+import { myTargets } from "@/domain/derive"
 import { normalizeName, SKY_OBJECTS, type FieldOfView, type SkyObject } from "@/domain/sky"
 import type { Catalog, TargetId } from "@/domain/types"
 import { formatDec, formatDegrees, formatRa } from "@/lib/format"
-import { cn } from "@/lib/utils"
 import type { CommitResult } from "@/store/core"
 import { store, useStore } from "@/store/core"
 import type { TargetSource } from "./actions"
-
-// ---------------------------------------------------------------------------
-// Project state: glyph plus word (Open / Done / Archived)
-// ---------------------------------------------------------------------------
-
-const PROJECT_STATE = {
-  open: { label: "Open", icon: CircleDot, tone: "info" },
-  done: { label: "Done", icon: ShieldCheck, tone: "success" },
-  archived: { label: "Archived", icon: Archive, tone: "neutral" },
-} as const
-
-export function ProjectStateBadge({ status, className }: { status: ProjectStatus; className?: string }) {
-  const meta = PROJECT_STATE[status]
-  const Icon = meta.icon
-  return (
-    <Badge variant="outline" className={cn(STATUS_CLASS, TONE_CLASS[meta.tone], className)} data-status={`project:${status}`}>
-      <Icon aria-hidden="true" />
-      {meta.label}
-    </Badge>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Six-step rail
-// ---------------------------------------------------------------------------
-
-/** A run's six steps with their gate glyph; the current step is named and marked (D-W3, PRJ-FR-20). */
-export function StepRail({ steps, current, label, compact = false }: { steps: RunStepState[]; current: string; label: string; compact?: boolean }) {
-  return (
-    <ol aria-label={label} className="flex min-w-0 flex-wrap items-center gap-x-0.5 gap-y-1">
-      {steps.map((step, index) => {
-        const here = step.id === current
-        return (
-          <li
-            key={step.id}
-            aria-current={here ? "step" : undefined}
-            title={`${step.n} ${step.label}: ${GATE_LABEL[step.state]}${step.status && step.status !== "-" ? ` · ${step.status}` : ""}`}
-            className={cn("inline-flex h-5 items-center gap-1 rounded-[0.3125rem] px-1 text-[0.6875rem]", here ? "bg-foreground/[0.08] font-medium text-foreground" : "text-muted-foreground")}
-          >
-            <StepGlyph state={step.state} />
-            <span className={cn(compact && !here && "sr-only")}>{step.label}</span>
-            <span className="sr-only">: {GATE_LABEL[step.state]}</span>
-            {index < steps.length - 1 ? <span aria-hidden="true" className="ml-0.5 h-px w-1.5 bg-border" /> : null}
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // Commit errors beside the control

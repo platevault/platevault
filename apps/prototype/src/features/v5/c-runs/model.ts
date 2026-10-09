@@ -33,7 +33,7 @@ import type {
   Subject,
   Volume,
 } from "@/domain/types"
-import { formatBytes, formatNight, plural } from "@/lib/format"
+import { fileName, formatBytes, plural } from "@/lib/format"
 import type { PrototypeState } from "@/store/core"
 
 // ---------------------------------------------------------------------------
@@ -350,10 +350,6 @@ function entryFromAsset(state: PrototypeState, asset: Asset, folder: string, kin
     patches,
     unavailable,
   }
-}
-
-function fileName(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1)
 }
 
 export function preparePlan(state: PrototypeState, run: Run, choices: PrepareChoices, options: { groupRevision?: number } = {}): PreparePlan {
@@ -813,8 +809,4 @@ export function tieOf(row: RequirementRow): RequirementRow["candidates"] {
   const distance = (n: string | null) => (n ? Math.abs(new Date(n).getTime() - new Date(night).getTime()) : Number.POSITIVE_INFINITY)
   const tied = row.candidates.filter((c) => c.summary.allCompatible && c.source.isMaster === first.source.isMaster && distance(c.source.night) === distance(first.source.night))
   return tied.length > 1 ? tied : []
-}
-
-export function sessionShortLabel(session: Session): string {
-  return `${formatNight(session.night)} · ${session.channel ?? "No filter"}`
 }

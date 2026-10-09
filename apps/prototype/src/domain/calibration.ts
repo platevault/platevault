@@ -25,7 +25,7 @@ import type {
   Run,
   Session,
 } from "./types"
-import { formatExposure, formatNight, plural } from "@/lib/format"
+import { fileName, formatExposure, formatNight, plural } from "@/lib/format"
 
 export const KINDS: CalibrationKind[] = ["dark", "flat", "bias"]
 
@@ -68,10 +68,6 @@ export interface CalSource {
   path: string
   /** Files handed off for this input. */
   files: Array<{ assetId: AssetId | null; path: string; sizeBytes: number; fileName: string }>
-}
-
-function fileName(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1)
 }
 
 export function rawSetSource(catalog: Catalog, session: Session): CalSource | null {

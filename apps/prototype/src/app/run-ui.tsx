@@ -5,12 +5,13 @@
  * - StepGlyph: Direction C's gate vocabulary. Each state has its own glyph
  *   shape, so colour only reinforces; the word sits beside it or in
  *   screen-reader text (glyph plus word).
+ * - StepRail: a run's six steps in one line, for lists (Project runs, Home).
  * - useFollowLink: opens a step link and focuses its target element (e.g.
  *   Save run) once the route has rendered.
  */
 import { useNavigate } from "@tanstack/react-router"
 import { Circle, CircleArrowRight, CircleCheck, CircleDashed, Loader, OctagonX, TriangleAlert } from "lucide-react"
-import { GATE_LABEL, type GateState, type StepLink } from "@/domain/derive"
+import { GATE_LABEL, type GateState, type RunStepState, type StepLink } from "@/domain/derive"
 import { cn } from "@/lib/utils"
 
 const GATE_GLYPH: Record<GateState, { icon: typeof Circle; className: string }> = {
@@ -36,6 +37,30 @@ export function GateLabel({ state, label, className }: { state: GateState; label
       <StepGlyph state={state} />
       {label ?? GATE_LABEL[state]}
     </span>
+  )
+}
+
+/** A run's six steps with their gate glyph; the current step is named and marked (D-W3, PRJ-FR-20). `compact` names only the current step. */
+export function StepRail({ steps, current, label, compact = false }: { steps: RunStepState[]; current: string; label: string; compact?: boolean }) {
+  return (
+    <ol aria-label={label} className="flex min-w-0 flex-wrap items-center gap-x-0.5 gap-y-1">
+      {steps.map((step, index) => {
+        const here = step.id === current
+        return (
+          <li
+            key={step.id}
+            aria-current={here ? "step" : undefined}
+            title={`${step.n} ${step.label}: ${GATE_LABEL[step.state]}${step.status && step.status !== "-" ? ` · ${step.status}` : ""}`}
+            className={cn("inline-flex h-5 items-center gap-1 rounded-[0.3125rem] px-1 text-[0.6875rem]", here ? "bg-foreground/[0.08] font-medium text-foreground" : "text-muted-foreground")}
+          >
+            <StepGlyph state={step.state} />
+            <span className={cn(compact && !here && "sr-only")}>{step.label}</span>
+            <span className="sr-only">: {GATE_LABEL[step.state]}</span>
+            {index < steps.length - 1 ? <span aria-hidden="true" className="ml-0.5 h-px w-1.5 bg-border" /> : null}
+          </li>
+        )
+      })}
+    </ol>
   )
 }
 

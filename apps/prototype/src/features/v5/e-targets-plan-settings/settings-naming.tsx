@@ -13,7 +13,8 @@ import { ActionError, Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { DEFAULT_NAMING, NAMING_TOKENS, type NamingValues, namingTemplate, resolveNamingTemplate, validateNamingTemplate } from "@/domain/templates"
+import { sessionNamingValues } from "@/domain/derive"
+import { DEFAULT_NAMING, NAMING_TOKENS, type NamingValues, namingTemplate, namingValues, resolveNamingTemplate, validateNamingTemplate } from "@/domain/templates"
 import type { Catalog, NamingFrameType, NamingToken } from "@/domain/types"
 import { TextField } from "@/features/t1/components/form-field"
 import { ReturnNotice } from "@/features/t1/settings/settings-layout"
@@ -61,36 +62,22 @@ function sampleValues(catalog: Catalog, type: NamingFrameType): { values: Naming
     if (!master) return null
     return {
       from: `master ${master.path.split("/").pop()}`,
-      values: {
+      values: namingValues({
         target: null,
         filter: master.channel,
-        date: master.createdAt.slice(0, 10),
-        frame_type: type,
+        night: master.createdAt.slice(0, 10),
+        frameType: type,
         camera: master.cameraName,
-        exposure: master.exposureS === null ? null : `${master.exposureS}s`,
-        gain: master.gain === null ? null : String(master.gain),
-        binning: `${master.binning}x${master.binning}`,
-        set_temp: master.ccdTempC === null ? null : `${master.ccdTempC}C`,
-      },
+        exposureS: master.exposureS,
+        gain: master.gain,
+        binning: master.binning,
+        ccdTempC: master.ccdTempC,
+      }),
     }
   }
   const session = Object.values(catalog.sessions).find((s) => s.imageType === type && !s.supersededBy)
   if (!session) return null
-  const targetId = session.target.status === "confirmed" || session.target.status === "associated" ? session.target.value : null
-  return {
-    from: `session of ${session.night}${session.channel ? `, ${session.channel}` : ""}`,
-    values: {
-      target: targetId ? (catalog.targets[targetId]?.name ?? null) : null,
-      filter: session.channel,
-      date: session.night,
-      frame_type: type,
-      camera: session.cameraName,
-      exposure: `${session.exposureS}s`,
-      gain: session.gain === null ? null : String(session.gain),
-      binning: `${session.binning}x${session.binning}`,
-      set_temp: session.ccdTempC === null ? null : `${session.ccdTempC}C`,
-    },
-  }
+  return { from: `session of ${session.night}${session.channel ? `, ${session.channel}` : ""}`, values: sessionNamingValues(catalog, session, type) }
 }
 
 function Preview({ label, root, template, values }: { label: string; root: string; template: string; values: NamingValues }) {

@@ -17,6 +17,7 @@ import { useEffect, useState } from "react"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
+import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { MissingRecord } from "@/app/missing-record"
@@ -29,8 +30,9 @@ import { markProjectDone, reopenProject } from "@/store/actions/projects"
 import { completeRun, trashRun } from "@/store/actions/runs"
 import { useStore } from "@/store/core"
 import { projectChannels } from "./model"
-import { InlineError, ProjectStateBadge, useCommitError } from "./parts"
-import { ArchivedSection, CandidatesSection, CandidatesTable, GoalsSection, PlanningSection, RigsSection, RunsSection, SubjectsSection, TrashSection } from "./project-sections"
+import { InlineError, useCommitError } from "./parts"
+import { CandidateReview } from "../d-review/review"
+import { ArchivedSection, CandidatesSection, GoalsSection, PlanningSection, RigsSection, RunsSection, SubjectsSection, TrashSection } from "./project-sections"
 
 export function ProjectPage() {
   const { projectId = "" } = useParams({ strict: false }) as { projectId?: string }
@@ -66,7 +68,7 @@ function ProjectDetail({ project }: { project: Project }) {
           </Link>
         }
         title={project.name}
-        meta={<ProjectStateBadge status={status} />}
+        meta={<StatusBadge kind="project" value={status} />}
         description={project.notes || `${plural(project.subjects.length, "subject")} · ${plural(project.rigIds.length, "rig")}`}
         actions={
           <>
@@ -257,23 +259,7 @@ function CandidateReviewPage({ project }: { project: Project }) {
           </Button>
         }
       />
-      <CandidateReviewRegion projectId={project.id} />
-    </div>
-  )
-}
-
-/**
- * The full-height region for `?candidates=unreviewed`: slice D's
- * `CandidateReview` mounts here at integration. Until then it lists the
- * candidate sessions with Unreviewed frames, each opening its session.
- */
-function CandidateReviewRegion({ projectId }: { projectId: string }) {
-  const project = useStore((s) => s.catalog.projects[projectId])
-  if (!project) return null
-  // INTEGRATE: <CandidateReview projectId={id} /> from d-review/review
-  return (
-    <div className="flex min-h-[40rem] min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4">
-      <CandidatesTable project={project} filter="unreviewed" />
+      <CandidateReview projectId={project.id} />
     </div>
   )
 }

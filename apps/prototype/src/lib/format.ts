@@ -103,3 +103,8 @@ export function formatDec(decDeg: number): string {
 export function formatDegrees(deg: number, digits = 1): string {
   return `${deg.toFixed(digits)}°`
 }
+
+/** The last segment of a path: "/Volumes/T7/NGC7000/Light_0001.fit" reads "Light_0001.fit". */
+export function fileName(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1)
+}

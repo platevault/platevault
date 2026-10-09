@@ -21,13 +21,13 @@ import { Label } from "@/components/ui/label"
 import { rigName, runPreparations, subjectName } from "@/domain/derive"
 import { RESULT_KIND_LABEL } from "@/domain/labels"
 import type { ResultKind, ResultRecord } from "@/domain/types"
-import { formatBytes, plural } from "@/lib/format"
+import { fileName, formatBytes, plural } from "@/lib/format"
 import { SelectField } from "@/features/t3/fields"
 import { useStore } from "@/store/core"
 import { acceptResult, attachResult, discoverResults, finishWriting, inspectResult, setResultKind, simulateApplicationOutput, startRunWithResult } from "./actions"
 import { MasterOffers } from "./calibrate-step"
 import { type ResultRow, type RunContext, resultRow, resultsFolders, runLayout } from "./model"
-import { fileName, OutcomeNotice, PrototypeMenu, Sha, useOutcome } from "./parts"
+import { OutcomeNotice, PrototypeMenu, Sha, useOutcome } from "./parts"
 
 type Act = ReturnType<typeof useOutcome>["act"]
 

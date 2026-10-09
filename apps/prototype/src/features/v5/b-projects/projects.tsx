@@ -9,6 +9,7 @@ import { useId } from "react"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { EmptyState } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
+import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -18,7 +19,6 @@ import { type GoalProgress, goalProgress, type NextAction, projectGroups, projec
 import type { Project } from "@/domain/types"
 import { plural } from "@/lib/format"
 import { nowIso, updateSlice, useStore } from "@/store/core"
-import { ProjectStateBadge } from "./parts"
 
 interface Row {
   project: Project
@@ -68,7 +68,7 @@ export function ProjectsPage() {
         </Link>
       ),
     },
-    { id: "state", header: "State", sortValue: (r) => projectStatus(r.project), cell: (r) => <ProjectStateBadge status={projectStatus(r.project)} /> },
+    { id: "state", header: "State", sortValue: (r) => projectStatus(r.project), cell: (r) => <StatusBadge kind="project" value={projectStatus(r.project)} /> },
     { id: "subjects", header: "Subjects", cell: (r) => <span className="block min-w-[11rem] whitespace-normal">{r.subjects.join(", ") || "None"}</span> },
     { id: "rigs", header: "Rigs", cell: (r) => <span className="block min-w-[10rem] whitespace-normal">{r.rigs.join(", ") || "None"}</span> },
     {

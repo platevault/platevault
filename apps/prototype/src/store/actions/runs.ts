@@ -8,11 +8,13 @@
 import {
   completeRefusals,
   findSubject,
+  groupHref,
   latestRevision,
   panelForSession,
   panelLabel,
   projectCandidates,
   rigName,
+  runHref,
   runPipeline,
   runSetup,
   subjectName,
@@ -37,8 +39,6 @@ import { plural } from "@/lib/format"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
 import { moveToOsTrash, preparedEntryItems, resultItems } from "./trash"
-
-const runHref = (run: Pick<Run, "id" | "projectId">, step: RunStep = "select") => `/projects/${run.projectId}/runs/${run.id}/${step}`
 
 function uniqueRunName(state: PrototypeState, projectId: ProjectId, base: string): string {
   const taken = new Set(Object.values(state.catalog.runs).filter((r) => r.projectId === projectId).map((r) => r.name))
@@ -122,7 +122,7 @@ export function startRun(projectId: ProjectId, subjectId: string, rigId: Optical
     createdAt: nowIso(),
     revision: 1,
   }
-  const href = `/projects/${projectId}/groups/${groupId}/select`
+  const href = groupHref(group)
   const result = commit(
     `Start ${group.name}`,
     (s) => withCatalog(s, (c) => ({ ...c, runGroups: { ...c.runGroups, [groupId]: group }, runs: { ...c.runs, ...Object.fromEntries(runs.map((r) => [r.id, r])) } })),
@@ -132,11 +132,28 @@ export function startRun(projectId: ProjectId, subjectId: string, rigId: Optical
   return { result, runId: null, groupId: result.ok ? groupId : null }
 }
 
-function editRun(runId: RunId, label: string, update: (run: Run, state: PrototypeState) => Run, options: { record?: boolean; step?: RunStep } = {}): CommitResult {
+export interface EditRunOptions {
+  /** Record "label: run name" in Activity (default); a caller with its own message passes false. */
+  record?: boolean
+  /** The step the Activity link opens; Select by default. */
+  step?: RunStep
+  /** Another write committed together with the run patch, e.g. a remembered setting. */
+  also?: (state: PrototypeState) => PrototypeState
+}
+
+/** Patch one run in one commit, guarded by its revision; every run write goes through here. */
+export function editRun(runId: RunId, label: string, update: (run: Run, state: PrototypeState) => Run, options: EditRunOptions = {}): CommitResult {
   const run = store.getState().catalog.runs[runId]
   if (!run) return MISSING
   const href = runHref(run, options.step)
-  const result = commit(label, (s) => withCatalog(s, (c) => ({ ...c, runs: { ...c.runs, [runId]: update(c.runs[runId]!, s) } })), { expect: { collection: "runs", id: runId, revision: run.revision }, href })
+  const result = commit(
+    label,
+    (s) => {
+      const next = withCatalog(s, (c) => ({ ...c, runs: { ...c.runs, [runId]: update(c.runs[runId]!, s) } }))
+      return options.also ? options.also(next) : next
+    },
+    { expect: { collection: "runs", id: runId, revision: run.revision }, href },
+  )
   if (result.ok && options.record !== false) recordSaved(`${label}: ${run.name}`, null, href)
   return result
 }
@@ -239,7 +256,7 @@ export function setRunSetup(runId: RunId, patch: Partial<RunSetup>): CommitResul
 export function setGroupSetup(groupId: RunGroupId, patch: Partial<RunSetup>): CommitResult {
   const group = store.getState().catalog.runGroups[groupId]
   if (!group) return MISSING
-  const href = `/projects/${group.projectId}/groups/${groupId}/prepare`
+  const href = groupHref(group, "prepare")
   const result = commit(
     "Group setup",
     (s) => withCatalog(s, (c) => ({ ...c, runGroups: { ...c.runGroups, [groupId]: { ...c.runGroups[groupId]!, setup: { ...c.runGroups[groupId]!.setup, ...patch } } } })),

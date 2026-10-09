@@ -956,6 +956,8 @@ export type TrashEpisodeKind =
   | "empty-trash"
   /** Import Move: sources sent to the OS Trash after their destination verified (D-W11). */
   | "import-move"
+  /** Clean up of a Complete run: only the entries its preparations created (D-W26, PREP-FR-14). */
+  | "run-cleanup"
 
 /**
  * One approved move to the OS Trash. Every item is either trashed or refused

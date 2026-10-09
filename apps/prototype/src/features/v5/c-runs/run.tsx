@@ -13,6 +13,7 @@ import { MissingRecord } from "@/app/missing-record"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
+import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { panelLabel, rigName, runPipeline, runStepLink, subjectName, trashRefusals } from "@/domain/derive"
 import { RUN_STEPS, STEP_LABEL } from "@/domain/labels"
@@ -24,7 +25,7 @@ import { ReviewStep } from "../d-review/review"
 import { CalibrateStep } from "./calibrate-step"
 import { DoneStep } from "./done-step"
 import { type RunContext, runContext } from "./model"
-import { OutcomeNotice, RunStatusLabel, StepBar, useOutcome } from "./parts"
+import { OutcomeNotice, StepBar, useOutcome } from "./parts"
 import { PrepareStep } from "./prepare-step"
 import { ResultsStep } from "./results-step"
 import { SelectStep } from "./select-step"
@@ -63,7 +64,7 @@ function RunScreen({ ctx, step }: { ctx: RunContext; step: RunStep }) {
             ) : null}
           </>
         }
-        meta={<RunStatusLabel status={pipeline.status} />}
+        meta={<StatusBadge kind="run" value={pipeline.status} />}
         description={
           <>
             Subject <span className="text-foreground">{subjectText}</span> · rig <span className="text-foreground">{rigName(state.catalog, run.rigId)}</span>. Both are fixed; another subject or rig needs another run.

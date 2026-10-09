@@ -17,11 +17,11 @@ import { latestRevision, liveAssetIds, rigName, runCandidates, runRefresh, subje
 import { RESULT_KIND_LABEL } from "@/domain/labels"
 import { describeDiff, diffContent, REASON_LABEL, sessionExposureS } from "@/domain/membership"
 import type { ResultRecord, Run, SelectionReason, Session } from "@/domain/types"
-import { formatDateTime, formatDuration, formatNight, plural } from "@/lib/format"
+import { fileName, formatDateTime, formatDuration, formatNight, plural } from "@/lib/format"
 import { addRunSessions, discardRunDraft, removeRunSessions, saveRun, setProductInputs } from "@/store/actions/runs"
 import { type PrototypeState, updateSlice, useStore } from "@/store/core"
 import { type RunContext, runLock } from "./model"
-import { fileName, OutcomeNotice, Sha, useOutcome } from "./parts"
+import { OutcomeNotice, Sha, useOutcome } from "./parts"
 
 interface SelectRow {
   session: Session

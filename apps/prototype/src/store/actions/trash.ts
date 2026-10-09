@@ -1,16 +1,17 @@
 /**
- * The OS Trash engine (foundation-owned; D-W43, D-W57, D-W72, D-W74).
+ * The OS Trash engine (foundation-owned; D-W26, D-W43, D-W57, D-W72, D-W74).
  *
  * Every approved move to the OS Trash (Done / Archive offers, Empty Trash,
- * Import Move sources) runs as one "trash" operation with visible progress
- * and records one `TrashEpisode`. Nothing is ever deleted permanently: a file
- * goes to `disk.trash`, or it is kept and listed as refused with its reason.
- * A frame with copies in several locations moves every copy, and if any copy
+ * Import Move sources, a run's Clean up) runs as one operation with visible
+ * per-item progress and records one `TrashEpisode`. Nothing is ever deleted
+ * permanently: a file goes to `disk.trash`, or it is kept and listed as
+ * refused with its reason (`trashRefusal`, asked again for every item). A
+ * frame with copies in several locations moves every copy, and if any copy
  * is refused the whole frame is refused (D-W57).
  */
-import { fileAt, filesUnder, removeFile } from "@/domain/disk"
+import { fileAt, filesUnder, removeFile, trashRefusal } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
-import type { AssetId, Disk, OperationId, ProjectId, ResultId, RunId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
+import type { AssetId, Disk, OperationId, OperationItem, OperationKind, ProjectId, ResultId, RunId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
 import { formatBytes, plural } from "@/lib/format"
 import { nowIso, type PrototypeState } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation, startOperation } from "@/store/operations"
@@ -33,7 +34,16 @@ export interface MoveToOsTrash {
   items: TrashItem[]
   /** Run records removed once the episode settles (Empty Trash). */
   removeRunIds?: RunId[]
+  /** Roots whose emptied folders leave the disk once the episode settles (a run's prepared folders); a folder still holding a file stays. */
+  pruneFolders?: string[]
+  /** What one item is, for progress and the summary; "item" by default. */
+  noun?: { one: string; many: string }
   href: string
+}
+
+/** A run's Clean up is its own operation kind, so its step reads its state apart from other trash moves. */
+function operationKind(kind: TrashEpisodeKind): OperationKind {
+  return kind === "run-cleanup" ? "cleanup" : "trash"
 }
 
 interface TrashPayload extends Omit<MoveToOsTrash, "title" | "items"> {
@@ -86,75 +96,89 @@ function groupItems(items: TrashItem[]): TrashItem[][] {
 
 /** Start the move; returns the operation id. Settles with exact counts in Activity. */
 export function moveToOsTrash(input: MoveToOsTrash): OperationId {
+  const noun = input.noun ?? { one: "item", many: "items" }
   const payload: TrashPayload = {
     kind: input.kind,
     projectId: input.projectId,
     runIds: input.runIds,
     removeRunIds: input.removeRunIds ?? [],
+    pruneFolders: input.pruneFolders ?? [],
+    noun,
     href: input.href,
     queue: groupItems(input.items),
     done: [],
     episodeId: freshId("trash", input.title),
   }
   return startOperation({
-    kind: "trash",
+    kind: operationKind(input.kind),
     title: input.title,
     scope: { runIds: input.runIds, projectId: input.projectId ?? undefined },
     total: input.items.length,
-    unit: "items",
+    unit: noun.many,
+    items: input.items.map((item) => ({ id: item.path, label: item.path.slice(item.path.lastIndexOf("/") + 1), path: item.path, status: "pending", phase: null, detail: item.refusedReason ?? null })),
     payload: payload as unknown as Record<string, unknown>,
     canCancel: false,
   })
 }
 
 function refusal(disk: Disk, item: TrashItem): string | null {
-  if (item.refusedReason) return item.refusedReason
-  if (disk.readOnlyPaths.some((p) => isUnder(item.path, p))) return "Write permission removed; kept in place"
-  const file = fileAt(disk, item.path)
-  if (!file) return "Not found at its recorded path"
-  const volume = disk.volumes[file.volumeId]
-  if (!volume?.mounted) return `${volume?.name ?? "Its volume"} is offline`
-  if (volume.trash === "unsupported") return `${volume.name} has no OS Trash; kept, nothing deleted`
-  return null
+  return item.refusedReason ?? trashRefusal(disk, item.path)
 }
 
 const GROUPS_PER_TICK = 12
 
-const trashHandler: OperationHandler = {
-  kind: "trash",
-  step(state, op) {
-    const payload = op.payload as unknown as TrashPayload
-    let disk = state.disk
-    const queue = [...payload.queue]
-    const done = [...payload.done]
-    const at = nowIso()
-    for (const group of queue.splice(0, GROUPS_PER_TICK)) {
-      const reasons = group.map((item) => refusal(disk, item))
-      const firstRefusal = reasons.find((r) => r !== null) ?? null
-      for (const [index, item] of group.entries()) {
-        const file = fileAt(disk, item.path)
-        const base = { path: item.path, volumeId: file?.volumeId ?? "", sizeBytes: file?.linkTarget ? 0 : (file?.sizeBytes ?? 0), assetId: item.assetId ?? null, resultId: item.resultId ?? null }
-        if (firstRefusal !== null) {
-          // D-W57: one refused copy keeps every copy of the frame.
-          done.push({ ...base, outcome: "refused", reason: reasons[index] ?? `Another copy was refused: ${firstRefusal}` })
-          continue
+function trashStep(kind: OperationKind): OperationHandler {
+  return {
+    kind,
+    step(state, op) {
+      const payload = op.payload as unknown as TrashPayload
+      let disk = state.disk
+      const queue = [...payload.queue]
+      const done = [...payload.done]
+      const outcomes = new Map<string, Pick<OperationItem, "status" | "detail">>()
+      const at = nowIso()
+      for (const group of queue.splice(0, GROUPS_PER_TICK)) {
+        const reasons = group.map((item) => refusal(disk, item))
+        const firstRefusal = reasons.find((r) => r !== null) ?? null
+        for (const [index, item] of group.entries()) {
+          const file = fileAt(disk, item.path)
+          const base = { path: item.path, volumeId: file?.volumeId ?? "", sizeBytes: file?.linkTarget ? 0 : (file?.sizeBytes ?? 0), assetId: item.assetId ?? null, resultId: item.resultId ?? null }
+          if (firstRefusal !== null) {
+            // D-W57: one refused copy keeps every copy of the frame.
+            const reason = reasons[index] ?? `Another copy was refused: ${firstRefusal}`
+            done.push({ ...base, outcome: "refused", reason })
+            outcomes.set(item.path, { status: "blocked", detail: reason })
+            continue
+          }
+          disk = { ...removeFile(disk, file!.volumeId, item.path), trash: [...disk.trash, { file: file!, originalPath: item.path, trashedAt: at }] }
+          done.push({ ...base, outcome: "trashed", reason: null })
+          outcomes.set(item.path, { status: "done", detail: "Moved to the OS Trash" })
         }
-        disk = { ...removeFile(disk, file!.volumeId, item.path), trash: [...disk.trash, { file: file!, originalPath: item.path, trashedAt: at }] }
-        done.push({ ...base, outcome: "trashed", reason: null })
       }
-    }
-    let next: PrototypeState = patchOperation({ ...state, disk }, op.id, {
-      progress: { ...op.progress, done: done.length },
-      payload: { ...payload, queue, done } as unknown as Record<string, unknown>,
-    })
-    if (queue.length > 0) return next
-    next = settleEpisode(next, op.id, { ...payload, queue, done })
-    const trashed = done.filter((i) => i.outcome === "trashed")
-    const refused = done.length - trashed.length
-    const bytes = trashed.reduce((n, i) => n + i.sizeBytes, 0)
-    const summary = `${plural(trashed.length, "item")} moved to the OS Trash (${formatBytes(bytes)}); ${plural(refused, "item")} kept with a reason. Nothing was deleted permanently.`
-    return settleOperation(next, op.id, refused > 0 && trashed.length === 0 ? "failed" : refused > 0 ? "partial" : "succeeded", summary, payload.href)
-  },
+      const items = op.items.map((item) => (outcomes.has(item.id) ? { ...item, ...outcomes.get(item.id)! } : item))
+      let next: PrototypeState = patchOperation({ ...state, disk }, op.id, {
+        items,
+        progress: { ...op.progress, done: done.length },
+        payload: { ...payload, queue, done } as unknown as Record<string, unknown>,
+      })
+      if (queue.length > 0) return next
+      next = settleEpisode(next, op.id, { ...payload, queue, done })
+      const trashed = done.filter((i) => i.outcome === "trashed")
+      const refused = done.length - trashed.length
+      const bytes = trashed.reduce((n, i) => n + i.sizeBytes, 0)
+      const noun = payload.noun ?? { one: "item", many: "items" }
+      const summary = `${plural(trashed.length, noun.one, noun.many)} moved to the OS Trash (${formatBytes(bytes)}); ${plural(refused, noun.one, noun.many)} kept with a reason. Nothing was deleted permanently.`
+      return settleOperation(next, op.id, refused > 0 && trashed.length === 0 ? "failed" : refused > 0 ? "partial" : "succeeded", summary, payload.href)
+    },
+  }
+}
+
+/** Folders under the roots that no longer hold a file leave the disk; a folder with a refused entry stays. */
+function pruneEmptiedFolders(disk: Disk, roots: string[]): Disk {
+  if (roots.length === 0) return disk
+  const files = Object.values(disk.files)
+  const holdsFile = (folder: Disk["folders"][number]) => files.some((f) => f.volumeId === folder.volumeId && f.path !== folder.path && isUnder(f.path, folder.path))
+  return { ...disk, folders: disk.folders.filter((folder) => !roots.some((root) => isUnder(folder.path, root)) || holdsFile(folder)) }
 }
 
 /** Record the episode, mark Trashed frames and Results, and remove emptied runs. */
@@ -192,8 +216,8 @@ function settleEpisode(state: PrototypeState, operationId: OperationId, payload:
     catalog.runGroups = Object.fromEntries(Object.entries(catalog.runGroups).map(([id, g]) => [id, { ...g, runIds: g.runIds.filter((r) => !remove.has(r)) }]))
   }
   catalog.trashEpisodes = { ...catalog.trashEpisodes, [episode.id]: episode }
-  return { ...state, catalog }
+  return { ...state, catalog, disk: pruneEmptiedFolders(state.disk, payload.pruneFolders ?? []) }
 }
 
 /** Operation handlers the foundation owns; slices register their own kinds in their slice definitions. */
-export const FOUNDATION_HANDLERS: OperationHandler[] = [trashHandler]
+export const FOUNDATION_HANDLERS: OperationHandler[] = [trashStep("trash"), trashStep("cleanup")]

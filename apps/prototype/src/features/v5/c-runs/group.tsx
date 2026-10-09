@@ -25,13 +25,13 @@ import { calibrationPlan, readinessLine } from "@/domain/calibration"
 import { type GroupPanelState, groupCandidates, groupPipeline, groupStepLink, panelLabel, rigName, runPreparations, runResults, subjectName, workingContent } from "@/domain/derive"
 import { MODE_LABEL, RESULT_KIND_LABEL, RUN_STEPS, STEP_LABEL } from "@/domain/labels"
 import type { InputMode, Preparation, ResultKind, RunGroup, RunStep } from "@/domain/types"
-import { formatNight, plural } from "@/lib/format"
+import { fileName, formatNight, plural } from "@/lib/format"
 import { addRunSessions, saveRun } from "@/store/actions/runs"
 import { type PrototypeState, useStore } from "@/store/core"
 import { GroupReviewStep } from "../d-review/review"
 import { attachResult, changeGroupSetup, chooseMode, chooseProfile, completeAllPanels, discoverResults, groupSetupRefusals, openGroupFolder, prepareAll, prepareChoices, setOutputParent, simulateApplicationOutput, updatePrepareChoices } from "./actions"
 import { currentPreparation, groupAssembledPath, livePanelRuns, type ModeOption, nextGroupRevision, preparePlan, readinessText, resultRow } from "./model"
-import { fileName, LayoutLine, OutcomeNotice, PrototypeMenu, StepBar, useOutcome } from "./parts"
+import { LayoutLine, OutcomeNotice, PrototypeMenu, StepBar, useOutcome } from "./parts"
 import { ChecksList, LayoutSection, MetadataSection, ModeSection, PreparationOutcome, PrepStateBadge, ProfileSection } from "./prepare-step"
 import { AttachDialog, ResultsTable } from "./results-step"
 
@@ -147,7 +147,7 @@ function PanelsTable({ group, panels, step }: { group: RunGroup; panels: GroupPa
           </Link>
         ),
     },
-    { id: "status", header: "Status", cell: (p) => (p.trashed ? <span className="text-[0.75rem] text-muted-foreground">Trashed</span> : p.run.completion === "complete" ? <StatusBadge kind="view" value="complete" /> : <span className="text-[0.75rem]">Open</span>) },
+    { id: "status", header: "Status", cell: (p) => <StatusBadge kind="run" value={p.trashed ? "trashed" : p.run.completion === "complete" ? "complete" : "open"} /> },
     { id: "step", header: STEP_LABEL[step], cell: (p) => (p.trashed ? <span className="text-[0.75rem] text-muted-foreground">Skipped by group actions</span> : <GateLabel state={p.pipeline.steps[index]!.state} label={p.pipeline.steps[index]!.status} />) },
     { id: "frames", header: "Frames", align: "right", cell: (p) => (p.trashed ? <span className="text-muted-foreground" title="A trashed panel's frames leave the counts">–</span> : panelFrames(p)), sortValue: (p) => (p.trashed ? -1 : panelFrames(p)) },
     {

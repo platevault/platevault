@@ -3,11 +3,10 @@
  * offers (PRJ-FR-14, PRJ-FR-15, STO-FR-13 to STO-FR-16), the archive and
  * restore transfer plans, the copy each frame keeps (D-W74), goal gaps for
  * planning and the goal channels a Project's rigs can capture. Pure: nothing
- * here writes state. Foundation candidates: `doneOffers`, `archivePlan`,
- * `keptCopy` and `rigChannels` belong in `src/domain/derive.ts` once the
- * production contract settles.
+ * here writes state. Every OS Trash refusal is the shared `trashRefusal`; the
+ * offers and plans stay here because only the Project screens read them.
  */
-import { fileAt, fileKey, freeBytes, volumeForPath } from "@/domain/disk"
+import { fileAt, fileKey, freeBytes, trashRefusal } from "@/domain/disk"
 import {
   formatHours,
   goalProgress,
@@ -17,6 +16,7 @@ import {
   projectMemberSessionIds,
   projectRuns,
   rigCameraKind,
+  sessionNamingValues,
   sessionTargetId,
 } from "@/domain/derive"
 import { isUnder } from "@/domain/indexing"
@@ -52,22 +52,6 @@ export function keptCopy(catalog: Catalog, asset: Asset): AssetCopy | null {
     const rb = rank(b)
     return ra.library - rb.library || ra.registered.localeCompare(rb.registered) || identical.indexOf(a) - identical.indexOf(b)
   })[0]!
-}
-
-function volumeAt(disk: Disk, path: string): Volume | undefined {
-  const id = volumeForPath(disk, path)
-  return id ? disk.volumes[id] : undefined
-}
-
-/** Why a path cannot go to the OS Trash now (STO-FR-15), or null. Execution re-checks every item. */
-export function custodyRefusal(disk: Disk, path: string): string | null {
-  if (disk.readOnlyPaths.some((p) => isUnder(path, p))) return "Write permission removed; kept in place"
-  const volume = volumeAt(disk, path)
-  if (!volume) return "Outside every known volume"
-  if (!volume.mounted) return `${volume.name} is offline`
-  if (volume.trash === "unsupported") return `${volume.name} has no OS Trash; kept, nothing deleted`
-  if (!fileAt(disk, path)) return "Not found at its recorded path"
-  return null
 }
 
 /** Bytes a move reclaims: each inode once, and none while another hard link outside the move holds it (STO-FR-14). */
@@ -234,7 +218,7 @@ export function rejectedFramesOffer(state: PrototypeState, project: Project): Tr
         refuse(`A copy sits outside Captures storage: ${outside.path}`)
         continue
       }
-      const copyRefusal = asset.copies.map((c) => custodyRefusal(disk, c.path)).find((r) => r !== null)
+      const copyRefusal = asset.copies.map((c) => trashRefusal(disk, c.path)).find((r) => r !== null)
       if (copyRefusal) {
         refuse(`${copyRefusal}; every copy must move, so the frame stays`)
         continue
@@ -272,7 +256,7 @@ export function intermediatesOffer(state: PrototypeState, project: Project): Tra
     seen.add(result.path)
     const label = result.path.split("/").at(-1) ?? result.path
     const owner = result.runId ? catalog.runs[result.runId]?.name : result.groupId ? catalog.runGroups[result.groupId]?.name : undefined
-    const reason = custodyRefusal(disk, result.path)
+    const reason = trashRefusal(disk, result.path)
     if (reason) {
       refusals.push({ key: result.id, label, path: result.path, reason })
       continue
@@ -286,7 +270,7 @@ export function intermediatesOffer(state: PrototypeState, project: Project): Tra
     if (seen.has(path) || path === master.adoption.destinationPath) continue
     const label = path.split("/").at(-1) ?? path
     const kept = fileAt(disk, master.adoption.destinationPath)
-    const reason = !kept || kept.sha256 !== master.adoption.verifiedSha256 ? `The kept library copy ${master.adoption.destinationPath} cannot be verified` : custodyRefusal(disk, path)
+    const reason = !kept || kept.sha256 !== master.adoption.verifiedSha256 ? `The kept library copy ${master.adoption.destinationPath} cannot be verified` : trashRefusal(disk, path)
     if (reason) {
       refusals.push({ key: master.id, label, path, reason })
       continue
@@ -335,9 +319,9 @@ export function duplicatesOffer(state: PrototypeState, project: Project): TrashO
             ? `Source path of a prepared revision of ${linkedBy.get(copy.path)}, which is not Complete`
             : moving.has(session.id)
               ? "An archive transfer is moving it; try again when it settles"
-              : custodyRefusal(disk, kept.path)
-                ? `The kept copy on ${keptName} cannot be re-verified: ${custodyRefusal(disk, kept.path)}`
-                : custodyRefusal(disk, copy.path)
+              : trashRefusal(disk, kept.path)
+                ? `The kept copy on ${keptName} cannot be re-verified: ${trashRefusal(disk, kept.path)}`
+                : trashRefusal(disk, copy.path)
         if (reason) {
           refusals.push({ key, label, path: copy.path, reason })
           continue
@@ -411,18 +395,7 @@ function joinPath(...parts: string[]): string {
 
 /** The session's folder under a location, laid out by the light naming template (STO-IMP-FR-07). */
 function templatedFolder(state: PrototypeState, root: string, session: Session): string {
-  const targetId = sessionTargetId(session)
-  const { path } = resolveNamingTemplate(namingTemplate(state.settings.naming, "light"), {
-    target: targetId ? (state.catalog.targets[targetId]?.name ?? null) : null,
-    filter: session.channel,
-    date: session.night,
-    frame_type: "light",
-    camera: session.cameraName,
-    exposure: `${session.exposureS}s`,
-    gain: session.gain === null ? null : String(session.gain),
-    binning: `${session.binning}x${session.binning}`,
-    set_temp: session.ccdTempC === null ? null : `${session.ccdTempC}C`,
-  })
+  const { path } = resolveNamingTemplate(namingTemplate(state.settings.naming, "light"), sessionNamingValues(state.catalog, session, "light"))
   return joinPath(root, path)
 }
 

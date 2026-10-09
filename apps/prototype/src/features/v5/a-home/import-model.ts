@@ -1,7 +1,7 @@
 /**
  * S13 Import model (slice A): the pure import plan the sheet previews and
- * the operation runs (D-W11, D-W12, D-W20, D-W24), plus the simulated
- * ASIAIR card the demo's saved source points at.
+ * the operation runs (D-W11, D-W12, D-W20, D-W24). The demo's saved source
+ * is the ASIAIR SD card (Prototype › Insert ASIAIR card).
  *
  * The plan sorts every file under the source into exactly one bucket:
  * - a destination in Captures (lights) or Calibration (everything else),
@@ -11,19 +11,18 @@
  * - a skip: a byte-identical duplicate of a library frame (SHA-256), a file
  *   already imported from this saved source (Import new), a non-image file,
  *   or a destination name already taken by different bytes.
- * Nothing here writes state except `insertCard` and `settleGrowingFiles`,
- * which change the simulated world outside PlateVault.
+ * Nothing here writes state.
  */
-import { fileAt, freeBytes, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
-import { isUnder, nightOf, stableHash } from "@/domain/indexing"
+import { fileAt, freeBytes, volumeForPath } from "@/domain/disk"
+import { isUnder } from "@/domain/indexing"
 import { locationAvailability } from "@/domain/library"
-import { namingTemplate, resolveNamingTemplate, type NamingValues } from "@/domain/templates"
+import { headerNamingValues, namingTemplate, resolveNamingTemplate } from "@/domain/templates"
+import { formatBytes } from "@/lib/format"
 import type {
   AssetId,
   Catalog,
   Disk,
   DiskFile,
-  FrameHeader,
   ImageType,
   ImportSource,
   Location,
@@ -33,7 +32,7 @@ import type {
   SessionId,
   Volume,
 } from "@/domain/types"
-import { nowIso, type PrototypeState, store } from "@/store/core"
+import type { PrototypeState } from "@/store/core"
 import type { ImportDraft } from "@/store/slices/a"
 
 export type ImportRole = Extract<LocationRole, "captures" | "calibration">
@@ -144,20 +143,6 @@ function isImage(file: DiskFile): boolean {
   return (file.kind === "fits" || file.kind === "xisf") && file.header !== null
 }
 
-function namingValues(header: FrameHeader, type: ImageType): NamingValues {
-  return {
-    target: header.object,
-    filter: header.filter,
-    date: header.dateObs ? nightOf(header.dateObs) : null,
-    frame_type: type,
-    camera: header.instrument,
-    exposure: `${Number(header.exposureS.toPrecision(6))}s`,
-    gain: header.gain === null ? null : String(header.gain),
-    binning: `${header.binning}x${header.binning}`,
-    set_temp: header.ccdTempC === null ? null : `${Math.round(header.ccdTempC)}C`,
-  }
-}
-
 function joinPath(folder: string, rel: string): string {
   const clean = rel.replace(/^\/+/, "")
   return `${folder.replace(/\/+$/, "")}/${clean}`
@@ -265,7 +250,7 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
     const role = roleFor(type)
     const location = destinations[role]
     if (!location) continue
-    const resolved = resolveNamingTemplate(namingTemplate(settings.naming, NAMING_TYPE[type]), namingValues(header, type))
+    const resolved = resolveNamingTemplate(namingTemplate(settings.naming, NAMING_TYPE[type]), headerNamingValues(header, type))
     const destFolder = joinPath(location.path, resolved.path.endsWith("/") ? resolved.path : `${resolved.path}/`)
     const destPath = `${destFolder}${file.path.slice(file.path.lastIndexOf("/") + 1)}`
     const existing = fileAt(disk, destPath)
@@ -295,7 +280,7 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
     }
     const check = locationWritable(disk, location)
     const free = check.volume ? freeBytes(disk, check.volume.id) : 0
-    const problem = needed === 0 ? null : (check.problem ?? (free < needed ? `${check.volume?.name ?? location.displayName} has ${formatGb(free)} free; this import needs ${formatGb(needed)}` : null))
+    const problem = needed === 0 ? null : (check.problem ?? (free < needed ? `${check.volume?.name ?? location.displayName} has ${formatBytes(free)} free; this import needs ${formatBytes(needed)}` : null))
     plan.destinations.push({ role, location, volume: check.volume, neededBytes: needed, freeBytes: free, writable: check.writable, problem })
   }
 
@@ -309,135 +294,4 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
   for (const d of plan.destinations) if (d.problem) plan.blockers.push(d.problem)
   if (draft.mode === "move" && !plan.move.allowed && plan.move.reason) plan.blockers.push(`Move is unavailable: ${plan.move.reason}`)
   return plan
-}
-
-function formatGb(bytes: number): string {
-  return `${(bytes / 1e9).toFixed(1)} GB`
-}
-
-// ---------------------------------------------------------------------------
-// The simulated ASIAIR card behind the demo's saved source "ASIAIR SD card".
-// Inserting it is a change to the world outside PlateVault (the OS mounts it).
-// ---------------------------------------------------------------------------
-
-export const CARD_VOLUME: Volume = {
-  id: "vol_asiair",
-  name: "ASIAIR",
-  mountPath: "/Volumes/ASIAIR",
-  volumeUuid: "A51A-0001",
-  mounted: true,
-  writable: true,
-  trash: "supported",
-  capacityBytes: 128_000_000_000,
-  links: { symlink: false, hardlink: false, clone: false },
-  network: false,
-}
-
-const REDCAT_HEADER: Omit<FrameHeader, "imageType" | "object" | "filter" | "exposureS" | "dateObs" | "ra" | "dec" | "rotationDeg"> = {
-  instrument: "ZWO ASI2600MM Pro",
-  telescope: "RedCat 51",
-  focalLengthMm: 250,
-  binning: 1,
-  gain: 100,
-  offset: 50,
-  ccdTempC: -10,
-  widthPx: 6248,
-  heightPx: 4176,
-  pixelSizeUm: 3.76,
-  bayerPattern: null,
-  siteLat: 52.09,
-  siteLon: 5.12,
-}
-
-const FRAME_BYTES = 6248 * 4176 * 2 + 11_520
-
-interface CardSet {
-  dir: string
-  prefix: string
-  count: number
-  start: string
-  type: ImageType
-  object: string | null
-  filter: string | null
-  exposureS: number
-  pointing: { ra: number; dec: number } | null
-  /** The last file is still being written by the capture device. */
-  lastGrowing?: boolean
-}
-
-function cardSet(spec: CardSet): DiskFile[] {
-  const start = Date.parse(spec.start)
-  return Array.from({ length: spec.count }, (_, i) => {
-    const dateObs = new Date(start + i * (spec.exposureS + 12) * 1000).toISOString()
-    const path = `${CARD_VOLUME.mountPath}/${spec.dir}/${spec.prefix}_${String(i + 1).padStart(4, "0")}.fit`
-    const jitter = (Number.parseInt(stableHash(path), 36) % 100) / 100
-    return makeFile({
-      path,
-      volumeId: CARD_VOLUME.id,
-      sizeBytes: FRAME_BYTES,
-      kind: "fits",
-      header: {
-        ...REDCAT_HEADER,
-        imageType: spec.type,
-        object: spec.object,
-        filter: spec.filter,
-        exposureS: spec.exposureS,
-        dateObs,
-        ra: spec.pointing ? spec.pointing.ra + (jitter - 0.5) * 0.02 : null,
-        dec: spec.pointing ? spec.pointing.dec + (jitter - 0.5) * 0.02 : null,
-        rotationDeg: spec.pointing ? 90 : null,
-      },
-      pixelTruth: spec.type === "light" ? { fwhmPx: 2.4 + jitter * 0.6, eccentricity: 0.36 + jitter * 0.12, starCount: 1500 + Math.round(jitter * 600), background: 820 + jitter * 120, saturatedStars: Math.round(jitter * 3), invalidSamples: 0, trailed: false } : null,
-      growing: spec.lastGrowing === true && i === spec.count - 1,
-      modifiedAt: dateObs,
-    })
-  })
-}
-
-const NGC7000 = { ra: 314.75, dec: 44.53 }
-
-/** The card's files: new NGC 7000 lights, flats, a type-less set, a file still being written and library duplicates. */
-function cardFiles(disk: Disk): DiskFile[] {
-  const files = [
-    ...cardSet({ dir: "Autorun/Light/NGC 7000", prefix: "Light_NGC7000_300s_Ha_20261006", count: 16, start: "2026-10-06T19:30:00Z", type: "light", object: "NGC 7000", filter: "Ha", exposureS: 300, pointing: NGC7000, lastGrowing: true }),
-    ...cardSet({ dir: "Autorun/Light/NGC 7000", prefix: "Light_NGC7000_300s_OIII_20261006", count: 12, start: "2026-10-06T21:10:00Z", type: "light", object: "NGC 7000", filter: "OIII", exposureS: 300, pointing: NGC7000 }),
-    ...cardSet({ dir: "Autorun/Flat", prefix: "Flat_RedCat_Ha_20261007", count: 20, start: "2026-10-07T05:20:00Z", type: "flat", object: null, filter: "Ha", exposureS: 1.5, pointing: null }),
-    // IMAGETYP missing: the files are held as Unclassified until typed.
-    ...cardSet({ dir: "Plan/M 33", prefix: "Capture_M33_120s_L_20261006", count: 6, start: "2026-10-06T23:40:00Z", type: "unknown", object: "M 33", filter: "L", exposureS: 120, pointing: { ra: 23.462, dec: 30.66 } }),
-    makeFile({ path: `${CARD_VOLUME.mountPath}/Log/Autorun_Log_2026-10-06.txt`, volumeId: CARD_VOLUME.id, sizeBytes: 48_200, kind: "text", modifiedAt: "2026-10-07T05:40:00Z" }),
-  ]
-  // The 2 Oct Ha session was imported from this card before and is still on it: byte-identical duplicates.
-  const earlier = Object.values(disk.files)
-    .filter((f) => f.path.startsWith("/Volumes/Astro-T7/Captures/NGC7000/2026-10-02/Ha/"))
-    .map((f) => ({ ...f, volumeId: CARD_VOLUME.id, path: `${CARD_VOLUME.mountPath}/Autorun/Light/NGC 7000/${f.path.slice(f.path.lastIndexOf("/") + 1)}`, inode: f.inode + 7 }))
-  return [...files, ...earlier]
-}
-
-export function isCardInserted(disk: Disk): boolean {
-  return disk.volumes[CARD_VOLUME.id]?.mounted === true
-}
-
-/** Simulate inserting the ASIAIR card: the OS mounts it with the files the device wrote. */
-export function insertCard() {
-  store.setState((s) => {
-    const existing = s.disk.volumes[CARD_VOLUME.id]
-    const disk: Disk = { ...s.disk, volumes: { ...s.disk.volumes, [CARD_VOLUME.id]: { ...(existing ?? CARD_VOLUME), mounted: true } } }
-    const hasFiles = Object.values(disk.files).some((f) => f.volumeId === CARD_VOLUME.id)
-    return { ...s, disk: hasFiles ? disk : writeFiles(disk, cardFiles(s.disk)) }
-  })
-}
-
-/** The capture device finished writing: the held files stop growing (their bytes settle). */
-export function settleGrowingFiles(paths: string[]) {
-  store.setState((s) => {
-    const files = { ...s.disk.files }
-    let changed = false
-    for (const [key, file] of Object.entries(files)) {
-      if (file.growing && paths.includes(file.path)) {
-        files[key] = { ...file, growing: false, modifiedAt: nowIso() }
-        changed = true
-      }
-    }
-    return changed ? { ...s, disk: { ...s.disk, files } } : s
-  })
 }

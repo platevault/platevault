@@ -19,6 +19,7 @@ import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PathText } from "@/components/app/data"
 import { Notice } from "@/components/app/feedback"
 import { OperationPanel } from "@/components/app/operation-panel"
+import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
@@ -31,7 +32,7 @@ import { useStore } from "@/store/core"
 import type { DoneApproval } from "@/store/slices/b"
 import { startArchiveTransfer } from "./actions"
 import { type ArchivePlan, archivePlan, doneOffers, type OfferKind, sessionLabel, type TrashOffer } from "./model"
-import { ProjectStateBadge, SheetSection } from "./parts"
+import { SheetSection } from "./parts"
 import { EmptyTrashButton, rememberApproval } from "./trash"
 
 export function DoneArchiveSheet() {
@@ -77,7 +78,7 @@ function DoneArchive({ project }: { project: Project }) {
       <SheetHeader className="border-b border-separator">
         <SheetTitle className="flex flex-wrap items-center gap-2">
           Done / Archive: {project.name}
-          <ProjectStateBadge status={status} />
+          <StatusBadge kind="project" value={status} />
         </SheetTitle>
         <SheetDescription>Each offer is approved on its own and runs as its own operation. Nothing moves until you approve it, and nothing is deleted permanently.</SheetDescription>
       </SheetHeader>

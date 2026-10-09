@@ -5,10 +5,10 @@
  * write the catalog directly; PlateVault observes their effects the next time
  * it reads the disk.
  */
-import { arrivalFiles, VOLUME_IDS } from "@/domain/seed"
+import { ASIAIR_CARD, arrivalFiles, asiairCardFiles, VOLUME_IDS } from "@/domain/seed"
 import { fakeSha256, fileAt, fileKey, filesUnder, makeFile, removeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
-import type { DiskFile, SimulationFaults, VolumeId } from "@/domain/types"
+import type { Disk, DiskFile, SimulationFaults, VolumeId } from "@/domain/types"
 import { nowIso, store } from "./core"
 
 export function setVolumeMounted(volumeId: VolumeId, mounted: boolean) {
@@ -60,6 +60,35 @@ export function copyNewCaptures() {
 export function newCapturesArrived(): boolean {
   const first = arrivalFiles()[0]
   return first ? Boolean(fileAt(store.getState().disk, first.path)) : false
+}
+
+/** S13 Import: the OS mounts the ASIAIR SD card with the files the device wrote last night. */
+export function insertAsiairCard() {
+  store.setState((s) => {
+    const existing = s.disk.volumes[ASIAIR_CARD.id]
+    const disk: Disk = { ...s.disk, volumes: { ...s.disk.volumes, [ASIAIR_CARD.id]: { ...(existing ?? ASIAIR_CARD), mounted: true } } }
+    const hasFiles = Object.values(disk.files).some((f) => f.volumeId === ASIAIR_CARD.id)
+    return { ...s, disk: hasFiles ? disk : writeFiles(disk, asiairCardFiles(s.disk)) }
+  })
+}
+
+export function asiairCardInserted(disk: Disk): boolean {
+  return disk.volumes[ASIAIR_CARD.id]?.mounted === true
+}
+
+/** The capture device finished writing: the held files stop growing (their bytes settle). */
+export function settleGrowingFiles(paths: string[]) {
+  store.setState((s) => {
+    const files = { ...s.disk.files }
+    let changed = false
+    for (const [key, file] of Object.entries(files)) {
+      if (file.growing && paths.includes(file.path)) {
+        files[key] = { ...file, growing: false, modifiedAt: nowIso() }
+        changed = true
+      }
+    }
+    return changed ? { ...s, disk: { ...s.disk, files } } : s
+  })
 }
 
 /** Overwrite a file outside PlateVault: same path, new bytes (drift). The old bytes stay restorable. */

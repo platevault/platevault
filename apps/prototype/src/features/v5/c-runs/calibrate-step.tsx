@@ -21,11 +21,11 @@ import { Switch } from "@/components/ui/switch"
 import { basisFiles, type CalSource, calibrationPlan, CRITERION_LABEL, KIND_LABEL, readinessLine, type RequirementRow, summaryText } from "@/domain/calibration"
 import { runSetup, workingContent } from "@/domain/derive"
 import type { MatchCriterion, Run } from "@/domain/types"
-import { formatNight, plural } from "@/lib/format"
+import { fileName, formatNight, plural } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { acceptCalibration, answerMasterOffer, calibrationException, clearCalibration, deferCalibration, setCalibrationPolicy } from "./actions"
 import { type RunContext, readinessText, runLock, tieOf } from "./model"
-import { fileName, OutcomeNotice, Sha, useOutcome } from "./parts"
+import { OutcomeNotice, Sha, useOutcome } from "./parts"
 
 export function CalibrateStep({ ctx }: { ctx: RunContext }) {
   const state = useStore((s) => s)

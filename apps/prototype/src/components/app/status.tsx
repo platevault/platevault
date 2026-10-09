@@ -29,6 +29,7 @@ import {
   Pause,
   Plug,
   ShieldCheck,
+  Trash2,
   TriangleAlert,
   Unplug,
   Wrench,
@@ -117,6 +118,18 @@ export const STATUS = {
     prepared: s("Prepared", "success", CheckCheck),
     unverified: s("Unverified", "warning", TriangleAlert),
     complete: s("Complete", "success", ShieldCheck),
+  },
+  /** A Project's lifecycle (PRJ-FR-14, D-W46). */
+  project: {
+    open: s("Open", "info", CircleDot),
+    done: s("Done", "success", ShieldCheck),
+    archived: s("Archived", "neutral", Archive),
+  },
+  /** A processing run's lifecycle (RES-FR-06, D-W72). */
+  run: {
+    open: s("Open", "neutral", CircleDot),
+    complete: s("Complete", "success", ShieldCheck),
+    trashed: s("Trashed", "muted", Trash2),
   },
   preparation: {
     running: s("Running", "info", Loader),

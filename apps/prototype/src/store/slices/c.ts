@@ -3,8 +3,8 @@
  * group. Screen-local state: Select's browsing filter and the Prepare
  * review choices (link type and the corrected-metadata decisions, D15) per
  * run or run group. Durable outcomes live in the catalog. Registers the
- * "prepare" and "cleanup" operation handlers
- * (`src/features/v5/c-runs/operations.ts`).
+ * "prepare" operation handler (`src/features/v5/c-runs/operations.ts`);
+ * Clean up uses the foundation trash engine.
  */
 import type { RunId } from "@/domain/types"
 import { cOperationHandlers } from "@/features/v5/c-runs/operations"

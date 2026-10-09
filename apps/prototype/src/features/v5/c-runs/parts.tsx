@@ -1,15 +1,15 @@
 /**
  * Slice C UI parts shared by the run and run group pages: the step bar (the
- * pane's gate bar, glyph plus word), the run status label, the inline
- * outcome of an action (refusals name each blocker), radio option cards, the
- * Prototype menu for simulated-disk controls, and small read-outs.
+ * pane's gate bar, glyph plus word), the inline outcome of an action
+ * (refusals name each blocker), radio option cards, the Prototype menu for
+ * simulated-disk controls, and small read-outs. The run status is the shared
+ * `StatusBadge kind="run"`.
  */
 import { Link } from "@tanstack/react-router"
-import { CircleDot, FlaskConical, ShieldCheck, Trash2 } from "lucide-react"
+import { FlaskConical } from "lucide-react"
 import { type ReactNode, useCallback, useState } from "react"
 import { StepGlyph } from "@/app/run-ui"
 import { Notice } from "@/components/app/feedback"
-import { TONE_CLASS } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { RadioGroupItem } from "@/components/ui/radio-group"
@@ -53,27 +53,6 @@ export function StepBar({ steps, here, nextId, linkFor, label }: { steps: RunSte
         })}
       </ol>
     </nav>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Run status: glyph plus word
-// ---------------------------------------------------------------------------
-
-const RUN_STATUS = {
-  open: { label: "Open", icon: CircleDot, tone: "neutral" },
-  complete: { label: "Complete", icon: ShieldCheck, tone: "success" },
-  trashed: { label: "Trashed", icon: Trash2, tone: "muted" },
-} as const
-
-export function RunStatusLabel({ status, className }: { status: "open" | "complete" | "trashed"; className?: string }) {
-  const meta = RUN_STATUS[status]
-  const Icon = meta.icon
-  return (
-    <span data-run-status={status} className={cn("inline-flex items-center gap-1 text-[0.75rem] font-medium [&>svg]:size-3.5", TONE_CLASS[meta.tone], className)}>
-      <Icon aria-hidden="true" />
-      {meta.label}
-    </span>
   )
 }
 
@@ -212,8 +191,4 @@ export function LayoutLine({ path, note, depth = 0, emphasis = false }: { path: 
       <span className="text-[0.75rem] text-muted-foreground">{note}</span>
     </li>
   )
-}
-
-export function fileName(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1)
 }

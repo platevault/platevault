@@ -102,6 +102,21 @@ export function filesUnder(disk: Disk, folder: string): DiskFile[] {
   return Object.values(disk.files).filter((f) => f.volumeId === volumeId && f.path !== folder && isUnder(f.path, folder))
 }
 
+/**
+ * Why a path cannot go to the OS Trash now (D-W57, STO-FR-15), or null. Offer
+ * previews ask it, and the trash operation asks again for every item it moves.
+ */
+export function trashRefusal(disk: Disk, path: string): string | null {
+  if (disk.readOnlyPaths.some((p) => isUnder(path, p))) return "Write permission removed; kept in place"
+  const volumeId = volumeForPath(disk, path)
+  const volume = volumeId ? disk.volumes[volumeId] : undefined
+  if (!volume) return "Outside every known volume"
+  if (!volume.mounted) return `${volume.name} is offline`
+  if (volume.trash === "unsupported") return `${volume.name} has no OS Trash; kept, nothing deleted`
+  if (!fileAt(disk, path)) return "Not found at its recorded path"
+  return null
+}
+
 /** Returns a new disk with an explicit (possibly empty) folder and its parents' existence implied. */
 export function createFolder(disk: Disk, folder: DiskFolder): Disk {
   if (disk.folders.some((f) => f.volumeId === folder.volumeId && f.path === folder.path)) return disk

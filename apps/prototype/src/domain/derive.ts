@@ -18,6 +18,7 @@ import {
 import { runSummary, sessionExposureS } from "./membership"
 import { bestWindowTonight, defaultCriteria } from "./planning"
 import { type FieldOfView, fieldOfView } from "./sky"
+import { type NamingValues, namingValues } from "./templates"
 import type {
   AppSettings,
   Asset,
@@ -76,6 +77,27 @@ function unsettled(op: Operation): boolean {
  */
 export function sessionTargetId(session: Session): string | null {
   return session.target.status === "confirmed" || session.target.status === "associated" ? session.target.value : null
+}
+
+/**
+ * Naming token values of a session (D-W20): its settled Target, corrected
+ * channel and exposure, camera and settings. Archive, Restore, review names
+ * and the Settings preview lay files out from these; Import, before any
+ * association, reads the header (`headerNamingValues`).
+ */
+export function sessionNamingValues(catalog: Catalog, session: Session, frameType: string = session.imageType): NamingValues {
+  const targetId = sessionTargetId(session)
+  return namingValues({
+    target: targetId ? (catalog.targets[targetId]?.name ?? null) : null,
+    filter: session.channel,
+    night: session.night,
+    frameType,
+    camera: session.cameraName,
+    exposureS: sessionExposureS(session),
+    gain: session.gain,
+    binning: session.binning,
+    ccdTempC: session.ccdTempC,
+  })
 }
 
 /** The session's rig under the same rule (Confirm equipment sets it, LIB-FR-05). */
@@ -645,6 +667,16 @@ export function groupStepLink(group: Pick<RunGroup, "id" | "projectId">, step: R
 
 export function projectLink(projectId: ProjectId, search?: Record<string, string>): StepLink {
   return { to: "/projects/$projectId", params: { projectId }, search }
+}
+
+/** The hash path of a run step, for Activity entries and operation links (the string form of `runStepLink`). */
+export function runHref(run: Pick<Run, "id" | "projectId">, step: RunStep = "select"): string {
+  return `/projects/${run.projectId}/runs/${run.id}/${step}`
+}
+
+/** The hash path of a run group step (the string form of `groupStepLink`). */
+export function groupHref(group: Pick<RunGroup, "id" | "projectId">, step: RunStep = "select"): string {
+  return `/projects/${group.projectId}/groups/${group.id}/${step}`
 }
 
 /** The setup a run uses: its own, or its group's shared setup (D-W38). */

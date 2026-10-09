@@ -1,9 +1,11 @@
 /**
  * Goal templates (D-W30, D-W47, PRJ-FR-12) and naming templates (D-W20,
- * STO-IMP-FR-07): the built-in values and the pure template resolution that
- * New Project, Import, Archive and Settings share. Nothing here writes state.
+ * STO-IMP-FR-07): the built-in values, the token values every consumer
+ * builds the same way, and the pure template resolution that New Project,
+ * Import, Archive, review names and Settings share. Nothing here writes state.
  */
-import type { GoalTemplate, GoalTemplateValue, NamingFrameType, NamingToken } from "./types"
+import { nightOf } from "./indexing"
+import type { FrameHeader, GoalTemplate, GoalTemplateValue, NamingFrameType, NamingToken } from "./types"
 
 const H = 3600
 
@@ -59,6 +61,54 @@ export function namingTemplate(overrides: Partial<Record<NamingFrameType, string
 
 /** Metadata a template resolves against; null fields use the token's fallback. */
 export type NamingValues = Partial<Record<NamingToken, string | null>>
+
+/** The metadata the naming tokens read, before formatting. */
+export interface NamingFacts {
+  target: string | null
+  filter: string | null
+  /** Observing night, `YYYY-MM-DD`. */
+  night: string | null
+  frameType: string
+  camera: string | null
+  exposureS: number | null
+  gain: number | null
+  binning: number | null
+  ccdTempC: number | null
+}
+
+/**
+ * Token values from metadata, formatted one way for every consumer (Import
+ * destinations, Archive and Restore folders, review display names and the
+ * Settings preview): "300s", "2x2", "-10C".
+ */
+export function namingValues(facts: NamingFacts): NamingValues {
+  return {
+    target: facts.target,
+    filter: facts.filter,
+    date: facts.night,
+    frame_type: facts.frameType,
+    camera: facts.camera,
+    exposure: facts.exposureS === null ? null : `${Number(facts.exposureS.toPrecision(6))}s`,
+    gain: facts.gain === null ? null : String(facts.gain),
+    binning: facts.binning === null ? null : `${facts.binning}x${facts.binning}`,
+    set_temp: facts.ccdTempC === null ? null : `${Math.round(facts.ccdTempC)}C`,
+  }
+}
+
+/** Token values from a file's observed header, before indexing associates it (Import); the Target is its OBJECT. */
+export function headerNamingValues(header: FrameHeader, frameType: string): NamingValues {
+  return namingValues({
+    target: header.object,
+    filter: header.filter,
+    night: header.dateObs ? nightOf(header.dateObs) : null,
+    frameType,
+    camera: header.instrument,
+    exposureS: header.exposureS,
+    gain: header.gain,
+    binning: header.binning,
+    ccdTempC: header.ccdTempC,
+  })
+}
 
 const RESERVED = new Set(["con", "prn", "aux", "nul", "com1", "lpt1", ".", ".."])
 const MAX_SEGMENT = 80

@@ -1,14 +1,14 @@
 /**
- * Slice C operation handlers: "prepare" (PREP-FR-09, D09) and "cleanup"
- * (PREP-FR-14, D-W26). Registered by `src/store/slices/c.ts`. Each tick reads
- * the simulated disk, so a source that changes or goes offline between ticks
- * is observed honestly. Nothing here deletes permanently: Clean up moves
- * prepared entries to the OS Trash.
+ * Slice C operation handler: "prepare" (PREP-FR-09, D09), registered by
+ * `src/store/slices/c.ts`. Each tick reads the simulated disk, so a source
+ * that changes or goes offline between ticks is observed honestly. Clean up
+ * runs through the foundation's OS Trash engine (`moveToOsTrash`, kind
+ * "run-cleanup").
  */
-import { createFolder, fakeSha256, fileAt, makeFile, removeFile, volumeForPath, writeFiles } from "@/domain/disk"
+import { createFolder, fakeSha256, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { deniedAncestor, isUnder } from "@/domain/indexing"
 import type { Disk, FrameHeader, InputMode, Operation, OperationItem, Preparation, PreparationInput } from "@/domain/types"
-import { formatBytes, plural } from "@/lib/format"
+import { plural } from "@/lib/format"
 import { nowIso, type PrototypeState } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
 import { FIELD_KEYWORD, type LinkType, type PrepareEntry, type PrepareJournal } from "./model"
@@ -189,62 +189,4 @@ const prepareHandler: OperationHandler = {
   },
 }
 
-// ---------------------------------------------------------------------------
-// Clean up: prepared entries to the OS Trash
-// ---------------------------------------------------------------------------
-
-export interface CleanupPayload {
-  runId: string
-  folders: string[]
-  queue: Array<{ path: string }>
-  done: Array<{ path: string; sizeBytes: number; outcome: "trashed" | "refused"; reason: string | null }>
-  href: string
-}
-
-function cleanupRefusal(disk: Disk, path: string): string | null {
-  if (disk.readOnlyPaths.some((p) => isUnder(path, p))) return "Write permission removed; kept in place"
-  const file = fileAt(disk, path)
-  if (!file) return "Not found at its recorded path"
-  const volume = disk.volumes[file.volumeId]
-  if (!volume?.mounted) return `${volume?.name ?? "Its volume"} is offline`
-  if (volume.trash === "unsupported") return `${volume.name} has no OS Trash; kept, nothing deleted`
-  return null
-}
-
-const CLEANUP_PER_TICK = 10
-
-const cleanupHandler: OperationHandler = {
-  kind: "cleanup",
-  step(state, op) {
-    const payload = structuredClone(op.payload) as unknown as CleanupPayload
-    let disk = state.disk
-    const at = nowIso()
-    const items = [...op.items]
-    for (const { path } of payload.queue.splice(0, CLEANUP_PER_TICK)) {
-      const reason = cleanupRefusal(disk, path)
-      const file = fileAt(disk, path)
-      const sizeBytes = file?.linkTarget ? 0 : (file?.sizeBytes ?? 0)
-      const index = items.findIndex((i) => i.path === path)
-      if (reason) {
-        payload.done.push({ path, sizeBytes, outcome: "refused", reason })
-        if (index >= 0) items[index] = { ...items[index]!, status: "blocked", detail: reason }
-        continue
-      }
-      disk = { ...removeFile(disk, file!.volumeId, path), trash: [...disk.trash, { file: file!, originalPath: path, trashedAt: at }] }
-      payload.done.push({ path, sizeBytes, outcome: "trashed", reason: null })
-      if (index >= 0) items[index] = { ...items[index]!, status: "done", detail: "Moved to the OS Trash" }
-    }
-    let next: PrototypeState = patchOperation({ ...state, disk }, op.id, { items, payload: payload as unknown as Record<string, unknown>, progress: { ...op.progress, done: payload.done.length } })
-    if (payload.queue.length > 0) return next
-    // An emptied prepared folder leaves the disk too; a folder holding a refused entry stays.
-    const keep = new Set(payload.done.filter((d) => d.outcome === "refused").map((d) => d.path))
-    next = { ...next, disk: { ...next.disk, folders: next.disk.folders.filter((f) => !payload.folders.some((folder) => isUnder(f.path, folder)) || [...keep].some((p) => isUnder(p, f.path))) } }
-    const trashed = payload.done.filter((d) => d.outcome === "trashed")
-    const refused = payload.done.length - trashed.length
-    const bytes = trashed.reduce((n, d) => n + d.sizeBytes, 0)
-    const summary = `${plural(trashed.length, "prepared entry", "prepared entries")} moved to the OS Trash (${formatBytes(bytes)}); ${plural(refused, "entry", "entries")} kept with a reason. Originals, library frames and Results are untouched.`
-    return settleOperation(next, op.id, refused > 0 && trashed.length === 0 ? "failed" : refused > 0 ? "partial" : "succeeded", summary, payload.href)
-  },
-}
-
-export const cOperationHandlers: OperationHandler[] = [prepareHandler, cleanupHandler]
+export const cOperationHandlers: OperationHandler[] = [prepareHandler]

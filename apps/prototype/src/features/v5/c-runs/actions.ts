@@ -9,7 +9,7 @@
  * exercise discovery and re-verification.
  */
 import { basisFiles, type CalSource } from "@/domain/calibration"
-import { completeRefusals, groupPipeline, latestRevision, runPreparations, runSetup, workingContent } from "@/domain/derive"
+import { completeRefusals, groupHref, groupPipeline, latestRevision, runHref, runPreparations, runSetup, workingContent } from "@/domain/derive"
 import { createFolder, fakeSha256, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { stableHash } from "@/domain/indexing"
 import { RESULT_KIND_LABEL } from "@/domain/labels"
@@ -33,31 +33,14 @@ import type {
   RunGroup,
   RunSetup,
 } from "@/domain/types"
-import { plural } from "@/lib/format"
+import { fileName, plural } from "@/lib/format"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, updateSlice, withCatalog } from "@/store/core"
-import { completeRun, setGroupSetup, setProductInputs, setRunSetup, startRun } from "@/store/actions/runs"
+import { completeRun, editRun, setGroupSetup, setProductInputs, setRunSetup, startRun } from "@/store/actions/runs"
 import { freshId, MISSING, recordSaved, refuse } from "@/store/actions/shared"
+import { moveToOsTrash } from "@/store/actions/trash"
 import { startOperation } from "@/store/operations"
 import { cleanupReview, currentPreparation, DEFAULT_CHOICES, groupAssembledPath, livePanelRuns, type PrepareChoices, preparePlan, recognize, resultsFolders, runLock, scanResultsFolders, verifyPreparation } from "./model"
-import type { CleanupPayload, PreparePayload } from "./operations"
-
-const runHref = (run: Pick<Run, "id" | "projectId">, step: string) => `/projects/${run.projectId}/runs/${run.id}/${step}`
-const groupHref = (group: Pick<RunGroup, "id" | "projectId">, step: string) => `/projects/${group.projectId}/groups/${group.id}/${step}`
-
-function fileName(path: string): string {
-  return path.slice(path.lastIndexOf("/") + 1)
-}
-
-function editRun(run: Run, label: string, update: (run: Run, state: PrototypeState) => Run, href: string, extra?: (state: PrototypeState) => PrototypeState): CommitResult {
-  return commit(
-    label,
-    (s) => {
-      const next = withCatalog(s, (c) => ({ ...c, runs: { ...c.runs, [run.id]: update(c.runs[run.id]!, s) } }))
-      return extra ? extra(next) : next
-    },
-    { expect: { collection: "runs", id: run.id, revision: run.revision }, href },
-  )
-}
+import type { PreparePayload } from "./operations"
 
 // ---------------------------------------------------------------------------
 // Setup (D-W38, D-W55)
@@ -133,7 +116,7 @@ export function setOutputParent(target: { runId?: string; groupId?: string }, pa
   if (!run) return MISSING
   const lock = runLock(run)
   if (lock) return refuse("Output folder change refused", [lock], runHref(run, "prepare"))
-  const result = editRun(run, "Output folder", (r) => ({ ...r, outputParent: path }), runHref(run, "prepare"), (s) => ({ ...s, settings: { ...s.settings, lastOutputParent: path } }))
+  const result = editRun(run.id, "Output folder", (r) => ({ ...r, outputParent: path }), { step: "prepare", record: false, also: (s) => ({ ...s, settings: { ...s.settings, lastOutputParent: path } }) })
   if (result.ok) recordSaved(`Output folder: ${run.name}`, path, runHref(run, "prepare"))
   return result
 }
@@ -149,17 +132,15 @@ function decide(runId: string, sessionId: string, kind: CalibrationKind, next: O
   const lock = runLock(run)
   if (lock) return refuse(`${label} refused`, [lock], runHref(run, "calibrate"))
   const id = `cal_${runId}_${sessionId}_${kind}`
-  const result = editRun(
-    run,
+  return editRun(
+    run.id,
     label,
     (r) => {
       const rest = r.calibration.filter((a) => !(a.lightSessionId === sessionId && a.kind === kind))
       return { ...r, calibration: next ? [...rest, { id, lightSessionId: sessionId, kind, ...next }] : rest }
     },
-    runHref(run, "calibrate"),
+    { step: "calibrate" },
   )
-  if (result.ok) recordSaved(`${label}: ${run.name}`, null, runHref(run, "calibrate"))
-  return result
 }
 
 function basisOf(input: CalibrationInput | null) {
@@ -200,7 +181,7 @@ export function answerMasterOffer(runId: string, masterId: string, answer: "adop
   const href = runHref(run, "calibrate")
   if (!run.masterOffers.some((o) => o.masterId === masterId && o.state === "pending")) return refuse("Offer already answered", [`${fileName(master.path)} was offered once and already answered`], href)
   if (answer === "dismiss") {
-    const result = editRun(run, "Dismiss master offer", (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "declined", at: nowIso() } : o)) }), href)
+    const result = editRun(run.id, "Dismiss master offer", (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "declined", at: nowIso() } : o)) }), { step: "calibrate", record: false })
     if (result.ok) recordSaved(`Dismissed ${fileName(master.path)}`, "It stays in the Results folder and is not offered again.", href)
     return result
   }
@@ -217,14 +198,17 @@ export function answerMasterOffer(runId: string, masterId: string, answer: "adop
   const at = nowIso()
   const copy = makeFile({ path: destinationPath, volumeId: location.volumeId, sizeBytes: source.sizeBytes, kind: source.kind, header: source.header, sha256: source.sha256, modifiedAt: at })
   const result = editRun(
-    run,
+    run.id,
     "Add master to the calibration library",
     (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "adopted", at } : o)) }),
-    href,
-    (s) => ({
-      ...withCatalog(s, (c) => ({ ...c, masters: { ...c.masters, [masterId]: { ...c.masters[masterId]!, state: "adopted", path: destinationPath, adoption: { destinationPath, verifiedSha256: source.sha256, adoptedAt: at } } } })),
-      disk: writeFiles(s.disk, [copy]),
-    }),
+    {
+      step: "calibrate",
+      record: false,
+      also: (s) => ({
+        ...withCatalog(s, (c) => ({ ...c, masters: { ...c.masters, [masterId]: { ...c.masters[masterId]!, state: "adopted", path: destinationPath, adoption: { destinationPath, verifiedSha256: source.sha256, adoptedAt: at } } } })),
+        disk: writeFiles(s.disk, [copy]),
+      }),
+    },
   )
   if (result.ok) recordSaved(`Added ${fileName(master.path)} to the calibration library`, `Copied to ${destinationPath}; SHA-256 verified. The Results copy stays.`, "/calibration")
   return result
@@ -619,6 +603,7 @@ export function startRunWithResult(resultId: string, projectId: string, subjectI
 // Clean up (PREP-FR-14) and Complete all
 // ---------------------------------------------------------------------------
 
+/** Clean up (D-W26, PREP-FR-14): the chosen prepared entries go to the OS Trash through the shared trash engine. */
 export function startCleanup(runId: string, paths: string[]): { result: CommitResult; operationId: string | null } {
   const state = store.getState()
   const run = state.catalog.runs[runId]
@@ -633,16 +618,15 @@ export function startCleanup(runId: string, paths: string[]): { result: CommitRe
   const allowed = new Set(review.entries.map((e) => e.path))
   const chosen = paths.filter((p) => allowed.has(p))
   if (chosen.length === 0) return { result: refuse(title, ["No prepared entry is selected"], href), operationId: null }
-  const payload: CleanupPayload = { runId, folders: [...new Set(review.entries.map((e) => e.prep.folderPath))], queue: chosen.map((path) => ({ path })), done: [], href }
-  const operationId = startOperation({
-    kind: "cleanup",
+  const operationId = moveToOsTrash({
+    kind: "run-cleanup",
     title: `Clean up ${run.name}`,
-    scope: { runIds: [run.id], projectId: run.projectId },
-    total: chosen.length,
-    unit: "entries",
-    items: chosen.map((path) => ({ id: path, label: fileName(path), path, status: "pending", phase: null, detail: null })),
-    payload: payload as unknown as Record<string, unknown>,
-    canCancel: false,
+    projectId: run.projectId,
+    runIds: [run.id],
+    items: chosen.map((path) => ({ path })),
+    pruneFolders: [...new Set(review.entries.map((e) => e.prep.folderPath))],
+    noun: { one: "prepared entry", many: "prepared entries" },
+    href,
   })
   return { result: { ok: true }, operationId }
 }

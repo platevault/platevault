@@ -66,6 +66,8 @@ export const VOLUME_IDS = {
   impostor: "vol_archive_impostor",
   spare: "vol_spare",
   nas: "vol_nas",
+  /** The ASIAIR SD card behind the demo's saved Import source; mounted by Prototype › Insert ASIAIR card. */
+  asiair: "vol_asiair",
 } as const
 
 const TB = 1_000_000_000_000
@@ -92,6 +94,7 @@ const MOUNT: Record<VolumeId, string> = {
   [VOLUME_IDS.archive]: "/Volumes/Archive",
   [VOLUME_IDS.spare]: "/Volumes/Spare",
   [VOLUME_IDS.nas]: "/Volumes/NAS",
+  [VOLUME_IDS.asiair]: "/Volumes/ASIAIR",
 }
 
 const SITE_COORDS = {
@@ -144,6 +147,8 @@ interface CaptureSpec {
   ext?: "fits" | "xisf"
   overrides?: Partial<FrameHeader>
   truth?: (index: number) => Partial<PixelTruth>
+  /** The last file is still being written by the capture device. */
+  growingLast?: boolean
 }
 
 function captureSet(spec: CaptureSpec): DiskFile[] {
@@ -190,7 +195,7 @@ function captureSet(spec: CaptureSpec): DiskFile[] {
       ...spec.truth?.(i),
     }
     const path = `${MOUNT[spec.volumeId]}/${spec.dir}/${spec.prefix}_${String(i + 1).padStart(4, "0")}.${ext}`
-    files.push(makeFile({ path, volumeId: spec.volumeId, sizeBytes: bytes, kind: ext, header, pixelTruth: truth, modifiedAt: dateObs }))
+    files.push(makeFile({ path, volumeId: spec.volumeId, sizeBytes: bytes, kind: ext, header, pixelTruth: truth, growing: spec.growingLast === true && i === spec.count - 1, modifiedAt: dateObs }))
   }
   return files
 }
@@ -299,6 +304,44 @@ export function arrivalFiles(): DiskFile[] {
     ...light(A, "Captures/NGC7000/2026-10-05/Ha", "Light_NGC7000_300s_Ha", 12, "2026-10-05T19:40:00Z", 300, "Ha", "NGC 7000", { ...NGC7000, rotationDeg: rot }),
     ...light(A, "Captures/NGC7000/2026-10-05/OIII", "Light_NGC7000_300s_OIII", 12, "2026-10-05T21:00:00Z", 300, "OIII", "NGC 7000", { ...NGC7000, rotationDeg: rot }),
   ]
+}
+
+/** The ASIAIR SD card the demo's saved source "ASIAIR SD card" points at; not mounted until inserted. */
+export const ASIAIR_CARD: Volume = {
+  id: VOLUME_IDS.asiair,
+  name: "ASIAIR",
+  mountPath: MOUNT[VOLUME_IDS.asiair]!,
+  volumeUuid: "A51A-0001",
+  mounted: true,
+  writable: true,
+  trash: "supported",
+  capacityBytes: 128_000_000_000,
+  links: { symlink: false, hardlink: false, clone: false },
+  network: false,
+}
+
+/**
+ * What the ASIAIR wrote last night (S13 Import): new NGC 7000 lights with the
+ * last file still being written, flats, a set without IMAGETYP (held as
+ * Unclassified), a log file, and the 2 Oct Ha session imported from this card
+ * before (byte-identical duplicates of library frames).
+ */
+export function asiairCardFiles(disk: Disk): DiskFile[] {
+  const card = VOLUME_IDS.asiair
+  const pointing = { ...NGC7000, rotationDeg: rot }
+  const site = SITE_COORDS.backyard
+  const files = [
+    ...captureSet({ volumeId: card, dir: "Autorun/Light/NGC 7000", prefix: "Light_NGC7000_300s_Ha_20261006", count: 16, start: "2026-10-06T19:30:00Z", imageType: "light", exposureS: 300, filter: "Ha", object: "NGC 7000", rig: REDCAT, pointing, site, growingLast: true }),
+    ...captureSet({ volumeId: card, dir: "Autorun/Light/NGC 7000", prefix: "Light_NGC7000_300s_OIII_20261006", count: 12, start: "2026-10-06T21:10:00Z", imageType: "light", exposureS: 300, filter: "OIII", object: "NGC 7000", rig: REDCAT, pointing, site }),
+    ...captureSet({ volumeId: card, dir: "Autorun/Flat", prefix: "Flat_RedCat_Ha_20261007", count: 20, start: "2026-10-07T05:20:00Z", imageType: "flat", exposureS: 1.5, filter: "Ha", object: null, rig: REDCAT, pointing: null, site: null }),
+    // IMAGETYP missing: the files are held as Unclassified until typed.
+    ...captureSet({ volumeId: card, dir: "Plan/M 33", prefix: "Capture_M33_120s_L_20261006", count: 6, start: "2026-10-06T23:40:00Z", imageType: "unknown", exposureS: 120, filter: "L", object: "M 33", rig: REDCAT, pointing: { ra: 23.462, dec: 30.66, rotationDeg: rot }, site, truth: () => ({ starCount: 1700, background: 860, saturatedStars: 1 }) }),
+    makeFile({ path: `${ASIAIR_CARD.mountPath}/Log/Autorun_Log_2026-10-06.txt`, volumeId: card, sizeBytes: 48_200, kind: "text", modifiedAt: "2026-10-07T05:40:00Z" }),
+  ]
+  const earlier = Object.values(disk.files)
+    .filter((f) => f.path.startsWith(`${MOUNT[A]}/Captures/NGC7000/2026-10-02/Ha/`))
+    .map((f) => ({ ...f, volumeId: card, path: `${ASIAIR_CARD.mountPath}/Autorun/Light/NGC 7000/${f.path.slice(f.path.lastIndexOf("/") + 1)}`, inode: f.inode + 7 }))
+  return [...files, ...earlier]
 }
 
 export const PROFILE_IDS = {

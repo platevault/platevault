@@ -16,7 +16,7 @@
 import { Link, useNavigate } from "@tanstack/react-router"
 import { FolderOpen, HardDrive, Usb } from "lucide-react"
 import { type ReactNode, useEffect, useId, useState } from "react"
-import { closeSheet, openSheet, useShellUi } from "@/app/ui-state"
+import { closeSheet, openPanel, openSheet, useShellUi } from "@/app/ui-state"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PathText } from "@/components/app/data"
 import { type Column, DataTable } from "@/components/app/data-table"
@@ -34,14 +34,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { filesUnder } from "@/domain/disk"
 import { sessionLongLabel } from "@/domain/membership"
 import { namingTemplate } from "@/domain/templates"
+import { ASIAIR_CARD } from "@/domain/seed"
 import type { ImageType, LocationRole } from "@/domain/types"
 import { ROLE_COPY, suggestDisplayName, validateLocation } from "@/features/t1/lib/locations"
 import { formatBytes, formatCount, formatDateTime, plural } from "@/lib/format"
 import { isSettled } from "@/store/operations"
 import { updateSlice, useStore } from "@/store/core"
+import { settleGrowingFiles } from "@/store/simulation"
 import type { ImportDraft } from "@/store/slices/a"
 import { HomePage } from "./home"
-import { CARD_VOLUME, type DestinationGroup, destinationLocations, type ImportPlan, insertCard, planImport, settleGrowingFiles, TYPE_LABEL, TYPEABLE } from "./import-model"
+import { type DestinationGroup, destinationLocations, type ImportPlan, planImport, TYPE_LABEL, TYPEABLE } from "./import-model"
 import { addLibraryFolder, type ImportPayload, saveImportSource, startImport } from "./import-run"
 
 /** Simulated time the capture device needs to finish writing a held file. */
@@ -244,9 +246,17 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
       </RadioGroup>
 
       {plan && !plan.online ? (
-        plan.sourcePath === CARD_VOLUME.mountPath ? (
-          <Notice tone="offline" title={`${plan.sourceLabel} is not connected`} actions={<Button size="xs" variant="outline" onClick={insertCard} data-insert-card>Insert the card (simulation)</Button>}>
-            Insert the card; macOS mounts it at {plan.sourcePath}. The prototype simulates the card the ASIAIR wrote last night.
+        plan.sourcePath === ASIAIR_CARD.mountPath ? (
+          <Notice
+            tone="offline"
+            title={`${plan.sourceLabel} is not connected`}
+            actions={
+              <Button size="xs" variant="outline" onClick={() => openPanel("simulation")} data-insert-card>
+                Open Prototype controls
+              </Button>
+            }
+          >
+            Insert the card and macOS mounts it at {plan.sourcePath}. In the prototype, choose Prototype › Outside PlateVault › Insert ASIAIR card; it holds what the ASIAIR wrote last night.
           </Notice>
         ) : (
           <Notice tone="offline" title={`${plan.sourceLabel} is not connected`}>
@@ -296,7 +306,7 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
         onOpenChange={setPicking}
         title="Choose an import source"
         description="A card, a folder or a mounted network share. Nothing is read until you import."
-        initialPath={folderPath ?? CARD_VOLUME.mountPath}
+        initialPath={folderPath ?? ASIAIR_CARD.mountPath}
         chooseVerb="Import from"
         onChoose={(path) => {
           setDraft({ source: { kind: "folder", path }, typed: {} })

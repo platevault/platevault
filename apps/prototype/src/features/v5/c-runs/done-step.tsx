@@ -16,13 +16,13 @@ import { Section } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import { runPipeline } from "@/domain/derive"
 import { STEP_LABEL } from "@/domain/labels"
-import { formatBytes, formatDateTime, plural } from "@/lib/format"
+import { fileName, formatBytes, formatDateTime, plural } from "@/lib/format"
 import { completeRun, reopenRun } from "@/store/actions/runs"
 import { useStore } from "@/store/core"
 import { useNavigate } from "@tanstack/react-router"
 import { startCleanup } from "./actions"
 import { type CleanupEntry, cleanupReview, type RunContext } from "./model"
-import { fileName, OutcomeNotice, useOutcome } from "./parts"
+import { OutcomeNotice, useOutcome } from "./parts"
 
 export function DoneStep({ ctx }: { ctx: RunContext }) {
   const state = useStore((s) => s)
