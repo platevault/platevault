@@ -10,7 +10,7 @@
  * are failed fits with a warning and no width (PIX-AC-03).
  */
 import { stableHash } from "@/domain/indexing"
-import type { PixelTruth } from "@/domain/types"
+import type { AssetId, DiskFile, PixelTruth } from "@/domain/types"
 
 export const ADU_MAX = 65_535
 const BETA = 4
@@ -305,4 +305,62 @@ export function renderCutout(field: StarField, star: StarRecord, kind: CutoutKin
     }
   }
   return image
+}
+
+/** The star field of one frame's current bytes; the preview, compare plate and thumbnail share it. Null without pixels. */
+export function frameField(assetId: AssetId, file: DiskFile | undefined): StarField | null {
+  if (!file?.header || !file.pixelTruth) return null
+  return starField(`${assetId}|${file.sha256}`, file.pixelTruth, file.header.widthPx, file.header.heightPx, file.header.bayerPattern)
+}
+
+export interface Histogram {
+  /** Counts per bin over linear 0..`rangeMax` ADU; the last bin also holds every brighter sample. */
+  bins: number[]
+  rangeMax: number
+  median: number
+  /** Median absolute deviation, in ADU. */
+  mad: number
+  /** Samples above `rangeMax`: stars and other bright signal. */
+  above: number
+  saturated: number
+  invalid: number
+  samples: number
+}
+
+/**
+ * Histogram of the displayed region's linear data (PIX-FR-03), sampled on a
+ * grid of at most 160 × 120 source pixels. The range runs from 0 to the
+ * median plus 24 MAD so the sky background has room; brighter samples count
+ * in the last bin. Display stretch never reaches it.
+ */
+export function linearHistogram(field: StarField, window: ViewWindow, binCount = 96): Histogram {
+  const values: number[] = []
+  let saturated = 0
+  let invalid = 0
+  const w = window.width * window.scale
+  const h = window.height * window.scale
+  const stepX = Math.max(1, w / 160)
+  const stepY = Math.max(1, h / 120)
+  for (let y = Math.max(0, window.y0); y < Math.min(field.height, window.y0 + h); y += stepY) {
+    for (let x = Math.max(0, window.x0); x < Math.min(field.width, window.x0 + w); x += stepX) {
+      const v = sampleAt(field, Math.floor(x), Math.floor(y))
+      if (Number.isNaN(v)) invalid += 1
+      else {
+        if (v >= ADU_MAX) saturated += 1
+        values.push(v)
+      }
+    }
+  }
+  const sorted = [...values].sort((a, b) => a - b)
+  const median = sorted[Math.floor(sorted.length / 2)] ?? 0
+  const deviations = sorted.map((v) => Math.abs(v - median)).sort((a, b) => a - b)
+  const mad = deviations[Math.floor(deviations.length / 2)] ?? 0
+  const rangeMax = Math.min(ADU_MAX, Math.max(64, median + 24 * Math.max(mad, 1)))
+  const bins = new Array<number>(binCount).fill(0)
+  let above = 0
+  for (const v of values) {
+    if (v > rangeMax) above += 1
+    bins[Math.min(binCount - 1, Math.floor((Math.max(0, v) / rangeMax) * binCount))]! += 1
+  }
+  return { bins, rangeMax, median, mad, above, saturated, invalid, samples: values.length }
 }

@@ -18,10 +18,11 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import type { AssetId, Catalog } from "@/domain/types"
+import type { AssetId, Catalog, MeasurementImport } from "@/domain/types"
 import { formatBytes, formatDateTime, plural } from "@/lib/format"
 import { useStore } from "@/store/core"
-import { importMeasurements } from "./actions"
+import { importMeasurements, resolveImportRow } from "./actions"
+import { SelectField } from "./fields"
 import { attaches, CSV_COLUMNS, IMPORT_METHOD, mapRows, readSubframeSelectorCsv } from "./csv"
 import { sessionLabel } from "@/domain/membership"
 
@@ -235,5 +236,90 @@ export function ImportDialog({ viewId, viewAssetIds, open, onOpenChange }: { vie
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** One recorded import with its row review: matched rows attached, the rest attach to nothing until the user resolves them. */
+export function ImportReview({ record, catalog }: { record: MeasurementImport; catalog: Catalog }) {
+  const [choice, setChoice] = useState<Record<number, string>>({})
+  const [error, setError] = useState<string | null>(null)
+  const open = record.rows.filter((r) => r.status !== "resolved")
+  return (
+    <li className="space-y-2 px-4 py-3">
+      <p className="text-sm">
+        <span className="font-medium">{record.path.slice(record.path.lastIndexOf("/") + 1)}</span>
+        <span className="text-muted-foreground">
+          {" "}
+          · {plural(record.matched, "row")} attached as imported values, content unverified{record.outsideRun > 0 ? ` (${record.outsideRun} to frames outside this run)` : ""}
+          {CSV_COLUMNS.filter((c) => c.status === "unavailable" || c.status === "not-imported")
+            .map((c) => ` · ${c.name} ${c.status === "unavailable" ? "unavailable" : "not imported"}`)
+            .join("")}
+        </span>
+      </p>
+      {open.length === 0 ? <p className="text-xs text-muted-foreground">Every row is reviewed.</p> : null}
+      <ul className="space-y-2">
+        {record.rows.map((row) => (
+          <li key={row.index} className="rounded-md border px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge
+                kind="match"
+                value={row.status === "resolved" ? "compatible" : row.status === "unmatched" ? "incompatible" : "unknown"}
+                label={
+                  row.status === "resolved"
+                    ? "Attached by you"
+                    : row.status === "ambiguous"
+                      ? "Ambiguous: attached to no frame"
+                      : row.status === "content-changed"
+                        ? "Content changed: attached to no frame"
+                        : row.status === "unreadable"
+                          ? "Unreadable: attached to no frame"
+                          : "Unmatched: attached to no frame"
+                }
+              />
+              <span className="font-mono text-xs [overflow-wrap:anywhere]">{row.file}</span>
+              <span className="text-xs text-muted-foreground">row {row.index}</span>
+            </div>
+            {row.status === "resolved" && row.assetId ? <p className="mt-1 text-xs text-muted-foreground">Attached to {frameName(catalog, row.assetId)}.</p> : null}
+            {row.status === "unmatched" ? <p className="mt-1 text-xs text-muted-foreground">No indexed frame has this path or file name. Its values stay unattached.</p> : null}
+            {row.status === "content-changed" ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                At import, {frameName(catalog, row.candidates[0]!)} had bytes that differ from the digest PlateVault recorded for it. Its values stay unattached.
+              </p>
+            ) : null}
+            {row.status === "unreadable" ? (
+              <p className="mt-1 text-xs text-muted-foreground">At import, {frameName(catalog, row.candidates[0]!)} could not be read, so nothing ties these values to its content. Its values stay unattached.</p>
+            ) : null}
+            {row.status === "ambiguous" ? (
+              <div className="mt-2 flex flex-wrap items-end gap-2">
+                <SelectField
+                  className="min-w-72"
+                  label="Attach to"
+                  value={choice[row.index] ?? "none"}
+                  onChange={(value) => setChoice((c) => ({ ...c, [row.index]: value }))}
+                  options={[{ value: "none", label: "Choose the frame this row measured" }, ...row.candidates.map((id) => ({ value: id, label: frameName(catalog, id) }))]}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const assetId = choice[row.index]
+                    if (!assetId || assetId === "none") return setError("Choose the frame this row measured before attaching it.")
+                    const result = resolveImportRow(record.id, row.index, assetId)
+                    setError(result.ok ? null : result.message)
+                  }}
+                >
+                  Attach row
+                </Button>
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </li>
   )
 }

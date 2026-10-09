@@ -1,48 +1,40 @@
 /**
- * Frame preview and star diagnostics (PIX-FR-03 to PIX-FR-06, D2-D3).
- * Prototype: the raster is synthetic, drawn from fixture pixel facts, and the
- * surface says so. Zoom (Fit, 1:1, 2:1), pan by drag or arrow keys, fixed
- * centre/corner comparison, previous/next frame and display stretch change
- * the preview only; measured values come from the catalog and stay identical
- * with any stretch (PIX-AC-02). Saturated stars are failed fits with no width.
+ * Frame preview building blocks and star diagnostics (PIX-FR-03 to PIX-FR-06,
+ * D2-D3), kept for slice D's S6 Review (`src/features/v5/d-review/preview.tsx`
+ * composes them). Prototype: the raster is synthetic, drawn from fixture
+ * pixel facts, and the surface says so. Display stretch changes the preview
+ * only; measured values come from the catalog and stay identical with any
+ * stretch (PIX-AC-02). Saturated stars are failed fits with no width.
  */
-import { ChevronLeft, ChevronRight, CircleSlash, Sparkles } from "lucide-react"
-import { type KeyboardEvent, type PointerEvent, useEffect, useId, useRef, useState } from "react"
-import { KeyValueList, PathText } from "@/components/app/data"
+import { useEffect, useId, useRef, useState } from "react"
+import { KeyValueList } from "@/components/app/data"
 import { UnknownValue } from "@/components/app/feedback"
 import { StatusBadge } from "@/components/app/status"
-import { Button } from "@/components/ui/button"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Kbd } from "@/components/ui/kbd"
-import { Toggle } from "@/components/ui/toggle"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { BUILT_IN_METHOD } from "@/domain/measurement"
-import type { Asset, DiskFile, FrameHeader, FrameMeasurement, Metric, MetricKey } from "@/domain/types"
+import type { FrameHeader, FrameMeasurement, Metric, MetricKey } from "@/domain/types"
 import { HEADER_KEYWORDS } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
-import { cn } from "@/lib/utils"
-import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, formatMetric, historyImportedMetrics, METRIC_LABEL } from "./measure"
+import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, historyImportedMetrics, METRIC_LABEL } from "./measure"
 import { formatMetricFixed } from "@/domain/membership"
-import { type CutoutKind, detectedStars, renderCutout, renderWindow, type StarField, type StarRecord, starField, type Stretch, type ViewWindow } from "./raster"
-
-type Zoom = "fit" | "1" | "2"
+import { type CutoutKind, renderCutout, renderWindow, type StarField, type StarRecord, type Stretch, type ViewWindow } from "./raster"
 
 const METRIC_ORDER: MetricKey[] = ["fwhm", "hfr", "eccentricity", "star-count", "background", "snr"]
 
-function useWidth<T extends HTMLElement>() {
+/** Content-box size of an element, following resizes. */
+export function useSize<T extends HTMLElement>() {
   const ref = useRef<T>(null)
-  const [width, setWidth] = useState(0)
+  const [size, setSize] = useState({ width: 0, height: 0 })
   useEffect(() => {
     const element = ref.current
     if (!element) return
-    const observer = new ResizeObserver(([entry]) => setWidth(Math.floor(entry!.contentRect.width)))
+    const observer = new ResizeObserver(([entry]) => setSize({ width: Math.floor(entry!.contentRect.width), height: Math.floor(entry!.contentRect.height) }))
     observer.observe(element)
     return () => observer.disconnect()
   }, [])
-  return [ref, width] as const
+  return [ref, size] as const
 }
 
-function Raster({ field, window, stretch, className, label }: { field: StarField; window: ViewWindow; stretch: Stretch; className?: string; label?: string }) {
+export function Raster({ field, window, stretch, className, label }: { field: StarField; window: ViewWindow; stretch: Stretch; className?: string; label?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const { x0, y0, scale, width, height } = window
   // Primitive deps: the parent rebuilds the window object every render (measurement ticks), the pixels only change with these.
@@ -54,7 +46,7 @@ function Raster({ field, window, stretch, className, label }: { field: StarField
   return <canvas ref={canvas} width={Math.max(1, width)} height={Math.max(1, height)} className={className} aria-label={label} role={label ? "img" : undefined} />
 }
 
-function Cutout({ field, star, kind }: { field: StarField; star: StarRecord; kind: CutoutKind }) {
+export function Cutout({ field, star, kind }: { field: StarField; star: StarRecord; kind: CutoutKind }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const unavailable = star.state === "failed" && kind !== "observed"
   useEffect(() => {
@@ -74,7 +66,7 @@ function Cutout({ field, star, kind }: { field: StarField; star: StarRecord; kin
   )
 }
 
-function StarDetail({ field, star, scaleArcsec }: { field: StarField; star: StarRecord; scaleArcsec: number | null }) {
+export function StarDetail({ field, star, scaleArcsec }: { field: StarField; star: StarRecord; scaleArcsec: number | null }) {
   const width = (px: number | null, label: string) =>
     px === null ? <UnknownValue label="Not reported" reason={`${label} needs a fitted profile; this fit failed.`} /> : scaleArcsec ? `${(px * scaleArcsec).toFixed(2)}″ (${px.toFixed(2)} px)` : `${px.toFixed(2)} px`
   return (
@@ -119,7 +111,7 @@ function StarDetail({ field, star, scaleArcsec }: { field: StarField; star: Star
  * come from with a numbered footnote, and the notes under the table give the
  * method, basis and input identity, so no value reads without its origin.
  */
-function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurement | undefined; state: FrameMeasureState; applies: boolean; sha256: string }) {
+export function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurement | undefined; state: FrameMeasureState; applies: boolean; sha256: string }) {
   const builtIn = applies ? builtInMetrics(record) : []
   const imported = currentImportedMetrics(record, sha256)
   const earlier = historyImportedMetrics(record, sha256)
@@ -214,7 +206,7 @@ function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurem
   )
 }
 
-function HeaderDetails({ header }: { header: FrameHeader }) {
+export function HeaderDetails({ header }: { header: FrameHeader }) {
   const keys = Object.keys(HEADER_KEYWORDS) as Array<keyof FrameHeader>
   return (
     <table className="w-full text-xs">
@@ -230,335 +222,5 @@ function HeaderDetails({ header }: { header: FrameHeader }) {
         ))}
       </tbody>
     </table>
-  )
-}
-
-export interface FramePreviewProps {
-  asset: Asset
-  file: DiskFile | undefined
-  record: FrameMeasurement | undefined
-  state: FrameMeasureState
-  applies: boolean
-  scaleArcsec: number | null
-  position: { index: number; total: number }
-  copies: Array<{ location: string; path: string }>
-  onPrevious: () => void
-  onNext: () => void
-  exclude: { label: string; disabledReason: string | null; run: () => void }
-  unavailableReason: string | null
-}
-
-export function FramePreview({ asset, file, record, state, applies, scaleArcsec, position, copies, onPrevious, onNext, exclude, unavailableReason }: FramePreviewProps) {
-  const [zoom, setZoom] = useState<Zoom>("fit")
-  const [stretch, setStretch] = useState<Stretch>("auto")
-  const [mode, setMode] = useState<"whole" | "corners">("whole")
-  const [starsOn, setStarsOn] = useState(false)
-  const [starId, setStarId] = useState<number | null>(null)
-  const [centre, setCentre] = useState<{ x: number; y: number } | null>(null)
-  const [frameRef, width] = useWidth<HTMLDivElement>()
-  const drag = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null)
-  const helpId = useId()
-  const truth = file?.pixelTruth
-
-  // A new frame keeps zoom, stretch and the panned region, so frames compare at the same place; the star choice is per frame.
-  useEffect(() => {
-    setStarId(null)
-  }, [asset.id])
-
-  const header = asset.observed
-  const field = truth ? starField(`${asset.id}|${file!.sha256}`, truth, header.widthPx, header.heightPx, header.bayerPattern) : null
-  const stars = field ? detectedStars(field) : []
-  const star = stars.find((s) => s.id === starId) ?? null
-  const height = Math.round((width * header.heightPx) / header.widthPx)
-  const scale = zoom === "fit" ? header.widthPx / Math.max(1, width) : zoom === "1" ? 1 : 0.5
-  const cx = zoom === "fit" ? header.widthPx / 2 : (centre?.x ?? header.widthPx / 2)
-  const cy = zoom === "fit" ? header.heightPx / 2 : (centre?.y ?? header.heightPx / 2)
-  const window: ViewWindow = { x0: cx - (width * scale) / 2, y0: cy - (height * scale) / 2, scale, width, height }
-
-  function pan(dx: number, dy: number) {
-    setCentre({
-      x: Math.min(header.widthPx, Math.max(0, cx + dx)),
-      y: Math.min(header.heightPx, Math.max(0, cy + dy)),
-    })
-  }
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (zoom === "fit") return
-    const step = (event.shiftKey ? 240 : 60) * scale
-    const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key]
-    if (!delta) return
-    event.preventDefault()
-    pan(delta[0]!, delta[1]!)
-  }
-
-  function onPointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (zoom === "fit" || (event.target as Element).closest("[data-star]")) return
-    drag.current = { x: event.clientX, y: event.clientY, cx, cy }
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-
-  function onPointerMove(event: PointerEvent<HTMLDivElement>) {
-    const start = drag.current
-    if (!start) return
-    setCentre({
-      x: Math.min(header.widthPx, Math.max(0, start.cx - (event.clientX - start.x) * scale)),
-      y: Math.min(header.heightPx, Math.max(0, start.cy - (event.clientY - start.y) * scale)),
-    })
-  }
-
-  function selectStar(record: StarRecord) {
-    setStarId(record.id)
-    setStarsOn(true)
-    if (mode === "corners") setMode("whole")
-    if (zoom === "fit") setZoom("1")
-    setCentre({ x: record.x, y: record.y })
-  }
-
-  const zoomLabel = { fit: "Fit", "1": "1:1", "2": "2:1" }[zoom]
-  const visibleStars = stars.filter((s) => (s.x - window.x0) / scale >= 0 && (s.x - window.x0) / scale <= width && (s.y - window.y0) / scale >= 0 && (s.y - window.y0) / scale <= height)
-
-  return (
-    <section aria-labelledby="preview-title" className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h3 id="preview-title" className="truncate text-sm font-semibold" title={asset.fileName}>
-            {asset.fileName}
-          </h3>
-          <p id={`${helpId}-position`} className="text-xs text-muted-foreground tabular-nums">
-            Frame {position.index + 1} of {position.total} · {zoomLabel}
-            {position.total <= 1 ? " · Only frame shown" : position.index <= 0 ? " · First frame shown" : position.index >= position.total - 1 ? " · Last frame shown" : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button size="sm" variant="outline" onClick={onPrevious} disabled={position.index <= 0} focusableWhenDisabled aria-describedby={position.index <= 0 ? `${helpId}-position` : undefined} className="aria-disabled:pointer-events-none aria-disabled:opacity-50" aria-keyshortcuts="k">
-            <ChevronLeft aria-hidden="true" data-icon="inline-start" />
-            Previous <Kbd>K</Kbd>
-          </Button>
-          <Button size="sm" variant="outline" onClick={onNext} disabled={position.index >= position.total - 1} focusableWhenDisabled aria-describedby={position.index >= position.total - 1 ? `${helpId}-position` : undefined} className="aria-disabled:pointer-events-none aria-disabled:opacity-50" aria-keyshortcuts="j">
-            Next <Kbd>J</Kbd>
-            <ChevronRight aria-hidden="true" data-icon="inline-end" />
-          </Button>
-        </div>
-      </div>
-
-      {unavailableReason || !field ? (
-        <div className="flex aspect-[3/2] items-center justify-center rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-          {unavailableReason ?? "No pixel data for this file."} Header metadata and measurements below stay readable.
-        </div>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <ToggleGroup value={[zoom]} onValueChange={(v) => v[0] && setZoom(v[0] as Zoom)} variant="outline" size="sm" aria-label="Zoom">
-              <ToggleGroupItem value="fit">Fit</ToggleGroupItem>
-              <ToggleGroupItem value="1">1:1</ToggleGroupItem>
-              <ToggleGroupItem value="2">2:1</ToggleGroupItem>
-            </ToggleGroup>
-            <ToggleGroup value={[stretch]} onValueChange={(v) => v[0] && setStretch(v[0] as Stretch)} variant="outline" size="sm" aria-label="Display stretch">
-              <ToggleGroupItem value="linear">Linear</ToggleGroupItem>
-              <ToggleGroupItem value="auto">Auto</ToggleGroupItem>
-              <ToggleGroupItem value="strong">Strong</ToggleGroupItem>
-            </ToggleGroup>
-            <ToggleGroup value={[mode]} onValueChange={(v) => v[0] && setMode(v[0] as "whole" | "corners")} variant="outline" size="sm" aria-label="Region">
-              <ToggleGroupItem value="whole">Whole frame</ToggleGroupItem>
-              <ToggleGroupItem value="corners">Centre and corners</ToggleGroupItem>
-            </ToggleGroup>
-            <Toggle variant="outline" size="sm" pressed={starsOn} onPressedChange={setStarsOn}>
-              <Sparkles aria-hidden="true" data-icon="inline-start" />
-              Stars
-            </Toggle>
-          </div>
-
-          {/* The plate on its mount (Direction B): a dark print in a matte with a caption, never a bare web card. */}
-          <figure className="rounded-[3px] bg-mount p-2 shadow-[inset_0_0_0_1px_var(--border),0_1px_2px_oklch(0_0_0/0.22)]">
-          <div ref={frameRef} className="w-full">
-            {mode === "whole" ? (
-              <div
-                role="group"
-                aria-label={`Preview of ${asset.fileName}, ${zoomLabel}, ${stretch} stretch`}
-                aria-describedby={helpId}
-                tabIndex={0}
-                onKeyDown={onKeyDown}
-                onPointerDown={onPointerDown}
-                onPointerMove={onPointerMove}
-                onPointerUp={() => {
-                  drag.current = null
-                }}
-                className={cn("relative overflow-hidden rounded-[2px] bg-plate shadow-[0_0_0_1px_oklch(0_0_0/0.35)] select-none", zoom !== "fit" && "cursor-grab active:cursor-grabbing")}
-                style={{ height }}
-              >
-                {width > 0 ? <Raster field={field} window={window} stretch={stretch} className="block" /> : null}
-                {starsOn ? (
-                  <svg className="absolute inset-0" width={width} height={height} aria-hidden="true">
-                    {visibleStars.map((s) => {
-                      const x = (s.x - window.x0) / scale
-                      const y = (s.y - window.y0) / scale
-                      const r = Math.max(5, ((s.fwhmPx ?? 6) * 2.2) / scale)
-                      return (
-                        <g key={s.id} data-star onClick={() => selectStar(s)} className="cursor-pointer">
-                          <circle cx={x} cy={y} r={Math.max(r, 10)} className="fill-transparent" />
-                          <circle
-                            cx={x}
-                            cy={y}
-                            r={r}
-                            className={cn("fill-transparent", s.id === starId ? "stroke-primary" : s.state === "failed" ? "stroke-warning" : "stroke-success")}
-                            strokeWidth={s.id === starId ? 2.5 : 1.5}
-                            strokeDasharray={s.state === "failed" ? "3 2" : undefined}
-                          />
-                        </g>
-                      )
-                    })}
-                  </svg>
-                ) : null}
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-1">
-                {(["top", "middle", "bottom"] as const).flatMap((row, j) =>
-                  (["left", "centre", "right"] as const).map((col, i) => {
-                    const tileW = Math.floor((width - 8) / 3)
-                    const tileH = Math.round(tileW * 0.66)
-                    const x0 = [0, (header.widthPx - tileW) / 2, header.widthPx - tileW][i]!
-                    const y0 = [0, (header.heightPx - tileH) / 2, header.heightPx - tileH][j]!
-                    const name = row === "middle" && col === "centre" ? "Centre" : `${row === "middle" ? "Middle" : row === "top" ? "Top" : "Bottom"} ${col === "centre" ? "centre" : col}`
-                    return (
-                      <figure key={`${row}-${col}`} className="relative">
-                        {tileW > 0 ? (
-                          <Raster field={field} window={{ x0, y0, scale: 1, width: tileW, height: tileH }} stretch={stretch} className="block rounded-[2px]" label={`${name} region at 1:1`} />
-                        ) : null}
-                        <figcaption className="absolute top-1 left-1 rounded-sm bg-black/70 px-1 text-[10px] text-white">{name}</figcaption>
-                      </figure>
-                    )
-                  }),
-                )}
-              </div>
-            )}
-          </div>
-            <figcaption className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 px-0.5 text-[0.6875rem] leading-4 text-muted-foreground">
-              <span className="min-w-0 truncate font-mono">{asset.fileName}</span>
-              <span className="tabular-nums">
-                {mode === "whole" ? zoomLabel : "Centre and corners at 1:1"} · {stretch === "linear" ? "Linear" : stretch === "auto" ? "Auto" : "Strong"} stretch, display only · {header.widthPx}×{header.heightPx} px
-              </span>
-            </figcaption>
-          </figure>
-          <p id={helpId} className="text-xs text-muted-foreground">
-            Prototype: a synthetic preview drawn from this frame's fixture facts, not its file pixels. {zoom === "fit" ? "Choose 1:1 or 2:1 to pan by dragging or with the arrow keys." : "Drag or use the arrow keys to pan; Shift pans further."}{" "}
-            {field.cfa ? `CFA ${field.cfa} mosaic plane as recorded; not debayered.` : "Mono linear data."}
-            {field.invalid ? ` ${field.invalid.count} invalid samples (NaN or ±∞) are drawn red and masked from measurement.` : ""}
-          </p>
-        </>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" onClick={exclude.run} disabled={exclude.disabledReason !== null} focusableWhenDisabled className="aria-disabled:pointer-events-none aria-disabled:opacity-50" aria-keyshortcuts="x" aria-describedby={`${helpId}-exclude`}>
-          <CircleSlash aria-hidden="true" data-icon="inline-start" />
-          {exclude.label} <Kbd>X</Kbd>
-        </Button>
-        <span id={`${helpId}-exclude`} className="text-xs text-muted-foreground">
-          {exclude.disabledReason ?? "View scope only: the file stays on disk and library quality is unchanged."}
-        </span>
-      </div>
-
-      <MetricTable record={record} state={state} applies={applies} sha256={asset.sha256} />
-
-      {starsOn && field ? (
-        <div className="space-y-2">
-          <h4 className="text-sm font-semibold">Detected stars ({stars.length} brightest)</h4>
-          <div className="max-h-44 overflow-y-auto rounded-lg border">
-            <table className="w-full text-xs tabular-nums">
-              <caption className="sr-only">Detected stars; choose one to inspect its fit</caption>
-              <thead className="sticky top-0 bg-card text-muted-foreground">
-                <tr className="border-b">
-                  <th scope="col" className="px-2 py-1 text-left font-medium">
-                    Star
-                  </th>
-                  <th scope="col" className="px-2 py-1 text-left font-medium">
-                    Position
-                  </th>
-                  <th scope="col" className="px-2 py-1 text-left font-medium">
-                    State
-                  </th>
-                  <th scope="col" className="px-2 py-1 text-right font-medium">
-                    FWHM
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {stars.map((s) => (
-                  <tr key={s.id} aria-current={s.id === starId ? "true" : undefined} className="border-b last:border-0 aria-[current=true]:bg-accent">
-                    <th scope="row" className="px-2 py-0.5 text-left font-normal">
-                      <button type="button" className="rounded-sm hover:underline" onClick={() => selectStar(s)}>
-                        Star {s.id}
-                      </button>
-                    </th>
-                    <td className="px-2 py-0.5">
-                      {s.x}, {s.y}
-                    </td>
-                    <td className="px-2 py-0.5">{s.state === "failed" ? "Failed fit" : "Fitted"}</td>
-                    <td className="px-2 py-0.5 text-right">{s.fwhmPx === null ? "Not reported" : scaleArcsec ? `${(s.fwhmPx * scaleArcsec).toFixed(2)}″` : `${s.fwhmPx} px`}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {star ? <StarDetail field={field} star={star} scaleArcsec={scaleArcsec} /> : <p className="text-xs text-muted-foreground">Choose a star in the list or on the preview.</p>}
-        </div>
-      ) : null}
-
-      <Collapsible className="rounded-lg border">
-        <CollapsibleTrigger render={<Button variant="ghost" size="sm" className="w-full justify-start" />}>Frame details: header, sources and copies</CollapsibleTrigger>
-        <CollapsibleContent className="space-y-4 border-t p-3">
-          <section className="space-y-1.5">
-            <h4 className="text-xs font-medium text-muted-foreground">Measurement provenance</h4>
-            {[...(applies ? builtInMetrics(record) : []), ...currentImportedMetrics(record, asset.sha256)].length === 0 ? (
-              <p className="text-sm text-muted-foreground">No measurement applies to this frame's current bytes.</p>
-            ) : (
-              <ul className="space-y-1.5 text-xs">
-                {[...(applies ? builtInMetrics(record) : []), ...currentImportedMetrics(record, asset.sha256)].map((m) => (
-                  <li key={`${m.source}-${m.key}`} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2">
-                    <span className="text-muted-foreground">
-                      {METRIC_LABEL[m.key]} ({m.source})
-                    </span>
-                    <span className="[overflow-wrap:anywhere]">
-                      {formatMetric(m)} · {m.unit || "no unit"} · {m.method} {m.version} · basis {m.basis}
-                      {m.source === "imported" ? " · content unverified" : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {record?.inputSha256 ? (
-              <p className="text-xs text-muted-foreground">
-                {builtInMetrics(record).length > 0 ? "Built-in input identity" : "Import observation"}: sha256 <span className="font-mono">{record.inputSha256.slice(0, 16)}…</span>
-                {record.inputSha256 === asset.sha256 ? " (matches the current bytes)" : " (earlier content; kept as history)"}
-                {record.computedAt ? `, ${builtInMetrics(record).length > 0 ? "measured" : "imported"} ${formatDateTime(record.computedAt)}` : ""}
-              </p>
-            ) : null}
-            {record && record.history.length > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                History: {record.history.length} earlier {record.history.length === 1 ? "measurement" : "measurements"} for other content (
-                {record.history.map((h) => `${h.inputSha256.slice(0, 8)}…`).join(", ")}).
-              </p>
-            ) : null}
-          </section>
-          <section className="space-y-1.5">
-            <h4 className="text-xs font-medium text-muted-foreground">Copies (read-only; the preview never writes)</h4>
-            <ul className="space-y-1">
-              {copies.map((c) => (
-                <li key={c.path} className="text-xs">
-                  <span className="text-muted-foreground">{c.location}: </span>
-                  <PathText path={c.path} className="inline" />
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-muted-foreground">
-              Current bytes: sha256 <span className="font-mono">{(file?.sha256 ?? asset.sha256).slice(0, 16)}…</span>
-            </p>
-          </section>
-          <section className="space-y-1.5">
-            <h4 className="text-xs font-medium text-muted-foreground">Header metadata</h4>
-            <HeaderDetails header={header} />
-          </section>
-        </CollapsibleContent>
-      </Collapsible>
-    </section>
   )
 }
