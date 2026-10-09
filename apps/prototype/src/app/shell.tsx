@@ -34,7 +34,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { groupPipeline, type NextAction, nextFrom, projectNext, runPipeline, type RunStepState } from "@/domain/derive"
-import { LOCALE_META, LOCALES, type Locale } from "@/lib/i18n"
+import { LOCALE_META, LOCALES, type Locale, say } from "@/lib/i18n"
 import { useMediaQuery } from "@/lib/use-media-query"
 import { cn } from "@/lib/utils"
 import { useNavCounts } from "@/store/issues"
@@ -209,13 +209,14 @@ function NextActionButton() {
   const { next, here } = context
   if (!next && !here) return <div className="min-w-0 flex-1" />
   const gateStep = here ?? next?.step ?? null
-  const detail = [here ? `${here.n} ${stepName(m, here.id)}: ${gateWord(m, here.state)} · ${here.items.find((i) => i.met === false)?.detail ?? here.status}` : null, next ? next.reason : null].filter(Boolean).join(" · ")
+  const gateDetail = here ? (here.items.find((i) => i.met === false)?.detail ?? here.status) : null
+  const detail = [here && gateDetail ? `${here.n} ${stepName(m, here.id)}: ${gateWord(m, here.state)} · ${say(m, gateDetail)}` : null, next?.reason ? say(m, next.reason) : null].filter(Boolean).join(" · ")
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       {next ? (
         <Button size="sm" className="min-w-0 max-w-[22rem] shrink" onClick={() => follow(next.link)} title={`${detail} (${MOD_LABEL}↩)`}>
           <Play aria-hidden="true" data-icon="inline-start" className="fill-current" />
-          <span className="min-w-0 truncate">{m.shell_next({ label: next.label })}</span>
+          <span className="min-w-0 truncate">{m.shell_next({ label: say(m, next.label) })}</span>
         </Button>
       ) : null}
       {gateStep ? (

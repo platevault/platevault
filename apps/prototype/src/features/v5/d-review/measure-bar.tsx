@@ -12,6 +12,7 @@
  */
 import { type RefObject, useEffect, useId, useRef, useState } from "react"
 import { useMessages } from "@/app/preferences"
+import { say } from "@/lib/i18n"
 import { StatusBadge } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -52,7 +53,7 @@ export function MeasureBar({ scope, frames, home }: { scope: ReviewScope; frames
   const unfinished = scope.ops.reduce((n, op) => n + unfinishedCount(op), 0)
   const notMeasuredText = m.measure_frames_not_measured({ count: notMeasured })
   const coverage = notMeasured === 0 ? m.measure_all_have_value() : `${notMeasuredText}.`
-  const summary = last?.status === "canceled" ? m.measure_canceled_summary({ count: unfinished }) : last?.summary ? `${last.summary} ${coverage}` : coverage
+  const summary = last?.status === "canceled" ? m.measure_canceled_summary({ count: unfinished }) : last?.summary ? `${say(m, last.summary)} ${coverage}` : coverage
 
   // Focus follows the control that replaced the one you pressed, then settles on the status line.
   const wasRunning = useRef(running)

@@ -15,17 +15,31 @@
  * through the "custom-preferences" strategy registered there. Conventions:
  * design/I18N.md.
  */
-import { m } from "@/paraglide/messages"
+import { m as generated } from "@/paraglide/messages"
 import type { Locale } from "@/paraglide/runtime"
 
-export { m }
 export { baseLocale as DEFAULT_LOCALE, isLocale, locales as LOCALES, type Locale } from "@/paraglide/runtime"
 
-/** The catalogue's type, for helpers that take `m` from a component's `useMessages()`. */
-export type Messages = typeof m
+type Generated = typeof generated
 
-type MessageKey = keyof Messages
-type MessageInputs<K extends MessageKey> = NonNullable<Parameters<Messages[K]>[0]>
+/**
+ * Paraglide types every input as `NonNullable<unknown>`, so a MessageRef
+ * passed straight into `m.*()` compiled and rendered "[object Object]".
+ * The catalogue's public type takes finished words only: word a ref with
+ * `say` first, or build the whole message as a ref with `msg`.
+ */
+type Word = string | number
+type WordInputs<I> = I extends object ? { [P in keyof I]: Word } : I
+type WordsOnly<F> = F extends (...args: infer A) => infer R ? (...args: { [i in keyof A]: i extends "0" ? WordInputs<A[i]> : A[i] }) => R : F
+
+/** The catalogue's type, for helpers that take `m` from a component's `useMessages()`. */
+export type Messages = { [K in keyof Generated]: WordsOnly<Generated[K]> }
+
+export const m: Messages = generated
+
+type MessageKey = keyof Generated
+/** `msg` params may themselves be refs: `say` words them first. */
+type MessageInputs<K extends MessageKey> = NonNullable<Parameters<Generated[K]>[0]>
 
 /** One catalogue message: the key is the kind, `params` its inputs (type-checked where `msg` builds it). */
 interface KeyedRef {

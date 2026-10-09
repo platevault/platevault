@@ -10,6 +10,7 @@ import { useMessages } from "@/app/preferences"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { Stat } from "@/components/app/data"
 import { Notice } from "@/components/app/feedback"
+import { say } from "@/lib/i18n"
 import { OperationPanel } from "@/components/app/operation-panel"
 import { PageHeader, StepIndicator } from "@/components/app/page"
 import { StatusBadge } from "@/components/app/status"
@@ -368,7 +369,7 @@ export function SetupIndexingPage() {
             </h2>
             {counts && latest ? (
               <div className="space-y-3 rounded-lg border bg-card p-4">
-                <p className="text-xs text-muted-foreground">{runs.length > 1 ? m.setup_latest_run({ title: latest.title }) : m.setup_scan()}</p>
+                <p className="text-xs text-muted-foreground">{runs.length > 1 ? m.setup_latest_run({ title: say(m, latest.title) }) : m.setup_scan()}</p>
                 <div className="grid grid-cols-5 gap-4">
                   <Stat label={m.setup_stat_discovered()} value={formatCount(counts.discovered)} />
                   <Stat label={m.setup_stat_read()} value={formatCount(counts.read)} />

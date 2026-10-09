@@ -27,7 +27,7 @@ import { GateLabel, stepName } from "@/app/run-ui"
 import { findPanel, findSubject, panelLabel, projectTrash, rigName, runPipeline, subjectName } from "@/domain/derive"
 import type { OperationId, ProjectId, Run, RunId } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import { emptyTrash, restoreRun } from "@/store/actions/runs"
 import { preparedEntryItems, resultItems } from "@/store/actions/trash"
 import { type CommitResult, type PrototypeState, store, updateSlice, useStore } from "@/store/core"
@@ -59,7 +59,8 @@ export function emptyTrashPreview(m: Messages, state: PrototypeState, runIds: Ru
     const refused = entries.filter((e) => e.refusedReason)
     changes.push(m.trash_preview_record({ name: run.name }))
     if (entries.length > 0) changes.push(m.trash_preview_prepared({ name: run.name, count: entries.length - refused.length }))
-    if (refused.length > 0) changes.push(m.trash_preview_kept({ name: run.name, count: refused.length, reason: refused[0]!.refusedReason ?? "" }))
+    const firstReason = refused[0]?.refusedReason
+    if (firstReason) changes.push(m.trash_preview_kept({ name: run.name, count: refused.length, reason: say(m, firstReason) }))
     if (results.length > 0) {
       if (ticked.includes(id)) changes.push(m.trash_preview_results({ name: run.name, count: results.length }))
       else unchanged.push(m.trash_preview_results_folder({ name: run.name }))

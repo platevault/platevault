@@ -32,6 +32,7 @@ import { defaultArchiveLocation } from "@/domain/derive"
 import { locationAvailability } from "@/domain/library"
 import type { Location, LocationRole } from "@/domain/types"
 import { formatCount, formatDateTime } from "@/lib/format"
+import { say } from "@/lib/i18n"
 import { setDefaultArchiveLocation } from "@/store/actions/settings"
 import { store, useStore } from "@/store/core"
 import { isSettled } from "@/store/operations"
@@ -418,7 +419,7 @@ export function LocationsPage() {
           ) : (
             <p className="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground tabular-nums">
               {m.location_last_indexing()} <StatusBadge kind="operation" value={latestIndex.status} /> {latestIndex.settledAt ? formatDateTime(latestIndex.settledAt) : ""}
-              {latestIndex.summary ? ` · ${latestIndex.summary}` : ""} ·{" "}
+              {latestIndex.summary ? ` · ${say(m, latestIndex.summary)}` : ""} ·{" "}
               <Link to="/activity" className="text-link underline-offset-4 hover:underline">
                 {m.nav_activity()}
               </Link>
