@@ -1429,5 +1429,6 @@
       }
     }
   ],
-  "equipment_no_rigs": "Nenhum setup"
+  "equipment_no_rigs": "Nenhum setup",
+  "settings_lookup_test_heading": "Teste"
 }

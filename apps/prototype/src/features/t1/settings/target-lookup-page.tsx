@@ -176,7 +176,7 @@ export function TargetLookupPage() {
           </RadioGroup>
         </Section>
 
-        <Section title={m.settings_lookup_test()} level={3} id="lookup-test" actions={<Pill tone="muted">{m.settings_lookup_fixture()}</Pill>}>
+        <Section title={m.settings_lookup_test_heading()} level={3} id="lookup-test" actions={<Pill tone="muted">{m.settings_lookup_fixture()}</Pill>}>
           <form
             noValidate
             className="max-w-sm"
