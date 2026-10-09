@@ -11,7 +11,7 @@ import type { ProjectId, SessionId, TargetId } from "@/domain/types"
 export type GlobalPanel = "palette" | "shortcuts" | "simulation" | null
 
 /**
- * Workflow sheets (IA S4, S9, S13). Each slice renders its own sheet host,
+ * Workflow sheets (IA S4, S13). Each slice renders its own sheet host,
  * mounted once at the app root; any screen opens one with `openSheet`.
  */
 export type WorkflowSheet =
@@ -19,8 +19,6 @@ export type WorkflowSheet =
   | { kind: "import" }
   /** S4 New Project (slice B); `fromSessionId` prefills its Target and rig (LIB-FR-17); `targetId` prefills a subject (S10 Target detail). */
   | { kind: "new-project"; fromSessionId?: SessionId; targetId?: TargetId }
-  /** S9 Done / Archive sheet on a Project (slice B). */
-  | { kind: "done-archive"; projectId: ProjectId }
   /** "Start a processing run": one subject and one rig of the Project (slice B, PRJ-FR-10). */
   | { kind: "start-run"; projectId: ProjectId }
   | null
