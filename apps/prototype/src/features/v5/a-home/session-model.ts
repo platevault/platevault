@@ -1,9 +1,10 @@
 /**
  * Slice-local derivations for S1 Home and S12 Sessions: one row model per
  * library light session, the filter buckets (D-W24, D-W25, D-W43), the runs
- * that use a session, and where a session's one-click action leads. Every
- * bucket comes from the foundation `sessionsNeedingWork`, so Home's top line
- * and the Sessions filters always agree. Nothing here writes state.
+ * that use a session, the session review's search, and the run a ready
+ * candidate can join. Every bucket comes from the foundation
+ * `sessionsNeedingWork`, so Home, the Issues hub and the Sessions filters
+ * always agree. Nothing here writes state.
  */
 import {
   type Candidate,
@@ -11,15 +12,11 @@ import {
   liveAssetIds,
   isTrashedSession,
   projectCandidates,
-  projectLink,
   rigName,
   runCandidates,
-  runStepLink,
   sessionRigId,
   sessionsNeedingWork,
   sessionTargetId,
-  type StepLink,
-  workingContent,
 } from "@/domain/derive"
 import { effectiveExposureS, qualityApplicability } from "@/domain/library"
 import type { Catalog, Project, ProjectId, Run, Session, SessionId } from "@/domain/types"
@@ -120,14 +117,9 @@ export function filterCounts(rows: SessionRow[]): Record<SessionFilter, number> 
   }
 }
 
-/**
- * Review a candidate's Unreviewed frames. A run's Review lists only its members, so the run is used only when
- * the session is a member of its working content; a candidate that no run holds yet is reviewed in the
- * Project's candidate review (PIX-FR-18), as Home's Next does.
- */
-export function reviewLink(catalog: Catalog, projectId: ProjectId, sessionId: SessionId): StepLink {
-  const run = Object.values(catalog.runs).find((r) => r.projectId === projectId && !r.trashedAt && r.completion === "open" && (workingContent(r)?.sessions ?? []).some((s) => s.sessionId === sessionId))
-  return run ? runStepLink(run, "review", { filter: "unreviewed" }) : projectLink(projectId, { candidates: "unreviewed" })
+/** The session detail's review region (`/sessions/$sessionId?view=review`), opened on Unreviewed while any frame is. */
+export function sessionReviewSearch(unreviewed: number): Record<string, string> {
+  return unreviewed > 0 ? { view: "review", filter: "unreviewed" } : { view: "review" }
 }
 
 /** The open run a "ready to add" candidate can join: same subject, rig and (for a panel run) panel. */

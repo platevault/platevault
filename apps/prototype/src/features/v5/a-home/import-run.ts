@@ -1,10 +1,12 @@
 /**
  * S13 Import as an operation (slice A, D-W11, D-W24). The "import" handler
- * copies each planned file to its templated destination, verifies the copy's
- * SHA-256 against the source, then reads the copies into the library so the
- * imported lights appear in Sessions. Move hands the verified sources to the
- * foundation OS Trash engine ("import-move" episode) once every copy has
- * verified; a source whose copy failed is never trashed. Also: saving an
+ * copies each planned file to its destination, verifies the copy's SHA-256
+ * against the source, then reads the copies into the library: lights become
+ * sessions, each new raw calibration session becomes a calibration process
+ * awaiting Stack (P-CAL3, through `readFiles`), and a master in structured
+ * calibration storage is a library master. Move hands the verified sources
+ * to the foundation OS Trash engine ("import-move" episode) once every copy
+ * has verified; a source whose copy failed is never trashed. Also: saving an
  * Import source and "Add existing library folder" (index in place).
  */
 import { fileAt, makeFile, writeFiles } from "@/domain/disk"
@@ -16,7 +18,7 @@ import { moveToOsTrash } from "@/store/actions/trash"
 import { type CommitResult, commit, nowIso, type PrototypeState, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation, startIndexing, startOperation } from "@/store/operations"
 import type { ImportDraft } from "@/store/slices/a"
-import { type ImportPlan, TYPE_LABEL } from "./import-model"
+import { type ImportPlan, routeFor, TYPE_LABEL } from "./import-model"
 
 interface QueueItem {
   src: string
@@ -55,7 +57,7 @@ function groupItems(payload: ImportPayload, items: OperationItem[]): OperationIt
     const failed = payload.failed.filter((q) => q.group === item.id)
     const left = payload.queue.filter((q) => q.group === item.id).length
     const status: OperationItem["status"] = left > 0 ? (done + failed.length > 0 ? "running" : "pending") : failed.length > 0 ? (done > 0 ? "uncertain" : "failed") : "done"
-    const detail = failed.length > 0 ? `${done} of ${total} copied and verified; ${failed.length} failed: ${failed[0]!.reason}` : `${done} of ${total} copied and verified (SHA-256)`
+    const detail = failed.length > 0 ? `${done} of ${total} verified · ${failed.length} failed: ${failed[0]!.reason}` : `${done} of ${total} verified`
     return { ...item, status, phase: left > 0 ? "copying" : "destination-verified", detail }
   })
 }
@@ -70,11 +72,11 @@ function copyBatch(state: PrototypeState, opId: OperationId, payload: ImportPayl
     const source = fileAt(disk, item.src)
     const volume = disk.volumes[item.destVolumeId]
     if (!source) {
-      failed.push({ ...item, reason: "the source file is gone (card removed or file moved); nothing was copied" })
+      failed.push({ ...item, reason: "source gone" })
       continue
     }
     if (!volume?.mounted || !volume.writable) {
-      failed.push({ ...item, reason: `${volume?.name ?? "the destination"} is not writable; the source is kept` })
+      failed.push({ ...item, reason: `${volume?.name ?? "destination"} not writable` })
       continue
     }
     const written = makeFile({ path: item.dest, volumeId: item.destVolumeId, sizeBytes: source.sizeBytes, kind: source.kind, header: source.header, pixelTruth: source.pixelTruth, sha256: source.sha256, modifiedAt: now })
@@ -82,7 +84,7 @@ function copyBatch(state: PrototypeState, opId: OperationId, payload: ImportPayl
     // Verify: re-read the copy and compare its digest with the source's.
     const check = fileAt(disk, item.dest)
     if (check?.sha256 !== source.sha256) {
-      failed.push({ ...item, reason: "the copy's SHA-256 did not match; the source is kept" })
+      failed.push({ ...item, reason: "SHA-256 mismatch" })
       continue
     }
     copied.push({ ...item, sha256: source.sha256, sizeBytes: source.sizeBytes })
@@ -136,27 +138,27 @@ function indexCopies(state: PrototypeState, opId: OperationId, payload: ImportPa
   return patchOperation({ ...state, catalog: { ...catalog, assets, sessions, importSources } }, opId, { payload: next as unknown as Record<string, unknown> })
 }
 
-function summary(payload: ImportPayload): string {
+/** "31 frames · 1.2 GB · 3 sessions · 20 calibration → stack · 12 duplicates skipped": one terse line. */
+function summary(state: PrototypeState, payload: ImportPayload): string {
   const bytes = payload.copied.reduce((n, c) => n + c.sizeBytes, 0)
-  const lights = payload.copied.filter((c) => c.type === "light").length
-  const calibration = payload.copied.length - lights
-  const parts = [
-    `${plural(payload.copied.length, "frame")} (${formatBytes(bytes)}) copied and verified by SHA-256: ${plural(lights, "light")}, ${calibration} calibration`,
-    `${plural(payload.sessionIds.length, "session")} in the library`,
-  ]
+  const routes = { sessions: 0, stack: 0, masters: 0 }
+  for (const c of payload.copied) routes[routeFor(c.type)] += 1
+  const parts = [`${plural(payload.copied.length, "frame")} · ${formatBytes(bytes)}`]
+  if (routes.sessions > 0) parts.push(plural(payload.sessionIds.filter((id) => state.catalog.sessions[id]?.imageType === "light").length, "session"))
+  if (routes.stack > 0) parts.push(`${routes.stack} calibration → stack`)
+  if (routes.masters > 0) parts.push(plural(routes.masters, "master"))
   const s = payload.skipped
   if (s.duplicate > 0) parts.push(`${plural(s.duplicate, "duplicate")} skipped`)
-  if (s.imported > 0) parts.push(`${s.imported} already imported from this source skipped`)
-  if (s.held > 0) parts.push(`${s.held} held on the source`)
-  if (payload.failed.length > 0) parts.push(`${payload.failed.length} failed and kept on the source`)
-  const text = `${parts.join("; ")}.`
-  if (payload.mode === "move" && payload.copied.length > 0) return `${text} The ${plural(payload.copied.length, "verified source")} go to the OS Trash in “Move import sources to the OS Trash”.`
-  return payload.mode === "move" ? `${text} No source went to the OS Trash.` : `${text} Sources are unchanged.`
+  if (s.imported > 0) parts.push(`${s.imported} imported before`)
+  if (s.held > 0) parts.push(`${s.held} held`)
+  if (payload.failed.length > 0) parts.push(`${payload.failed.length} failed, kept`)
+  if (payload.mode === "move") parts.push(payload.copied.length > 0 ? "sources → OS Trash" : "no source moved")
+  return parts.join(" · ")
 }
 
 function finish(state: PrototypeState, opId: OperationId, payload: ImportPayload): PrototypeState {
   const status = payload.failed.length === 0 ? "succeeded" : payload.copied.length > 0 ? "partial" : "failed"
-  return settleOperation(state, opId, status, summary(payload), `/sessions?import=${opId}`)
+  return settleOperation(state, opId, status, summary(state, payload), `/sessions?import=${opId}`)
 }
 
 /** Ops whose OS Trash hand-off is scheduled in this page session (a reload schedules it again). */
@@ -259,12 +261,12 @@ export function startImport(plan: ImportPlan, draft: ImportDraft): OperationId {
 /** Save the chosen folder as an Import source, so Import new can skip what it already imported. */
 export function saveImportSource(name: string, path: string): CommitResult {
   const trimmed = name.trim()
-  if (!trimmed) return { ok: false, reason: "refused", message: "Name: enter a name, for example ASIAIR SD card.", reasons: ["enter a name"] }
+  if (!trimmed) return { ok: false, reason: "refused", message: "Name needed", reasons: ["no name"] }
   const id: ImportSourceId = `src_${path.replace(/[^a-z0-9]+/gi, "_").toLowerCase()}`
   const source: ImportSource = { id, name: trimmed, path, lastImportedAt: null, importedSha256: [] }
   const result = commit(`Save Import source ${trimmed}`, (s) => withCatalog(s, (c) => ({ ...c, importSources: { ...c.importSources, [id]: source } })), { href: "/import" })
   if (result.ok) {
-    recordActivity({ kind: "saved", title: `Import source saved: ${trimmed}`, detail: `${path}. Import new skips files imported from it.`, operationId: null, href: "/import" })
+    recordActivity({ kind: "saved", title: `Import source saved: ${trimmed}`, detail: path, operationId: null, href: "/import" })
     updateSlice("a", (a) => ({ ...a, importDraft: { ...a.importDraft, source: { kind: "saved", id }, newOnly: true } }))
   }
   return result
