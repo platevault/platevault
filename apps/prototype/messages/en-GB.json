@@ -891,8 +891,7 @@
   "settings_shortcuts_help": "?, /, [ and G sequences. ⌘K and Ctrl+K always work.",
   "settings_restore_title": "Restore appearance defaults?",
   "settings_restore_density": "Density: {name}",
-  "settings_restore_shortcuts_on": "Single-key shortcuts: on",
-  "location_edit_title": "Edit {name}",
+  "settings_edit_title": "Edit {name}",
   "settings_save": "Save",
   "location_path": "Path",
   "location_volume": "Volume",
@@ -927,7 +926,7 @@
   "location_link_clones": "Clones",
   "location_links_none": "Not supported",
   "location_unreadable_folders": "Unreadable folders at the last scan",
-  "location_none": "None",
+  "settings_none": "None",
   "location_retire_review_title": "Review: retire {name}",
   "location_label": "Location",
   "location_root": "Root",
@@ -973,10 +972,10 @@
   "location_close_review": "Close review",
   "location_make_default_blocked": "Make default blocked",
   "location_make_default_not_saved": "Make default not saved",
-  "location_details": "Details",
+  "settings_details": "Details",
   "location_index_now": "Index now",
-  "location_make_default": "Make default",
-  "location_edit": "Edit",
+  "settings_make_default": "Make default",
+  "settings_edit": "Edit",
   "location_remove_with_frames": [
     {
       "declarations": [
@@ -993,10 +992,114 @@
       }
     }
   ],
-  "location_remove": "Remove",
+  "settings_remove": "Remove",
   "location_last_indexing": "Last indexing",
-  "location_default": "Default",
-  "location_remove_title": "Remove {name}?",
+  "settings_default": "Default",
+  "settings_remove_title": "Remove {name}?",
   "location_remove_change": "Unregister {path}",
-  "location_remove_confirm": "Remove location"
+  "location_remove_confirm": "Remove location",
+  "site_add": "Add site",
+  "site_name": "Name",
+  "site_name_placeholder": "Backyard",
+  "site_latitude_field": "Latitude (° N)",
+  "site_longitude_field": "Longitude (° E)",
+  "site_elevation_field": "Elevation (m)",
+  "site_optional": "Optional",
+  "site_time_zone": "Time zone",
+  "settings_no_match": "No match",
+  "site_darkness": "Darkness",
+  "site_twilight_astronomical": "Astronomical",
+  "site_twilight_nautical": "Nautical",
+  "site_sun_below": "Sun −{degrees}°",
+  "site_min_altitude_field": "Min. altitude (°)",
+  "site_default_about": "About the default site",
+  "site_default_help": "Reminders move to the default site.",
+  "site_save_changes_button": "Save changes",
+  "site_no_default": "No default site",
+  "site_none": "No sites",
+  "site_coordinates_header": "Coordinates",
+  "site_elevation": "Elevation",
+  "site_min_altitude": "Min. altitude",
+  "site_from_headers": "From headers",
+  "site_headers_about": "About header coordinates",
+  "site_headers_help": "SITELAT and SITELONG without a saved site.",
+  "site_in_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "· in {n} session",
+        "countPlural=*": "· in {n} sessions"
+      }
+    }
+  ],
+  "site_add_as_site": "Add as site",
+  "site_remove_change": "Remove {name}",
+  "site_default_change": "Default: {name}",
+  "site_clear_planning": "Clear the planning site",
+  "site_remove_confirm": "Remove site",
+  "site_make_default_title": "Make {name} the default?",
+  "site_reminders_change": "Reminders: {from} → {to}",
+  "site_previous": "previous site",
+  "settings_lookup_sesame_sources": "SIMBAD, NED, VizieR",
+  "settings_lookup_simbad_only": "SIMBAD only",
+  "settings_lookup_resolved": "Resolved by {provider}.",
+  "settings_lookup_not_found": "{provider} returned no object named {query}.",
+  "settings_lookup_failed": "{provider} did not respond: the lookup failed as if offline. No Target was changed; local Targets and indexed sessions stay usable.",
+  "settings_lookup_off": "Online lookup is off, so nothing was sent. Local Targets and the bundled catalog still search offline.",
+  "settings_lookup_query_empty": "Name to look up: enter a Target name or alias, for example NGC 7000.",
+  "settings_lookup_local": "Local search",
+  "settings_lookup_targets": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} Target",
+        "countPlural=*": "{n} Targets"
+      }
+    }
+  ],
+  "settings_lookup_catalogue_objects": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} catalogue object",
+        "countPlural=*": "{n} catalogue objects"
+      }
+    }
+  ],
+  "settings_lookup_online": "Look up Targets online",
+  "settings_lookup_online_about": "About online lookup",
+  "settings_lookup_online_help": "Sends Target names to the provider. A failed lookup never blocks indexing.",
+  "settings_lookup_provider": "Provider",
+  "settings_lookup_test": "Test",
+  "settings_lookup_fixture": "Fixture",
+  "settings_lookup_query": "Name to look up",
+  "settings_lookup_running": "Looking up…",
+  "settings_lookup_running_named": "Looking up {name}",
+  "settings_lookup_name": "Name",
+  "settings_lookup_coordinates": "Coordinates",
+  "settings_lookup_object_type": "Object type",
+  "settings_lookup_aliases": "Aliases",
+  "settings_lookup_failed_title": "Lookup failed",
+  "settings_lookup_off_title": "Online lookup off"
 }

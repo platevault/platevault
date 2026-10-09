@@ -891,8 +891,7 @@
   "settings_shortcuts_help": "?, /, [ e sequências com G. ⌘K e Ctrl+K sempre funcionam.",
   "settings_restore_title": "Restaurar o padrão da aparência?",
   "settings_restore_density": "Densidade: {name}",
-  "settings_restore_shortcuts_on": "Atalhos de uma tecla: ativados",
-  "location_edit_title": "Editar {name}",
+  "settings_edit_title": "Editar {name}",
   "settings_save": "Salvar",
   "location_path": "Caminho",
   "location_volume": "Volume",
@@ -927,7 +926,7 @@
   "location_link_clones": "Clones",
   "location_links_none": "Sem suporte",
   "location_unreadable_folders": "Pastas ilegíveis na última varredura",
-  "location_none": "Nenhum",
+  "settings_none": "Nenhum",
   "location_retire_review_title": "Revisão: aposentar {name}",
   "location_label": "Local",
   "location_root": "Raiz",
@@ -973,10 +972,10 @@
   "location_close_review": "Fechar revisão",
   "location_make_default_blocked": "Tornar padrão bloqueado",
   "location_make_default_not_saved": "Tornar padrão não salvo",
-  "location_details": "Detalhes",
+  "settings_details": "Detalhes",
   "location_index_now": "Indexar agora",
-  "location_make_default": "Tornar padrão",
-  "location_edit": "Editar",
+  "settings_make_default": "Tornar padrão",
+  "settings_edit": "Editar",
   "location_remove_with_frames": [
     {
       "declarations": [
@@ -993,10 +992,114 @@
       }
     }
   ],
-  "location_remove": "Remover",
+  "settings_remove": "Remover",
   "location_last_indexing": "Última indexação",
-  "location_default": "Padrão",
-  "location_remove_title": "Remover {name}?",
+  "settings_default": "Padrão",
+  "settings_remove_title": "Remover {name}?",
   "location_remove_change": "Cancelar o registro de {path}",
-  "location_remove_confirm": "Remover local"
+  "location_remove_confirm": "Remover local",
+  "site_add": "Adicionar local",
+  "site_name": "Nome",
+  "site_name_placeholder": "Quintal",
+  "site_latitude_field": "Latitude (° N)",
+  "site_longitude_field": "Longitude (° L)",
+  "site_elevation_field": "Altitude (m)",
+  "site_optional": "Opcional",
+  "site_time_zone": "Fuso horário",
+  "settings_no_match": "Nenhum resultado",
+  "site_darkness": "Escuridão",
+  "site_twilight_astronomical": "Astronômica",
+  "site_twilight_nautical": "Náutica",
+  "site_sun_below": "Sol −{degrees}°",
+  "site_min_altitude_field": "Altura mín. (°)",
+  "site_default_about": "Sobre o local padrão",
+  "site_default_help": "Os lembretes passam para o local padrão.",
+  "site_save_changes_button": "Salvar alterações",
+  "site_no_default": "Sem local padrão",
+  "site_none": "Nenhum local",
+  "site_coordinates_header": "Coordenadas",
+  "site_elevation": "Altitude",
+  "site_min_altitude": "Altura mín.",
+  "site_from_headers": "Dos cabeçalhos",
+  "site_headers_about": "Sobre coordenadas do cabeçalho",
+  "site_headers_help": "SITELAT e SITELONG sem local salvo.",
+  "site_in_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "· em {n} sessão",
+        "countPlural=*": "· em {n} sessões"
+      }
+    }
+  ],
+  "site_add_as_site": "Adicionar como local",
+  "site_remove_change": "Remover {name}",
+  "site_default_change": "Padrão: {name}",
+  "site_clear_planning": "Limpar o local de planejamento",
+  "site_remove_confirm": "Remover local",
+  "site_make_default_title": "Tornar {name} o padrão?",
+  "site_reminders_change": "Lembretes: {from} → {to}",
+  "site_previous": "local anterior",
+  "settings_lookup_sesame_sources": "SIMBAD, NED, VizieR",
+  "settings_lookup_simbad_only": "Só SIMBAD",
+  "settings_lookup_resolved": "Resolvido por {provider}.",
+  "settings_lookup_not_found": "{provider} não retornou nenhum objeto chamado {query}.",
+  "settings_lookup_failed": "{provider} não respondeu: a busca falhou como se estivesse offline. Nenhum Alvo foi alterado; Alvos locais e sessões indexadas continuam utilizáveis.",
+  "settings_lookup_off": "A busca online está desativada, então nada foi enviado. Alvos locais e o catálogo embutido continuam pesquisáveis offline.",
+  "settings_lookup_query_empty": "Nome a buscar: informe um nome ou apelido de Alvo, por exemplo NGC 7000.",
+  "settings_lookup_local": "Busca local",
+  "settings_lookup_targets": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} Alvo",
+        "countPlural=*": "{n} Alvos"
+      }
+    }
+  ],
+  "settings_lookup_catalogue_objects": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} objeto de catálogo",
+        "countPlural=*": "{n} objetos de catálogo"
+      }
+    }
+  ],
+  "settings_lookup_online": "Buscar Alvos online",
+  "settings_lookup_online_about": "Sobre a busca online",
+  "settings_lookup_online_help": "Envia nomes de Alvos ao provedor. Uma busca que falha nunca bloqueia a indexação.",
+  "settings_lookup_provider": "Provedor",
+  "settings_lookup_test": "Testar",
+  "settings_lookup_fixture": "Simulado",
+  "settings_lookup_query": "Nome a buscar",
+  "settings_lookup_running": "Buscando…",
+  "settings_lookup_running_named": "Buscando {name}",
+  "settings_lookup_name": "Nome",
+  "settings_lookup_coordinates": "Coordenadas",
+  "settings_lookup_object_type": "Tipo de objeto",
+  "settings_lookup_aliases": "Apelidos",
+  "settings_lookup_failed_title": "Busca falhou",
+  "settings_lookup_off_title": "Busca online desativada"
 }

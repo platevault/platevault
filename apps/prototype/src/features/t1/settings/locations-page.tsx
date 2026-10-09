@@ -106,7 +106,7 @@ function EditLocationDialog({ location, onClose }: { location: Location | null; 
           }}
         >
           <DialogHeader>
-            <DialogTitle>{m.location_edit_title({ name: location?.displayName ?? "" })}</DialogTitle>
+            <DialogTitle>{m.settings_edit_title({ name: location?.displayName ?? "" })}</DialogTitle>
           </DialogHeader>
           {location ? <PathText path={location.path} className="text-muted-foreground" /> : null}
           <TextField id={ids.name} label={m.location_display_name()} value={name} onChange={setName} error={error} autoFocus />
@@ -216,7 +216,7 @@ function RetireReviewPanel({
   const refusalId = useId()
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => heading.current?.focus(), [])
-  const none = (list: string[]) => (list.length ? list.join(", ") : m.location_none())
+  const none = (list: string[]) => (list.length ? list.join(", ") : m.settings_none())
   return (
     <section aria-labelledby={headingId} className="space-y-3 rounded-lg border border-destructive/40 bg-background p-3">
       <h5 id={headingId} ref={heading} tabIndex={-1} className="text-sm font-semibold outline-none">
@@ -228,7 +228,7 @@ function RetireReviewPanel({
           { label: m.location_root(), value: review.path, mono: true },
           { label: m.location_availability_at_review(), value: <StatusBadge kind="availability" value={review.availability} /> },
           { label: m.location_copies(), value: count(m.location_copies_count, review.frames) },
-          { label: m.nav_sessions(), value: review.sessions.length ? m.location_sessions_list({ count: review.sessions.length, list: review.sessions.join(", ") }) : m.location_none() },
+          { label: m.nav_sessions(), value: review.sessions.length ? m.location_sessions_list({ count: review.sessions.length, list: review.sessions.join(", ") }) : m.settings_none() },
           { label: m.common_runs(), value: none(review.runs) },
           { label: m.nav_projects(), value: none(review.projects) },
           { label: m.status_role_results(), value: none(review.results) },
@@ -337,19 +337,19 @@ export function LocationsPage() {
     const availability = locationAvailability(store.getState().disk, location)
     const run = latestIndexRun(store.getState().operations, location.id)
     const busy = run !== null && !isSettled(run.op.status) && run.op.status !== "interrupted"
-    const details: MenuEntry = { label: m.location_details(), onSelect: () => setDetail(location.id) }
+    const details: MenuEntry = { label: m.settings_details(), onSelect: () => setDetail(location.id) }
     // A retired location is never reselected, rescanned or remapped (LIB-FR-15).
     if (availability === "retired") return [details]
     return [
       { label: location.scanScope === "never" ? m.location_index_now() : m.location_rescan(), disabled: busy || availability !== "online", onSelect: () => actions.retry(location) },
-      ...(location.role === "archive" && defaultArchiveId !== location.id ? [{ label: m.location_make_default(), onSelect: () => makeDefault(location) }] : []),
+      ...(location.role === "archive" && defaultArchiveId !== location.id ? [{ label: m.settings_make_default(), onSelect: () => makeDefault(location) }] : []),
       details,
-      { label: m.location_edit(), onSelect: () => setEditing(location) },
+      { label: m.settings_edit(), onSelect: () => setEditing(location) },
       { label: m.location_locate_or_remap(), disabled: frames === 0, onSelect: () => actions.locate(location) },
       { label: m.location_choose_folder_again(), onSelect: () => actions.chooseAgain(location) },
       { separator: true },
       { label: m.location_retire(), disabled: frames === 0, onSelect: () => openRetire(location) },
-      { label: frames > 0 ? count(m.location_remove_with_frames, frames) : m.location_remove(), destructive: true, disabled: frames > 0, onSelect: () => setRemoving(location) },
+      { label: frames > 0 ? count(m.location_remove_with_frames, frames) : m.settings_remove(), destructive: true, disabled: frames > 0, onSelect: () => setRemoving(location) },
     ]
   }
 
@@ -381,7 +381,7 @@ export function LocationsPage() {
       <>
         {location.role === "archive" && defaultArchiveId !== location.id ? (
           <Button size="sm" variant="ghost" onClick={() => makeDefault(location)} data-make-default={location.id}>
-            {m.location_make_default()}
+            {m.settings_make_default()}
             <span className="sr-only"> {location.displayName}</span>
           </Button>
         ) : null}
@@ -444,7 +444,7 @@ export function LocationsPage() {
               }
             >
               {rows.length === 0 ? (
-                <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">{m.location_none()}</p>
+                <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">{m.settings_none()}</p>
               ) : (
                 <ContextMenuArea menu={menu}>
                   <ul className="space-y-2" aria-label={copy.list}>
@@ -454,7 +454,7 @@ export function LocationsPage() {
                         headingLevel={4}
                         location={location}
                         current={highlight === location.id || search.locationId === location.id}
-                        badges={role === "archive" && defaultArchiveId === location.id ? <Pill tone="info">{m.location_default()}</Pill> : null}
+                        badges={role === "archive" && defaultArchiveId === location.id ? <Pill tone="info">{m.settings_default()}</Pill> : null}
                         actions={rowActions(location)}
                         // rowActions offers Rescan on every row that can still be indexed.
                         actionsIncludeRescan
@@ -495,7 +495,7 @@ export function LocationsPage() {
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
-        title={m.location_remove_title({ name: removing?.displayName ?? "" })}
+        title={m.settings_remove_title({ name: removing?.displayName ?? "" })}
         description={null}
         changes={[m.location_remove_change({ path: removing?.path ?? "" })]}
         confirmLabel={m.location_remove_confirm()}

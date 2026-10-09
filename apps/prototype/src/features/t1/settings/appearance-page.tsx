@@ -101,7 +101,7 @@ export function AppearancePage() {
           m.shell_theme_named({ name: themeInfo(DEFAULT_THEME).name }),
           m.shell_language_named({ name: LOCALE_META[DEFAULT_LOCALE].nativeName }),
           m.settings_restore_density({ name: m.settings_density_comfortable() }),
-          m.settings_restore_shortcuts_on(),
+          m.palette_single_key_on(),
         ]}
         confirmLabel={m.settings_restore_defaults()}
         onConfirm={() => {

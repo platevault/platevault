@@ -7,6 +7,7 @@
  */
 import { MapPin, Plus } from "lucide-react"
 import { type RefObject, useEffect, useId, useRef, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { DataTable } from "@/components/app/data-table"
 import { ActionError, EmptyState, Notice } from "@/components/app/feedback"
@@ -38,6 +39,7 @@ function SiteDialog({
   /** The control that opened the dialog; focus returns there on close. */
   finalFocus: RefObject<HTMLElement | null>
 }) {
+  const m = useMessages()
   const [values, setValues] = useState<SiteValues>(siteValues(null))
   const [makeDefault, setMakeDefault] = useState(false)
   const [errors, setErrors] = useState<SiteErrors>({})
@@ -87,16 +89,24 @@ function SiteDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>{site ? `Edit ${site.name}` : "Add site"}</DialogTitle>
+            <DialogTitle>{site ? m.settings_edit_title({ name: site.name }) : m.site_add()}</DialogTitle>
           </DialogHeader>
-          <TextField id={`${id}-name`} label="Name" value={values.name} onChange={set("name")} error={errors.name} placeholder="Backyard" autoFocus />
+          <TextField id={`${id}-name`} label={m.site_name()} value={values.name} onChange={set("name")} error={errors.name} placeholder={m.site_name_placeholder()} autoFocus />
           <div className="grid grid-cols-3 gap-3">
-            <TextField id={`${id}-lat`} label="Latitude (° N)" value={values.latitude} onChange={set("latitude")} error={errors.latitude} inputMode="decimal" />
-            <TextField id={`${id}-lon`} label="Longitude (° E)" value={values.longitude} onChange={set("longitude")} error={errors.longitude} inputMode="decimal" />
-            <TextField id={`${id}-elev`} label="Elevation (m)" value={values.elevation} onChange={set("elevation")} error={errors.elevation} inputMode="decimal" placeholder="Optional" />
+            <TextField id={`${id}-lat`} label={m.site_latitude_field()} value={values.latitude} onChange={set("latitude")} error={errors.latitude} inputMode="decimal" />
+            <TextField id={`${id}-lon`} label={m.site_longitude_field()} value={values.longitude} onChange={set("longitude")} error={errors.longitude} inputMode="decimal" />
+            <TextField
+              id={`${id}-elev`}
+              label={m.site_elevation_field()}
+              value={values.elevation}
+              onChange={set("elevation")}
+              error={errors.elevation}
+              inputMode="decimal"
+              placeholder={m.site_optional()}
+            />
           </div>
           <Field className="gap-1.5" data-invalid={errors.timeZone ? true : undefined}>
-            <FieldLabel htmlFor={`${id}-zone`}>Time zone</FieldLabel>
+            <FieldLabel htmlFor={`${id}-zone`}>{m.site_time_zone()}</FieldLabel>
             <Combobox items={TIME_ZONES} value={values.timeZone || null} onValueChange={(value) => set("timeZone")((value as string | null) ?? "")}>
               <ComboboxInput
                 id={`${id}-zone`}
@@ -106,7 +116,7 @@ function SiteDialog({
                 aria-describedby={errors.timeZone ? `${id}-zone-error` : undefined}
               />
               <ComboboxContent>
-                <ComboboxEmpty>No match</ComboboxEmpty>
+                <ComboboxEmpty>{m.settings_no_match()}</ComboboxEmpty>
                 <ComboboxList>
                   {(zone: string) => (
                     <ComboboxItem key={zone} value={zone}>
@@ -120,11 +130,11 @@ function SiteDialog({
           </Field>
           <div className="grid grid-cols-[minmax(0,1fr)_10rem] gap-3">
             <FieldSet className="gap-1.5">
-              <FieldLegend variant="label">Darkness</FieldLegend>
+              <FieldLegend variant="label">{m.site_darkness()}</FieldLegend>
               <RadioGroup value={values.twilight} onValueChange={(value) => set("twilight")(value as string)} className="grid-cols-2">
                 {[
-                  { value: "astronomical", title: "Astronomical", description: "Sun −18°" },
-                  { value: "nautical", title: "Nautical", description: "Sun −12°" },
+                  { value: "astronomical", title: m.site_twilight_astronomical(), description: m.site_sun_below({ degrees: "18" }) },
+                  { value: "nautical", title: m.site_twilight_nautical(), description: m.site_sun_below({ degrees: "12" }) },
                 ].map((option) => (
                   <FieldLabel key={option.value} htmlFor={`${id}-tw-${option.value}`}>
                     <Field orientation="horizontal" className="items-start">
@@ -138,24 +148,24 @@ function SiteDialog({
                 ))}
               </RadioGroup>
             </FieldSet>
-            <TextField id={`${id}-alt`} label="Min. altitude (°)" value={values.minAltitude} onChange={set("minAltitude")} error={errors.minAltitude} inputMode="decimal" placeholder="0–90" />
+            <TextField id={`${id}-alt`} label={m.site_min_altitude_field()} value={values.minAltitude} onChange={set("minAltitude")} error={errors.minAltitude} inputMode="decimal" placeholder="0–90" />
           </div>
           {isDefault ? (
             // The default is cleared only by choosing another site, so an unchecked box would promise a change that never happens.
-            <Pill tone="info">Default</Pill>
+            <Pill tone="info">{m.settings_default()}</Pill>
           ) : (
             <div className="flex items-center gap-1.5">
               <label htmlFor={`${id}-default`} className="flex items-center gap-2 text-sm">
                 <Checkbox id={`${id}-default`} checked={makeDefault} onCheckedChange={(checked) => setMakeDefault(checked)} />
-                Make default
+                {m.settings_make_default()}
               </label>
-              {reminderSite && reminderSite !== site?.id ? <HelpTip label="About the default site">Reminders move to the default site.</HelpTip> : null}
+              {reminderSite && reminderSite !== site?.id ? <HelpTip label={m.site_default_about()}>{m.site_default_help()}</HelpTip> : null}
             </div>
           )}
           {writeError ? <ActionError message={writeError} onRetry={submit} /> : null}
           <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-            <Button type="submit">{site ? "Save changes" : "Add site"}</Button>
+            <DialogClose render={<Button type="button" variant="outline" />}>{m.verb_cancel()}</DialogClose>
+            <Button type="submit">{site ? m.site_save_changes_button() : m.site_add()}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -164,6 +174,7 @@ function SiteDialog({
 }
 
 export function SitesPage() {
+  const m = useMessages()
   const sites = useStore((s) => Object.values(s.catalog.sites))
   const defaultSiteId = useStore((s) => s.settings.defaultSiteId)
   const planningSiteId = useStore((s) => s.settings.planningSiteId)
@@ -194,61 +205,62 @@ export function SitesPage() {
   const addButton = (
     <Button size="sm" variant="outline" onClick={(event) => openEditor({ site: null }, event.currentTarget)}>
       <Plus aria-hidden="true" data-icon="inline-start" />
-      Add site
+      {m.site_add()}
     </Button>
   )
 
   const menu = (r: ObservingSite): MenuEntry[] => [
-    ...(defaultSiteId === r.id ? [] : [{ label: "Make default", onSelect: () => void makeDefault(r) }]),
-    { label: "Edit", onSelect: () => openEditor({ site: r }, null) },
+    ...(defaultSiteId === r.id ? [] : [{ label: m.settings_make_default(), onSelect: () => void makeDefault(r) }]),
+    { label: m.settings_edit(), onSelect: () => openEditor({ site: r }, null) },
     { separator: true },
-    { label: "Remove", destructive: true, onSelect: () => setRemoving(r) },
+    { label: m.settings_remove(), destructive: true, onSelect: () => setRemoving(r) },
   ]
   const nextDefault = removing ? sites.filter((s) => s.id !== removing.id).sort((a, b) => a.name.localeCompare(b.name))[0] : undefined
 
   return (
     <div>
-      <PageHeader level={2} title="Observing sites" actions={sites.length ? addButton : null} />
+      <PageHeader level={2} title={m.settings_sites()} actions={sites.length ? addButton : null} />
       <PageBody>
         <ReturnNotice />
-        {sites.length > 0 && !defaultSiteId ? <Notice tone="info" title="No default site" /> : null}
+        {sites.length > 0 && !defaultSiteId ? <Notice tone="info" title={m.site_no_default()} /> : null}
         {defaultError ? <ActionError message={defaultError.message} onRetry={() => makeDefault(defaultError.site)} /> : null}
 
         <DataTable<ObservingSite>
-          label="Observing sites"
+          label={m.settings_sites()}
           scroll="none"
           rows={sites}
           getRowId={(r) => r.id}
           rowClassName={() => ROW_MENU_ROW}
           initialSort={{ columnId: "name", direction: "asc" }}
           contextMenu={menu}
-          empty={<EmptyState icon={MapPin} title="No sites" action={addButton} className="border-0" />}
+          empty={<EmptyState icon={MapPin} title={m.site_none()} action={addButton} className="border-0" />}
           columns={[
-            { id: "name", header: "Name", rowHeader: true, sortValue: (r) => r.name, cell: (r) => r.name },
+            { id: "name", header: m.site_name(), rowHeader: true, sortValue: (r) => r.name, cell: (r) => r.name },
             {
               id: "default",
-              header: "Default",
+              header: m.settings_default(),
               sortValue: (r) => (defaultSiteId === r.id ? 0 : 1),
               cell: (r) =>
                 defaultSiteId === r.id ? (
-                  <Pill tone="info">Default</Pill>
+                  <Pill tone="info">{m.settings_default()}</Pill>
                 ) : (
                   <Button size="xs" variant="ghost" className="-my-1" onClick={() => makeDefault(r)} data-make-default={r.id}>
-                    Make default<span className="sr-only"> {r.name}</span>
+                    {m.settings_make_default()}
+                    <span className="sr-only"> {r.name}</span>
                   </Button>
                 ),
             },
-            { id: "coords", header: "Coordinates", cell: (r) => <span className="tabular-nums">{formatCoordinates(r.latitude, r.longitude)}</span> },
-            { id: "elevation", header: "Elevation", align: "right", cell: (r) => (r.elevationM === null ? "–" : `${formatCount(r.elevationM)} m`) },
-            { id: "zone", header: "Time zone", cell: (r) => r.timeZone, sortValue: (r) => r.timeZone },
-            { id: "twilight", header: "Darkness", cell: (r) => (r.twilight === "astronomical" ? "Astronomical" : "Nautical") },
-            { id: "alt", header: "Min. altitude", align: "right", cell: (r) => `${r.minAltitudeDeg}°` },
+            { id: "coords", header: m.site_coordinates_header(), cell: (r) => <span className="tabular-nums">{formatCoordinates(r.latitude, r.longitude)}</span> },
+            { id: "elevation", header: m.site_elevation(), align: "right", cell: (r) => (r.elevationM === null ? "–" : `${formatCount(r.elevationM)} m`) },
+            { id: "zone", header: m.site_time_zone(), cell: (r) => r.timeZone, sortValue: (r) => r.timeZone },
+            { id: "twilight", header: m.site_darkness(), cell: (r) => (r.twilight === "astronomical" ? m.site_twilight_astronomical() : m.site_twilight_nautical()) },
+            { id: "alt", header: m.site_min_altitude(), align: "right", cell: (r) => `${r.minAltitudeDeg}°` },
             rowMenuColumn<ObservingSite>(
               (r) => r.name,
               (r) => [
-                ...(defaultSiteId === r.id ? [] : [{ label: "Make default", onSelect: () => void makeDefault(r) }]),
-                { label: "Edit", onSelect: (trigger: HTMLElement | null) => openEditor({ site: r }, trigger) },
-                { label: "Remove", destructive: true, onSelect: () => setRemoving(r) },
+                ...(defaultSiteId === r.id ? [] : [{ label: m.settings_make_default(), onSelect: () => void makeDefault(r) }]),
+                { label: m.settings_edit(), onSelect: (trigger: HTMLElement | null) => openEditor({ site: r }, trigger) },
+                { label: m.settings_remove(), destructive: true, onSelect: () => setRemoving(r) },
               ],
             ),
           ]}
@@ -256,23 +268,23 @@ export function SitesPage() {
 
         {suggestions.length > 0 ? (
           <Section
-            title="From headers"
+            title={m.site_from_headers()}
             level={3}
             id="sites-headers"
-            actions={<HelpTip label="About header coordinates">SITELAT and SITELONG without a saved site.</HelpTip>}
+            actions={<HelpTip label={m.site_headers_about()}>{m.site_headers_help()}</HelpTip>}
           >
             <ul className="divide-y rounded-lg border">
               {suggestions.map((s) => (
                 <li key={`${s.latitude},${s.longitude}`} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
                   <span className="tabular-nums">
-                    {formatCoordinates(s.latitude, s.longitude)} <span className="text-muted-foreground">· in {s.sessions === 1 ? "1 session" : `${s.sessions} sessions`}</span>
+                    {formatCoordinates(s.latitude, s.longitude)} <span className="text-muted-foreground">{m.site_in_sessions({ count: s.sessions, n: formatCount(s.sessions) })}</span>
                   </span>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={(event) => openEditor({ site: null, prefill: { latitude: String(s.latitude), longitude: String(s.longitude) } }, event.currentTarget)}
                   >
-                    Add as site
+                    {m.site_add_as_site()}
                   </Button>
                 </li>
               ))}
@@ -285,25 +297,28 @@ export function SitesPage() {
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(open) => !open && setRemoving(null)}
-        title={`Remove ${removing?.name ?? "site"}?`}
+        title={m.settings_remove_title({ name: removing?.name ?? "" })}
         description={null}
         changes={[
-          `Remove ${removing?.name ?? "the site"}`,
-          ...(removing && removing.id === defaultSiteId ? [nextDefault ? `Default: ${nextDefault.name}` : "No default site"] : []),
-          ...(removing && removing.id === planningSiteId ? ["Clear the planning site"] : []),
-          ...(removing && reminders.siteId === removing.id && reminders.enabled ? ["Notifications off"] : []),
+          m.site_remove_change({ name: removing?.name ?? "" }),
+          ...(removing && removing.id === defaultSiteId ? [nextDefault ? m.site_default_change({ name: nextDefault.name }) : m.site_no_default()] : []),
+          ...(removing && removing.id === planningSiteId ? [m.site_clear_planning()] : []),
+          ...(removing && reminders.siteId === removing.id && reminders.enabled ? [m.status_notifications_off()] : []),
         ]}
-        confirmLabel="Remove site"
+        confirmLabel={m.site_remove_confirm()}
         tone="destructive"
         onConfirm={() => (removing ? deleteSite(removing) : undefined)}
       />
       <ConfirmDialog
         open={confirmDefault !== null}
         onOpenChange={(open) => !open && setConfirmDefault(null)}
-        title={`Make ${confirmDefault?.name ?? "this site"} the default?`}
+        title={m.site_make_default_title({ name: confirmDefault?.name ?? "" })}
         description={null}
-        changes={[`Default: ${confirmDefault?.name ?? "this site"}`, `Reminders: ${sites.find((s) => s.id === reminders.siteId)?.name ?? "previous site"} → ${confirmDefault?.name ?? "this site"}`]}
-        confirmLabel="Make default"
+        changes={[
+          m.site_default_change({ name: confirmDefault?.name ?? "" }),
+          m.site_reminders_change({ from: sites.find((s) => s.id === reminders.siteId)?.name ?? m.site_previous(), to: confirmDefault?.name ?? "" }),
+        ]}
+        confirmLabel={m.settings_make_default()}
         onConfirm={() => (confirmDefault ? makeDefault(confirmDefault) : undefined)}
       />
     </div>
