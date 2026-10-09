@@ -38,7 +38,7 @@ There is no Inbox (D-W24, D-W33). Sessions are assigned only to runs (D-W34). Pl
 | Toolbar | **Import** | sheet over `/import` | Lightroom-style workflow entry (D-W11, D-W24). It is also on Home and in the toolbar. |
 | Footer | Activity, Settings | `/activity`, `/settings/*` | Settings: Equipment (rigs with filter lists, D-W31), Goal templates (D-W30, D-W47), Naming (D-W20), Locations, Sites, Applications, Target lookup, Appearance. |
 
-When a Project is open, the source list shows its outline under Projects: its subjects, its runs and run groups (each with its current step glyph), and Trash with a count. When a run is open, the outline shows the run's six steps with their gate glyph and short status. This is v4's pipeline navigator, moved to the run.
+Round 2 (2026-10-09): the source list is navigation only. The Project outline is gone; an optional Recent group lists up to three recently opened Projects without children, and Sessions and Projects carry count badges. The Project page owns its runs and stages; a run's six steps live in its step bar.
 
 ## Screens
 
@@ -103,7 +103,7 @@ Read this before editing. The foundation owns every shared file below; a screen 
 
 ### Domain types (`src/domain/types.ts`)
 
-- **Project**: `subjects: Subject[]`, where a Subject is `{ targetId, mosaic: { name, centre, panels: MosaicPanel[] } | null }` and a panel is `{ n, ra, dec, rotationDeg }`. Also `rigIds`, `goals: Goal[]` (`subjectId`, `panelId`, `channel`, `integrationS`, `frameCount`, `qualityBar`), `goalTemplateId`, `state: "open" | "done"`, `doneAt`, `archive: { at, sessionIds } | null`, and `rejections` (the Project-only reject).
+- **Project**: `subjects: Subject[]`, where a Subject is `{ targetId, mosaic: { name, centre, panels: MosaicPanel[] } | null }` and a panel is `{ n, ra, dec, rotationDeg }`. Also `rigIds`, `goals: Goal[]` (`subjectId`, `panelId`, `channel: GoalChannel`, `integrationS`, `frameCount`, `qualityBar`), `archiveLocationId`, `wrapUp`, `state: "open" | "done"`, `doneAt`, `archive: { at, sessionIds } | null`, and `rejections` (the Project-only reject). Round 2 removed `goalTemplateId` (see § Round 2 foundation).
 - **Run** (the domain's View): `projectId`, `subjectId`, `panelId`, `groupId`, `rigId` (fixed), `setup: RunSetup | null` (profile, input mode, calibration policy; null for a panel run), `revisions: MembershipRevision[]`, `draft`, `calibration` (assignment overrides), `masterOffers`, `outputParent`, `completion: "open" | "complete"`, `completedAt`, `stageBeforeComplete`, and `trashedAt`. `RunStep` is `select | review | calibrate | prepare | results | done`.
 - **MembershipContent**: `sessions` (each with a reason), `included`, `excluded`, `rejected` (removed in Review, D-W54), `unresolved`, and `productInputs` (Results of other runs).
 - **RunGroup**: `runIds` (panel runs, in panel order), the shared `setup` and `outputParent`.
@@ -190,6 +190,50 @@ Integrated evidence (2026-10-09, demo seed, private headless Chrome, `/Users/sjo
 - NGC 7000 OIII deep: Select "Saved r1"; Calibrate "dark ✓ · flat ✓ · bias ✓"; Prepare with SETI Astro Suite Pro and Copy prepares 80 inputs (Prepared); Results finds the simulated outputs and refuses Accept of a file still being written; Complete; Clean up moves 81 prepared entries (4.3 GB) to the OS Trash and Done reads "Cleaned up".
 - Project Mark Done names 3 runs not Complete; Complete on each, then Mark Done reads Done.
 - The Done / Archive sheet offers Archive 7 sessions (11.5 GB), 2 intermediates and Empty Trash (2 runs); Archive leaves the Project Archived.
+
+### Round 2 foundation (2026-10-09)
+
+Work order: `design/HARNESS-V5-FEEDBACK-R1.md` (Copy rules, Shell and navigation, Domain and seed). Slices build their screens on these; use them instead of local copies.
+
+**Primitives (`src/components/app/`)**
+
+| Primitive | File | Use |
+|---|---|---|
+| `ClearableInput` | `clearable-input.tsx` | Every filter or search field: × clears, Escape clears; `search` adds the magnifier and `data-page-search` (`/`). `TableToolbar` uses it. |
+| `HelpTip` | `tips.tsx` | ⓘ with a tooltip for the rare rule that needs it. Default to none. |
+| `NoteMarker` | `tips.tsx` | ① beside a measured value; `rows: [{ label, value }]` for method, basis and time. No inline paragraphs. |
+| `Refusal`, `refusalFrom(result, action, links?)` | `refusal.tsx` | `<Action> blocked · <reason>` with a disclosure of blocker chips (linked). `refusalFrom` turns a refused `CommitResult` into props. |
+| `Pill`, `CountBadge` | `pill.tsx` | Tone pills (`link` or `onClick` makes them interactive) for issues, channels, filters, blockers; count badges capped at 99+ with an sr-only label. |
+| `Box` | `box.tsx` | Hairline group panel with a small heading, optional actions, `flush` for tables. A Box in a Box loses its frame. |
+| `MenuEntry`, `MenuEntries`, `RowContextMenu`, `ContextMenuArea` + `menuKey(id)` | `row-menu.tsx` | Right-click on every list. `DataTable`'s `contextMenu` may now return `MenuEntry[]`. |
+
+**Shell (`src/app/`)**: `issues-hub.tsx` (`IssuesButton` in the toolbar, `IssuePill` and `issueText` for Home's pills), `history.tsx` (`HistoryControl`: Back and Forward at the toolbar's leading edge), `appearance.tsx` (`ThemePicker` with live swatches, `ThemeSwatch`, `LanguagePicker`; Settings › Appearance mounts them), `themes.ts` (theme registry), `active-route.ts` (`useActiveRoute`, moved from the deleted `outline.tsx`), `ui-state.ts` (`rememberProject`, `recentProjectIds`). The toolbar's Next shows only the gate glyph and word beside it; the reason is in its tooltip. The status bar is status words only.
+
+**Hooks**: `useIssues()` and `useNavCounts()` (`src/store/issues.ts`); `useT()` and `t()` (`src/app/preferences.ts`); `usePreferences()` now has `theme` (a theme id or `"system"`), `resolvedTheme`, `scheme` and `locale`.
+
+**Themes**: PlateVault Dark (default) and Light, Gruvbox Dark and Light, Nord, Dracula, Solarized Dark and Light, Catppuccin Mocha and Latte, Tokyo Night, One Dark, Rosé Pine. `html[data-theme]` selects one (`.dark` marks dark schemes for the `dark:` variant). Token values are generated: `pnpm themes` (`scripts/themes.mjs`) maps each published palette onto the token set, raises text and tone tokens to 4.5:1 on every surface (tone text on its 16% tint, destructive-button text on a 30% tint; UI glyphs 3:1), keeps hover fills 0.05 OKLCH lightness from their surface, and writes `src/themes.css` and `design/themes-contrast.md`. Never edit `src/themes.css` by hand. Pills use `bg-<tone>/12` (hover `/16`) so they stay inside the checked range.
+
+**Language**: `src/lib/i18n.ts` (`LOCALES`: en-GB source, pt-BR machine-generated; `translate`), table `src/lib/messages/pt-BR.ts`. The key is the en-GB string with `{name}` placeholders. The shell, nav, toolbar, Issues hub, StatusBadge words and gate words are translated; screens route only shell-shared words through `t()` and add keys to the table when they do.
+
+**Domain (`src/domain/`)**
+
+- `types.ts`: `Goal.channel: GoalChannel` (`Band | "OSC" | "Dual-band"`, never free text); `QualityBar` adds `usable-max-fwhm`; `GoalTemplateValue` holds `qualityBar`; `Project.goalTemplateId` is removed ("Applied in" is gone), `Project.archiveLocationId` (P-ARC1) and `Project.wrapUp` (P-WRAP1 step records) are added; `MasterOffer.state` `"declined"` is now `"dismissed"` (P-CAL2); `CalibrationMaster.origin` gains kind `"integrated"` and `sessionId` (P-CAL1); `ProfileCapability.masterIntegration`; `Volume.removable`; `AppSettings.defaultArchiveLocationId` and `moonConstraints`; operation kinds `integrate-master` and `duplicate-scan`. `SCHEMA_VERSION` is 7.
+- `labels.ts`: `GOAL_CHANNELS`, `isGoalChannel`, `qualityBarLabel`, `DEFAULT_MOON_CONSTRAINTS`, `WRAP_UP_STEPS`, `WRAP_UP_LABEL`.
+- `derive.ts`: `goalChannel` returns a `GoalChannel | null`; `projectNext` offers "Wrap up" when every run is Complete and no Next for a Done Project; `projectStage` reads "Wrap up"; new `archiveLocations`, `defaultArchiveLocation`, `archiveDestination` (P-ARC1), `projectWrapUp`, `projectStageStrip` (Open → Runs → Wrap up → Done / Archived), `defaultSite`, `planList`, `goodTonight(world, target, night, bands?)`, `projectGoalSet`.
+- `planning.ts`: `filterSuitability` (per-band Moon constraints over one night's samples).
+- `calibration-library.ts`: `calibrationSessions`, `integrationProfiles`, `integrateRefusals`, `dismissedOffers`.
+- `storage.ts`: `preparationFootprint`, `runFootprint` (for a run's Done step and Wrap up; not the Storage overview), `liveCopies`, `duplicateCopies`, `lastDuplicateScan`.
+- `devices.ts`: `removableDevices`, `recognizeLayout` (ASIAIR, N.I.N.A., SharpCap, Ekos, SGP, Voyager by folder structure), `isRemovablePath`, `DEVICE_LAYOUT_LABEL`. It replaces `ASIAIR_CARD`.
+- `issues.ts`: `deriveIssues` (groups Sessions, Locations, Work, Runs, Calibration, Drift; each issue one action), `worstSeverity`, `sessionsNeedingAttention`, `blockedProjectCount`.
+- `sites.ts`: removing the default site makes the first remaining site the default.
+
+**Store actions**: `integrateMaster(sessionId, profileId)` and `restoreMasterOffer(runId, masterId)` (`actions/calibration.ts`); `startDuplicateScan()` (`actions/storage.ts`); `addToPlan`, `removeFromPlan` (`actions/planning.ts`); `setDefaultArchiveLocation`, `setMoonConstraint` (`actions/settings.ts`); `setProjectArchiveLocation`, `setWrapUpStep`, `goalsFromValues` (`actions/projects.ts`; `addSubject` copies the Project's goal set); `connectDevice`, `ejectDevice` (`store/simulation.ts`, replacing `insertAsiairCard`). Handlers for `integrate-master` and `duplicate-scan` are foundation-owned.
+
+**Seed**: M 31 LRGB is open in Wrap up (Clean up done, Trash and Archive to do, archives to the NAS archive) with every goal kind; Archive and NAS archive are archive locations, Archive the Default; the 300 s dark master is integrated from its calibration session, other calibration sessions have none; M 31's 120 s master dark offer is dismissed; an ASIAIR card (recognised) and a USB stick (generic) are connected; the Plan list holds NGC 7000 and M 33; Heart and Soul has a frame-count OIII goal.
+
+**Left to the slices**: Home's pills (A, `IssuePill`), the Removable devices section of Import (A), the Project stage strip and Wrap up UI replacing the Done / Archive sheet (B), structured channel chips in goal editors (B, E2), Restore offer and Integrate master UI (E2), Storage without footprints and with Scan for duplicates (E2), Plan list and good-tonight chips (E1).
+
+Evidence (2026-10-09, demo seed, private headless Chrome, port 5530): `/Users/sjors/tmp/pv-v5-r2f/smoke.mjs routes` passes 34 routes at 1440×900, 1280×800 and 1024×768 with document scroll equal to the viewport, no "built next" and 0 console errors. Home renders in all 13 themes and pt-BR switches the shell; screenshots are in `design/harness-v5-shots/r2-foundation/`.
 
 ## Fix pass (2026-10-09)
 
