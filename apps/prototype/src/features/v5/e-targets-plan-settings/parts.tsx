@@ -1,20 +1,23 @@
 /**
- * Shared pieces of slice E's Targets and Plan screens: tonight's sky context,
- * the Moon and site line, the 7-band Filters strip, Fit per rig, compact
- * Captured per channel and the Project badge.
+ * Shared pieces of slice E's Targets, Target and Plan screens: tonight's sky
+ * context, the Moon and site line, the per-filter good-tonight chips, Fit
+ * per rig, compact Captured per channel and the Project badge.
  */
 import { Link } from "@tanstack/react-router"
 import { MapPin, Moon } from "lucide-react"
 import { useMemo } from "react"
 import { UnknownValue } from "@/components/app/feedback"
+import { Pill } from "@/components/app/pill"
+import type { Tone } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { formatHours, planningSite } from "@/domain/derive"
 import { defaultCriteria, tonightAt, zoneAbbreviation } from "@/domain/planning"
-import type { BandCell, Fit } from "@/domain/derive"
+import type { Fit } from "@/domain/derive"
 import type { ObservingSite, Project } from "@/domain/types"
 import { formatTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { nowIso, useStore } from "@/store/core"
+import type { FilterChip, FilterGrade } from "./good-tonight"
 import { nightGrid } from "./sky-tonight"
 import type { RigFit, SkyContext } from "./targets-model"
 
@@ -43,10 +46,15 @@ export function siteTimeRange(start: string, end: string, site: ObservingSite): 
   return `${formatTime(start, site.timeZone)}–${formatTime(end, site.timeZone)} ${zoneAbbreviation(end, site.timeZone)}`
 }
 
+/** "21:00–04:40" in the site's zone, for columns whose zone the toolbar names. */
+export function clockRange(start: string, end: string, site: ObservingSite): string {
+  return `${formatTime(start, site.timeZone)}–${formatTime(end, site.timeZone)}`
+}
+
 /** The Moon, once, for a toolbar: illumination, phase, rise and set (PLAN-TGT-FR-07). */
 export function MoonLine({ ctx, className }: { ctx: SkyContext; className?: string }) {
   const { moon } = ctx.tonight
-  const parts = [`${moon.illuminationPct}%`, moon.phase, moon.rise ? `rises ${siteTime(moon.rise, ctx.site)}` : "no moonrise tonight", moon.set ? `sets ${siteTime(moon.set, ctx.site)}` : "no moonset tonight"]
+  const parts = [`${moon.illuminationPct}%`, moon.phase, moon.rise ? `rises ${siteTime(moon.rise, ctx.site)}` : "no moonrise", moon.set ? `sets ${siteTime(moon.set, ctx.site)}` : "no moonset"]
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-[0.75rem] text-muted-foreground tabular-nums", className)} data-moon>
       <Moon aria-hidden="true" className="size-3.5 shrink-0" />
@@ -69,40 +77,55 @@ export function SiteLine({ site, className }: { site: ObservingSite; className?:
   )
 }
 
-/** "Add an observing site in Settings" (PLAN-TGT-AC-15), returning here afterwards. */
+/** Settings › Sites (PLAN-TGT-AC-15), returning here afterwards. */
 export function AddSiteButton({ returnTo }: { returnTo: string }) {
   return (
     <Button size="sm" variant="outline" render={<Link to="/settings/sites" search={{ return: returnTo }} />}>
-      Add an observing site in Settings
+      Add site
     </Button>
   )
 }
 
-const BAND_ORDER: BandCell["band"][] = ["L", "R", "G", "B", "Ha", "SII", "OIII"]
+const GRADE_TONE: Record<FilterGrade, Tone> = { good: "success", marginal: "warning", poor: "muted" }
+
+/** Shape as well as colour: marginal is dashed, poor is struck through and unfilled. */
+const GRADE_SHAPE: Record<FilterGrade, string> = {
+  good: "",
+  marginal: "border border-dashed border-warning/70 ring-0",
+  poor: "bg-transparent line-through decoration-foreground/50",
+}
+
+/** A grade-tinted chip: a filter's band, or a legend word. */
+export function GradePill({ grade, title, className, children }: { grade: FilterGrade; title?: string; className?: string; children: string }) {
+  return (
+    <Pill tone={GRADE_TONE[grade]} title={title} className={cn("h-4 min-w-5 justify-center gap-0 px-1 text-[0.625rem] leading-none", GRADE_SHAPE[grade], className)}>
+      {children}
+    </Pill>
+  )
+}
+
+/** One filter's good-tonight chip; its reason is the tooltip. */
+export function FilterPill({ chip, className }: { chip: FilterChip; className?: string }) {
+  return (
+    <GradePill grade={chip.grade} title={chip.reason} className={className}>
+      {chip.band}
+    </GradePill>
+  )
+}
 
 /**
- * The Filters strip (PLAN-TGT-FR-06): the bands in strip order, each viable
- * (filled) or limited by the Moon (outlined, struck). A band the selection
- * cannot capture is left out, never drawn as limited.
+ * The per-filter good-tonight strip: one chip per filter, tinted good,
+ * marginal or poor. Without a window tonight it reads "–" with `empty` as
+ * the reason.
  */
-export function BandStrip({ cells, recommendation }: { cells: BandCell[]; recommendation: string }) {
-  const sorted = [...cells].sort((a, b) => BAND_ORDER.indexOf(a.band) - BAND_ORDER.indexOf(b.band))
-  const label = `${recommendation}: ${sorted.map((c) => `${c.band} ${c.state}`).join(", ") || "no bands"}`
+export function FilterChips({ chips, empty }: { chips: FilterChip[] | null; empty: string }) {
+  if (!chips) return <UnknownValue label="–" reason={empty} />
+  if (chips.length === 0) return <span className="text-xs text-muted-foreground">No filters</span>
   return (
-    <span className="inline-flex items-center gap-px" title={label} aria-label={label} role="img">
-      {sorted.map((c) => (
-        <span
-          key={c.band}
-          aria-hidden="true"
-          className={cn(
-            "inline-flex h-4 min-w-5 items-center justify-center rounded-[3px] px-0.5 text-[0.625rem] leading-none font-medium",
-            c.state === "viable" ? "bg-foreground/[0.14] text-foreground" : "border border-foreground/20 text-muted-foreground line-through decoration-foreground/40",
-          )}
-        >
-          {c.band}
-        </span>
+    <span role="img" aria-label={chips.map((c) => c.reason).join("; ")} className="inline-flex items-center gap-0.5" data-filter-chips>
+      {chips.map((c) => (
+        <FilterPill key={c.band} chip={c} />
       ))}
-      {sorted.length === 0 ? <span className="text-xs text-muted-foreground">No bands</span> : null}
     </span>
   )
 }
@@ -144,16 +167,11 @@ export function CapturedCell({ captured }: { captured: Array<{ channel: string; 
   )
 }
 
-/** A Project badge (D-W60): the Project's name, linking to it. */
+/** A Project badge (D-W60): the Project's name as a pill, linking to it. */
 export function ProjectBadge({ project }: { project: Project }) {
   return (
-    <Link
-      to="/projects/$projectId"
-      params={{ projectId: project.id }}
-      className="inline-flex h-4 max-w-40 items-center truncate rounded-[3px] border border-separator px-1 text-[0.625rem] leading-none text-muted-foreground hover:text-foreground"
-      title={`Subject of the open Project ${project.name}`}
-    >
+    <Pill tone="muted" link={{ to: "/projects/$projectId", params: { projectId: project.id } }} title={`Project ${project.name}`} className="h-4 max-w-40 px-1.5 text-[0.625rem]">
       {project.name}
-    </Link>
+    </Pill>
   )
 }
