@@ -311,15 +311,19 @@ export function sessionAvailability(disk: Disk, catalog: Catalog, session: Sessi
 /** Why a member cannot be read now. */
 export type UnavailableState = Exclude<AssetAvailability, "available">
 
+const PREVIEW_UNAVAILABLE: Record<UnavailableState, MessageRef> = {
+  retired: msg("domain_preview_retired"),
+  offline: msg("domain_preview_offline"),
+  unreadable: msg("domain_preview_unreadable"),
+  absent: msg("domain_preview_absent"),
+}
+
 /**
  * Why the current frame's preview cannot be drawn. A retired copy reads
  * Retired, never "not found": it is never read again or offered as an input (D11, LIB-FR-15).
  */
-export function previewUnavailableReason(state: UnavailableState): string {
-  if (state === "retired") return "Preview unavailable: the frame is Retired. Its location was retired, so PlateVault never reads this copy again or offers it as an input."
-  if (state === "offline") return "Preview unavailable: the frame is offline."
-  if (state === "unreadable") return "Preview unavailable: the frame is unreadable (access denied)."
-  return "Preview unavailable: the frame is not found at its last complete scan."
+export function previewUnavailableReason(state: UnavailableState): MessageRef {
+  return PREVIEW_UNAVAILABLE[state]
 }
 
 export interface RunSummary extends MembershipSummary {

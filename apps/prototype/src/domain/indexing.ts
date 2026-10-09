@@ -9,6 +9,8 @@
  * Stack (P-CAL3, `routeRawCalibration`); masters in a Calibration location are
  * library masters.
  */
+import { formatDegrees } from "@/lib/format"
+import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { routeRawCalibration } from "./calibration-process"
 import { correctedExposureS } from "./corrections"
 import { isRetiredAsset } from "./library"
@@ -198,24 +200,25 @@ export function associateTarget(catalog: Catalog, session: Session, now: IsoDate
   if (object) {
     evidence.push({
       source: "header",
-      label: "OBJECT",
-      value: object,
+      label: verbatim("OBJECT"),
+      value: verbatim(object),
       agrees: pointedTarget ? objectTarget?.id === pointedTarget.id : objectTarget ? null : false,
     })
   } else {
-    evidence.push({ source: "header", label: "OBJECT", value: "Missing", agrees: null })
+    evidence.push({ source: "header", label: verbatim("OBJECT"), value: msg("status_missing"), agrees: null })
   }
+  const pointingLabel = msg("evidence_source_pointing")
   if (session.pointing && pointed) {
     evidence.push({
       source: "pointing",
-      label: "Pointing",
-      value: `${pointed.separation.toFixed(2)}° from ${pointed.name} centre`,
+      label: pointingLabel,
+      value: msg("indexing_pointing_from_centre", { angle: formatDegrees(pointed.separation, 2), name: pointed.name }),
       agrees: true,
     })
   } else if (session.pointing) {
-    evidence.push({ source: "pointing", label: "Pointing", value: "Outside every known Target", agrees: false })
+    evidence.push({ source: "pointing", label: pointingLabel, value: msg("indexing_pointing_outside_targets"), agrees: false })
   } else {
-    evidence.push({ source: "pointing", label: "Pointing", value: "No pointing in header", agrees: null })
+    evidence.push({ source: "pointing", label: pointingLabel, value: msg("indexing_pointing_none"), agrees: null })
   }
 
   if (pointedTarget && (!object || objectTarget?.id === pointedTarget.id)) {
@@ -268,6 +271,11 @@ function trainFor(catalog: Catalog, camera: Camera, telescope: Telescope): Optic
   return train
 }
 
+/** A header value as data, or "Missing" when the header lacks it. */
+function headerValue(value: string | null | undefined): MessageRef {
+  return value ? verbatim(value) : msg("status_missing")
+}
+
 /**
  * Equipment association (D11): explicit camera/optical-train records with
  * confirmed versus observed evidence. Unknown header strings are detected as
@@ -275,15 +283,16 @@ function trainFor(catalog: Catalog, camera: Camera, telescope: Telescope): Optic
  */
 export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFile["header"]>): Association<OpticalTrainId> {
   const evidence: Evidence[] = [
-    { source: "header", label: "INSTRUME", value: header.instrument ?? "Missing", agrees: header.instrument ? true : null },
-    { source: "header", label: "TELESCOP", value: header.telescope ?? "Missing", agrees: header.telescope ? true : null },
+    { source: "header", label: verbatim("INSTRUME"), value: headerValue(header.instrument), agrees: header.instrument ? true : null },
+    { source: "header", label: verbatim("TELESCOP"), value: headerValue(header.telescope), agrees: header.telescope ? true : null },
     {
       source: "header",
-      label: "FOCALLEN",
-      value: header.focalLengthMm ? `${header.focalLengthMm} mm` : "Missing",
+      label: verbatim("FOCALLEN"),
+      value: headerValue(header.focalLengthMm ? `${header.focalLengthMm} mm` : null),
       agrees: header.focalLengthMm ? true : null,
     },
   ]
+  const trainLabel = msg("domain_optical_train")
   const camera = findOrDetectCamera(catalog, header)
   if (!camera) return { value: null, status: "unresolved", evidence, confirmedAt: null }
 
@@ -293,7 +302,7 @@ export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFil
     : undefined
   if (named) {
     const train = trainFor(catalog, camera, named)
-    evidence.push({ source: "equipment-record", label: "Optical train", value: train.name, agrees: true })
+    evidence.push({ source: "equipment-record", label: trainLabel, value: verbatim(train.name), agrees: true })
     return { value: train.id, status: "associated", evidence, confirmedAt: null }
   }
   const byFocal = header.focalLengthMm
@@ -303,12 +312,7 @@ export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFil
     const train = trainFor(catalog, camera, byFocal)
     const telescopeEvidence = evidence[1]!
     telescopeEvidence.agrees = false
-    evidence.push({
-      source: "equipment-record",
-      label: "Optical train",
-      value: `${train.name} (focal length matches, telescope name does not)`,
-      agrees: null,
-    })
+    evidence.push({ source: "equipment-record", label: trainLabel, value: msg("indexing_train_focal_match", { name: train.name }), agrees: null })
     return { value: train.id, status: "needs-review", evidence, confirmedAt: null }
   }
   if (header.telescope && header.focalLengthMm) {
@@ -322,7 +326,7 @@ export function associateEquipment(catalog: Catalog, header: NonNullable<DiskFil
     }
     catalog.telescopes[telescope.id] = telescope
     const train = trainFor(catalog, camera, telescope)
-    evidence.push({ source: "equipment-record", label: "Optical train", value: `${train.name} (detected)`, agrees: true })
+    evidence.push({ source: "equipment-record", label: trainLabel, value: msg("indexing_train_detected", { name: train.name }), agrees: true })
     return { value: train.id, status: "associated", evidence, confirmedAt: null }
   }
   return { value: null, status: "needs-review", evidence, confirmedAt: null }
