@@ -144,3 +144,31 @@ The user reviewed `186686b8`. This file is the work order for round 2. Its propo
 - **Calibration:** detected as calibration sessions at index or import, and kept outside Projects (P-CAL1). For auto-stacking into masters, see the lead's feasibility note.
 - **Footprints:** low value in the overview; moved to Clean up.
 - **Duplicates:** scan on demand.
+
+## Round 1b decisions (user, 2026-10-09)
+
+- **P-CAL3: masters only (user-chosen; supersedes P-CAL1's raw handling).**
+  - The Calibration library holds masters only, and runs are assigned masters only. Raw-set assignment is dropped.
+  - Raw calibration frames exist only as input to a separate **calibration process**, with these steps:
+    1. Import or index detects a raw calibration session.
+    2. **Stack** hands it to the configured tool (Siril / PixInsight).
+    3. Watch the tool's output folder and **detect the master** (IMAGETYP master, NCOMBINE).
+    4. **Auto-import it** into structured calibration storage, with a layout per kind:
+       - flats per optical train + filter + night (flats are short-lived and night-specific);
+       - darks per camera + exposure + gain/offset + temperature, and bias per camera + gain/offset (long-lived libraries).
+    5. Register the master with lineage to its raw session.
+    6. **Delete the raws** (OS Trash) on success, or keep them (a setting).
+  - Each step is visible and resumable. A stacked master from elsewhere imports directly.
+  - Stacking stays a tool hand-off for now. A built-in stacker is deferred.
+- **i18n gate (user):** every user-visible string must come from the message catalogue, and a lint enforces it, as in the previous release. The previous app had:
+  - Paraglide / inlang `messages/<locale>.json` accessed via `m.<key>()`;
+  - ESLint rules `alm/no-user-string` and `alm/no-js-plural` (`apps/desktop/eslint-rules/no-user-string.js` on main);
+  - `scripts/check-i18n-catalog.mjs` and `scripts/check-i18n-locale-drift.mjs`.
+
+  The harness adopts that stack, replacing the foundation's interim `t()`. The migration (catalogue extraction plus the lint gate) runs once, after the round-2 slices integrate, so the slices don't conflict on shared catalogue files.
+- **Status bar (user):** use the full bottom bar.
+  - Left: locations.
+  - Middle: issue chips by kind (offline, blocked runs, needs a Target, calibration waiting), each clickable.
+  - Right: running work (each operation with progress, cancel on hover) and the last notification ("Import finished · 54 frames") with a history popover.
+  - Context: the selection count when a list has a selection.
+  - It shares its data with the Issues hub.
