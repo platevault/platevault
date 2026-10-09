@@ -26,7 +26,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { formatHours } from "@/domain/derive"
 import { sessionLabel } from "@/domain/membership"
 import { formatCount, formatNight } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
 import { useStore } from "@/store/core"
 import type { ImportPayload } from "./import-run"
@@ -75,7 +75,7 @@ export function SessionsPage() {
   const shown = rows.filter((r) => {
     if (!matchesFilter(r, filter)) return false
     if (!needle) return true
-    return [r.session.objectLabel, r.targetName, r.rigName, r.session.channel, formatNight(r.session.night, true), r.session.cameraName].some((v) => v?.toLowerCase().includes(needle))
+    return [r.session.objectLabel, r.targetName, r.rig && say(m, r.rig), r.session.channel, formatNight(r.session.night, true), r.session.cameraName].some((v) => v?.toLowerCase().includes(needle))
   })
   // Imported sessions first while their highlight is on.
   if (imported.size > 0) shown.sort((a, b) => Number(imported.has(b.session.id)) - Number(imported.has(a.session.id)))
@@ -119,10 +119,10 @@ export function SessionsPage() {
     {
       id: "rig",
       header: m.sessions_column_rig(),
-      sortValue: (r) => r.rigName ?? "",
+      sortValue: (r) => (r.rig ? say(m, r.rig) : ""),
       truncate: true,
       className: "max-w-44",
-      cell: (r) => r.rigName ?? <StatusBadge kind="association" value={r.session.equipment.status === "needs-review" ? "needs-review" : "unresolved"} label={m.sessions_rig_needs_review()} />,
+      cell: (r) => (r.rig ? say(m, r.rig) : <StatusBadge kind="association" value={r.session.equipment.status === "needs-review" ? "needs-review" : "unresolved"} label={m.sessions_rig_needs_review()} />),
     },
     {
       id: "frames",
@@ -146,7 +146,7 @@ export function SessionsPage() {
           <Button size="xs" variant="outline" className="-my-1" onClick={() => review(r)} data-review-session={r.session.id}>
             {m.verb_review()}
             {r.unreviewed > 0 ? <CountBadge count={r.unreviewed} tone="warning" label={m.session_frames_unreviewed({ count: r.unreviewed, frames: formatCount(r.unreviewed) })} /> : null}
-            <span className="sr-only"> {sessionLabel(r.session)}</span>
+            <span className="sr-only"> {sessionLabel(m, r.session)}</span>
           </Button>
         ),
     },
@@ -174,7 +174,7 @@ export function SessionsPage() {
   ]
 
   const menu = (r: SessionRow): MenuEntry[] => [
-    { heading: sessionLabel(r.session) },
+    { heading: sessionLabel(m, r.session) },
     { label: m.verb_open(), icon: Eye, onSelect: () => open(r) },
     ...(r.trashed
       ? []
@@ -185,7 +185,7 @@ export function SessionsPage() {
         ]),
   ]
 
-  const importSummary = importOp && importOp.status !== "running" ? importOp.summary : null
+  const importSummary = importOp && importOp.status !== "running" && importOp.summary ? say(m, importOp.summary) : null
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -203,7 +203,7 @@ export function SessionsPage() {
         {importOp ? (
           <Notice
             tone="info"
-            title={importOp.status === "running" ? m.sessions_import_running({ title: importOp.title }) : `${importOp.title} · ${m.session_count({ count: imported.size })}`}
+            title={importOp.status === "running" ? m.sessions_import_running({ title: say(m, importOp.title) }) : `${say(m, importOp.title)} · ${m.session_count({ count: imported.size })}`}
             actions={
               <Button size="xs" variant="ghost" onClick={() => setParams({ import: undefined })}>
                 {m.verb_clear()}

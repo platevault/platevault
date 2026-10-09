@@ -16,7 +16,7 @@ import { Eye, FolderOpen } from "lucide-react"
 import { useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { useMessages } from "@/app/preferences"
-import { GateLabel } from "@/app/run-ui"
+import { GateLabel, stepName } from "@/app/run-ui"
 import { Box } from "@/components/app/box"
 import { EvidenceList, KeyValueList, PathText } from "@/components/app/data"
 import { type Column, DataTable } from "@/components/app/data-table"
@@ -28,13 +28,13 @@ import { StatusBadge, type Tone } from "@/components/app/status"
 import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { CALIBRATION_STEP_LABEL, processForSession, processView, type ProcessStatus } from "@/domain/calibration-process"
+import { CALIBRATION_STEP_NAME, processForSession, processView, type ProcessStatus } from "@/domain/calibration-process"
 import { formatHours, rigName, runPipeline, runStepLink, sessionRigId, sessionTargetId } from "@/domain/derive"
 import { assetAvailability, captureSite, qualityApplicability } from "@/domain/library"
 import { sessionLongLabel } from "@/domain/membership"
 import type { Asset, Session } from "@/domain/types"
 import { formatCount, formatDateTime, formatDec, formatExposure, formatNight, formatRa } from "@/lib/format"
-import type { Messages } from "@/lib/i18n"
+import { type Messages, say } from "@/lib/i18n"
 import type { SearchParams } from "@/routes"
 import { type PrototypeState, useStore } from "@/store/core"
 import { SessionReview } from "../d-review/review"
@@ -74,7 +74,7 @@ function CalibrationSession({ session }: { session: Session }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
-        title={sessionLongLabel(session)}
+        title={sessionLongLabel(m, session)}
         eyebrow={<Link to="/sessions">{m.nav_sessions()}</Link>}
         meta={pill ? <Pill tone={pill.tone}>{pill.label}</Pill> : <Pill tone="muted">{m.status_role_calibration()}</Pill>}
         actions={
@@ -92,7 +92,7 @@ function CalibrationSession({ session }: { session: Session }) {
               : m.session_raw_frames({ count: session.assetIds.length, frames: formatCount(session.assetIds.length) })
           }
         >
-          {view?.failure ? `${m.session_step_failed({ step: CALIBRATION_STEP_LABEL[view.failure.step] })} · ${view.failure.reason}` : null}
+          {view?.failure ? `${m.session_step_failed({ step: say(m, CALIBRATION_STEP_NAME[view.failure.step]) })} · ${say(m, view.failure.reason)}` : null}
         </Notice>
       </PageBody>
     </div>
@@ -117,7 +117,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
-        title={sessionLongLabel(session)}
+        title={sessionLongLabel(m, session)}
         eyebrow={<Link to="/sessions">{m.nav_sessions()}</Link>}
         description={`${session.objectLabel ? m.session_object({ name: session.objectLabel }) : m.session_no_object()} · ${m.session_frame_count({ count: frames, frames: formatCount(frames) })} · ${formatHours(row?.seconds ?? 0)}`}
         meta={
@@ -196,14 +196,14 @@ function DetailBody({
           actions={targetId ? <Pill tone={session.target.status === "confirmed" ? "success" : "info"}>{catalog.targets[targetId]?.name ?? targetId}</Pill> : <Pill tone="warning">{m.session_unsettled()}</Pill>}
         >
           <div className="space-y-2">
-            {session.target.evidence.length > 0 ? <EvidenceList evidence={session.target.evidence} caption={m.session_target_evidence({ name: sessionLongLabel(session) })} /> : <p className="text-xs text-muted-foreground">{m.session_no_evidence()}</p>}
+            {session.target.evidence.length > 0 ? <EvidenceList evidence={session.target.evidence} caption={m.session_target_evidence({ name: sessionLongLabel(m, session) })} /> : <p className="text-xs text-muted-foreground">{m.session_no_evidence()}</p>}
             {!row?.trashed ? <ConfirmTargetControl sessionId={session.id} onDone={setTargetNote} /> : null}
             {targetNote ? <p className="text-xs text-success" role="status">{targetNote}</p> : null}
           </div>
         </Box>
-        <Box id="rig" level={2} title={m.sessions_column_rig()} actions={rigId ? <Pill tone={session.equipment.status === "confirmed" ? "success" : "info"}>{rigName(catalog, rigId)}</Pill> : <Pill tone="warning">{m.session_unsettled()}</Pill>}>
+        <Box id="rig" level={2} title={m.sessions_column_rig()} actions={rigId ? <Pill tone={session.equipment.status === "confirmed" ? "success" : "info"}>{rigName(m, catalog, rigId)}</Pill> : <Pill tone="warning">{m.session_unsettled()}</Pill>}>
           <div className="space-y-2">
-            <EvidenceList evidence={session.equipment.evidence} caption={m.session_rig_evidence({ name: sessionLongLabel(session) })} />
+            <EvidenceList evidence={session.equipment.evidence} caption={m.session_rig_evidence({ name: sessionLongLabel(m, session) })} />
             {!row?.trashed ? <ConfirmRigControl sessionId={session.id} /> : null}
           </div>
         </Box>
@@ -230,7 +230,7 @@ function DetailBody({
                   <span className="flex items-center gap-1.5">
                     {project.state === "done" ? <Pill tone="muted">{m.status_done()}</Pill> : null}
                     <Pill tone="info">{m.status_candidate()}</Pill>
-                    <NoteMarker label={m.session_why_candidate({ name: project.name })} rows={[{ label: m.session_reason(), value: candidate.reason }]} />
+                    <NoteMarker label={m.session_why_candidate({ name: project.name })} rows={[{ label: m.session_reason(), value: say(m, candidate.reason) }]} />
                   </span>
                 </li>
               ))}
@@ -297,11 +297,11 @@ function RunsList({ state, runs }: { state: PrototypeState; runs: ReturnType<typ
                 {run.name}
               </Link>
               <span className="truncate text-xs text-muted-foreground">
-                {project?.name} · {rigName(state.catalog, run.rigId)}
+                {project?.name} · {rigName(m, state.catalog, run.rigId)}
               </span>
               {run.draft ? <Pill tone="muted">{m.status_draft()}</Pill> : null}
             </span>
-            <GateLabel state={pipeline.current.state} label={`${pipeline.current.label} · ${pipeline.current.status}`} />
+            <GateLabel state={pipeline.current.state} label={`${stepName(m, pipeline.current.id)} · ${say(m, pipeline.current.status)}`} />
           </li>
         )
       })}

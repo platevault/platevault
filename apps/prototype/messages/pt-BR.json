@@ -6518,5 +6518,6 @@
   "domain_naming_unknown_token": "Token desconhecido {token}",
   "domain_naming_parent_folder": "Uma pasta não pode ser `..`",
   "domain_naming_reserved": "\"{name}\" é um nome reservado",
-  "domain_naming_leading_slash": "Um modelo é relativo ao seu local; remova a / inicial"
+  "domain_naming_leading_slash": "Um modelo é relativo ao seu local; remova a / inicial",
+  "run_verify_frame_not_in_catalog": "Um frame preparado não está mais no catálogo."
 }

@@ -32,7 +32,7 @@ export function frameName(m: Messages, catalog: Catalog, id: AssetId): string {
   const asset = catalog.assets[id]
   if (!asset) return m.importdlg_unknown_frame()
   const session = asset.sessionId ? catalog.sessions[asset.sessionId] : undefined
-  return `${asset.fileName}${session ? ` (${sessionLabel(session)})` : ""}`
+  return `${asset.fileName}${session ? ` (${sessionLabel(m, session)})` : ""}`
 }
 
 export function ImportDialog({ viewId, viewAssetIds, open, onOpenChange }: { viewId: string; viewAssetIds: Set<AssetId>; open: boolean; onOpenChange: (open: boolean) => void }) {

@@ -10,13 +10,13 @@
  * criteria (PLAN-TGT-FR-05). The filter grades come from `filterSuitability`
  * (good-tonight.ts).
  */
-import { bandUnion, myTargets, sessionTargetId, liveLightSessions, rigName, targetFit, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
+import { bandUnion, myTargets, sessionTargetId, liveLightSessions, rigRef, targetFit, type Fit, fitsNicely, isMosaicCandidate } from "@/domain/derive"
 import { BANDS, NARROW_BANDS } from "@/domain/labels"
 import { targetCoverage } from "@/domain/library"
 import { computeWindows, nightAt, type Tonight } from "@/domain/planning"
 import { BUNDLED_CATALOGUE, bundledEntryFor, type CatalogueEntry, type CatalogueId, entryKeys, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
 import type { Band, Catalog, Disk, MoonConstraint, ObservingSite, ObservingWindow, OpticalTrainId, PlanCriteria, Project, Target } from "@/domain/types"
-import { m } from "@/lib/i18n"
+import { m, type MessageRef, msg, say } from "@/lib/i18n"
 import { addTarget, setFavourite } from "@/store/actions/library"
 import { addToPlan } from "@/store/actions/planning"
 import type { CommitResult } from "@/store/core"
@@ -236,7 +236,7 @@ export function positionSky(ctx: SkyContext | null, id: string, ra: number | nul
 
 export interface RigFit {
   rigId: OpticalTrainId
-  rigName: string
+  rig: MessageRef
   fit: Fit
 }
 
@@ -268,7 +268,7 @@ export function rowView(catalog: Catalog, disk: Disk, ctx: SkyContext | null, ro
     row,
     sky,
     tonight: sky.status === "ok" && ctx ? filtersTonight(ctx, { id: row.key, ra: row.ra, dec: row.dec }, sky.altitudes, constraints, selectionBands(catalog, rigIds)) : null,
-    fits: rigIds.map((rigId) => ({ rigId, rigName: rigName(catalog, rigId), fit: targetFit(catalog, { ...target, sizeDeg: row.sizeDeg }, rigId) })),
+    fits: rigIds.map((rigId) => ({ rigId, rig: rigRef(catalog, rigId), fit: targetFit(catalog, { ...target, sizeDeg: row.sizeDeg }, rigId) })),
     captured,
     capturedS: captured.reduce((sum, c) => sum + c.seconds, 0),
     sessions: row.target ? (sessionCounts.get(row.target.id) ?? 0) : 0,
@@ -298,6 +298,9 @@ export interface SortSpec {
 
 export interface PresetDef {
   id: string
+  /** The preset's name as a ref, for copy that is stored (an Activity detail). */
+  readonly name: MessageRef
+  /** `name` worded in the current language. */
   readonly label: string
   readonly definition: string
   /** "rig": offered only with a rig selected; "narrowband": hidden when a selected rig passes no Ha, SII or OIII. */
@@ -315,7 +318,8 @@ const moonUp = (v: RowView) => (v.sky.status === "ok" ? v.sky.moonUp : null)
 export const BUILT_IN_PRESETS: PresetDef[] = [
   {
     id: "best-tonight",
-    get label() { return m.targets_preset_best() },
+    name: msg("targets_preset_best"),
+    get label() { return say(m, this.name) },
     get definition() { return m.targets_preset_best_definition() },
     needs: null,
     match: (v) => imgTime(v) > 0 && broadOk(v),
@@ -323,7 +327,8 @@ export const BUILT_IN_PRESETS: PresetDef[] = [
   },
   {
     id: "narrowband-moon",
-    get label() { return m.targets_preset_narrowband() },
+    name: msg("targets_preset_narrowband"),
+    get label() { return say(m, this.name) },
     get definition() { return m.targets_preset_narrowband_definition() },
     needs: "narrowband",
     match: (v) => imgTime(v) > 0 && moonUp(v) === true && narrowOk(v),
@@ -331,14 +336,16 @@ export const BUILT_IN_PRESETS: PresetDef[] = [
   },
   {
     id: "emission-ha",
-    get label() { return m.targets_preset_emission() },
+    name: msg("targets_preset_emission"),
+    get label() { return say(m, this.name) },
     get definition() { return m.targets_preset_emission_definition() },
     needs: "narrowband",
     match: (v) => v.row.kind === "emission" && ok(v, "Ha"),
   },
   {
     id: "galaxies-dark",
-    get label() { return m.targets_preset_galaxies() },
+    name: msg("targets_preset_galaxies"),
+    get label() { return say(m, this.name) },
     get definition() { return m.targets_preset_galaxies_definition() },
     needs: null,
     match: (v) => v.row.kind === "galaxy" && imgTime(v) > 0 && moonUp(v) === false,
@@ -346,14 +353,16 @@ export const BUILT_IN_PRESETS: PresetDef[] = [
   },
   {
     id: "pn-oiii",
-    get label() { return m.targets_preset_planetary() },
+    name: msg("targets_preset_planetary"),
+    get label() { return say(m, this.name) },
     get definition() { return m.targets_preset_planetary_definition() },
     needs: "narrowband",
     match: (v) => v.row.kind === "planetary" && ok(v, "OIII"),
   },
   {
     id: "mosaic",
-    get label() { return m.targets_preset_mosaic() },
+    name: msg("targets_preset_mosaic"),
+    get label() { return say(m, this.name) },
     get definition() { return m.targets_preset_mosaic_definition() },
     needs: "rig",
     match: (v) => v.fits.some((f) => isMosaicCandidate(f.fit)),
@@ -361,7 +370,8 @@ export const BUILT_IN_PRESETS: PresetDef[] = [
   },
   {
     id: "fits-nicely",
-    get label() { return m.targets_preset_fits() },
+    name: msg("targets_preset_fits"),
+    get label() { return say(m, this.name) },
     get definition() { return m.targets_preset_fits_definition() },
     needs: "rig",
     match: (v) => v.fits.some((f) => fitsNicely(f.fit)),

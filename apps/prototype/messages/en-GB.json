@@ -6462,5 +6462,6 @@
   "domain_naming_unknown_token": "Unknown token {token}",
   "domain_naming_parent_folder": "A folder cannot be `..`",
   "domain_naming_reserved": "\"{name}\" is a reserved name",
-  "domain_naming_leading_slash": "A template is relative to its location; remove the leading /"
+  "domain_naming_leading_slash": "A template is relative to its location; remove the leading /",
+  "run_verify_frame_not_in_catalog": "A prepared frame is no longer in the catalog."
 }

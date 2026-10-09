@@ -688,7 +688,7 @@ function SkippedPart({ plan }: { plan: ImportPlan }) {
                       void navigate({ to: "/sessions/$sessionId", params: { sessionId } })
                     }}
                   >
-                    {sessionLongLabel(sessions[sessionId]!)} · {n}
+                    {sessionLongLabel(m, sessions[sessionId]!)} · {n}
                   </Pill>
                 ) : (
                   <Pill tone="muted">{m.import_library_frames({ count: n })}</Pill>
@@ -774,10 +774,10 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
                 <li key={s.id} className="flex min-h-(--row-h) items-center justify-between gap-2 px-2.5 py-1">
                   {s.imageType === "light" ? (
                     <Link to="/sessions/$sessionId" params={{ sessionId: s.id }} onClick={closeSheet} className="font-medium underline-offset-2 hover:underline">
-                      {sessionLongLabel(s)}
+                      {sessionLongLabel(m, s)}
                     </Link>
                   ) : (
-                    <span>{sessionLongLabel(s)}</span>
+                    <span>{sessionLongLabel(m, s)}</span>
                   )}
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
                     {typeLabel(m, s.imageType)} · {m.session_frame_count({ count: s.assetIds.length, frames: formatCount(s.assetIds.length) })}

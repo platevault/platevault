@@ -19,6 +19,7 @@ import { calibrationProcesses } from "@/domain/calibration-process"
 import { fileAt } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
 import { displayZone, formatZonedDateTime, reminderSiteOf, wallTimeToIso } from "@/domain/planning"
+import { say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { store, useStore } from "@/store/core"
 import { resetPrototype } from "@/store"
@@ -41,6 +42,7 @@ import {
   setVolumeMounted,
   toolFinishedStacking,
 } from "@/store/simulation"
+import { useMessages } from "./preferences"
 import { closePanel, useShellUi } from "./ui-state"
 
 /** `path` details render in monospace and truncate; prose details wrap in the body font. */
@@ -87,6 +89,7 @@ export function SimulationControls() {
   const arrived = useStore(() => newCapturesArrived())
   const devices = useStore((s) => removableDevices(s.disk))
   const stacking = useStore((s) => calibrationProcesses(s.catalog).filter((v) => v.status === "stacking"))
+  const m = useMessages()
   const [folderQuery, setFolderQuery] = useState("")
   const [path, setPath] = useState("")
   const [destination, setDestination] = useState("")
@@ -173,7 +176,7 @@ export function SimulationControls() {
           {stacking.map((view) => (
             <div key={view.process.id} className="flex items-center justify-between gap-3 py-1.5" data-sim-stacking={view.process.id}>
               <div className="min-w-0">
-                <p className="text-sm">{view.name}</p>
+                <p className="text-sm">{say(m, view.name)}</p>
                 <p className="font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">{view.process.outputFolder}</p>
               </div>
               <Button size="sm" variant="outline" className="shrink-0" onClick={() => toolFinishedStacking(view.process.id)}>
