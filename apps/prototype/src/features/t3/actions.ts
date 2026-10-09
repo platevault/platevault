@@ -8,6 +8,7 @@ import { runHref } from "@/domain/derive"
 import { stableHash } from "@/domain/indexing"
 import type { AssetId, Catalog, FrameMeasurement, MeasurementImport, MeasurementImportRow, RunId } from "@/domain/types"
 import { plural } from "@/lib/format"
+import { m } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
 import { defaultFrameUi, type FrameUi } from "@/store/slices/d"
 import { attaches, type CsvRow, importedMetrics, type MappedRow, observeFrame } from "./csv"
@@ -77,11 +78,11 @@ export function resolveImportRow(importId: string, rowIndex: number, assetId: As
   const { catalog, disk } = store.getState()
   const record = catalog.measurementImports[importId]
   const row = record?.rows.find((r) => r.index === rowIndex)
-  if (!record || !row) return { ok: false, reason: "write-failed", message: "The import row was not found; open Import measurements again." }
+  if (!record || !row) return { ok: false, reason: "write-failed", message: m.importdlg_row_not_found() }
   const seen = observeFrame(disk, catalog, assetId, null)
-  if (seen.state === "unreadable") return { ok: false, reason: "write-failed", message: "Row not attached: the frame's bytes cannot be read now, so PlateVault cannot record which content the values describe." }
+  if (seen.state === "unreadable") return { ok: false, reason: "write-failed", message: m.importdlg_row_not_attached_unreadable() }
   if (seen.state === "content-changed")
-    return { ok: false, reason: "write-failed", message: `Row not attached: the frame's bytes differ from the digest PlateVault recorded ${seen.basis?.recordedBy === "measurement" ? "when it measured it" : "when it was indexed"}. Index its folder and review frames again before attaching it.` }
+    return { ok: false, reason: "write-failed", message: seen.basis?.recordedBy === "measurement" ? m.importdlg_row_not_attached_measured() : m.importdlg_row_not_attached_indexed() }
   const rows = record.rows.map((r) => (r.index === rowIndex ? { ...r, status: "resolved" as const, assetId } : r))
   return commit(
     "Attach imported row",

@@ -7,6 +7,7 @@
  * stretch (PIX-AC-02). Saturated stars are failed fits with no width.
  */
 import { useEffect, useRef, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { KeyValueList } from "@/components/app/data"
 import { UnknownValue } from "@/components/app/feedback"
 import { StatusBadge } from "@/components/app/status"
@@ -15,11 +16,20 @@ import { BUILT_IN_METHOD } from "@/domain/measurement"
 import type { FrameHeader, FrameMeasurement, Metric, MetricKey } from "@/domain/types"
 import { HEADER_KEYWORDS } from "@/domain/types"
 import { formatDateTime } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import { builtInMetrics, currentImportedMetrics, type FrameMeasureState, historyImportedMetrics, METRIC_LABEL } from "./measure"
 import { formatMetricFixed } from "@/domain/membership"
-import { type CutoutKind, renderCutout, renderWindow, type StarField, type StarRecord, type Stretch, type ViewWindow } from "./raster"
+import { type CutoutKind, renderCutout, renderWindow, type StarField, type StarRecord, type StarWarning, type Stretch, type ViewWindow } from "./raster"
 
 const METRIC_ORDER: MetricKey[] = ["fwhm", "hfr", "eccentricity", "star-count", "background", "snr"]
+
+function cutoutTitle(m: Messages, kind: CutoutKind): string {
+  return kind === "observed" ? m.frame_cutout_observed() : kind === "fitted" ? m.frame_fitted() : m.frame_cutout_residual()
+}
+
+function starWarning(m: Messages, warning: StarWarning): string {
+  return warning === "saturated" ? m.frame_warning_saturated() : m.frame_warning_near_edge()
+}
 
 /** Content-box size of an element, following resizes. */
 export function useSize<T extends HTMLElement>() {
@@ -48,19 +58,20 @@ export function Raster({ field, window, stretch, className, label }: { field: St
 }
 
 export function Cutout({ field, star, kind }: { field: StarField; star: StarRecord; kind: CutoutKind }) {
+  const m = useMessages()
   const canvas = useRef<HTMLCanvasElement>(null)
   const unavailable = star.state === "failed" && kind !== "observed"
   useEffect(() => {
     if (unavailable) return
     canvas.current?.getContext("2d")?.putImageData(renderCutout(field, star, kind), 0, 0)
   }, [field, star, kind, unavailable])
-  const title = { observed: "Observed", fitted: "Fitted", residual: "Residual" }[kind]
+  const title = cutoutTitle(m, kind)
   return (
     <figure className="space-y-1">
       {unavailable ? (
-        <div className="flex size-20 items-center justify-center rounded-sm border border-dashed p-1 text-center text-xs text-muted-foreground">No fit</div>
+        <div className="flex size-20 items-center justify-center rounded-sm border border-dashed p-1 text-center text-xs text-muted-foreground">{m.frame_no_fit()}</div>
       ) : (
-        <canvas ref={canvas} width={25} height={25} className="size-20 rounded-sm border [image-rendering:pixelated]" role="img" aria-label={`${title} cutout of star ${star.id}`} />
+        <canvas ref={canvas} width={25} height={25} className="size-20 rounded-sm border [image-rendering:pixelated]" role="img" aria-label={m.frame_cutout_label({ kind: title, id: star.id })} />
       )}
       <figcaption className="text-xs text-muted-foreground">{title}</figcaption>
     </figure>
@@ -68,41 +79,48 @@ export function Cutout({ field, star, kind }: { field: StarField; star: StarReco
 }
 
 export function StarDetail({ field, star, scaleArcsec }: { field: StarField; star: StarRecord; scaleArcsec: number | null }) {
+  const m = useMessages()
   const width = (px: number | null) =>
-    px === null ? <UnknownValue label="Not reported" reason="Fit failed" /> : scaleArcsec ? `${(px * scaleArcsec).toFixed(2)}″ (${px.toFixed(2)} px)` : `${px.toFixed(2)} px`
+    px === null ? (
+      <UnknownValue label={m.measure_not_reported()} reason={m.frame_fit_failed()} />
+    ) : scaleArcsec ? (
+      `${formatMetricFixed({ value: px * scaleArcsec, unit: "arcsec" })} (${formatMetricFixed({ value: px, unit: "px" })})`
+    ) : (
+      formatMetricFixed({ value: px, unit: "px" })
+    )
   return (
     <section aria-labelledby={`star-${star.id}-title`} className="space-y-3 rounded-lg border p-3">
       <div className="flex flex-wrap items-center gap-2">
         <h4 id={`star-${star.id}-title`} className="text-sm font-semibold">
-          Star {star.id}
+          {m.frame_star({ id: star.id })}
         </h4>
-        <StatusBadge kind="measurement" value={star.state === "failed" ? "failed" : "valid"} label={star.state === "failed" ? "Failed fit" : "Fitted"} />
+        <StatusBadge kind="measurement" value={star.state === "failed" ? "failed" : "valid"} label={star.state === "failed" ? m.status_failed_fit() : m.frame_fitted()} />
         <NoteMarker
-          label="Fit note"
+          label={m.frame_fit_note()}
           rows={[
-            { label: "Method", value: `${BUILT_IN_METHOD.method} ${BUILT_IN_METHOD.version}` },
-            { label: "Data", value: "Linear, source pixels" },
-            { label: "HFR", value: "Half-flux radius" },
+            { label: m.frame_note_method(), value: `${BUILT_IN_METHOD.method} ${BUILT_IN_METHOD.version}` },
+            { label: m.review_note_data(), value: m.frame_linear_source_pixels() },
+            { label: METRIC_LABEL.hfr, value: m.frame_half_flux_radius() },
           ]}
         />
       </div>
       <KeyValueList
         items={[
-          { label: "Location", value: `x ${star.x}, y ${star.y} px` },
-          { label: "PSF model", value: star.state === "failed" ? <UnknownValue label="No model" reason="Clipped profile" /> : BUILT_IN_METHOD.method },
-          { label: "FWHM", value: width(star.fwhmPx) },
-          { label: "HFR", value: width(star.hfrPx) },
-          { label: "Eccentricity", value: star.eccentricity === null ? <UnknownValue label="Not reported" /> : star.eccentricity.toFixed(2) },
-          { label: "Angle", value: star.angleDeg === null ? <UnknownValue label="Not reported" /> : `${star.angleDeg}°` },
-          { label: "Peak", value: `${star.peakAdu.toLocaleString("en-GB")} ADU` },
-          { label: "Background", value: `${star.backgroundAdu.toLocaleString("en-GB")} ADU` },
-          { label: "SNR", value: star.snr.toFixed(1) },
+          { label: m.frame_location(), value: m.frame_star_location({ x: star.x, y: star.y }) },
+          { label: m.frame_psf_model(), value: star.state === "failed" ? <UnknownValue label={m.frame_no_model()} reason={m.frame_clipped_profile()} /> : BUILT_IN_METHOD.method },
+          { label: METRIC_LABEL.fwhm, value: width(star.fwhmPx) },
+          { label: METRIC_LABEL.hfr, value: width(star.hfrPx) },
+          { label: METRIC_LABEL.eccentricity, value: star.eccentricity === null ? <UnknownValue label={m.measure_not_reported()} /> : star.eccentricity.toFixed(2) },
+          { label: m.frame_angle(), value: star.angleDeg === null ? <UnknownValue label={m.measure_not_reported()} /> : `${star.angleDeg}°` },
+          { label: m.frame_peak(), value: formatMetricFixed({ value: star.peakAdu, unit: "ADU" }) },
+          { label: METRIC_LABEL.background, value: formatMetricFixed({ value: star.backgroundAdu, unit: "ADU" }) },
+          { label: METRIC_LABEL.snr, value: star.snr.toFixed(1) },
         ]}
       />
       {star.warnings.length > 0 ? (
         <ul className="space-y-1 text-sm text-warning">
           {star.warnings.map((w) => (
-            <li key={w}>{w}</li>
+            <li key={w}>{starWarning(m, w)}</li>
           ))}
         </ul>
       ) : null}
@@ -122,47 +140,49 @@ export function StarDetail({ field, star, scaleArcsec }: { field: StarField; sta
  * An absent import reads "–".
  */
 export function MetricTable({ record, state, applies, sha256 }: { record: FrameMeasurement | undefined; state: FrameMeasureState; applies: boolean; sha256: string }) {
+  const m = useMessages()
   const builtIn = applies ? builtInMetrics(record) : []
   const imported = currentImportedMetrics(record, sha256)
   const earlier = historyImportedMetrics(record, sha256)
-  const byKey = (list: Metric[], key: MetricKey) => list.find((m) => m.key === key)
-  const warning = builtIn.find((m) => m.warning)?.warning
+  const byKey = (list: Metric[], key: MetricKey) => list.find((metric) => metric.key === key)
+  const warning = builtIn.find((metric) => metric.warning)?.warning
   const own = builtIn[0]
+  const inputSha = record?.inputSha256
   const builtInNote: NoteRow[] = own
     ? [
-        { label: "Method", value: `${own.method} ${own.version}` },
-        { label: "Basis", value: own.basis },
-        { label: "Input", value: record?.inputSha256 ? `SHA-256 ${record.inputSha256.slice(0, 12)}… ${record.inputSha256 === sha256 ? "(current)" : "(earlier)"}` : "–" },
-        ...(record?.computedAt ? [{ label: "Measured", value: formatDateTime(record.computedAt) }] : []),
+        { label: m.frame_note_method(), value: `${own.method} ${own.version}` },
+        { label: m.frame_note_basis(), value: own.basis },
+        { label: m.frame_note_input(), value: inputSha ? (inputSha === sha256 ? m.frame_input_current({ hash: inputSha.slice(0, 12) }) : m.frame_input_earlier({ hash: inputSha.slice(0, 12) })) : "–" },
+        ...(record?.computedAt ? [{ label: m.status_measured(), value: formatDateTime(record.computedAt) }] : []),
       ]
     : [
-        { label: "Method", value: `${BUILT_IN_METHOD.method} ${BUILT_IN_METHOD.version}` },
-        { label: "State", value: applies ? "Not measured" : "Does not apply" },
+        { label: m.frame_note_method(), value: `${BUILT_IN_METHOD.method} ${BUILT_IN_METHOD.version}` },
+        { label: m.frame_note_state(), value: applies ? m.status_not_measured() : m.frame_does_not_apply() },
       ]
   const importNote: NoteRow[] | null =
     imported.length > 0
       ? [
-          { label: "Method", value: `${imported[0]!.method} ${imported[0]!.version}` },
-          { label: "Units", value: [...new Set(imported.map((m) => m.unit || "none"))].join(", ") },
-          { label: "Match", value: "File name, unverified" },
+          { label: m.frame_note_method(), value: `${imported[0]!.method} ${imported[0]!.version}` },
+          { label: m.frame_note_units(), value: [...new Set(imported.map((metric) => metric.unit || m.frame_unit_none()))].join(", ") },
+          { label: m.frame_note_match(), value: m.frame_match_file_name() },
         ]
       : earlier.length > 0
-        ? [{ label: "History", value: "Imported for earlier content" }]
+        ? [{ label: m.frame_note_history(), value: m.frame_imported_earlier() }]
         : null
   return (
     <div className="space-y-1.5">
       <table className="w-full text-sm">
-        <caption className="sr-only">Measurements of the current frame, with their sources</caption>
+        <caption className="sr-only">{m.frame_metrics_caption()}</caption>
         <thead data-chrome className="text-[0.6875rem] text-muted-foreground">
           <tr className="border-b border-separator">
             <th scope="col" className="py-1 text-left font-medium">
-              Metric
+              {m.frame_col_metric()}
             </th>
             <th scope="col" className="py-1 text-right font-medium">
-              Built-in <NoteMarker n={1} label="Built-in source" rows={builtInNote} />
+              {m.status_built_in()} <NoteMarker n={1} label={m.frame_builtin_source()} rows={builtInNote} />
             </th>
             <th scope="col" className="py-1 text-right font-medium">
-              Imported {importNote ? <NoteMarker n={2} label="Imported source" rows={importNote} /> : null}
+              {m.frame_col_imported()} {importNote ? <NoteMarker n={2} label={m.frame_imported_source()} rows={importNote} /> : null}
             </th>
           </tr>
         </thead>
@@ -177,23 +197,23 @@ export function MetricTable({ record, state, applies, sha256 }: { record: FrameM
                   {METRIC_LABEL[key]}
                 </th>
                 <td className="py-0.5 text-right">
-                  {value ? formatMetricFixed(value) : <UnknownValue label={state === "pending" ? "Pending" : state === "verifying" ? "Verifying" : "Not measured"} />}
+                  {value ? formatMetricFixed(value) : <UnknownValue label={state === "pending" ? m.status_pending() : state === "verifying" ? m.status_verifying() : m.status_not_measured()} />}
                 </td>
                 <td className="py-0.5 text-right">
                   {other ? (
                     <>
                       {formatMetricFixed(other)}
-                      <span className="sr-only"> {other.unit}, imported, unverified</span>
+                      <span className="sr-only"> {m.frame_value_imported_sr({ unit: other.unit })}</span>
                     </>
                   ) : past ? (
                     <span className="text-muted-foreground">
                       {formatMetricFixed(past)}
-                      <span className="sr-only"> {past.unit}, history</span>
+                      <span className="sr-only"> {m.frame_value_history_sr({ unit: past.unit })}</span>
                     </span>
                   ) : (
                     <span className="text-muted-foreground">
                       <span aria-hidden="true">–</span>
-                      <span className="sr-only">None</span>
+                      <span className="sr-only">{m.review_none()}</span>
                     </span>
                   )}
                 </td>
@@ -208,17 +228,18 @@ export function MetricTable({ record, state, applies, sha256 }: { record: FrameM
 }
 
 export function HeaderDetails({ header }: { header: FrameHeader }) {
+  const m = useMessages()
   const keys = Object.keys(HEADER_KEYWORDS) as Array<keyof FrameHeader>
   return (
     <table className="w-full text-xs">
-      <caption className="sr-only">Header metadata</caption>
+      <caption className="sr-only">{m.frame_header_caption()}</caption>
       <tbody>
         {keys.map((key) => (
           <tr key={key} className="border-b last:border-0">
             <th scope="row" className="py-1 pr-3 text-left font-mono font-normal text-muted-foreground">
               {HEADER_KEYWORDS[key]}
             </th>
-            <td className="py-1 font-mono break-all">{header[key] === null ? "Missing" : String(header[key])}</td>
+            <td className="py-1 font-mono break-all">{header[key] === null ? m.status_missing() : String(header[key])}</td>
           </tr>
         ))}
       </tbody>

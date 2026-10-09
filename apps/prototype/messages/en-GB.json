@@ -497,5 +497,835 @@
   "tips_help": "Help",
   "tips_note": "Note {number}",
   "page_step_done": "(done)",
-  "ui_breadcrumb": "Breadcrumb"
+  "ui_breadcrumb": "Breadcrumb",
+  "review_filter_all": "All",
+  "review_picked": "Picked",
+  "review_rejected": "Rejected",
+  "review_run_in_trash": "run in Trash",
+  "review_run_complete": "Run complete",
+  "review_run_complete_help": "Membership stays. Marks change library quality and Project rejects.",
+  "review_panel_complete": "Panel complete",
+  "review_panel_complete_help": "A Complete panel run keeps its membership. Marks change library quality only.",
+  "review_panel_n": "Panel {n}",
+  "review_frames_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame",
+        "countPlural=*": "{count} frames"
+      }
+    }
+  ],
+  "review_no_project": "No Project",
+  "review_mark_announcement": "{mark}: {what}. Library scope.",
+  "review_mark_draft_removed": "Removed from the run's draft as Rejected.",
+  "review_mark_draft_back": "Back in the run's draft.",
+  "review_mark_draft_still_out": "Still out of the run's draft: rejected for this Project.",
+  "review_name_file": "File name",
+  "review_name_filter_night": "Filter, night, number",
+  "review_name_target_filter": "Target, filter, exposure, number",
+  "review_name_night_camera": "Night, camera, gain, temperature, number",
+  "review_quality_rejected_both": "Rejected · Library and this Project",
+  "review_quality_rejected_both_short": "Rejected · both",
+  "review_quality_rejected_library": "Rejected · Library",
+  "review_quality_rejected_project": "Rejected · This Project",
+  "review_quality_unreviewed_changed": "Unreviewed · changed content",
+  "review_quality_unreviewed_pending": "Unreviewed · verification pending",
+  "review_quality_rejected_project_compact": "Rejected · Project",
+  "review_quality_library_title": "Library: {word}",
+  "review_member_included": "Included",
+  "review_member_rejected": "Out of draft · Rejected",
+  "review_member_excluded": "Excluded from run",
+  "review_key_prev_next": "Previous or next frame",
+  "review_key_pick": "Pick",
+  "review_key_reject": "Reject",
+  "review_key_mark_next": "Mark and go to next",
+  "review_key_zoom": "Zoom: Fit or 1:1",
+  "review_key_fullscreen": "Fullscreen",
+  "review_compare": "Compare",
+  "review_corner_inspector": "Corner inspector",
+  "review_frame_inspector": "Frame inspector",
+  "review_key_grid": "Grid, or back",
+  "review_table_height": "Table height",
+  "review_key_filter": "Filter: All, Picked, Rejected, Unreviewed",
+  "review_select_all_shown": "Select all shown",
+  "review_key_toggle_selection": "Toggle selection",
+  "review_key_escape": "Leave fullscreen, then clear selection",
+  "review_key_shortcuts": "Shortcuts",
+  "review_shortcuts_title": "Review shortcuts",
+  "review_shortcuts_description": "Table, filmstrip and grid. A mark applies to the whole selection.",
+  "review_auto_advance": "Auto-advance",
+  "review_auto_advance_help": "Auto-advance help",
+  "review_auto_advance_tip": "After P, X or U, the next frame becomes current.",
+  "review_all_shortcuts": "All app shortcuts",
+  "review_done": "Done",
+  "measure_frames_not_measured": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame not measured",
+        "countPlural=*": "{count} frames not measured"
+      }
+    }
+  ],
+  "measure_all_have_value": "Every readable frame has a built-in value.",
+  "measure_canceled_summary": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Measurement canceled; {count} not measured.",
+        "countPlural=*": "Measurement canceled; {count} not measured."
+      }
+    }
+  ],
+  "measure_started": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Measuring {count} frame, the current frame first.",
+        "countPlural=*": "Measuring {count} frames, the current frame first."
+      }
+    }
+  ],
+  "measure_interrupted_restart": "Interrupted by a restart",
+  "measure_verifying_cached": "Verifying cached values",
+  "measure_measuring": "Measuring",
+  "measure_progress_label": "Measurement progress",
+  "measure_progress_value": "{done} of {total} frames",
+  "measure_progress_text": "{word}: {done} of {total}",
+  "measure_frames_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame unreadable.",
+        "countPlural=*": "{count} frames unreadable."
+      }
+    }
+  ],
+  "measure_all_measured": "All measured",
+  "measure_blocked": "Measuring blocked · {reason}",
+  "measure_frames_action": "Measure frames",
+  "measure_metric_fwhm": "FWHM",
+  "measure_metric_hfr": "HFR",
+  "measure_metric_eccentricity": "Eccentricity",
+  "measure_metric_star_count": "Star count",
+  "measure_metric_background": "Background",
+  "measure_metric_snr": "SNR",
+  "measure_not_reported": "Not reported",
+  "review_copy_location": "{location}: ",
+  "review_unknown_location": "Unknown location",
+  "review_close_inspector": "Close the inspector",
+  "review_in_run": "In run: {state}",
+  "review_panel_run": "Panel {n} run",
+  "review_subject": "Subject: {name}",
+  "review_library_quality": "Library quality",
+  "review_library_quality_frames": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Library quality: {count} frame",
+        "countPlural=*": "Library quality: {count} frames"
+      }
+    }
+  ],
+  "review_clear_project_reject": "Clear Project reject",
+  "review_reject_for_project": "Reject for this Project",
+  "review_reject_for_project_frames": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Reject for this Project: {count} frame",
+        "countPlural=*": "Reject for this Project: {count} frames"
+      }
+    }
+  ],
+  "review_mark_scope_help": "Mark scope",
+  "review_mark_scope_tip": "P, X and U mark the library, in every Project. A Project reject stays in this Project.",
+  "review_no_pixels": "No pixels",
+  "review_tab_values": "Values",
+  "review_tab_stars": "Stars",
+  "review_show_stars": "Show stars",
+  "review_detected_stars": "Detected stars, {count} brightest",
+  "frame_star": "Star {id}",
+  "frame_note_method": "Method",
+  "frame_note_basis": "Basis",
+  "frame_note_match": "Match",
+  "frame_match_file_name": "File name, unverified",
+  "review_linear_data": "Linear data",
+  "review_imported_csv": "Imported CSV",
+  "review_col_frame": "Frame",
+  "review_col_panel": "Panel",
+  "review_col_subject": "Subject",
+  "review_col_session": "Session",
+  "review_col_time": "Time",
+  "review_col_exposure": "Exposure",
+  "review_col_quality": "Quality",
+  "review_col_member": "In run",
+  "review_no_session": "No session",
+  "review_ecc_short": "Ecc.",
+  "review_col_fwhm_imported": "FWHM imported",
+  "review_imported_unverified": "Imported, unverified",
+  "review_imported_unverified_sr": ", imported, unverified",
+  "review_none": "None",
+  "review_col_measurement": "Measurement",
+  "review_col_copy": "Copy",
+  "review_current_frame": "Current frame",
+  "review_frames_in_review": "Frames in this review",
+  "review_column_source": "{column} source",
+  "review_decoding_thumbnail": "Decoding thumbnail",
+  "review_view_filmstrip": "Filmstrip",
+  "review_frame_grid": "Frame grid",
+  "review_no_pixel_data": "No pixel data for this file.",
+  "review_tile_top_left": "Top left",
+  "review_tile_top": "Top",
+  "review_tile_top_right": "Top right",
+  "review_tile_left": "Left",
+  "review_tile_centre": "Centre",
+  "review_tile_right": "Right",
+  "review_tile_bottom_left": "Bottom left",
+  "review_tile_bottom": "Bottom",
+  "review_tile_bottom_right": "Bottom right",
+  "review_corners_group": "{label}, corners at 1:1",
+  "review_tile_title": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input fwhm",
+        "input ecc",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: FWHM {fwhm}, eccentricity {ecc}, {count} star",
+        "countPlural=*": "{name}: FWHM {fwhm}, eccentricity {ecc}, {count} stars"
+      }
+    }
+  ],
+  "review_tile_title_ratio": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input fwhm",
+        "input ratio",
+        "input ecc",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: FWHM {fwhm} (×{ratio} centre), eccentricity {ecc}, {count} star",
+        "countPlural=*": "{name}: FWHM {fwhm} (×{ratio} centre), eccentricity {ecc}, {count} stars"
+      }
+    }
+  ],
+  "review_tile_label": "{name} at 1:1, FWHM {fwhm}, eccentricity {ecc}",
+  "review_tile_ecc": "e {value}",
+  "review_plot_point_rejected": "{name}: {value} (Rejected)",
+  "review_plots_label": "Plots across the session",
+  "review_capture_order": "Capture order · {count}",
+  "review_legend_measured": "measured",
+  "review_legend_selected": "selected",
+  "review_zoom_fit": "Fit",
+  "review_stretch_linear": "Linear",
+  "review_stretch_auto": "Auto",
+  "review_stretch_strong": "Strong",
+  "review_plate_label": "{label}, {zoom}, {stretch} stretch",
+  "review_histogram_label": "Histogram of linear data, median {median} ADU",
+  "review_histogram_median": "Median {median} · MAD {mad}",
+  "review_histogram_saturated": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} saturated",
+        "countPlural=*": "{count} saturated"
+      }
+    }
+  ],
+  "review_histogram_invalid": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} invalid",
+        "countPlural=*": "{count} invalid"
+      }
+    }
+  ],
+  "review_histogram_note": "Histogram note",
+  "review_note_data": "Data",
+  "review_histogram_range": "Linear ADU 0–{max}",
+  "review_note_counts": "Counts",
+  "review_note_log": "Log",
+  "review_note_samples": "Samples",
+  "review_note_samples_value": "{count}, region shown",
+  "review_note_brighter": "Brighter",
+  "review_announce_frame": "{name}: frame {index} of {total}.",
+  "review_refusal_mark": "Mark blocked",
+  "review_refusal_reject": "Reject blocked",
+  "review_refusal_clear": "Clear blocked",
+  "review_refusal_save": "Save blocked",
+  "review_refusal_marks": "Marks blocked",
+  "review_announce_project_reject_cleared": "Project reject cleared: {what}.",
+  "review_announce_compare": "Compare: {current} and {reference}",
+  "review_announce_compare_none": "Compare: {current} and no reference",
+  "review_no_frame": "no frame",
+  "review_announce_corners_off": "Corner inspector off",
+  "review_announce_corners_on": "Corner inspector on",
+  "review_announce_revealed": "Revealed {path}",
+  "review_announce_no_copy": "No copy to reveal",
+  "review_announce_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame selected.",
+        "countPlural=*": "{count} frames selected."
+      }
+    }
+  ],
+  "review_announce_threshold_above": [
+    {
+      "declarations": [
+        "input count",
+        "input metric",
+        "input value",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame with {metric} above {value} selected. Quality is unchanged until you mark it.",
+        "countPlural=*": "{count} frames with {metric} above {value} selected. Quality is unchanged until you mark them."
+      }
+    }
+  ],
+  "review_announce_threshold_below": [
+    {
+      "declarations": [
+        "input count",
+        "input metric",
+        "input value",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame with {metric} below {value} selected. Quality is unchanged until you mark it.",
+        "countPlural=*": "{count} frames with {metric} below {value} selected. Quality is unchanged until you mark them."
+      }
+    }
+  ],
+  "review_announce_filter": "Filter: {label}, {frames}.",
+  "review_announce_selection_cleared": "Selection cleared.",
+  "review_cmd_next": "Next frame",
+  "review_cmd_previous": "Previous frame",
+  "review_cmd_pick": "Mark Picked",
+  "review_cmd_reject": "Mark Rejected",
+  "review_cmd_unreviewed": "Mark Unreviewed",
+  "review_cmd_zoom": "Zoom Fit or 1:1",
+  "review_cmd_fullscreen": "Fullscreen preview",
+  "review_cmd_compare": "Compare frames",
+  "review_cmd_grid": "Grid view",
+  "review_cmd_height": "Cycle table height",
+  "review_cmd_select_all": "Select all shown frames",
+  "review_open_sessions": "Open Sessions",
+  "review_open_projects": "Open Projects",
+  "review_open_select": "Open Select",
+  "review_open_project": "Open Project",
+  "review_reveal_path": "Reveal path",
+  "review_empty_none": "No frames",
+  "review_empty_picked": "No Picked frames",
+  "review_empty_rejected": "No Rejected frames",
+  "review_empty_unreviewed": "No Unreviewed frames",
+  "review_show_all": "Show all",
+  "review_frame_position": "Frame {index} of {total}",
+  "review_cfa_title": "Mosaic plane as recorded, not debayered",
+  "review_cfa": "CFA {cfa}",
+  "review_corners": "Corners",
+  "review_fwhm_overlay": "FWHM overlay",
+  "review_ecc_overlay": "Eccentricity overlay",
+  "review_zoom": "Zoom",
+  "review_pan_help": "Pan help",
+  "review_pan_tip": "Drag or arrow keys pan. Shift pans further.",
+  "review_display_stretch": "Display stretch",
+  "review_leave_fullscreen": "Leave fullscreen",
+  "review_no_current_frame": "No current frame",
+  "review_compare_current": "Current: {name}",
+  "review_preview_of": "Preview of {name}",
+  "review_reference_label": "Reference:",
+  "review_compare_reference": "Compare reference",
+  "review_choose_frame": "Choose a frame",
+  "review_no_reference": "No reference",
+  "review_reference_of": "Reference {name}",
+  "review_draft_panel_runs_unsaved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} panel run unsaved",
+        "countPlural=*": "{count} panel runs unsaved"
+      }
+    }
+  ],
+  "review_announce_saved_revision": "{name} saved as revision {revision}.",
+  "review_announce_runs_saved": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} run saved.",
+        "countPlural=*": "{count} runs saved."
+      }
+    }
+  ],
+  "review_announce_discarded": "Unsaved changes discarded.",
+  "review_panel_in_trash": "{name} in Trash",
+  "review_trash_help": "Not listed or counted.",
+  "review_quality_filter": "Quality filter",
+  "review_panel_filter": "Panel filter",
+  "review_all_panels": "All panels",
+  "review_view": "View",
+  "review_view_table": "Table",
+  "review_view_grid": "Grid",
+  "review_height_rows": "About 8 rows",
+  "review_height_strip": "One-line strip",
+  "review_height_full": "Full height",
+  "review_table_height_title": "Table height: {current}. {key} switches to {next}.",
+  "review_table_height_sr": ", table height",
+  "review_select": "Select",
+  "review_select_all_shown_count": "Select all shown ({count})",
+  "review_select_by_threshold_menu": "Select by threshold…",
+  "review_select_by_threshold": "Select by threshold",
+  "review_display": "Display",
+  "review_frame_names": "Frame names",
+  "review_columns": "Columns",
+  "review_auto_advance_after_mark": "Auto-advance after a mark",
+  "review_show_inspector": "Show the inspector",
+  "review_project_trash": "Project Trash",
+  "review_threshold_prefix": "Select frames with",
+  "review_threshold_metric": "Threshold metric",
+  "review_direction": "Direction",
+  "review_above": "above",
+  "review_below": "below",
+  "review_threshold_value": "Threshold value",
+  "review_threshold_value_in": "Threshold value in {unit}",
+  "review_select_frames": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Select {count} frame",
+        "countPlural=*": "Select {count} frames"
+      }
+    }
+  ],
+  "review_add_to_selection": "Add to selection",
+  "review_not_measured_never_selected": "Not measured frames are never selected",
+  "review_count_not_measured": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} not measured",
+        "countPlural=*": "{count} not measured"
+      }
+    }
+  ],
+  "review_threshold_help": "Threshold help",
+  "review_threshold_tip": "Click a plot to set the value. Selecting never changes quality.",
+  "review_close_threshold": "Close threshold selection",
+  "review_status_line": "Review status",
+  "review_shown_of": [
+    {
+      "declarations": [
+        "input count",
+        "input total",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame shown of {total}",
+        "countPlural=*": "{count} frames shown of {total}"
+      }
+    }
+  ],
+  "review_in_trash_count": "{count} in Trash",
+  "review_hidden_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} hidden",
+        "countPlural=*": "{count} hidden"
+      }
+    }
+  ],
+  "review_help_named": "{name} help",
+  "review_dismiss_path": "Dismiss path",
+  "review_discard": "Discard",
+  "review_save_runs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Save run",
+        "countPlural=*": "Save runs"
+      }
+    }
+  ],
+  "review_confirm_reject_title": "Reject {what} for {project}?",
+  "review_confirm_reject_description": "This Project only. Library quality stays.",
+  "review_confirm_reject_change": "Rejected · This Project: {frames}",
+  "review_confirm_out_of_totals": "Out of {project}'s totals",
+  "review_confirm_out_of_draft": "Out of the {runs} draft",
+  "review_confirm_reject_label": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Reject {count} frame",
+        "countPlural=*": "Reject {count} frames"
+      }
+    }
+  ],
+  "review_announce_rejected_for": "Rejected for {project}: {frames}.",
+  "review_about_rows": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "About {count} row",
+        "countPlural=*": "About {count} rows"
+      }
+    }
+  ],
+  "review_imports_hide_rows": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} measurement import: hide rows",
+        "countPlural=*": "{count} measurement imports: hide rows"
+      }
+    }
+  ],
+  "review_imports_review_rows": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} measurement import: review rows",
+        "countPlural=*": "{count} measurement imports: review rows"
+      }
+    }
+  ],
+  "frame_cutout_observed": "Observed",
+  "frame_fitted": "Fitted",
+  "frame_cutout_residual": "Residual",
+  "frame_warning_saturated": "Saturated: the core is clipped at 65,535 ADU, so the PSF fit failed",
+  "frame_warning_near_edge": "Near the frame edge: part of the profile may be cut off",
+  "frame_no_fit": "No fit",
+  "frame_cutout_label": "{kind} cutout of star {id}",
+  "frame_fit_failed": "Fit failed",
+  "frame_fit_note": "Fit note",
+  "frame_linear_source_pixels": "Linear, source pixels",
+  "frame_half_flux_radius": "Half-flux radius",
+  "frame_location": "Location",
+  "frame_star_location": "x {x}, y {y} px",
+  "frame_psf_model": "PSF model",
+  "frame_no_model": "No model",
+  "frame_clipped_profile": "Clipped profile",
+  "frame_angle": "Angle",
+  "frame_peak": "Peak",
+  "frame_note_input": "Input",
+  "frame_input_current": "SHA-256 {hash}… (current)",
+  "frame_input_earlier": "SHA-256 {hash}… (earlier)",
+  "frame_note_state": "State",
+  "frame_does_not_apply": "Does not apply",
+  "frame_note_units": "Units",
+  "frame_unit_none": "none",
+  "frame_note_history": "History",
+  "frame_imported_earlier": "Imported for earlier content",
+  "frame_metrics_caption": "Measurements of the current frame, with their sources",
+  "frame_col_metric": "Metric",
+  "frame_builtin_source": "Built-in source",
+  "frame_col_imported": "Imported",
+  "frame_imported_source": "Imported source",
+  "frame_value_imported_sr": "{unit}, imported, unverified",
+  "frame_value_history_sr": "{unit}, history",
+  "frame_header_caption": "Header metadata",
+  "importdlg_unknown_frame": "Unknown frame",
+  "importdlg_blocked_no_export": "No export on a mounted volume to review.",
+  "importdlg_blocked_choose": "Choose an export file to review its mapping.",
+  "importdlg_blocked_unsupported": "This file cannot be imported.",
+  "importdlg_blocked_no_match": "No row matches an indexed frame.",
+  "importdlg_title": "Import measurements",
+  "importdlg_description_choose": "Choose a supported export. Prototype: simulated file chooser listing CSV files on mounted volumes.",
+  "importdlg_description_review": "Review how the export maps to frames and metrics before anything is attached.",
+  "importdlg_no_csv_title": "No CSV export on a mounted volume",
+  "importdlg_no_csv_body": "Supported: {format}. Mount the volume that holds the export, or copy it to a mounted location.",
+  "importdlg_export_file": "Export file",
+  "importdlg_file_meta": "{size} · modified {date}",
+  "importdlg_unsupported_title": "This file is not a supported export",
+  "importdlg_unsupported_body": "{path} has no SubframeSelector File and FWHM columns, so nothing can be mapped. Choose a {format}.",
+  "importdlg_summary": [
+    {
+      "declarations": [
+        "input count",
+        "input scale",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} row · subframe scale {scale} as recorded in the export",
+        "countPlural=*": "{count} rows · subframe scale {scale} as recorded in the export"
+      }
+    }
+  ],
+  "importdlg_source_note": "Source: imported · method {method} {version}, as recorded in the export. The export records no content identity, so attached values read content unverified. PlateVault records each frame's current SHA-256 only to notice later changes.",
+  "importdlg_column_mapping": "Column mapping",
+  "importdlg_col_csv": "CSV column",
+  "importdlg_col_unit": "Unit",
+  "importdlg_col_mapping": "Mapping",
+  "importdlg_no_unit": "No unit",
+  "importdlg_not_imported": "Not imported",
+  "importdlg_rows": "Rows",
+  "importdlg_rows_matched": [
+    {
+      "declarations": [
+        "input count",
+        "input byPath",
+        "input byName",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} row matched to indexed frames ({byPath} by path, {byName} by unique file name)",
+        "countPlural=*": "{count} rows matched to indexed frames ({byPath} by path, {byName} by unique file name)"
+      }
+    }
+  ],
+  "importdlg_outside_view": "({count} outside this View; their values still attach to the frame)",
+  "importdlg_attach_none": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} attaches to no frame until reviewed",
+        "countPlural=*": "{count} attach to no frame until reviewed"
+      }
+    }
+  ],
+  "importdlg_changed_heading": "Needs review: content changed since PlateVault recorded it",
+  "importdlg_badge_unreadable": "Needs review: cannot be read",
+  "importdlg_badge_changed": "Needs review: content changed",
+  "importdlg_row_n": "Row {n}",
+  "importdlg_unreadable_body": "{frame} cannot be read now (offline or access denied), so PlateVault cannot record which content these values describe. It attaches to nothing.",
+  "importdlg_changed_body_measured": "The current bytes of {frame} (sha256 {current}…) differ from the digest PlateVault recorded when it measured the frame ({recorded}…). These values may describe other content, so they attach to nothing.",
+  "importdlg_changed_body_indexed": "The current bytes of {frame} (sha256 {current}…) differ from the digest PlateVault recorded when it indexed the frame ({recorded}…). These values may describe other content, so they attach to nothing.",
+  "importdlg_ambiguous": "Ambiguous",
+  "importdlg_unmatched": "Unmatched",
+  "importdlg_ambiguous_body": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Its file name matches {count} indexed frame: {frames}. It attaches to none until you choose one in Review frames.",
+        "countPlural=*": "Its file name matches {count} indexed frames: {frames}. It attaches to none until you choose one in Review frames."
+      }
+    }
+  ],
+  "importdlg_unmatched_body": "No indexed frame has this path or file name. It attaches to nothing.",
+  "importdlg_does_not_title": "What the import does not do",
+  "importdlg_does_not_body": "It replaces no built-in value, excludes or restores no frame, and changes no quality decision. The Approved column is never imported.",
+  "importdlg_review_mapping": "Review mapping",
+  "importdlg_import_rows": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Import {count} matched row",
+        "countPlural=*": "Import {count} matched rows"
+      }
+    }
+  ],
+  "importdlg_row_attached_by_you": "Attached by you",
+  "importdlg_row_ambiguous": "Ambiguous: attached to no frame",
+  "importdlg_row_changed": "Content changed: attached to no frame",
+  "importdlg_row_unreadable": "Unreadable: attached to no frame",
+  "importdlg_row_unmatched": "Unmatched: attached to no frame",
+  "importdlg_attached_summary": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} row attached as imported values, content unverified",
+        "countPlural=*": "{count} rows attached as imported values, content unverified"
+      }
+    }
+  ],
+  "importdlg_outside_run": "({count} to frames outside this run)",
+  "importdlg_column_unavailable": "{name} unavailable",
+  "importdlg_column_not_imported": "{name} not imported",
+  "importdlg_every_row_reviewed": "Every row is reviewed.",
+  "importdlg_attached_to": "Attached to {frame}.",
+  "importdlg_unmatched_stay": "No indexed frame has this path or file name. Its values stay unattached.",
+  "importdlg_changed_stay": "At import, {frame} had bytes that differ from the digest PlateVault recorded for it. Its values stay unattached.",
+  "importdlg_unreadable_stay": "At import, {frame} could not be read, so nothing ties these values to its content. Its values stay unattached.",
+  "importdlg_attach_to": "Attach to",
+  "importdlg_choose_frame": "Choose the frame this row measured",
+  "importdlg_choose_first": "Choose the frame this row measured before attaching it.",
+  "importdlg_attach_row": "Attach row",
+  "importdlg_row_not_found": "The import row was not found; open Import measurements again.",
+  "importdlg_row_not_attached_unreadable": "Row not attached: the frame's bytes cannot be read now, so PlateVault cannot record which content the values describe.",
+  "importdlg_row_not_attached_measured": "Row not attached: the frame's bytes differ from the digest PlateVault recorded when it measured it. Index its folder and review frames again before attaching it.",
+  "importdlg_row_not_attached_indexed": "Row not attached: the frame's bytes differ from the digest PlateVault recorded when it was indexed. Index its folder and review frames again before attaching it.",
+  "importdlg_note_file": "Frame identity: matched to an indexed copy by path, then by file name",
+  "importdlg_note_approved": "Rejection decisions stay yours",
+  "importdlg_note_fwhm": "Shown next to built-in FWHM",
+  "importdlg_note_eccentricity": "Shown next to built-in eccentricity",
+  "importdlg_note_stars": "Shown next to built-in star count",
+  "importdlg_note_psf_signal_weight": "No units and no PlateVault equivalent; never shown as FWHM or HFR."
 }

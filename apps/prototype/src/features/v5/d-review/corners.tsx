@@ -10,8 +10,11 @@
  * for each plate, so it also works in fullscreen and in Compare.
  */
 import { useMemo } from "react"
+import { useMessages } from "@/app/preferences"
+import { formatMetricFixed } from "@/domain/membership"
 import { Raster, useSize } from "@/features/t3/frame-preview"
 import { type RegionRect, type RegionStats, regionStats, type StarField, type Stretch } from "@/features/t3/raster"
+import type { Messages } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 export interface CornerOverlay {
@@ -28,17 +31,35 @@ const MAX_TILE = 320
 /** A tile this much softer than the centre is flagged. */
 const SOFT_RATIO = 1.2
 
+type TileId = `${(typeof ROWS)[number]}-${(typeof COLS)[number]}`
+
 interface Tile {
-  id: string
-  name: string
+  id: TileId
   rect: RegionRect
   stats: RegionStats
 }
 
-function tileName(row: (typeof ROWS)[number], col: (typeof COLS)[number]): string {
-  if (row === "middle") return col === "centre" ? "Centre" : col === "left" ? "Left" : "Right"
-  const edge = row === "top" ? "Top" : "Bottom"
-  return col === "centre" ? edge : `${edge} ${col}`
+function tileName(m: Messages, id: TileId): string {
+  switch (id) {
+    case "top-left":
+      return m.review_tile_top_left()
+    case "top-centre":
+      return m.review_tile_top()
+    case "top-right":
+      return m.review_tile_top_right()
+    case "middle-left":
+      return m.review_tile_left()
+    case "middle-centre":
+      return m.review_tile_centre()
+    case "middle-right":
+      return m.review_tile_right()
+    case "bottom-left":
+      return m.review_tile_bottom_left()
+    case "bottom-centre":
+      return m.review_tile_bottom()
+    case "bottom-right":
+      return m.review_tile_bottom_right()
+  }
 }
 
 /** The nine tiles of `size` source pixels, row by row from the top left, each measured over its zone. */
@@ -49,15 +70,16 @@ function cornerTiles(field: StarField, size: number): Tile[] {
     COLS.map((col, i) => {
       const rect = { x0: at(size, field.width)[i]!, y0: at(size, field.height)[j]!, width: size, height: size }
       const area = { x0: at(zone, field.width)[i]!, y0: at(zone, field.height)[j]!, width: zone, height: zone }
-      return { id: `${row}-${col}`, name: tileName(row, col), rect, stats: regionStats(field, area, 400) }
+      return { id: `${row}-${col}` as const, rect, stats: regionStats(field, area, 400) }
     }),
   )
 }
 
-const fwhmText = (v: number | null) => (v === null ? "–" : `${v.toFixed(2)} px`)
+const fwhmText = (v: number | null) => (v === null ? "–" : formatMetricFixed({ value: v, unit: "px" }))
 const eccText = (v: number | null) => (v === null ? "–" : v.toFixed(2))
 
 export function CornerGrid({ field, stretch, overlay, label, className }: { field: StarField; stretch: Stretch; overlay: CornerOverlay; label: string; className?: string }) {
+  const m = useMessages()
   const [ref, size] = useSize<HTMLDivElement>()
   const fit = Math.floor((Math.min(size.width, size.height) - PAD * 2 - GAP * 2) / 3)
   const tile = Math.min(MAX_TILE, fit, Math.floor(Math.min(field.width, field.height) / 3))
@@ -66,7 +88,7 @@ export function CornerGrid({ field, stretch, overlay, label, className }: { fiel
   return (
     <div ref={ref} className={cn("relative min-h-0 min-w-0 flex-1 rounded-[3px] bg-mount shadow-[inset_0_0_0_1px_var(--border),0_1px_2px_oklch(0_0_0/0.22)]", className)}>
       {tiles.length > 0 ? (
-        <div role="group" aria-label={`${label}, corners at 1:1`} data-corners className="absolute top-1/2 left-1/2 grid -translate-x-1/2 -translate-y-1/2 grid-cols-3" style={{ gap: GAP }}>
+        <div role="group" aria-label={m.review_corners_group({ label })} data-corners className="absolute top-1/2 left-1/2 grid -translate-x-1/2 -translate-y-1/2 grid-cols-3" style={{ gap: GAP }}>
           {tiles.map((t) => (
             <CornerTile key={t.id} field={field} stretch={stretch} tile={t} size={tile} overlay={overlay} centre={t.id === "middle-centre" ? null : centre} />
           ))}
@@ -77,7 +99,11 @@ export function CornerGrid({ field, stretch, overlay, label, className }: { fiel
 }
 
 function CornerTile({ field, stretch, tile, size, overlay, centre }: { field: StarField; stretch: Stretch; tile: Tile; size: number; overlay: CornerOverlay; centre: number | null }) {
-  const { rect, stats, name } = tile
+  const m = useMessages()
+  const { rect, stats } = tile
+  const name = tileName(m, tile.id)
+  const fwhm = fwhmText(stats.fwhmPx)
+  const ecc = eccText(stats.eccentricity)
   const ratio = centre !== null && stats.fwhmPx !== null ? stats.fwhmPx / centre : null
   const soft = ratio !== null && ratio >= SOFT_RATIO
   const fitted = stats.stars.filter((s) => s.state === "fitted" && s.x >= rect.x0 && s.x < rect.x0 + size && s.y >= rect.y0 && s.y < rect.y0 + size)
@@ -87,14 +113,14 @@ function CornerTile({ field, stretch, tile, size, overlay, centre }: { field: St
       className="relative"
       style={{ width: size, height: size }}
       data-corner={tile.id}
-      title={`${name}: FWHM ${fwhmText(stats.fwhmPx)}${ratio !== null ? ` (×${ratio.toFixed(2)} centre)` : ""}, eccentricity ${eccText(stats.eccentricity)}, ${stats.fitted} stars`}
+      title={ratio !== null ? m.review_tile_title_ratio({ name, fwhm, ratio: ratio.toFixed(2), ecc, count: stats.fitted }) : m.review_tile_title({ name, fwhm, ecc, count: stats.fitted })}
     >
       <Raster
         field={field}
         window={{ ...rect, scale: 1 }}
         stretch={stretch}
         className="block rounded-[2px] bg-plate"
-        label={`${name} at 1:1, FWHM ${fwhmText(stats.fwhmPx)}, eccentricity ${eccText(stats.eccentricity)}`}
+        label={m.review_tile_label({ name, fwhm, ecc })}
       />
       {shown ? (
         <svg className="pointer-events-none absolute inset-0" width={size} height={size} aria-hidden="true">
@@ -120,10 +146,10 @@ function CornerTile({ field, stretch, tile, size, overlay, centre }: { field: St
           <span className="flex flex-col items-start gap-px">
             {overlay.fwhm ? (
               <span className={cn("rounded-sm bg-background/80 px-1", soft ? "font-semibold text-warning" : "text-foreground")}>
-                {soft && ratio !== null ? `${stats.fwhmPx!.toFixed(2)} ×${ratio.toFixed(2)}` : fwhmText(stats.fwhmPx)}
+                {soft && ratio !== null ? `${stats.fwhmPx!.toFixed(2)} ×${ratio.toFixed(2)}` : fwhm}
               </span>
             ) : null}
-            {overlay.eccentricity ? <span className="rounded-sm bg-background/80 px-1 text-foreground">e {eccText(stats.eccentricity)}</span> : null}
+            {overlay.eccentricity ? <span className="rounded-sm bg-background/80 px-1 text-foreground">{m.review_tile_ecc({ value: ecc })}</span> : null}
           </span>
         ) : null}
       </figcaption>

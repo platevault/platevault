@@ -7,14 +7,33 @@
  * raster is synthetic; display stretch never reaches a measurement.
  */
 import { type KeyboardEvent, type PointerEvent, useEffect, useMemo, useRef } from "react"
+import { useMessages } from "@/app/preferences"
 import { NoteMarker } from "@/components/app/tips"
 import { Raster, useSize } from "@/features/t3/frame-preview"
 import { detectedStars, linearHistogram, type StarField, type StarRecord, type Stretch, type ViewWindow } from "@/features/t3/raster"
+import { m } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 export type Zoom = "fit" | "1" | "2"
-export const ZOOM_LABEL: Record<Zoom, string> = { fit: "Fit", "1": "1:1", "2": "2:1" }
-export const STRETCH_LABEL: Record<Stretch, string> = { linear: "Linear", auto: "Auto", strong: "Strong" }
+/** Getters, so every read is in the chosen language. */
+export const ZOOM_LABEL: Record<Zoom, string> = {
+  get fit() {
+    return m.review_zoom_fit()
+  },
+  "1": "1:1",
+  "2": "2:1",
+}
+export const STRETCH_LABEL: Record<Stretch, string> = {
+  get linear() {
+    return m.review_stretch_linear()
+  },
+  get auto() {
+    return m.review_stretch_auto()
+  },
+  get strong() {
+    return m.review_stretch_strong()
+  },
+}
 
 export interface PlateView {
   zoom: Zoom
@@ -72,6 +91,7 @@ export function Plate({
   /** Reports the region shown, for the histogram. */
   onWindow?: (window: ViewWindow) => void
 }) {
+  const m = useMessages()
   const [mountRef, size] = useSize<HTMLDivElement>()
   const win = plateWindow(field, size.width - MOUNT_PAD * 2, size.height - MOUNT_PAD * 2, view)
   const { x0, y0, scale, width, height } = win
@@ -111,7 +131,7 @@ export function Plate({
         <div
           role="group"
           data-plate
-          aria-label={`${label}, ${ZOOM_LABEL[view.zoom]}, ${STRETCH_LABEL[view.stretch]} stretch`}
+          aria-label={m.review_plate_label({ label, zoom: ZOOM_LABEL[view.zoom], stretch: STRETCH_LABEL[view.stretch] })}
           aria-describedby={describedBy}
           tabIndex={0}
           onKeyDown={onKeyDown}
@@ -157,6 +177,7 @@ export function Plate({
 
 /** Histogram of the displayed region's linear data; the median marks the sky background. */
 export function HistogramView({ field, window }: { field: StarField; window: ViewWindow }) {
+  const m = useMessages()
   const { x0, y0, scale, width, height } = window
   const h = useMemo(() => linearHistogram(field, { x0, y0, scale, width, height }), [field, x0, y0, scale, width, height])
   const max = Math.max(1, ...h.bins.map((c) => Math.log1p(c)))
@@ -166,7 +187,7 @@ export function HistogramView({ field, window }: { field: StarField; window: Vie
   const medianX = (h.median / h.rangeMax) * W
   return (
     <figure className="space-y-1">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-14 w-full rounded-sm bg-plate" role="img" aria-label={`Histogram of linear data, median ${Math.round(h.median)} ADU`}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-14 w-full rounded-sm bg-plate" role="img" aria-label={m.review_histogram_label({ median: Math.round(h.median) })}>
         {h.bins.map((count, i) => {
           const bh = (Math.log1p(count) / max) * (H - 4)
           return <rect key={i} x={i * bw} y={H - bh} width={Math.max(0.5, bw - 0.3)} height={bh} className="fill-foreground/55" />
@@ -174,16 +195,16 @@ export function HistogramView({ field, window }: { field: StarField; window: Vie
         <line x1={medianX} x2={medianX} y1={0} y2={H} className="stroke-link" strokeWidth={1} vectorEffect="non-scaling-stroke" />
       </svg>
       <figcaption className="text-[0.6875rem] leading-4 text-muted-foreground tabular-nums">
-        Median {Math.round(h.median).toLocaleString("en-GB")} · MAD {Math.round(h.mad)}
-        {h.saturated > 0 ? ` · ${h.saturated} saturated` : ""}
-        {h.invalid > 0 ? ` · ${h.invalid} invalid` : ""}{" "}
+        {m.review_histogram_median({ median: Math.round(h.median).toLocaleString("en-GB"), mad: Math.round(h.mad) })}
+        {h.saturated > 0 ? ` · ${m.review_histogram_saturated({ count: h.saturated })}` : ""}
+        {h.invalid > 0 ? ` · ${m.review_histogram_invalid({ count: h.invalid })}` : ""}{" "}
         <NoteMarker
-          label="Histogram note"
+          label={m.review_histogram_note()}
           rows={[
-            { label: "Data", value: `Linear ADU 0–${Math.round(h.rangeMax).toLocaleString("en-GB")}` },
-            { label: "Counts", value: "Log" },
-            { label: "Samples", value: `${h.samples.toLocaleString("en-GB")}, region shown` },
-            { label: "Brighter", value: h.above.toLocaleString("en-GB") },
+            { label: m.review_note_data(), value: m.review_histogram_range({ max: Math.round(h.rangeMax).toLocaleString("en-GB") }) },
+            { label: m.review_note_counts(), value: m.review_note_log() },
+            { label: m.review_note_samples(), value: m.review_note_samples_value({ count: h.samples.toLocaleString("en-GB") }) },
+            { label: m.review_note_brighter(), value: h.above.toLocaleString("en-GB") },
           ]}
         />
       </figcaption>
