@@ -16,8 +16,9 @@
  *
  * An invisible ruler measures every candidate, so the row never wraps or
  * clips. The chips and the inline notifications share the room the rest
- * leaves (`fitBar`). Below 768 px the bar stays as it was: chips by kind and
- * the last notification.
+ * leaves (`fitBar`); the oldest notification shown may truncate to fit.
+ * Below 768 px the bar stays as it was: chips by kind and the last
+ * notification.
  */
 import { Link } from "@tanstack/react-router"
 import {
@@ -80,6 +81,8 @@ const CHIP_GAP_PX = 4
 const SLOT_GAP_PX = 8
 /** Unread notifications shown inline at most. */
 const INLINE_NOTICES = 3
+/** A notification is truncated to fit down to this width; below it, it drops. */
+const NOTICE_MIN_PX = 128
 
 /** The chip's words: a count by kind ("2 blocked"). */
 function chipText(m: Messages, chip: StatusChip): string {
@@ -106,6 +109,8 @@ interface BarFit {
   level: 1 | 2 | 3
   chips: number
   notices: number
+  /** The width the oldest notice shown is truncated to, when it fits only truncated. */
+  squeezed: number | null
 }
 
 /** Natural widths from the ruler, in bar order; `notices` newest first. */
@@ -134,17 +139,26 @@ function fitBar(widths: BarWidths, room: number): BarFit {
       used += CHIP_GAP_PX + width
       chips += 1
     }
-    return { level: 3, chips, notices: 0 }
+    return { level: 3, chips, notices: 0, squeezed: null }
   }
   let left = room - grouped
   let notices = 0
+  let squeezed: number | null = null
   for (const width of widths.notices) {
-    if (width + SLOT_GAP_PX > left) break
-    left -= width + SLOT_GAP_PX
-    notices += 1
+    if (width + SLOT_GAP_PX <= left) {
+      left -= width + SLOT_GAP_PX
+      notices += 1
+      continue
+    }
+    if (left - SLOT_GAP_PX >= NOTICE_MIN_PX) {
+      squeezed = left - SLOT_GAP_PX
+      left = 0
+      notices += 1
+    }
+    break
   }
   const named = widths.pills.length > 0 && rowWidth(widths.pills) <= grouped + left
-  return { level: named ? 1 : 2, chips: widths.chips.length, notices }
+  return { level: named ? 1 : 2, chips: widths.chips.length, notices, squeezed }
 }
 
 /**
@@ -154,7 +168,7 @@ function fitBar(widths: BarWidths, room: number): BarFit {
  */
 function useBarFit(box: RefObject<HTMLDivElement | null>, list: RefObject<HTMLUListElement | null>, ruler: RefObject<HTMLDivElement | null>): BarFit {
   // Every chip until the first measure, which runs before paint.
-  const [fit, setFit] = useState<BarFit>({ level: 2, chips: Number.POSITIVE_INFINITY, notices: 0 })
+  const [fit, setFit] = useState<BarFit>({ level: 2, chips: Number.POSITIVE_INFINITY, notices: 0, squeezed: null })
   const words = useRef<string | null>(null)
   const measure = useCallback(() => {
     const row = box.current
@@ -164,7 +178,7 @@ function useBarFit(box: RefObject<HTMLDivElement | null>, list: RefObject<HTMLUL
     const inline = list.current
     const room = Math.floor(row.getBoundingClientRect().width + (inline ? inline.getBoundingClientRect().width + SLOT_GAP_PX : 0))
     const next = fitBar({ pills: widths("pill"), chips: widths("chip"), more: widths("more")[0] ?? 0, empty: widths("empty")[0] ?? 0, notices: widths("notice") }, room)
-    setFit((prev) => (prev.level === next.level && prev.chips === next.chips && prev.notices === next.notices ? prev : next))
+    setFit((prev) => (prev.level === next.level && prev.chips === next.chips && prev.notices === next.notices && prev.squeezed === next.squeezed ? prev : next))
   }, [box, list, ruler])
   useLayoutEffect(() => {
     const marks = ruler.current
@@ -467,13 +481,13 @@ function NoticeRow({ notice, onNavigate }: { notice: Notice; onNavigate: () => v
   )
 }
 
-/** An unread notification inline; following it marks it read. */
-function InlineNotice({ notice }: { notice: Notice }) {
+/** An unread notification inline; following it marks it read. `width` truncates it to fit. */
+function InlineNotice({ notice, width }: { notice: Notice; width: number | null }) {
   const m = useMessages()
   const { icon: Glyph, className } = NOTICE_GLYPH[notice.tone]
   const words = noticeText(m, notice)
   return (
-    <li className={NOTICE_INLINE} data-notice-inline={notice.id}>
+    <li className={NOTICE_INLINE} style={width === null ? undefined : { maxWidth: width }} data-notice-inline={notice.id}>
       <Glyph aria-hidden="true" className={cn("size-3 shrink-0", className)} />
       {notice.href ? (
         <Link to={notice.href as never} onClick={() => markNoticesRead(notice.id)} className="min-w-0 truncate text-foreground hover:underline" title={notice.detail ?? words}>
@@ -488,13 +502,14 @@ function InlineNotice({ notice }: { notice: Notice }) {
   )
 }
 
-function InlineNotices({ notices, list }: { notices: Notice[]; list: RefObject<HTMLUListElement | null> }) {
+/** The unread notifications that fit, newest first; the last one shown takes `squeezed` when it fits only truncated. */
+function InlineNotices({ notices, squeezed, list }: { notices: Notice[]; squeezed: number | null; list: RefObject<HTMLUListElement | null> }) {
   const m = useMessages()
   if (notices.length === 0) return null
   return (
     <ul ref={list} aria-label={m.status_bar_notifications()} className="flex shrink-0 items-center gap-2" data-status-notices>
-      {notices.map((notice) => (
-        <InlineNotice key={notice.id} notice={notice} />
+      {notices.map((notice, i) => (
+        <InlineNotice key={notice.id} notice={notice} width={i === notices.length - 1 ? squeezed : null} />
       ))}
     </ul>
   )
@@ -625,7 +640,7 @@ export function StatusBar() {
       <SelectionItem />
       <IssueSlot status={status} fit={fit} box={box} />
       <RunningWork />
-      <InlineNotices notices={candidates.slice(0, fit.notices)} list={list} />
+      <InlineNotices notices={candidates.slice(0, fit.notices)} squeezed={fit.squeezed} list={list} />
       <NotificationHistory notices={notices} unread={unread} narrow={narrow} />
       <BarRuler status={status} notices={candidates} narrow={narrow} ruler={ruler} />
     </footer>
