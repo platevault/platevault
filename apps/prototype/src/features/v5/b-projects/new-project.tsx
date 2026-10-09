@@ -27,7 +27,7 @@ import { formatDegrees, plural } from "@/lib/format"
 import { createProject, goalsFromTemplate, prefillFromSession, setGoals } from "@/store/actions/projects"
 import { store, useStore } from "@/store/core"
 import { SelectField } from "@/features/t3/fields"
-import { addTargetRecord } from "./actions"
+import { addTarget } from "@/store/actions/library"
 import { projectChannels } from "./model"
 import { InlineError, layoutPanels, type MosaicDraft, PanelsEditor, type SubjectPick, SubjectSearch } from "./parts"
 
@@ -77,7 +77,7 @@ export function draftProblem(draft: SubjectDraft): string | null {
 export function resolveDraft(draft: SubjectDraft): { ok: true; targetId: string; mosaic: Subject["mosaic"] } | { ok: false; message: string } {
   let targetId: string | null = draft.pick.kind === "target" ? draft.pick.targetId : null
   if (draft.pick.kind === "new") {
-    const added = addTargetRecord(draft.pick.source)
+    const added = addTarget(draft.pick.entry, { resolver: draft.pick.resolver, favourite: false })
     if (!added.result.ok) return { ok: false, message: added.result.message }
     targetId = added.targetId
   }
@@ -102,7 +102,7 @@ export function SubjectDraftRow({ draft, rigIds, onChange, onRemove }: { draft: 
           {draft.mosaic ? draft.mosaic.name || `${draft.pick.name} mosaic` : draft.pick.name}
           <span className="ml-2 text-xs font-normal text-muted-foreground">
             {draft.mosaic ? `Mosaic of ${draft.pick.name} · ${plural(draft.mosaic.panels.length, "panel")}` : "Target"}
-            {draft.pick.kind === "new" ? (draft.pick.source.origin === "resolver" ? " · new Target from SIMBAD" : " · new Target from the catalogue") : ""}
+            {draft.pick.kind === "new" ? (draft.pick.resolver ? ` · new Target from ${draft.pick.resolver}` : " · new Target from the catalogue") : ""}
           </span>
         </span>
         <div className="flex items-center gap-2">

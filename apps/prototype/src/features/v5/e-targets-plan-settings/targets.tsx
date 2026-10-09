@@ -40,7 +40,7 @@ import type { SearchParams } from "@/routes"
 import { setFavourite } from "@/store/actions/library"
 import { store, useStore } from "@/store/core"
 import type { SavedTargetPreset } from "@/store/slices/e"
-import { CATALOGUES, type CatalogueId } from "./catalogues"
+import { CATALOGUES, type CatalogueId } from "@/domain/sky"
 import { NameDialog } from "./dialogs"
 import { AddSiteButton, BandStrip, CapturedCell, FitCell, MoonLine, ProjectBadge, SiteLine, useSkyContext } from "./parts"
 import {

@@ -4,7 +4,7 @@
  * Project's candidate sessions (PIX-FR-18). Pure derivation over the store;
  * nothing here writes. Trashed frames are never listed (LIB-FR-18, PIX-AC-19).
  */
-import { findPanel, findSubject, frameQuality, type FrameQuality, liveAssetIds, projectCandidates, subjectName, workingContent } from "@/domain/derive"
+import { findPanel, findSubject, frameQuality, type FrameQuality, groupHref, liveAssetIds, projectCandidates, runHref, subjectName, workingContent } from "@/domain/derive"
 import { assetAvailability, type AssetAvailability } from "@/domain/library"
 import { type MemberState, memberState } from "@/domain/membership"
 import type { Asset, AssetId, MetricKey, Metric, MosaicPanel, Operation, Project, ProjectId, Run, RunGroupId, RunId, Session } from "@/domain/types"
@@ -127,7 +127,7 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
     membersOf(run, findPanel(subject, run.panelId) ?? null)
     readOnlyReason = run.trashedAt ? "This run is in the Project's Trash. Restore it before you mark frames." : null
     membershipNote = run.completion === "complete" ? "This run is Complete: marks change library quality and this Project's rejects, but the run's membership stays as it was. Reopen the run to change it." : null
-    href = `/projects/${project.id}/runs/${run.id}/review`
+    href = runHref(run, "review")
   } else if (context.kind === "group") {
     const group = catalog.runGroups[context.groupId]
     project = group ? catalog.projects[group.projectId] : undefined
@@ -146,7 +146,7 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
       membersOf(run, panel)
     }
     membershipNote = runs.some((r) => r.completion === "complete") ? "A Complete panel run keeps its membership; marks on its frames change library quality only." : null
-    href = `/projects/${project.id}/groups/${group.id}/review`
+    href = groupHref(group, "review")
   } else {
     project = catalog.projects[context.projectId]
     if (!project) return null

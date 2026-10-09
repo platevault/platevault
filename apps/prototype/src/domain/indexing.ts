@@ -8,7 +8,7 @@
  */
 import { correctedExposureS } from "./corrections"
 import { isRetiredAsset } from "./library"
-import { angularSeparationDeg, normalizeName, SKY_OBJECTS } from "./sky"
+import { angularSeparationDeg, BUNDLED_CATALOGUE, bundledEntryFor, normalizeName, targetFromEntry } from "./sky"
 import type {
   Asset,
   AssetCopy,
@@ -161,33 +161,20 @@ function matchesName(name: string, candidates: string[]): boolean {
 function ensureTargetFor(catalog: Catalog, name: string, now: IsoDateTime): Target | null {
   const existing = Object.values(catalog.targets).find((t) => matchesName(name, [t.name, ...t.aliases]))
   if (existing) return existing
-  const sky = SKY_OBJECTS.find((o) => matchesName(name, [o.name, ...o.aliases]))
-  if (!sky) return null
-  const target: Target = {
-    id: `tgt_${stableHash(sky.name)}`,
-    name: sky.name,
-    aliases: sky.aliases,
-    ra: sky.ra,
-    dec: sky.dec,
-    sizeDeg: { width: sky.widthDeg, height: sky.heightDeg },
-    coordinateSource: "catalog",
-    resolver: null,
-    notes: "",
-    favourite: false,
-    createdAt: now,
-    revision: 1,
-  }
+  const entry = bundledEntryFor(name)
+  if (!entry) return null
+  const target = targetFromEntry(entry, { id: `tgt_${stableHash(entry.designation)}`, at: now, resolver: null, favourite: false })
   catalog.targets[target.id] = target
   return target
 }
 
-/** The reference object whose extent contains the pointing, nearest first. */
+/** The bundled object whose extent contains the pointing, nearest first. */
 function objectAtPointing(ra: number, dec: number) {
   let best: { name: string; separation: number } | null = null
-  for (const sky of SKY_OBJECTS) {
-    const separation = angularSeparationDeg(ra, dec, sky.ra, sky.dec)
-    const reach = Math.max(sky.widthDeg, sky.heightDeg) / 2 + 0.5
-    if (separation <= reach && (!best || separation < best.separation)) best = { name: sky.name, separation }
+  for (const entry of BUNDLED_CATALOGUE) {
+    const separation = angularSeparationDeg(ra, dec, entry.ra, entry.dec)
+    const reach = Math.max(entry.sizeDeg.width, entry.sizeDeg.height) / 2 + 0.5
+    if (separation <= reach && (!best || separation < best.separation)) best = { name: entry.designation, separation }
   }
   return best
 }

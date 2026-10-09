@@ -34,6 +34,7 @@ import {
   projectStatus,
   projectRuns,
   runCandidates,
+  runHref,
   runningWork,
   runPipeline,
   runStepLink,
@@ -642,7 +643,7 @@ function operationHref(state: PrototypeState, op: Operation): { to: string; labe
   const run = runId ? state.catalog.runs[runId] : undefined
   if (op.kind === "import") return { to: `/sessions?import=${op.id}`, label: "Sessions" }
   if (op.kind === "index") return { to: "/storage", label: "Storage" }
-  if (run) return { to: `/projects/${run.projectId}/runs/${run.id}`, label: run.name }
+  if (run) return { to: runHref(run, runPipeline(state, run).current.id), label: run.name }
   if (op.scope.projectId) return { to: `/projects/${op.scope.projectId}`, label: state.catalog.projects[op.scope.projectId]?.name ?? "Project" }
   return { to: "/activity", label: "Activity" }
 }

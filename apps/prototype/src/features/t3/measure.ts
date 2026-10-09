@@ -9,6 +9,7 @@
  * (PIX-FR-08), so the operation names no View in its scope: Mark complete
  * does not wait for it (D09).
  */
+import { runHref } from "@/domain/derive"
 import { BUILT_IN_METHOD, simulateMeasurement } from "@/domain/measurement"
 import type { AssetId, Catalog, FrameMeasurement, MeasurementRecord, Metric, Operation, OperationId, OperationItem, RunId } from "@/domain/types"
 import { plural } from "@/lib/format"
@@ -236,7 +237,7 @@ export const measureHandler: OperationHandler = {
       op.id,
       payload.skipped.length > 0 ? "partial" : "succeeded",
       `${parts.join(", ")}. ${BUILT_IN_METHOD.method}, linear data. No exclusion or quality change.`,
-      state.catalog.runs[payload.runId] ? `/projects/${state.catalog.runs[payload.runId]!.projectId}/runs/${payload.runId}/review` : null,
+      state.catalog.runs[payload.runId] ? runHref(state.catalog.runs[payload.runId]!, "review") : null,
     )
   },
 }

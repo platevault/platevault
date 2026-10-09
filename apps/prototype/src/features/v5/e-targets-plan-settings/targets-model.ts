@@ -1,8 +1,8 @@
 /**
  * Targets model (slice E, S10): the rows of My targets, Browse catalogues and
- * search; tonight's values per row; Fit per rig; the built-in presets; and
- * "Add to targets". Pure derivations except `addToMyTargets`, which writes
- * through `commit()`.
+ * search over the shared bundled catalogue and SIMBAD fixture (domain/sky);
+ * tonight's values per row; Fit per rig; the built-in presets; and "Add to
+ * targets", which writes through the shared `addTarget`.
  *
  * Planning values come from the foundation's `computeWindows`, so a row's Img
  * time equals the total of its Plan windows tonight under the same site and
@@ -12,13 +12,25 @@ import { bandStrip, bandUnion, myTargets, sessionTargetId, liveLightSessions, ri
 import { BANDS, NARROW_BANDS } from "@/domain/labels"
 import { targetCoverage } from "@/domain/library"
 import { computeWindows, nightAt, type Tonight } from "@/domain/planning"
-import { normalizeName } from "@/domain/sky"
+import { BUNDLED_CATALOGUE, bundledEntryFor, type CatalogueEntry, type CatalogueId, entryKeys, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
 import type { Band, Catalog, Disk, ObservingSite, ObservingWindow, OpticalTrainId, PlanCriteria, Project, Target } from "@/domain/types"
-import { setFavourite } from "@/store/actions/library"
-import { freshId, recordSaved } from "@/store/actions/shared"
-import { type CommitResult, commit, nowIso, withCatalog } from "@/store/core"
-import { BUNDLED, bundledEntryFor, type CatalogueEntry, type CatalogueId, entryKeys, matchesQuery, type ObjectKind, objectKind, SIMBAD_FIXTURE } from "./catalogues"
+import { addTarget, setFavourite } from "@/store/actions/library"
+import type { CommitResult } from "@/store/core"
 import { moonUpAt, type NightGrid, nextOpposition, objectTonight } from "./sky-tonight"
+
+export type ObjectKind = "emission" | "galaxy" | "planetary" | "snr" | "cluster" | "reflection" | "dark" | "other"
+
+export function objectKind(objectType: string | null): ObjectKind {
+  const t = (objectType ?? "").toLowerCase()
+  if (t.includes("planetary")) return "planetary"
+  if (t.includes("galax")) return "galaxy"
+  if (t.includes("supernova")) return "snr"
+  if (t.includes("emission")) return "emission"
+  if (t.includes("dark")) return "dark"
+  if (t.includes("reflection")) return "reflection"
+  if (t.includes("cluster")) return "cluster"
+  return "other"
+}
 
 // ---------------------------------------------------------------------------
 // Rows
@@ -87,7 +99,7 @@ export function allRows(catalog: Catalog): TargetRow[] {
   const mine = new Map(myTargets(catalog).map((m) => [m.target.id, m.projects]))
   const rows = Object.values(catalog.targets).map((t) => libraryRow(t, mine.get(t.id) ?? [], mine.has(t.id)))
   const held = new Set(rows.flatMap((r) => [r.designation, ...r.aliases].map(normalizeName)))
-  for (const entry of BUNDLED) if (!entryKeys(entry).some((k) => held.has(k))) rows.push(entryRow(entry, false))
+  for (const entry of BUNDLED_CATALOGUE) if (!entryKeys(entry).some((k) => held.has(k))) rows.push(entryRow(entry, false))
   return rows
 }
 
@@ -399,33 +411,9 @@ export function formatSort(sort: SortSpec): string {
 // Add to targets (PLAN-TGT-FR-03)
 // ---------------------------------------------------------------------------
 
-/**
- * Write the row into the library as a ★ Target (or star an existing one).
- * A failed write keeps nothing and returns the error for Retry. Slice-local;
- * foundation candidate: `addTarget` in store/actions/library.ts.
- */
+/** Write the row into the library as a ★ Target (or star an existing one). A failed write keeps nothing and returns the error for Retry. */
 export function addToMyTargets(row: TargetRow): { result: CommitResult; targetId: string | null } {
   if (row.target) return { result: setFavourite(row.target.id, true), targetId: row.target.id }
-  const entry = row.entry
-  if (!entry) return { result: { ok: false, reason: "stale", message: "This result is no longer available. Search again." }, targetId: null }
-  const id = freshId("tgt", entry.designation)
-  const at = nowIso()
-  const target: Target = {
-    id,
-    name: entry.designation,
-    aliases: entry.aliases,
-    ra: entry.ra,
-    dec: entry.dec,
-    sizeDeg: entry.sizeDeg,
-    coordinateSource: row.simbad ? "resolver" : "catalog",
-    resolver: row.simbad ? { provider: "SIMBAD", fetchedAt: at, objectType: entry.objectType } : null,
-    notes: "",
-    favourite: true,
-    createdAt: at,
-    revision: 1,
-  }
-  const href = `/targets/${id}`
-  const result = commit(`Add ${entry.designation} to My targets`, (s) => withCatalog(s, (c) => ({ ...c, targets: { ...c.targets, [id]: target } })), { href })
-  if (result.ok) recordSaved(`★ ${entry.designation} added to My targets`, row.simbad ? "Coordinates, size and type from SIMBAD." : `From the bundled ${entry.catalogues.join(", ")} catalogue.`, href)
-  return { result, targetId: result.ok ? id : null }
+  if (!row.entry) return { result: { ok: false, reason: "stale", message: "This result is no longer available. Search again." }, targetId: null }
+  return addTarget(row.entry, { resolver: row.simbad ? "SIMBAD" : null, favourite: true })
 }

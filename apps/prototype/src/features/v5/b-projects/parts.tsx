@@ -12,12 +12,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { myTargets } from "@/domain/derive"
-import { normalizeName, SKY_OBJECTS, type FieldOfView, type SkyObject } from "@/domain/sky"
+import { BUNDLED_CATALOGUE, type CatalogueEntry, type FieldOfView, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
 import type { Catalog, TargetId } from "@/domain/types"
 import { formatDec, formatDegrees, formatRa } from "@/lib/format"
 import type { CommitResult } from "@/store/core"
 import { store, useStore } from "@/store/core"
-import type { TargetSource } from "./actions"
 
 // ---------------------------------------------------------------------------
 // Commit errors beside the control
@@ -42,37 +41,19 @@ export function InlineError({ message, className }: { message: string | null; cl
 // Subject search: My targets, catalogues and SIMBAD (D-W17)
 // ---------------------------------------------------------------------------
 
-/** What SIMBAD returns in the prototype: the bundled objects plus these (a fixture response). */
-const SIMBAD_ONLY: SkyObject[] = [
-  { name: "IC 1396", aliases: ["Elephant's Trunk Nebula", "IC1396"], ra: 324.74, dec: 57.5, widthDeg: 3.0, heightDeg: 2.5, objectType: "Emission nebula" },
-  { name: "NGC 6888", aliases: ["Crescent Nebula", "Caldwell 27"], ra: 303.03, dec: 38.35, widthDeg: 0.33, heightDeg: 0.2, objectType: "Emission nebula" },
-  { name: "NGC 7380", aliases: ["Wizard Nebula"], ra: 341.83, dec: 58.13, widthDeg: 0.42, heightDeg: 0.42, objectType: "Open cluster with nebula" },
-  { name: "Sh2-101", aliases: ["Tulip Nebula", "Sharpless 101"], ra: 300.0, dec: 35.33, widthDeg: 0.27, heightDeg: 0.27, objectType: "Emission nebula" },
-  { name: "NGC 6992", aliases: ["Eastern Veil Nebula", "Caldwell 33"], ra: 313.75, dec: 31.72, widthDeg: 1.0, heightDeg: 0.5, objectType: "Supernova remnant" },
-]
-
 const LOOKUP_MS = 600
 
-/** A subject the user picked: an existing Target, or an object that becomes a Target record on save. */
+/** A subject the user picked: an existing Target, or a catalogue or resolver entry that becomes a Target record on save. */
 export type SubjectPick =
   | { kind: "target"; targetId: TargetId; name: string; ra: number | null; dec: number | null; size: { width: number; height: number } | null }
-  | { kind: "new"; source: TargetSource; name: string; ra: number; dec: number; size: { width: number; height: number } | null }
+  | { kind: "new"; entry: CatalogueEntry; resolver: string | null; name: string; ra: number; dec: number; size: { width: number; height: number } | null }
 
 function matches(query: string, name: string, aliases: string[]): boolean {
-  const q = normalizeName(query)
-  if (!q) return false
-  return [name, ...aliases].some((n) => normalizeName(n).includes(q))
+  return matchesQuery([name, ...aliases], query)
 }
 
-function fromSky(object: SkyObject, origin: "catalog" | "resolver", provider: string | null): SubjectPick {
-  return {
-    kind: "new",
-    name: object.name,
-    ra: object.ra,
-    dec: object.dec,
-    size: { width: object.widthDeg, height: object.heightDeg },
-    source: { name: object.name, aliases: object.aliases, ra: object.ra, dec: object.dec, sizeDeg: { width: object.widthDeg, height: object.heightDeg }, objectType: object.objectType, origin, provider },
-  }
+function fromEntry(entry: CatalogueEntry, resolver: string | null): SubjectPick {
+  return { kind: "new", entry, resolver, name: entry.designation, ra: entry.ra, dec: entry.dec, size: entry.sizeDeg }
 }
 
 interface ResultRow {
@@ -117,10 +98,10 @@ export function SubjectSearch({ taken, onPick, autoFocus = false }: { taken: str
         setSimbad({ query: text, status: "failed", message: `${providerName} did not respond: the lookup failed as if offline. Nothing was added; My targets and the catalogues still work.` })
         return
       }
-      const known = new Set([...groups.flatMap((g) => g.rows.map((r) => r.pick.name))])
-      const rows = [...SKY_OBJECTS, ...SIMBAD_ONLY]
-        .filter((o) => matches(text, o.name, o.aliases) && !known.has(o.name))
-        .map((o): ResultRow => ({ key: `simbad:${o.name}`, pick: fromSky(o, "resolver", providerName), aliases: o.aliases, type: o.objectType }))
+      const known = new Set(groups.flatMap((g) => g.rows.map((r) => normalizeName(r.pick.name))))
+      const rows = SIMBAD_FIXTURE.filter((o) => matches(text, o.designation, o.aliases) && !known.has(normalizeName(o.designation))).map(
+        (o): ResultRow => ({ key: `simbad:${o.designation}`, pick: fromEntry(o, providerName), aliases: o.aliases, type: o.objectType }),
+      )
       setSimbad({ query: text, status: "done", rows })
     }, LOOKUP_MS)
   }
@@ -194,18 +175,18 @@ function localResults(catalog: Catalog, query: string): Array<{ title: string; r
       type: projects.length > 0 ? `Subject of ${projects.map((p) => p.name).join(", ")}` : "★ Favourite",
     }))
   const byName = new Map(Object.values(catalog.targets).map((t) => [t.name, t]))
-  const catalogueRows = SKY_OBJECTS.filter((o) => matches(query, o.name, o.aliases) && !(byName.get(o.name) && mineIds.has(byName.get(o.name)!.id))).map((o): ResultRow => {
-    const record = byName.get(o.name)
+  const catalogueRows = BUNDLED_CATALOGUE.filter((o) => matches(query, o.designation, o.aliases) && !(byName.get(o.designation) && mineIds.has(byName.get(o.designation)!.id))).map((o): ResultRow => {
+    const record = byName.get(o.designation)
     return {
-      key: `sky:${o.name}`,
-      pick: record ? { kind: "target", targetId: record.id, name: record.name, ra: record.ra, dec: record.dec, size: record.sizeDeg } : fromSky(o, "catalog", null),
+      key: `sky:${o.designation}`,
+      pick: record ? { kind: "target", targetId: record.id, name: record.name, ra: record.ra, dec: record.dec, size: record.sizeDeg } : fromEntry(o, null),
       aliases: o.aliases,
       type: o.objectType,
     }
   })
   // Target records outside My targets and the bundled list (for example created by indexing).
   const otherRows = Object.values(catalog.targets)
-    .filter((t) => !mineIds.has(t.id) && !SKY_OBJECTS.some((o) => o.name === t.name) && matches(query, t.name, t.aliases))
+    .filter((t) => !mineIds.has(t.id) && !BUNDLED_CATALOGUE.some((o) => o.designation === t.name) && matches(query, t.name, t.aliases))
     .map((t): ResultRow => ({ key: t.id, pick: { kind: "target", targetId: t.id, name: t.name, ra: t.ra, dec: t.dec, size: t.sizeDeg }, aliases: t.aliases, type: "Library Target" }))
   return [
     { title: "My targets", rows: myRows },
@@ -232,7 +213,7 @@ function ResultGroup({ title, rows, taken, onPick, empty }: { title: string; row
                 <span className="block text-xs text-muted-foreground tabular-nums">
                   {row.type ? `${row.type} · ` : ""}
                   {row.pick.ra !== null && row.pick.dec !== null ? `${formatRa(row.pick.ra)} ${formatDec(row.pick.dec)}` : "Position unknown"}
-                  {row.pick.kind === "new" ? (row.pick.source.origin === "resolver" ? " · new Target from SIMBAD" : " · new Target from the catalogue") : ""}
+                  {row.pick.kind === "new" ? (row.pick.resolver ? ` · new Target from ${row.pick.resolver}` : " · new Target from the catalogue") : ""}
                 </span>
               </div>
               <Button size="sm" variant="outline" disabled={added} onClick={() => onPick(row.pick)}>

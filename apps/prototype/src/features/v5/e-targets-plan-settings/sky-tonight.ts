@@ -3,55 +3,13 @@
  * samples for the night timeline, a Target's altitude curve, peak altitude
  * in darkness, Moon separation and next opposition.
  *
- * This repeats the low-precision Sun, Moon and altitude formulas that
- * `src/domain/planning.ts` keeps private, on the same 10-minute grid that
- * `computeWindows` and `tonightAt` use, so curves and window blocks line up.
- * Production computes all of it in Rust (PLAN-FR-08). Foundation candidate:
- * export `sunPosition`, `moonPosition` and `altitudeDeg` from planning.ts and
- * delete the copies here.
+ * It uses the planning module's Sun, Moon and altitude formulas on the same
+ * 10-minute grid that `computeWindows` and `tonightAt` use, so curves and
+ * window blocks line up. Production computes all of it in Rust (PLAN-FR-08).
  */
-import { nightAt } from "@/domain/planning"
+import { altitudeDeg, julianDay, moonPosition, nightAt, norm360, SAMPLE_MIN, sunPosition } from "@/domain/planning"
 import { angularSeparationDeg } from "@/domain/sky"
 import type { ObservingSite } from "@/domain/types"
-
-const RAD = Math.PI / 180
-export const SAMPLE_MIN = 10
-const norm360 = (deg: number) => ((deg % 360) + 360) % 360
-const julianDay = (ms: number) => ms / 86_400_000 + 2_440_587.5
-
-function equatorial(lambdaDeg: number, betaDeg: number, epsDeg: number): { ra: number; dec: number } {
-  const l = lambdaDeg * RAD
-  const b = betaDeg * RAD
-  const ep = epsDeg * RAD
-  const ra = Math.atan2(Math.sin(l) * Math.cos(ep) - Math.tan(b) * Math.sin(ep), Math.cos(l))
-  const dec = Math.asin(Math.sin(b) * Math.cos(ep) + Math.cos(b) * Math.sin(ep) * Math.sin(l))
-  return { ra: norm360(ra / RAD), dec: dec / RAD }
-}
-
-function sunPosition(jd: number) {
-  const n = jd - 2_451_545
-  const L = norm360(280.46 + 0.985_647_4 * n)
-  const g = norm360(357.528 + 0.985_600_3 * n) * RAD
-  return equatorial(L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g), 0, 23.439 - 0.000_000_4 * n)
-}
-
-function moonPosition(jd: number) {
-  const T = (jd - 2_451_545) / 36_525
-  const s = (deg: number) => Math.sin(deg * RAD)
-  const lambda =
-    218.32 + 481_267.881 * T + 6.29 * s(135 + 477_198.87 * T) - 1.27 * s(259.3 - 413_335.36 * T) + 0.66 * s(235.7 + 890_534.22 * T) +
-    0.21 * s(269.9 + 954_397.74 * T) - 0.19 * s(357.5 + 35_999.05 * T) - 0.11 * s(186.5 + 966_404.03 * T)
-  const beta = 5.13 * s(93.3 + 483_202.02 * T) + 0.28 * s(228.2 + 960_400.89 * T) - 0.28 * s(318.3 + 6_003.15 * T) - 0.17 * s(217.6 - 407_332.21 * T)
-  return equatorial(norm360(lambda), beta, 23.439)
-}
-
-function altitudeDeg(ra: number, dec: number, latDeg: number, lonDeg: number, jd: number): number {
-  const gmst = norm360(280.460_618_37 + 360.985_647_366_29 * (jd - 2_451_545))
-  const ha = (gmst + lonDeg - ra) * RAD
-  const lat = latDeg * RAD
-  const d = dec * RAD
-  return Math.asin(Math.sin(d) * Math.sin(lat) + Math.cos(d) * Math.cos(lat) * Math.cos(ha)) / RAD
-}
 
 export interface SkySample {
   ms: number

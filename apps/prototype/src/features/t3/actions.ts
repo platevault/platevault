@@ -4,6 +4,7 @@
  * marks (P/X/U, Reject for this Project only) and Exclude from run are the
  * shared actions in `src/store/actions/library.ts` and `runs.ts`.
  */
+import { runHref } from "@/domain/derive"
 import { stableHash } from "@/domain/indexing"
 import type { AssetId, Catalog, FrameMeasurement, MeasurementImport, MeasurementImportRow, RunId } from "@/domain/types"
 import { plural } from "@/lib/format"
@@ -14,7 +15,7 @@ import { historyEntry } from "./measure"
 
 function reviewHref(runId: RunId): string {
   const run = store.getState().catalog.runs[runId]
-  return run ? `/projects/${run.projectId}/runs/${run.id}/review` : "/projects"
+  return run ? runHref(run, "review") : "/projects"
 }
 
 /**

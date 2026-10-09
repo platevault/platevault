@@ -10,7 +10,7 @@ import { CornerDownLeft, Search } from "lucide-react"
 import { useMemo, useRef } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Kbd } from "@/components/ui/kbd"
-import { isTrashedSession } from "@/domain/derive"
+import { groupHref, isTrashedSession, runHref } from "@/domain/derive"
 import { formatExposure, formatNight } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { SHELLS } from "./contributions"
@@ -52,8 +52,8 @@ function useCommands(): Group[] {
         items: [
           ...Object.values(catalog.runs)
             .filter((r) => !r.trashedAt && !r.groupId)
-            .map((r) => ({ id: `run:${r.id}`, label: r.name, group: "Runs", keywords: "processing run", to: `/projects/${r.projectId}/runs/${r.id}/select` })),
-          ...Object.values(catalog.runGroups).map((g) => ({ id: `group:${g.id}`, label: g.name, group: "Runs", keywords: "run group mosaic panels", to: `/projects/${g.projectId}/groups/${g.id}/select` })),
+            .map((r) => ({ id: `run:${r.id}`, label: r.name, group: "Runs", keywords: "processing run", to: runHref(r) })),
+          ...Object.values(catalog.runGroups).map((g) => ({ id: `group:${g.id}`, label: g.name, group: "Runs", keywords: "run group mosaic panels", to: groupHref(g) })),
         ],
       },
       {

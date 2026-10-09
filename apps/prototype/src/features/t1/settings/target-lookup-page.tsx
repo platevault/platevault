@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Switch } from "@/components/ui/switch"
-import { normalizeName, SKY_OBJECTS } from "@/domain/sky"
+import { BUNDLED_CATALOGUE, resolverEntryFor } from "@/domain/sky"
 import type { AppSettings } from "@/domain/types"
 import { formatDateTime, formatDec, formatRa } from "@/lib/format"
 import { nowIso, store, updateSlice, useStore } from "@/store/core"
@@ -97,8 +97,7 @@ export function TargetLookupPage() {
         })
         return
       }
-      const key = normalizeName(text)
-      const match = SKY_OBJECTS.find((o) => normalizeName(o.name) === key || o.aliases.some((a) => normalizeName(a) === key))
+      const match = resolverEntryFor(text)
       record(
         match
           ? {
@@ -107,7 +106,7 @@ export function TargetLookupPage() {
               provider,
               outcome: "resolved",
               message: `Resolved by ${PROVIDER_LABEL[provider]}.`,
-              result: { name: match.name, ra: match.ra, dec: match.dec, objectType: match.objectType, aliases: match.aliases },
+              result: { name: match.designation, ra: match.ra, dec: match.dec, objectType: match.objectType, aliases: match.aliases },
             }
           : { at: nowIso(), query: text, provider, outcome: "not-found", message: `${PROVIDER_LABEL[provider]} returned no object named ${text}.`, result: null },
       )
@@ -124,7 +123,7 @@ export function TargetLookupPage() {
       <PageBody>
         <ReturnNotice task="Target lookup" />
         <Notice tone="info" title="Local search always works">
-          Searching by name, alias or coordinates uses your {targets === 1 ? "1 Target" : `${targets} Targets`} and the bundled offline catalog of {SKY_OBJECTS.length} objects. It needs no
+          Searching by name, alias or coordinates uses your {targets === 1 ? "1 Target" : `${targets} Targets`} and the bundled offline catalogues of {BUNDLED_CATALOGUE.length} objects. It needs no
           account or network.
         </Notice>
         {writeError ? <ActionError message={writeError.message} onRetry={writeError.retry} /> : null}

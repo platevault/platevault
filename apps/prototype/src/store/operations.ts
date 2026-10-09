@@ -12,9 +12,10 @@
  * their recorded items intact; Retry resumes from the recorded state and
  * never infers progress from file names (D09).
  */
+import { runHref } from "@/domain/derive"
 import { fileKey } from "@/domain/disk"
 import { listLocation, markScanStopped, markVerificationPending, readFiles, settleLocationScan } from "@/domain/indexing"
-import type { LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus } from "@/domain/types"
+import type { LocationId, Operation, OperationId, OperationItem, OperationKind, OperationScope, OperationStatus, RunStep } from "@/domain/types"
 import { plural } from "@/lib/format"
 import { nowIso, type PrototypeState, store } from "./core"
 
@@ -157,7 +158,7 @@ export function cancelOperation(id: OperationId) {
     // A canceled operation still links to its owning surface in Activity (seam 16).
     const runId = op.scope.runIds?.[0]
     const run = runId ? next.catalog.runs[runId] : undefined
-    const step = { measure: "review", "import-measurements": "review", prepare: "prepare", cleanup: "done" } as Partial<Record<OperationKind, string>>
+    const step: Partial<Record<OperationKind, RunStep>> = { measure: "review", "import-measurements": "review", prepare: "prepare", cleanup: "done" }
     const href =
       op.kind === "index"
         ? "/settings/locations"
@@ -166,7 +167,7 @@ export function cancelOperation(id: OperationId) {
           : op.kind === "import"
             ? "/sessions"
             : run && step[op.kind]
-              ? `/projects/${run.projectId}/runs/${run.id}/${step[op.kind]}`
+              ? runHref(run, step[op.kind])
               : op.scope.projectId
                 ? `/projects/${op.scope.projectId}`
                 : null

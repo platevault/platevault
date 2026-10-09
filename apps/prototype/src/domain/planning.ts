@@ -12,12 +12,13 @@ import type { CalendarExport, ObservingSite, ObservingWindow, PlanCriteria, Remi
 import { formatDateTime } from "@/lib/format"
 
 const RAD = Math.PI / 180
-const SAMPLE_MIN = 10
+/** Minutes between samples of the night grid that windows, Tonight and the Targets timeline share. */
+export const SAMPLE_MIN = 10
 export const PLAN_NIGHTS = 14
 
-const norm360 = (deg: number) => ((deg % 360) + 360) % 360
+export const norm360 = (deg: number) => ((deg % 360) + 360) % 360
 
-function julianDay(ms: number): number {
+export function julianDay(ms: number): number {
   return ms / 86_400_000 + 2_440_587.5
 }
 
@@ -31,7 +32,7 @@ function equatorial(lambdaDeg: number, betaDeg: number, epsDeg: number): { ra: n
 }
 
 /** Low-precision Sun position (about 0.01°). */
-function sunPosition(jd: number) {
+export function sunPosition(jd: number): { ra: number; dec: number } {
   const n = jd - 2_451_545
   const L = norm360(280.46 + 0.985_647_4 * n)
   const g = norm360(357.528 + 0.985_600_3 * n) * RAD
@@ -40,7 +41,7 @@ function sunPosition(jd: number) {
 }
 
 /** Low-precision Moon position (Astronomical Almanac, about 0.3°). */
-function moonPosition(jd: number) {
+export function moonPosition(jd: number): { ra: number; dec: number } {
   const T = (jd - 2_451_545) / 36_525
   const s = (deg: number) => Math.sin(deg * RAD)
   const lambda =
@@ -56,7 +57,8 @@ function moonPosition(jd: number) {
   return equatorial(norm360(lambda), beta, 23.439)
 }
 
-function altitudeDeg(ra: number, dec: number, latDeg: number, lonDeg: number, jd: number): number {
+/** Altitude in degrees of a fixed position at a site and instant. */
+export function altitudeDeg(ra: number, dec: number, latDeg: number, lonDeg: number, jd: number): number {
   const gmst = norm360(280.460_618_37 + 360.985_647_366_29 * (jd - 2_451_545))
   const ha = (gmst + lonDeg - ra) * RAD
   const lat = latDeg * RAD

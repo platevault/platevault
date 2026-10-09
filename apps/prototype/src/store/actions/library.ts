@@ -4,6 +4,7 @@
  * ★ favourites (D-W60). Catalog only: source headers never change.
  */
 import { latestRevision } from "@/domain/derive"
+import { type CatalogueEntry, entryKeys, targetFromEntry } from "@/domain/sky"
 import { rejectInContent, sessionLabel, unrejectInContent } from "@/domain/membership"
 import type { AssetId, CatalogCorrection, Evidence, OpticalTrainId, QualityValue, RunId, Session, SessionId, TargetId } from "@/domain/types"
 import { plural } from "@/lib/format"
@@ -144,4 +145,22 @@ export function setFavourite(targetId: TargetId, favourite: boolean): CommitResu
   )
   if (result.ok) recordSaved(favourite ? `★ ${target.name}` : `☆ ${target.name}`, null, href)
   return result
+}
+
+/**
+ * Add a catalogue or resolver entry to the library as a Target (PRJ-FR-05,
+ * PLAN-TGT-FR-03): an existing Target with one of its names is reused (and
+ * starred when `favourite`), else a new record is written. New Project's
+ * subject search and the Targets screen both add Targets through here.
+ */
+export function addTarget(entry: CatalogueEntry, options: { resolver: string | null; favourite: boolean }): { result: CommitResult; targetId: TargetId | null } {
+  const keys = new Set(entryKeys(entry))
+  const existing = Object.values(store.getState().catalog.targets).find((t) => entryKeys({ designation: t.name, aliases: t.aliases }).some((k) => keys.has(k)))
+  if (existing) return { result: options.favourite && !existing.favourite ? setFavourite(existing.id, true) : { ok: true }, targetId: existing.id }
+  const id = freshId("tgt", entry.designation)
+  const target = targetFromEntry(entry, { id, at: nowIso(), resolver: options.resolver, favourite: options.favourite })
+  const href = `/targets/${id}`
+  const result = commit(options.favourite ? `Add ${entry.designation} to My targets` : `Add ${entry.designation} to targets`, (s) => withCatalog(s, (c) => ({ ...c, targets: { ...c.targets, [id]: target } })), { href })
+  if (result.ok) recordSaved(options.favourite ? `★ ${entry.designation} added to My targets` : `Target added: ${entry.designation}`, options.resolver ? `Coordinates, size and type from ${options.resolver}.` : `From the bundled ${entry.catalogues.join(", ") || "reference"} catalogue.`, href)
+  return { result, targetId: result.ok ? id : null }
 }

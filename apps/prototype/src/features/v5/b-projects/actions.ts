@@ -1,65 +1,20 @@
 /**
- * Slice B writes that the foundation does not provide (foundation candidates):
- *
- * - `addTargetRecord`: a Target record for a subject picked from the bundled
- *   catalogue or a SIMBAD lookup in New Project / Add subject (D-W17). It
- *   writes only a catalog Target record (PRJ-FR-05).
- * - The "archive" operation: Archive of a Done Project and Restore of its
- *   archived sessions after Reopen (STO-FR-13, D-W69), one reviewed transfer
- *   per approval. Each session moves whole or stays: every frame is verified
- *   (volume, bytes against the reviewed digest, a free destination) before any
- *   frame of that session moves. Prepared links pointing at a moved copy are
- *   rebuilt to its new path, so no run reference dangles (STO-FR-06).
+ * Slice B writes that the foundation does not provide: the "archive"
+ * operation, Archive of a Done Project and Restore of its archived sessions
+ * after Reopen (STO-FR-13, D-W69), one reviewed transfer per approval. Each
+ * session moves whole or stays: every frame is verified (volume, bytes
+ * against the reviewed digest, a free destination) before any frame of that
+ * session moves. Prepared links pointing at a moved copy are rebuilt to its
+ * new path, so no run reference dangles (STO-FR-06). New subjects become
+ * Targets through the shared `addTarget` (store/actions/library).
  */
 import { fileKey, removeFile, writeFiles } from "@/domain/disk"
 import { stableHash } from "@/domain/indexing"
-import type { Catalog, Disk, OperationId, ProjectId, SessionId, Target, TargetId } from "@/domain/types"
+import type { Catalog, Disk, OperationId, ProjectId, SessionId } from "@/domain/types"
 import { formatBytes, plural } from "@/lib/format"
-import { freshId, recordSaved } from "@/store/actions/shared"
-import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
+import { nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { type OperationHandler, patchOperation, settleOperation, startOperation } from "@/store/operations"
 import { type ArchiveMove, type ArchiveRow, sessionLabel } from "./model"
-
-// ---------------------------------------------------------------------------
-// Target records for new subjects
-// ---------------------------------------------------------------------------
-
-export interface TargetSource {
-  name: string
-  aliases: string[]
-  ra: number
-  dec: number
-  sizeDeg: { width: number; height: number } | null
-  objectType: string
-  /** "catalog" for the bundled catalogue, "resolver" for an online lookup. */
-  origin: "catalog" | "resolver"
-  provider: string | null
-}
-
-/** The existing Target record of that name, or a new one. */
-export function addTargetRecord(source: TargetSource): { result: CommitResult; targetId: TargetId | null } {
-  const existing = Object.values(store.getState().catalog.targets).find((t) => t.name === source.name)
-  if (existing) return { result: { ok: true }, targetId: existing.id }
-  const id = freshId("tgt", source.name)
-  const at = nowIso()
-  const target: Target = {
-    id,
-    name: source.name,
-    aliases: source.aliases,
-    ra: source.ra,
-    dec: source.dec,
-    sizeDeg: source.sizeDeg,
-    coordinateSource: source.origin,
-    resolver: source.origin === "resolver" ? { provider: source.provider ?? "SIMBAD", fetchedAt: at, objectType: source.objectType } : null,
-    notes: "",
-    favourite: false,
-    createdAt: at,
-    revision: 1,
-  }
-  const result = commit(`Add ${source.name} to targets`, (s) => withCatalog(s, (c) => ({ ...c, targets: { ...c.targets, [id]: target } })), { href: `/targets/${id}` })
-  if (result.ok) recordSaved(`Target added: ${source.name}`, source.origin === "resolver" ? `From ${source.provider ?? "SIMBAD"}` : "From the bundled catalogue", `/targets/${id}`)
-  return { result, targetId: result.ok ? id : null }
-}
 
 // ---------------------------------------------------------------------------
 // Archive and Restore transfers
