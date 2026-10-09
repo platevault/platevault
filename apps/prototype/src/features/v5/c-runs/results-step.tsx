@@ -10,6 +10,7 @@
 import { useNavigate } from "@tanstack/react-router"
 import { Check, Copy, FlaskConical, FolderSearch, Layers, PackageCheck, Paperclip, Play, ScanSearch } from "lucide-react"
 import { useEffect, useId, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { Box } from "@/components/app/box"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { CountBadge, Pill } from "@/components/app/pill"
@@ -25,7 +26,8 @@ import { projectWrapUp, rigName, runPreparations, subjectName } from "@/domain/d
 import { RESULT_KIND_LABEL } from "@/domain/labels"
 import type { Project, ResultKind, ResultRecord } from "@/domain/types"
 import { SelectField } from "@/features/t3/fields"
-import { fileName, formatBytes, plural } from "@/lib/format"
+import { fileName, formatBytes } from "@/lib/format"
+import { type Messages, m } from "@/lib/i18n"
 import { useStore } from "@/store/core"
 import { acceptResult, attachResult, discoverResults, finishWriting, inspectResult, setResultKind, simulateApplicationOutput, startRunWithResult } from "./actions"
 import { MasterOffers } from "./calibrate-step"
@@ -38,16 +40,18 @@ const KIND_OPTIONS = (["linear-integration", "channel-product", "final-image", "
 
 /** Wrap up on the Project page (P-WRAP1): where intermediates and prepared folders leave, once every run is Complete. */
 export function WrapUpLink({ project }: { project: Project }) {
+  const m = useMessages()
   const available = useStore((s) => projectWrapUp(s.catalog, project).available)
   if (!available) return null
   return (
     <Pill tone="info" icon={PackageCheck} link={{ to: "/projects/$projectId", params: { projectId: project.id }, search: { stage: "wrap-up" } }}>
-      Wrap up
+      {m.run_wrap_up()}
     </Pill>
   )
 }
 
 export function ResultsStep({ ctx }: { ctx: RunContext }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const { run, project } = ctx
   const outcome = useOutcome()
@@ -66,7 +70,7 @@ export function ResultsStep({ ctx }: { ctx: RunContext }) {
   const proposed = runLayout(state, run).resultsPath
   const lookAgain = () => {
     const r = discoverResults({ runId: run.id })
-    outcome.act(r, { title: r.found > 0 ? `${plural(r.found, "new file")} found` : "Nothing new", tone: "info" })
+    outcome.act(r, { blocked: m.run_results_look_again_blocked(), success: { title: r.found > 0 ? m.run_results_new_files_found({ count: r.found }) : m.import_nothing_new(), tone: "info" } })
   }
   return (
     <div className="space-y-4">
@@ -74,17 +78,17 @@ export function ResultsStep({ ctx }: { ctx: RunContext }) {
       <Box
         id="results-folder"
         level={2}
-        title="Results folder"
+        title={m.run_results_folder()}
         actions={
           <>
-            <PrototypeMenu actions={[{ label: "The application writes outputs", detail: "A stack per channel, a file still being written, two intermediates and a master dark.", run: () => outcome.act(simulateApplicationOutput({ runId: run.id })) }]} />
+            <PrototypeMenu actions={[{ label: m.run_proto_app_writes_outputs(), detail: m.run_proto_app_writes_outputs_detail(), run: () => outcome.act(simulateApplicationOutput({ runId: run.id }), { blocked: m.run_proto_blocked() }) }]} />
             <Button size="xs" variant="outline" disabled={folders.length === 0 || run.trashedAt !== null} onClick={lookAgain}>
               <FolderSearch aria-hidden="true" data-icon="inline-start" />
-              Look again
+              {m.run_results_look_again()}
             </Button>
             <Button size="xs" variant="outline" disabled={run.trashedAt !== null} onClick={() => setAttaching(true)}>
               <Paperclip aria-hidden="true" data-icon="inline-start" />
-              Attach…
+              {m.run_results_attach_ellipsis()}
             </Button>
           </>
         }
@@ -97,7 +101,7 @@ export function ResultsStep({ ctx }: { ctx: RunContext }) {
           ))
         ) : (
           <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
-            <Pill tone="muted">Not prepared</Pill>
+            <Pill tone="muted">{m.run_not_prepared()}</Pill>
             {proposed ? <span className="font-mono text-xs [overflow-wrap:anywhere]">{proposed}/</span> : null}
           </p>
         )}
@@ -111,8 +115,8 @@ export function ResultsStep({ ctx }: { ctx: RunContext }) {
         flush
         title={
           <span className="flex items-center gap-1.5">
-            Products <CountBadge count={products.length} label={plural(products.length, "product")} />
-            <HelpTip label="Products">Never accepted by itself; Accept binds the current bytes.</HelpTip>
+            {m.run_results_products()} <CountBadge count={products.length} label={m.run_results_products_count({ count: products.length })} />
+            <HelpTip label={m.run_results_products()}>{m.run_results_products_help()}</HelpTip>
           </span>
         }
       >
@@ -124,17 +128,17 @@ export function ResultsStep({ ctx }: { ctx: RunContext }) {
         level={2}
         title={
           <span className="flex items-center gap-1.5">
-            Intermediates <CountBadge count={intermediates.length} label={plural(intermediates.length, "intermediate")} />
+            {m.run_results_intermediates()} <CountBadge count={intermediates.length} label={m.run_results_intermediates_count({ count: intermediates.length })} />
           </span>
         }
         actions={intermediates.length > 0 ? <WrapUpLink project={project} /> : null}
       >
         {intermediates.length === 0 ? (
-          <p className="text-sm text-muted-foreground">None</p>
+          <p className="text-sm text-muted-foreground">{m.run_none()}</p>
         ) : (
           <details className="text-[0.75rem]">
             <summary className="cursor-default">
-              {plural(intermediates.length, "file")} · {formatBytes(intermediates.reduce((n, r) => n + (r.file?.sizeBytes ?? 0), 0))}
+              {m.run_files_count({ count: intermediates.length })} · {formatBytes(intermediates.reduce((n, r) => n + (r.file?.sizeBytes ?? 0), 0))}
             </summary>
             <ul className="mt-1 max-h-48 space-y-0.5 overflow-y-auto font-mono">
               {intermediates.map((r) => (
@@ -145,19 +149,23 @@ export function ResultsStep({ ctx }: { ctx: RunContext }) {
         )}
       </Box>
 
-      <AttachDialog open={attaching} onOpenChange={setAttaching} defaultFolder={folders[0] ?? null} kindOptions={KIND_OPTIONS} onAttach={(path, kind, channel) => outcome.act(attachResult({ runId: run.id }, path, kind, channel))} />
+      <AttachDialog open={attaching} onOpenChange={setAttaching} defaultFolder={folders[0] ?? null} kindOptions={KIND_OPTIONS} onAttach={(path, kind, channel) => outcome.act(attachResult({ runId: run.id }, path, kind, channel), { blocked: m.run_results_attach_blocked() })} />
       <UseAsInputDialog record={using} onClose={() => setUsing(null)} onOutcome={outcome.act} />
     </div>
   )
 }
 
-const BASIS_NOTE = { tool: "Tool evidence", window: "Inferred from the time window", unknown: "No evidence" } as const
+function basisNote(m: Messages, basis: ResultRow["attribution"]["basis"]): string {
+  if (basis === "tool") return m.run_results_basis_tool()
+  if (basis === "window") return m.run_results_basis_window()
+  return m.session_no_evidence()
+}
 
 export function attributionCell(r: ResultRow) {
   return (
     <span className="inline-flex items-center gap-1">
       <span>{r.attribution.label}</span>
-      <NoteMarker label={`${fileName(r.record.path)} attribution`}>{r.record.discovered === "attached" && r.attribution.basis === "unknown" ? "Attached · no evidence" : BASIS_NOTE[r.attribution.basis]}</NoteMarker>
+      <NoteMarker label={m.run_results_attribution_for({ name: fileName(r.record.path) })}>{r.record.discovered === "attached" && r.attribution.basis === "unknown" ? m.run_results_attached_no_evidence() : basisNote(m, r.attribution.basis)}</NoteMarker>
     </span>
   )
 }
@@ -168,24 +176,26 @@ function copyPath(path: string) {
 }
 
 export function ResultsTable({ rows, onOutcome, onUse, kindOptions }: { rows: ResultRow[]; rigId: string; onOutcome: Act; onUse?: (r: ResultRecord) => void; kindOptions: Array<{ value: string; label: string }> }) {
+  const m = useMessages()
+  const accept = (r: ResultRow) => onOutcome(acceptResult(r.record.id), { blocked: m.run_results_accept_blocked() })
   const entries = (r: ResultRow): MenuEntry[] => {
     const name = fileName(r.record.path)
     const candidate = r.record.acceptance === "candidate"
     return [
       { heading: name },
-      ...(candidate ? [{ label: "Accept", icon: Check, onSelect: () => onOutcome(acceptResult(r.record.id)) }] : []),
-      ...(!candidate && onUse ? [{ label: "Use as input…", icon: Play, onSelect: () => onUse(r.record) }] : []),
-      ...(r.changed && !r.pending ? [{ label: "Inspect again", icon: ScanSearch, onSelect: () => onOutcome(inspectResult(r.record.id)) }] : []),
-      ...(candidate && !r.record.kind ? [{ separator: true } as const, ...kindOptions.map((k) => ({ label: `Kind: ${k.label}`, onSelect: () => onOutcome(setResultKind(r.record.id, k.value as ResultKind)) }))] : []),
+      ...(candidate ? [{ label: m.run_accept(), icon: Check, onSelect: () => accept(r) }] : []),
+      ...(!candidate && onUse ? [{ label: m.run_results_use_as_input(), icon: Play, onSelect: () => onUse(r.record) }] : []),
+      ...(r.changed && !r.pending ? [{ label: m.run_results_inspect_again(), icon: ScanSearch, onSelect: () => onOutcome(inspectResult(r.record.id), { blocked: m.run_results_inspect_blocked() }) }] : []),
+      ...(candidate && !r.record.kind ? [{ separator: true } as const, ...kindOptions.map((k) => ({ label: m.run_results_kind_option({ kind: k.label }), onSelect: () => onOutcome(setResultKind(r.record.id, k.value as ResultKind), { blocked: m.run_results_kind_blocked() }) }))] : []),
       { separator: true },
-      { label: "Copy path", icon: Copy, onSelect: () => copyPath(r.record.path) },
-      ...(r.pending ? [{ label: "Prototype: finish writing", icon: FlaskConical, onSelect: () => onOutcome(finishWriting(r.record.id)) }] : []),
+      { label: m.session_copy_path(), icon: Copy, onSelect: () => copyPath(r.record.path) },
+      ...(r.pending ? [{ label: m.run_proto_finish_writing(), icon: FlaskConical, onSelect: () => onOutcome(finishWriting(r.record.id), { blocked: m.run_proto_blocked() }) }] : []),
     ]
   }
   const columns: Column<ResultRow>[] = [
     {
       id: "file",
-      header: "File",
+      header: m.run_col_file(),
       rowHeader: true,
       cell: (r) => (
         <span className="flex max-w-[18rem] flex-col">
@@ -199,27 +209,27 @@ export function ResultsTable({ rows, onOutcome, onUse, kindOptions }: { rows: Re
     },
     {
       id: "kind",
-      header: "Kind",
+      header: m.run_col_kind(),
       cell: (r) => (
         <span className="flex flex-wrap items-center gap-1">
-          {r.record.kind ? <span>{RESULT_KIND_LABEL[r.record.kind]}</span> : <Pill tone="warning">{r.record.acceptance === "candidate" ? "Kind?" : "Unknown kind"}</Pill>}
+          {r.record.kind ? <span>{RESULT_KIND_LABEL[r.record.kind]}</span> : <Pill tone="warning">{r.record.acceptance === "candidate" ? m.run_results_kind_missing() : m.run_unknown_kind()}</Pill>}
           {r.record.channel ? <Pill tone="neutral">{r.record.channel}</Pill> : null}
         </span>
       ),
     },
     {
       id: "state",
-      header: "State",
+      header: m.run_col_state(),
       cell: (r) => (
         <span className="flex flex-wrap items-center gap-1">
-          {r.pending ? <StatusBadge kind="processing" value="pending" label="Pending" /> : !r.readable ? <StatusBadge kind="availability" value="absent" label="Unreadable" /> : <StatusBadge kind="acceptance" value={r.record.acceptance} />}
-          {r.changed && !r.pending ? <StatusBadge kind="content" value="drifted" label={r.record.acceptance === "accepted" ? "Drifted" : "Changed"} /> : null}
+          {r.pending ? <StatusBadge kind="processing" value="pending" label={m.status_pending()} /> : !r.readable ? <StatusBadge kind="availability" value="absent" label={m.status_unreadable()} /> : <StatusBadge kind="acceptance" value={r.record.acceptance} />}
+          {r.changed && !r.pending ? <StatusBadge kind="content" value="drifted" label={r.record.acceptance === "accepted" ? m.status_drifted() : m.run_results_changed()} /> : null}
         </span>
       ),
     },
     {
       id: "rev",
-      header: "Revision",
+      header: m.run_col_revision(),
       cell: (r) => (
         <span className="flex flex-wrap items-center gap-1">
           {attributionCell(r)}
@@ -233,30 +243,31 @@ export function ResultsTable({ rows, onOutcome, onUse, kindOptions }: { rows: Re
       cell: (r) => (
         <span className="flex items-center justify-end gap-1">
           {r.record.acceptance === "candidate" ? (
-            <Button size="xs" onClick={() => onOutcome(acceptResult(r.record.id))} aria-label={`Accept ${fileName(r.record.path)}`}>
-              Accept
+            <Button size="xs" onClick={() => accept(r)} aria-label={m.run_results_accept_named({ name: fileName(r.record.path) })}>
+              {m.run_accept()}
             </Button>
           ) : null}
-          <RowActions entries={entries(r)} label={`Actions for ${fileName(r.record.path)}`} />
+          <RowActions entries={entries(r)} label={m.run_actions_for({ name: fileName(r.record.path) })} />
         </span>
       ),
     },
   ]
   return (
     <DataTable
-      label="Results"
+      label={m.step_results()}
       rows={rows}
       columns={columns}
       getRowId={(r) => r.record.id}
       scroll="none"
       initialSort={{ columnId: "file", direction: "asc" }}
       contextMenu={entries}
-      empty={<p className="px-3 py-4 text-sm text-muted-foreground">No products yet</p>}
+      empty={<p className="px-3 py-4 text-sm text-muted-foreground">{m.run_results_no_products()}</p>}
     />
   )
 }
 
 export function AttachDialog({ open, onOpenChange, defaultFolder, kindOptions, onAttach }: { open: boolean; onOpenChange: (o: boolean) => void; defaultFolder: string | null; kindOptions: Array<{ value: string; label: string }>; onAttach: (path: string, kind: ResultKind, channel: string | null) => boolean }) {
+  const m = useMessages()
   const [path, setPath] = useState("")
   const [kind, setKind] = useState(kindOptions[0]!.value)
   const [channel, setChannel] = useState("")
@@ -277,26 +288,26 @@ export function AttachDialog({ open, onOpenChange, defaultFolder, kindOptions, o
           }}
         >
           <DialogHeader>
-            <DialogTitle>Attach a Result</DialogTitle>
+            <DialogTitle>{m.run_results_attach_title()}</DialogTitle>
             <DialogDescription className="flex flex-wrap gap-1">
-              <Pill tone="muted">Attached</Pill>
-              <Pill tone="muted">User-linked</Pill>
-              <Pill tone="muted">Lineage unknown</Pill>
+              <Pill tone="muted">{m.run_results_attached()}</Pill>
+              <Pill tone="muted">{m.status_user_linked()}</Pill>
+              <Pill tone="muted">{m.run_results_lineage_unknown()}</Pill>
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
-            <Label htmlFor={pathId}>File path</Label>
-            <Input id={pathId} className="font-mono text-xs" value={path} onChange={(e) => setPath(e.target.value)} placeholder={defaultFolder ? `${defaultFolder}/…` : "/Volumes/…"} autoFocus />
+            <Label htmlFor={pathId}>{m.run_results_file_path()}</Label>
+            <Input id={pathId} className="font-mono text-xs" value={path} onChange={(e) => setPath(e.target.value)} placeholder={defaultFolder ? `${defaultFolder}/…` : m.run_results_path_placeholder()} autoFocus />
           </div>
-          <SelectField label="Kind" value={kind} options={kindOptions} onChange={setKind} />
+          <SelectField label={m.run_col_kind()} value={kind} options={kindOptions} onChange={setKind} />
           <div className="grid gap-1.5">
-            <Label htmlFor={channelId}>Channel (optional)</Label>
-            <Input id={channelId} value={channel} onChange={(e) => setChannel(e.target.value)} placeholder="Ha" />
+            <Label htmlFor={channelId}>{m.run_results_channel_optional()}</Label>
+            <Input id={channelId} value={channel} onChange={(e) => setChannel(e.target.value)} placeholder={m.run_results_channel_placeholder()} />
           </div>
           <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+            <DialogClose render={<Button type="button" variant="outline" />}>{m.verb_cancel()}</DialogClose>
             <Button type="submit" disabled={path.trim() === ""}>
-              Attach
+              {m.run_results_attach()}
             </Button>
           </DialogFooter>
         </form>
@@ -307,6 +318,7 @@ export function AttachDialog({ open, onOpenChange, defaultFolder, kindOptions, o
 
 /** "Use as input to a new run": any open Project's subject and rig; the product's rig is shown (D-W56). */
 function UseAsInputDialog({ record, onClose, onOutcome }: { record: ResultRecord | null; onClose: () => void; onOutcome: Act }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const navigate = useNavigate()
   const owner = record?.runId ? state.catalog.runs[record.runId] : undefined
@@ -323,17 +335,17 @@ function UseAsInputDialog({ record, onClose, onOutcome }: { record: ResultRecord
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Use {fileName(record.path)}</DialogTitle>
+          <DialogTitle>{m.run_use_named({ name: fileName(record.path) })}</DialogTitle>
           <DialogDescription className="flex flex-wrap items-center gap-1">
             <Pill tone="muted" icon={Layers}>
-              {owner?.name ?? "Run group"}
+              {owner?.name ?? m.run_results_run_group()}
             </Pill>
             <Pill tone="muted">{rigName(state.catalog, owner?.rigId ?? null)}</Pill>
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
           <SelectField
-            label="Project"
+            label={m.run_col_project()}
             value={project.id}
             options={projects.map((p) => ({ value: p.id, label: p.name }))}
             onChange={(v) => {
@@ -343,31 +355,31 @@ function UseAsInputDialog({ record, onClose, onOutcome }: { record: ResultRecord
             }}
           />
           {subjects.length > 0 ? (
-            <SelectField label="Subject" value={subject!.id} options={subjects.map((s) => ({ value: s.id, label: subjectName(state.catalog, s) }))} onChange={setSubjectId} />
+            <SelectField label={m.run_col_subject()} value={subject!.id} options={subjects.map((s) => ({ value: s.id, label: subjectName(state.catalog, s) }))} onChange={setSubjectId} />
           ) : (
-            <Refusal action="Start blocked" reason="mosaic subjects only" blockers={[]} />
+            <Refusal action={m.run_results_start_blocked()} reason={m.run_results_mosaic_subjects_only()} blockers={[]} />
           )}
-          {rig ? <SelectField label="Rig" value={rig} options={project.rigIds.map((id) => ({ value: id, label: rigName(state.catalog, id) }))} onChange={setRigId} /> : null}
+          {rig ? <SelectField label={m.run_col_rig()} value={rig} options={project.rigIds.map((id) => ({ value: id, label: rigName(state.catalog, id) }))} onChange={setRigId} /> : null}
           {rig && owner && rig !== owner.rigId ? (
             <span className="flex items-center gap-1">
-              <Pill tone="info">Another rig</Pill>
-              <HelpTip label="Another rig">The one-rig rule covers raw frames only.</HelpTip>
+              <Pill tone="info">{m.run_another_rig()}</Pill>
+              <HelpTip label={m.run_another_rig()}>{m.run_one_rig_rule_help()}</HelpTip>
             </span>
           ) : null}
         </div>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>{m.verb_cancel()}</DialogClose>
           <Button
             disabled={!subject || !rig}
             onClick={() => {
               const r = startRunWithResult(record.id, project.id, subject!.id, rig!)
-              if (onOutcome(r) && r.runId) {
+              if (onOutcome(r, { blocked: m.run_results_start_blocked() }) && r.runId) {
                 onClose()
                 void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: project.id, runId: r.runId, step: "select" } })
               }
             }}
           >
-            Start run
+            {m.startrun_title()}
           </Button>
         </DialogFooter>
       </DialogContent>

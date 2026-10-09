@@ -47,7 +47,7 @@ const OFFER_ORDER: OfferKind[] = ["rejected-frames", "intermediates", "duplicate
 const OFFER_LABEL: Record<OfferKind, string> = { "rejected-frames": "Rejects", intermediates: "Intermediates", "duplicate-copies": "Duplicates" }
 
 function offerLabel(m: Messages, kind: OfferKind): string {
-  return kind === "rejected-frames" ? m.wrapup_offer_rejects() : kind === "intermediates" ? m.wrapup_offer_intermediates_label() : m.wrapup_offer_duplicates_label()
+  return kind === "rejected-frames" ? m.wrapup_offer_rejects() : kind === "intermediates" ? m.run_results_intermediates() : m.wrapup_offer_duplicates_label()
 }
 
 type StepPill = { label: string; tone: Tone }
@@ -222,7 +222,7 @@ function CleanupStep({ project, step, pill, editable, current, settle }: StepPro
               title={m.wrapup_cleanup_confirm_title({ count: pending.length })}
               description={m.wrapup_cleanup_description()}
               changes={pending.map((r) => m.wrapup_cleanup_change({ name: r.run.name, count: r.paths.length, size: formatBytes(r.bytes) }))}
-              confirmLabel={m.wrapup_cleanup()}
+              confirmLabel={m.run_clean_up()}
               tone="destructive"
               onConfirm={() => cleanUp(pending)}
             />
@@ -236,7 +236,7 @@ function CleanupStep({ project, step, pill, editable, current, settle }: StepPro
         </>
       }
     >
-      <CommitOutcome result={refused} action={m.wrapup_cleanup_blocked()} reason={(count) => m.project_runs_count({ count })} className="border-b border-border px-3 py-2" />
+      <CommitOutcome result={refused} action={m.run_clean_up_blocked()} reason={(count) => m.project_runs_count({ count })} className="border-b border-border px-3 py-2" />
       <ul className="divide-y divide-separator text-sm">
         {rows.map((row) => (
           <li key={row.run.id} className="flex flex-wrap items-center gap-2 px-3 py-1.5">
@@ -358,7 +358,7 @@ function TrashStep({ project, step, pill, editable, current, settle }: StepProps
                       title={m.wrapup_trash_offer_title({ offer: offerLabel(m, kind).toLowerCase(), name: project.name })}
                       description={m.wrapup_trash_offer_description()}
                       changes={[m.wrapup_items_to_trash({ count: offer.count, size: formatBytes(offer.sizeBytes) }), ...(offer.refusals.length > 0 ? [m.wrapup_items_kept_reason({ count: offer.refusals.length })] : [])]}
-                      confirmLabel={m.trash_move()}
+                      confirmLabel={m.run_move_to_trash()}
                       tone="destructive"
                       onConfirm={() => move(offer)}
                     />

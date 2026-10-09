@@ -8,16 +8,17 @@
  */
 import { CircleCheck, FlaskConical, MoreHorizontal, X } from "lucide-react"
 import { type ReactNode, useCallback, useState } from "react"
-import { CurrentLink, StepGlyph } from "@/app/run-ui"
+import { useMessages } from "@/app/preferences"
+import { CurrentLink, gateWord, StepGlyph, stepName } from "@/app/run-ui"
 import { Refusal } from "@/components/app/refusal"
 import { Button } from "@/components/ui/button"
 import type { MenuEntry } from "@/components/app/row-menu"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { RadioGroupItem } from "@/components/ui/radio-group"
-import { GATE_LABEL, type RunStepState, type StepLink } from "@/domain/derive"
+import type { RunStepState, StepLink } from "@/domain/derive"
 import type { Catalog, RunStep } from "@/domain/types"
 import { profileOptions } from "@/features/v5/b-projects/start-run"
-import { plural } from "@/lib/format"
+import { m } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { CommitResult } from "@/store/core"
 
@@ -32,6 +33,7 @@ import type { CommitResult } from "@/store/core"
  * 1 needs review"); the step that holds Next carries a visible "Next" marker.
  */
 export function StepBar({ steps, here, nextId, linkFor, label }: { steps: RunStepState[]; here: RunStep; nextId: RunStep | null; linkFor: (step: RunStep) => { to: string; params: Record<string, string> }; label: string }) {
+  const m = useMessages()
   return (
     <nav aria-label={label} data-chrome className="border-b border-separator bg-background px-3">
       <ol className="flex min-w-0 items-stretch">
@@ -40,27 +42,30 @@ export function StepBar({ steps, here, nextId, linkFor, label }: { steps: RunSte
           const current = step.id === here
           const holdsNext = nextId === step.id && !current
           const status = step.status && step.status !== "–" ? step.status : null
+          const name = stepName(m, step.id)
+          const gate = gateWord(m, step.state)
           return (
             <li key={step.id} className="min-w-0 flex-1">
               <CurrentLink
                 to={link.to as never}
                 params={link.params as never}
                 current={current ? "step" : false}
-                title={`${step.n} ${step.label}: ${GATE_LABEL[step.state]}${status ? ` · ${status}` : ""}${holdsNext ? " · holds Next" : ""}`}
+                title={[m.run_step_title({ n: step.n, step: name, gate }), status, holdsNext ? m.run_step_holds_next() : null].filter(Boolean).join(" · ")}
                 className={cn(
                   "group flex h-8 min-w-0 items-center gap-1.5 border-b-2 px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   current ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 <StepGlyph state={step.state} />
-                <span className="shrink-0 font-medium">{step.label}</span>
+                <span className="shrink-0 font-medium">{name}</span>
                 <span className="sr-only">
-                  : {GATE_LABEL[step.state]}
+                  : {gate}
                   {status ? `, ${status}` : ""}
                 </span>
                 {holdsNext ? (
                   <span className="shrink-0 rounded-sm border border-link/50 px-1 text-xs leading-4 font-semibold text-link">
-                    <span className="sr-only">, </span>Next
+                    <span className="sr-only">, </span>
+                    {m.run_step_next()}
                   </span>
                 ) : null}
               </CurrentLink>
@@ -77,18 +82,18 @@ export function StepBar({ steps, here, nextId, linkFor, label }: { steps: RunSte
 // ---------------------------------------------------------------------------
 
 export interface Outcome {
-  /** "Prepare M 31 blocked", or a success: "Prepared". */
+  /** "Prepare blocked", or a success: "Prepared". */
   title: string
   /** Blockers of a refusal; the reason of a failure. A success carries none. */
   reasons?: string[]
   tone: "refusal" | "warning" | "info"
 }
 
-/** A store refusal title ("Prepare M 31 refused") in the terse form: "Prepare M 31 blocked". */
-function refusalTitle(r: Extract<CommitResult, { reason: "refused" }>): string {
-  const suffix = `: ${r.reasons.join("; ")}.`
-  const title = r.message.endsWith(suffix) ? r.message.slice(0, -suffix.length) : "Blocked"
-  return title.endsWith(" refused") ? `${title.slice(0, -" refused".length)} blocked` : title
+export interface ActOptions {
+  /** The refusal's title, "<Action> blocked", worded by the caller that knows the action; without one a refusal reads "Blocked". */
+  blocked?: string
+  /** The line a success shows; without one a success clears the notice. */
+  success?: Outcome | null
 }
 
 /**
@@ -98,14 +103,14 @@ function refusalTitle(r: Extract<CommitResult, { reason: "refused" }>): string {
  */
 export function useOutcome(resetKey?: string) {
   const [outcome, setOutcome] = useState<{ value: Outcome; key: string | undefined } | null>(null)
-  const act = useCallback((result: CommitResult | { result: CommitResult }, success?: Outcome | null): boolean => {
+  const act = useCallback((result: CommitResult | { result: CommitResult }, options: ActOptions = {}): boolean => {
     const r = "result" in result ? result.result : result
     if (r.ok) {
-      setOutcome(success ? { value: success, key: resetKey } : null)
+      setOutcome(options.success ? { value: options.success, key: resetKey } : null)
       return true
     }
-    if (r.reason === "refused") setOutcome({ value: { title: refusalTitle(r), reasons: r.reasons, tone: "refusal" }, key: resetKey })
-    else setOutcome({ value: { title: r.reason === "stale" ? "Changed elsewhere" : "Not saved", reasons: [r.message], tone: "warning" }, key: resetKey })
+    if (r.reason === "refused") setOutcome({ value: { title: options.blocked ?? m.status_blocked(), reasons: r.reasons, tone: "refusal" }, key: resetKey })
+    else setOutcome({ value: { title: r.reason === "stale" ? m.status_changed_elsewhere() : m.status_not_saved(), reasons: [r.message], tone: "warning" }, key: resetKey })
     return false
   }, [resetKey])
   return { outcome: outcome && outcome.key === resetKey ? outcome.value : null, act, clear: () => setOutcome(null) }
@@ -113,10 +118,11 @@ export function useOutcome(resetKey?: string) {
 
 /** The outcome beside its control: `<Action> blocked · N blockers ▸` with chips (linked through `linkFor`), or one status line. */
 export function OutcomeNotice({ outcome, onDismiss, className, linkFor }: { outcome: Outcome | null; onDismiss: () => void; className?: string; linkFor?: (blocker: string) => StepLink | undefined }) {
+  const m = useMessages()
   if (!outcome) return null
   const reasons = outcome.reasons ?? []
   const dismiss = (
-    <Button size="icon-xs" variant="ghost" onClick={onDismiss} aria-label="Dismiss" title="Dismiss">
+    <Button size="icon-xs" variant="ghost" onClick={onDismiss} aria-label={m.run_dismiss()} title={m.run_dismiss()}>
       <X aria-hidden="true" />
     </Button>
   )
@@ -132,9 +138,9 @@ export function OutcomeNotice({ outcome, onDismiss, className, linkFor }: { outc
   return (
     <div className={cn("flex min-w-0 items-start gap-1.5", className)} data-outcome={outcome.tone}>
       {outcome.tone === "refusal" ? (
-        <Refusal className="min-w-0 flex-1" action={outcome.title} reason={plural(reasons.length, "blocker")} blockers={reasons.map((label) => ({ label, link: linkFor?.(label) }))} />
+        <Refusal className="min-w-0 flex-1" action={outcome.title} reason={m.refusal_blockers({ count: reasons.length })} blockers={reasons.map((label) => ({ label, link: linkFor?.(label) }))} />
       ) : (
-        <Refusal className="min-w-0 flex-1" action={outcome.title} reason={reasons[0] ?? "try again"} blockers={[]} />
+        <Refusal className="min-w-0 flex-1" action={outcome.title} reason={reasons[0] ?? m.run_try_again()} blockers={[]} />
       )}
       {dismiss}
     </div>
@@ -171,17 +177,18 @@ export interface PrototypeAction {
 }
 
 /** Simulated-disk controls for the review; labelled Prototype, never product actions. */
-export function PrototypeMenu({ actions, label = "Prototype" }: { actions: PrototypeAction[]; label?: string }) {
+export function PrototypeMenu({ actions, label }: { actions: PrototypeAction[]; label?: string }) {
+  const m = useMessages()
   if (actions.length === 0) return null
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button size="sm" variant="ghost" />}>
         <FlaskConical aria-hidden="true" data-icon="inline-start" />
-        {label}
+        {label ?? m.common_prototype()}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Simulate on the prototype disk</DropdownMenuLabel>
+          <DropdownMenuLabel>{m.run_prototype_simulate()}</DropdownMenuLabel>
           {actions.map((a) => (
             <DropdownMenuItem key={a.label} onClick={a.run}>
               <span className="flex flex-col">
@@ -232,17 +239,18 @@ export function RowActions({ entries, label }: { entries: MenuEntry[]; label: st
 
 /** A profile's name as the pickers show it (one convention with Start run): the generic launcher reads "Other app". */
 export function profileLabel(catalog: Catalog, profileId: string | null): string {
-  return profileOptions(catalog).find((o) => o.value === profileId)?.label ?? "Application"
+  return profileOptions(catalog).find((o) => o.value === profileId)?.label ?? m.run_profile_application()
 }
 
 // ---------------------------------------------------------------------------
 // Read-outs
 // ---------------------------------------------------------------------------
 
-export function Sha({ value, label = "SHA-256" }: { value: string | null; label?: string }) {
+export function Sha({ value, label }: { value: string | null; label?: string }) {
+  const m = useMessages()
   if (!value) return <span className="text-muted-foreground">–</span>
   return (
-    <span className="font-mono text-[0.6875rem] text-muted-foreground" title={`${label} ${value}`}>
+    <span className="font-mono text-[0.6875rem] text-muted-foreground" title={`${label ?? m.run_sha256()} ${value}`}>
       {value.slice(0, 10)}…
     </span>
   )

@@ -4,3 +4,9 @@
 # Regenerate with: node scripts/check-i18n-catalog.mjs --generate
 # pt-BR agrees in gender with the noun: 'Mostrar tudo' (plan entries) vs 'Mostrar todas' (sessões).
 dup-value	plan_show_all,sessions_show_all
+# 'Wrap up' is a stage name (pt-BR noun 'Encerramento') and an action (verb 'Encerrar').
+dup-value	run_wrap_up,wrapup_action
+# pt-BR gender follows the noun: panel (painel, m.) vs session (sessão, f.).
+dup-value	mosaic_left_out,run_metadata_hint_excluded
+# pt-BR differs by position: mid-sentence possessive vs sentence-initial article.
+dup-value	run_entry_its_volume,wrapup_its_volume

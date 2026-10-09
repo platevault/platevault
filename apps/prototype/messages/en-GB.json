@@ -604,7 +604,6 @@
   "home_candidate_of": "Candidate of {name}",
   "session_cant_add": "Can't add",
   "home_added_to_draft": "{session} added to the {run} draft",
-  "home_add_to_run": "Add to run",
   "home_tonight": "Tonight",
   "home_no_site": "No site",
   "home_darkness": "Darkness",
@@ -1158,7 +1157,6 @@
   "wrapup_project": "Wrap up {name}",
   "project_noun": "Project",
   "wrapup_its_volume": "Its volume",
-  "wrapup_refusal_offline": "{name} is offline",
   "wrapup_refusal_not_found": "Not found at {path}",
   "wrapup_refusal_not_mounted": "{name} is not mounted",
   "wrapup_refusal_not_writable": "{name} is not writable",
@@ -1294,7 +1292,6 @@
     }
   ],
   "projects_no_subjects": "No subjects",
-  "projects_no_rigs": "No rigs",
   "projects_col_state": "State",
   "projects_col_goals": "Goals",
   "projects_col_open_runs": "Open runs",
@@ -1462,7 +1459,6 @@
   "project_run_trash_description": "Restore brings it back as it was.",
   "project_run_to_trash": "{name} → Project Trash",
   "project_run_trash_goals": "Its members stop counting toward goals",
-  "trash_move": "Move to Trash",
   "project_placement_ambiguous": "Ambiguous",
   "project_placement_off_panel": "Off panel",
   "project_placement_no_pointing": "No pointing",
@@ -1904,7 +1900,6 @@
   "trash_empty_run": "Empty run",
   "trash_empty": "Empty Trash",
   "wrapup_offer_rejects": "Rejects",
-  "wrapup_offer_intermediates_label": "Intermediates",
   "wrapup_offer_duplicates_label": "Duplicates",
   "wrapup_blocked": "Wrap up blocked",
   "wrapup_runs_not_complete": [
@@ -1961,9 +1956,7 @@
       }
     }
   ],
-  "wrapup_cleanup": "Clean up",
   "wrapup_mark_done": "Mark Done",
-  "wrapup_cleanup_blocked": "Clean up blocked",
   "wrapup_cleaning_up": "Cleaning up",
   "wrapup_clean": "Clean",
   "wrapup_items": [
@@ -2560,7 +2553,6 @@
   ],
   "target_planner": "Planner",
   "target_panel": "Panel {number}",
-  "target_no_sessions": "No sessions",
   "target_sessions_caption": "Sessions of {name}",
   "target_channel": "Channel",
   "calibration_frames": "Frames",
@@ -2598,7 +2590,6 @@
   "activity_destination_project": "Project",
   "activity_destination_about": "About",
   "activity_destination_run": "run",
-  "activity_destination_group": "run group",
   "activity_destination_trash": "Project Trash",
   "activity_destination_page": "page",
   "activity_recorded": "Recorded",
@@ -3631,5 +3622,1951 @@
         "countPlural=*": "{n} runs"
       }
     }
-  ]
+  ],
+  "run_step_title": "{n} {step}: {gate}",
+  "run_step_holds_next": "holds Next",
+  "run_step_next": "Next",
+  "run_dismiss": "Dismiss",
+  "run_try_again": "try again",
+  "run_prototype_simulate": "Simulate on the prototype disk",
+  "run_profile_application": "Application",
+  "run_sha256": "SHA-256",
+  "run_open_project": "Open the Project",
+  "run_open_select": "Open Select",
+  "run_subject_fixed": "Subject (fixed)",
+  "run_rig_fixed": "Rig (fixed)",
+  "run_restore_returns_to": "Restore returns it to {step}",
+  "run_in_trash": "In Trash · {date}",
+  "run_open_trash": "Open Trash",
+  "run_restore": "Restore",
+  "run_restored": "{name} restored",
+  "run_restore_blocked": "Restore blocked",
+  "run_reopen": "Reopen",
+  "run_reopen_blocked": "Reopen blocked",
+  "run_clean_up": "Clean up",
+  "run_move_to_trash": "Move to Trash",
+  "run_trash_blocked": "Move to Trash blocked",
+  "run_trash_title": "Move {name} to the Trash?",
+  "run_trash_waits": "Waits in {project}'s Trash at {step}",
+  "run_trash_leaves": "Leaves run lists, pickers and goal totals",
+  "run_actions_for": "Actions for {name}",
+  "run_remove": "Remove",
+  "run_none": "None",
+  "run_unknown_run": "Unknown run",
+  "run_unknown_project": "Unknown Project",
+  "run_unknown_kind": "Unknown kind",
+  "run_another_rig": "Another rig",
+  "run_col_night": "Night",
+  "run_col_channel": "Channel",
+  "run_col_frames": "Frames",
+  "run_col_integration": "Integration",
+  "run_col_reason": "Reason",
+  "run_col_state": "State",
+  "run_col_product": "Product",
+  "run_col_kind": "Kind",
+  "run_col_from": "From",
+  "run_col_rig": "Rig",
+  "run_col_accepted_bytes": "Accepted bytes",
+  "run_select_pointing_inside_panel": "Pointing inside the panel",
+  "run_selection_blocked": "Selection change blocked",
+  "run_select_remove_from_run": "Remove from run",
+  "run_select_add_to_run": "Add to run",
+  "run_select_frames_of": "{included} of {total}",
+  "run_select_not_selected": "Not selected · {reason}",
+  "run_select_no_longer_matches": "No longer matches",
+  "run_select_remove_session": "Remove {session} from the run",
+  "run_select_in_run": "In the run",
+  "run_select_new_candidates": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} new candidate",
+        "countPlural=*": "{count} new candidates"
+      }
+    }
+  ],
+  "run_select_add_count": "Add {count}",
+  "run_select_members_no_longer_match": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} member no longer matches",
+        "countPlural=*": "{count} members no longer match"
+      }
+    }
+  ],
+  "run_select_why_no_longer_match": "Why members no longer match",
+  "run_select_no_longer_match_note": "Target or rig changed · counts until removed",
+  "run_select_selected_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} selected session",
+        "countPlural=*": "{count} selected sessions"
+      }
+    }
+  ],
+  "run_select_all_channels": "All",
+  "run_select_selected_only": "Selected only",
+  "run_select_sessions_label": "Sessions for {name}",
+  "run_select_no_candidates": "No candidates on {rig}",
+  "run_select_revision": "Revision {revision}",
+  "run_discard": "Discard",
+  "run_discard_blocked": "Discard blocked",
+  "run_save_revision": "Save revision {revision}",
+  "run_saved_revision": "Saved revision {revision}",
+  "run_save_blocked": "Save blocked",
+  "run_products_blocked": "Product inputs blocked",
+  "run_product_inputs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} product input",
+        "countPlural=*": "{count} product inputs"
+      }
+    }
+  ],
+  "run_product_inputs_help": "Accepted Results, any Project and rig. The one-rig rule covers raw frames only.",
+  "run_products_add": "Add products…",
+  "run_products_add_title": "Add products",
+  "run_products_none": "No accepted products",
+  "run_products_use": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Use {count} product",
+        "countPlural=*": "Use {count} products"
+      }
+    }
+  ],
+  "run_complete": "Complete",
+  "run_completed": "{name} Complete",
+  "run_complete_blocked": "Complete blocked",
+  "run_complete_title": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Complete {name} with {count} open step?",
+        "countPlural=*": "Complete {name} with {count} open steps?"
+      }
+    }
+  ],
+  "run_complete_description": "Nothing is removed.",
+  "run_reopen_returns_to": "Reopen returns it to {step}",
+  "run_complete_step_stays": "{step} stays {gate}",
+  "run_complete_at": "Complete · {date}",
+  "run_completion": "Completion",
+  "run_cleanup_kind_link": "Link",
+  "run_cleanup_kind_list": "Source list",
+  "run_cleanup_kind_copy": "Copy or clone",
+  "run_exclude": "Exclude",
+  "run_include": "Include",
+  "run_clean_up_this": "Clean up this…",
+  "run_clean_up_ellipsis": "Clean up…",
+  "run_clean_up_blocked": "Clean up blocked",
+  "run_col_entry": "Entry",
+  "run_col_size": "Size",
+  "run_entries_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entry",
+        "countPlural=*": "{count} entries"
+      }
+    }
+  ],
+  "run_after_complete": "After Complete",
+  "run_direct_source_nothing_to_clean": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Direct-source preparation · nothing to clean",
+        "countPlural=*": "{count} Direct-source preparations · nothing to clean"
+      }
+    }
+  ],
+  "run_prepared_entries_label": "Prepared entries of {name}",
+  "run_no_prepared_entries": "No prepared entries",
+  "run_all_in_os_trash": "All in the OS Trash",
+  "run_nothing_prepared": "Nothing prepared",
+  "run_open_prepare": "Open Prepare",
+  "run_clean_up_title": "Clean up {name}?",
+  "run_clean_up_description": "Restorable from the OS Trash.",
+  "run_clean_up_moves": [
+    {
+      "declarations": [
+        "input count",
+        "input bytes",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Moves {count} prepared entry · {bytes}",
+        "countPlural=*": "Moves {count} prepared entries · {bytes}"
+      }
+    }
+  ],
+  "run_clean_up_from": "From {folder}/",
+  "run_clean_up_confirm": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {count} entry to Trash",
+        "countPlural=*": "Move {count} entries to Trash"
+      }
+    }
+  ],
+  "run_hide": "Hide",
+  "run_show": "Show",
+  "run_note_for": "{name} note",
+  "run_frames_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} frame",
+        "countPlural=*": "{count} frames"
+      }
+    }
+  ],
+  "run_cal_readiness": "Readiness",
+  "run_cal_auto_assign": "Auto-assign",
+  "run_cal_policy_blocked": "Auto-assign blocked",
+  "run_cal_off": "Off",
+  "run_cal_no_sessions": "No sessions",
+  "run_cal_to_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} to review",
+        "countPlural=*": "{count} to review"
+      }
+    }
+  ],
+  "run_cal_policy_shared": "Policy shared by every panel",
+  "run_cal_matches": "Matches",
+  "run_cal_requirements": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} requirement",
+        "countPlural=*": "{count} requirements"
+      }
+    }
+  ],
+  "run_cal_no_sessions_saved": "No sessions saved",
+  "run_cal_exception_blocked": "Exception blocked",
+  "run_cal_automatic": "Automatic",
+  "run_cal_exception_note": "Exception · {reason}",
+  "run_cal_tie": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Tie · {count} equal master · nearest night wins",
+        "countPlural=*": "Tie · {count} equal masters · nearest night wins"
+      }
+    }
+  ],
+  "run_cal_stack_from": "Stack from {name}",
+  "run_cal_stacking": "Stacking {name}",
+  "run_cal_assign_blocked": "Assignment blocked",
+  "run_cal_kind_dark": "dark",
+  "run_cal_kind_flat": "flat",
+  "run_cal_kind_bias": "bias",
+  "run_use_named": "Use {name}",
+  "run_cal_use_as_exception": "Use {name} as exception…",
+  "run_cal_process_without": "Process without {kind}…",
+  "run_cal_defer": "Defer",
+  "run_cal_use_automatic": "Use automatic",
+  "run_cal_no_master": "No master",
+  "run_cal_col_light_session": "Light session",
+  "run_cal_col_master": "Master",
+  "run_cal_col_criteria": "Criteria",
+  "run_cal_without": "Without {kind}",
+  "run_cal_closest": "Closest · {name}",
+  "run_cal_vs": "vs {value}",
+  "run_cal_choose_for": "Choose the {name}",
+  "run_cal_requirements_label": "Calibration requirements",
+  "run_cal_exception_title": "Exception: {name}",
+  "run_cal_this_run_only": "this run only",
+  "run_cal_reason_placeholder": "Dithered; no 300 s dark at gain 100",
+  "run_cal_record_exception": "Record exception",
+  "run_cal_add_blocked": "Add to library blocked",
+  "run_cal_dismiss_blocked": "Dismiss blocked",
+  "run_cal_master_added": "{name} added",
+  "run_cal_master_dismissed": "{name} dismissed",
+  "run_cal_masters_found": "Masters found",
+  "run_cal_masters_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master",
+        "countPlural=*": "{count} masters"
+      }
+    }
+  ],
+  "run_cal_restore_in_library": "Restore in the Calibration library",
+  "run_cal_dismissed_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} dismissed",
+        "countPlural=*": "{count} dismissed"
+      }
+    }
+  ],
+  "run_cal_none_pending": "None pending",
+  "run_cal_add_to_library": "Add to library",
+  "run_cal_bin": "bin {binning}",
+  "run_wrap_up": "Wrap up",
+  "run_accept": "Accept",
+  "run_not_prepared": "Not prepared",
+  "run_files_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} file",
+        "countPlural=*": "{count} files"
+      }
+    }
+  ],
+  "run_col_file": "File",
+  "run_col_revision": "Revision",
+  "run_col_project": "Project",
+  "run_col_subject": "Subject",
+  "run_proto_blocked": "Simulation blocked",
+  "run_proto_app_writes_outputs": "The application writes outputs",
+  "run_proto_app_writes_outputs_detail": "A stack per channel, a file still being written, two intermediates and a master dark.",
+  "run_proto_finish_writing": "Prototype: finish writing",
+  "run_results_look_again_blocked": "Look again blocked",
+  "run_results_new_files_found": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} new file found",
+        "countPlural=*": "{count} new files found"
+      }
+    }
+  ],
+  "run_results_folder": "Results folder",
+  "run_results_look_again": "Look again",
+  "run_results_attach_ellipsis": "Attach…",
+  "run_results_attach": "Attach",
+  "run_results_attach_blocked": "Attach blocked",
+  "run_results_products": "Products",
+  "run_results_products_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} product",
+        "countPlural=*": "{count} products"
+      }
+    }
+  ],
+  "run_results_products_help": "Never accepted by itself; Accept binds the current bytes.",
+  "run_results_intermediates": "Intermediates",
+  "run_results_intermediates_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} intermediate",
+        "countPlural=*": "{count} intermediates"
+      }
+    }
+  ],
+  "run_results_basis_tool": "Tool evidence",
+  "run_results_basis_window": "Inferred from the time window",
+  "run_results_attached_no_evidence": "Attached · no evidence",
+  "run_results_attribution_for": "{name} attribution",
+  "run_results_accept_blocked": "Accept blocked",
+  "run_results_use_as_input": "Use as input…",
+  "run_results_inspect_again": "Inspect again",
+  "run_results_inspect_blocked": "Inspect blocked",
+  "run_results_kind_option": "Kind: {kind}",
+  "run_results_kind_blocked": "Kind change blocked",
+  "run_results_kind_missing": "Kind?",
+  "run_results_changed": "Changed",
+  "run_results_accept_named": "Accept {name}",
+  "run_results_no_products": "No products yet",
+  "run_results_attach_title": "Attach a Result",
+  "run_results_attached": "Attached",
+  "run_results_lineage_unknown": "Lineage unknown",
+  "run_results_file_path": "File path",
+  "run_results_path_placeholder": "/Volumes/…",
+  "run_results_channel_optional": "Channel (optional)",
+  "run_results_channel_placeholder": "Ha",
+  "run_results_run_group": "Run group",
+  "run_results_start_blocked": "Start blocked",
+  "run_results_mosaic_subjects_only": "mosaic subjects only",
+  "run_one_rig_rule_help": "The one-rig rule covers raw frames only.",
+  "run_prepare_running": "{title} running",
+  "run_read_only_because": "Read-only · {reason}",
+  "run_prepare_shared_title": "Profile, mode and policy shared by every panel",
+  "run_shared_with": "Shared · {name}",
+  "run_profile_blocked": "Profile change blocked",
+  "run_mode_blocked": "Input mode change blocked",
+  "run_folder_blocked": "Run folder change blocked",
+  "run_layout_output": "<output>",
+  "run_layout_last_used": "Last used",
+  "run_layout_not_chosen": "Not chosen",
+  "run_layout_output_note": "Output",
+  "run_layout_group": "Group",
+  "run_layout_group_rev": "Group · rev {revision}",
+  "run_layout_new": "New",
+  "run_layout_new_rev": "New · rev {revision}",
+  "run_layout_results_folder": "{name} Results",
+  "run_layout_results_every_revision": "Results · every revision",
+  "run_layout_change_folder": "Change folder…",
+  "run_layout_preview": "Layout preview",
+  "run_layout_output_folder": "Output folder",
+  "run_layout_use": "Use",
+  "run_proto_object_correction": "Record an OBJECT correction",
+  "run_proto_object_correction_detail": "Adds a catalog correction on the first member session, so the corrected metadata review appears.",
+  "run_proto_source_drift": "Change a prepared source frame",
+  "run_proto_source_drift_detail": "An outside tool rewrites one source; Open then finds the drift.",
+  "run_prepare_blocked": "Prepare blocked",
+  "run_prepare_ellipsis": "Prepare…",
+  "run_prepare_title": "Prepare {name}?",
+  "run_prepare_title_rev": "Prepare {name} (rev {revision})?",
+  "run_prepare_confirm": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Prepare {count} input",
+        "countPlural=*": "Prepare {count} inputs"
+      }
+    }
+  ],
+  "run_prepare_creates": "Creates {folder}",
+  "run_prepare_creates_run_folder": "Creates the run folder",
+  "run_prepare_writes_source_list": "Writes a source list",
+  "run_prepare_writes_entries": [
+    {
+      "declarations": [
+        "input count",
+        "input bytes",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Writes {count} entry · {bytes}",
+        "countPlural=*": "Writes {count} entries · {bytes}"
+      }
+    }
+  ],
+  "run_prepare_inputs_blocked_partial": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} input blocked · Partial",
+        "countPlural=*": "{count} inputs blocked · Partial"
+      }
+    }
+  ],
+  "run_prepare_records_decisions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Records {count} metadata decision",
+        "countPlural=*": "Records {count} metadata decisions"
+      }
+    }
+  ],
+  "run_profile_verified": "Verified",
+  "run_profile_not_verified": "Not verified",
+  "run_profile_read_only": "Read-only",
+  "run_profile_write_prone": "Write-prone",
+  "run_profile_writes_unknown": "Writes unknown",
+  "run_profile_evidence": "{name} evidence",
+  "run_mode_link_type": "Link type",
+  "run_mode_symbolic_links": "Symbolic links",
+  "run_mode_hard_links": "Hard links",
+  "run_mode_hard_links_help": "Every source and the run folder on one volume.",
+  "run_mode_named_blocked": "{mode} blocked",
+  "run_metadata_hint_accept_source": "Header as is",
+  "run_metadata_hint_excluded": "Left out",
+  "run_metadata_hint_configuration": "Via configuration",
+  "run_metadata_absent": "absent",
+  "run_metadata_legend": "How the corrected value of {field} reaches the application",
+  "run_metadata_not_supported": "{name}: not supported",
+  "run_metadata_needs_isolated": "Needs Copy or Clone",
+  "run_footprint_title": "Prepared bytes",
+  "run_footprint_prepared": "{bytes} prepared",
+  "run_footprint_note_label": "Footprint note",
+  "run_footprint_offline": "Volume offline · bytes unknown",
+  "run_launch_opened": "Opened",
+  "run_launch_not_located": "Not located",
+  "run_launch_failed": "Did not launch",
+  "run_named_rev": "{name} (rev {revision})",
+  "run_preparation": "Preparation",
+  "run_preparation_rev": "Preparation (rev {revision})",
+  "run_open_blocked": "Open blocked",
+  "run_opened": "Opened {name}",
+  "run_open_in": "Open in {app}",
+  "run_link_symbolic": "symbolic",
+  "run_link_hard": "hard",
+  "run_membership_changed": "Membership changed · prepare r{revision}",
+  "run_unverified_since": "Unverified since {date}",
+  "run_entries_changed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entry changed",
+        "countPlural=*": "{count} entries changed"
+      }
+    }
+  ],
+  "run_partial_count": "Partial {done}/{total}",
+  "run_prepared_count": "Prepared · {done}/{total}",
+  "run_blocked_count": "Blocked · {count}",
+  "run_blocked_inputs_label": "Blocked inputs, {count}",
+  "run_lock_trashed": "In the Project Trash",
+  "run_lock_complete": "Complete · Reopen to change",
+  "run_parent_none": "No output folder",
+  "run_parent_missing": "{name} missing",
+  "run_parent_read_only": "{name} not writable",
+  "run_field_target": "Target",
+  "run_field_equipment": "Equipment",
+  "run_field_filter": "Filter",
+  "run_field_exposure": "Exposure",
+  "run_field_focal_length": "Focal length",
+  "run_metadata_choice_configuration": "Application configuration",
+  "run_metadata_choice_patched_copy": "Patched copy",
+  "run_metadata_choice_accept_source": "Accept the source value",
+  "run_metadata_choice_excluded": "Exclude these inputs",
+  "run_mode_semantics_symlink": "A run folder of symbolic links to the originals. References, not backups: a writing application alters the source.",
+  "run_mode_semantics_hardlink": "A run folder of hard links. Same volume only; the link and the original are the same file.",
+  "run_mode_semantics_direct_source": "No run folder entries: the profile gets the exact original paths in a file list. Nothing is linked or copied.",
+  "run_mode_semantics_copy": "Isolated full copies of every input. Needs storage for every byte; originals are never touched.",
+  "run_mode_semantics_clone": "Isolated copy-on-write clones on the same volume. Near-zero storage until either side changes.",
+  "run_check_lock": "Run state",
+  "run_check_membership": "Saved membership",
+  "run_check_profile": "Application profile",
+  "run_check_metadata": "Corrected metadata",
+  "run_check_mode": "Input mode",
+  "run_check_destination": "Run folder",
+  "run_check_space": "Free space",
+  "run_check_sources": "Source presence",
+  "run_check_entries": "Inputs",
+  "run_entry_denied": "Unreadable: read access to {path} is denied",
+  "run_entry_offline": "Offline: {name} is not connected",
+  "run_entry_its_volume": "its volume",
+  "run_entry_retired": "Retired: {name} is retired and never an input",
+  "run_entry_its_location": "its location",
+  "run_entry_not_found": "Not found at {path} at the last scan",
+  "run_entry_unresolved": "Unresolved member: it could not be read when it was selected",
+  "run_entry_not_readable": "Not readable at {path}",
+  "run_mode_output_volume": "the output volume",
+  "run_mode_write_prone": "{name}: write-prone",
+  "run_mode_writes_unknown": "{name}: input writes unknown",
+  "run_mode_other_volume": "Sources on another volume",
+  "run_mode_whole_folders": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Reads whole folders · {count} excluded frame",
+        "countPlural=*": "Reads whole folders · {count} excluded frames"
+      }
+    }
+  ],
+  "run_mode_no_source_paths": "{name}: no source paths",
+  "run_mode_no_clones": "{name}: no clones",
+  "run_mode_needs_space": "Needs {bytes} · {free} free",
+  "run_check_requirements_to_review": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} requirement to review",
+        "countPlural=*": "{count} requirements to review"
+      }
+    }
+  ],
+  "run_check_products_reads": "{name} reads {kinds}",
+  "run_check_products_unsupported": "Unsupported: {files}",
+  "run_check_corrections_to_decide": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} correction to decide",
+        "countPlural=*": "{count} corrections to decide"
+      }
+    }
+  ],
+  "run_check_patched_needs_isolated": "Patched copies need Copy or Clone",
+  "run_check_no_configuration": "{name}: no configuration",
+  "run_check_decisions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} decision",
+        "countPlural=*": "{count} decisions"
+      }
+    }
+  ],
+  "run_check_folder_exists": "{name} exists",
+  "run_check_space_of": "{bytes} of {free} free",
+  "run_check_sources_readable": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} source readable",
+        "countPlural=*": "{count} sources readable"
+      }
+    }
+  ],
+  "run_check_sources_unreadable": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} source unreadable · Partial",
+        "countPlural=*": "{count} sources unreadable · Partial"
+      }
+    }
+  ],
+  "run_check_no_frames": "No included frames",
+  "run_verify_entry_missing": "The run folder entry is missing or its volume is offline.",
+  "run_verify_source_unreadable": "The source cannot be read now (offline or missing).",
+  "run_verify_snapshot_differs": "Changed since its preparation snapshot: its SHA-256 differs.",
+  "run_verify_entry_differs": "This entry no longer matches what was prepared.",
+  "run_verify_digest_differs": "Changed since it was prepared: its SHA-256 differs from the recorded digest.",
+  "run_verify_entry_missing_or_differs": "Its run folder entry is missing or no longer matches what was prepared.",
+  "run_rev": "Rev {revision}",
+  "run_cleanup_volume_offline": "{name} is offline",
+  "rungroup_panels_preparing": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} panel preparing",
+        "countPlural=*": "{count} panels preparing"
+      }
+    }
+  ],
+  "rungroup_names_partial": "{names} Partial",
+  "rungroup_not_every_panel_prepared": "Not every panel prepared",
+  "rungroup_panels_prepared": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} panel prepared",
+        "countPlural=*": "{count} panels prepared"
+      }
+    }
+  ],
+  "rungroup_status": "Group {status}",
+  "rungroup_mosaic_fixed": "Mosaic (fixed)",
+  "rungroup_panels_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} panel",
+        "countPlural=*": "{count} panels"
+      }
+    }
+  ],
+  "rungroup_in_trash": "{count} in Trash",
+  "rungroup_panels": "Panels",
+  "rungroup_review_status": "Review {status}",
+  "rungroup_col_panel": "Panel",
+  "rungroup_col_panel_run": "Panel run",
+  "rungroup_col_status": "Status",
+  "rungroup_panels_label": "Panels of {name}",
+  "rungroup_placed_by_you": "Placed on {panel} by you ({detail})",
+  "rungroup_place_blocked": "Placement blocked",
+  "rungroup_to_place": "To place",
+  "rungroup_sessions_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session",
+        "countPlural=*": "{count} sessions"
+      }
+    }
+  ],
+  "rungroup_all_placed": "All placed",
+  "rungroup_place_on": "Place on {panel}",
+  "rungroup_selections": "Selections",
+  "rungroup_save_panels": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Save {count} panel",
+        "countPlural=*": "Save {count} panels"
+      }
+    }
+  ],
+  "rungroup_save": "Save",
+  "rungroup_candidates_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} candidate",
+        "countPlural=*": "{count} candidates"
+      }
+    }
+  ],
+  "rungroup_unsaved": "Unsaved",
+  "rungroup_cal_policy": "Calibration policy",
+  "rungroup_cal_policy_help": "Shared by every panel; matched per panel run.",
+  "rungroup_outcome": "Group outcome",
+  "rungroup_open_folder_title": "Every panel must be prepared and verified",
+  "rungroup_open_folder": "Open folder",
+  "rungroup_setup_locked": "Setup locked",
+  "rungroup_complete_panels": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Complete panel",
+        "countPlural=*": "{count} Complete panels"
+      }
+    }
+  ],
+  "rungroup_layout_folder": "Group folder",
+  "rungroup_layout_folder_rev": "Group folder · rev {revision}",
+  "rungroup_inputs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} input",
+        "countPlural=*": "{count} inputs"
+      }
+    }
+  ],
+  "rungroup_result": "Group Result",
+  "rungroup_review_all": "Review all",
+  "rungroup_panel_runs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} panel run",
+        "countPlural=*": "{count} panel runs"
+      }
+    }
+  ],
+  "rungroup_prepare_all_blocked": "Prepare all blocked",
+  "rungroup_prepare_all": "Prepare all…",
+  "rungroup_every_panel_complete": "Every panel Complete",
+  "rungroup_prepare_all_title": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Prepare all {count} panel of {name}?",
+        "countPlural=*": "Prepare all {count} panels of {name}?"
+      }
+    }
+  ],
+  "rungroup_prepare_all_creates": "Creates {folder}/ with {panels}",
+  "rungroup_blocked_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} blocked",
+        "countPlural=*": "{count} blocked"
+      }
+    }
+  ],
+  "rungroup_prepare_panels": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Prepare {count} panel",
+        "countPlural=*": "Prepare {count} panels"
+      }
+    }
+  ],
+  "rungroup_result_help": "Found only in {folder}/. The application assembles the panels.",
+  "rungroup_result_folder_placeholder": "<Mosaic> Results/Assembled",
+  "rungroup_proto_writes_mosaic": "The application writes the assembled mosaic",
+  "rungroup_proto_writes_mosaic_detail": "One file in Assembled/.",
+  "rungroup_panel_results": "Panel Results",
+  "rungroup_accepted_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} accepted",
+        "countPlural=*": "{count} accepted"
+      }
+    }
+  ],
+  "rungroup_open_panel_results": "Open {panel} Results",
+  "rungroup_complete_all_blocked": "Complete all blocked",
+  "rungroup_complete_all": "Complete all",
+  "rungroup_open_done": "Open Done",
+  "run_revision_short": "r{revision}",
+  "run_mode_no_symlinks": "{name}: no symbolic links",
+  "run_mode_no_hardlinks": "{name}: no hard links",
+  "run_check_mode_symlinks": "{mode} (symbolic links)",
+  "run_check_mode_hardlinks": "{mode} (hard links)",
+  "location_role_captures_description": "Light frames to index. Add as many folders as you like.",
+  "location_role_captures_add": "Add capture location",
+  "location_role_captures_picker": "Choose a capture folder",
+  "location_role_captures_list": "Capture locations",
+  "location_role_calibration_description": "Darks, flats, bias frames and calibration masters.",
+  "location_role_calibration_add": "Add calibration location",
+  "location_role_calibration_picker": "Choose a calibration folder",
+  "location_role_calibration_list": "Calibration locations",
+  "location_role_results_description": "Finished images and processing products PlateVault should find. Output folders can also be chosen per View.",
+  "location_role_results_add": "Add results location",
+  "location_role_results_picker": "Choose a results folder",
+  "location_role_results_list": "Results locations",
+  "location_role_archive_description": "Destinations for verified archive transfers.",
+  "location_role_archive_add": "Add archive location",
+  "location_role_archive_picker": "Choose an archive folder",
+  "location_role_archive_list": "Archive locations",
+  "location_error_name_empty": "Display name: enter a name, for example Astro-T7 captures.",
+  "location_error_name_taken": "Display name: {name} is already used by another location.",
+  "location_error_path_registered": "Folder: {path} is already registered as {name}.",
+  "location_error_path_inside": "Folder: inside {name}, which already indexes this folder. Choose a folder outside registered locations.",
+  "location_error_path_contains": "Folder: contains {name}. Choose a folder that does not hold a registered location.",
+  "location_error_unknown_volume": "Folder: {path} is not on a known volume.",
+  "location_retire_stale": "{name} is no longer registered as reviewed. Nothing was retired.",
+  "location_retire_availability_changed": "Retire location refused: {name} reads {now} now, but this review was made while it read {then}. Nothing was retired. Close this review and choose Retire location again for a new review.",
+  "location_retire_busy": "Retire location refused: {title} is not finished. Nothing was retired.",
+  "location_remap_same_folder": "{path} is the folder {name} already uses. Choose a different folder, or use Rescan to read it again.",
+  "location_remap_overlaps": "{path} overlaps {name}. Choose a folder outside other registered locations.",
+  "location_remap_no_frames": "{name} holds no indexed frames, so there is nothing to remap. Use Choose folder again to point it at another folder.",
+  "location_remap_no_match": "Remap refused: no indexed frame in {name} has the same bytes in {path}. Matching names are not enough. Nothing changed.",
+  "location_remap_unavailable": "Remap not saved: the location or volume is no longer available.",
+  "location_remap_hash_failed": [
+    {
+      "declarations": [
+        "input count",
+        "input volume",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remap not saved: hash verification of {count} file on {volume} failed. Nothing changed; choose Retry.",
+        "countPlural=*": "Remap not saved: hash verification of {count} files on {volume} failed. Nothing changed; choose Retry."
+      }
+    }
+  ],
+  "site_error_name_empty": "Name: enter a name, for example Backyard.",
+  "site_error_name_taken": "Name: {name} is already a saved site.",
+  "site_error_latitude": "Latitude: enter degrees from −90 to 90; north is positive.",
+  "site_error_longitude": "Longitude: enter degrees from −180 to 180; east is positive.",
+  "site_error_elevation": "Elevation: enter metres as a number, or leave it empty.",
+  "site_error_min_altitude": "Minimum altitude: enter degrees from 0 to 90.",
+  "site_error_time_zone_unknown": "Time zone: {zone} is not an IANA time zone. Choose one from the list.",
+  "site_error_time_zone_empty": "Time zone: choose the site's IANA time zone, for example Europe/Amsterdam.",
+  "site_coordinates": "{latitude}° {ns}, {longitude}° {ew}",
+  "site_north": "N",
+  "site_south": "S",
+  "site_east": "E",
+  "site_west": "W",
+  "location_not_saved": "Location registration was not saved.",
+  "location_folder": "Folder",
+  "location_change": "Change",
+  "location_display_name": "Display name",
+  "location_role": "Role",
+  "location_names_more": "{names} and {count} more",
+  "location_remap_refused": "Remap refused",
+  "location_folder_unchanged": "Folder not changed",
+  "location_remap_saved": "Remap saved",
+  "location_rescan": "Rescan",
+  "location_choose_again": "Choose again",
+  "settings_locate_named": "Locate {name}",
+  "location_choose_folder_for": "Choose folder for {name}",
+  "location_remap_title": "Remap {name} to {path}?",
+  "location_remap_same_bytes": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} same bytes",
+        "countPlural=*": "{frames} same bytes"
+      }
+    }
+  ],
+  "location_remap_differ": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} differs",
+        "countPlural=*": "{frames} differ"
+      }
+    }
+  ],
+  "location_remap_not_found": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} not found",
+        "countPlural=*": "{frames} not found"
+      }
+    }
+  ],
+  "location_volume_evidence": "Volume evidence",
+  "location_from": "From",
+  "location_to": "To",
+  "location_remap_change_move": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame moves to {path}, verified by SHA-256",
+        "countPlural=*": "{frames} frames move to {path}, verified by SHA-256"
+      }
+    }
+  ],
+  "location_remap_change_differ": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input names",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame refused, bytes differ: {names}",
+        "countPlural=*": "{frames} frames refused, bytes differ: {names}"
+      }
+    }
+  ],
+  "location_remap_change_not_found": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input names",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame not found in the new folder: {names}",
+        "countPlural=*": "{frames} frames not found in the new folder: {names}"
+      }
+    }
+  ],
+  "location_remap_change_refused_note": "Refused frames read Not found here",
+  "location_remap_change_points": "{name} points to {path}",
+  "location_remap_confirm": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remap {frames} frame",
+        "countPlural=*": "Remap {frames} frames"
+      }
+    }
+  ],
+  "location_remap_done": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame → {path}",
+        "countPlural=*": "{frames} frames → {path}"
+      }
+    }
+  ],
+  "location_remap_done_refused": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "input refused",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame → {path} · {refused} refused",
+        "countPlural=*": "{frames} frames → {path} · {refused} refused"
+      }
+    }
+  ],
+  "location_last_attempt": "Last attempt {date}",
+  "location_indexed": "Indexed {date}",
+  "location_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "location_state_group": "{name} state",
+  "location_indexing": "Indexing",
+  "location_volume_not_mounted": "{name} not mounted",
+  "location_volume_missing": "Volume not mounted",
+  "location_locate_or_remap": "Locate or remap",
+  "location_retire": "Retire location",
+  "location_choose_folder_again": "Choose folder again",
+  "location_incomplete_unread": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Incomplete scope · {count} folder unread",
+        "countPlural=*": "Incomplete scope · {count} folders unread"
+      }
+    }
+  ],
+  "location_retired_copies": [
+    {
+      "declarations": [
+        "input count",
+        "input date",
+        "input copies",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Retired {date} · {copies} copy",
+        "countPlural=*": "Retired {date} · {copies} copies"
+      }
+    }
+  ],
+  "location_more_actions": "More actions for {name}",
+  "settings_actions": "Actions",
+  "settings_sections": "Settings sections",
+  "settings_back_to_session": "Back to session",
+  "settings_back_to_plan": "Back to Plan",
+  "settings_back_to_target": "Back to Target",
+  "settings_back_to_run": "Back to run",
+  "settings_back_to_storage": "Back to Storage",
+  "settings_back_to_calibration": "Back to Calibration",
+  "settings_back_to_project": "Back to Project",
+  "settings_go_back": "Go back",
+  "about_simulated_data": "Simulated data",
+  "about_no_files_touched": "No files touched",
+  "about_no_network": "No network",
+  "about_this_build": "This build",
+  "about_version": "Version",
+  "about_version_value": "{version} · prototype build",
+  "about_data": "Data",
+  "about_data_demo": "Demo library",
+  "about_data_empty": "Empty (first run)",
+  "about_stored_in": "Stored in",
+  "about_catalog": "Catalog",
+  "about_count_locations": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} location",
+        "countPlural=*": "{n} locations"
+      }
+    }
+  ],
+  "about_count_light_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} light session",
+        "countPlural=*": "{n} light sessions"
+      }
+    }
+  ],
+  "about_count_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "about_count_runs": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} processing run",
+        "countPlural=*": "{n} processing runs"
+      }
+    }
+  ],
+  "about_clock": "PlateVault clock",
+  "about_clock_simulated": "{date} (simulated)",
+  "about_clock_system": "This computer",
+  "about_onboarding": "Onboarding",
+  "about_first_run_setup": "First-run setup",
+  "about_restart_setup": "Restart setup",
+  "about_simulation": "Simulation",
+  "about_restart_title": "Restart first-run setup?",
+  "about_restart_change": "Open the Choose locations step",
+  "settings_density_compact": "Compact",
+  "settings_density_comfortable": "Comfortable",
+  "settings_density_spacious": "Spacious",
+  "settings_at_defaults": "Already at the defaults",
+  "settings_restore_defaults": "Restore defaults",
+  "settings_density": "Density",
+  "settings_keyboard": "Keyboard",
+  "settings_shortcuts_about": "About single-key shortcuts",
+  "settings_shortcuts_help": "?, /, [ and G sequences. ⌘K and Ctrl+K always work.",
+  "settings_restore_title": "Restore appearance defaults?",
+  "settings_restore_density": "Density: {name}",
+  "settings_edit_title": "Edit {name}",
+  "settings_save": "Save",
+  "location_path": "Path",
+  "location_volume": "Volume",
+  "location_volume_identity": "{name} · identity {uuid}",
+  "location_volume_unknown": "Unknown volume",
+  "location_availability": "Availability",
+  "location_access": "Access",
+  "location_scan_scope": "Scan scope",
+  "location_last_indexed": "Last indexed",
+  "location_not_indexed_yet": "Not indexed yet",
+  "location_indexed_frames": "Indexed frames",
+  "location_sessions_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} session",
+        "countPlural=*": "{n} sessions"
+      }
+    }
+  ],
+  "location_links": "Links",
+  "location_link_symlinks": "Symlinks",
+  "location_link_hardlinks": "Hardlinks",
+  "location_link_clones": "Clones",
+  "location_links_none": "Not supported",
+  "location_unreadable_folders": "Unreadable folders at the last scan",
+  "settings_none": "None",
+  "location_retire_review_title": "Review: retire {name}",
+  "location_label": "Location",
+  "location_root": "Root",
+  "location_availability_at_review": "Availability at review",
+  "location_copies": "Copies",
+  "location_copies_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} copy",
+        "countPlural=*": "{n} copies"
+      }
+    }
+  ],
+  "location_sessions_list": "{count}: {list}",
+  "location_changes": "Changes",
+  "location_copies_read_retired": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} copy reads Retired",
+        "countPlural=*": "{n} copies read Retired"
+      }
+    }
+  ],
+  "location_leaves_totals": "Leaves totals",
+  "location_no_file_changes": "No file changes",
+  "location_availability_changed": "Availability changed",
+  "location_close_review": "Close review",
+  "location_make_default_blocked": "Make default blocked",
+  "location_make_default_not_saved": "Make default not saved",
+  "settings_details": "Details",
+  "location_index_now": "Index now",
+  "settings_make_default": "Make default",
+  "settings_edit": "Edit",
+  "location_remove_with_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remove · {n} frame",
+        "countPlural=*": "Remove · {n} frames"
+      }
+    }
+  ],
+  "settings_remove": "Remove",
+  "location_last_indexing": "Last indexing",
+  "settings_default": "Default",
+  "settings_remove_title": "Remove {name}?",
+  "location_remove_change": "Unregister {path}",
+  "location_remove_confirm": "Remove location",
+  "site_name": "Name",
+  "site_name_placeholder": "Backyard",
+  "site_latitude_field": "Latitude (° N)",
+  "site_longitude_field": "Longitude (° E)",
+  "site_elevation_field": "Elevation (m)",
+  "site_optional": "Optional",
+  "site_time_zone": "Time zone",
+  "site_darkness": "Darkness",
+  "site_twilight_astronomical": "Astronomical",
+  "site_twilight_nautical": "Nautical",
+  "site_sun_below": "Sun −{degrees}°",
+  "site_min_altitude_field": "Min. altitude (°)",
+  "site_default_about": "About the default site",
+  "site_default_help": "Reminders move to the default site.",
+  "site_save_changes_button": "Save changes",
+  "site_no_default": "No default site",
+  "site_none": "No sites",
+  "site_coordinates_header": "Coordinates",
+  "site_elevation": "Elevation",
+  "site_min_altitude": "Min. altitude",
+  "site_from_headers": "From headers",
+  "site_headers_about": "About header coordinates",
+  "site_headers_help": "SITELAT and SITELONG without a saved site.",
+  "site_in_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "· in {n} session",
+        "countPlural=*": "· in {n} sessions"
+      }
+    }
+  ],
+  "site_add_as_site": "Add as site",
+  "settings_default_named": "Default: {name}",
+  "site_clear_planning": "Clear the planning site",
+  "site_remove_confirm": "Remove site",
+  "site_make_default_title": "Make {name} the default?",
+  "site_reminders_change": "Reminders: {from} → {to}",
+  "site_previous": "previous site",
+  "settings_lookup_sesame_sources": "SIMBAD, NED, VizieR",
+  "settings_lookup_simbad_only": "SIMBAD only",
+  "settings_lookup_resolved": "Resolved by {provider}.",
+  "settings_lookup_not_found": "{provider} returned no object named {query}.",
+  "settings_lookup_failed": "{provider} did not respond: the lookup failed as if offline. No Target was changed; local Targets and indexed sessions stay usable.",
+  "settings_lookup_off": "Online lookup is off, so nothing was sent. Local Targets and the bundled catalog still search offline.",
+  "settings_lookup_query_empty": "Name to look up: enter a Target name or alias, for example NGC 7000.",
+  "settings_lookup_local": "Local search",
+  "settings_lookup_targets": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} Target",
+        "countPlural=*": "{n} Targets"
+      }
+    }
+  ],
+  "settings_lookup_catalogue_objects": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} catalogue object",
+        "countPlural=*": "{n} catalogue objects"
+      }
+    }
+  ],
+  "settings_lookup_online": "Look up Targets online",
+  "settings_lookup_online_about": "About online lookup",
+  "settings_lookup_online_help": "Sends Target names to the provider. A failed lookup never blocks indexing.",
+  "settings_lookup_provider": "Provider",
+  "settings_lookup_test": "Test",
+  "settings_lookup_fixture": "Fixture",
+  "settings_lookup_query": "Name to look up",
+  "settings_lookup_running": "Looking up…",
+  "settings_lookup_running_named": "Looking up {name}",
+  "settings_lookup_name": "Name",
+  "settings_lookup_coordinates": "Coordinates",
+  "settings_lookup_object_type": "Object type",
+  "settings_lookup_aliases": "Aliases",
+  "settings_lookup_failed_title": "Lookup failed",
+  "settings_lookup_off_title": "Online lookup off",
+  "setup_step_welcome": "Welcome",
+  "setup_step_index": "Index",
+  "setup_progress": "Setup progress",
+  "setup_welcome_title": "Welcome to PlateVault",
+  "setup_welcome_description": "PlateVault catalogs your astrophotography captures where they already are, groups them into sessions and prepares exact inputs for PixInsight, Siril and other processing apps.",
+  "setup_does_title": "What PlateVault does",
+  "setup_does_index": "Indexes FITS and XISF folders in place",
+  "setup_does_sessions": "Groups frames into sessions, one per filter, exposure and camera",
+  "setup_does_coverage": "Shows Target coverage and optional Project goals",
+  "setup_does_views": "Prepares reviewed Views for your processing app",
+  "setup_never_title": "What it never does",
+  "setup_never_move": "Moves, renames or deletes files without a reviewed operation",
+  "setup_never_headers": "Changes the headers of your source files",
+  "setup_never_process": "Calibrates, stacks or stretches images",
+  "setup_never_account": "Needs an account or a network connection",
+  "setup_next_empty": "Next, choose the folders that hold your captures. Only a Captures location is required.",
+  "setup_next_registered": "Your locations are registered. Continue to review them and start indexing.",
+  "setup_set_up_locations": "Set up locations",
+  "setup_continue": "Continue setup",
+  "setup_later": "Set up later",
+  "setup_later_hint": "Opens the library now. Add locations any time in Settings › Locations.",
+  "setup_demo_title": "Prototype: demo library",
+  "setup_demo_load": "Load demo library",
+  "setup_demo_body": "Skips setup and loads a realistic indexed library: M 31, NGC 7000, a mosaic Project and an offline drive. It replaces the prototype data in this browser.",
+  "setup_demo_confirm_title": "Load the demo library?",
+  "setup_demo_confirm_description": "Prototype only. The demo replaces everything in this browser's prototype data.",
+  "setup_demo_change_replace": "Replace locations, sessions, Projects and Views with the demo library",
+  "setup_demo_change_skip": "Skip setup and open Targets",
+  "setup_demo_unchanged_appearance": "Theme and density",
+  "setup_demo_unchanged_files": "No real files exist; nothing on your computer is touched",
+  "setup_locations_title": "Choose locations",
+  "setup_locations_description": "Register the folders that already hold your files. Registering only records access and indexing intent; nothing is copied, renamed, moved or deleted.",
+  "setup_required": "Required",
+  "setup_add_another": "Add another location",
+  "setup_captures_needed": "Add at least one folder with light frames to continue.",
+  "setup_deferred": "You chose to set this up later. Add it any time in Settings › Locations.",
+  "setup_optional_unset": "Leave it unset if you do not keep these files in one place yet.",
+  "setup_nothing_else_title": "Nothing else is needed now",
+  "setup_nothing_else_body": "View folders are chosen when you prepare a View. Setup asks for no workspace folder, processing app, Project or account.",
+  "setup_continue_reason": "Add a capture location to continue. Captures is the only required role.",
+  "setup_continue_short": "Continue",
+  "setup_remove_description": "Removes the registration only. Nothing was indexed from this folder yet.",
+  "setup_remove_change": "Stop tracking {path}",
+  "setup_remove_unchanged": "The folder and every file in it",
+  "setup_footer_running": "You can browse sessions already read while indexing continues.",
+  "setup_footer_interrupted": "Indexing was interrupted. Continue it above, or open the library to browse sessions already read.",
+  "setup_footer_canceled": "Indexing was canceled. Sessions already read are kept; rescan the rest here or later in Settings › Locations.",
+  "setup_footer_unindexed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} location not indexed yet. Index it now, or later in Settings › Locations.",
+        "countPlural=*": "{n} locations not indexed yet. Index them now, or later in Settings › Locations."
+      }
+    }
+  ],
+  "setup_footer_finished": "Indexing finished. Open the library to review sessions.",
+  "setup_indexing_title": "Index your captures",
+  "setup_indexing_description": "PlateVault reads metadata from each location. Files stay where they are and are never changed.",
+  "setup_indexing_progress": "Indexing progress",
+  "setup_latest_run": "Latest run: {title}",
+  "setup_scan": "Setup scan",
+  "setup_stat_discovered": "Files discovered",
+  "setup_stat_read": "Metadata read",
+  "setup_stat_unsupported": "Unsupported",
+  "setup_stat_unsupported_hint": "Skipped, left as they are",
+  "setup_stat_unreadable": "Unreadable folders",
+  "setup_stat_unreadable_hint": "Read Unknown, never missing",
+  "setup_stat_complete_value": "{done} of {total}",
+  "setup_stat_complete_hint": "locations, now",
+  "setup_library_so_far": "Library so far: {sessions} · {frames} (lights and calibration)",
+  "setup_library_covers": " · covers {names}",
+  "setup_locations_to_index": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} location to index",
+        "countPlural=*": "{n} locations to index"
+      }
+    }
+  ],
+  "setup_index_all_hint": "Every registered location is read. Calibration frames are indexed too; they never appear as light sessions.",
+  "setup_registered_locations": "Registered locations",
+  "setup_index_new": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Index {n} new location",
+        "countPlural=*": "Index {n} new locations"
+      }
+    }
+  ],
+  "setup_open_library": "Open library",
+  "setup_index_later_hint": "Index later keeps the locations registered; start indexing from Settings › Locations.",
+  "setup_index_later": "Index later",
+  "setup_start_indexing": "Start indexing",
+  "site_time_zone_placeholder": "Europe/Amsterdam",
+  "apps_badge_verified": "Verified profile",
+  "apps_badge_found": "Found",
+  "apps_badge_not_configured": "Not configured",
+  "apps_badge_launch_failed": "Launch failed",
+  "apps_badge_checked": "Checked",
+  "apps_badge_needs_attention": "Needs attention",
+  "apps_badge_read_only": "Read-only inputs",
+  "apps_badge_writes_unknown": "Input writes unknown",
+  "apps_badge_write_prone": "Writes into inputs",
+  "apps_unsupported_corrected": "reading corrected values through configuration",
+  "apps_unsupported_paths": "passing exact source paths",
+  "apps_unsupported_file_list": "handing off an exact file list (it reads whole folders)",
+  "apps_unsupported_products": "accepted Results as inputs",
+  "apps_evidence": "Evidence",
+  "apps_prototype_fixture": "Prototype fixture",
+  "apps_input_writes": "Input writes",
+  "apps_input_modes": "Input modes",
+  "apps_none_recorded": "None recorded",
+  "apps_direct_source": "Direct source",
+  "apps_direct_file_list": "Exact file list",
+  "apps_direct_whole_folders": "Whole folders only",
+  "apps_product_inputs": "Product inputs",
+  "apps_corrected_values": "Corrected values",
+  "apps_corrected_through": "Through configuration",
+  "apps_corrected_not_through": "Not through configuration",
+  "apps_unsupported_list": "Not supported: {list}. Renaming files never overrides header values.",
+  "apps_rename_note": "Renaming files never overrides header values.",
+  "apps_not_located": "No application located",
+  "apps_locate_any": "Locate an application",
+  "apps_locate_description": "Prototype: simulated application chooser. It lists application bundles on the simulated computer and records the path only; nothing is launched.",
+  "apps_none_present": "No application bundle is present. Restore one in this step's prototype controls.",
+  "apps_use_this": "Use this application",
+  "apps_generic_description": "Launches any application with your arguments. It is not a verified preparation profile, so only Copy or Clone handoffs are offered.",
+  "apps_check_again": "Check again",
+  "apps_change": "Change…",
+  "apps_locate": "Locate…",
+  "apps_launch_arguments": "Launch arguments",
+  "apps_launch_placeholder": "e.g. --input \"{token}\"",
+  "apps_save_arguments": "Save arguments",
+  "apps_edit_to_save": "Edit the arguments to save them.",
+  "apps_description": "Profiles PlateVault prepares inputs for. Capability claims come from recorded evidence only; PlateVault never runs processing.",
+  "apps_back_to_task": "Back to the task",
+  "apps_fixture_title": "Prototype: fixture capability evidence",
+  "apps_fixture_body": "Evidence below is fixture data. Real capability probes for PixInsight/WBPP, Siril and SETI Astro Suite Pro are not part of this prototype.",
+  "apps_controls_title": "applications on this computer",
+  "apps_present": "present",
+  "apps_moved_away": "moved away",
+  "apps_next_launch_fails": " · next launch fails",
+  "apps_move_away": "Move away",
+  "apps_put_back": "Put back",
+  "apps_fail_next_launch": "Fail next launch",
+  "settings_keep_raws_not_saved": "Keep raws not saved",
+  "settings_raw_frames": "Raw frames",
+  "settings_keep_raws": "Keep raw calibration frames",
+  "settings_keep_raws_about": "About keeping raw calibration frames",
+  "settings_keep_raws_help": "Off: raws go to the OS Trash once their master registers.",
+  "settings_masters": "Masters",
+  "settings_layout": "Layout",
+  "settings_tools": "Tools",
+  "template_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "settings_name_required": "Name required",
+  "template_add_channel": "Add a channel",
+  "template_hours_or_frames": "Hours or frames needed · {channels}",
+  "template_goals": "Goals",
+  "template_osc_about": "About OSC and Dual-band",
+  "template_osc_help": "OSC: no filter or a broadband filter on an OSC camera. Dual-band: a filter passing two narrow bands.",
+  "template_table_caption": "{group} goal templates",
+  "template_column_template": "Template",
+  "template_copy_name": "{name} copy",
+  "template_copy_name_numbered": "{name} copy {n}",
+  "template_duplicate_title": "Duplicate {name}",
+  "template_new": "New template",
+  "template_built_in": "Built-in",
+  "template_duplicate": "Duplicate",
+  "template_none_yours": "No templates of yours",
+  "template_yours": "Yours",
+  "template_delete": "Delete",
+  "template_delete_title": "Delete {name}?",
+  "template_delete_change": "Delete {name}",
+  "naming_type_lights": "Lights",
+  "naming_type_flats": "Flats",
+  "naming_type_darks": "Darks",
+  "naming_type_bias": "Bias",
+  "naming_fallbacks": "Fallbacks",
+  "naming_no_fallbacks": "No fallbacks",
+  "naming_custom": "Custom",
+  "naming_restore_default": "Restore default",
+  "naming_discard": "Discard",
+  "naming_tokens_about": "Tokens and fallbacks",
+  "naming_empty": "Empty",
+  "naming_chip_token": "{text}, {label} token",
+  "naming_chip_separator": "/, folder separator",
+  "naming_chip_text": "{text}, text",
+  "naming_chip_hint": "← and → move between chips, ⌥← and ⌥→ move a chip, Delete removes it.",
+  "naming_move_left": "Move chip left",
+  "naming_move_right": "Move chip right",
+  "naming_insert_token": "Insert a token",
+  "naming_token_title": "{label}; falls back to “{fallback}”",
+  "naming_add_folder": "/ folder",
+  "naming_text_to_insert": "Text to insert",
+  "naming_text_placeholder": "Text",
+  "naming_add_text": "Add text",
+  "naming_as_text": "As text",
+  "naming_not_saved": "Not saved · {errors}",
+  "naming_preview": "Preview",
+  "naming_unsaved": "Unsaved",
+  "naming_preview_library": "Library · {from}",
+  "naming_preview_no_metadata": "No metadata",
+  "naming_frame_types": "Frame types",
+  "equipment_pick_band": "Pick a band",
+  "equipment_add_value": "Add {value}",
+  "equipment_add_filter": "Add filter",
+  "equipment_matches_filter": "Matches FILTER",
+  "equipment_comma_separated": "Comma-separated",
+  "equipment_bands": "Bands",
+  "equipment_error_whole_pixels": "Whole pixels > 0",
+  "equipment_error_microns": "µm > 0",
+  "equipment_error_mm": "mm > 0",
+  "equipment_optics_title": "Optics of {name}",
+  "equipment_shared_camera": "Shared camera",
+  "equipment_shared_camera_help": "Camera values change for {rigs}.",
+  "equipment_camera_kind": "Camera kind",
+  "equipment_mono": "Mono",
+  "equipment_osc": "OSC",
+  "equipment_osc_colour": "OSC (colour)",
+  "equipment_sensor_width": "Sensor width (px)",
+  "equipment_sensor_height": "Sensor height (px)",
+  "equipment_pixel_size": "Pixel size (µm)",
+  "equipment_focal_length": "Effective focal length (mm)",
+  "equipment_field_of_view": "Field of view",
+  "equipment_rename": "Rename",
+  "equipment_edit_optics": "Edit optics",
+  "equipment_unknown_filter": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Unknown FILTER “{value}” · {n} session",
+        "countPlural=*": "Unknown FILTER “{value}” · {n} sessions"
+      }
+    }
+  ],
+  "equipment_not_now": "Not now",
+  "equipment_hidden": "Hidden",
+  "equipment_show": "Show",
+  "equipment_camera": "Camera",
+  "equipment_sensor": "Sensor",
+  "equipment_telescope": "Telescope",
+  "equipment_derived": "Derived",
+  "equipment_osc_camera": "OSC camera",
+  "equipment_filters": "Filters",
+  "equipment_to_rig": "to {name}",
+  "equipment_no_filters_osc": "No filters · OSC",
+  "equipment_filters_of": "Filters of {name}",
+  "equipment_filter": "Filter",
+  "equipment_dual_band": "Dual-band",
+  "equipment_rename_title": "Rename {name}",
+  "equipment_rig_name": "Rig name",
+  "equipment_remove_filter_title": "Remove {filter} from {rig}?",
+  "equipment_remove_filter_change": "Remove {filter} ({bands})",
+  "equipment_remove_filter_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} session reads the filter as unknown",
+        "countPlural=*": "{n} sessions read the filter as unknown"
+      }
+    }
+  ],
+  "equipment_no_rigs": "No rigs",
+  "settings_lookup_test_heading": "Test"
 }

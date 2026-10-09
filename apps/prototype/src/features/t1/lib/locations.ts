@@ -9,41 +9,57 @@ import { fileAt, volumeForPath } from "@/domain/disk"
 import { isUnder, stableHash } from "@/domain/indexing"
 import type { Availability, Catalog, Disk, Location, LocationId, LocationRole, Volume } from "@/domain/types"
 import { formatExposure, formatNight } from "@/lib/format"
+import { m } from "@/lib/i18n"
 import { type CommitResult, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { isSettled } from "@/store/operations"
 import { save } from "./writes"
 
 export const ROLE_ORDER: LocationRole[] = ["captures", "calibration", "results", "archive"]
 
-export const ROLE_COPY: Record<LocationRole, { title: string; noun: string; description: string; add: string; picker: string }> = {
-  captures: {
-    title: "Captures",
-    noun: "capture",
-    description: "Light frames to index. Add as many folders as you like.",
-    add: "Add capture location",
-    picker: "Choose a capture folder",
-  },
-  calibration: {
-    title: "Calibration",
-    noun: "calibration",
-    description: "Darks, flats, bias frames and calibration masters.",
-    add: "Add calibration location",
-    picker: "Choose a calibration folder",
-  },
-  results: {
-    title: "Results",
-    noun: "results",
-    description: "Finished images and processing products PlateVault should find. Output folders can also be chosen per View.",
-    add: "Add results location",
-    picker: "Choose a results folder",
-  },
-  archive: {
-    title: "Archive",
-    noun: "archive",
-    description: "Destinations for verified archive transfers.",
-    add: "Add archive location",
-    picker: "Choose an archive folder",
-  },
+interface RoleCopy {
+  readonly title: string
+  readonly description: string
+  /** Button and dialog title, e.g. "Add capture location". */
+  readonly add: string
+  readonly picker: string
+  /** Accessible name of the role's location list. */
+  readonly list: string
+}
+
+type Message = () => string
+
+function roleCopy(title: Message, description: Message, add: Message, picker: Message, list: Message): RoleCopy {
+  return {
+    get title() {
+      return title()
+    },
+    get description() {
+      return description()
+    },
+    get add() {
+      return add()
+    },
+    get picker() {
+      return picker()
+    },
+    get list() {
+      return list()
+    },
+  }
+}
+
+/** Per-role copy, read at render so a language change applies. */
+export const ROLE_COPY: Record<LocationRole, RoleCopy> = {
+  captures: roleCopy(m.status_role_captures, m.location_role_captures_description, m.location_role_captures_add, m.location_role_captures_picker, m.location_role_captures_list),
+  calibration: roleCopy(
+    m.status_role_calibration,
+    m.location_role_calibration_description,
+    m.location_role_calibration_add,
+    m.location_role_calibration_picker,
+    m.location_role_calibration_list,
+  ),
+  results: roleCopy(m.status_role_results, m.location_role_results_description, m.location_role_results_add, m.location_role_results_picker, m.location_role_results_list),
+  archive: roleCopy(m.status_role_archive, m.location_role_archive_description, m.location_role_archive_add, m.location_role_archive_picker, m.location_role_archive_list),
 }
 
 export interface LocationDraft {
@@ -70,22 +86,22 @@ export function validateLocation(catalog: Catalog, draft: LocationDraft, exceptI
   // A retired location keeps its record but no longer holds its folder (D11: register it again).
   const others = Object.values(catalog.locations).filter((l) => l.id !== exceptId && !l.retiredAt)
   const name = draft.displayName.trim()
-  if (!name) errors.displayName = "Display name: enter a name, for example Astro-T7 captures."
-  else if (others.some((l) => l.displayName.toLowerCase() === name.toLowerCase())) errors.displayName = `Display name: ${name} is already used by another location.`
+  if (!name) errors.displayName = m.location_error_name_empty()
+  else if (others.some((l) => l.displayName.toLowerCase() === name.toLowerCase())) errors.displayName = m.location_error_name_taken({ name })
 
   const same = others.find((l) => l.path === draft.path)
   const container = others.find((l) => l.path !== draft.path && isUnder(draft.path, l.path))
   const inside = others.find((l) => l.path !== draft.path && isUnder(l.path, draft.path))
-  if (same) errors.path = `Folder: ${draft.path} is already registered as ${same.displayName}.`
-  else if (container) errors.path = `Folder: inside ${container.displayName}, which already indexes this folder. Choose a folder outside registered locations.`
-  else if (inside) errors.path = `Folder: contains ${inside.displayName}. Choose a folder that does not hold a registered location.`
+  if (same) errors.path = m.location_error_path_registered({ path: draft.path, name: same.displayName })
+  else if (container) errors.path = m.location_error_path_inside({ name: container.displayName })
+  else if (inside) errors.path = m.location_error_path_contains({ name: inside.displayName })
   return errors
 }
 
 export function registerLocation(draft: LocationDraft, href: string): { result: CommitResult; id: LocationId | null } {
   const state = store.getState()
   const volumeId = volumeForPath(state.disk, draft.path)
-  if (!volumeId) return { result: { ok: false, reason: "write-failed", message: `Folder: ${draft.path} is not on a known volume.` }, id: null }
+  if (!volumeId) return { result: { ok: false, reason: "write-failed", message: m.location_error_unknown_volume({ path: draft.path }) }, id: null }
   const baseId: LocationId = `loc_${stableHash(`${volumeId}|${draft.path}`)}`
   // Registering a retired location's folder again is a new location (D11).
   const id: LocationId = state.catalog.locations[baseId] ? `loc_${stableHash(`${volumeId}|${draft.path}|${nowIso()}`)}` : baseId
@@ -140,7 +156,7 @@ export function repointLocation(id: LocationId, path: string, href: string): Com
   const state = store.getState()
   const location = state.catalog.locations[id]
   const volumeId = volumeForPath(state.disk, path)
-  if (!location || !volumeId) return { ok: false, reason: "write-failed", message: `Folder: ${path} is not on a known volume.` }
+  if (!location || !volumeId) return { ok: false, reason: "write-failed", message: m.location_error_unknown_volume({ path }) }
   return save(
     { label: `Folder change for ${location.displayName}`, saved: `${location.displayName} now points to ${path}`, detail: "No indexed frame referenced the previous folder.", href },
     (s) =>
@@ -218,7 +234,7 @@ export function reviewRetire(state: PrototypeState, locationId: LocationId): Ret
     path: location.path,
     availability: locationAvailability(disk, location),
     frames: assetIds.size,
-    sessions: sessions.map((s) => [formatNight(s.night), s.channel ?? "No filter", formatExposure(s.exposureS)].join(" · ")),
+    sessions: sessions.map((s) => [formatNight(s.night), s.channel ?? m.palette_session_no_filter(), formatExposure(s.exposureS)].join(" · ")),
     runs: runs.map((r) => r.name),
     projects: [...projectIds].map((id) => catalog.projects[id]?.name ?? id),
     results: Object.values(catalog.results)
@@ -236,17 +252,21 @@ export function reviewRetire(state: PrototypeState, locationId: LocationId): Ret
 export function retireLocation(review: RetireReview, href: string): CommitResult {
   const state = store.getState()
   const location = state.catalog.locations[review.locationId]
-  if (!location || location.retiredAt) return { ok: false, reason: "stale", message: `${review.displayName} is no longer registered as reviewed. Nothing was retired.` }
+  if (!location || location.retiredAt) return { ok: false, reason: "stale", message: m.location_retire_stale({ name: review.displayName }) }
   const now = locationAvailability(state.disk, location)
   if (now !== review.availability) {
     return {
       ok: false,
       reason: "stale",
-      message: `Retire location refused: ${review.displayName} reads ${now === "online" ? "Online" : "Offline"} now, but this review was made while it read ${review.availability === "online" ? "Online" : "Offline"}. Nothing was retired. Close this review and choose Retire location again for a new review.`,
+      message: m.location_retire_availability_changed({
+        name: review.displayName,
+        now: now === "online" ? m.status_online() : m.status_offline(),
+        then: review.availability === "online" ? m.status_online() : m.status_offline(),
+      }),
     }
   }
   const busy = Object.values(state.operations).find((op) => !isSettled(op.status) && op.scope.locationIds?.includes(review.locationId))
-  if (busy) return { ok: false, reason: "stale", message: `Retire location refused: ${busy.title} is not finished. Nothing was retired.` }
+  if (busy) return { ok: false, reason: "stale", message: m.location_retire_busy({ title: busy.title }) }
   return save(
     {
       label: `Retirement of ${review.displayName}`,
@@ -304,11 +324,11 @@ export function computeRemap(catalog: Catalog, disk: Disk, locationId: LocationI
   }
   const other = Object.values(catalog.locations).find((l) => l.id !== locationId && !l.retiredAt && (isUnder(toPath, l.path) || isUnder(l.path, toPath)))
   if (toPath === location.path && toVolumeId === location.volumeId) {
-    proof.refusal = `${toPath} is the folder ${location.displayName} already uses. Choose a different folder, or use Rescan to read it again.`
+    proof.refusal = m.location_remap_same_folder({ path: toPath, name: location.displayName })
     return proof
   }
   if (other) {
-    proof.refusal = `${toPath} overlaps ${other.displayName}. Choose a folder outside other registered locations.`
+    proof.refusal = m.location_remap_overlaps({ path: toPath, name: other.displayName })
     return proof
   }
   for (const asset of Object.values(catalog.assets)) {
@@ -323,9 +343,8 @@ export function computeRemap(catalog: Catalog, disk: Disk, locationId: LocationI
     else proof.differs.push(entry)
   }
   const total = proof.verified.length + proof.differs.length + proof.notFound.length
-  if (total === 0) proof.refusal = `${location.displayName} holds no indexed frames, so there is nothing to remap. Use Choose folder again to point it at another folder.`
-  else if (proof.verified.length === 0)
-    proof.refusal = `Remap refused: no indexed frame in ${location.displayName} has the same bytes in ${toPath}. Matching names are not enough. Nothing changed.`
+  if (total === 0) proof.refusal = m.location_remap_no_frames({ name: location.displayName })
+  else if (proof.verified.length === 0) proof.refusal = m.location_remap_no_match({ name: location.displayName, path: toPath })
   return proof
 }
 
@@ -339,13 +358,13 @@ export function computeRemap(catalog: Catalog, disk: Disk, locationId: LocationI
 export function applyRemap(proof: RemapProof, href: string): CommitResult {
   const state = store.getState()
   const location = state.catalog.locations[proof.locationId]
-  if (!location || !proof.toVolume) return { ok: false, reason: "write-failed", message: "Remap not saved: the location or volume is no longer available." }
+  if (!location || !proof.toVolume) return { ok: false, reason: "write-failed", message: m.location_remap_unavailable() }
   if (state.faults.failNextHashVerification) {
     store.setState((s) => ({ ...s, faults: { ...s.faults, failNextHashVerification: false } }))
     return {
       ok: false,
       reason: "write-failed",
-      message: `Remap not saved: hash verification of ${proof.verified.length} files on ${proof.toVolume.name} failed. Nothing changed; choose Retry.`,
+      message: m.location_remap_hash_failed({ count: proof.verified.length, volume: proof.toVolume.name }),
     }
   }
   const now = nowIso()

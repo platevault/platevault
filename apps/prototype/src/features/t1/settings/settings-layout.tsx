@@ -7,19 +7,23 @@
 import { Link, Outlet, useSearch } from "@tanstack/react-router"
 import { Undo2 } from "lucide-react"
 import { SETTINGS_SECTIONS as SECTIONS } from "@/app/navigation"
+import { useMessages } from "@/app/preferences"
 import { ListDetail, PageHeader } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
+import type { Messages } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 function SettingsMenu() {
+  // Subscribes to the language: the section labels are catalogue getters.
+  useMessages()
   return (
     <div className="space-y-4 p-2">
-      {SECTIONS.map((section) => (
-        <div key={section.group} className="space-y-0.5">
-          <div id={`settings-group-${section.group}`} className="px-2 pb-1 text-xs text-muted-foreground">
+      {SECTIONS.map((section, index) => (
+        <div key={section.items[0]?.to ?? index} className="space-y-0.5">
+          <div id={`settings-group-${index}`} className="px-2 pb-1 text-xs text-muted-foreground">
             {section.group}
           </div>
-          <ul aria-labelledby={`settings-group-${section.group}`} className="space-y-0.5">
+          <ul aria-labelledby={`settings-group-${index}`} className="space-y-0.5">
             {section.items.map((item) => (
               <li key={item.to}>
                 <Link
@@ -41,11 +45,12 @@ function SettingsMenu() {
 }
 
 export function SettingsLayout() {
+  const m = useMessages()
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Settings" />
+      <PageHeader title={m.nav_settings()} />
       <ListDetail
-        listLabel="Settings sections"
+        listLabel={m.settings_sections()}
         className="grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)]"
         list={<SettingsMenu />}
         // One content width for every section, so right edges match across Settings.
@@ -65,26 +70,27 @@ function safeReturnPath(value: string | undefined): string | null {
   return value
 }
 
-function returnLabel(path: string): string {
-  if (/^\/sessions\/[^/]+$/.test(path)) return "Back to session"
-  if (path.startsWith("/plan")) return "Back to Plan"
-  if (/^\/targets\/[^/]+$/.test(path)) return "Back to Target"
-  if (/^\/projects\/[^/]+\/(runs|groups)\//.test(path)) return "Back to run"
-  if (path.startsWith("/storage")) return "Back to Storage"
-  if (path.startsWith("/calibration")) return "Back to Calibration"
-  if (path.startsWith("/projects/")) return "Back to Project"
-  return "Go back"
+function returnLabel(m: Messages, path: string): string {
+  if (/^\/sessions\/[^/]+$/.test(path)) return m.settings_back_to_session()
+  if (path.startsWith("/plan")) return m.settings_back_to_plan()
+  if (/^\/targets\/[^/]+$/.test(path)) return m.settings_back_to_target()
+  if (/^\/projects\/[^/]+\/(runs|groups)\//.test(path)) return m.settings_back_to_run()
+  if (path.startsWith("/storage")) return m.settings_back_to_storage()
+  if (path.startsWith("/calibration")) return m.settings_back_to_calibration()
+  if (path.startsWith("/projects/")) return m.settings_back_to_project()
+  return m.settings_go_back()
 }
 
 /** `?return=` (HLD §4): one link back to the task that sent the user here. */
 export function ReturnNotice() {
+  const m = useMessages()
   const search = useSearch({ strict: false }) as Record<string, string | undefined>
   const path = safeReturnPath(search.return)
   if (!path) return null
   return (
     <Button size="sm" variant="outline" render={<a href={`#${path}`} />} data-return-link>
       <Undo2 aria-hidden="true" data-icon="inline-start" />
-      {returnLabel(path)}
+      {returnLabel(m, path)}
     </Button>
   )
 }

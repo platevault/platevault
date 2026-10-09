@@ -573,7 +573,7 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
                               follow(runStepLink(run, "select"))
                             }}
                           >
-                            {m.home_add_to_run()}
+                            {m.run_select_add_to_run()}
                           </Button>
                         ) : (
                           <Button size="xs" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId })}>

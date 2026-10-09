@@ -524,7 +524,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
               )}
             </div>
             {sessions.length === 0 ? (
-              <p className="p-3 text-sm text-muted-foreground">{m.target_no_sessions()}</p>
+              <p className="p-3 text-sm text-muted-foreground">{m.run_cal_no_sessions()}</p>
             ) : (
               <ContextMenuArea menu={sessionMenu}>
                 <table className="w-full text-sm">

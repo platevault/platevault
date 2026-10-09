@@ -75,7 +75,7 @@ export function ProjectsPage() {
       rowHeader: true,
       sortValue: (r) => r.project.name,
       cell: (r) => {
-        const detail = `${r.subjects.join(", ") || m.projects_no_subjects()} · ${r.rigs.join(", ") || m.projects_no_rigs()}`
+        const detail = `${r.subjects.join(", ") || m.projects_no_subjects()} · ${r.rigs.join(", ") || m.equipment_no_rigs()}`
         return (
           <span className="block min-w-0">
             <Link to="/projects/$projectId" params={{ projectId: r.project.id }} className="font-medium underline-offset-2 hover:underline">

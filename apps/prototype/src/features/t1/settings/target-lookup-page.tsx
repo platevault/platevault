@@ -6,6 +6,7 @@
  */
 import { Loader2, Search } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { KeyValueList } from "@/components/app/data"
 import { ActionError, DetailSkeleton, Notice } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
@@ -17,7 +18,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Switch } from "@/components/ui/switch"
 import { BUNDLED_CATALOGUE, resolverEntryFor } from "@/domain/sky"
 import type { AppSettings } from "@/domain/types"
-import { formatDateTime, formatDec, formatRa } from "@/lib/format"
+import { formatCount, formatDateTime, formatDec, formatRa } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import { nowIso, store, updateSlice, useStore } from "@/store/core"
 import type { TargetLookupTest } from "@/store/slices/e"
 import { TextField } from "../components/form-field"
@@ -26,17 +28,38 @@ import { ReturnNotice } from "./settings-layout"
 
 const HREF = "/settings/targets"
 
-const PROVIDERS: Array<{ value: AppSettings["targetLookup"]["provider"]; title: string; description: string }> = [
-  { value: "cds-sesame", title: "CDS Sesame", description: "SIMBAD, NED, VizieR" },
-  { value: "simbad", title: "SIMBAD only", description: "SIMBAD" },
-]
+type Provider = AppSettings["targetLookup"]["provider"]
 
-const PROVIDER_LABEL: Record<AppSettings["targetLookup"]["provider"], string> = { "cds-sesame": "CDS Sesame", simbad: "SIMBAD" }
+/** Provider names are proper nouns: not translated. */
+const PROVIDER_LABEL: Record<Provider, string> = { "cds-sesame": "CDS Sesame", simbad: "SIMBAD" }
+
+function providers(m: Messages): Array<{ value: Provider; title: string; description: string }> {
+  return [
+    { value: "cds-sesame", title: PROVIDER_LABEL["cds-sesame"], description: m.settings_lookup_sesame_sources() },
+    { value: "simbad", title: m.settings_lookup_simbad_only(), description: PROVIDER_LABEL.simbad },
+  ]
+}
+
+/** The test outcome in the current language. */
+function outcomeMessage(m: Messages, test: TargetLookupTest): string {
+  const provider = PROVIDER_LABEL[test.provider]
+  switch (test.outcome) {
+    case "resolved":
+      return m.settings_lookup_resolved({ provider })
+    case "not-found":
+      return m.settings_lookup_not_found({ provider, query: test.query })
+    case "failed":
+      return m.settings_lookup_failed({ provider })
+    case "off":
+      return m.settings_lookup_off()
+  }
+}
 
 /** Simulated provider round trip; long enough to show the loading state. */
 const LOOKUP_MS = 700
 
 export function TargetLookupPage() {
+  const m = useMessages()
   const lookup = useStore((s) => s.settings.targetLookup)
   const targets = useStore((s) => Object.keys(s.catalog.targets).length)
   const last = useStore((s) => s.slices.e.lastLookupTest)
@@ -74,13 +97,13 @@ export function TargetLookupPage() {
     if (running) return
     const text = query.trim()
     if (!text) {
-      setQueryError("Name to look up: enter a Target name or alias, for example NGC 7000.")
+      setQueryError(m.settings_lookup_query_empty())
       return
     }
     setQueryError(undefined)
     const { provider, enabled } = store.getState().settings.targetLookup
     if (!enabled) {
-      record({ at: nowIso(), query: text, provider, outcome: "off", message: "Online lookup is off, so nothing was sent. Local Targets and the bundled catalog still search offline.", result: null })
+      record({ at: nowIso(), query: text, provider, outcome: "off", result: null })
       return
     }
     setRunning(true)
@@ -89,14 +112,7 @@ export function TargetLookupPage() {
       const failed = store.getState().faults.failNextResolverLookup
       if (failed) {
         store.setState((s) => ({ ...s, faults: { ...s.faults, failNextResolverLookup: false } }))
-        record({
-          at: nowIso(),
-          query: text,
-          provider,
-          outcome: "failed",
-          message: `${PROVIDER_LABEL[provider]} did not respond: the lookup failed as if offline. No Target was changed; local Targets and indexed sessions stay usable.`,
-          result: null,
-        })
+        record({ at: nowIso(), query: text, provider, outcome: "failed", result: null })
         return
       }
       const match = resolverEntryFor(text)
@@ -107,23 +123,23 @@ export function TargetLookupPage() {
               query: text,
               provider,
               outcome: "resolved",
-              message: `Resolved by ${PROVIDER_LABEL[provider]}.`,
               result: { name: match.designation, ra: match.ra, dec: match.dec, objectType: match.objectType, aliases: match.aliases },
             }
-          : { at: nowIso(), query: text, provider, outcome: "not-found", message: `${PROVIDER_LABEL[provider]} returned no object named ${text}.`, result: null },
+          : { at: nowIso(), query: text, provider, outcome: "not-found", result: null },
       )
     }, LOOKUP_MS)
   }
 
   return (
     <div>
-      <PageHeader level={2} title="Target lookup" />
+      <PageHeader level={2} title={m.settings_target_lookup()} />
       <PageBody>
         <ReturnNotice />
         <p className="flex flex-wrap items-center gap-1.5 text-sm" data-local-search>
-          <Pill tone="success">Local search</Pill>
+          <Pill tone="success">{m.settings_lookup_local()}</Pill>
           <span className="text-muted-foreground tabular-nums">
-            {targets === 1 ? "1 Target" : `${targets} Targets`} · {BUNDLED_CATALOGUE.length} catalogue objects
+            {m.settings_lookup_targets({ count: targets, n: formatCount(targets) })} ·{" "}
+            {m.settings_lookup_catalogue_objects({ count: BUNDLED_CATALOGUE.length, n: formatCount(BUNDLED_CATALOGUE.length) })}
           </span>
         </p>
         {writeError ? <ActionError message={writeError.message} onRetry={writeError.retry} /> : null}
@@ -131,22 +147,22 @@ export function TargetLookupPage() {
         <div className="flex items-center justify-between gap-4 rounded-md border border-border p-3">
           <span className="inline-flex items-center gap-1.5">
             <label htmlFor={ids.enabled} className="text-sm font-medium">
-              Look up Targets online
+              {m.settings_lookup_online()}
             </label>
-            <HelpTip label="About online lookup">Sends Target names to the provider. A failed lookup never blocks indexing.</HelpTip>
+            <HelpTip label={m.settings_lookup_online_about()}>{m.settings_lookup_online_help()}</HelpTip>
           </span>
           <Switch id={ids.enabled} checked={lookup.enabled} onCheckedChange={(checked) => change({ ...lookup, enabled: checked })} />
         </div>
 
-        <Section title="Provider" level={3} id={ids.provider}>
+        <Section title={m.settings_lookup_provider()} level={3} id={ids.provider}>
           <RadioGroup
             aria-labelledby={`${ids.provider}-title`}
             disabled={!lookup.enabled}
             value={lookup.provider}
-            onValueChange={(value) => change({ ...lookup, provider: value as AppSettings["targetLookup"]["provider"] })}
+            onValueChange={(value) => change({ ...lookup, provider: value as Provider })}
             className="grid-cols-2"
           >
-            {PROVIDERS.map((p) => (
+            {providers(m).map((p) => (
               <FieldLabel key={p.value} htmlFor={`${ids.provider}-${p.value}`}>
                 <Field orientation="horizontal" className="items-start" data-disabled={lookup.enabled ? undefined : true}>
                   <FieldContent>
@@ -160,7 +176,7 @@ export function TargetLookupPage() {
           </RadioGroup>
         </Section>
 
-        <Section title="Test" level={3} id="lookup-test" actions={<Pill tone="muted">Fixture</Pill>}>
+        <Section title={m.settings_lookup_test_heading()} level={3} id="lookup-test" actions={<Pill tone="muted">{m.settings_lookup_fixture()}</Pill>}>
           <form
             noValidate
             className="max-w-sm"
@@ -171,39 +187,42 @@ export function TargetLookupPage() {
           >
             <TextField
               id={ids.query}
-              label="Name to look up"
+              label={m.settings_lookup_query()}
               value={query}
               onChange={setQuery}
               error={queryError}
               action={
                 <Button type="submit" className="shrink-0" aria-busy={running || undefined}>
                   {running ? <Loader2 aria-hidden="true" data-icon="inline-start" className="motion-safe:animate-spin" /> : <Search aria-hidden="true" data-icon="inline-start" />}
-                  {running ? "Looking up…" : "Test"}
+                  {running ? m.settings_lookup_running() : m.settings_lookup_test()}
                 </Button>
               }
             />
           </form>
           <div aria-live="polite">
             {running ? (
-              <DetailSkeleton label={`Looking up ${query.trim()}`} />
+              <DetailSkeleton label={m.settings_lookup_running_named({ name: query.trim() })} />
             ) : last ? (
               last.outcome === "resolved" && last.result ? (
                 <div className="space-y-2 rounded-lg border p-3">
                   <p className="text-sm">
-                    {last.message} <span className="text-muted-foreground">{formatDateTime(last.at)}</span>
+                    {outcomeMessage(m, last)} <span className="text-muted-foreground">{formatDateTime(last.at)}</span>
                   </p>
                   <KeyValueList
                     items={[
-                      { label: "Name", value: last.result.name, source: PROVIDER_LABEL[last.provider] },
-                      { label: "Coordinates", value: `${formatRa(last.result.ra)} ${formatDec(last.result.dec)}`, source: PROVIDER_LABEL[last.provider] },
-                      { label: "Object type", value: last.result.objectType, source: PROVIDER_LABEL[last.provider] },
-                      { label: "Aliases", value: last.result.aliases.join(", "), source: PROVIDER_LABEL[last.provider] },
+                      { label: m.settings_lookup_name(), value: last.result.name, source: PROVIDER_LABEL[last.provider] },
+                      { label: m.settings_lookup_coordinates(), value: `${formatRa(last.result.ra)} ${formatDec(last.result.dec)}`, source: PROVIDER_LABEL[last.provider] },
+                      { label: m.settings_lookup_object_type(), value: last.result.objectType, source: PROVIDER_LABEL[last.provider] },
+                      { label: m.settings_lookup_aliases(), value: last.result.aliases.join(", "), source: PROVIDER_LABEL[last.provider] },
                     ]}
                   />
                 </div>
               ) : (
-                <Notice tone={last.outcome === "failed" ? "warning" : "info"} title={last.outcome === "failed" ? "Lookup failed" : last.outcome === "off" ? "Online lookup off" : "No match"}>
-                  {last.message}
+                <Notice
+                  tone={last.outcome === "failed" ? "warning" : "info"}
+                  title={last.outcome === "failed" ? m.settings_lookup_failed_title() : last.outcome === "off" ? m.settings_lookup_off_title() : m.sessions_no_match()}
+                >
+                  {outcomeMessage(m, last)}
                 </Notice>
               )
             ) : null}
