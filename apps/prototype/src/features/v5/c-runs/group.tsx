@@ -51,7 +51,7 @@ export function RunGroupPage() {
   const group = groupId ? state.catalog.runGroups[groupId] : undefined
   const project = group ? state.catalog.projects[group.projectId] : undefined
   if (!group || !project || group.projectId !== projectId) return <MissingRecord noun="run group" backTo={projectId ? `/projects/${projectId}` : "/projects"} backLabel={m.run_open_project()} />
-  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord noun="run step" backTo={`/projects/${project.id}/groups/${group.id}/select`} backLabel={m.run_open_select()} />
+  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord noun="run step" backTo={`/projects/${project.id}/groups/${group.id}/select`} backLabel={m.review_open_select()} />
   return <GroupScreen group={group} step={step as RunStep} />
 }
 
@@ -288,7 +288,7 @@ function GroupSelect({ group, onOutcome }: { group: RunGroup; onOutcome: Act }) 
               key={r.id}
               entries={[
                 { heading: r.name },
-                { label: m.run_open_select(), icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: r.projectId, runId: r.id, step: "select" } }) },
+                { label: m.review_open_select(), icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: r.projectId, runId: r.id, step: "select" } }) },
                 ...(r.draft && r.completion !== "complete" ? [{ label: m.rungroup_save(), icon: Save, onSelect: () => onOutcome(saveRun(r.id), { blocked: m.run_save_blocked() }) }] : []),
               ]}
             >

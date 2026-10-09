@@ -9,6 +9,7 @@
 import { useEffect, useSyncExternalStore } from "react"
 import type { AssetId, DiskFile } from "@/domain/types"
 import { frameField, renderWindow } from "@/features/t3/raster"
+import { m } from "@/lib/i18n"
 
 export const THUMB_W = 160
 
@@ -76,7 +77,7 @@ export function useThumbnail(assetId: AssetId, file: DiskFile | undefined, unrea
     }
   }, [key, file, assetId])
   if (unreadableReason) return { state: "unreadable", reason: unreadableReason }
-  if (!key) return { state: "unreadable", reason: "No pixel data for this file." }
+  if (!key) return { state: "unreadable", reason: m.review_no_pixel_data() }
   const url = ready.get(key)
   return url ? { state: "ready", url } : { state: "pending" }
 }

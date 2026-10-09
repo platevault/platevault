@@ -251,6 +251,9 @@ export function renderWindow(field: StarField, window: ViewWindow, stretch: Stre
   return image
 }
 
+/** A saturated core fails the PSF fit; a star near the edge may have its profile cut off. */
+export type StarWarning = "saturated" | "near-edge"
+
 export interface StarRecord {
   id: number
   x: number
@@ -263,7 +266,8 @@ export interface StarRecord {
   peakAdu: number
   backgroundAdu: number
   snr: number
-  warnings: string[]
+  /** Fit caveats, worded at render. */
+  warnings: StarWarning[]
   source: FieldStar
 }
 
@@ -277,10 +281,7 @@ function fitStar(field: StarField, star: FieldStar, index: number): StarRecord {
   const saturated = star.peak >= ADU_MAX
   const nearEdge = star.x < 40 || star.y < 40 || star.x > field.width - 40 || star.y > field.height - 40
   const jitter = 1 + (((index * 7919) % 61) - 30) / 1000
-  const warnings = [
-    saturated ? "Saturated: the core is clipped at 65,535 ADU, so the PSF fit failed" : null,
-    nearEdge ? "Near the frame edge: part of the profile may be cut off" : null,
-  ].filter((w): w is string => w !== null)
+  const warnings: StarWarning[] = [...(saturated ? (["saturated"] as const) : []), ...(nearEdge ? (["near-edge"] as const) : [])]
   return {
     id: index + 1,
     x: Math.round(star.x),

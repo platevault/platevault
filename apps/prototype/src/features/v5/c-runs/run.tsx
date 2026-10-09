@@ -38,7 +38,7 @@ export function RunPage() {
   const state = useStore((s) => s)
   const ctx = runId ? runContext(state, runId) : null
   if (!ctx || ctx.run.projectId !== projectId) return <MissingRecord noun="run" backTo={projectId ? `/projects/${projectId}` : "/projects"} backLabel={m.run_open_project()} />
-  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord noun="run step" backTo={`/projects/${ctx.project.id}/runs/${ctx.run.id}/select`} backLabel={m.run_open_select()} />
+  if (!RUN_STEPS.includes(step as RunStep)) return <MissingRecord noun="run step" backTo={`/projects/${ctx.project.id}/runs/${ctx.run.id}/select`} backLabel={m.review_open_select()} />
   return <RunScreen ctx={ctx} step={step as RunStep} />
 }
 

@@ -8,20 +8,29 @@
  */
 import { Link } from "@tanstack/react-router"
 import { Sparkles, X } from "lucide-react"
+import { useMessages } from "@/app/preferences"
 import { HelpTip } from "@/components/app/tips"
 import { PathText } from "@/components/app/data"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Toggle } from "@/components/ui/toggle"
-import { pixelScaleFor } from "@/domain/membership"
+import { formatMetricFixed, pixelScaleFor } from "@/domain/membership"
 import type { Catalog, FrameMeasurement } from "@/domain/types"
 import { HeaderDetails, MetricTable, StarDetail } from "@/features/t3/frame-preview"
 import { detectedStars, type StarField, type StarRecord, type ViewWindow } from "@/features/t3/raster"
 import { cn } from "@/lib/utils"
+import { MARK_WORD } from "./marks"
 import type { ReviewFrame, ReviewScope } from "./model"
 import { HistogramView } from "./preview"
-import { MEMBER_WORD, QualityLabel } from "./quality"
+import { memberWord, QualityLabel } from "./quality"
+import { REVIEW_KEY } from "./shortcuts"
+
+const MARKS = [
+  ["usable", REVIEW_KEY.pick],
+  ["unusable", REVIEW_KEY.reject],
+  ["unreviewed", REVIEW_KEY.unreviewed],
+] as const
 
 export interface InspectorActions {
   mark: (value: "usable" | "unusable" | "unreviewed") => void
@@ -66,14 +75,14 @@ export function Inspector({
   overlay?: boolean
   onClose?: () => void
 }) {
+  const m = useMessages()
   const record: FrameMeasurement | undefined = catalog.measurements[frame.asset.id]
   const applies = frame.measure === "measured"
   const disabled = scope.readOnlyReason
-  const plural = targets > 1 ? ` ${targets} frames` : ""
   const stars = field ? detectedStars(field) : []
   return (
     <aside
-      aria-label="Frame inspector"
+      aria-label={m.review_frame_inspector()}
       className={cn(
         "flex min-h-0 shrink-0 flex-col overflow-y-auto border-l border-separator bg-background",
         overlay ? "absolute inset-y-0 right-0 z-20 w-[min(19rem,100%)] shadow-lg" : "w-[19rem]",
@@ -88,36 +97,30 @@ export function Inspector({
             <ul className="mt-0.5 space-y-0.5 text-xs text-muted-foreground">
               {frame.asset.copies.map((c) => (
                 <li key={`${c.volumeId}${c.path}`} className="min-w-0">
-                  <span>{catalog.locations[c.locationId]?.displayName ?? "Unknown location"}: </span>
+                  <span>{m.review_copy_location({ location: catalog.locations[c.locationId]?.displayName ?? m.review_unknown_location() })}</span>
                   <PathText path={c.path} className="inline" />
                 </li>
               ))}
             </ul>
           </div>
           {onClose ? (
-            <Button size="icon-sm" variant="ghost" aria-label="Close the inspector (I)" onClick={onClose}>
+            <Button size="icon-sm" variant="ghost" aria-label={m.shell_with_shortcut({ label: m.review_close_inspector(), shortcut: REVIEW_KEY.inspector })} onClick={onClose}>
               <X aria-hidden="true" />
             </Button>
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <QualityLabel frame={frame} />
-          {frame.member ? <span className="text-muted-foreground">In run: {MEMBER_WORD[frame.member]}</span> : null}
+          {frame.member ? <span className="text-muted-foreground">{m.review_in_run({ state: memberWord(m, frame.member) })}</span> : null}
           {frame.panel && frame.run ? (
             <Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: frame.run.projectId, runId: frame.run.id, step: "review" }} className="text-link hover:underline">
-              Panel {frame.panel.n} run
+              {m.review_panel_run({ n: frame.panel.n })}
             </Link>
           ) : null}
-          {frame.subject ? <span className="text-muted-foreground">Subject: {frame.subject}</span> : null}
+          {frame.subject ? <span className="text-muted-foreground">{m.review_subject({ name: frame.subject })}</span> : null}
         </div>
-        <div className="grid grid-cols-3 gap-1" role="group" aria-label={`Library quality${plural}`}>
-          {(
-            [
-              ["usable", "Picked", "P"],
-              ["unusable", "Rejected", "X"],
-              ["unreviewed", "Unreviewed", "U"],
-            ] as const
-          ).map(([value, label, key]) => (
+        <div className="grid grid-cols-3 gap-1" role="group" aria-label={targets > 1 ? m.review_library_quality_frames({ count: targets }) : m.review_library_quality()}>
+          {MARKS.map(([value, key]) => (
             <Button
               key={value}
               size="xs"
@@ -128,7 +131,7 @@ export function Inspector({
               title={disabled ?? undefined}
               onClick={() => actions.mark(value)}
             >
-              {label}
+              {MARK_WORD[value]}
               <Kbd>{key}</Kbd>
             </Button>
           ))}
@@ -137,23 +140,23 @@ export function Inspector({
           <div className="flex flex-wrap items-center gap-2">
             {frame.rejectedBy.project && targets <= 1 ? (
               <Button size="xs" variant="ghost" disabled={disabled !== null} onClick={actions.clearProjectReject}>
-                Clear Project reject
+                {m.review_clear_project_reject()}
               </Button>
             ) : (
               <Button size="xs" variant="ghost" disabled={disabled !== null} onClick={actions.projectReject}>
-                Reject for this Project{plural ? `:${plural}` : ""}
+                {targets > 1 ? m.review_reject_for_project_frames({ count: targets }) : m.review_reject_for_project()}
               </Button>
             )}
-            <HelpTip label="Mark scope">P, X and U mark the library, in every Project. A Project reject stays in this Project.</HelpTip>
+            <HelpTip label={m.review_mark_scope_help()}>{m.review_mark_scope_tip()}</HelpTip>
           </div>
         ) : null}
       </div>
-      <div className="border-b border-separator px-3 py-2">{field && window ? <HistogramView field={field} window={window} /> : <p className="text-xs text-muted-foreground">No pixels</p>}</div>
+      <div className="border-b border-separator px-3 py-2">{field && window ? <HistogramView field={field} window={window} /> : <p className="text-xs text-muted-foreground">{m.review_no_pixels()}</p>}</div>
       <Tabs value={tab === "regions" ? "values" : tab} onValueChange={(v) => onTab(String(v))} className="gap-0">
         <TabsList variant="line" className="w-full shrink-0 justify-start border-b border-separator px-2">
-          <TabsTrigger value="values">Values</TabsTrigger>
-          <TabsTrigger value="stars">Stars</TabsTrigger>
-          <TabsTrigger value="header">Header</TabsTrigger>
+          <TabsTrigger value="values">{m.review_tab_values()}</TabsTrigger>
+          <TabsTrigger value="stars">{m.review_tab_stars()}</TabsTrigger>
+          <TabsTrigger value="header">{m.evidence_source_header()}</TabsTrigger>
         </TabsList>
         <TabsContent value="values" className="px-3 py-2">
           <MetricTable record={record} state={frame.measure} applies={applies} sha256={frame.asset.sha256} />
@@ -163,17 +166,17 @@ export function Inspector({
             <>
               <Toggle variant="outline" size="sm" pressed={starsOn} onPressedChange={onStarsOn}>
                 <Sparkles aria-hidden="true" data-icon="inline-start" />
-                Show stars
+                {m.review_show_stars()}
               </Toggle>
-              <ul className="max-h-36 overflow-y-auto rounded-md border text-xs" aria-label={`Detected stars, ${stars.length} brightest`}>
+              <ul className="max-h-36 overflow-y-auto rounded-md border text-xs" aria-label={m.review_detected_stars({ count: stars.length })}>
                 {stars.map((s) => (
                   <li key={s.id} className={cn("border-b last:border-0", s.id === star?.id && "bg-accent")}>
                     <button type="button" className="flex w-full justify-between gap-2 px-2 py-0.5 text-left tabular-nums hover:bg-foreground/[0.05]" aria-current={s.id === star?.id ? "true" : undefined} onClick={() => onStar(s)}>
-                      <span>Star {s.id}</span>
+                      <span>{m.frame_star({ id: s.id })}</span>
                       <span className="text-muted-foreground">
                         {s.x}, {s.y}
                       </span>
-                      <span className={s.state === "failed" ? "text-warning" : undefined}>{s.state === "failed" ? "Failed fit" : `${s.fwhmPx} px`}</span>
+                      <span className={s.state === "failed" ? "text-warning" : undefined}>{s.state === "failed" ? m.status_failed_fit() : formatMetricFixed({ value: s.fwhmPx, unit: "px" })}</span>
                     </button>
                   </li>
                 ))}
@@ -181,7 +184,7 @@ export function Inspector({
               {star ? <StarDetail field={field} star={star} scaleArcsec={pixelScaleFor(catalog, frame.session)} /> : null}
             </>
           ) : (
-            <p className="text-xs text-muted-foreground">No pixels</p>
+            <p className="text-xs text-muted-foreground">{m.review_no_pixels()}</p>
           )}
         </TabsContent>
         <TabsContent value="header" className="px-3 py-2">

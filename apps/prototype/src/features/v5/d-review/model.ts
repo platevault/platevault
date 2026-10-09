@@ -8,6 +8,7 @@ import { findPanel, findSubject, frameQuality, type FrameQuality, groupHref, liv
 import { assetAvailability, type AssetAvailability } from "@/domain/library"
 import { type MemberState, memberState } from "@/domain/membership"
 import type { Asset, AssetId, MetricKey, Metric, MosaicPanel, Operation, Project, ProjectId, Run, RunGroupId, RunId, Session, SessionId } from "@/domain/types"
+import { m } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
 import { builtInMetrics, currentImportedMetrics, frameMeasureState, type FrameMeasureState, latestMeasureOp } from "@/features/t3/measure"
 
@@ -18,11 +19,12 @@ export type ReviewContext = { kind: "run"; runId: RunId } | { kind: "group"; gro
 export type ReviewBucket = "picked" | "rejected" | "unreviewed"
 export type QualityFilter = "all" | ReviewBucket
 
-export const FILTERS: Array<{ id: QualityFilter; label: string; key: string }> = [
-  { id: "all", label: "All", key: "1" },
-  { id: "picked", label: "Picked", key: "2" },
-  { id: "rejected", label: "Rejected", key: "3" },
-  { id: "unreviewed", label: "Unreviewed", key: "4" },
+/** Labels are getters, so every read is in the chosen language. */
+export const FILTERS: Array<{ id: QualityFilter; readonly label: string; key: string }> = [
+  { id: "all", get label() { return m.review_filter_all() }, key: "1" },
+  { id: "picked", get label() { return m.review_picked() }, key: "2" },
+  { id: "rejected", get label() { return m.review_rejected() }, key: "3" },
+  { id: "unreviewed", get label() { return m.status_unreviewed() }, key: "4" },
 ]
 
 export const PLOT_METRICS: MetricKey[] = ["fwhm", "hfr", "eccentricity", "star-count", "background"]
@@ -61,13 +63,13 @@ export interface ReviewScope {
   /** Measurement operations, one per run (or one for candidates and a session). */
   measureKeys: string[]
   ops: Operation[]
-  /** Marks are refused here, with this terse reason (a trashed run) and where to resolve it. */
-  readOnlyReason: string | null
+  /** Marks are refused here, with this terse reason (a trashed run) and where to resolve it. Read in the chosen language. */
+  readonly readOnlyReason: string | null
   readOnlyLink: StepLink | null
   /** Marks still apply to the library, but run membership stays (a Complete run): a pill and its help. */
-  membershipNote: { label: string; help: string } | null
+  readonly membershipNote: { label: string; help: string } | null
   /** A group's panel runs in the Trash: listed by name, their frames never counted (D-W75). */
-  trashedPanels: string[]
+  readonly trashedPanels: string[]
   /** Trashed frames this scope leaves out (LIB-FR-18). */
   trashedHidden: number
   href: string
@@ -120,10 +122,11 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
   const sources: Source[] = []
   let project: Project | null = null
   let runs: Run[] = []
-  let readOnlyReason: string | null = null
+  let runTrashed = false
   let readOnlyLink: StepLink | null = null
-  let membershipNote: ReviewScope["membershipNote"] = null
-  let trashedPanels: string[] = []
+  let membership: "run-complete" | "panel-complete" | null = null
+  /** A trashed panel run reads by its panel number, else by its run name. */
+  const trashed: Array<{ n: number } | { name: string }> = []
   let href = "/"
   let panels: MosaicPanel[] = []
   const membersOf = (run: Run, panel: MosaicPanel | null) => {
@@ -139,10 +142,10 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
     const subject = findSubject(project, run.subjectId)
     membersOf(run, findPanel(subject, run.panelId) ?? null)
     if (run.trashedAt) {
-      readOnlyReason = "run in Trash"
+      runTrashed = true
       readOnlyLink = { to: "/projects/$projectId/trash", params: { projectId: project.id } }
     }
-    membershipNote = run.completion === "complete" ? { label: "Run complete", help: "Membership stays. Marks change library quality and Project rejects." } : null
+    membership = run.completion === "complete" ? "run-complete" : null
     href = runHref(run, "review")
   } else if (context.kind === "group") {
     const group = catalog.runGroups[context.groupId]
@@ -154,14 +157,14 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
       if (!run) continue
       const panel = findPanel(subject, run.panelId) ?? null
       if (run.trashedAt) {
-        trashedPanels.push(panel ? `Panel ${panel.n}` : run.name)
+        trashed.push(panel ? { n: panel.n } : { name: run.name })
         continue
       }
       runs.push(run)
       if (panel) panels.push(panel)
       membersOf(run, panel)
     }
-    membershipNote = runs.some((r) => r.completion === "complete") ? { label: "Panel complete", help: "A Complete panel run keeps its membership. Marks change library quality only." } : null
+    membership = runs.some((r) => r.completion === "complete") ? "panel-complete" : null
     href = groupHref(group, "review")
   } else if (context.kind === "candidates") {
     project = catalog.projects[context.projectId] ?? null
@@ -222,7 +225,29 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
       order,
     }
   })
-  return { key, project, frames, runs, measureKeys, ops, readOnlyReason, readOnlyLink, membershipNote, trashedPanels, trashedHidden, href, panels }
+  return {
+    key,
+    project,
+    frames,
+    runs,
+    measureKeys,
+    ops,
+    readOnlyLink,
+    trashedHidden,
+    href,
+    panels,
+    get readOnlyReason() {
+      return runTrashed ? m.review_run_in_trash() : null
+    },
+    get membershipNote() {
+      if (membership === "run-complete") return { label: m.review_run_complete(), help: m.review_run_complete_help() }
+      if (membership === "panel-complete") return { label: m.review_panel_complete(), help: m.review_panel_complete_help() }
+      return null
+    },
+    get trashedPanels() {
+      return trashed.map((t) => ("n" in t ? m.review_panel_n({ n: t.n }) : t.name))
+    },
+  }
 }
 
 /** The bucket a frame lands in after a library mark; a Project-only reject keeps it Rejected (D-W42). */

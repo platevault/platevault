@@ -3,37 +3,41 @@
  * word, as in v4. Picked, Rejected and Unreviewed are the review words for
  * library Usable, Unusable and Unreviewed; a reject always names its scope.
  */
+import { useMessages } from "@/app/preferences"
 import { StatusBadge } from "@/components/app/status"
 import type { MemberState } from "@/domain/membership"
+import type { Messages } from "@/lib/i18n"
 import type { ReviewFrame } from "./model"
 
-export function qualityWord(frame: ReviewFrame): string {
+/** The frame's quality in words; `short` drops the detail after a reject's scope and after Unreviewed. */
+export function qualityWord(m: Messages, frame: ReviewFrame, short = false): string {
   const { library, project } = frame.rejectedBy
-  if (library && project) return "Rejected · Library and this Project"
-  if (library) return "Rejected · Library"
-  if (project) return "Rejected · This Project"
-  if (frame.quality.library === "usable") return "Picked"
-  if (frame.quality.library === "changed-content") return "Unreviewed · changed content"
-  if (frame.quality.library === "verification-pending") return "Unreviewed · verification pending"
-  return "Unreviewed"
+  if (library && project) return short ? m.review_quality_rejected_both_short() : m.review_quality_rejected_both()
+  if (library) return m.review_quality_rejected_library()
+  if (project) return m.review_quality_rejected_project()
+  if (frame.quality.library === "usable") return m.review_picked()
+  if (!short && frame.quality.library === "changed-content") return m.review_quality_unreviewed_changed()
+  if (!short && frame.quality.library === "verification-pending") return m.review_quality_unreviewed_pending()
+  return m.status_unreviewed()
 }
 
 /** `short` drops the detail after a reject's scope; `compact` (thumbnails) keeps only the word, plus "Project" for a Project-only reject. */
 export function QualityLabel({ frame, short = false, compact = false }: { frame: ReviewFrame; short?: boolean; compact?: boolean }) {
+  const m = useMessages()
   const { library, project } = frame.rejectedBy
-  const word = qualityWord(frame)
+  const word = qualityWord(m, frame)
   const label = compact
     ? project && !library
-      ? "Rejected · Project"
+      ? m.review_quality_rejected_project_compact()
       : frame.bucket === "picked"
-        ? "Picked"
+        ? m.review_picked()
         : frame.bucket === "rejected"
-          ? "Rejected"
-          : "Unreviewed"
+          ? m.review_rejected()
+          : m.status_unreviewed()
     : short
-      ? word.replace(" · Library and this Project", " · both").replace(" · changed content", "").replace(" · verification pending", "")
+      ? qualityWord(m, frame, true)
       : word
-  const title = compact ? word : project && !library ? `Library: ${frame.quality.library === "usable" ? "Picked" : "Unreviewed"}` : undefined
+  const title = compact ? word : project && !library ? m.review_quality_library_title({ word: frame.quality.library === "usable" ? m.review_picked() : m.status_unreviewed() }) : undefined
   const value = library
     ? ("unusable" as const)
     : project
@@ -52,9 +56,16 @@ export function QualityLabel({ frame, short = false, compact = false }: { frame:
   )
 }
 
-export const MEMBER_WORD: Record<MemberState, string> = {
-  included: "Included",
-  rejected: "Out of draft · Rejected",
-  excluded: "Excluded from run",
-  unresolved: "Unresolved",
+/** A frame's state in the run's draft, in words. */
+export function memberWord(m: Messages, member: MemberState): string {
+  switch (member) {
+    case "included":
+      return m.review_member_included()
+    case "rejected":
+      return m.review_member_rejected()
+    case "excluded":
+      return m.review_member_excluded()
+    case "unresolved":
+      return m.status_unresolved()
+  }
 }

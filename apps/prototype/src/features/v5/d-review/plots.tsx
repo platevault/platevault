@@ -6,6 +6,7 @@
  * a line and clicking a plot's background sets its value from there. Pointer
  * only by design: the frame list is the keyboard path to the same choices.
  */
+import { useMessages } from "@/app/preferences"
 import type { AssetId, MetricKey } from "@/domain/types"
 import { useSize } from "@/features/t3/frame-preview"
 import { formatMetric, METRIC_LABEL } from "@/features/t3/measure"
@@ -48,10 +49,11 @@ function MetricPlot({
   onSelect: (id: AssetId) => void
   onThreshold: ((metric: MetricKey, value: number) => void) | null
 }) {
+  const m = useMessages()
   const [ref, size] = useSize<HTMLDivElement>()
   const points = frames.flatMap((f, index) => {
-    const m = f.builtIn[metric]
-    return m && m.value !== null ? [{ id: f.asset.id, index, value: m.value, unit: m.unit, frame: f }] : []
+    const metricValue = f.builtIn[metric]
+    return metricValue && metricValue.value !== null ? [{ id: f.asset.id, index, value: metricValue.value, unit: metricValue.unit, frame: f }] : []
   })
   const W = size.width
   const H = size.height
@@ -77,7 +79,7 @@ function MetricPlot({
       </figcaption>
       <div ref={ref} className="relative min-h-0 flex-1">
         {points.length === 0 ? (
-          <p className="absolute inset-0 flex items-center justify-center rounded-sm border border-dashed px-1 text-center text-[0.6875rem] text-muted-foreground">Not measured</p>
+          <p className="absolute inset-0 flex items-center justify-center rounded-sm border border-dashed px-1 text-center text-[0.6875rem] text-muted-foreground">{m.status_not_measured()}</p>
         ) : W > 0 && H > 0 ? (
           <svg
             width={W}
@@ -122,7 +124,7 @@ function MetricPlot({
                     )}
                     strokeWidth={isActive ? 1.5 : 1.2}
                   />
-                  <title>{`${p.frame.asset.fileName}: ${formatMetric(p)}${rejected ? " (Rejected)" : ""}`}</title>
+                  <title>{rejected ? m.review_plot_point_rejected({ name: p.frame.asset.fileName, value: formatMetric(p) }) : `${p.frame.asset.fileName}: ${formatMetric(p)}`}</title>
                 </g>
               )
             })}
@@ -141,32 +143,33 @@ export function SessionPlots(props: {
   onSelect: (id: AssetId) => void
   onThreshold: ((metric: MetricKey, value: number) => void) | null
 }) {
+  const m = useMessages()
   // The sequence is capture order, whatever the list's sort.
   const frames = [...props.frames].sort((a, b) => a.order - b.order)
   return (
-    <section aria-label="Plots across the session" className="flex h-full min-h-0 flex-col gap-1">
+    <section aria-label={m.review_plots_label()} className="flex h-full min-h-0 flex-col gap-1">
       <div className="flex min-h-0 flex-1 gap-2">
         {PLOT_METRICS.map((metric) => (
           <MetricPlot key={metric} metric={metric} {...props} frames={frames} />
         ))}
       </div>
       <p className="flex gap-x-4 overflow-hidden px-1 text-[0.6875rem] leading-4 whitespace-nowrap text-muted-foreground">
-        <span>Capture order · {frames.length}</span>
+        <span>{m.review_capture_order({ count: frames.length })}</span>
         <span>
           <Dot className="fill-foreground/70" />
-          measured
+          {m.review_legend_measured()}
         </span>
         <span>
           <Dot className="fill-transparent stroke-muted-foreground" />
-          Rejected
+          {m.review_rejected()}
         </span>
         <span>
           <Dot className="fill-link" />
-          selected
+          {m.review_legend_selected()}
         </span>
         <span>
           <Dot className="fill-primary" />
-          current frame
+          {m.review_current_frame()}
         </span>
       </p>
     </section>

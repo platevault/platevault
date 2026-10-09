@@ -412,7 +412,7 @@ export function CandidatesSection({ project }: { project: Project }) {
       sortValue: (r) => r.unreviewed,
       cell: (r) => (r.unreviewed > 0 ? <CountBadge count={r.unreviewed} tone="warning" label={m.project_unreviewed_count({ count: r.unreviewed })} /> : <span className="text-muted-foreground">0</span>),
     },
-    { id: "runs", header: m.project_col_in_run(), cell: (r) => (r.runs.length > 0 ? <span className="text-xs">{r.runs.join(", ")}</span> : <Pill tone="info">{m.status_ready()}</Pill>) },
+    { id: "runs", header: m.review_col_member(), cell: (r) => (r.runs.length > 0 ? <span className="text-xs">{r.runs.join(", ")}</span> : <Pill tone="info">{m.status_ready()}</Pill>) },
   ]
 
   const menu = (r: CandidateRow): MenuEntry[] => {

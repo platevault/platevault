@@ -8,19 +8,21 @@
 import { sessionNamingValues } from "@/domain/derive"
 import { headerNamingValues, resolveNamingTemplate } from "@/domain/templates"
 import type { Catalog } from "@/domain/types"
+import { m } from "@/lib/i18n"
 import type { ReviewFrame } from "./model"
 
 export interface NamePreset {
   id: string
-  label: string
+  readonly label: string
   template: string
 }
 
+/** Labels are getters, so every read is in the chosen language. */
 export const NAME_PRESETS: NamePreset[] = [
-  { id: "file", label: "File name", template: "{file}" },
-  { id: "filter-night", label: "Filter, night, number", template: "{filter} {date} #{n}" },
-  { id: "target-filter", label: "Target, filter, exposure, number", template: "{target} {filter} {exposure} #{n}" },
-  { id: "night-camera", label: "Night, camera, gain, temperature, number", template: "{date} {camera} g{gain} {set_temp} #{n}" },
+  { id: "file", get label() { return m.review_name_file() }, template: "{file}" },
+  { id: "filter-night", get label() { return m.review_name_filter_night() }, template: "{filter} {date} #{n}" },
+  { id: "target-filter", get label() { return m.review_name_target_filter() }, template: "{target} {filter} {exposure} #{n}" },
+  { id: "night-camera", get label() { return m.review_name_night_camera() }, template: "{date} {camera} g{gain} {set_temp} #{n}" },
 ]
 
 export function namePreset(id: string): NamePreset {
