@@ -190,3 +190,21 @@ Integrated evidence (2026-10-09, demo seed, private headless Chrome, `/Users/sjo
 - NGC 7000 OIII deep: Select "Saved r1"; Calibrate "dark ✓ · flat ✓ · bias ✓"; Prepare with SETI Astro Suite Pro and Copy prepares 80 inputs (Prepared); Results finds the simulated outputs and refuses Accept of a file still being written; Complete; Clean up moves 81 prepared entries (4.3 GB) to the OS Trash and Done reads "Cleaned up".
 - Project Mark Done names 3 runs not Complete; Complete on each, then Mark Done reads Done.
 - The Done / Archive sheet offers Archive 7 sessions (11.5 GB), 2 intermediates and Empty Trash (2 runs); Archive leaves the Project Archived.
+
+## Fix pass (2026-10-09)
+
+The design critique and the WCAG 2.2 AA audit of the integrated harness were fixed on `ui-harness-v5`. The window, source list, toolbar, status bar and gate vocabulary keep their v4 names; what changed:
+
+- **Toolbar:** one 40 px row at every width. The Next label and its caption truncate with the whole text in the tooltip; Search folds to an icon under 1200 px and Import under 1280 px; Prototype and Theme live in the More menu.
+- **Next never points at the screen it is on** (`nextFrom` in `derive.ts`): on an advisory step (Review) Next moves on to the following step and the caption keeps the step's progress; on a blocking step Next is replaced by the reason; a Save run Next focuses the Save button. A Complete run only offers Clean up.
+- **Gate words:** the review gate reads *Needs review* with its own glyph (circle with dots); the warning triangle is kept for warnings; Partial is the dashed circle in rails and badges alike. Home and Projects reuse the rail's word ("Partial at Prepare").
+- **Review drafts:** X in a run's Review changes Review, not Select: Select keeps "Saved r1", Review reads "2 rejected, unsaved" with Save run and Discard in Review's status line. Review's counts cover the frames it lists, as its filters do.
+- **Review layout:** the table takes the space left after a preview stage of at least 26rem; under 1000 px of pane the inspector opens over the preview (I); Measure frames, the Trash and Complete notes and Import measurements sit in the status line; labels fold to icons below 62rem. Roving focus follows the current frame in the table, filmstrip and grid (one Tab stop each); Measure frames hands focus to Cancel and back to the status line, announcing the start and the summary.
+- **Pane header and sections:** pane titles 17 px, section headings 15 px, captions 11 px on one line; the sticky pane header publishes `--pane-header-h`, which `#main`'s scroll padding uses.
+- **Projects list:** column priority keeps Next in view from 1024 px; rows have a context menu. **Project page:** Runs first, then Goals, Subjects, Rigs, Candidates (summarised, one link to the candidate review), Planning, Archived sessions and Trash; the toolbar Next is the one primary action.
+- **Sheets:** right sheets hang below the toolbar and take their caller's width (Done / Archive 52rem); offers confirm inline, never in a second dialog; Mark Done stays disabled while runs are not Complete, and Complete on a run with open steps previews them first.
+- **Source list:** the deepest current row takes the accent fill and is the only `aria-current="page"` (`CurrentLink` in `app/run-ui.tsx`); the step bar is a gate bar (glyph and step name, gate word and status in the name, a visible Next marker, `aria-current="step"`).
+- **Tokens:** `--destructive-foreground` gives the one destructive button style 5.5:1 or better in dark; pressed toggles draw the ring colour bar in dark.
+- **Seed:** one rejected M 31 L frame and one duplicate copy on Spare lost write permission, so the Done / Archive sheet shows refused items with reasons.
+
+Evidence (2026-10-09, demo seed, private headless Chrome; scripts in `/Users/sjors/tmp/pv-v5-fix/`): the integrated smoke passes 34 routes at 1440, 1280 and 1024 with document scroll equal to the viewport and 0 console errors; axe-core 4.14.0 finds 0 serious or critical issues on 27 screens. Before and after screenshots are in `design/harness-v5-shots/fixed/`.
