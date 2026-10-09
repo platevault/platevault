@@ -6,6 +6,7 @@
 import { Link } from "@tanstack/react-router"
 import { MapPin, Moon } from "lucide-react"
 import { useMemo } from "react"
+import { useMessages } from "@/app/preferences"
 import { UnknownValue } from "@/components/app/feedback"
 import { Pill } from "@/components/app/pill"
 import type { Tone } from "@/components/app/status"
@@ -13,11 +14,12 @@ import { Button } from "@/components/ui/button"
 import { formatHours, planningSite } from "@/domain/derive"
 import { defaultCriteria, tonightAt, zoneAbbreviation } from "@/domain/planning"
 import type { Fit } from "@/domain/derive"
-import type { ObservingSite, Project } from "@/domain/types"
+import type { ObservingSite, PlanCriteria, Project } from "@/domain/types"
 import { formatTime } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { nowIso, useStore } from "@/store/core"
-import type { FilterChip, FilterGrade } from "./good-tonight"
+import { type FilterChip, type FilterGrade, filterReason } from "./good-tonight"
 import { nightGrid } from "./sky-tonight"
 import type { RigFit, SkyContext } from "./targets-model"
 
@@ -53,13 +55,19 @@ export function clockRange(start: string, end: string, site: ObservingSite): str
 
 /** The Moon, once, for a toolbar: illumination, phase, rise and set (PLAN-TGT-FR-07). */
 export function MoonLine({ ctx, className }: { ctx: SkyContext; className?: string }) {
+  const m = useMessages()
   const { moon } = ctx.tonight
-  const parts = [`${moon.illuminationPct}%`, moon.phase, moon.rise ? `rises ${siteTime(moon.rise, ctx.site)}` : "no moonrise", moon.set ? `sets ${siteTime(moon.set, ctx.site)}` : "no moonset"]
+  const parts = [
+    `${moon.illuminationPct}%`,
+    moon.phase,
+    moon.rise ? m.tonight_moon_rises({ time: siteTime(moon.rise, ctx.site) }) : m.tonight_moon_no_rise(),
+    moon.set ? m.tonight_moon_sets({ time: siteTime(moon.set, ctx.site) }) : m.tonight_moon_no_set(),
+  ]
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-[0.75rem] text-muted-foreground tabular-nums", className)} data-moon>
       <Moon aria-hidden="true" className="size-3.5 shrink-0" />
       <span className="truncate">
-        <span className="text-foreground">Moon</span> {parts.join(" · ")}
+        <span className="text-foreground">{m.tonight_moon()}</span> {parts.join(" · ")}
       </span>
     </span>
   )
@@ -79,11 +87,24 @@ export function SiteLine({ site, className }: { site: ObservingSite; className?:
 
 /** Settings › Sites (PLAN-TGT-AC-15), returning here afterwards. */
 export function AddSiteButton({ returnTo }: { returnTo: string }) {
+  const m = useMessages()
   return (
     <Button size="sm" variant="outline" render={<Link to="/settings/sites" search={{ return: returnTo }} />}>
-      Add site
+      {m.tonight_add_site()}
     </Button>
   )
+}
+
+/** The planning criteria behind every window, for a timeline's method note. */
+export function criteriaText(m: Messages, c: PlanCriteria): string {
+  const parts = [
+    m.tonight_criteria_altitude({ altitude: c.minAltitudeDeg }),
+    c.darkness === "astronomical" ? m.tonight_criteria_astronomical() : m.tonight_criteria_nautical(),
+    m.tonight_criteria_duration({ minutes: c.minDurationMin }),
+  ]
+  if (c.maxMoonIlluminationPct !== null) parts.push(m.tonight_criteria_moon_illumination({ illumination: c.maxMoonIlluminationPct }))
+  if (c.minMoonSeparationDeg !== null) parts.push(m.tonight_criteria_moon_separation({ separation: c.minMoonSeparationDeg }))
+  return parts.join(", ")
 }
 
 const GRADE_TONE: Record<FilterGrade, Tone> = { good: "success", marginal: "warning", poor: "muted" }
@@ -106,8 +127,9 @@ export function GradePill({ grade, title, className, children }: { grade: Filter
 
 /** One filter's good-tonight chip; its reason is the tooltip. */
 export function FilterPill({ chip, className }: { chip: FilterChip; className?: string }) {
+  useMessages()
   return (
-    <GradePill grade={chip.grade} title={chip.reason} className={className}>
+    <GradePill grade={chip.grade} title={filterReason(chip)} className={className}>
       {chip.band}
     </GradePill>
   )
@@ -119,10 +141,11 @@ export function FilterPill({ chip, className }: { chip: FilterChip; className?: 
  * the reason.
  */
 export function FilterChips({ chips, empty }: { chips: FilterChip[] | null; empty: string }) {
+  const m = useMessages()
   if (!chips) return <UnknownValue label="–" reason={empty} />
-  if (chips.length === 0) return <span className="text-xs text-muted-foreground">No filters</span>
+  if (chips.length === 0) return <span className="text-xs text-muted-foreground">{m.tonight_no_filters()}</span>
   return (
-    <span role="img" aria-label={chips.map((c) => c.reason).join("; ")} className="inline-flex items-center gap-0.5" data-filter-chips>
+    <span role="img" aria-label={chips.map(filterReason).join("; ")} className="inline-flex items-center gap-0.5" data-filter-chips>
       {chips.map((c) => (
         <FilterPill key={c.band} chip={c} />
       ))}
@@ -169,8 +192,9 @@ export function CapturedCell({ captured }: { captured: Array<{ channel: string; 
 
 /** A Project badge (D-W60): the Project's name as a pill, linking to it. */
 export function ProjectBadge({ project }: { project: Project }) {
+  const m = useMessages()
   return (
-    <Pill tone="muted" link={{ to: "/projects/$projectId", params: { projectId: project.id } }} title={`Project ${project.name}`} className="h-4 max-w-40 px-1.5 text-[0.625rem]">
+    <Pill tone="muted" link={{ to: "/projects/$projectId", params: { projectId: project.id } }} title={m.target_project_badge({ name: project.name })} className="h-4 max-w-40 px-1.5 text-[0.625rem]">
       {project.name}
     </Pill>
   )

@@ -26,6 +26,7 @@
 import { Link, useNavigate, useSearch } from "@tanstack/react-router"
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Crosshair, MoreHorizontal, Plus, Search, Star, X } from "lucide-react"
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { ClearableInput } from "@/components/app/clearable-input"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { ActionError, EmptyState, Notice, UnknownValue } from "@/components/app/feedback"
@@ -40,7 +41,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { openSheet } from "@/app/ui-state"
 import { formatHours, planList } from "@/domain/derive"
 import type { OpticalTrainId } from "@/domain/types"
-import { formatNight, plural } from "@/lib/format"
+import { formatNight } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { SearchParams } from "@/routes"
 import { setFavourite } from "@/store/actions/library"
@@ -67,6 +68,7 @@ import {
   presetById,
   presetUnavailable,
   projectRows,
+  rowSource,
   type RowView,
   rowView,
   type SortColumn,
@@ -76,6 +78,8 @@ import {
   sessionCountsByTarget,
   sortViews,
   type TargetRow,
+  zeroReasonText,
+  zeroReasonWord,
 } from "./targets-model"
 import { deletePreset, describeView, renamePreset, savedPresetUnavailable, savePreset, VIEW_KEYS } from "./targets-presets"
 
@@ -134,6 +138,7 @@ const CHIP_ON = "border-transparent bg-selected text-selected-foreground"
 const CHIP_OFF = "border-separator text-foreground/85 hover:bg-foreground/[0.06]"
 
 export function TargetsPage() {
+  const m = useMessages()
   const search = useSearch({ strict: false }) as SearchParams
   const navigate = useNavigate()
   const catalog = useStore((s) => s.catalog)
@@ -168,7 +173,7 @@ export function TargetsPage() {
   const presetBlocked = preset ? presetUnavailable(preset, rigIds, bands) : null
   const activePreset = preset && !presetBlocked && !query ? preset : undefined
   const good = parseBand(search.good)
-  const goodBlocked = good && !bands.includes(good) ? `The rig has no ${good} filter` : null
+  const goodBlocked = good && !bands.includes(good) ? m.targets_rig_lacks_filter({ band: good }) : null
   const activeGood = good && !goodBlocked && !query ? good : null
   const sort = parseSort(search.sort) ?? activePreset?.sort ?? DEFAULT_SORT
   const activeSaved = search.saved ? saved.find((p) => p.id === search.saved) : undefined
@@ -187,13 +192,13 @@ export function TargetsPage() {
 
   const rows = useMemo(() => allRows(catalog), [catalog])
   const searched = useMemo(() => (query.trim() ? searchRows(rows, query, simbad?.status === "searched" && simbad.query === query.trim()) : null), [rows, query, simbad])
-  const baseRows = searched ? searched.rows : project ? projectRows(rows, project) : mode === "browse" ? (catalogues.length > 0 || activePreset || activeGood ? browseRows(rows, catalogues) : []) : myTargetRows(rows)
+  const baseRows = searched ? searched : project ? projectRows(rows, project) : mode === "browse" ? (catalogues.length > 0 || activePreset || activeGood ? browseRows(rows, catalogues) : []) : myTargetRows(rows)
   const counts = useMemo(() => sessionCountsByTarget(catalog), [catalog])
   const planned = useMemo(() => new Set(planList(catalog).map((t) => t.id)), [catalog])
   const rigKey = rigIds.join(",")
   const views = useMemo(() => baseRows.map((row) => rowView(catalog, disk, ctx, row, rigIds, counts, constraints)), [baseRows, catalog, disk, ctx, rigKey, counts, constraints])
   const filtered = goodFor(activePreset ? views.filter(activePreset.match) : views, activeGood)
-  const shown = sortViews(filtered, sort, searched?.source, activeGood)
+  const shown = sortViews(filtered, sort, activeGood)
 
   function run(action: () => CommitResult) {
     const result = action()
@@ -216,9 +221,9 @@ export function TargetsPage() {
   }
   const applyGood = (band: string | undefined) => setParams({ good: band, sort: band ? formatSort(GOOD_TONIGHT_SORT) : undefined, saved: undefined })
 
-  const noSite = "No observing site"
+  const noSite = m.tonight_no_site()
   const skyCell = (view: RowView, render: (sky: Extract<RowView["sky"], { status: "ok" }>) => ReactNode) =>
-    view.sky.status === "no-site" ? dash(noSite) : view.sky.status === "no-coordinates" ? dash(view.sky.reason) : render(view.sky)
+    view.sky.status === "no-site" ? dash(noSite) : view.sky.status === "no-coordinates" ? dash(m.tonight_no_coordinates()) : render(view.sky)
 
   const columns: ColumnDef[] = [
     {
@@ -233,7 +238,7 @@ export function TargetsPage() {
             type="button"
             data-star
             aria-pressed={starred}
-            aria-label={starred ? `Remove ${v.row.designation} from favourites` : v.row.target ? `Add ${v.row.designation} to favourites` : `Add ${v.row.designation} to targets`}
+            aria-label={starred ? m.targets_unstar_named({ name: v.row.designation }) : v.row.target ? m.targets_star_named({ name: v.row.designation }) : m.targets_add_named({ name: v.row.designation })}
             onClick={() => toggleStar(v)}
             className="inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
           >
@@ -244,7 +249,7 @@ export function TargetsPage() {
     },
     {
       id: "designation",
-      header: "Designation",
+      header: m.targets_designation(),
       sortable: true,
       className: "min-w-32",
       cell: (v) => (
@@ -266,18 +271,18 @@ export function TargetsPage() {
         </span>
       ),
     },
-    { id: "type", header: "Type", sortable: true, className: "max-w-32 truncate", cell: (v) => (v.row.objectType ? <span title={v.row.objectType}>{v.row.objectType}</span> : dash("Object type unknown")) },
+    { id: "type", header: m.targets_type(), sortable: true, className: "max-w-32 truncate", cell: (v) => (v.row.objectType ? <span title={v.row.objectType}>{v.row.objectType}</span> : dash(m.targets_type_unknown())) },
     {
       id: "maxAlt",
-      header: "Max alt",
+      header: m.tonight_max_alt(),
       sortable: true,
       align: "right",
-      cell: (v) => skyCell(v, (sky) => (sky.peakDeg === null ? dash("No darkness tonight") : `${Math.round(sky.peakDeg)}°`.replace("-", "−"))),
+      cell: (v) => skyCell(v, (sky) => (sky.peakDeg === null ? dash(m.tonight_no_darkness()) : `${Math.round(sky.peakDeg)}°`.replace("-", "−"))),
     },
-    { id: "lunar", header: "Lunar", sortable: true, align: "right", cell: (v) => skyCell(v, (sky) => `${Math.round(sky.lunarDeg)}°`) },
+    { id: "lunar", header: m.tonight_lunar(), sortable: true, align: "right", cell: (v) => skyCell(v, (sky) => `${Math.round(sky.lunarDeg)}°`) },
     {
       id: "img",
-      header: "Img time",
+      header: m.tonight_img_time(),
       sortable: true,
       align: "right",
       cell: (v) =>
@@ -285,42 +290,42 @@ export function TargetsPage() {
           sky.imgTimeS > 0 ? (
             formatHours(sky.imgTimeS)
           ) : (
-            <span title={sky.zeroReason ?? undefined}>
-              0h <span className="text-xs text-muted-foreground">{sky.zeroReason?.split(":")[0]?.toLowerCase()}</span>
-              <span className="sr-only">: {sky.zeroReason}</span>
+            <span title={sky.zeroReason ? zeroReasonText(sky.zeroReason) : undefined}>
+              {m.tonight_zero_hours()} <span className="text-xs text-muted-foreground">{sky.zeroReason ? zeroReasonWord(sky.zeroReason) : null}</span>
+              <span className="sr-only">: {sky.zeroReason ? zeroReasonText(sky.zeroReason) : null}</span>
             </span>
           ),
         ),
     },
     {
       id: "tonight",
-      header: "Filters",
+      header: m.targets_filters(),
       sortable: true,
-      help: "Each filter tonight under its Moon limits. Dashed: marginal. Struck: poor.",
-      cell: (v) => skyCell(v, (sky) => <FilterChips chips={v.tonight} empty={sky.zeroReason ?? "No window tonight"} />),
+      help: m.targets_filters_help(),
+      cell: (v) => skyCell(v, (sky) => <FilterChips chips={v.tonight} empty={sky.zeroReason ? zeroReasonText(sky.zeroReason) : m.tonight_no_window()} />),
     },
     // Fit sits beside the filter chips: both follow the rig selector (D-W23).
-    ...(rigIds.length > 0 ? [{ id: "fit" as const, header: rigIds.length > 1 ? "Fit per rig" : "Fit", sortable: true, cell: (v: RowView) => <FitCell fits={v.fits} /> }] : []),
+    ...(rigIds.length > 0 ? [{ id: "fit" as const, header: rigIds.length > 1 ? m.targets_fit_per_rig() : m.targets_fit(), sortable: true, cell: (v: RowView) => <FitCell fits={v.fits} /> }] : []),
     {
       id: "opposition",
-      header: "Opposition",
+      header: m.tonight_opposition(),
       sortable: true,
-      cell: (v) => (v.opposition ? shortDate(v.opposition, ctx?.nowMs ?? Date.now()) : dash(v.row.ra === null ? "No catalogued coordinates" : noSite)),
+      cell: (v) => (v.opposition ? shortDate(v.opposition, ctx?.nowMs ?? Date.now()) : dash(v.row.ra === null ? m.tonight_no_coordinates() : noSite)),
     },
-    { id: "sessions", header: "Sessions", sortable: true, align: "right", cell: (v) => (v.sessions > 0 ? v.sessions : <span className="text-muted-foreground">–</span>) },
-    { id: "captured", header: "Captured", sortable: true, className: "max-w-40 truncate", cell: (v) => <CapturedCell captured={v.captured} /> },
+    { id: "sessions", header: m.nav_sessions(), sortable: true, align: "right", cell: (v) => (v.sessions > 0 ? v.sessions : <span className="text-muted-foreground">–</span>) },
+    { id: "captured", header: m.coverage_captured(), sortable: true, className: "max-w-40 truncate", cell: (v) => <CapturedCell captured={v.captured} /> },
   ]
-  if (searched) columns.push({ id: "source", header: "Source", sortable: true, cell: (v) => <span className="text-xs">{searched.source.get(v.row.key)}</span> })
+  if (searched) columns.push({ id: "source", header: m.targets_source(), sortable: true, cell: (v) => <span className="text-xs">{rowSource(v.row)}</span> })
   columns.push({
     id: "actions",
-    header: "Actions",
+    header: m.tonight_actions(),
     sortable: false,
     className: "w-px",
     cell: (v) =>
       v.row.mine ? null : (
         <Button size="xs" variant="outline" onClick={() => add(v.row)}>
           <Plus aria-hidden="true" data-icon="inline-start" />
-          Add<span className="sr-only"> {v.row.designation} to targets</span>
+          {m.verb_add()}<span className="sr-only"> {m.targets_add_sr({ name: v.row.designation })}</span>
         </Button>
       ),
   })
@@ -345,15 +350,15 @@ export function TargetsPage() {
     if (!v) return []
     const target = v.row.target
     const inPlan = target ? planned.has(target.id) : false
-    const plan: MenuEntry = inPlan ? { label: "Remove from Plan", onSelect: () => run(() => removeFromPlan(target!.id)) } : { label: "Add to Plan", onSelect: () => run(() => planRow(v.row)) }
-    if (!target) return [{ label: "Add to targets", onSelect: () => add(v.row) }, plan]
+    const plan: MenuEntry = inPlan ? { label: m.targets_remove_from_plan(), onSelect: () => run(() => removeFromPlan(target!.id)) } : { label: m.targets_add_to_plan(), onSelect: () => run(() => planRow(v.row)) }
+    if (!target) return [{ label: m.targets_add_to_targets(), onSelect: () => add(v.row) }, plan]
     return [
-      { label: "Open", onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: target.id }, search: keepSearch(search) }) },
-      { label: target.favourite ? "Remove ★" : "Add ★", onSelect: () => toggleStar(v) },
+      { label: m.verb_open(), onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: target.id }, search: keepSearch(search) }) },
+      { label: target.favourite ? m.targets_unstar() : m.targets_star(), onSelect: () => toggleStar(v) },
       plan,
       { separator: true },
-      { label: "New Project…", onSelect: () => openSheet({ kind: "new-project", targetId: target.id }) },
-      { label: "Open Plan", onSelect: () => void navigate({ to: "/plan" }) },
+      { label: m.targets_new_project(), onSelect: () => openSheet({ kind: "new-project", targetId: target.id }) },
+      { label: m.targets_open_plan(), onSelect: () => void navigate({ to: "/plan" }) },
     ]
   }
 
@@ -366,36 +371,36 @@ export function TargetsPage() {
       const p = presetById(id)
       if (!p) return []
       const on = activePreset?.id === p.id && !activeSaved
-      return [on ? { label: "Clear", onSelect: () => setParams({ preset: undefined, sort: undefined, saved: undefined }) } : { label: "Apply", disabled: Boolean(query), onSelect: () => setParams({ preset: p.id, sort: undefined, saved: undefined }) }]
+      return [on ? { label: m.verb_clear(), onSelect: () => setParams({ preset: undefined, sort: undefined, saved: undefined }) } : { label: m.targets_apply(), disabled: Boolean(query), onSelect: () => setParams({ preset: p.id, sort: undefined, saved: undefined }) }]
     }
     if (kind === "saved") {
       const p = saved.find((x) => x.id === id)
       if (!p) return []
       return [
-        { label: "Apply", disabled: Boolean(savedPresetUnavailable(catalog, p.view)) || Boolean(query), onSelect: () => applySaved(p) },
-        { label: "Rename…", onSelect: () => setRenaming(p) },
-        { label: "Delete…", destructive: true, onSelect: () => setDeleting(p) },
+        { label: m.targets_apply(), disabled: Boolean(savedPresetUnavailable(catalog, p.view)) || Boolean(query), onSelect: () => applySaved(p) },
+        { label: m.targets_rename_menu(), onSelect: () => setRenaming(p) },
+        { label: m.targets_delete_menu(), destructive: true, onSelect: () => setDeleting(p) },
       ]
     }
-    return [...goodBands.map((band) => ({ label: `Good tonight for ${band}`, onSelect: () => applyGood(band) })), ...(good ? [{ separator: true } as const, { label: "Clear", onSelect: () => applyGood(undefined) }] : [])]
+    return [...goodBands.map((band) => ({ label: m.targets_good_for({ band }), onSelect: () => applyGood(band) })), ...(good ? [{ separator: true } as const, { label: m.verb_clear(), onSelect: () => applyGood(undefined) }] : [])]
   }
 
   const rigItems = [
-    { value: "none", label: "No rig" },
+    { value: "none", label: m.targets_no_rig() },
     ...Object.values(catalog.opticalTrains)
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((r) => ({ value: r.id, label: r.name })),
-    ...(project ? [{ value: "project", label: `This Project's rigs (${project.rigIds.length})` }] : []),
+    ...(project ? [{ value: "project", label: m.targets_project_rigs({ count: project.rigIds.length }) }] : []),
   ]
   const currentView: SavedTargetPreset["view"] = { mode, cat: catalogues.join(",") || undefined, preset: activePreset?.id, good: activeGood ?? undefined, rig: rigParam !== "none" && rigParam !== "project" ? rigParam : undefined, sort: search.sort }
 
   const emptyState = (() => {
-    if (searched) return <EmptyState icon={Search} title={`No match for “${query}”`} description={null} action={<Button size="sm" variant="outline" onClick={() => setParams({ q: undefined })}>Clear search</Button>} />
+    if (searched) return <EmptyState icon={Search} title={m.targets_no_match({ query })} description={null} action={<Button size="sm" variant="outline" onClick={() => setParams({ q: undefined })}>{m.targets_clear_search()}</Button>} />
     if (mode === "browse" && !project && catalogues.length === 0 && !activePreset && !activeGood)
-      return <EmptyState icon={Crosshair} title="Choose a catalogue or preset" description={null} action={<Button size="sm" onClick={() => setParams({ cat: "Messier" })}>Browse Messier</Button>} />
-    if (activeGood) return <EmptyState icon={Crosshair} title={`No target with ${activeGood} ok tonight`} description={null} action={<Button size="sm" variant="outline" onClick={() => applyGood(undefined)}>Clear filter</Button>} />
-    if (activePreset) return <EmptyState icon={Crosshair} title={`No target matches ${activePreset.label}`} description={null} action={<Button size="sm" variant="outline" onClick={() => setParams({ preset: undefined, saved: undefined })}>Clear preset</Button>} />
-    return <EmptyState icon={Star} title="No targets yet" description={null} action={<Button size="sm" onClick={() => setParams({ mode: "browse", cat: "Messier" })}>Browse catalogues</Button>} />
+      return <EmptyState icon={Crosshair} title={m.targets_choose_catalogue()} description={null} action={<Button size="sm" onClick={() => setParams({ cat: "Messier" })}>{m.targets_browse_messier()}</Button>} />
+    if (activeGood) return <EmptyState icon={Crosshair} title={m.targets_none_good({ band: activeGood })} description={null} action={<Button size="sm" variant="outline" onClick={() => applyGood(undefined)}>{m.targets_clear_filter()}</Button>} />
+    if (activePreset) return <EmptyState icon={Crosshair} title={m.targets_none_match_preset({ name: activePreset.label })} description={null} action={<Button size="sm" variant="outline" onClick={() => setParams({ preset: undefined, saved: undefined })}>{m.targets_clear_preset()}</Button>} />
+    return <EmptyState icon={Star} title={m.targets_empty()} description={null} action={<Button size="sm" onClick={() => setParams({ mode: "browse", cat: "Messier" })}>{m.targets_browse_catalogues()}</Button>} />
   })()
 
   const sortedBy = columns.find((c) => c.id === sort.column)?.header ?? sort.column
@@ -403,10 +408,10 @@ export function TargetsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
-        title="Targets"
+        title={m.nav_targets()}
         actions={
-          <Button variant="outline" onClick={() => setSaveOpen(true)} disabled={Boolean(query)} title={query ? "Clear search first" : undefined}>
-            Save preset
+          <Button variant="outline" onClick={() => setSaveOpen(true)} disabled={Boolean(query)} title={query ? m.targets_clear_search_first() : undefined}>
+            {m.targets_save_preset()}
           </Button>
         }
       />
@@ -417,33 +422,33 @@ export function TargetsPage() {
               <Pill tone="info" link={{ to: "/projects/$projectId", params: { projectId: project.id } }}>
                 {project.name}
               </Pill>
-              <Button size="icon-xs" variant="ghost" aria-label="Clear Project" title="Clear Project" onClick={() => setParams({ project: undefined, rig: undefined })}>
+              <Button size="icon-xs" variant="ghost" aria-label={m.targets_clear_project()} title={m.targets_clear_project()} onClick={() => setParams({ project: undefined, rig: undefined })}>
                 <X aria-hidden="true" />
               </Button>
               <Button size="xs" variant="outline" render={<Link to="/plan" search={{ project: project.id }} />}>
-                Plan
+                {m.nav_plan()}
               </Button>
             </span>
           ) : (
-            <div role="radiogroup" aria-label="Show" className="inline-flex rounded-md border border-separator p-px">
-              {(["my", "browse"] as const).map((m) => (
+            <div role="radiogroup" aria-label={m.targets_show()} className="inline-flex rounded-md border border-separator p-px">
+              {(["my", "browse"] as const).map((option) => (
                 <button
-                  key={m}
+                  key={option}
                   type="button"
                   role="radio"
-                  aria-checked={mode === m}
-                  onClick={() => setParams({ mode: m === "my" ? undefined : "browse", saved: undefined })}
-                  className={cn("h-6 rounded-[4px] px-2 text-sm", mode === m ? "bg-selected text-selected-foreground" : "text-foreground/85 hover:bg-foreground/[0.06]")}
+                  aria-checked={mode === option}
+                  onClick={() => setParams({ mode: option === "my" ? undefined : "browse", saved: undefined })}
+                  className={cn("h-6 rounded-[4px] px-2 text-sm", mode === option ? "bg-selected text-selected-foreground" : "text-foreground/85 hover:bg-foreground/[0.06]")}
                 >
-                  {m === "my" ? "My targets" : "Browse catalogues"}
+                  {option === "my" ? m.targets_my_targets() : m.targets_browse_catalogues()}
                 </button>
               ))}
             </div>
           )}
           <ClearableInput
             search
-            aria-label="Search targets, catalogues and SIMBAD"
-            placeholder="Targets, catalogues, SIMBAD"
+            aria-label={m.targets_search_label()}
+            placeholder={m.targets_search_placeholder()}
             value={draftQuery}
             onValueChange={(value) => {
               typed.current = value
@@ -453,7 +458,7 @@ export function TargetsPage() {
             wrapperClassName="w-72"
           />
           <Select items={rigItems} value={rigItems.some((i) => i.value === rigParam) ? rigParam : "none"} onValueChange={(value) => setParams({ rig: value === (project ? "project" : "none") ? undefined : (value as string), saved: undefined })}>
-            <SelectTrigger size="sm" aria-label="Rig" className="w-56 min-w-0">
+            <SelectTrigger size="sm" aria-label={m.targets_rig()} className="w-56 min-w-0">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -468,16 +473,16 @@ export function TargetsPage() {
             <ContextMenuArea menu={presetMenu}>
               <span className="inline-flex items-center gap-0.5" data-good-filter {...menuKey("good")}>
                 <Popover>
-                  <PopoverTrigger render={<button type="button" aria-label={`Moon limits for ${good}`} className="rounded-full" />}>
-                    <Pill tone={goodBlocked ? "muted" : "success"} title={goodBlocked ?? (query ? "Off while searching" : undefined)}>
-                      {good} ok · {limitText(constraints[good])}
+                  <PopoverTrigger render={<button type="button" aria-label={m.targets_moon_limits_for({ band: good })} className="rounded-full" />}>
+                    <Pill tone={goodBlocked ? "muted" : "success"} title={goodBlocked ?? (query ? m.targets_off_while_searching() : undefined)}>
+                      {m.targets_good_chip({ band: good, limit: limitText(constraints[good]) })}
                     </Pill>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-60">
                     <MoonLimits bands={[good]} />
                   </PopoverContent>
                 </Popover>
-                <Button size="icon-xs" variant="ghost" aria-label={`Clear ${good} filter`} title="Clear filter" onClick={() => applyGood(undefined)}>
+                <Button size="icon-xs" variant="ghost" aria-label={m.targets_clear_band_filter({ band: good })} title={m.targets_clear_filter()} onClick={() => applyGood(undefined)}>
                   <X aria-hidden="true" />
                 </Button>
               </span>
@@ -494,8 +499,8 @@ export function TargetsPage() {
           )}
         </div>
         {mode === "browse" && !project && !query ? (
-          <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Catalogues">
-            <span className="mr-1 text-xs text-muted-foreground">Catalogues</span>
+          <div className="flex flex-wrap items-center gap-1" role="group" aria-label={m.targets_catalogues()}>
+            <span className="mr-1 text-xs text-muted-foreground">{m.targets_catalogues()}</span>
             {CATALOGUES.map((c) => {
               const on = catalogues.includes(c)
               return (
@@ -507,8 +512,8 @@ export function TargetsPage() {
           </div>
         ) : null}
         <ContextMenuArea menu={presetMenu}>
-          <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Presets">
-            <span className="mr-1 text-xs text-muted-foreground">Presets</span>
+          <div className="flex flex-wrap items-center gap-1" role="group" aria-label={m.targets_presets()}>
+            <span className="mr-1 text-xs text-muted-foreground">{m.targets_presets()}</span>
             {visiblePresets.map((p) => {
               const on = activePreset?.id === p.id && !activeSaved
               return (
@@ -528,12 +533,12 @@ export function TargetsPage() {
             })}
             <DropdownMenu>
               <DropdownMenuTrigger render={<button type="button" disabled={Boolean(query) || goodBands.length === 0} aria-pressed={Boolean(activeGood)} className={cn(CHIP, "inline-flex items-center gap-1", activeGood ? CHIP_ON : CHIP_OFF)} {...menuKey("good")} />}>
-                {activeGood ? `Good tonight for ${activeGood}` : "Good tonight for…"}
+                {activeGood ? m.targets_good_for({ band: activeGood }) : m.targets_good_for_menu()}
                 <ChevronDown aria-hidden="true" className="size-3" />
               </DropdownMenuTrigger>
               <DropdownMenuContent>
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>Good tonight for</DropdownMenuLabel>
+                  <DropdownMenuLabel>{m.targets_good_for_heading()}</DropdownMenuLabel>
                   {goodBands.map((band) => (
                     <DropdownMenuItem key={band} onClick={() => applyGood(band)}>
                       <span className="w-8 font-medium">{band}</span>
@@ -544,7 +549,7 @@ export function TargetsPage() {
                 {good ? (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => applyGood(undefined)}>Clear</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => applyGood(undefined)}>{m.verb_clear()}</DropdownMenuItem>
                   </>
                 ) : null}
               </DropdownMenuContent>
@@ -564,16 +569,16 @@ export function TargetsPage() {
                     className="h-full px-2 text-xs disabled:opacity-50"
                   >
                     {p.name}
-                    {blocked ? <span className="sr-only">: unavailable, {blocked}</span> : null}
+                    {blocked ? <span className="sr-only">{m.targets_preset_unavailable_sr({ reason: blocked })}</span> : null}
                   </button>
                   <DropdownMenu>
-                    <DropdownMenuTrigger render={<button type="button" aria-label={`More for ${p.name}`} className="inline-flex h-full items-center border-l border-separator/70 px-1" />}>
+                    <DropdownMenuTrigger render={<button type="button" aria-label={m.targets_more_for({ name: p.name })} className="inline-flex h-full items-center border-l border-separator/70 px-1" />}>
                       <MoreHorizontal aria-hidden="true" className="size-3.5" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => setRenaming(p)}>Rename…</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setRenaming(p)}>{m.targets_rename_menu()}</DropdownMenuItem>
                       <DropdownMenuItem variant="destructive" onClick={() => setDeleting(p)}>
-                        Delete…
+                        {m.targets_delete_menu()}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -583,9 +588,9 @@ export function TargetsPage() {
             {presetBlocked && preset ? (
               <span className="ml-1 inline-flex items-center gap-0.5">
                 <Pill tone="warning" title={presetBlocked}>
-                  {preset.label} · unavailable
+                  {m.targets_preset_unavailable({ name: preset.label })}
                 </Pill>
-                <Button size="icon-xs" variant="ghost" aria-label={`Clear ${preset.label}`} onClick={() => setParams({ preset: undefined, saved: undefined })}>
+                <Button size="icon-xs" variant="ghost" aria-label={m.targets_clear_named({ name: preset.label })} onClick={() => setParams({ preset: undefined, saved: undefined })}>
                   <X aria-hidden="true" />
                 </Button>
               </span>
@@ -598,16 +603,16 @@ export function TargetsPage() {
         <div className="px-5 pt-2">
           {simbad.status === "searching" ? (
             <p className="text-[0.75rem] text-muted-foreground" role="status">
-              Searching SIMBAD…
+              {m.targets_simbad_searching()}
             </p>
           ) : simbad.status === "off" ? (
-            <Notice tone="offline" title="SIMBAD off" actions={<Button size="sm" variant="outline" render={<Link to="/settings/targets" search={{ return: "/targets" }} />}>Target lookup</Button>} />
+            <Notice tone="offline" title={m.targets_simbad_off()} actions={<Button size="sm" variant="outline" render={<Link to="/settings/targets" search={{ return: "/targets" }} />}>{m.settings_target_lookup()}</Button>} />
           ) : simbad.status === "unreachable" ? (
-            <Notice tone="offline" title="SIMBAD unreachable" actions={<Button size="sm" variant="outline" onClick={retrySimbad}>Retry</Button>} />
+            <Notice tone="offline" title={m.targets_simbad_unreachable()} actions={<Button size="sm" variant="outline" onClick={retrySimbad}>{m.verb_retry()}</Button>} />
           ) : (
             <p className="inline-flex items-center gap-1 text-[0.75rem] text-muted-foreground" role="status">
-              SIMBAD searched
-              <NoteMarker rows={[{ label: "Source", value: "Fixture data (prototype)" }]} />
+              {m.targets_simbad_searched()}
+              <NoteMarker rows={[{ label: m.targets_source(), value: m.targets_simbad_fixture() }]} />
             </p>
           )}
         </div>
@@ -623,7 +628,7 @@ export function TargetsPage() {
           <div data-targets-table className="relative h-full overflow-auto rounded-md border bg-background scroll-pt-[calc(var(--row-h)+1px)]">
             <table className="w-full text-sm">
               <caption className="sr-only">
-                {searched ? `Search results for ${query}` : project ? `${project.name} subjects` : mode === "browse" ? "Browse catalogues" : "My targets"}, {plural(shown.length, "row")}
+                {searched ? m.targets_caption_search({ query }) : project ? m.targets_caption_project({ name: project.name }) : mode === "browse" ? m.targets_browse_catalogues() : m.targets_my_targets()}, {m.plan_rows_count({ count: shown.length })}
               </caption>
               <thead data-chrome className="sticky top-0 z-10 bg-[color-mix(in_oklch,var(--chrome)_70%,var(--background))] text-[0.6875rem] font-medium text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
                 <tr>
@@ -639,20 +644,20 @@ export function TargetsPage() {
                         <span className="inline-flex items-center gap-1">
                           {c.sortable ? (
                             <button type="button" onClick={() => toggleSort(c.id as SortColumn)} className={cn("inline-flex h-6 items-center gap-1 rounded-sm hover:text-foreground", active && "text-foreground")}>
-                              {c.id === "tonight" && activeGood ? `Filters (${activeGood})` : c.header}
+                              {c.id === "tonight" && activeGood ? m.targets_filters_band({ band: activeGood }) : c.header}
                               {active ? sort.direction === "asc" ? <ArrowUp aria-hidden="true" className="size-3" /> : <ArrowDown aria-hidden="true" className="size-3" /> : <ArrowUpDown aria-hidden="true" className="size-3 opacity-50" />}
                             </button>
                           ) : c.id === "star" ? (
                             <span>
                               <span aria-hidden="true">★</span>
-                              <span className="sr-only">Favourite</span>
+                              <span className="sr-only">{m.targets_favourite()}</span>
                             </span>
                           ) : c.id === "actions" ? (
                             <span className="sr-only">{c.header}</span>
                           ) : (
                             c.header
                           )}
-                          {c.help ? <HelpTip label={`About ${c.header}`}>{c.help}</HelpTip> : null}
+                          {c.help ? <HelpTip label={m.targets_about_column({ name: c.header })}>{c.help}</HelpTip> : null}
                         </span>
                       </th>
                     )
@@ -686,18 +691,18 @@ export function TargetsPage() {
         </ContextMenuArea>
       </div>
       <p data-chrome className="border-t border-separator px-5 py-1 text-[0.6875rem] text-muted-foreground tabular-nums" aria-live="polite">
-        {plural(shown.length, "target")} · {sortedBy} {sort.direction === "asc" ? "↑" : "↓"}
-        <span className="sr-only">{sort.direction === "asc" ? " ascending" : " descending"}</span>
+        {m.plan_targets_count({ count: shown.length })} · {sortedBy} {sort.direction === "asc" ? "↑" : "↓"}
+        <span className="sr-only"> {sort.direction === "asc" ? m.targets_sort_ascending() : m.targets_sort_descending()}</span>
       </p>
 
       <NameDialog
         open={saveOpen}
         onOpenChange={setSaveOpen}
-        title="Save preset"
+        title={m.targets_save_preset()}
         description={describeView(catalog, currentView)}
-        label="Preset name"
+        label={m.targets_preset_name()}
         initial=""
-        confirmLabel="Save preset"
+        confirmLabel={m.targets_save_preset()}
         taken={[...saved.map((p) => p.name), ...BUILT_IN_PRESETS.map((p) => p.label)]}
         onSubmit={(name) => {
           const created = savePreset(name, currentView)
@@ -708,11 +713,11 @@ export function TargetsPage() {
       <NameDialog
         open={renaming !== null}
         onOpenChange={(open) => !open && setRenaming(null)}
-        title="Rename preset"
+        title={m.targets_rename_preset()}
         description={renaming ? describeView(catalog, renaming.view) : ""}
-        label="Preset name"
+        label={m.targets_preset_name()}
         initial={renaming?.name ?? ""}
-        confirmLabel="Rename"
+        confirmLabel={m.targets_rename()}
         taken={[...saved.filter((p) => p.id !== renaming?.id).map((p) => p.name), ...BUILT_IN_PRESETS.map((p) => p.label)]}
         onSubmit={(name) => {
           if (renaming) renamePreset(renaming.id, name)
@@ -722,10 +727,10 @@ export function TargetsPage() {
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
-        title={`Delete preset ${deleting?.name ?? ""}?`}
+        title={m.targets_delete_preset_title({ name: deleting?.name ?? "" })}
         description={deleting ? describeView(catalog, deleting.view) : ""}
-        changes={[`Removes “${deleting?.name ?? ""}”`]}
-        confirmLabel="Delete preset"
+        changes={[m.targets_delete_preset_change({ name: deleting?.name ?? "" })]}
+        confirmLabel={m.targets_delete_preset()}
         tone="destructive"
         onConfirm={() => {
           if (!deleting) return

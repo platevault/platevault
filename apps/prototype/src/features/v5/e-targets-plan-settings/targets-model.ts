@@ -16,6 +16,7 @@ import { targetCoverage } from "@/domain/library"
 import { computeWindows, nightAt, type Tonight } from "@/domain/planning"
 import { BUNDLED_CATALOGUE, bundledEntryFor, type CatalogueEntry, type CatalogueId, entryKeys, matchesQuery, normalizeName, SIMBAD_FIXTURE } from "@/domain/sky"
 import type { Band, Catalog, Disk, MoonConstraint, ObservingSite, ObservingWindow, OpticalTrainId, PlanCriteria, Project, Target } from "@/domain/types"
+import { m } from "@/lib/i18n"
 import { addTarget, setFavourite } from "@/store/actions/library"
 import { addToPlan } from "@/store/actions/planning"
 import type { CommitResult } from "@/store/core"
@@ -122,40 +123,41 @@ export function projectRows(rows: TargetRow[], project: Project): TargetRow[] {
   return rows.filter((r) => r.target && ids.has(r.target.id))
 }
 
-export interface SearchResult {
-  rows: TargetRow[]
-  /** Where each row was found: My targets, a library Target, a bundled catalogue or SIMBAD. */
-  source: Map<string, string>
+/** Where a row was found, in the current language: My targets, the library, its bundled catalogues or SIMBAD. */
+export function rowSource(row: TargetRow): string {
+  if (row.mine) return m.targets_my_targets()
+  if (row.target) return m.targets_source_library()
+  if (row.simbad) return "SIMBAD"
+  return row.entry?.catalogues.join(", ") ?? ""
 }
 
 /** Search across My targets, the library, the bundled catalogues and (when searched) SIMBAD (PLAN-TGT-FR-03). */
-export function searchRows(rows: TargetRow[], query: string, simbadSearched: boolean): SearchResult {
-  const source = new Map<string, string>()
-  const out: TargetRow[] = []
-  for (const row of rows) {
-    if (!matchesQuery([row.designation, ...row.aliases], query)) continue
-    out.push(row)
-    source.set(row.key, row.mine ? "My targets" : row.target ? "Library" : row.entry!.catalogues.join(", "))
-  }
+export function searchRows(rows: TargetRow[], query: string, simbadSearched: boolean): TargetRow[] {
+  const out = rows.filter((row) => matchesQuery([row.designation, ...row.aliases], query))
   if (simbadSearched) {
     const held = new Set(rows.flatMap((r) => [r.designation, ...r.aliases].map(normalizeName)))
     for (const entry of SIMBAD_FIXTURE) {
       if (entryKeys(entry).some((k) => held.has(k)) || !matchesQuery([entry.designation, ...entry.aliases], query)) continue
-      const row = entryRow(entry, true)
-      out.push(row)
-      source.set(row.key, "SIMBAD")
+      out.push(entryRow(entry, true))
     }
   }
-  return { rows: out, source }
+  return out
 }
 
 // ---------------------------------------------------------------------------
 // Tonight per row
 // ---------------------------------------------------------------------------
 
+/** Why Img time is zero tonight (PLAN-TGT-FR-05); `zeroReasonText` words it. */
+export type ZeroReason =
+  | { kind: "darkness"; sunLimitDeg: number }
+  | { kind: "low"; minAltitudeDeg: number }
+  | { kind: "moon" }
+  | { kind: "short"; minAltitudeDeg: number; minDurationMin: number }
+
 export type RowSky =
   | { status: "no-site" }
-  | { status: "no-coordinates"; reason: string }
+  | { status: "no-coordinates" }
   | {
       status: "ok"
       peakDeg: number | null
@@ -164,13 +166,30 @@ export type RowSky =
       windows: ObservingWindow[]
       best: ObservingWindow | null
       /** Why Img time is zero: altitude, Moon or darkness (PLAN-TGT-FR-05). */
-      zeroReason: string | null
+      zeroReason: ZeroReason | null
       /** Moon above the horizon during the best window; null without a window. */
       moonUp: boolean | null
       altitudes: number[]
     }
 
-export const NO_COORDINATES = "This target has no catalogued coordinates, so visibility can't be computed."
+/** "Altitude: stays below 30° in darkness": the full reason, for a tooltip. */
+export function zeroReasonText(reason: ZeroReason): string {
+  switch (reason.kind) {
+    case "darkness":
+      return m.tonight_zero_darkness({ sun: reason.sunLimitDeg })
+    case "low":
+      return m.tonight_zero_low({ altitude: reason.minAltitudeDeg })
+    case "moon":
+      return m.tonight_zero_moon()
+    case "short":
+      return m.tonight_zero_short({ altitude: reason.minAltitudeDeg, minutes: reason.minDurationMin })
+  }
+}
+
+/** The one word beside "0h": darkness, altitude or moon. */
+export function zeroReasonWord(reason: ZeroReason): string {
+  return reason.kind === "darkness" ? m.tonight_zero_word_darkness() : reason.kind === "moon" ? m.tonight_zero_word_moon() : m.tonight_zero_word_altitude()
+}
 
 export interface SkyContext {
   site: ObservingSite
@@ -188,18 +207,18 @@ export function windowsTonight(ctx: SkyContext, id: string, ra: number, dec: num
 
 export function positionSky(ctx: SkyContext | null, id: string, ra: number | null, dec: number | null): RowSky {
   if (!ctx) return { status: "no-site" }
-  if (ra === null || dec === null) return { status: "no-coordinates", reason: NO_COORDINATES }
+  if (ra === null || dec === null) return { status: "no-coordinates" }
   const windows = windowsTonight(ctx, id, ra, dec)
   const sky = objectTonight(ctx.grid, ra, dec)
   const imgTimeS = windows.reduce((sum, w) => sum + (Date.parse(w.end) - Date.parse(w.start)) / 1000, 0)
   const best = [...windows].sort((a, b) => b.maxAltitudeDeg - a.maxAltitudeDeg)[0] ?? null
-  let zeroReason: string | null = null
+  let zeroReason: ZeroReason | null = null
   if (imgTimeS === 0) {
     const min = ctx.criteria.minAltitudeDeg
-    if (!ctx.tonight.darkness) zeroReason = `Darkness: the Sun stays above ${ctx.grid.sunLimit}° tonight`
-    else if (sky.peakDarkDeg === null || sky.peakDarkDeg < min) zeroReason = `Altitude: stays below ${min}° in darkness`
-    else if (ctx.criteria.maxMoonIlluminationPct !== null || ctx.criteria.minMoonSeparationDeg !== null) zeroReason = "Moon: too bright or too close while it is up"
-    else zeroReason = `Altitude: above ${min}° for under ${ctx.criteria.minDurationMin} min of the darkness still ahead`
+    if (!ctx.tonight.darkness) zeroReason = { kind: "darkness", sunLimitDeg: ctx.grid.sunLimit }
+    else if (sky.peakDarkDeg === null || sky.peakDarkDeg < min) zeroReason = { kind: "low", minAltitudeDeg: min }
+    else if (ctx.criteria.maxMoonIlluminationPct !== null || ctx.criteria.minMoonSeparationDeg !== null) zeroReason = { kind: "moon" }
+    else zeroReason = { kind: "short", minAltitudeDeg: min, minDurationMin: ctx.criteria.minDurationMin }
   }
   const mid = best ? new Date((Date.parse(best.start) + Date.parse(best.end)) / 2).toISOString() : null
   return {
@@ -279,8 +298,8 @@ export interface SortSpec {
 
 export interface PresetDef {
   id: string
-  label: string
-  definition: string
+  readonly label: string
+  readonly definition: string
   /** "rig": offered only with a rig selected; "narrowband": hidden when a selected rig passes no Ha, SII or OIII. */
   needs: "rig" | "narrowband" | null
   match: (view: RowView) => boolean
@@ -296,39 +315,57 @@ const moonUp = (v: RowView) => (v.sky.status === "ok" ? v.sky.moonUp : null)
 export const BUILT_IN_PRESETS: PresetDef[] = [
   {
     id: "best-tonight",
-    label: "Best tonight",
-    definition: "Img time above zero, a broadband filter ok tonight; longest first.",
+    get label() { return m.targets_preset_best() },
+    get definition() { return m.targets_preset_best_definition() },
     needs: null,
     match: (v) => imgTime(v) > 0 && broadOk(v),
     sort: { column: "img", direction: "desc" },
   },
   {
     id: "narrowband-moon",
-    label: "Narrowband (Moon up)",
-    definition: "Img time above zero, Ha, SII or OIII ok tonight, Moon up.",
+    get label() { return m.targets_preset_narrowband() },
+    get definition() { return m.targets_preset_narrowband_definition() },
     needs: "narrowband",
     match: (v) => imgTime(v) > 0 && moonUp(v) === true && narrowOk(v),
     sort: { column: "img", direction: "desc" },
   },
-  { id: "emission-ha", label: "Emission nebulae Ha", definition: "Emission nebulae, Ha ok tonight.", needs: "narrowband", match: (v) => v.row.kind === "emission" && ok(v, "Ha") },
+  {
+    id: "emission-ha",
+    get label() { return m.targets_preset_emission() },
+    get definition() { return m.targets_preset_emission_definition() },
+    needs: "narrowband",
+    match: (v) => v.row.kind === "emission" && ok(v, "Ha"),
+  },
   {
     id: "galaxies-dark",
-    label: "Galaxies dark sky",
-    definition: "Galaxies, Img time above zero, Moon down.",
+    get label() { return m.targets_preset_galaxies() },
+    get definition() { return m.targets_preset_galaxies_definition() },
     needs: null,
     match: (v) => v.row.kind === "galaxy" && imgTime(v) > 0 && moonUp(v) === false,
     sort: { column: "img", direction: "desc" },
   },
-  { id: "pn-oiii", label: "Planetary nebulae OIII", definition: "Planetary nebulae, OIII ok tonight.", needs: "narrowband", match: (v) => v.row.kind === "planetary" && ok(v, "OIII") },
+  {
+    id: "pn-oiii",
+    get label() { return m.targets_preset_planetary() },
+    get definition() { return m.targets_preset_planetary_definition() },
+    needs: "narrowband",
+    match: (v) => v.row.kind === "planetary" && ok(v, "OIII"),
+  },
   {
     id: "mosaic",
-    label: "Mosaic candidates",
-    definition: "Targets that need 2 or more panels on a selected rig.",
+    get label() { return m.targets_preset_mosaic() },
+    get definition() { return m.targets_preset_mosaic_definition() },
     needs: "rig",
     match: (v) => v.fits.some((f) => isMosaicCandidate(f.fit)),
     sort: { column: "fit", direction: "desc" },
   },
-  { id: "fits-nicely", label: "Fits nicely", definition: "Targets that cover 25% to 90% of a selected rig's field.", needs: "rig", match: (v) => v.fits.some((f) => fitsNicely(f.fit)) },
+  {
+    id: "fits-nicely",
+    get label() { return m.targets_preset_fits() },
+    get definition() { return m.targets_preset_fits_definition() },
+    needs: "rig",
+    match: (v) => v.fits.some((f) => fitsNicely(f.fit)),
+  },
 ]
 
 export function presetById(id: string | undefined): PresetDef | undefined {
@@ -342,8 +379,8 @@ export function selectionBands(catalog: Catalog, rigIds: OpticalTrainId[]): Band
 
 /** Why a preset is not offered now, or null when it is. */
 export function presetUnavailable(preset: PresetDef, rigIds: OpticalTrainId[], bands: Band[]): string | null {
-  if (preset.needs === "rig" && rigIds.length === 0) return "Choose a rig to use this preset"
-  if (preset.needs === "narrowband" && rigIds.length > 0 && !bands.some((b) => NARROW_BANDS.includes(b))) return "The selected rig has no Ha, SII or OIII filter"
+  if (preset.needs === "rig" && rigIds.length === 0) return m.targets_preset_needs_rig()
+  if (preset.needs === "narrowband" && rigIds.length > 0 && !bands.some((b) => NARROW_BANDS.includes(b))) return m.targets_preset_needs_narrowband()
   return null
 }
 
@@ -371,7 +408,7 @@ function fitValue(fit: Fit | undefined): number | null {
   return fit.kind === "panels" ? 10 + fit.panels : fit.coverage
 }
 
-export function sortValue(view: RowView, column: SortColumn, source?: Map<string, string>, band?: Band | null): string | number | null {
+export function sortValue(view: RowView, column: SortColumn, band?: Band | null): string | number | null {
   const sky = view.sky.status === "ok" ? view.sky : null
   switch (column) {
     case "designation":
@@ -395,16 +432,16 @@ export function sortValue(view: RowView, column: SortColumn, source?: Map<string
     case "fit":
       return fitValue(view.fits[0]?.fit)
     case "source":
-      return source?.get(view.row.key) ?? null
+      return rowSource(view.row)
   }
 }
 
 /** `band` is the toolbar's good-tonight filter: the Filters column then sorts by that band. */
-export function sortViews(views: RowView[], sort: SortSpec, source?: Map<string, string>, band?: Band | null): RowView[] {
+export function sortViews(views: RowView[], sort: SortSpec, band?: Band | null): RowView[] {
   const factor = sort.direction === "asc" ? 1 : -1
   return [...views].sort((a, b) => {
-    const va = sortValue(a, sort.column, source, band)
-    const vb = sortValue(b, sort.column, source, band)
+    const va = sortValue(a, sort.column, band)
+    const vb = sortValue(b, sort.column, band)
     if (va === null && vb === null) return collator.compare(a.row.designation, b.row.designation)
     if (va === null) return 1
     if (vb === null) return -1
@@ -429,10 +466,12 @@ export function formatSort(sort: SortSpec): string {
 // Add to targets (PLAN-TGT-FR-03) and to the Plan list
 // ---------------------------------------------------------------------------
 
+const stale = (): CommitResult => ({ ok: false, reason: "stale", message: m.targets_result_gone() })
+
 /** Write the row into the library as a ★ Target (or star an existing one). A failed write keeps nothing and returns the error for Retry. */
 export function addToMyTargets(row: TargetRow): { result: CommitResult; targetId: string | null } {
   if (row.target) return { result: setFavourite(row.target.id, true), targetId: row.target.id }
-  if (!row.entry) return { result: { ok: false, reason: "stale", message: "This result is no longer available. Search again." }, targetId: null }
+  if (!row.entry) return { result: stale(), targetId: null }
   return addTarget(row.entry, { resolver: row.simbad ? "SIMBAD" : null, favourite: true })
 }
 
@@ -443,10 +482,10 @@ export function addToMyTargets(row: TargetRow): { result: CommitResult; targetId
 export function planRow(row: TargetRow): CommitResult {
   let targetId = row.target?.id ?? null
   if (!targetId) {
-    if (!row.entry) return { ok: false, reason: "stale", message: "This result is no longer available. Search again." }
+    if (!row.entry) return stale()
     const written = addTarget(row.entry, { resolver: row.simbad ? "SIMBAD" : null, favourite: false })
     if (!written.result.ok) return written.result
     targetId = written.targetId
   }
-  return targetId ? addToPlan(targetId) : { ok: false, reason: "stale", message: "This result is no longer available. Search again." }
+  return targetId ? addToPlan(targetId) : stale()
 }

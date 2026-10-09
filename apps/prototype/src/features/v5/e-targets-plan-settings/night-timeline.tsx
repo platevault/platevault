@@ -11,12 +11,13 @@
  */
 import { ChevronRight } from "lucide-react"
 import { Fragment, type ReactNode } from "react"
+import { useMessages } from "@/app/preferences"
 import { type MenuEntry, ContextMenuArea, menuKey } from "@/components/app/row-menu"
 import { NoteMarker, type NoteRow } from "@/components/app/tips"
 import type { ObservingWindow } from "@/domain/types"
 import { formatTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import type { FilterChip, FilterGrade } from "./good-tonight"
+import { type FilterChip, type FilterGrade, filterReason, gradeLabel } from "./good-tonight"
 import { FilterPill, GradePill, siteTimeRange } from "./parts"
 import type { NightGrid } from "./sky-tonight"
 
@@ -146,6 +147,7 @@ export interface NightTableProps<R extends NightRow> {
 }
 
 export function NightTable<R extends NightRow>({ grid, nowMs, minAltitudeDeg, moonIlluminationPct, caption, labelHeader, rows, columns = [], expanded, onToggle, trailing, menu, note }: NightTableProps<R>) {
+  const m = useMessages()
   const scale = timeScale(grid, nowMs)
   const minY = 100 - minAltitudeDeg * (100 / 90)
   const moonSegments = segments(
@@ -179,7 +181,7 @@ export function NightTable<R extends NightRow>({ grid, nowMs, minAltitudeDeg, mo
             </th>
           ))}
           <th scope="col" className="overflow-hidden p-0 font-normal">
-            <span className="sr-only">Night, {grid.site.timeZone}</span>
+            <span className="sr-only">{m.tonight_axis({ zone: grid.site.timeZone })}</span>
             {/* Table cells cannot be size containers, so the axis sits in its own block. */}
             <div aria-hidden="true" className="@container relative h-6 w-full">
               {scale.hours.map((h) =>
@@ -193,12 +195,12 @@ export function NightTable<R extends NightRow>({ grid, nowMs, minAltitudeDeg, mo
           </th>
           {trailing ? (
             <th scope="col">
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{m.tonight_actions()}</span>
             </th>
           ) : null}
         </tr>
         <tr aria-hidden="true" className="h-3">
-          <td className="px-2 text-[0.625rem] leading-3">Twilight</td>
+          <td className="px-2 text-[0.625rem] leading-3">{m.tonight_twilight()}</td>
           {blank}
           <td className="p-0">
             <Track scale={scale} className="h-2.5">
@@ -208,7 +210,7 @@ export function NightTable<R extends NightRow>({ grid, nowMs, minAltitudeDeg, mo
           {trailing ? <td /> : null}
         </tr>
         <tr aria-hidden="true" className="h-3 border-b border-separator">
-          <td className="px-2 text-[0.625rem] leading-3">Moon {moonIlluminationPct}%</td>
+          <td className="px-2 text-[0.625rem] leading-3">{m.tonight_moon_band({ illumination: moonIlluminationPct })}</td>
           {blank}
           <td className="p-0">
             <Track scale={scale} className="h-2.5">
@@ -224,7 +226,8 @@ export function NightTable<R extends NightRow>({ grid, nowMs, minAltitudeDeg, mo
         {rows.map((row) => {
           const open = row.chips !== null && expanded.has(row.key)
           const summary =
-            row.note ?? (row.windows.length > 0 ? `windows ${row.windows.map((w) => `${siteTimeRange(w.start, w.end, grid.site)}, peak ${Math.round(w.maxAltitudeDeg)}°`).join("; ")}` : "no window tonight")
+            row.note ??
+            (row.windows.length > 0 ? m.tonight_summary_windows({ windows: row.windows.map((w) => m.tonight_summary_window({ range: siteTimeRange(w.start, w.end, grid.site), altitude: Math.round(w.maxAltitudeDeg) })).join("; ") }) : m.tonight_no_window())
           const curve = row.altitudes
             ? row.altitudes
                 .slice(grid.from, grid.to + 1)
@@ -240,7 +243,7 @@ export function NightTable<R extends NightRow>({ grid, nowMs, minAltitudeDeg, mo
                       <button
                         type="button"
                         aria-expanded={open}
-                        aria-label={`Filters: ${row.name}`}
+                        aria-label={m.tonight_filters_of({ name: row.name })}
                         onClick={() => onToggle(row.key)}
                         className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-foreground/[0.07] hover:text-foreground"
                       >
@@ -289,7 +292,7 @@ export function NightTable<R extends NightRow>({ grid, nowMs, minAltitudeDeg, mo
                       <th scope="row" className="px-2 text-left font-normal">
                         <span className={cn("flex items-center", row.indent ? "pl-9" : "pl-5")}>
                           <FilterPill chip={chip} />
-                          <span className="sr-only">: {chip.reason}</span>
+                          <span className="sr-only">: {filterReason(chip)}</span>
                         </span>
                       </th>
                       {columns.map((c) => (
@@ -336,7 +339,7 @@ export function NightTable<R extends NightRow>({ grid, nowMs, minAltitudeDeg, mo
       <figcaption className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pb-1 text-[0.6875rem] text-muted-foreground" data-chrome>
         <span className="inline-flex items-center gap-1">
           <span aria-hidden="true" className="inline-block h-0.5 w-3 bg-link" />
-          Altitude
+          {m.tonight_altitude()}
         </span>
         <span className="inline-flex items-center gap-1">
           <span aria-hidden="true" className="inline-block h-0 w-3 border-t border-dashed border-muted-foreground" />
@@ -344,18 +347,18 @@ export function NightTable<R extends NightRow>({ grid, nowMs, minAltitudeDeg, mo
         </span>
         <span className="inline-flex items-center gap-1">
           <span aria-hidden="true" className="inline-block h-2 w-3 rounded-[2px] border border-primary bg-primary/35" />
-          Window
+          {m.tonight_window()}
         </span>
         <span className="inline-flex items-center gap-1">
           <span aria-hidden="true" className="inline-block h-2.5 w-0.5 bg-warning" />
-          Now
+          {m.tonight_now()}
         </span>
         <span className="inline-flex items-center gap-1">
-          <GradePill grade="good">Good</GradePill>
-          <GradePill grade="marginal">Marginal</GradePill>
-          <GradePill grade="poor">Poor</GradePill>
+          <GradePill grade="good">{gradeLabel("good")}</GradePill>
+          <GradePill grade="marginal">{gradeLabel("marginal")}</GradePill>
+          <GradePill grade="poor">{gradeLabel("poor")}</GradePill>
         </span>
-        <NoteMarker label="Method" rows={note} />
+        <NoteMarker label={m.tonight_method()} rows={note} />
       </figcaption>
     </figure>
   )

@@ -7,6 +7,7 @@
  */
 import { MoonStar } from "lucide-react"
 import { type KeyboardEvent, useId, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { ActionError } from "@/components/app/feedback"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,12 +20,13 @@ import { BAND_ORDER } from "./good-tonight"
 
 type Field = keyof MoonConstraint
 
-const FIELD: Record<Field, { label: string; unit: string; max: number }> = {
-  minSeparationDeg: { label: "minimum Moon separation", unit: "°", max: 180 },
-  maxIlluminationPct: { label: "maximum Moon illumination", unit: "%", max: 100 },
+const FIELD: Record<Field, { unit: string; max: number }> = {
+  minSeparationDeg: { unit: "°", max: 180 },
+  maxIlluminationPct: { unit: "%", max: 100 },
 }
 
 function LimitInput({ band, field, value, onError }: { band: Band; field: Field; value: number; onError: (message: string | null) => void }) {
+  const m = useMessages()
   const [draft, setDraft] = useState<string | null>(null)
   const meta = FIELD[field]
   function commitDraft() {
@@ -42,7 +44,7 @@ function LimitInput({ band, field, value, onError }: { band: Band; field: Field;
         inputMode="numeric"
         min={0}
         max={meta.max}
-        aria-label={`${band} ${meta.label}`}
+        aria-label={field === "minSeparationDeg" ? m.tonight_limit_separation_field({ band }) : m.tonight_limit_illumination_field({ band })}
         value={draft ?? String(value)}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commitDraft}
@@ -64,6 +66,7 @@ function LimitInput({ band, field, value, onError }: { band: Band; field: Field;
 
 /** The editor: one row per band, Moon ≥ separation and lit ≤ illumination. */
 export function MoonLimits({ bands }: { bands: Band[] }) {
+  const m = useMessages()
   const constraints = useStore((s) => s.settings.moonConstraints)
   const [error, setError] = useState<string | null>(null)
   const headingId = useId()
@@ -73,7 +76,7 @@ export function MoonLimits({ bands }: { bands: Band[] }) {
     <div className="space-y-2" role="group" aria-labelledby={headingId}>
       <div className="flex items-center justify-between gap-2">
         <h3 id={headingId} className="text-xs font-semibold text-muted-foreground">
-          Moon limits
+          {m.tonight_moon_limits()}
         </h3>
         {changed.length > 0 ? (
           <Button
@@ -87,7 +90,7 @@ export function MoonLimits({ bands }: { bands: Band[] }) {
               setError(null)
             }}
           >
-            Reset
+            {m.tonight_reset()}
           </Button>
         ) : null}
       </div>
@@ -95,13 +98,13 @@ export function MoonLimits({ bands }: { bands: Band[] }) {
         <thead className="text-[0.6875rem] text-muted-foreground">
           <tr>
             <th scope="col" className="pb-1 text-left font-medium">
-              Filter
+              {m.tonight_filter()}
             </th>
             <th scope="col" className="pb-1 text-right font-medium">
-              Moon ≥
+              {m.tonight_limit_separation_header()}
             </th>
             <th scope="col" className="pb-1 text-right font-medium">
-              Lit ≤
+              {m.tonight_limit_illumination_header()}
             </th>
           </tr>
         </thead>
@@ -128,11 +131,12 @@ export function MoonLimits({ bands }: { bands: Band[] }) {
 
 /** "Moon limits" in a toolbar, opening the editor. */
 export function MoonLimitsButton({ bands }: { bands: Band[] }) {
+  const m = useMessages()
   return (
     <Popover>
       <PopoverTrigger render={<Button size="sm" variant="outline" />}>
         <MoonStar aria-hidden="true" data-icon="inline-start" />
-        Moon limits
+        {m.tonight_moon_limits()}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-60">
         <MoonLimits bands={bands} />

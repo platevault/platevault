@@ -357,13 +357,6 @@ export function wallTimeToIso(local: string, timeZone?: string): string | null {
   return Number.isNaN(at) ? null : new Date(at).toISOString()
 }
 
-export function criteriaSummary(c: PlanCriteria): string {
-  const parts = [`altitude ≥ ${c.minAltitudeDeg}°`, c.darkness === "astronomical" ? "astronomical darkness" : "nautical darkness", `at least ${c.minDurationMin} min`]
-  if (c.maxMoonIlluminationPct !== null) parts.push(`Moon ≤ ${c.maxMoonIlluminationPct}% when up`)
-  if (c.minMoonSeparationDeg !== null) parts.push(`Moon ≥ ${c.minMoonSeparationDeg}° away when up`)
-  return parts.join(", ")
-}
-
 // ---------------------------------------------------------------------------
 // Calendar snapshot (PLAN-FR-04)
 // ---------------------------------------------------------------------------
