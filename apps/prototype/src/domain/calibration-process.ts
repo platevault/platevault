@@ -229,7 +229,7 @@ export function stackRefusals(catalog: Catalog, settings: AppSettings, sessionId
   else if (!profile.capability.masterStacking) reasons.push(msg("domain_stack_cannot_stack", { name: profile.name }))
   else if (profile.executableState !== "found") reasons.push(msg("domain_stack_not_set_up", { name: profile.name }))
   if (rawFrameIds(catalog, process).length === 0) reasons.push(msg("domain_stack_no_frames"))
-  if (!stackOutputFolder(catalog, settings, process)) reasons.push(msg("domain_stack_no_output_folder"))
+  if (!stackOutputFolder(catalog, settings, process)) reasons.push(msg("run_parent_none"))
   return reasons
 }
 

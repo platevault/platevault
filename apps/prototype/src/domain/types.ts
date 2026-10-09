@@ -327,8 +327,9 @@ export type EvidenceSource = "header" | "pointing" | "equipment-record" | "user"
 
 export interface Evidence {
   source: EvidenceSource
-  label: string
-  value: string
+  /** A FITS keyword (`verbatim`) or a catalogue label; worded at render. */
+  label: MessageRef
+  value: MessageRef
   /** true agrees with the association, false conflicts, null is unknown. */
   agrees: boolean | null
 }
@@ -981,7 +982,8 @@ export interface Preparation {
   preparedAssetIds: AssetId[]
   /** Accepted Result inputs written into the folder (D-W4). */
   preparedResultIds: ResultId[]
-  blocked: Array<{ input: PreparationInput; path: string; reason: string }>
+  /** Why each input was not prepared; worded at render. */
+  blocked: Array<{ input: PreparationInput; path: string; reason: MessageRef }>
   metadataDecisions: MetadataDecision[]
   launches: Array<{ at: IsoDateTime; outcome: "opened" | "missing-executable" | "launch-failed" }>
   /**
@@ -989,7 +991,7 @@ export interface Preparation {
    * snapshot (PREP-FR-10); cleared by the next Open that re-verifies them.
    * The run reads Unverified meanwhile.
    */
-  unverified?: { at: IsoDateTime; changed: Array<{ path: string; reason: string }> } | null
+  unverified?: { at: IsoDateTime; changed: Array<{ path: string; reason: MessageRef }> } | null
   createdAt: IsoDateTime
   settledAt: IsoDateTime | null
 }
@@ -1070,7 +1072,8 @@ export interface TrashEpisode {
     assetId: AssetId | null
     resultId: ResultId | null
     outcome: "trashed" | "refused"
-    reason: string | null
+    /** Why the item stayed in place (`trashRefusal`); worded at render. */
+    reason: MessageRef | null
   }>
   operationId: OperationId | null
 }

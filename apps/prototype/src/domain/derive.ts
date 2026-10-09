@@ -133,9 +133,9 @@ export function liveLightSessions(catalog: Catalog): Session[] {
   return Object.values(catalog.sessions).filter((s) => s.imageType === "light" && !s.supersededBy && !isTrashedSession(catalog, s))
 }
 
-/** The rig's name: "No rig" without one, "Unknown rig" for one no longer in the catalog. */
+/** The rig's name: "no rig" without one, "Unknown rig" for one no longer in the catalog. */
 export function rigRef(catalog: Catalog, rigId: OpticalTrainId | null): MessageRef {
-  if (!rigId) return msg("domain_rig_none")
+  if (!rigId) return msg("session_no_rig")
   const rig = catalog.opticalTrains[rigId]
   return rig ? verbatim(rig.name) : msg("domain_rig_unknown")
 }
