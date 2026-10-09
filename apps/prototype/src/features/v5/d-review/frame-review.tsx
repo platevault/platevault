@@ -2,24 +2,31 @@
  * S6 Review workspace (slice D): one frame list in three views, the preview
  * with its plots and inspector, the two quality levels and the review
  * hotkeys (D-W13, D-W14, D-W15, D-W22, D-W40, D-W41, D-W42, D-W53, D-W54;
- * spec 067 PIX-FR-01 to PIX-FR-18).
+ * spec 067 PIX-FR-01 to PIX-FR-18). Contexts: a run, a group, a Project's
+ * candidates, or one library session (library marks only).
  *
  * Layout (D-W22): the frame table spans the full width at the top; T cycles
  * it through about 8 rows (resizable, the height is remembered), a one-line
  * strip showing the current frame, and full height. The preview, inspector
  * and the plots across the session fill the rest. F is fullscreen; G is the
- * grid; the filmstrip is the strip with thumbnails.
+ * grid; the filmstrip is the strip with thumbnails; ⌘/Ctrl+I swaps each
+ * plate for the corner inspector (nine 1:1 tiles), in fullscreen and
+ * Compare too.
  */
-import { useSearch } from "@tanstack/react-router"
-import { ArrowLeftRight, ChevronLeft, ChevronRight, Columns3, Expand, Filter, Grid3x3, ImageOff, Keyboard, LayoutList, ListChecks, Minimize, PanelRight, Rows3, Save, Upload, X } from "lucide-react"
+import { Link, useSearch } from "@tanstack/react-router"
+import { ArrowLeftRight, ChevronLeft, ChevronRight, Columns3, Expand, Filter, FolderOpen, Grid3x3, ImageOff, Keyboard, LayoutList, ListChecks, Minimize, PanelRight, Rows3, Save, Scan, Upload, X } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { MissingRecord } from "@/app/missing-record"
 import { getPreferences } from "@/app/preferences"
 import { MOD_LABEL } from "@/app/shortcuts"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
-import { EmptyState, Notice } from "@/components/app/feedback"
+import { EmptyState } from "@/components/app/feedback"
+import { Pill } from "@/components/app/pill"
+import { Refusal, type RefusalProps, refusalFrom } from "@/components/app/refusal"
+import type { MenuEntry } from "@/components/app/row-menu"
+import { HelpTip } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
-import { ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut } from "@/components/ui/context-menu"
+import { runHref, runPipeline, type StepLink } from "@/domain/derive"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -48,14 +55,14 @@ import { frameField, type StarRecord, type ViewWindow } from "@/features/t3/rast
 import { plural } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { discardRunDraft, saveRun } from "@/store/actions/runs"
-import { useStore } from "@/store/core"
-import { runPipeline } from "@/domain/derive"
+import { type CommitResult, useStore } from "@/store/core"
 import { registerReviewCommands } from "./commands"
+import { CornerGrid, type CornerOverlay } from "./corners"
 import { Inspector } from "./inspector"
 import { type Activate, FrameGrid, FrameTable, Filmstrip, frameColumns, type SortState, sortFrames } from "./list"
 import { markAnnouncement, markLibrary, MARK_WORD, setProjectOnlyReject } from "./marks"
 import { MeasureBar } from "./measure-bar"
-import { bucketAfterMark, FILTERS, PLOT_METRICS, type QualityFilter, type ReviewContext, type ReviewFrame, reviewScope } from "./model"
+import { bucketAfterMark, contextKey, FILTERS, PLOT_METRICS, type QualityFilter, type ReviewContext, type ReviewFrame, reviewScope } from "./model"
 import { displayName, NAME_PRESETS, namePreset } from "./names"
 import { SessionPlots, type Threshold } from "./plots"
 import { setReviewPrefs, type TableHeight, useReviewPrefs } from "./prefs"
@@ -66,7 +73,7 @@ type ListView = "table" | "filmstrip" | "grid"
 const HEIGHT_NEXT: Record<TableHeight, TableHeight> = { rows: "strip", strip: "full", full: "rows" }
 const HEIGHT_LABEL: Record<TableHeight, string> = { rows: "About 8 rows", strip: "One-line strip", full: "Full height" }
 const ROW_PX = 26
-/** The preview stage's minimum: caption, a plate of about 240 px, the note and the plots strip. */
+/** The preview stage's minimum: caption, a plate of about 240 px and the plots strip. */
 const STAGE_MIN_PX = 416
 /** Review's own chrome around the table and the stage: toolbar, table handle and status line. */
 const REVIEW_CHROME_PX = 66
@@ -102,7 +109,7 @@ function MiniSelect({ label, value, options, onChange, className }: { label: str
 export function FrameReview({ context }: { context: ReviewContext }) {
   const state = useStore((s) => s)
   const { catalog, disk } = state
-  const contextKeyStr = context.kind === "run" ? context.runId : context.kind === "group" ? context.groupId : context.projectId
+  const contextKeyStr = contextKey(context)
   // biome-ignore lint/correctness/useExhaustiveDependencies: the context is rebuilt by its parent every render; its key identifies it.
   const scope = useMemo(() => reviewScope(state, context), [state, context.kind, contextKeyStr])
   const prefs = useReviewPrefs()
@@ -129,7 +136,10 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   const [projectConfirm, setProjectConfirm] = useState<ReviewFrame[] | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [announcement, setAnnouncement] = useState("")
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<RefusalProps | null>(null)
+  const [corners, setCorners] = useState(false)
+  const [cornerOverlay, setCornerOverlay] = useState<CornerOverlay>({ fwhm: true, eccentricity: true })
+  const [revealed, setRevealed] = useState<string | null>(null)
   const [inspectorShown, setInspectorShown] = useState(false)
   const gridCols = useRef(4)
   const [rootRef, rootSize] = useSize<HTMLDivElement>()
@@ -203,17 +213,21 @@ export function FrameReview({ context }: { context: ReviewContext }) {
     announce(`${names.get(next.asset.id)}: frame ${ordered.indexOf(next) + 1} of ${ordered.length}.`)
   }
 
-  function mark(value: QualityValue, always = false) {
+  /** A refused or failed write as a Refusal; a blocker that names the read-only reason links to where it resolves. */
+  function refuse(result: CommitResult, action: string) {
+    if (result.ok) return
+    const links: Record<string, StepLink> = scope?.readOnlyReason && scope.readOnlyLink ? { [scope.readOnlyReason]: scope.readOnlyLink } : {}
+    setError(refusalFrom(result, action, links) ?? { action, reason: result.message, blockers: [] })
+    announce(`${action}: ${result.message}`)
+  }
+
+  function mark(value: QualityValue, always = false, list: ReviewFrame[] = targets) {
     if (!scope || !current) return
-    const result = markLibrary(scope, targets, value)
-    if (!result.ok) {
-      setError(result.message)
-      announce(result.message)
-      return
-    }
+    const result = markLibrary(scope, list, value)
+    if (!result.ok) return refuse(result, "Mark blocked")
     setError(null)
-    announce(markAnnouncement(targets, value))
-    if (targets.length > 1) return
+    announce(markAnnouncement(list, value))
+    if (list.length > 1) return
     const successor = ordered[index + 1] ?? null
     const fallback = ordered[index - 1] ?? null
     const leaves = filter !== "all" && bucketAfterMark(current, value) !== filter
@@ -223,28 +237,50 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   }
 
   function confirmProjectReject(list: ReviewFrame[]) {
-    if (!scope) return
-    if (scope.readOnlyReason) {
-      setError(scope.readOnlyReason)
-      return
-    }
+    if (!scope?.project) return
+    if (scope.readOnlyReason) return refuse({ ok: false, reason: "refused", message: scope.readOnlyReason, reasons: [scope.readOnlyReason] }, "Reject blocked")
     setProjectConfirm(list)
   }
 
   function clearProjectReject(list: ReviewFrame[]) {
     if (!scope) return
     const result = setProjectOnlyReject(scope, list, false)
-    if (!result.ok) return setError(result.message)
+    if (!result.ok) return refuse(result, "Clear blocked")
     setError(null)
-    announce(`Project reject cleared for ${list.length === 1 ? list[0]!.asset.fileName : plural(list.length, "frame")}. Library quality unchanged.`)
+    announce(`Project reject cleared: ${list.length === 1 ? list[0]!.asset.fileName : plural(list.length, "frame")}.`)
   }
 
-  function startCompare() {
-    if (compare) return setCompare(false)
+  /** Compare the current frame with `with` (a right-clicked frame), else toggle Compare with the nearest other frame. */
+  function startCompare(withId?: AssetId) {
+    const reference = withId && withId !== current?.asset.id ? frames.find((f) => f.asset.id === withId) : undefined
+    if (reference) {
+      setRefId(reference.asset.id)
+      setCompare(true)
+      announce(`Compare: ${current ? names.get(current.asset.id) : "no frame"} and ${names.get(reference.asset.id)}`)
+      return
+    }
+    if (compare) {
+      if (!withId) setCompare(false)
+      return
+    }
     const other = selectedFrames.find((f) => f.asset.id !== current?.asset.id) ?? ordered[index - 1] ?? ordered[index + 1] ?? null
     if (!refId || !frames.some((f) => f.asset.id === refId)) setRefId(other?.asset.id ?? null)
     setCompare(true)
-    announce(`Compare on: ${current ? names.get(current.asset.id) : "no frame"} beside ${other ? names.get(other.asset.id) : "no reference"}, linked zoom and pan.`)
+    announce(`Compare: ${current ? names.get(current.asset.id) : "no frame"} and ${other ? names.get(other.asset.id) : "no reference"}`)
+  }
+
+  function toggleCorners() {
+    setCorners((on) => {
+      announce(on ? "Corner inspector off" : "Corner inspector on")
+      return !on
+    })
+  }
+
+  /** Prototype: there is no OS file manager, so Reveal shows the path it would open. */
+  function reveal(frame: ReviewFrame) {
+    const path = frame.asset.copies[0]?.path ?? null
+    setRevealed(path)
+    announce(path ? `Revealed ${path}` : "No copy to reveal")
   }
 
   function toggleGrid() {
@@ -299,6 +335,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
 
   useEffect(() => {
     setStar(null)
+    setRevealed(null)
   }, [current?.asset.id])
 
   const zoomed = plateView.zoom !== "fit"
@@ -309,6 +346,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
     toggleGrid,
     cycleHeight,
     startCompare,
+    toggleCorners,
     toggleZoom: () => setPlateView((v) => ({ ...v, zoom: v.zoom === "fit" ? "1" : "fit" })),
     toggleFullscreen: () => setFullscreen((f) => !f),
     filter: (id: QualityFilter) => {
@@ -354,6 +392,10 @@ export function FrameReview({ context }: { context: ReviewContext }) {
       const key = event.key
       if ((event.metaKey || event.ctrlKey) && !event.altKey && key.toLowerCase() === "a") {
         h.selectAll()
+        return consume()
+      }
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && key.toLowerCase() === "i") {
+        h.toggleCorners()
         return consume()
       }
       if (event.metaKey || event.ctrlKey) return
@@ -416,7 +458,8 @@ export function FrameReview({ context }: { context: ReviewContext }) {
       { id: "compare", label: "Compare frames", keys: "C", run: () => h().startCompare() },
       { id: "grid", label: "Grid view", keys: "G", run: () => h().toggleGrid() },
       { id: "height", label: "Cycle table height", keys: "T", run: () => h().cycleHeight() },
-      { id: "inspector", label: "Show or hide the frame inspector", keys: "I", run: () => h().toggleInspector() },
+      { id: "inspector", label: "Frame inspector", keys: "I", run: () => h().toggleInspector() },
+      { id: "corners", label: "Corner inspector", keys: `${MOD_LABEL}I`, run: () => h().toggleCorners() },
       { id: "select-all", label: "Select all shown frames", keys: `${MOD_LABEL}A`, run: () => h().selectAll() },
       { id: "shortcuts", label: "Review shortcuts", keys: "?", run: () => h().shortcuts() },
     ])
@@ -427,61 +470,54 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   }, [])
 
   if (!scope) {
-    return <MissingRecord noun={context.kind === "candidates" ? "Project" : context.kind === "group" ? "run group" : "run"} backTo="/projects" backLabel="Open Projects" />
+    const noun = { candidates: "Project", group: "run group", run: "run", session: "session" }[context.kind]
+    return context.kind === "session" ? <MissingRecord noun={noun} backTo="/sessions" backLabel="Open Sessions" /> : <MissingRecord noun={noun} backTo="/projects" backLabel="Open Projects" />
   }
 
-  const menu = current ? (
-    <>
-      {(["usable", "unusable", "unreviewed"] as const).map((value) => (
-        <ContextMenuItem key={value} disabled={scope.readOnlyReason !== null} onClick={() => mark(value)}>
-          Mark {MARK_WORD[value]}
-          {targets.length > 1 ? ` (${targets.length})` : ""}
-          <ContextMenuShortcut>{value === "usable" ? "P" : value === "unusable" ? "X" : "U"}</ContextMenuShortcut>
-        </ContextMenuItem>
-      ))}
-      <ContextMenuSeparator />
-      {targets.length === 1 && current.rejectedBy.project ? (
-        <ContextMenuItem disabled={scope.readOnlyReason !== null} onClick={() => clearProjectReject([current])}>
-          Clear Project reject
-        </ContextMenuItem>
-      ) : (
-        <ContextMenuItem disabled={scope.readOnlyReason !== null} onClick={() => confirmProjectReject(targets)}>
-          Reject for this Project only…
-        </ContextMenuItem>
-      )}
-      <ContextMenuSeparator />
-      <ContextMenuItem
-        onClick={() => {
-          setRefId(current.asset.id)
-          announce(`${names.get(current.asset.id)} is the compare reference.`)
-        }}
-      >
-        Set as compare reference
-      </ContextMenuItem>
-      <ContextMenuItem onClick={selectAll}>
-        Select all shown
-        <ContextMenuShortcut>{MOD_LABEL}A</ContextMenuShortcut>
-      </ContextMenuItem>
-    </>
-  ) : null
+  // Right click on a row or thumbnail: the selection when the frame is in it, else that frame.
+  const menu = (id: AssetId): MenuEntry[] => {
+    const frame = frames.find((f) => f.asset.id === id)
+    if (!frame) return []
+    const list = selected.has(id) && selectedFrames.length > 1 ? selectedFrames : [frame]
+    const blocked = scope.readOnlyReason !== null
+    const markEntry = (label: string, value: QualityValue, shortcut: string): MenuEntry => ({ label, shortcut, disabled: blocked, onSelect: () => mark(value, false, list) })
+    const projectEntries: MenuEntry[] = scope.project
+      ? [
+          { separator: true },
+          list.length === 1 && frame.rejectedBy.project
+            ? { label: "Clear Project reject", disabled: blocked, onSelect: () => clearProjectReject(list) }
+            : { label: "Reject for this Project", disabled: blocked, onSelect: () => confirmProjectReject(list) },
+        ]
+      : []
+    return [
+      ...(list.length > 1 ? [{ heading: plural(list.length, "frame") }] : []),
+      markEntry("Pick", "usable", "P"),
+      markEntry("Reject", "unusable", "X"),
+      markEntry("Unreviewed", "unreviewed", "U"),
+      ...projectEntries,
+      { separator: true },
+      { label: "Compare", icon: ArrowLeftRight, shortcut: "C", disabled: frames.length < 2, onSelect: () => startCompare(id) },
+      { label: "Reveal path", icon: FolderOpen, disabled: frame.asset.copies.length === 0, onSelect: () => reveal(frame) },
+    ]
+  }
 
+  const filterLabel = FILTERS.find((f) => f.id === filter)!.label
+  const back = context.kind === "session" ? { to: "/sessions", label: "Open Sessions" } : scope.runs[0] ? { to: runHref(scope.runs[0], "select"), label: "Open Select" } : { to: `/projects/${scope.project?.id ?? ""}`, label: "Open Project" }
   const emptyList = (
     <EmptyState
       icon={ImageOff}
-      title={frames.length === 0 ? "No frames to review" : "No frames match"}
-      description={
-        frames.length === 0
-          ? context.kind === "candidates"
-            ? "This Project has no candidate sessions with frames outside the Trash."
-            : "This review has no frames yet: add sessions in Select."
-          : `No frame is ${FILTERS.find((f) => f.id === filter)!.label} here. Choose All to see every frame.`
-      }
+      title={frames.length === 0 ? "No frames" : `No ${filterLabel} frames`}
+      description={null}
       action={
         frames.length > 0 ? (
           <Button size="sm" variant="outline" onClick={() => setFilter("all")}>
-            Show all frames
+            Show all
           </Button>
-        ) : undefined
+        ) : (
+          <Button size="sm" variant="outline" render={<Link to={back.to as never} />}>
+            {back.label}
+          </Button>
+        )
       }
     />
   )
@@ -520,13 +556,36 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         Frame {index + 1} of {ordered.length}
       </span>
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
-        <ToggleGroup value={[plateView.zoom]} onValueChange={(v) => v[0] && setPlateView((p) => ({ ...p, zoom: v[0] as Zoom }))} variant="outline" size="sm" spacing={0} aria-label="Zoom">
-          {(["fit", "1", "2"] as const).map((z) => (
-            <ToggleGroupItem key={z} value={z} className="h-6 px-2 text-xs">
-              {ZOOM_LABEL[z]}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+        {field?.cfa ? (
+          <Pill tone="muted" title="Mosaic plane as recorded, not debayered">
+            CFA {field.cfa}
+          </Pill>
+        ) : null}
+        <Toggle variant="outline" size="sm" className="h-6 gap-1 px-2 text-xs" pressed={corners} onPressedChange={toggleCorners} aria-label="Corner inspector" title={`Corners (${MOD_LABEL}I)`}>
+          <Scan aria-hidden="true" className="size-3.5" />
+          <span className="@max-[62rem]:sr-only">Corners</span>
+        </Toggle>
+        {corners ? (
+          <>
+            <Toggle variant="outline" size="sm" className="h-6 px-2 text-xs" pressed={cornerOverlay.fwhm} onPressedChange={(on) => setCornerOverlay((o) => ({ ...o, fwhm: on }))} aria-label="FWHM overlay">
+              FWHM
+            </Toggle>
+            <Toggle variant="outline" size="sm" className="h-6 px-2 text-xs" pressed={cornerOverlay.eccentricity} onPressedChange={(on) => setCornerOverlay((o) => ({ ...o, eccentricity: on }))} aria-label="Eccentricity overlay">
+              Ecc.
+            </Toggle>
+          </>
+        ) : (
+          <>
+            <ToggleGroup value={[plateView.zoom]} onValueChange={(v) => v[0] && setPlateView((p) => ({ ...p, zoom: v[0] as Zoom }))} variant="outline" size="sm" spacing={0} aria-label="Zoom">
+              {(["fit", "1", "2"] as const).map((z) => (
+                <ToggleGroupItem key={z} value={z} className="h-6 px-2 text-xs">
+                  {ZOOM_LABEL[z]}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            {zoomed ? <HelpTip label="Pan help">Drag or arrow keys pan. Shift pans further.</HelpTip> : null}
+          </>
+        )}
         <ToggleGroup value={[plateView.stretch]} onValueChange={(v) => v[0] && setPlateView((p) => ({ ...p, stretch: v[0] as PlateView["stretch"] }))} variant="outline" size="sm" spacing={0} aria-label="Display stretch">
           {(["linear", "auto", "strong"] as const).map((s) => (
             <ToggleGroupItem key={s} value={s} className="h-6 px-2 text-xs">
@@ -552,38 +611,36 @@ export function FrameReview({ context }: { context: ReviewContext }) {
     </div>
   ) : null
 
-  const plateNote = (
-    <p id="review-plate-note" className="truncate px-1 text-[0.6875rem] leading-4 text-muted-foreground">
-      Prototype: a synthetic preview drawn from this frame's fixture facts. {zoomed ? "Drag or use the arrow keys on the preview to pan; Shift pans further." : "Z or 1:1 zooms in."} Stretch changes the display only; values are measured on linear data.
-      {field?.cfa ? ` CFA ${field.cfa} mosaic plane as recorded, not debayered.` : ""}
-    </p>
-  )
+  const plateFor = (f: NonNullable<typeof field>, label: string, primary: boolean) =>
+    corners ? (
+      <CornerGrid field={f} stretch={plateView.stretch} overlay={cornerOverlay} label={label} />
+    ) : (
+      <Plate
+        field={f}
+        view={plateView}
+        onView={setPlateView}
+        label={label}
+        starsOn={primary && starsOn}
+        starId={primary ? (star?.id ?? null) : null}
+        onStar={(s) => {
+          if (!primary) return
+          setStar(s)
+          setTab("stars")
+        }}
+        onWindow={primary ? setShownWindow : undefined}
+      />
+    )
 
   const plates =
     current === null ? (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">No current frame.</div>
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">No current frame</div>
     ) : (
       <div className="flex min-h-0 flex-1 gap-2">
         <PlateSlot
           label={compare ? `Current: ${names.get(current.asset.id)}` : null}
           field={field}
           unavailable={unavailableReason}
-          render={(f) => (
-            <Plate
-              field={f}
-              view={plateView}
-              onView={setPlateView}
-              label={`Preview of ${names.get(current.asset.id)}`}
-              starsOn={starsOn}
-              starId={star?.id ?? null}
-              onStar={(s) => {
-                setStar(s)
-                setTab("stars")
-              }}
-              onWindow={setShownWindow}
-              describedBy="review-plate-note"
-            />
-          )}
+          render={(f) => plateFor(f, `Preview of ${names.get(current.asset.id)}`, true)}
         />
         {compare ? (
           <PlateSlot
@@ -600,8 +657,8 @@ export function FrameReview({ context }: { context: ReviewContext }) {
               </span>
             }
             field={refField}
-            unavailable={!reference ? "Choose a reference frame to compare with." : reference.availability !== "available" ? previewUnavailableReason(reference.availability) : !refField ? "No pixel data for this file." : null}
-            render={(f) => <Plate field={f} view={plateView} onView={setPlateView} label={`Reference ${reference ? names.get(reference.asset.id) : ""}`} starsOn={false} starId={null} onStar={() => {}} />}
+            unavailable={!reference ? "No reference" : reference.availability !== "available" ? previewUnavailableReason(reference.availability) : !refField ? "No pixels" : null}
+            render={(f) => plateFor(f, `Reference ${reference ? names.get(reference.asset.id) : ""}`, false)}
           />
         ) : null}
       </div>
@@ -633,7 +690,6 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         catalog={catalog}
         field={field}
         window={shownWindow && field ? shownWindow : field ? plateWindow(field, 640, 420, { ...plateView, zoom: "fit" }) : null}
-        view={plateView}
         starsOn={starsOn}
         onStarsOn={setStarsOn}
         star={star}
@@ -661,11 +717,7 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   const saveDrafts = () => {
     for (const run of drafts) {
       const result = saveRun(run.id)
-      if (!result.ok) {
-        setError(result.message)
-        announce(result.message)
-        return
-      }
+      if (!result.ok) return refuse(result, "Save blocked")
     }
     setError(null)
     announce(drafts.length === 1 ? `${drafts[0]!.name} saved as revision ${(drafts[0]!.revisions.at(-1)?.revision ?? 0) + 1}.` : `${plural(drafts.length, "run")} saved.`)
@@ -673,10 +725,13 @@ export function FrameReview({ context }: { context: ReviewContext }) {
   }
   const discardDrafts = () => {
     for (const run of drafts) discardRunDraft(run.id)
-    announce("Unsaved changes discarded; the runs are back at their saved revisions.")
+    announce("Unsaved changes discarded.")
     statusLineRef.current?.focus()
   }
-  const notes = [scope.membershipNote, scope.trashedPanels.length > 0 ? `${scope.trashedPanels.join(", ")} ${scope.trashedPanels.length === 1 ? "is" : "are"} in the Project's Trash: not listed or counted.` : null].filter((n): n is string => n !== null)
+  const pills = [
+    scope.membershipNote ? { label: scope.membershipNote.label, help: scope.membershipNote.help } : null,
+    ...scope.trashedPanels.map((p) => ({ label: `${p} in Trash`, help: "Not listed or counted." })),
+  ].filter((n): n is { label: string; help: string } => n !== null)
 
   return (
     <div ref={rootRef} className="@container flex min-h-[36.5rem] min-w-0 flex-1 flex-col" data-review={scope.key}>
@@ -812,12 +867,8 @@ export function FrameReview({ context }: { context: ReviewContext }) {
 
       {scope.readOnlyReason || error ? (
         <div className="shrink-0 space-y-1 border-b border-separator px-3 py-1.5">
-          {scope.readOnlyReason ? <Notice tone="info" title={scope.readOnlyReason} /> : null}
-          {error ? (
-            <p role="alert" className="text-xs text-destructive">
-              {error}
-            </p>
-          ) : null}
+          {scope.readOnlyReason ? <Refusal action="Marks blocked" reason={scope.readOnlyReason} blockers={scope.readOnlyLink ? [{ label: "Project Trash", link: scope.readOnlyLink }] : []} /> : null}
+          {error ? <Refusal {...error} /> : null}
         </div>
       ) : null}
 
@@ -842,9 +893,12 @@ export function FrameReview({ context }: { context: ReviewContext }) {
           <Button size="sm" variant="outline" disabled={threshold.value === null} onClick={() => applyThreshold(true)}>
             Add to selection
           </Button>
-          <span className="text-muted-foreground">
-            {thresholdInfo.missing > 0 ? `${plural(thresholdInfo.missing, "frame")} Not measured: never selected. ` : ""}Click a plot to set the value. Selecting never changes quality.
-          </span>
+          {thresholdInfo.missing > 0 ? (
+            <Pill tone="muted" title="Not measured frames are never selected">
+              {thresholdInfo.missing} not measured
+            </Pill>
+          ) : null}
+          <HelpTip label="Threshold help">Click a plot to set the value. Selecting never changes quality.</HelpTip>
           <Button size="icon-sm" variant="ghost" className="ml-auto" aria-label="Close threshold selection" onClick={() => setThreshold(null)}>
             <X aria-hidden="true" />
           </Button>
@@ -892,7 +946,6 @@ export function FrameReview({ context }: { context: ReviewContext }) {
                 <div className="flex min-h-0 flex-1 flex-col gap-1.5 p-2">
                   {plateCaption}
                   {plates}
-                  {plateNote}
                 </div>
               )}
               {fullscreen ? null : plotsStrip}
@@ -913,28 +966,37 @@ export function FrameReview({ context }: { context: ReviewContext }) {
       >
         <span className="shrink-0">
           {plural(ordered.length, "frame")} shown of {frames.length}
-          {scope.trashedHidden > 0 ? ` · ${scope.trashedHidden} Trashed not listed` : ""}
+          {scope.trashedHidden > 0 ? ` · ${scope.trashedHidden} in Trash` : ""}
           {selected.size > 0 ? (
             <span className="text-foreground">
               {" "}
-              · {selected.size} selected{hiddenSelected > 0 ? ` (${hiddenSelected} hidden by the filter)` : ""}
+              · {selected.size} selected{hiddenSelected > 0 ? ` (${hiddenSelected} hidden)` : ""}
             </span>
           ) : null}
         </span>
         <MeasureBar scope={scope} frames={frames} home={statusLineRef} />
-        {notes.length > 0 ? (
-          <span className="min-w-0 flex-1 truncate" title={notes.join(" ")}>
-            {notes.join(" ")}
-          </span>
-        ) : (
-          <span className="min-w-0 flex-1 truncate" title="Source notes: 1 built-in, PlateVault PSF on linear data with the input SHA-256 per frame in Values; 2 imported, content unverified.">
-            <sup className="text-link">1</sup> built-in · <sup className="text-link">2</sup> imported: content unverified
-          </span>
-        )}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          {pills.map((p) => (
+            <span key={p.label} className="flex shrink-0 items-center gap-0.5">
+              <Pill tone="muted">{p.label}</Pill>
+              <HelpTip label={`${p.label} help`}>{p.help}</HelpTip>
+            </span>
+          ))}
+          {revealed ? (
+            <span className="flex min-w-0 items-center gap-0.5">
+              <Pill tone="info" icon={FolderOpen} title={revealed} className="min-w-0">
+                {revealed}
+              </Pill>
+              <Button size="icon-xs" variant="ghost" aria-label="Dismiss path" onClick={() => setRevealed(null)}>
+                <X aria-hidden="true" />
+              </Button>
+            </span>
+          ) : null}
+        </span>
         {context.kind === "run" ? (
           <Button size="xs" variant="ghost" className="shrink-0" onClick={() => setImportOpen(true)}>
             <Upload aria-hidden="true" data-icon="inline-start" />
-            Import measurements
+            Import
           </Button>
         ) : null}
         {draftNote ? (
@@ -956,24 +1018,25 @@ export function FrameReview({ context }: { context: ReviewContext }) {
         <ImportDialog viewId={scope.key} viewAssetIds={new Set(frames.map((f) => f.asset.id))} open={importOpen} onOpenChange={setImportOpen} />
       ) : null}
       {context.kind === "run" && importOpen === false ? <ImportList scopeKey={scope.key} /> : null}
-      <ConfirmDialog
-        open={projectConfirm !== null}
-        onOpenChange={(open) => !open && setProjectConfirm(null)}
-        title={`Reject ${confirmFrames.length === 1 ? confirmFrames[0]!.asset.fileName : plural(confirmFrames.length, "frame")} for ${project.name} only?`}
-        description="Project scope: a rejection record in this Project only. Use it when a frame is fine in the library but wrong for this campaign."
-        changes={[
-          `Record ${plural(confirmFrames.length, "frame")} as Rejected · This Project in ${project.name}`,
-          `${project.name}'s "in project" totals leave ${confirmFrames.length === 1 ? "it" : "them"} out`,
-          ...(confirmRuns.length > 0 ? [`Remove ${confirmFrames.length === 1 ? "it" : "them"} from the draft of ${confirmRuns.join(", ")} with the reason Rejected`] : []),
-        ]}
-        unchanged={["Library quality: Picked, Rejected or Unreviewed stays as it is", "Captured totals and every other Project", "Saved and prepared revisions", "Source files and headers"]}
-        confirmLabel={`Reject ${plural(confirmFrames.length, "frame")} for ${project.name}`}
-        onConfirm={() => {
-          const result = setProjectOnlyReject(scope, confirmFrames, true)
-          if (result.ok) announce(`Rejected for ${project.name} only: ${plural(confirmFrames.length, "frame")}. Library quality unchanged.`)
-          return result
-        }}
-      />
+      {project ? (
+        <ConfirmDialog
+          open={projectConfirm !== null}
+          onOpenChange={(open) => !open && setProjectConfirm(null)}
+          title={`Reject ${confirmFrames.length === 1 ? confirmFrames[0]!.asset.fileName : plural(confirmFrames.length, "frame")} for ${project.name}?`}
+          description="This Project only. Library quality stays."
+          changes={[
+            `Rejected · This Project: ${plural(confirmFrames.length, "frame")}`,
+            `Out of ${project.name}'s totals`,
+            ...(confirmRuns.length > 0 ? [`Out of the ${confirmRuns.join(", ")} draft`] : []),
+          ]}
+          confirmLabel={`Reject ${plural(confirmFrames.length, "frame")}`}
+          onConfirm={() => {
+            const result = setProjectOnlyReject(scope, confirmFrames, true)
+            if (result.ok) announce(`Rejected for ${project.name}: ${plural(confirmFrames.length, "frame")}.`)
+            return result
+          }}
+        />
+      ) : null}
     </div>
   )
 }

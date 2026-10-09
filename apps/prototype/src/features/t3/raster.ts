@@ -7,7 +7,10 @@
  * deterministic star field per frame. Values are linear ADU in source pixel
  * coordinates; display stretch maps them for the screen only and never feeds
  * a measurement (PIX-FR-04). Per-star records follow HLD §14: saturated stars
- * are failed fits with a warning and no width (PIX-AC-03).
+ * are failed fits with a warning and no width (PIX-AC-03). Each frame also
+ * carries a seeded field aberration (tilt and coma): stars soften and stretch
+ * tangentially away from a sweet spot near the centre, so the corner
+ * inspector has something to show.
  */
 import { stableHash } from "@/domain/indexing"
 import type { AssetId, DiskFile, PixelTruth } from "@/domain/types"
@@ -60,18 +63,33 @@ export function starField(key: string, truth: PixelTruth, width: number, height:
   const seed = Number.parseInt(stableHash(key), 36)
   const random = mulberry(seed)
   const trailAngle = random() * 180
+  // The optics draw from their own stream, so the stars keep their places and brightness.
+  const optics = mulberry(seed ^ 0x5bd1e995)
+  const sweet = { x: (optics() - 0.5) * 0.5, y: (optics() - 0.5) * 0.5 }
+  const soften = 0.25 + optics() * 0.6
+  const stretch = 0.3 + optics() * 0.5
   const stars: FieldStar[] = []
   const count = Math.min(truth.starCount, 2600)
   for (let i = 0; i < count; i += 1) {
     // Brightness follows a steep power law: a few bright stars, many faint ones.
     const peak = 220 + 26_000 * random() ** 6
+    const x = 12 + random() * (width - 24)
+    const y = 12 + random() * (height - 24)
+    const fwhm = truth.fwhmPx * (0.94 + random() * 0.12)
+    const baseEccentricity = Math.min(0.95, truth.eccentricity * (0.9 + random() * 0.2))
+    const angle = truth.trailed ? trailAngle + (random() - 0.5) * 4 : random() * 180
+    const nx = (x / width) * 2 - 1 - sweet.x
+    const ny = (y / height) * 2 - 1 - sweet.y
+    const r2 = (nx * nx + ny * ny) / 2
+    const fieldEccentricity = Math.min(0.95, stretch * r2)
+    const tangential = !truth.trailed && fieldEccentricity > baseEccentricity
     stars.push({
-      x: 12 + random() * (width - 24),
-      y: 12 + random() * (height - 24),
+      x,
+      y,
       peak,
-      fwhm: truth.fwhmPx * (0.94 + random() * 0.12),
-      eccentricity: Math.min(0.95, truth.eccentricity * (0.9 + random() * 0.2)),
-      angle: truth.trailed ? trailAngle + (random() - 0.5) * 4 : random() * 180,
+      fwhm: fwhm * (1 + soften * r2),
+      eccentricity: Math.min(0.95, Math.hypot(baseEccentricity, fieldEccentricity)),
+      angle: tangential ? (Math.atan2(ny, nx) * 180) / Math.PI + 90 : angle,
     })
   }
   stars.sort((a, b) => b.peak - a.peak)
@@ -251,30 +269,82 @@ export interface StarRecord {
 
 /** The brightest detected stars with fit results; saturated stars are failed fits with no width. */
 export function detectedStars(field: StarField, limit = 40): StarRecord[] {
-  return field.stars.slice(0, limit).map((star, index) => {
-    const saturated = star.peak >= ADU_MAX
-    const nearEdge = star.x < 40 || star.y < 40 || star.x > field.width - 40 || star.y > field.height - 40
-    const jitter = 1 + (((index * 7919) % 61) - 30) / 1000
-    const warnings = [
-      saturated ? "Saturated: the core is clipped at 65,535 ADU, so the PSF fit failed" : null,
-      nearEdge ? "Near the frame edge: part of the profile may be cut off" : null,
-    ].filter((w): w is string => w !== null)
-    return {
-      id: index + 1,
-      x: Math.round(star.x),
-      y: Math.round(star.y),
-      state: saturated ? "failed" : "fitted",
-      fwhmPx: saturated ? null : Number((star.fwhm * jitter).toFixed(2)),
-      hfrPx: saturated ? null : Number((star.fwhm * 0.62 * jitter).toFixed(2)),
-      eccentricity: saturated ? null : Number(star.eccentricity.toFixed(2)),
-      angleDeg: saturated ? null : Number((star.angle % 180).toFixed(1)),
-      peakAdu: Math.round(Math.min(ADU_MAX, star.peak + field.background)),
-      backgroundAdu: Math.round(field.background),
-      snr: Number((Math.min(ADU_MAX, star.peak) / field.noise).toFixed(1)),
-      warnings,
-      source: star,
+  return field.stars.slice(0, limit).map((star, index) => fitStar(field, star, index))
+}
+
+/** The fit record of one field star; `index` is its brightness rank, so its id matches `detectedStars`. */
+function fitStar(field: StarField, star: FieldStar, index: number): StarRecord {
+  const saturated = star.peak >= ADU_MAX
+  const nearEdge = star.x < 40 || star.y < 40 || star.x > field.width - 40 || star.y > field.height - 40
+  const jitter = 1 + (((index * 7919) % 61) - 30) / 1000
+  const warnings = [
+    saturated ? "Saturated: the core is clipped at 65,535 ADU, so the PSF fit failed" : null,
+    nearEdge ? "Near the frame edge: part of the profile may be cut off" : null,
+  ].filter((w): w is string => w !== null)
+  return {
+    id: index + 1,
+    x: Math.round(star.x),
+    y: Math.round(star.y),
+    state: saturated ? "failed" : "fitted",
+    fwhmPx: saturated ? null : Number((star.fwhm * jitter).toFixed(2)),
+    hfrPx: saturated ? null : Number((star.fwhm * 0.62 * jitter).toFixed(2)),
+    eccentricity: saturated ? null : Number(star.eccentricity.toFixed(2)),
+    angleDeg: saturated ? null : Number((((star.angle % 180) + 180) % 180).toFixed(1)),
+    peakAdu: Math.round(Math.min(ADU_MAX, star.peak + field.background)),
+    backgroundAdu: Math.round(field.background),
+    snr: Number((Math.min(ADU_MAX, star.peak) / field.noise).toFixed(1)),
+    warnings,
+    source: star,
+  }
+}
+
+/** A source-pixel rectangle at 1:1. */
+export interface RegionRect {
+  x0: number
+  y0: number
+  width: number
+  height: number
+}
+
+export interface RegionStats {
+  /** Detected stars inside the region, brightest first, at most `limit`. */
+  stars: StarRecord[]
+  /** Medians over the fitted stars; null with fewer than 3. */
+  fwhmPx: number | null
+  eccentricity: number | null
+  fitted: number
+}
+
+/** Below this SNR a star is not detected. */
+const DETECT_SNR = 5
+
+function median(values: number[]): number | null {
+  if (values.length < 3) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2
+}
+
+/** Stars detected in one region and their median FWHM and eccentricity (the corner inspector). */
+export function regionStats(field: StarField, rect: RegionRect, limit = 60): RegionStats {
+  const indices: number[] = []
+  for (let gx = Math.floor(rect.x0 / CELL); gx <= Math.floor((rect.x0 + rect.width) / CELL); gx += 1) {
+    for (let gy = Math.floor(rect.y0 / CELL); gy <= Math.floor((rect.y0 + rect.height) / CELL); gy += 1) {
+      for (const index of field.grid.get(gx * 10_000 + gy) ?? []) {
+        const s = field.stars[index]!
+        if (s.x >= rect.x0 && s.x < rect.x0 + rect.width && s.y >= rect.y0 && s.y < rect.y0 + rect.height) indices.push(index)
+      }
     }
-  })
+  }
+  indices.sort((a, b) => a - b)
+  const all = indices.map((index) => fitStar(field, field.stars[index]!, index)).filter((s) => s.snr >= DETECT_SNR)
+  const fitted = all.filter((s) => s.state === "fitted")
+  return {
+    stars: all.slice(0, limit),
+    fwhmPx: median(fitted.map((s) => s.fwhmPx!)),
+    eccentricity: median(fitted.map((s) => s.eccentricity!)),
+    fitted: fitted.length,
+  }
 }
 
 export type CutoutKind = "observed" | "fitted" | "residual"

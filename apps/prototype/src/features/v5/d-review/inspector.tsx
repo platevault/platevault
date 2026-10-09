@@ -1,12 +1,14 @@
 /**
  * Review inspector (D-W13, D-W15, D-W42, PIX-FR-02, PIX-FR-05, PIX-FR-06):
  * the current frame's display name and full path, both quality levels with
- * their marks, the histogram of its displayed region, and tabs for its
- * measured values with their sources, detected stars with cutouts, the fixed
- * centre-and-corner regions, and the header.
+ * their marks (library only in a session review), the histogram of its
+ * displayed region, and tabs for its measured values with their sources,
+ * detected stars with cutouts, and the header. The corners at 1:1 live on
+ * the stage (`corners.tsx`).
  */
 import { Link } from "@tanstack/react-router"
 import { Sparkles, X } from "lucide-react"
+import { HelpTip } from "@/components/app/tips"
 import { PathText } from "@/components/app/data"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
@@ -18,7 +20,7 @@ import { HeaderDetails, MetricTable, StarDetail } from "@/features/t3/frame-prev
 import { detectedStars, type StarField, type StarRecord, type ViewWindow } from "@/features/t3/raster"
 import { cn } from "@/lib/utils"
 import type { ReviewFrame, ReviewScope } from "./model"
-import { HistogramView, type PlateView, RegionGrid } from "./preview"
+import { HistogramView } from "./preview"
 import { MEMBER_WORD, QualityLabel } from "./quality"
 
 export interface InspectorActions {
@@ -34,7 +36,6 @@ export function Inspector({
   catalog,
   field,
   window,
-  view,
   starsOn,
   onStarsOn,
   star,
@@ -52,7 +53,6 @@ export function Inspector({
   catalog: Catalog
   field: StarField | null
   window: ViewWindow | null
-  view: PlateView
   starsOn: boolean
   onStarsOn: (on: boolean) => void
   star: StarRecord | null
@@ -133,26 +133,26 @@ export function Inspector({
             </Button>
           ))}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {frame.rejectedBy.project && targets <= 1 ? (
-            <Button size="xs" variant="ghost" disabled={disabled !== null} onClick={actions.clearProjectReject}>
-              Clear Project reject
-            </Button>
-          ) : (
-            <Button size="xs" variant="ghost" disabled={disabled !== null} onClick={actions.projectReject}>
-              Reject for this Project only{plural ? `:${plural}` : ""}
-            </Button>
-          )}
-          <span className="text-[0.6875rem] text-muted-foreground">Library marks apply in every Project and run.</span>
-        </div>
-        {disabled ? <p className="text-xs text-muted-foreground">{disabled}</p> : null}
+        {scope.project ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {frame.rejectedBy.project && targets <= 1 ? (
+              <Button size="xs" variant="ghost" disabled={disabled !== null} onClick={actions.clearProjectReject}>
+                Clear Project reject
+              </Button>
+            ) : (
+              <Button size="xs" variant="ghost" disabled={disabled !== null} onClick={actions.projectReject}>
+                Reject for this Project{plural ? `:${plural}` : ""}
+              </Button>
+            )}
+            <HelpTip label="Mark scope">P, X and U mark the library, in every Project. A Project reject stays in this Project.</HelpTip>
+          </div>
+        ) : null}
       </div>
-      <div className="border-b border-separator px-3 py-2">{field && window ? <HistogramView field={field} window={window} /> : <p className="text-xs text-muted-foreground">No pixel data, so no histogram.</p>}</div>
-      <Tabs value={tab} onValueChange={(v) => onTab(String(v))} className="gap-0">
+      <div className="border-b border-separator px-3 py-2">{field && window ? <HistogramView field={field} window={window} /> : <p className="text-xs text-muted-foreground">No pixels</p>}</div>
+      <Tabs value={tab === "regions" ? "values" : tab} onValueChange={(v) => onTab(String(v))} className="gap-0">
         <TabsList variant="line" className="w-full shrink-0 justify-start border-b border-separator px-2">
           <TabsTrigger value="values">Values</TabsTrigger>
           <TabsTrigger value="stars">Stars</TabsTrigger>
-          <TabsTrigger value="regions">Regions</TabsTrigger>
           <TabsTrigger value="header">Header</TabsTrigger>
         </TabsList>
         <TabsContent value="values" className="px-3 py-2">
@@ -163,7 +163,7 @@ export function Inspector({
             <>
               <Toggle variant="outline" size="sm" pressed={starsOn} onPressedChange={onStarsOn}>
                 <Sparkles aria-hidden="true" data-icon="inline-start" />
-                Show stars on the preview
+                Show stars
               </Toggle>
               <ul className="max-h-36 overflow-y-auto rounded-md border text-xs" aria-label={`Detected stars, ${stars.length} brightest`}>
                 {stars.map((s) => (
@@ -178,20 +178,10 @@ export function Inspector({
                   </li>
                 ))}
               </ul>
-              {star ? <StarDetail field={field} star={star} scaleArcsec={pixelScaleFor(catalog, frame.session)} /> : <p className="text-xs text-muted-foreground">Choose a star in the list or on the preview to see its fit and cutouts.</p>}
+              {star ? <StarDetail field={field} star={star} scaleArcsec={pixelScaleFor(catalog, frame.session)} /> : null}
             </>
           ) : (
-            <p className="text-xs text-muted-foreground">No pixel data for this frame.</p>
-          )}
-        </TabsContent>
-        <TabsContent value="regions" className="space-y-1.5 px-3 py-2">
-          {field ? (
-            <>
-              <RegionGrid field={field} stretch={view.stretch} />
-              <p className="text-[0.6875rem] text-muted-foreground">Fixed 84 px regions at 1:1, the same place in every frame, so you can compare corners frame by frame.</p>
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">No pixel data for this frame.</p>
+            <p className="text-xs text-muted-foreground">No pixels</p>
           )}
         </TabsContent>
         <TabsContent value="header" className="px-3 py-2">

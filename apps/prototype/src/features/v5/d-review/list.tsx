@@ -8,17 +8,30 @@
  */
 import { ArrowDown, ArrowUp, ArrowUpDown, ImageOff, Loader } from "lucide-react"
 import { type MouseEvent, type ReactNode, type Ref, useEffect, useLayoutEffect, useRef } from "react"
+import { ContextMenuArea, type MenuEntry, menuKey } from "@/components/app/row-menu"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
 import { currentFile, formatMetricFixed, previewUnavailableReason, sessionLabel } from "@/domain/membership"
 import type { AssetId, Catalog, Disk, MetricKey } from "@/domain/types"
 import { formatExposure, formatTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { STATUS, StatusBadge } from "@/components/app/status"
+import { NoteMarker, type NoteRow } from "@/components/app/tips"
+import { BUILT_IN_METHOD } from "@/domain/measurement"
 import { useSize } from "@/features/t3/frame-preview"
 import type { ReviewContext, ReviewFrame } from "./model"
 import { MEMBER_WORD, QualityLabel, qualityWord } from "./quality"
 import { useThumbnail } from "./thumbnails"
+
+const COLUMN_NOTE: Record<1 | 2, NoteRow[]> = {
+  1: [
+    { label: "Method", value: `${BUILT_IN_METHOD.method} ${BUILT_IN_METHOD.version}` },
+    { label: "Basis", value: "Linear data" },
+  ],
+  2: [
+    { label: "Source", value: "Imported CSV" },
+    { label: "Match", value: "File name, unverified" },
+  ],
+}
 
 export type Activate = (id: AssetId, mode: "set" | "toggle" | "range") => void
 
@@ -30,7 +43,7 @@ export interface SortState {
 export interface FrameColumn {
   id: string
   header: string
-  /** Source note marker: 1 built-in, 2 imported (v4 Direction B). */
+  /** Source note: 1 built-in, 2 imported (v4 Direction B), as a NoteMarker beside the header. */
   note?: 1 | 2
   align?: "right"
   contexts?: ReviewContext["kind"][]
@@ -82,7 +95,7 @@ export function frameColumns(names: Map<AssetId, string>): FrameColumn[] {
     },
     { id: "panel", header: "Panel", contexts: ["group"], sortValue: (f) => f.panel?.n ?? null, cell: (f) => (f.panel ? `Panel ${f.panel.n}` : "–") },
     { id: "subject", header: "Subject", contexts: ["candidates"], sortValue: (f) => f.subject, cell: (f) => f.subject ?? "–" },
-    { id: "session", header: "Session", sortValue: (f) => f.session?.startedAt ?? null, cell: (f) => (f.session ? sessionLabel(f.session) : <span className="text-muted-foreground">No session</span>) },
+    { id: "session", header: "Session", contexts: ["run", "group", "candidates"], sortValue: (f) => f.session?.startedAt ?? null, cell: (f) => (f.session ? sessionLabel(f.session) : <span className="text-muted-foreground">No session</span>) },
     { id: "time", header: "Time", sortValue: (f) => f.asset.observed.dateObs, cell: (f) => formatTime(f.asset.observed.dateObs) },
     { id: "exposure", header: "Exposure", align: "right", sortValue: (f) => f.asset.observed.exposureS, cell: (f) => formatExposure(f.asset.observed.exposureS) },
     { id: "quality", header: "Quality", sortValue: (f) => qualityWord(f), cell: (f) => <QualityLabel frame={f} short /> },
@@ -101,12 +114,15 @@ export function frameColumns(names: Map<AssetId, string>): FrameColumn[] {
       sortValue: (f) => f.imported.fwhm?.value ?? null,
       cell: (f) =>
         f.imported.fwhm ? (
-          <span title="Imported · content unverified">
+          <span title="Imported, unverified">
             {formatMetricFixed(f.imported.fwhm)}
-            <span className="sr-only">, imported, content unverified</span>
+            <span className="sr-only">, imported, unverified</span>
           </span>
         ) : (
-          <span className="text-muted-foreground">None</span>
+          <span className="text-muted-foreground">
+            <span aria-hidden="true">–</span>
+            <span className="sr-only">None</span>
+          </span>
         ),
     },
     {
@@ -172,22 +188,23 @@ function useFollowFocus(activeId: AssetId | null, prefix: string) {
   return box
 }
 
-/** Right click, Shift+F10 or the Menu key on a frame opens its menu; every item is also on the toolbar or inspector. */
-function WithMenu({ menu, onOpen, children, className, boxRef }: { menu: ReactNode; onOpen: (event: MouseEvent) => void; children: ReactNode; className?: string; boxRef?: Ref<HTMLDivElement> }) {
+/**
+ * Right click, Shift+F10 or the Menu key on a frame opens its menu (the
+ * foundation's ContextMenuArea); the frame becomes current first unless it is
+ * in the selection. Every item is also on the toolbar or inspector.
+ */
+function WithMenu({ menu, onActivate, activeId, selected, children, className, boxRef }: { menu: (id: AssetId) => MenuEntry[]; onActivate: Activate; activeId: AssetId | null; selected: Set<AssetId>; children: ReactNode; className?: string; boxRef?: Ref<HTMLDivElement> }) {
+  const onContextMenu = (event: MouseEvent) => {
+    const id = (event.target as HTMLElement).closest<HTMLElement>("[data-frame-id]")?.dataset.frameId ?? null
+    if (id !== null && id !== activeId && !selected.has(id)) onActivate(id, "set")
+  }
   return (
-    <ContextMenu>
-      <ContextMenuTrigger className={className}>
-        <div ref={boxRef} className="contents" onContextMenu={onOpen}>
-          {children}
-        </div>
-      </ContextMenuTrigger>
-      <ContextMenuContent>{menu}</ContextMenuContent>
-    </ContextMenu>
+    <ContextMenuArea menu={menu} className={className}>
+      <div ref={boxRef} className="contents" onContextMenu={onContextMenu}>
+        {children}
+      </div>
+    </ContextMenuArea>
   )
-}
-
-function frameIdOf(event: MouseEvent): AssetId | null {
-  return (event.target as HTMLElement).closest<HTMLElement>("[data-frame-id]")?.dataset.frameId ?? null
 }
 
 export interface ListProps {
@@ -197,8 +214,8 @@ export interface ListProps {
   names: Map<AssetId, string>
   onActivate: Activate
   onToggleSelected: (id: AssetId, on: boolean) => void
-  /** Context menu items for the frame under the pointer; it becomes current first. */
-  menu: ReactNode
+  /** Context menu entries for the frame under the pointer. */
+  menu: (id: AssetId) => MenuEntry[]
   empty: ReactNode
 }
 
@@ -219,11 +236,9 @@ export function FrameTable({
     <WithMenu
       menu={props.menu}
       boxRef={box}
-      onOpen={(event) => {
-        const id = frameIdOf(event)
-        if (id === null) event.stopPropagation()
-        else if (id !== activeId && !selected.has(id)) onActivate(id, "set")
-      }}
+      onActivate={onActivate}
+      activeId={activeId}
+      selected={selected}
       className={cn("relative min-h-0 flex-1 overflow-auto bg-background", strip ? "overflow-hidden" : "scroll-pt-[calc(var(--row-h)+1px)]")}
     >
       <table className="w-full text-sm">
@@ -256,13 +271,9 @@ export function FrameTable({
                     onClick={() => onSort(active ? { columnId: column.id, direction: sort.direction === "asc" ? "desc" : "asc" } : { columnId: column.id, direction: "asc" })}
                   >
                     {column.header}
-                    {column.note ? (
-                      <sup className="text-link" aria-label={column.note === 1 ? "built-in, see note 1" : "imported, see note 2"}>
-                        {column.note}
-                      </sup>
-                    ) : null}
                     {active ? sort.direction === "asc" ? <ArrowUp aria-hidden="true" className="size-3" /> : <ArrowDown aria-hidden="true" className="size-3" /> : <ArrowUpDown aria-hidden="true" className="size-3 opacity-50" />}
                   </button>
+                  {column.note ? <NoteMarker n={column.note} label={`${column.header} source`} rows={COLUMN_NOTE[column.note]} className="ml-0.5" /> : null}
                 </th>
               )
             })}
@@ -284,6 +295,7 @@ export function FrameTable({
                   key={id}
                   id={`frame-row-${id}`}
                   data-frame-id={id}
+                  {...menuKey(id)}
                   aria-current={activeId === id ? "true" : undefined}
                   data-selected={isSelected || undefined}
                   onClick={(event) => {
@@ -351,6 +363,7 @@ function ThumbCell({ frame, props, disk, catalog, size, tabbable }: { frame: Rev
         type="button"
         id={`frame-thumb-${id}`}
         data-frame-id={id}
+        {...menuKey(id)}
         data-frame-item
         tabIndex={tabbable ? 0 : -1}
         aria-current={isActive ? "true" : undefined}
@@ -389,16 +402,7 @@ export function Filmstrip({ disk, catalog, ...props }: ListProps & { disk: Disk;
   const box = useFollowFocus(props.activeId, "frame-thumb")
   const tabbable = tabbableId(props)
   return (
-    <WithMenu
-      menu={props.menu}
-      boxRef={box}
-      onOpen={(event) => {
-        const id = frameIdOf(event)
-        if (id === null) event.stopPropagation()
-        else if (id !== props.activeId && !props.selected.has(id)) props.onActivate(id, "set")
-      }}
-      className="min-h-0 shrink-0 overflow-x-auto overflow-y-hidden bg-background"
-    >
+    <WithMenu menu={props.menu} boxRef={box} onActivate={props.onActivate} activeId={props.activeId} selected={props.selected} className="min-h-0 shrink-0 overflow-x-auto overflow-y-hidden bg-background">
       {props.frames.length === 0 ? (
         <div className="p-3">{props.empty}</div>
       ) : (
@@ -429,16 +433,7 @@ export function FrameGrid({ disk, catalog, onColumns, ...props }: ListProps & { 
   }, [cols, onColumns])
   return (
     <div ref={ref} className="min-h-0 flex-1">
-      <WithMenu
-        menu={props.menu}
-        boxRef={box}
-        onOpen={(event) => {
-          const id = frameIdOf(event)
-          if (id === null) event.stopPropagation()
-          else if (id !== props.activeId && !props.selected.has(id)) props.onActivate(id, "set")
-        }}
-        className="block h-full overflow-y-auto bg-background"
-      >
+      <WithMenu menu={props.menu} boxRef={box} onActivate={props.onActivate} activeId={props.activeId} selected={props.selected} className="block h-full overflow-y-auto bg-background">
         {props.frames.length === 0 ? (
           <div className="p-3">{props.empty}</div>
         ) : (

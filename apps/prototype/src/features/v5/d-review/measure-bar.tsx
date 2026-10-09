@@ -92,7 +92,7 @@ export function MeasureBar({ scope, frames, home }: { scope: ReviewScope; frames
       <span className="flex min-w-0 items-center gap-2">
         {status}
         <Progress value={total > 0 ? (done / total) * 100 : 0} aria-label="Measurement progress" getAriaValueText={() => `${done} of ${total} frames`} className="w-24 shrink-0" />
-        <span className="min-w-0 truncate tabular-nums" title="The current frame is measured first.">
+        <span className="min-w-0 truncate tabular-nums">
           {word}: {done} of {total}
         </span>
         {paused ? (
@@ -111,8 +111,8 @@ export function MeasureBar({ scope, frames, home }: { scope: ReviewScope; frames
     <span className="flex min-w-0 items-center gap-2">
       {status}
       {last ? <StatusBadge kind="operation" value={last.status} className="shrink-0" /> : null}
-      <span className="min-w-0 truncate" title={`${summary}${unreadable > 0 ? ` ${plural(unreadable, "frame")} cannot be read now and stay Not measured.` : ""}`}>
-        {notMeasured === 0 ? "Every readable frame measured" : `${plural(notMeasured, "frame")} not measured`}
+      <span className="min-w-0 truncate" title={`${summary}${unreadable > 0 ? ` ${plural(unreadable, "frame")} unreadable.` : ""}`}>
+        {notMeasured === 0 ? "All measured" : `${plural(notMeasured, "frame")} not measured`}
       </span>
       {notMeasured > 0 ? (
         <>
@@ -123,7 +123,7 @@ export function MeasureBar({ scope, frames, home }: { scope: ReviewScope; frames
             disabled={disabledReason !== null}
             focusableWhenDisabled
             aria-describedby={disabledReason ? reasonId : undefined}
-            title="Only Measure frames starts measuring; browsing and filtering never measure."
+            title={disabledReason ? `Measuring blocked · ${disabledReason}` : undefined}
             className="shrink-0 aria-disabled:pointer-events-none aria-disabled:opacity-50"
           >
             Measure frames
