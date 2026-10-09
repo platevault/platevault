@@ -123,7 +123,7 @@ export interface OfferRefusal {
   key: string
   label: string
   path: string | null
-  reason: string
+  reason: MessageRef
 }
 
 export interface TrashOffer {
@@ -204,24 +204,24 @@ export function rejectedFramesOffer(state: PrototypeState, project: Project): Tr
       seen.add(id)
       const label = asset.fileName
       const path = asset.copies[0]?.path ?? ""
-      const refuse = (reason: string) => refusals.push({ key: id, label, path, reason })
+      const refuse = (reason: MessageRef) => refusals.push({ key: id, label, path, reason })
       const preparedIn = prepared.get(id)
       if (preparedIn) {
-        refuse(m.wrapup_refusal_in_open_run({ where: preparedIn }))
+        refuse(msg("wrapup_refusal_in_open_run", { where: preparedIn }))
         continue
       }
       const input = inputs.get(id)
       if (input) {
-        refuse(m.wrapup_refusal_result_input({ name: input }))
+        refuse(msg("wrapup_refusal_result_input", { name: input }))
         continue
       }
       if (asset.sessionId && moving.has(asset.sessionId)) {
-        refuse(m.wrapup_refusal_archive_moving())
+        refuse(msg("wrapup_refusal_archive_moving"))
         continue
       }
       const outside = asset.copies.find((c) => catalog.locations[c.locationId]?.role !== "captures")
       if (outside) {
-        refuse(m.wrapup_refusal_outside_captures())
+        refuse(msg("wrapup_refusal_outside_captures"))
         continue
       }
       const copyRefusal = asset.copies.map((c) => trashRefusal(disk, c.path)).find((r) => r !== null)
@@ -276,7 +276,7 @@ export function intermediatesOffer(state: PrototypeState, project: Project): Tra
     if (seen.has(path) || path === master.adoption.destinationPath) continue
     const label = path.split("/").at(-1) ?? path
     const kept = fileAt(disk, master.adoption.destinationPath)
-    const reason = !kept || kept.sha256 !== master.adoption.verifiedSha256 ? m.wrapup_refusal_kept_unverifiable({ path: master.adoption.destinationPath }) : trashRefusal(disk, path)
+    const reason = !kept || kept.sha256 !== master.adoption.verifiedSha256 ? msg("wrapup_refusal_kept_unverifiable", { path: master.adoption.destinationPath }) : trashRefusal(disk, path)
     if (reason) {
       refusals.push({ key: master.id, label, path, reason })
       continue
@@ -322,11 +322,11 @@ export function duplicatesOffer(state: PrototypeState, project: Project): TrashO
         const label = m.wrapup_copy_on({ name: asset.fileName, location: catalog.locations[copy.locationId]?.displayName ?? m.wrapup_unknown_location() })
         const reason =
           linkedBy.has(copy.path) && copy.path !== kept.path
-            ? m.wrapup_refusal_linked_source({ name: linkedBy.get(copy.path) ?? "" })
+            ? msg("wrapup_refusal_linked_source", { name: linkedBy.get(copy.path) ?? "" })
             : moving.has(session.id)
-              ? m.wrapup_refusal_archive_moving()
+              ? msg("wrapup_refusal_archive_moving")
               : trashRefusal(disk, kept.path)
-                ? m.wrapup_refusal_kept_copy_unverified({ name: keptName })
+                ? msg("wrapup_refusal_kept_copy_unverified", { name: keptName })
                 : trashRefusal(disk, copy.path)
         if (reason) {
           refusals.push({ key, label, path: copy.path, reason })
@@ -380,10 +380,10 @@ export interface ArchivePlan {
   rows: ArchiveRow[]
   /** Kept because a run in another Project not marked Done uses them (D-W46). */
   kept: Array<{ session: Session; projects: string[] }>
-  refused: Array<{ session: Session; reason: string }>
+  refused: Array<{ session: Session; reason: MessageRef }>
   sizeBytes: number
   /** A reason that refuses the whole archive, e.g. no archive location. */
-  blocked: string | null
+  blocked: MessageRef | null
 }
 
 /** "NGC 7000 · 18 Sep · Ha": the session's target (or object), night and channel. */
@@ -415,22 +415,22 @@ function sourceCopy(catalog: Catalog, asset: Asset): AssetCopy | null {
 }
 
 /** Checks shared by archive and restore: the source is readable and nothing else sits at the destination. */
-function moveRefusal(state: PrototypeState, move: ArchiveMove): string | null {
+function moveRefusal(state: PrototypeState, move: ArchiveMove): MessageRef | null {
   const source = state.disk.volumes[move.from.volumeId]
-  if (!source?.mounted) return m.run_cleanup_volume_offline({ name: source?.name ?? m.wrapup_its_volume() })
-  if (!state.disk.files[fileKey(move.from.volumeId, move.from.path)]) return m.wrapup_refusal_not_found({ path: move.from.path })
-  if (state.disk.files[fileKey(move.to.volumeId, move.to.path)]) return m.wrapup_refusal_file_exists({ path: move.to.path })
+  if (!source?.mounted) return msg("run_cleanup_volume_offline", { name: source?.name ?? msg("wrapup_its_volume") })
+  if (!state.disk.files[fileKey(move.from.volumeId, move.from.path)]) return msg("wrapup_refusal_not_found", { path: move.from.path })
+  if (state.disk.files[fileKey(move.to.volumeId, move.to.path)]) return msg("wrapup_refusal_file_exists", { path: move.to.path })
   return null
 }
 
-function planOver(state: PrototypeState, sessions: Session[], destinationFor: (session: Session, asset: Asset) => CopyRef | null, destination: Location | null, blocked: string | null): Omit<ArchivePlan, "kept"> {
+function planOver(state: PrototypeState, sessions: Session[], destinationFor: (session: Session, asset: Asset) => CopyRef | null, destination: Location | null, blocked: MessageRef | null): Omit<ArchivePlan, "kept"> {
   const { catalog, disk } = state
   const volume = destination ? (disk.volumes[destination.volumeId] ?? null) : null
   const rows: ArchiveRow[] = []
   const refused: ArchivePlan["refused"] = []
   for (const session of sessions) {
     const moves: ArchiveMove[] = []
-    let reason: string | null = null
+    let reason: MessageRef | null = null
     for (const id of liveAssetIds(catalog, session)) {
       const asset = catalog.assets[id]
       const copy = asset ? sourceCopy(catalog, asset) : null
@@ -448,9 +448,9 @@ function planOver(state: PrototypeState, sessions: Session[], destinationFor: (s
   const sizeBytes = rows.reduce((n, r) => n + r.sizeBytes, 0)
   const free = volume ? freeBytes(disk, volume.id) : 0
   let block = blocked
-  if (!block && volume && !volume.mounted) block = m.wrapup_refusal_not_mounted({ name: volume.name })
-  if (!block && volume && !volume.writable) block = m.wrapup_refusal_not_writable({ name: volume.name })
-  if (!block && volume && sizeBytes > free) block = m.wrapup_refusal_space({ name: volume.name, free: formatBytes(free), size: formatBytes(sizeBytes) })
+  if (!block && volume && !volume.mounted) block = msg("wrapup_refusal_not_mounted", { name: volume.name })
+  if (!block && volume && !volume.writable) block = msg("wrapup_refusal_not_writable", { name: volume.name })
+  if (!block && volume && sizeBytes > free) block = msg("wrapup_refusal_space", { name: volume.name, free: formatBytes(free), size: formatBytes(sizeBytes) })
   return { destination, volume, freeBytes: free, rows, refused, sizeBytes, blocked: block }
 }
 
@@ -481,7 +481,7 @@ export function archivePlan(state: PrototypeState, project: Project, destination
     members.filter((s) => !usedElsewhere.has(s.id)),
     (session, asset) => (destination ? { locationId: destination.id, volumeId: destination.volumeId, path: joinPath(templatedFolder(state, destination.path, session), asset.fileName) } : null),
     destination,
-    destination ? null : m.wrapup_no_archive_location(),
+    destination ? null : msg("wrapup_no_archive_location"),
   )
   return { ...plan, kept }
 }
@@ -507,7 +507,7 @@ export function restorePlan(state: PrototypeState, project: Project, origins: Ar
     null,
   )
   // Restore writes back to each origin's own volume; the free-space check above uses the Captures fallback only.
-  return { ...plan, kept: [], blocked: plan.rows.length === 0 && plan.refused.length === 0 ? m.project_nothing_to_restore() : null }
+  return { ...plan, kept: [], blocked: plan.rows.length === 0 && plan.refused.length === 0 ? msg("project_nothing_to_restore") : null }
 }
 
 // ---------------------------------------------------------------------------
