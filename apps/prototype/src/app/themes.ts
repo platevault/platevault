@@ -11,24 +11,25 @@ export type ThemeScheme = "dark" | "light"
 
 export interface ThemeInfo {
   id: string
-  label: string
+  /** The palette's published name, a proper noun: not translated, like a locale's native name. */
+  name: string
   scheme: ThemeScheme
 }
 
 export const THEMES = [
-  { id: "platevault-dark", label: "PlateVault Dark", scheme: "dark" },
-  { id: "platevault-light", label: "PlateVault Light", scheme: "light" },
-  { id: "gruvbox-dark", label: "Gruvbox Dark", scheme: "dark" },
-  { id: "gruvbox-light", label: "Gruvbox Light", scheme: "light" },
-  { id: "nord", label: "Nord", scheme: "dark" },
-  { id: "dracula", label: "Dracula", scheme: "dark" },
-  { id: "solarized-dark", label: "Solarized Dark", scheme: "dark" },
-  { id: "solarized-light", label: "Solarized Light", scheme: "light" },
-  { id: "catppuccin-mocha", label: "Catppuccin Mocha", scheme: "dark" },
-  { id: "catppuccin-latte", label: "Catppuccin Latte", scheme: "light" },
-  { id: "tokyo-night", label: "Tokyo Night", scheme: "dark" },
-  { id: "one-dark", label: "One Dark", scheme: "dark" },
-  { id: "rose-pine", label: "Rosé Pine", scheme: "dark" },
+  { id: "platevault-dark", name: "PlateVault Dark", scheme: "dark" },
+  { id: "platevault-light", name: "PlateVault Light", scheme: "light" },
+  { id: "gruvbox-dark", name: "Gruvbox Dark", scheme: "dark" },
+  { id: "gruvbox-light", name: "Gruvbox Light", scheme: "light" },
+  { id: "nord", name: "Nord", scheme: "dark" },
+  { id: "dracula", name: "Dracula", scheme: "dark" },
+  { id: "solarized-dark", name: "Solarized Dark", scheme: "dark" },
+  { id: "solarized-light", name: "Solarized Light", scheme: "light" },
+  { id: "catppuccin-mocha", name: "Catppuccin Mocha", scheme: "dark" },
+  { id: "catppuccin-latte", name: "Catppuccin Latte", scheme: "light" },
+  { id: "tokyo-night", name: "Tokyo Night", scheme: "dark" },
+  { id: "one-dark", name: "One Dark", scheme: "dark" },
+  { id: "rose-pine", name: "Rosé Pine", scheme: "dark" },
 ] as const satisfies readonly ThemeInfo[]
 
 export type ThemeId = (typeof THEMES)[number]["id"]

@@ -34,188 +34,196 @@ import {
   Unplug,
   Wrench,
 } from "lucide-react"
-import { useT } from "@/app/preferences"
+import { useMessages } from "@/app/preferences"
 import { Badge } from "@/components/ui/badge"
+import { m } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 export type Tone = "neutral" | "muted" | "info" | "success" | "warning" | "danger"
 
 interface StatusMeta {
-  label: string
+  /** The status word in the chosen language, read at render. */
+  readonly label: string
   tone: Tone
   icon: LucideIcon
 }
 
-function s(label: string, tone: Tone, icon: LucideIcon): StatusMeta {
-  return { label, tone, icon }
+function s(message: () => string, tone: Tone, icon: LucideIcon): StatusMeta {
+  return {
+    get label() {
+      return message()
+    },
+    tone,
+    icon,
+  }
 }
 
 export const STATUS = {
   availability: {
-    online: s("Online", "success", Plug),
-    offline: s("Offline", "warning", Unplug),
-    unreadable: s("Unreadable", "danger", Lock),
-    absent: s("Not found", "danger", CircleX),
-    retired: s("Retired", "muted", Archive),
-    available: s("Available", "success", Check),
+    online: s(m.status_online, "success", Plug),
+    offline: s(m.status_offline, "warning", Unplug),
+    unreadable: s(m.status_unreadable, "danger", Lock),
+    absent: s(m.status_not_found, "danger", CircleX),
+    retired: s(m.status_retired, "muted", Archive),
+    available: s(m.status_available, "success", Check),
   },
   access: {
-    ok: s("Readable", "success", Check),
-    denied: s("Access denied", "danger", Lock),
-    unknown: s("Not checked", "muted", CircleHelp),
+    ok: s(m.status_readable, "success", Check),
+    denied: s(m.status_access_denied, "danger", Lock),
+    unknown: s(m.status_not_checked, "muted", CircleHelp),
   },
   scanScope: {
-    never: s("Not indexed", "muted", CircleDashed),
-    complete: s("Complete scope", "success", CheckCheck),
-    incomplete: s("Incomplete scope", "warning", TriangleAlert),
-    provisional: s("Provisional", "info", Hourglass),
+    never: s(m.status_not_indexed, "muted", CircleDashed),
+    complete: s(m.status_complete_scope, "success", CheckCheck),
+    incomplete: s(m.status_incomplete_scope, "warning", TriangleAlert),
+    provisional: s(m.status_provisional, "info", Hourglass),
   },
   role: {
-    captures: s("Captures", "neutral", CircleDot),
-    calibration: s("Calibration", "neutral", CircleDot),
-    results: s("Results", "neutral", CircleDot),
-    archive: s("Archive", "neutral", Archive),
-    unset: s("Not set", "muted", CircleDashed),
+    captures: s(m.status_role_captures, "neutral", CircleDot),
+    calibration: s(m.status_role_calibration, "neutral", CircleDot),
+    results: s(m.status_role_results, "neutral", CircleDot),
+    archive: s(m.status_role_archive, "neutral", Archive),
+    unset: s(m.status_not_set, "muted", CircleDashed),
   },
   quality: {
-    unreviewed: s("Unreviewed", "muted", CircleDashed),
-    usable: s("Usable", "success", Check),
-    unusable: s("Unusable", "neutral", Ban),
-    "changed-content": s("Changed content", "warning", FileDiff),
-    "verification-pending": s("Verification pending", "info", Hourglass),
-    "project-rejected": s("Rejected for Project", "neutral", CircleSlash),
-    excluded: s("Excluded from View", "neutral", CircleSlash),
+    unreviewed: s(m.status_unreviewed, "muted", CircleDashed),
+    usable: s(m.status_usable, "success", Check),
+    unusable: s(m.status_unusable, "neutral", Ban),
+    "changed-content": s(m.status_changed_content, "warning", FileDiff),
+    "verification-pending": s(m.status_verification_pending, "info", Hourglass),
+    "project-rejected": s(m.status_rejected_for_project, "neutral", CircleSlash),
+    excluded: s(m.status_excluded_from_view, "neutral", CircleSlash),
   },
   association: {
-    confirmed: s("Confirmed", "success", ShieldCheck),
-    associated: s("Associated", "info", Link2),
-    "needs-review": s("Needs review", "warning", TriangleAlert),
-    unresolved: s("Unresolved", "warning", CircleHelp),
+    confirmed: s(m.status_confirmed, "success", ShieldCheck),
+    associated: s(m.status_associated, "info", Link2),
+    "needs-review": s(m.status_needs_review, "warning", TriangleAlert),
+    unresolved: s(m.status_unresolved, "warning", CircleHelp),
   },
   copies: {
-    conflicting: s("Conflicting copies", "warning", CopyX),
+    conflicting: s(m.status_conflicting_copies, "warning", CopyX),
   },
   operation: {
-    running: s("Running", "info", Loader),
-    paused: s("Paused", "neutral", Pause),
-    succeeded: s("Finished", "success", Check),
-    partial: s("Partial", "warning", CircleDashed),
-    failed: s("Failed", "danger", CircleX),
-    canceled: s("Canceled", "muted", CircleSlash),
-    interrupted: s("Interrupted", "warning", CircleAlert),
+    running: s(m.status_running, "info", Loader),
+    paused: s(m.status_paused, "neutral", Pause),
+    succeeded: s(m.status_finished, "success", Check),
+    partial: s(m.status_partial, "warning", CircleDashed),
+    failed: s(m.status_failed, "danger", CircleX),
+    canceled: s(m.status_canceled, "muted", CircleSlash),
+    interrupted: s(m.status_interrupted, "warning", CircleAlert),
   },
   item: {
-    pending: s("Pending", "muted", Clock),
-    running: s("Running", "info", Loader),
-    done: s("Done", "success", Check),
-    blocked: s("Blocked", "danger", Ban),
-    failed: s("Failed", "danger", CircleX),
-    skipped: s("Skipped", "muted", CircleSlash),
-    uncertain: s("Uncertain", "warning", CircleHelp),
+    pending: s(m.status_pending, "muted", Clock),
+    running: s(m.status_running, "info", Loader),
+    done: s(m.status_done, "success", Check),
+    blocked: s(m.status_blocked, "danger", Ban),
+    failed: s(m.status_failed, "danger", CircleX),
+    skipped: s(m.status_skipped, "muted", CircleSlash),
+    uncertain: s(m.status_uncertain, "warning", CircleHelp),
   },
   view: {
-    draft: s("Draft", "muted", CircleDashed),
-    saved: s("Saved", "neutral", Check),
-    prepared: s("Prepared", "success", CheckCheck),
-    unverified: s("Unverified", "warning", TriangleAlert),
-    complete: s("Complete", "success", ShieldCheck),
+    draft: s(m.status_draft, "muted", CircleDashed),
+    saved: s(m.status_saved, "neutral", Check),
+    prepared: s(m.status_prepared, "success", CheckCheck),
+    unverified: s(m.status_unverified, "warning", TriangleAlert),
+    complete: s(m.status_complete, "success", ShieldCheck),
   },
   /** A Project's lifecycle (PRJ-FR-14, D-W46). */
   project: {
-    open: s("Open", "info", CircleDot),
-    done: s("Done", "success", ShieldCheck),
-    archived: s("Archived", "neutral", Archive),
+    open: s(m.status_open, "info", CircleDot),
+    done: s(m.status_done, "success", ShieldCheck),
+    archived: s(m.status_archived, "neutral", Archive),
   },
   /** A processing run's lifecycle (RES-FR-06, D-W72). */
   run: {
-    open: s("Open", "neutral", CircleDot),
-    complete: s("Complete", "success", ShieldCheck),
-    trashed: s("Trashed", "muted", Trash2),
+    open: s(m.status_open, "neutral", CircleDot),
+    complete: s(m.status_complete, "success", ShieldCheck),
+    trashed: s(m.status_trashed, "muted", Trash2),
   },
   preparation: {
-    running: s("Running", "info", Loader),
-    prepared: s("Prepared", "success", CheckCheck),
+    running: s(m.status_running, "info", Loader),
+    prepared: s(m.status_prepared, "success", CheckCheck),
     // Partial reads the same as the step rail's Partial gate: the dashed circle, never the warning triangle.
-    partial: s("Partial", "warning", CircleDashed),
-    failed: s("Failed", "danger", CircleX),
-    canceled: s("Canceled", "muted", CircleSlash),
-    paused: s("Paused", "neutral", Pause),
+    partial: s(m.status_partial, "warning", CircleDashed),
+    failed: s(m.status_failed, "danger", CircleX),
+    canceled: s(m.status_canceled, "muted", CircleSlash),
+    paused: s(m.status_paused, "neutral", Pause),
   },
   assignment: {
-    suggested: s("Suggested", "info", CircleDot),
-    accepted: s("Accepted", "success", Check),
-    exception: s("Exception", "warning", Wrench),
-    deferred: s("Deferred", "muted", Clock),
-    unresolved: s("Unresolved", "warning", CircleHelp),
+    suggested: s(m.status_suggested, "info", CircleDot),
+    accepted: s(m.status_accepted, "success", Check),
+    exception: s(m.status_exception, "warning", Wrench),
+    deferred: s(m.status_deferred, "muted", Clock),
+    unresolved: s(m.status_unresolved, "warning", CircleHelp),
   },
   match: {
-    compatible: s("Compatible", "success", Check),
-    incompatible: s("Incompatible", "danger", CircleX),
-    unknown: s("Unknown", "warning", CircleHelp),
+    compatible: s(m.status_compatible, "success", Check),
+    incompatible: s(m.status_incompatible, "danger", CircleX),
+    unknown: s(m.status_unknown, "warning", CircleHelp),
   },
   lineage: {
-    "tool-recorded": s("Tool-recorded", "info", Link2),
-    "user-linked": s("User-linked", "neutral", Link2),
-    unknown: s("Unknown lineage", "muted", CircleHelp),
+    "tool-recorded": s(m.status_tool_recorded, "info", Link2),
+    "user-linked": s(m.status_user_linked, "neutral", Link2),
+    unknown: s(m.status_unknown_lineage, "muted", CircleHelp),
   },
   acceptance: {
-    candidate: s("Candidate", "muted", CircleDashed),
-    accepted: s("Accepted", "success", Check),
+    candidate: s(m.status_candidate, "muted", CircleDashed),
+    accepted: s(m.status_accepted, "success", Check),
   },
   processing: {
-    pending: s("Pending", "muted", Clock),
-    written: s("Written", "neutral", Check),
-    unknown: s("State unknown", "muted", CircleHelp),
+    pending: s(m.status_pending, "muted", Clock),
+    written: s(m.status_written, "neutral", Check),
+    unknown: s(m.status_state_unknown, "muted", CircleHelp),
   },
   content: {
-    unchanged: s("Unchanged", "muted", Check),
-    drifted: s("Drifted", "warning", FileDiff),
+    unchanged: s(m.status_unchanged, "muted", Check),
+    drifted: s(m.status_drifted, "warning", FileDiff),
   },
   custody: {
-    keep: s("Keep", "neutral", ShieldCheck),
-    protected: s("Protected", "neutral", Lock),
+    keep: s(m.status_keep, "neutral", ShieldCheck),
+    protected: s(m.status_protected, "neutral", Lock),
   },
   master: {
-    adopted: s("Adopted", "success", ShieldCheck),
-    candidate: s("Candidate", "muted", CircleDashed),
+    adopted: s(m.status_adopted, "success", ShieldCheck),
+    candidate: s(m.status_candidate, "muted", CircleDashed),
   },
   measurement: {
-    valid: s("Measured", "success", Check),
-    pending: s("Pending", "muted", Clock),
+    valid: s(m.status_measured, "success", Check),
+    pending: s(m.status_pending, "muted", Clock),
     // PIX-FR-01: a cached measurement reads Verifying until its bytes rehash to the recorded digest.
-    verifying: s("Verifying", "info", Hourglass),
-    failed: s("Failed fit", "danger", CircleX),
-    unavailable: s("Not measured", "muted", CircleDashed),
+    verifying: s(m.status_verifying, "info", Hourglass),
+    failed: s(m.status_failed_fit, "danger", CircleX),
+    unavailable: s(m.status_not_measured, "muted", CircleDashed),
   },
   save: {
-    saved: s("Saved", "neutral", Check),
-    unsaved: s("Unsaved changes", "warning", CircleAlert),
-    saving: s("Saving", "info", Loader),
-    failed: s("Not saved", "danger", CircleX),
-    stale: s("Changed elsewhere", "warning", TriangleAlert),
+    saved: s(m.status_saved, "neutral", Check),
+    unsaved: s(m.status_unsaved_changes, "warning", CircleAlert),
+    saving: s(m.status_saving, "info", Loader),
+    failed: s(m.status_not_saved, "danger", CircleX),
+    stale: s(m.status_changed_elsewhere, "warning", TriangleAlert),
   },
   reminders: {
-    disabled: s("Notifications off", "muted", CircleSlash),
-    enabled: s("Notifications on", "success", Check),
-    denied: s("Permission denied", "danger", Ban),
+    disabled: s(m.status_notifications_off, "muted", CircleSlash),
+    enabled: s(m.status_notifications_on, "success", Check),
+    denied: s(m.status_permission_denied, "danger", Ban),
   },
   trash: {
-    supported: s("OS Trash supported", "success", Check),
-    unsupported: s("OS Trash unsupported", "danger", Ban),
+    supported: s(m.status_os_trash_supported, "success", Check),
+    unsupported: s(m.status_os_trash_unsupported, "danger", Ban),
   },
   source: {
-    manual: s("Manual", "neutral", Wrench),
-    detected: s("Detected", "info", CircleDot),
-    "built-in": s("Built-in", "muted", ShieldCheck),
+    manual: s(m.status_manual, "neutral", Wrench),
+    detected: s(m.status_detected, "info", CircleDot),
+    "built-in": s(m.status_built_in, "muted", ShieldCheck),
   },
   site: {
-    default: s("Default site", "info", CircleDot),
+    default: s(m.status_default_site, "info", CircleDot),
   },
   checklist: {
-    met: s("Met", "success", Check),
-    partial: s("Partial", "warning", CircleDashed),
-    missing: s("Missing", "danger", CircleX),
-    unknown: s("Unknown", "muted", CircleHelp),
+    met: s(m.status_met, "success", Check),
+    partial: s(m.status_partial, "warning", CircleDashed),
+    missing: s(m.status_missing, "danger", CircleX),
+    unknown: s(m.status_unknown, "muted", CircleHelp),
   },
 } satisfies Record<string, Record<string, StatusMeta>>
 
@@ -239,7 +247,7 @@ export const TONE_CLASS: Record<Tone, string> = {
 }
 
 export function statusMeta<K extends StatusKind>(kind: K, value: StatusValue<K>): StatusMeta {
-  return (STATUS[kind] as Record<string, StatusMeta>)[value] ?? s(String(value), "muted", CircleHelp)
+  return (STATUS[kind] as Record<string, StatusMeta>)[value] ?? s(() => String(value), "muted", CircleHelp)
 }
 
 export interface StatusBadgeProps<K extends StatusKind> {
@@ -250,15 +258,16 @@ export interface StatusBadgeProps<K extends StatusKind> {
   className?: string
 }
 
-/** The status as glyph and word; the spec term reads in the chosen language (`t()`), a caller's `label` as given. */
+/** The status as glyph and word; the spec term reads in the chosen language, a caller's `label` as given. */
 export function StatusBadge<K extends StatusKind>({ kind, value, label, className }: StatusBadgeProps<K>) {
-  const t = useT()
+  // Subscribes to the language: the word comes from `meta.label`.
+  useMessages()
   const meta = statusMeta(kind, value)
   const Icon = meta.icon
   return (
     <Badge variant="outline" className={cn(STATUS_CLASS, TONE_CLASS[meta.tone], className)} data-status={`${kind}:${value}`}>
       <Icon aria-hidden="true" className={cn(value === "running" && "motion-safe:animate-spin")} />
-      {label ?? t(meta.label)}
+      {label ?? meta.label}
     </Badge>
   )
 }

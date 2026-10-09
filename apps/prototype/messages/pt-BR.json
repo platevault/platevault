@@ -1,0 +1,501 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "app_name": "PlateVault",
+  "app_document_title": "Protótipo PlateVault",
+  "verb_add": "Adicionar",
+  "verb_assign": "Atribuir",
+  "verb_cancel": "Cancelar",
+  "verb_choose": "Escolher",
+  "verb_clear": "Limpar",
+  "verb_close": "Fechar",
+  "verb_fix": "Corrigir",
+  "verb_open": "Abrir",
+  "verb_pause": "Pausar",
+  "verb_resume": "Retomar",
+  "verb_retry": "Tentar de novo",
+  "verb_review": "Revisar",
+  "verb_stack": "Empilhar",
+  "common_more": "Mais",
+  "common_locations": "Locais",
+  "common_runs": "Execuções",
+  "common_loading": "Carregando",
+  "common_prototype": "Protótipo",
+  "key_escape": "Esc",
+  "key_space": "Espaço",
+  "nav_home": "Início",
+  "nav_projects": "Projetos",
+  "nav_targets": "Alvos",
+  "nav_plan": "Plano",
+  "nav_library": "Biblioteca",
+  "nav_sessions": "Sessões",
+  "nav_calibration": "Calibração",
+  "nav_storage": "Armazenamento",
+  "nav_activity": "Atividade",
+  "nav_settings": "Configurações",
+  "nav_welcome": "Boas-vindas e configuração",
+  "nav_design_system": "Referência do design system",
+  "settings_group_general": "Geral",
+  "settings_group_processing": "Processamento",
+  "settings_appearance": "Aparência",
+  "settings_equipment": "Equipamento",
+  "settings_naming": "Nomenclatura",
+  "settings_sites": "Locais de observação",
+  "settings_target_lookup": "Busca de Alvos",
+  "settings_goal_templates": "Modelos de metas",
+  "settings_applications": "Aplicativos",
+  "settings_about": "Sobre este protótipo",
+  "shell_skip_to_content": "Pular para o conteúdo principal",
+  "shell_sidebar": "Barra lateral",
+  "shell_sidebar_show": "Mostrar barra lateral",
+  "shell_sidebar_hide": "Ocultar barra lateral",
+  "shell_navigation": "Navegação",
+  "shell_navigation_open": "Abrir navegação",
+  "shell_nav_main": "Principal",
+  "shell_nav_recent": "Recentes",
+  "shell_nav_utilities": "Utilitários",
+  "shell_nav_sessions_badge": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} precisa de atenção",
+        "countPlural=*": "{count} precisam de atenção"
+      }
+    }
+  ],
+  "shell_nav_projects_badge": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bloqueado",
+        "countPlural=*": "{count} bloqueados"
+      }
+    }
+  ],
+  "shell_next": "Próximo: {label}",
+  "shell_import": "Importar",
+  "shell_search_or_jump": "Buscar ou ir para…",
+  "shell_with_shortcut": "{label} ({shortcut})",
+  "shell_prototype_controls": "Controles do protótipo…",
+  "shell_theme": "Tema",
+  "shell_theme_named": "Tema: {name}",
+  "shell_theme_match_system": "Seguir o sistema",
+  "shell_language": "Idioma",
+  "shell_language_named": "Idioma: {name}",
+  "shell_not_found_doc_title": "Página não encontrada",
+  "shell_not_found_title": "Esta página não existe",
+  "shell_not_found_description": "O link pode ser de uma versão anterior do protótipo.",
+  "shell_not_found_home": "Ir para o Início",
+  "locale_machine_generated": "Tradução automática",
+  "history_back": "Voltar",
+  "history_forward": "Avançar",
+  "palette_title": "Paleta de comandos",
+  "palette_description": "Digite para buscar telas, registros e ações. Use as setas para mover e Enter para abrir.",
+  "palette_search_label": "Buscar telas, registros e ações",
+  "palette_empty": "Nenhum resultado. Tente o nome de um Alvo, uma tela como Sessões ou uma ação como Tema.",
+  "palette_group_go_to": "Ir para",
+  "palette_group_actions": "Ações",
+  "palette_settings_destination": "Configurações: {name}",
+  "palette_session_no_filter": "Sem filtro",
+  "palette_session_missing_object": "OBJECT ausente",
+  "palette_toggle_sidebar": "Alternar barra lateral",
+  "palette_open_simulation": "Abrir controles de simulação",
+  "palette_single_key_off": "Atalhos de uma tecla: desligados",
+  "palette_single_key_on": "Atalhos de uma tecla: ligados",
+  "shortcuts_title": "Atalhos de teclado",
+  "shortcuts_show": "Mostrar atalhos de teclado",
+  "shortcuts_description": "Os atalhos ficam desligados enquanto você digita em um campo.",
+  "shortcuts_single_key": "Atalhos de uma tecla",
+  "shortcuts_single_key_hint": "?, /, [ e sequências com G. Desligue se você usa entrada por voz ou pressiona teclas sem querer; {mod}K e {escape} continuam ligados.",
+  "shortcuts_search": "Buscar ou ir para qualquer lugar",
+  "shortcuts_focus_search": "Focar a busca ou o filtro da página",
+  "shortcuts_toggle_sidebar": "Recolher ou expandir a barra lateral",
+  "shortcuts_run_next": "Executar a próxima ação da execução ou do Projeto aberto",
+  "shortcuts_go_to_step": "Ir para a etapa 1 a 6 da execução ou do grupo de execuções aberto",
+  "shortcuts_context_menu": "Abrir o menu de contexto da linha em foco",
+  "shortcuts_go_to": "Ir para {name}",
+  "shortcuts_move_rows": "Mover entre as linhas da tabela",
+  "shortcuts_toggle_checkbox": "Marcar ou desmarcar a caixa em foco",
+  "shortcuts_close": "Fechar uma caixa de diálogo, um menu ou um painel",
+  "issues_title": "Problemas",
+  "issues_none": "Nenhum problema",
+  "issues_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} problema",
+        "countPlural=*": "{count} problemas"
+      }
+    }
+  ],
+  "issues_group_work": "Trabalho",
+  "issues_group_drift": "Alterações",
+  "issue_needs_target": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sem Alvo",
+        "countPlural=*": "{count} sem Alvo"
+      }
+    }
+  ],
+  "issue_not_in_project": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} fora de Projetos",
+        "countPlural=*": "{count} fora de Projetos"
+      }
+    }
+  ],
+  "issue_location_unreadable": "{name} ilegível",
+  "issue_location_offline": "{name} offline",
+  "issue_failed": "{name} falhou",
+  "issue_interrupted": "{name} interrompida",
+  "issue_to_review": "{name}: {count} para revisar",
+  "issue_blocked": "{name} bloqueada",
+  "issue_master_offered": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master oferecido",
+        "countPlural=*": "{count} masters oferecidos"
+      }
+    }
+  ],
+  "issue_to_stack": "{count} para empilhar",
+  "issue_frames_changed": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} alterado · {name}",
+        "countPlural=*": "{count} alterados · {name}"
+      }
+    }
+  ],
+  "issue_master_changed": "Master alterado · {name}",
+  "status_bar": "Status",
+  "status_bar_locations_online": "{online} de {total} online",
+  "status_bar_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} selecionado",
+        "countPlural=*": "{count} selecionados"
+      }
+    }
+  ],
+  "status_bar_selected_of": "{count} de {total} selecionados",
+  "status_bar_offline": "{count} offline",
+  "status_bar_runs_blocked": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bloqueada",
+        "countPlural=*": "{count} bloqueadas"
+      }
+    }
+  ],
+  "status_bar_calibration_waiting": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} calibração aguardando",
+        "countPlural=*": "{count} calibrações aguardando"
+      }
+    }
+  ],
+  "status_bar_more": "Mais {count}",
+  "status_bar_more_running": "Mais {count} em execução",
+  "status_bar_working": "Trabalhando",
+  "status_bar_idle": "Ocioso",
+  "status_bar_notifications": "Notificações",
+  "step_select": "Selecionar",
+  "step_review": "Revisão",
+  "step_calibrate": "Calibrar",
+  "step_prepare": "Preparar",
+  "step_results": "Resultados",
+  "step_done": "Concluído",
+  "record_missing_doc_title": "{noun}: não encontrado",
+  "record_missing_title": "Este registro ({noun}) não está no catálogo",
+  "record_missing_description": "O link pode ser de uma versão anterior do protótipo, ou o registro foi removido ao esvaziar a Lixeira. Sua biblioteca não foi alterada.",
+  "status_online": "Online",
+  "status_offline": "Offline",
+  "status_unreadable": "Ilegível",
+  "status_not_found": "Não encontrado",
+  "status_retired": "Aposentado",
+  "status_available": "Disponível",
+  "status_readable": "Legível",
+  "status_access_denied": "Acesso negado",
+  "status_not_checked": "Não verificado",
+  "status_not_indexed": "Não indexado",
+  "status_complete_scope": "Escopo completo",
+  "status_incomplete_scope": "Escopo incompleto",
+  "status_provisional": "Provisório",
+  "status_role_captures": "Capturas",
+  "status_role_calibration": "Calibração",
+  "status_role_results": "Resultados",
+  "status_role_archive": "Arquivo",
+  "status_not_set": "Não definido",
+  "status_unreviewed": "Não revisado",
+  "status_usable": "Utilizável",
+  "status_unusable": "Inutilizável",
+  "status_changed_content": "Conteúdo alterado",
+  "status_verification_pending": "Verificação pendente",
+  "status_rejected_for_project": "Rejeitado no Projeto",
+  "status_excluded_from_view": "Excluído da visualização",
+  "status_confirmed": "Confirmado",
+  "status_associated": "Associado",
+  "status_needs_review": "Precisa de revisão",
+  "status_unresolved": "Não resolvido",
+  "status_conflicting_copies": "Cópias conflitantes",
+  "status_running": "Em execução",
+  "status_paused": "Pausado",
+  "status_finished": "Concluído",
+  "status_partial": "Parcial",
+  "status_failed": "Falhou",
+  "status_canceled": "Cancelado",
+  "status_interrupted": "Interrompido",
+  "status_pending": "Pendente",
+  "status_done": "Concluído",
+  "status_blocked": "Bloqueado",
+  "status_skipped": "Ignorado",
+  "status_uncertain": "Incerto",
+  "status_ready": "Pronto",
+  "status_not_started": "Não iniciado",
+  "status_draft": "Rascunho",
+  "status_saved": "Salvo",
+  "status_prepared": "Preparado",
+  "status_unverified": "Não verificado",
+  "status_complete": "Completo",
+  "status_open": "Aberto",
+  "status_archived": "Arquivado",
+  "status_trashed": "Na lixeira",
+  "status_suggested": "Sugerido",
+  "status_accepted": "Aceito",
+  "status_exception": "Exceção",
+  "status_deferred": "Adiado",
+  "status_compatible": "Compatível",
+  "status_incompatible": "Incompatível",
+  "status_unknown": "Desconhecido",
+  "status_tool_recorded": "Registrado pela ferramenta",
+  "status_user_linked": "Vinculado pelo usuário",
+  "status_unknown_lineage": "Origem desconhecida",
+  "status_candidate": "Candidato",
+  "status_written": "Gravado",
+  "status_state_unknown": "Estado desconhecido",
+  "status_unchanged": "Inalterado",
+  "status_drifted": "Alterado",
+  "status_keep": "Manter",
+  "status_protected": "Protegido",
+  "status_adopted": "Adotado",
+  "status_measured": "Medido",
+  "status_verifying": "Verificando",
+  "status_failed_fit": "Ajuste falhou",
+  "status_not_measured": "Não medido",
+  "status_unsaved_changes": "Alterações não salvas",
+  "status_saving": "Salvando",
+  "status_not_saved": "Não salvo",
+  "status_changed_elsewhere": "Alterado em outro lugar",
+  "status_notifications_off": "Notificações desligadas",
+  "status_notifications_on": "Notificações ligadas",
+  "status_permission_denied": "Permissão negada",
+  "status_os_trash_supported": "Lixeira do sistema disponível",
+  "status_os_trash_unsupported": "Lixeira do sistema indisponível",
+  "status_manual": "Manual",
+  "status_detected": "Detectado",
+  "status_built_in": "Integrado",
+  "status_default_site": "Local padrão",
+  "status_met": "Atingido",
+  "status_missing": "Ausente",
+  "evidence_agrees": "Confere",
+  "evidence_conflicts": "Diverge",
+  "evidence_source_header": "Cabeçalho",
+  "evidence_source_pointing": "Apontamento",
+  "evidence_source_equipment_record": "Registro de equipamento",
+  "evidence_source_user": "Usuário",
+  "evidence_source_resolver": "Resolvedor",
+  "evidence_source_catalog": "Catálogo",
+  "evidence_column_source": "Origem",
+  "evidence_column_evidence": "Evidência",
+  "evidence_column_value": "Valor",
+  "evidence_column_result": "Resultado",
+  "coverage_frames_captured": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame capturado",
+        "countPlural=*": "{frames} frames capturados"
+      }
+    }
+  ],
+  "coverage_goal": "meta {duration}",
+  "coverage_captured": "Capturado",
+  "coverage_last_verified": "Última verificação {date}",
+  "coverage_unavailable": "Indisponível",
+  "filters_active": "Filtros ativos",
+  "filters_remove": "Remover filtro {name}",
+  "filters_none": "Nenhum filtro ativo",
+  "filters_clear": "Limpar filtros",
+  "table_loading": "Carregando {name}",
+  "table_select_all": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Selecionar o {count} exibido",
+        "countPlural=*": "Selecionar todos os {count} exibidos"
+      }
+    }
+  ],
+  "table_select_row": "Selecionar {name}",
+  "table_no_rows": "Nenhuma linha.",
+  "selection_count": [
+    {
+      "declarations": [
+        "input count",
+        "input noun",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} {noun} selecionado",
+        "countPlural=*": "{count} {noun}s selecionados"
+      }
+    }
+  ],
+  "selection_outside_filters": "Selecionados fora dos filtros atuais: {count}",
+  "selection_region": "Seleção",
+  "selection_show": "Mostrar selecionados",
+  "selection_clear": "Limpar seleção",
+  "save_review_current": "Ver a revisão atual",
+  "folder_picker_description": "Seletor de pastas do protótipo: volumes e pastas vêm do disco simulado.",
+  "folder_picker_volumes": "Volumes",
+  "folder_picker_up": "Subir uma pasta",
+  "folder_picker_path": "Caminho da pasta",
+  "folder_picker_live_denied": "{name}: acesso negado",
+  "folder_picker_live_count": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} pasta",
+        "countPlural=*": "{name}: {count} pastas"
+      }
+    }
+  ],
+  "folder_picker_denied_body": "O PlateVault não consegue listar esta pasta. Você ainda pode escolhê-la; a indexação a relata como ilegível até que o acesso seja restaurado.",
+  "folder_picker_empty": "Nenhuma pasta dentro de {name}. Escolha esta pasta ou suba um nível.",
+  "folder_picker_list": "Pastas em {name}",
+  "confirm_preview": "Prévia: nada é gravado até você confirmar.",
+  "confirm_changes": "Isto vai",
+  "confirm_unchanged": "Inalterado",
+  "operation_progress_label": "Progresso de {title}",
+  "operation_progress_value": "{done} de {total} {unit}, {percent}",
+  "operation_progress_count": "{done} de {total} {unit}",
+  "operation_show_fewer": "Mostrar menos",
+  "operation_show_all": "Mostrar todos os {count} itens",
+  "operation_started": "Iniciado em {date}",
+  "operation_settled": "concluído em {date}",
+  "refusal_details": "Detalhes",
+  "refusal_hide_details": "Ocultar detalhes",
+  "refusal_blockers": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} impedimento",
+        "countPlural=*": "{count} impedimentos"
+      }
+    }
+  ],
+  "tips_help": "Ajuda",
+  "tips_note": "Nota {number}",
+  "page_step_done": "(concluído)",
+  "ui_breadcrumb": "Trilha de navegação"
+}

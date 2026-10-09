@@ -29,8 +29,9 @@ import { nowIso, type PrototypeState, useStore } from "@/store/core"
 import { useStatusChips } from "@/store/issues"
 import { type Notice, type NoticeTone, useNotices } from "@/store/notifications"
 import { cancelOperation } from "@/store/operations"
-import { IssueRow, issueText, SEVERITY_TONE } from "./issues-hub"
-import { type Translate, useT } from "./preferences"
+import type { Messages } from "@/lib/i18n"
+import { IssueRow, issueCopy, SEVERITY_TONE } from "./issues-hub"
+import { useMessages } from "./preferences"
 import { useSelectionContext } from "./status-selection"
 
 const NARROW = "(max-width: 767.98px)"
@@ -42,8 +43,18 @@ const CHIP_ICON: Record<StatusChipId, LucideIcon> = { offline: Unplug, blocked: 
 /** Matches the chip row's `gap-1`. */
 const CHIP_GAP_PX = 4
 
-function chipText(t: Translate, chip: StatusChip): string {
-  return t(chip.label, { n: chip.count, name: chip.name ?? "" })
+/** The chip's words: a count by kind, or the one named location's issue ("NAS offline"). */
+function chipText(m: Messages, chip: StatusChip): string {
+  const named = chip.name !== null ? chip.issues[0] : undefined
+  if (named) return issueCopy(m, named).text
+  const { count } = chip
+  const text: Record<StatusChipId, () => string> = {
+    offline: () => m.status_bar_offline({ count }),
+    blocked: () => m.status_bar_runs_blocked({ count }),
+    "needs-target": () => m.issue_needs_target({ count }),
+    calibration: () => m.status_bar_calibration_waiting({ count }),
+  }
+  return text[chip.id]()
 }
 
 const selectLocations = (s: PrototypeState) => {
@@ -52,11 +63,11 @@ const selectLocations = (s: PrototypeState) => {
 }
 
 function LocationsItem({ narrow }: { narrow: boolean }) {
-  const t = useT()
+  const m = useMessages()
   const { online, total } = useStore(selectLocations)
-  const text = t("{n} of {total} online", { n: online, total })
+  const text = m.status_bar_locations_online({ online, total })
   return (
-    <Button variant="ghost" size="xs" render={<Link to="/settings/locations" />} className="shrink-0 text-muted-foreground" title={`${t("Locations")}: ${text}`} data-status-locations>
+    <Button variant="ghost" size="xs" render={<Link to="/settings/locations" />} className="shrink-0 text-muted-foreground" title={`${m.common_locations()}: ${text}`} data-status-locations>
       <HardDrive data-icon="inline-start" aria-hidden="true" />
       <span className={cn("tabular-nums", narrow && "sr-only")}>{text}</span>
     </Button>
@@ -64,13 +75,13 @@ function LocationsItem({ narrow }: { narrow: boolean }) {
 }
 
 function SelectionItem() {
-  const t = useT()
+  const m = useMessages()
   const selection = useSelectionContext()
   if (!selection) return null
   return (
     <span className="inline-flex shrink-0 items-center gap-1 border-l border-separator pl-2 text-foreground tabular-nums" data-status-selection>
       <SquareCheck aria-hidden="true" className="size-3 text-link" />
-      {selection.total !== null ? t("{n} of {total} selected", { n: selection.count, total: selection.total }) : t("{n} selected", { n: selection.count })}
+      {selection.total !== null ? m.status_bar_selected_of({ count: selection.count, total: selection.total }) : m.status_bar_selected({ count: selection.count })}
     </span>
   )
 }
@@ -87,15 +98,16 @@ function ChipIssues({ chip, onNavigate }: { chip: StatusChip; onNavigate: () => 
 
 /** One chip: a link to the action of its one issue, or a popover listing its issues. */
 function ChipControl({ chip }: { chip: StatusChip }) {
-  const t = useT()
+  const m = useMessages()
   const [open, setOpen] = useState(false)
   const Icon = CHIP_ICON[chip.id]
   const tone = SEVERITY_TONE[chip.severity]
-  const text = chipText(t, chip)
+  const text = chipText(m, chip)
   const only = chip.issues.length === 1 ? chip.issues[0]! : null
   if (only) {
+    const copy = issueCopy(m, only)
     return (
-      <Pill tone={tone} icon={Icon} link={only.action.link} title={`${issueText(t, only)} · ${t(only.action.label)}`}>
+      <Pill tone={tone} icon={Icon} link={only.action.link} title={`${copy.text} · ${copy.action}`}>
         {text}
       </Pill>
     )
@@ -115,9 +127,9 @@ function ChipControl({ chip }: { chip: StatusChip }) {
 
 /** Chips that do not fit: "+N", opening each with its issues. */
 function MoreChips({ chips }: { chips: StatusChip[] }) {
-  const t = useT()
+  const m = useMessages()
   const [open, setOpen] = useState(false)
-  const label = t("{n} more", { n: chips.length })
+  const label = m.status_bar_more({ count: chips.length })
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger className={pillClass("neutral", true)} title={label} aria-label={label} data-status-more="chips">
@@ -127,10 +139,10 @@ function MoreChips({ chips }: { chips: StatusChip[] }) {
         {chips.map((chip) => {
           const Icon = CHIP_ICON[chip.id]
           return (
-            <section key={chip.id} aria-label={chipText(t, chip)} className="border-b border-border last:border-0">
+            <section key={chip.id} aria-label={chipText(m, chip)} className="border-b border-border last:border-0">
               <h3 data-chrome className="flex items-center gap-1.5 px-3 pt-2 text-[0.6875rem] font-semibold text-muted-foreground">
                 <Icon aria-hidden="true" className="size-3" />
-                {chipText(t, chip)}
+                {chipText(m, chip)}
               </h3>
               <ChipIssues chip={chip} onNavigate={() => setOpen(false)} />
             </section>
@@ -146,12 +158,13 @@ function MoreChips({ chips }: { chips: StatusChip[] }) {
  * chip and the "+N" button, so the visible row never wraps or clips a chip.
  */
 function IssueChips() {
-  const t = useT()
+  const m = useMessages()
   const chips = useStatusChips()
   const box = useRef<HTMLDivElement>(null)
   const ruler = useRef<HTMLDivElement>(null)
   const [shown, setShown] = useState(chips.length)
-  const key = chips.map((c) => `${c.id}:${c.count}:${c.severity}:${c.name ?? ""}`).join("|")
+  // Keyed on the chip words, so a count, a name or a language change re-measures.
+  const key = chips.map((c) => `${c.id}:${c.severity}:${chipText(m, c)}`).join("|")
   useLayoutEffect(() => {
     const row = box.current
     const marks = ruler.current
@@ -175,10 +188,10 @@ function IssueChips() {
     const observer = new ResizeObserver(fit)
     observer.observe(row)
     return () => observer.disconnect()
-  }, [key, t])
+  }, [key])
   const hidden = chips.slice(shown)
   return (
-    <div ref={box} role="group" aria-label={t("Issues")} className="relative flex min-w-0 flex-1 items-center gap-1 overflow-hidden" data-status-chips>
+    <div ref={box} role="group" aria-label={m.issues_title()} className="relative flex min-w-0 flex-1 items-center gap-1 overflow-hidden" data-status-chips>
       {chips.slice(0, shown).map((chip) => (
         <ChipControl key={chip.id} chip={chip} />
       ))}
@@ -189,7 +202,7 @@ function IssueChips() {
           return (
             <span key={chip.id} className={pillClass(SEVERITY_TONE[chip.severity])}>
               <Icon />
-              <span>{chipText(t, chip)}</span>
+              <span>{chipText(m, chip)}</span>
             </span>
           )
         })}
@@ -201,17 +214,17 @@ function IssueChips() {
 
 /** A mini progress bar; work whose size is unknown (a tool stacking) pulses instead. */
 function MiniProgress({ value, label }: { value: number | null; label: string }) {
-  const t = useT()
+  const m = useMessages()
   if (value === null) {
-    return <span role="progressbar" aria-label={label} aria-valuetext={t("Working")} className="block h-1 w-10 shrink-0 animate-pulse rounded-full bg-primary/40 motion-reduce:animate-none" />
+    return <span role="progressbar" aria-label={label} aria-valuetext={m.status_bar_working()} className="block h-1 w-10 shrink-0 animate-pulse rounded-full bg-primary/40 motion-reduce:animate-none" />
   }
   return <Progress value={value} aria-label={label} className="w-10 shrink-0 gap-0 [&_[data-slot=progress-track]]:bg-foreground/15" />
 }
 
 function OperationItem({ op, expanded = false }: { op: Operation; expanded?: boolean }) {
-  const t = useT()
+  const m = useMessages()
   const pct = op.progress.total > 0 ? Math.round((op.progress.done / op.progress.total) * 100) : null
-  const word = op.status === "paused" ? t("Paused") : pct !== null ? `${pct}%` : ""
+  const word = op.status === "paused" ? m.status_paused() : pct !== null ? `${pct}%` : ""
   return (
     <div className={cn("group/op flex min-w-0 items-center gap-1.5", expanded ? "w-full" : "max-w-48")} data-operation={op.id}>
       <Link to="/activity" className={cn("min-w-0 truncate text-foreground hover:underline", expanded && "flex-1")} title={op.title}>
@@ -224,8 +237,8 @@ function OperationItem({ op, expanded = false }: { op: Operation; expanded?: boo
           <button
             type="button"
             onClick={() => cancelOperation(op.id)}
-            aria-label={`${t("Cancel")}: ${op.title}`}
-            title={t("Cancel")}
+            aria-label={`${m.verb_cancel()}: ${op.title}`}
+            title={m.verb_cancel()}
             className={cn(
               "inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground",
               !expanded && "absolute right-0 opacity-0 group-focus-within/op:opacity-100 group-hover/op:opacity-100",
@@ -247,16 +260,16 @@ const selectRunning = (s: PrototypeState) =>
 
 /** Running work, newest first: two inline from 1440 px, one below, the rest under "+N". */
 function RunningWork() {
-  const t = useT()
+  const m = useMessages()
   const running = useStore(selectRunning)
   const wide = useMediaQuery(WIDE)
   const [open, setOpen] = useState(false)
-  if (running.length === 0) return <span className="shrink-0 px-1">{t("Idle")}</span>
+  if (running.length === 0) return <span className="shrink-0 px-1">{m.status_bar_idle()}</span>
   const inline = running.slice(0, wide ? 2 : 1)
   const rest = running.length - inline.length
-  const label = t("{n} more running", { n: rest })
+  const label = m.status_bar_more_running({ count: rest })
   return (
-    <div role="group" aria-label={t("Running")} className="flex min-w-0 shrink items-center gap-3" data-status-work>
+    <div role="group" aria-label={m.status_running()} className="flex min-w-0 shrink items-center gap-3" data-status-work>
       {inline.map((op) => (
         <OperationItem key={op.id} op={op} />
       ))}
@@ -265,7 +278,7 @@ function RunningWork() {
           <PopoverTrigger className={pillClass("neutral", true)} title={label} aria-label={label} data-status-more="work">
             +{rest}
           </PopoverTrigger>
-          <PopoverContent side="top" align="end" className="w-80 gap-0 p-0" aria-label={t("Running")}>
+          <PopoverContent side="top" align="end" className="w-80 gap-0 p-0" aria-label={m.status_running()}>
             <ul className="py-1 text-xs">
               {running.map((op) => (
                 <li key={op.id} className="flex min-h-(--row-h) items-center px-3">
@@ -316,7 +329,7 @@ function NoticeRow({ notice, onNavigate }: { notice: Notice; onNavigate: () => v
 
 /** The last notification; its popover holds the history, newest first. */
 function LastNotification() {
-  const t = useT()
+  const m = useMessages()
   const notices = useNotices()
   const [open, setOpen] = useState(false)
   const latest = notices[0]
@@ -331,17 +344,17 @@ function LastNotification() {
         <PopoverTrigger
           render={<Button variant="ghost" size="xs" className="min-w-0 max-w-48 shrink justify-start text-muted-foreground min-[1440px]:max-w-72" />}
           title={latest.text}
-          aria-label={`${t("Notifications")}: ${latest.text}`}
+          aria-label={`${m.status_bar_notifications()}: ${latest.text}`}
           data-status-notice
         >
           <Glyph data-icon="inline-start" aria-hidden="true" className={className} />
           <span className="truncate">{latest.text}</span>
         </PopoverTrigger>
-        <PopoverContent side="top" align="end" className="w-96 gap-0 p-0" aria-label={t("Notifications")}>
+        <PopoverContent side="top" align="end" className="w-96 gap-0 p-0" aria-label={m.status_bar_notifications()}>
           <div data-chrome className="flex items-center gap-2 border-b border-border px-3 py-1.5">
-            <h2 className="flex-1 text-sm font-semibold">{t("Notifications")}</h2>
+            <h2 className="flex-1 text-sm font-semibold">{m.status_bar_notifications()}</h2>
             <Button variant="ghost" size="xs" className="text-link" render={<Link to="/activity" />} onClick={() => setOpen(false)}>
-              {t("Activity")}
+              {m.nav_activity()}
             </Button>
           </div>
           <ul className="max-h-[min(24rem,var(--available-height))] overflow-y-auto py-1">
@@ -356,10 +369,10 @@ function LastNotification() {
 }
 
 export function StatusBar() {
-  const t = useT()
+  const m = useMessages()
   const narrow = useMediaQuery(NARROW)
   return (
-    <footer data-chrome aria-label={t("Status")} className="flex h-6 shrink-0 items-center gap-2 border-t border-separator bg-chrome px-2 text-[0.6875rem] text-muted-foreground">
+    <footer data-chrome aria-label={m.status_bar()} className="flex h-6 shrink-0 items-center gap-2 border-t border-separator bg-chrome px-2 text-[0.6875rem] text-muted-foreground">
       <LocationsItem narrow={narrow} />
       <SelectionItem />
       <IssueChips />

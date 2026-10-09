@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useSyncExternalStore } from "react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useT } from "./preferences"
+import { useMessages } from "./preferences"
 
 /** The furthest history index reached since the last push, so Forward knows whether it can go. */
 let furthest = -1
@@ -34,7 +34,7 @@ function useHistoryPosition(): { canBack: boolean; canForward: boolean } {
 }
 
 export function HistoryControl() {
-  const t = useT()
+  const m = useMessages()
   const { history } = useRouter()
   const { canBack, canForward } = useHistoryPosition()
   const item = (label: string, Icon: typeof ChevronLeft, enabled: boolean, go: () => void) => (
@@ -46,9 +46,9 @@ export function HistoryControl() {
     </Tooltip>
   )
   return (
-    <div className="flex shrink-0 items-center" role="group" aria-label={`${t("Back")} / ${t("Forward")}`}>
-      {item(t("Back"), ChevronLeft, canBack, () => history.back())}
-      {item(t("Forward"), ChevronRight, canForward, () => history.forward())}
+    <div className="flex shrink-0 items-center" role="group" aria-label={`${m.history_back()} / ${m.history_forward()}`}>
+      {item(m.history_back(), ChevronLeft, canBack, () => history.back())}
+      {item(m.history_forward(), ChevronRight, canForward, () => history.forward())}
     </div>
   )
 }

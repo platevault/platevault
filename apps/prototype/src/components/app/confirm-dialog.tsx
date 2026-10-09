@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { useMessages } from "@/app/preferences"
 import type { CommitResult } from "@/store/core"
 import { ActionError } from "./feedback"
 
@@ -64,6 +65,7 @@ export function ConfirmDialog({
   onConfirm,
   focusAfterConfirm,
 }: ConfirmDialogProps) {
+  const m = useMessages()
   const [internalOpen, setInternalOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const confirmed = useRef(false)
@@ -112,11 +114,11 @@ export function ConfirmDialog({
         </AlertDialogHeader>
         <div className="space-y-2 text-sm">
           <p data-chrome className="text-[0.75rem] text-muted-foreground">
-            Preview: nothing is written until you confirm.
+            {m.confirm_preview()}
           </p>
           <div className="divide-y divide-separator overflow-hidden rounded-[0.3125rem] border border-separator bg-background">
-            <section aria-label="This will" className="px-3 py-2">
-              <h3 className="mb-1 text-xs font-medium text-muted-foreground">This will</h3>
+            <section aria-label={m.confirm_changes()} className="px-3 py-2">
+              <h3 className="mb-1 text-xs font-medium text-muted-foreground">{m.confirm_changes()}</h3>
               <ul className="space-y-0.5">
                 {shown.changes.map((change) => (
                   <li key={change} className="flex gap-2">
@@ -127,8 +129,8 @@ export function ConfirmDialog({
               </ul>
             </section>
             {shown.unchanged && shown.unchanged.length > 0 ? (
-              <section aria-label="Unchanged" className="bg-muted/40 px-3 py-2">
-                <h3 className="mb-1 text-xs font-medium text-muted-foreground">Unchanged</h3>
+              <section aria-label={m.confirm_unchanged()} className="bg-muted/40 px-3 py-2">
+                <h3 className="mb-1 text-xs font-medium text-muted-foreground">{m.confirm_unchanged()}</h3>
                 <ul className="space-y-0.5 text-muted-foreground">
                   {shown.unchanged.map((item) => (
                     <li key={item} className="flex gap-2">
@@ -143,9 +145,9 @@ export function ConfirmDialog({
           {error ? <ActionError message={error} /> : null}
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{m.verb_cancel()}</AlertDialogCancel>
           <AlertDialogAction variant={shown.tone === "destructive" ? "destructive" : "default"} onClick={confirm}>
-            {error ? "Retry" : shown.confirmLabel}
+            {error ? m.verb_retry() : shown.confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

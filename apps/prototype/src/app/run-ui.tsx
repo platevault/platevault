@@ -14,9 +14,11 @@
 import { createLink, useNavigate } from "@tanstack/react-router"
 import { Circle, CircleArrowRight, CircleCheck, CircleDashed, CircleEllipsis, Loader, OctagonX } from "lucide-react"
 import type { AnchorHTMLAttributes, Ref } from "react"
-import { GATE_LABEL, type GateState, type RunStepState, type StepLink } from "@/domain/derive"
+import type { GateState, RunStepState, StepLink } from "@/domain/derive"
+import type { RunStep } from "@/domain/types"
+import type { Messages } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { useT } from "./preferences"
+import { useMessages } from "./preferences"
 
 const GATE_GLYPH: Record<GateState, { icon: typeof Circle; className: string }> = {
   done: { icon: CircleCheck, className: "text-success" },
@@ -26,6 +28,33 @@ const GATE_GLYPH: Record<GateState, { icon: typeof Circle; className: string }> 
   running: { icon: Loader, className: "text-link motion-safe:animate-spin" },
   partial: { icon: CircleDashed, className: "text-warning" },
   idle: { icon: Circle, className: "text-muted-foreground" },
+}
+
+/** The gate word for a state: the step rail, the toolbar and every `GateLabel`. */
+export function gateWord(m: Messages, state: GateState): string {
+  const word: Record<GateState, () => string> = {
+    done: m.status_done,
+    ready: m.status_ready,
+    review: m.status_needs_review,
+    blocked: m.status_blocked,
+    running: m.status_running,
+    partial: m.status_partial,
+    idle: m.status_not_started,
+  }
+  return word[state]()
+}
+
+/** A run step's name: Select, Review, Calibrate, Prepare, Results, Done. */
+export function stepName(m: Messages, step: RunStep): string {
+  const name: Record<RunStep, () => string> = {
+    select: m.step_select,
+    review: m.step_review,
+    calibrate: m.step_calibrate,
+    prepare: m.step_prepare,
+    results: m.step_results,
+    done: m.step_done,
+  }
+  return name[step]()
 }
 
 /**
@@ -48,18 +77,18 @@ export function StepGlyph({ state, className }: { state: GateState; className?: 
 
 /** Glyph plus word: the gate state as a native status label, in the chosen language. */
 export function GateLabel({ state, label, className }: { state: GateState; label?: string; className?: string }) {
-  const t = useT()
+  const m = useMessages()
   return (
     <span className={cn("inline-flex items-center gap-1 text-[0.75rem] font-medium", className)} data-gate={state}>
       <StepGlyph state={state} />
-      {label ?? t(GATE_LABEL[state])}
+      {label ?? gateWord(m, state)}
     </span>
   )
 }
 
 /** A run's six steps with their gate glyph; the current step is named and marked (D-W3, PRJ-FR-20). `compact` names only the current step. */
 export function StepRail({ steps, current, label, compact = false }: { steps: RunStepState[]; current: string; label: string; compact?: boolean }) {
-  const t = useT()
+  const m = useMessages()
   return (
     <ol aria-label={label} className="flex min-w-0 flex-wrap items-center gap-x-0.5 gap-y-1">
       {steps.map((step, index) => {
@@ -68,12 +97,12 @@ export function StepRail({ steps, current, label, compact = false }: { steps: Ru
           <li
             key={step.id}
             aria-current={here ? "step" : undefined}
-            title={`${step.n} ${t(step.label)}: ${t(GATE_LABEL[step.state])}${step.status && step.status !== "-" ? ` · ${step.status}` : ""}`}
+            title={`${step.n} ${stepName(m, step.id)}: ${gateWord(m, step.state)}${step.status && step.status !== "-" ? ` · ${step.status}` : ""}`}
             className={cn("inline-flex h-5 items-center gap-1 rounded-[0.3125rem] px-1 text-[0.6875rem]", here ? "bg-foreground/[0.08] font-medium text-foreground" : "text-muted-foreground")}
           >
             <StepGlyph state={step.state} />
-            <span className={cn(compact && !here && "sr-only")}>{t(step.label)}</span>
-            <span className="sr-only">: {t(GATE_LABEL[step.state])}</span>
+            <span className={cn(compact && !here && "sr-only")}>{stepName(m, step.id)}</span>
+            <span className="sr-only">: {gateWord(m, step.state)}</span>
             {index < steps.length - 1 ? <span aria-hidden="true" className="ml-0.5 h-px w-1.5 bg-border" /> : null}
           </li>
         )

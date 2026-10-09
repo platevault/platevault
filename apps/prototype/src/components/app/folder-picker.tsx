@@ -7,6 +7,7 @@
  */
 import { ArrowUp, ChevronRight, Folder, FolderLock, HardDrive } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { listFolders, volumeForPath } from "@/domain/disk"
@@ -46,7 +47,8 @@ function startPath(disk: Disk, initialPath: string | null | undefined): string {
   return volumeRoots(disk).find((v) => v.mounted)?.mountPath ?? "/Volumes"
 }
 
-export function FolderPicker({ open, onOpenChange, title, description, initialPath, chooseVerb = "Choose", onChoose }: FolderPickerProps) {
+export function FolderPicker({ open, onOpenChange, title, description, initialPath, chooseVerb, onChoose }: FolderPickerProps) {
+  const m = useMessages()
   const disk = useStore((s) => s.disk)
   const [current, setCurrent] = useState(() => startPath(disk, initialPath))
   const listPane = useRef<HTMLDivElement>(null)
@@ -89,15 +91,15 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
         className="gap-0 p-0 sm:max-w-2xl"
         // Start where the user is: the first folder, else the current volume (never another volume).
         initialFocus={() =>
-          listPane.current?.querySelector<HTMLElement>("[data-folder-row]") ?? document.querySelector<HTMLElement>('nav[aria-label="Volumes"] [aria-current="location"]')
+          listPane.current?.querySelector<HTMLElement>("[data-folder-row]") ?? document.querySelector<HTMLElement>('nav[data-volumes] [aria-current="location"]')
         }
       >
         <DialogHeader className="border-b p-4">
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description ?? "Prototype folder chooser: volumes and folders come from the simulated disk."}</DialogDescription>
+          <DialogDescription>{description ?? m.folder_picker_description()}</DialogDescription>
         </DialogHeader>
         <div className="grid min-h-72 grid-cols-[11rem_minmax(0,1fr)]">
-          <nav aria-label="Volumes" className="border-r p-2">
+          <nav aria-label={m.folder_picker_volumes()} data-volumes className="border-r p-2">
             <ul className="space-y-0.5">
               {roots.map((volume) => {
                 const active = volume.mounted && isUnder(current, volume.mountPath)
@@ -117,7 +119,7 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
                     </Button>
                     {volume.mounted ? null : (
                       <p id={`${volume.id}-offline`} className="pl-8 text-xs text-muted-foreground">
-                        Offline
+                        {m.status_offline()}
                       </p>
                     )}
                   </li>
@@ -127,10 +129,10 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
           </nav>
           <div className="flex min-w-0 flex-col">
             <div className="flex items-center gap-1 border-b px-2 py-1.5">
-              <Button ref={upButton} variant="ghost" size="icon-sm" disabled={!parent} aria-label="Up one folder" onClick={() => parent && openFolder(parent)}>
+              <Button ref={upButton} variant="ghost" size="icon-sm" disabled={!parent} aria-label={m.folder_picker_up()} onClick={() => parent && openFolder(parent)}>
                 <ArrowUp aria-hidden="true" />
               </Button>
-              <nav aria-label="Folder path" className="min-w-0 flex-1">
+              <nav aria-label={m.folder_picker_path()} className="min-w-0 flex-1">
                 <ol className="flex min-w-0 flex-wrap items-center gap-0.5 text-sm">
                   {crumbs.map((crumb, index) => {
                     const last = index === crumbs.length - 1
@@ -155,24 +157,22 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
             </div>
             <div ref={listPane} className="max-h-80 min-h-0 flex-1 overflow-y-auto p-2">
               <p className="sr-only" aria-live="polite">
-                {open ? `${currentName}: ${denied ? "access denied" : `${folders.length} ${folders.length === 1 ? "folder" : "folders"}`}` : ""}
+                {open ? (denied ? m.folder_picker_live_denied({ name: currentName }) : m.folder_picker_live_count({ name: currentName, count: folders.length })) : ""}
               </p>
               {denied ? (
-                <Notice tone="warning" title="Access denied">
-                  PlateVault cannot list this folder. You can still choose it; indexing reports it as unreadable until access is restored.
+                <Notice tone="warning" title={m.status_access_denied()}>
+                  {m.folder_picker_denied_body()}
                 </Notice>
               ) : folders.length === 0 ? (
-                <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                  No folders inside {currentName}. Choose this folder, or go up one level.
-                </p>
+                <p className="px-2 py-6 text-center text-sm text-muted-foreground">{m.folder_picker_empty({ name: currentName })}</p>
               ) : (
-                <ul aria-label={`Folders in ${currentName}`} className="space-y-0.5">
+                <ul aria-label={m.folder_picker_list({ name: currentName })} className="space-y-0.5">
                   {folders.map((folder) => (
                     <li key={folder.path}>
                       <Button data-folder-row variant="ghost" size="sm" className="w-full justify-start" onClick={() => openFolder(folder.path)}>
                         {folder.denied ? <FolderLock aria-hidden="true" data-icon="inline-start" /> : <Folder aria-hidden="true" data-icon="inline-start" />}
                         <span className="truncate">{folder.name}</span>
-                        {folder.denied ? <span className="ml-auto text-xs text-muted-foreground">Access denied</span> : null}
+                        {folder.denied ? <span className="ml-auto text-xs text-muted-foreground">{m.status_access_denied()}</span> : null}
                       </Button>
                     </li>
                   ))}
@@ -184,7 +184,7 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
         <DialogFooter className="bottom-0 m-0 items-center rounded-b-xl sm:justify-between">
           <PathText path={current} className="min-w-0 text-muted-foreground" />
           <div className="flex shrink-0 gap-2">
-            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <DialogClose render={<Button variant="outline" />}>{m.verb_cancel()}</DialogClose>
             <Button
               ref={chooseButton}
               onClick={() => {
@@ -192,7 +192,7 @@ export function FolderPicker({ open, onOpenChange, title, description, initialPa
                 onOpenChange(false)
               }}
             >
-              {chooseVerb} {currentName}
+              {chooseVerb ?? m.verb_choose()} {currentName}
             </Button>
           </div>
         </DialogFooter>

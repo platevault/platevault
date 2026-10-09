@@ -12,11 +12,11 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Kbd } from "@/components/ui/kbd"
 import { groupHref, isTrashedSession, runHref } from "@/domain/derive"
 import { formatExposure, formatNight } from "@/lib/format"
+import { LOCALE_META, LOCALES } from "@/lib/i18n"
 import { useStore } from "@/store/core"
 import { SHELLS } from "./contributions"
 import { ALL_NAV_ITEMS, STATIC_DESTINATIONS } from "./navigation"
-import { LOCALES } from "@/lib/i18n"
-import { setLocale, setSingleKeyShortcuts, setTheme } from "./preferences"
+import { setLocale, setSingleKeyShortcuts, setTheme, useMessages, usePreferences } from "./preferences"
 import { THEMES } from "./themes"
 import type { PaletteCommand } from "./shell-contract"
 import { closePanel, openPanel, toggleSidebar, useShellUi } from "./ui-state"
@@ -24,73 +24,94 @@ import { closePanel, openPanel, toggleSidebar, useShellUi } from "./ui-state"
 const NO_COMMANDS = (): PaletteCommand[] => []
 const contributed = SHELLS.map((shell) => shell.useCommands ?? NO_COMMANDS)
 
+/** Contributed commands join the built-in Actions group through this `group` value. */
+const ACTIONS = "Actions"
+
 interface Group {
   value: string
+  /** The heading; a contributed group's `group` value as given. */
+  label: string
   items: PaletteCommand[]
 }
 
 function useCommands(): Group[] {
+  const m = useMessages()
+  const { locale } = usePreferences()
   const catalog = useStore((s) => s.catalog)
   const extra = contributed.flatMap((hook) => hook())
   return useMemo(() => {
+    // Built-in items carry their group heading, so typing the heading finds them.
+    const goTo = m.palette_group_go_to()
+    const targets = m.nav_targets()
+    const projects = m.nav_projects()
+    const runs = m.common_runs()
+    const sessions = m.nav_sessions()
+    const actions = m.palette_group_actions()
     const groups: Group[] = [
       {
-        value: "Go to",
+        value: "go-to",
+        label: goTo,
         items: [
-          ...ALL_NAV_ITEMS.map((item) => ({ id: `nav:${item.to}`, label: item.label, group: "Go to", to: item.to })),
-          ...STATIC_DESTINATIONS.map((d) => ({ id: `nav:${d.to}`, label: d.label, group: "Go to", to: d.to, keywords: d.keywords })),
+          ...ALL_NAV_ITEMS.map((item) => ({ id: `nav:${item.to}`, label: item.label, group: goTo, to: item.to })),
+          ...STATIC_DESTINATIONS.map((d) => ({ id: `nav:${d.to}`, label: d.label, group: goTo, to: d.to, keywords: d.keywords })),
         ],
       },
       {
-        value: "Targets",
-        items: Object.values(catalog.targets).map((t) => ({ id: `target:${t.id}`, label: t.name, group: "Targets", to: `/targets/${t.id}`, keywords: t.aliases.join(" ") })),
+        value: "targets",
+        label: targets,
+        items: Object.values(catalog.targets).map((t) => ({ id: `target:${t.id}`, label: t.name, group: targets, to: `/targets/${t.id}`, keywords: t.aliases.join(" ") })),
       },
       {
-        value: "Projects",
-        items: Object.values(catalog.projects).map((p) => ({ id: `project:${p.id}`, label: p.name, group: "Projects", to: `/projects/${p.id}` })),
+        value: "projects",
+        label: projects,
+        items: Object.values(catalog.projects).map((p) => ({ id: `project:${p.id}`, label: p.name, group: projects, to: `/projects/${p.id}` })),
       },
       {
-        value: "Runs",
+        value: "runs",
+        label: runs,
         items: [
           ...Object.values(catalog.runs)
             .filter((r) => !r.trashedAt && !r.groupId)
-            .map((r) => ({ id: `run:${r.id}`, label: r.name, group: "Runs", keywords: "processing run", to: runHref(r) })),
-          ...Object.values(catalog.runGroups).map((g) => ({ id: `group:${g.id}`, label: g.name, group: "Runs", keywords: "run group mosaic panels", to: groupHref(g) })),
+            .map((r) => ({ id: `run:${r.id}`, label: r.name, group: runs, keywords: "processing run", to: runHref(r) })),
+          ...Object.values(catalog.runGroups).map((g) => ({ id: `group:${g.id}`, label: g.name, group: runs, keywords: "run group mosaic panels", to: groupHref(g) })),
         ],
       },
       {
-        value: "Sessions",
+        value: "sessions",
+        label: sessions,
         items: Object.values(catalog.sessions)
           .filter((s) => s.imageType === "light" && !s.supersededBy && !isTrashedSession(catalog, s))
           .map((s) => ({
             id: `session:${s.id}`,
-            label: `${formatNight(s.night)} · ${s.channel ?? "No filter"} · ${formatExposure(s.exposureS)} · ${s.objectLabel ?? "Missing OBJECT"}`,
-            group: "Sessions",
+            label: `${formatNight(s.night)} · ${s.channel ?? m.palette_session_no_filter()} · ${formatExposure(s.exposureS)} · ${s.objectLabel ?? m.palette_session_missing_object()}`,
+            group: sessions,
             to: `/sessions/${s.id}`,
           })),
       },
       {
-        value: "Actions",
+        value: ACTIONS,
+        label: actions,
         items: [
-          ...THEMES.map((theme) => ({ id: `act:theme-${theme.id}`, label: `Theme: ${theme.label}`, group: "Actions", keywords: `appearance ${theme.scheme}`, run: () => setTheme(theme.id) })),
-          { id: "act:theme-system", label: "Theme: Match system", group: "Actions", keywords: "appearance auto", run: () => setTheme("system") },
-          ...LOCALES.map((locale) => ({ id: `act:locale-${locale.id}`, label: `Language: ${locale.label}`, group: "Actions", keywords: "language locale translation", run: () => setLocale(locale.id) })),
-          { id: "act:sidebar", label: "Toggle sidebar", group: "Actions", keywords: "collapse expand", run: () => toggleSidebar() },
-          { id: "act:sim", label: "Open simulation controls", group: "Actions", keywords: "prototype offline mount fault", run: () => openPanel("simulation") },
-          { id: "act:keys", label: "Show keyboard shortcuts", group: "Actions", keywords: "help keys", run: () => openPanel("shortcuts") },
-          { id: "act:single-keys-off", label: "Single-key shortcuts: Off", group: "Actions", keywords: "keyboard speech accessibility", run: () => setSingleKeyShortcuts(false) },
-          { id: "act:single-keys-on", label: "Single-key shortcuts: On", group: "Actions", keywords: "keyboard", run: () => setSingleKeyShortcuts(true) },
-          ...extra.filter((c) => c.group === "Actions"),
+          ...THEMES.map((theme) => ({ id: `act:theme-${theme.id}`, label: m.shell_theme_named({ name: theme.name }), group: actions, keywords: `appearance ${theme.scheme}`, run: () => setTheme(theme.id) })),
+          { id: "act:theme-system", label: m.shell_theme_named({ name: m.shell_theme_match_system() }), group: actions, keywords: "appearance auto", run: () => setTheme("system") },
+          ...LOCALES.map((id) => ({ id: `act:locale-${id}`, label: m.shell_language_named({ name: LOCALE_META[id].nativeName }), group: actions, keywords: "language locale translation", run: () => setLocale(id) })),
+          { id: "act:sidebar", label: m.palette_toggle_sidebar(), group: actions, keywords: "collapse expand", run: () => toggleSidebar() },
+          { id: "act:sim", label: m.palette_open_simulation(), group: actions, keywords: "prototype offline mount fault", run: () => openPanel("simulation") },
+          { id: "act:keys", label: m.shortcuts_show(), group: actions, keywords: "help keys", run: () => openPanel("shortcuts") },
+          { id: "act:single-keys-off", label: m.palette_single_key_off(), group: actions, keywords: "keyboard speech accessibility", run: () => setSingleKeyShortcuts(false) },
+          { id: "act:single-keys-on", label: m.palette_single_key_on(), group: actions, keywords: "keyboard", run: () => setSingleKeyShortcuts(true) },
+          ...extra.filter((c) => c.group === ACTIONS),
         ],
       },
     ]
-    const otherGroups = [...new Set(extra.filter((c) => c.group !== "Actions").map((c) => c.group))]
-    for (const value of otherGroups) groups.push({ value, items: extra.filter((c) => c.group === value) })
+    const otherGroups = [...new Set(extra.filter((c) => c.group !== ACTIONS).map((c) => c.group))]
+    for (const value of otherGroups) groups.push({ value, label: value, items: extra.filter((c) => c.group === value) })
     return groups.filter((g) => g.items.length > 0)
-  }, [catalog, extra])
+  }, [m, locale, catalog, extra])
 }
 
 export function CommandPalette() {
+  const m = useMessages()
   const { panel } = useShellUi()
   const router = useRouter()
   const groups = useCommands()
@@ -110,8 +131,8 @@ export function CommandPalette() {
   return (
     <Dialog open={panel === "palette"} onOpenChange={(open) => !open && closePanel()}>
       <DialogContent showCloseButton={false} className="top-24 max-w-xl translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl">
-        <DialogTitle className="sr-only">Command palette</DialogTitle>
-        <DialogDescription className="sr-only">Type to search surfaces, records and actions. Use arrow keys to move and Enter to open.</DialogDescription>
+        <DialogTitle className="sr-only">{m.palette_title()}</DialogTitle>
+        <DialogDescription className="sr-only">{m.palette_description()}</DialogDescription>
         <Autocomplete.Root
           inline
           open
@@ -127,8 +148,8 @@ export function CommandPalette() {
             <Search aria-hidden="true" className="size-4 text-muted-foreground" />
             <Autocomplete.Input
               data-palette-input
-              aria-label="Search surfaces, records and actions"
-              placeholder="Search or jump to…"
+              aria-label={m.palette_search_label()}
+              placeholder={m.shell_search_or_jump()}
               className="h-11 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               onKeyDown={(event) => {
                 if (event.key === "Enter" && highlighted.current) {
@@ -137,17 +158,15 @@ export function CommandPalette() {
                 }
               }}
             />
-            <Kbd>Esc</Kbd>
+            <Kbd>{m.key_escape()}</Kbd>
           </div>
           <Autocomplete.Empty>
-            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-              No matches. Try a Target name, a surface such as Sessions, or an action such as Theme.
-            </p>
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">{m.palette_empty()}</p>
           </Autocomplete.Empty>
           <Autocomplete.List className="max-h-[min(60dvh,26rem)] overflow-y-auto overscroll-contain p-1">
             {(group: Group) => (
               <Autocomplete.Group key={group.value} items={group.items} className="pb-1">
-                <Autocomplete.GroupLabel className="px-2 py-1.5 text-xs text-muted-foreground">{group.value}</Autocomplete.GroupLabel>
+                <Autocomplete.GroupLabel className="px-2 py-1.5 text-xs text-muted-foreground">{group.label}</Autocomplete.GroupLabel>
                 <Autocomplete.Collection>
                   {(item: PaletteCommand) => (
                     <Autocomplete.Item

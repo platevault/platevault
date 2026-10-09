@@ -1,39 +1,55 @@
 /**
- * Locale registry and the tiny string-table helper (foundation-owned).
+ * The message catalogue and the shipped locales (foundation-owned).
  *
- * en-GB is the source language: a message key is its en-GB string, so code
- * reads naturally and a string with no translation falls back to it. Other
- * locales carry a table keyed by those source strings. pt-BR is
- * machine-generated and covers the shell, navigation, toolbar, Issues hub and
- * status words; screens route only shell-shared words through `t()`.
+ * Every user-visible string comes from messages/en-GB.json, compiled by
+ * Paraglide into type-safe functions under src/paraglide/ (generated and
+ * git-ignored: `pnpm i18n:compile`, or the Vite plugin in dev and build).
+ * Import `m` from here, never from the generated path:
  *
- * Placeholders are `{name}`; `translate("pt-BR", "{n} offline", { n: 2 })`.
- * Components use `useT()` from `src/app/preferences.ts`, which re-renders on
- * a language change.
+ *   m.nav_home()                       // plain message
+ *   m.issues_count({ count })          // interpolation and plural, type-checked
+ *
+ * A React component takes the catalogue from `useMessages()`
+ * (src/app/preferences.ts) instead, so it re-renders when the language
+ * changes. The active locale is the saved preference, which Paraglide reads
+ * through the "custom-preferences" strategy registered there. Conventions:
+ * design/I18N.md.
  */
-import { PT_BR } from "./messages/pt-BR"
+import { m } from "@/paraglide/messages"
+import type { Locale } from "@/paraglide/runtime"
 
-export const LOCALES = [
-  { id: "en-GB", label: "English (UK)", machineGenerated: false },
-  { id: "pt-BR", label: "Português (Brasil)", machineGenerated: true },
-] as const
+export { m }
+export { baseLocale as DEFAULT_LOCALE, isLocale, locales as LOCALES, type Locale } from "@/paraglide/runtime"
 
-export type Locale = (typeof LOCALES)[number]["id"]
+/** The catalogue's type, for helpers that take `m` from a component's `useMessages()`. */
+export type Messages = typeof m
 
-export const DEFAULT_LOCALE: Locale = "en-GB"
+/**
+ * How much human scrutiny a catalogue has had. `source` is the catalogue the
+ * others are translated from, so "reviewed" does not apply to it.
+ */
+export type LocaleReviewStatus = "source" | "reviewed" | "machine-generated"
 
-export function isLocale(value: string): value is Locale {
-  return LOCALES.some((locale) => locale.id === value)
+export interface LocaleMeta {
+  id: Locale
+  /** The language's own name for itself, in its own script: the accessible name of the choice. */
+  nativeName: string
+  /**
+   * Decorative only, never the accessible name: a flag denotes a country,
+   * not a language, and a screen reader announcing "flag of Brazil" is noise.
+   */
+  flag: string
+  /** An unreviewed translation must be identifiable as such in the chooser. */
+  reviewStatus: LocaleReviewStatus
 }
 
-const TABLES: Record<Locale, Readonly<Record<string, string>> | null> = {
-  "en-GB": null,
-  "pt-BR": PT_BR,
+/** Keyed by `Locale`, so a locale added to project.inlang/settings.json without an entry here fails typecheck. */
+export const LOCALE_META: Record<Locale, LocaleMeta> = {
+  "en-GB": { id: "en-GB", nativeName: "English (UK)", flag: "🇬🇧", reviewStatus: "source" },
+  "pt-BR": { id: "pt-BR", nativeName: "Português (Brasil)", flag: "🇧🇷", reviewStatus: "machine-generated" },
 }
 
-/** The string in `locale`, or the en-GB source when the table has none; `{name}` placeholders filled from `vars`. */
-export function translate(locale: Locale, source: string, vars?: Record<string, string | number>): string {
-  const text = TABLES[locale]?.[source] ?? source
-  if (!vars) return text
-  return text.replace(/\{(\w+)\}/g, (match, key: string) => (key in vars ? String(vars[key]) : match))
+/** Whether the chooser marks the locale "Machine-generated": `source` and `reviewed` are both trustworthy. */
+export function needsReviewNotice(id: Locale): boolean {
+  return LOCALE_META[id].reviewStatus === "machine-generated"
 }

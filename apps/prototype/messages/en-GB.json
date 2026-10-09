@@ -1,0 +1,501 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "app_name": "PlateVault",
+  "app_document_title": "PlateVault prototype",
+  "verb_add": "Add",
+  "verb_assign": "Assign",
+  "verb_cancel": "Cancel",
+  "verb_choose": "Choose",
+  "verb_clear": "Clear",
+  "verb_close": "Close",
+  "verb_fix": "Fix",
+  "verb_open": "Open",
+  "verb_pause": "Pause",
+  "verb_resume": "Resume",
+  "verb_retry": "Retry",
+  "verb_review": "Review",
+  "verb_stack": "Stack",
+  "common_more": "More",
+  "common_locations": "Locations",
+  "common_runs": "Runs",
+  "common_loading": "Loading",
+  "common_prototype": "Prototype",
+  "key_escape": "Esc",
+  "key_space": "Space",
+  "nav_home": "Home",
+  "nav_projects": "Projects",
+  "nav_targets": "Targets",
+  "nav_plan": "Plan",
+  "nav_library": "Library",
+  "nav_sessions": "Sessions",
+  "nav_calibration": "Calibration",
+  "nav_storage": "Storage",
+  "nav_activity": "Activity",
+  "nav_settings": "Settings",
+  "nav_welcome": "Welcome and setup",
+  "nav_design_system": "Design system reference",
+  "settings_group_general": "General",
+  "settings_group_processing": "Processing",
+  "settings_appearance": "Appearance",
+  "settings_equipment": "Equipment",
+  "settings_naming": "Naming",
+  "settings_sites": "Observing sites",
+  "settings_target_lookup": "Target lookup",
+  "settings_goal_templates": "Goal templates",
+  "settings_applications": "Applications",
+  "settings_about": "About this prototype",
+  "shell_skip_to_content": "Skip to main content",
+  "shell_sidebar": "Sidebar",
+  "shell_sidebar_show": "Show sidebar",
+  "shell_sidebar_hide": "Hide sidebar",
+  "shell_navigation": "Navigation",
+  "shell_navigation_open": "Open navigation",
+  "shell_nav_main": "Main",
+  "shell_nav_recent": "Recent",
+  "shell_nav_utilities": "Utilities",
+  "shell_nav_sessions_badge": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} needs attention",
+        "countPlural=*": "{count} need attention"
+      }
+    }
+  ],
+  "shell_nav_projects_badge": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} blocked",
+        "countPlural=*": "{count} blocked"
+      }
+    }
+  ],
+  "shell_next": "Next: {label}",
+  "shell_import": "Import",
+  "shell_search_or_jump": "Search or jump to…",
+  "shell_with_shortcut": "{label} ({shortcut})",
+  "shell_prototype_controls": "Prototype controls…",
+  "shell_theme": "Theme",
+  "shell_theme_named": "Theme: {name}",
+  "shell_theme_match_system": "Match system",
+  "shell_language": "Language",
+  "shell_language_named": "Language: {name}",
+  "shell_not_found_doc_title": "Page not found",
+  "shell_not_found_title": "This page does not exist",
+  "shell_not_found_description": "The link may come from an older prototype build.",
+  "shell_not_found_home": "Go to Home",
+  "locale_machine_generated": "Machine-generated",
+  "history_back": "Back",
+  "history_forward": "Forward",
+  "palette_title": "Command palette",
+  "palette_description": "Type to search surfaces, records and actions. Use arrow keys to move and Enter to open.",
+  "palette_search_label": "Search surfaces, records and actions",
+  "palette_empty": "No matches. Try a Target name, a surface such as Sessions, or an action such as Theme.",
+  "palette_group_go_to": "Go to",
+  "palette_group_actions": "Actions",
+  "palette_settings_destination": "Settings: {name}",
+  "palette_session_no_filter": "No filter",
+  "palette_session_missing_object": "Missing OBJECT",
+  "palette_toggle_sidebar": "Toggle sidebar",
+  "palette_open_simulation": "Open simulation controls",
+  "palette_single_key_off": "Single-key shortcuts: Off",
+  "palette_single_key_on": "Single-key shortcuts: On",
+  "shortcuts_title": "Keyboard shortcuts",
+  "shortcuts_show": "Show keyboard shortcuts",
+  "shortcuts_description": "Shortcuts are off while you type in a field.",
+  "shortcuts_single_key": "Single-key shortcuts",
+  "shortcuts_single_key_hint": "?, /, [ and G sequences. Turn off if you use speech input or press keys by accident; {mod}K and {escape} stay on.",
+  "shortcuts_search": "Search or jump to anything",
+  "shortcuts_focus_search": "Focus the page search or filter",
+  "shortcuts_toggle_sidebar": "Collapse or expand the sidebar",
+  "shortcuts_run_next": "Run the Next action of the open run or Project",
+  "shortcuts_go_to_step": "Go to step 1 to 6 of the open run or run group",
+  "shortcuts_context_menu": "Open the context menu of the focused row",
+  "shortcuts_go_to": "Go to {name}",
+  "shortcuts_move_rows": "Move between table rows",
+  "shortcuts_toggle_checkbox": "Toggle the focused checkbox",
+  "shortcuts_close": "Close a dialog, menu or panel",
+  "issues_title": "Issues",
+  "issues_none": "No issues",
+  "issues_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} issue",
+        "countPlural=*": "{count} issues"
+      }
+    }
+  ],
+  "issues_group_work": "Work",
+  "issues_group_drift": "Drift",
+  "issue_needs_target": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} needs a Target",
+        "countPlural=*": "{count} need a Target"
+      }
+    }
+  ],
+  "issue_not_in_project": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} not in a Project",
+        "countPlural=*": "{count} not in a Project"
+      }
+    }
+  ],
+  "issue_location_unreadable": "{name} unreadable",
+  "issue_location_offline": "{name} offline",
+  "issue_failed": "{name} failed",
+  "issue_interrupted": "{name} interrupted",
+  "issue_to_review": "{name}: {count} to review",
+  "issue_blocked": "{name} blocked",
+  "issue_master_offered": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} master offered",
+        "countPlural=*": "{count} masters offered"
+      }
+    }
+  ],
+  "issue_to_stack": "{count} to stack",
+  "issue_frames_changed": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} changed · {name}",
+        "countPlural=*": "{count} changed · {name}"
+      }
+    }
+  ],
+  "issue_master_changed": "Master changed · {name}",
+  "status_bar": "Status",
+  "status_bar_locations_online": "{online} of {total} online",
+  "status_bar_selected": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} selected",
+        "countPlural=*": "{count} selected"
+      }
+    }
+  ],
+  "status_bar_selected_of": "{count} of {total} selected",
+  "status_bar_offline": "{count} offline",
+  "status_bar_runs_blocked": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} blocked",
+        "countPlural=*": "{count} blocked"
+      }
+    }
+  ],
+  "status_bar_calibration_waiting": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} calibration waiting",
+        "countPlural=*": "{count} calibrations waiting"
+      }
+    }
+  ],
+  "status_bar_more": "{count} more",
+  "status_bar_more_running": "{count} more running",
+  "status_bar_working": "Working",
+  "status_bar_idle": "Idle",
+  "status_bar_notifications": "Notifications",
+  "step_select": "Select",
+  "step_review": "Review",
+  "step_calibrate": "Calibrate",
+  "step_prepare": "Prepare",
+  "step_results": "Results",
+  "step_done": "Done",
+  "record_missing_doc_title": "{noun} not found",
+  "record_missing_title": "This {noun} is not in the catalog",
+  "record_missing_description": "The link may come from an older prototype build, or the record was removed by Empty Trash. Your library is unchanged.",
+  "status_online": "Online",
+  "status_offline": "Offline",
+  "status_unreadable": "Unreadable",
+  "status_not_found": "Not found",
+  "status_retired": "Retired",
+  "status_available": "Available",
+  "status_readable": "Readable",
+  "status_access_denied": "Access denied",
+  "status_not_checked": "Not checked",
+  "status_not_indexed": "Not indexed",
+  "status_complete_scope": "Complete scope",
+  "status_incomplete_scope": "Incomplete scope",
+  "status_provisional": "Provisional",
+  "status_role_captures": "Captures",
+  "status_role_calibration": "Calibration",
+  "status_role_results": "Results",
+  "status_role_archive": "Archive",
+  "status_not_set": "Not set",
+  "status_unreviewed": "Unreviewed",
+  "status_usable": "Usable",
+  "status_unusable": "Unusable",
+  "status_changed_content": "Changed content",
+  "status_verification_pending": "Verification pending",
+  "status_rejected_for_project": "Rejected for Project",
+  "status_excluded_from_view": "Excluded from View",
+  "status_confirmed": "Confirmed",
+  "status_associated": "Associated",
+  "status_needs_review": "Needs review",
+  "status_unresolved": "Unresolved",
+  "status_conflicting_copies": "Conflicting copies",
+  "status_running": "Running",
+  "status_paused": "Paused",
+  "status_finished": "Finished",
+  "status_partial": "Partial",
+  "status_failed": "Failed",
+  "status_canceled": "Canceled",
+  "status_interrupted": "Interrupted",
+  "status_pending": "Pending",
+  "status_done": "Done",
+  "status_blocked": "Blocked",
+  "status_skipped": "Skipped",
+  "status_uncertain": "Uncertain",
+  "status_ready": "Ready",
+  "status_not_started": "Not started",
+  "status_draft": "Draft",
+  "status_saved": "Saved",
+  "status_prepared": "Prepared",
+  "status_unverified": "Unverified",
+  "status_complete": "Complete",
+  "status_open": "Open",
+  "status_archived": "Archived",
+  "status_trashed": "Trashed",
+  "status_suggested": "Suggested",
+  "status_accepted": "Accepted",
+  "status_exception": "Exception",
+  "status_deferred": "Deferred",
+  "status_compatible": "Compatible",
+  "status_incompatible": "Incompatible",
+  "status_unknown": "Unknown",
+  "status_tool_recorded": "Tool-recorded",
+  "status_user_linked": "User-linked",
+  "status_unknown_lineage": "Unknown lineage",
+  "status_candidate": "Candidate",
+  "status_written": "Written",
+  "status_state_unknown": "State unknown",
+  "status_unchanged": "Unchanged",
+  "status_drifted": "Drifted",
+  "status_keep": "Keep",
+  "status_protected": "Protected",
+  "status_adopted": "Adopted",
+  "status_measured": "Measured",
+  "status_verifying": "Verifying",
+  "status_failed_fit": "Failed fit",
+  "status_not_measured": "Not measured",
+  "status_unsaved_changes": "Unsaved changes",
+  "status_saving": "Saving",
+  "status_not_saved": "Not saved",
+  "status_changed_elsewhere": "Changed elsewhere",
+  "status_notifications_off": "Notifications off",
+  "status_notifications_on": "Notifications on",
+  "status_permission_denied": "Permission denied",
+  "status_os_trash_supported": "OS Trash supported",
+  "status_os_trash_unsupported": "OS Trash unsupported",
+  "status_manual": "Manual",
+  "status_detected": "Detected",
+  "status_built_in": "Built-in",
+  "status_default_site": "Default site",
+  "status_met": "Met",
+  "status_missing": "Missing",
+  "evidence_agrees": "Agrees",
+  "evidence_conflicts": "Conflicts",
+  "evidence_source_header": "Header",
+  "evidence_source_pointing": "Pointing",
+  "evidence_source_equipment_record": "Equipment record",
+  "evidence_source_user": "User",
+  "evidence_source_resolver": "Resolver",
+  "evidence_source_catalog": "Catalog",
+  "evidence_column_source": "Source",
+  "evidence_column_evidence": "Evidence",
+  "evidence_column_value": "Value",
+  "evidence_column_result": "Result",
+  "coverage_frames_captured": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame captured",
+        "countPlural=*": "{frames} frames captured"
+      }
+    }
+  ],
+  "coverage_goal": "goal {duration}",
+  "coverage_captured": "Captured",
+  "coverage_last_verified": "Last verified {date}",
+  "coverage_unavailable": "Unavailable",
+  "filters_active": "Active filters",
+  "filters_remove": "Remove filter {name}",
+  "filters_none": "No active filters",
+  "filters_clear": "Clear filters",
+  "table_loading": "Loading {name}",
+  "table_select_all": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Select all {count} shown",
+        "countPlural=*": "Select all {count} shown"
+      }
+    }
+  ],
+  "table_select_row": "Select {name}",
+  "table_no_rows": "No rows.",
+  "selection_count": [
+    {
+      "declarations": [
+        "input count",
+        "input noun",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} {noun} selected",
+        "countPlural=*": "{count} {noun}s selected"
+      }
+    }
+  ],
+  "selection_outside_filters": "Selected outside current filters: {count}",
+  "selection_region": "Selection",
+  "selection_show": "Show selected",
+  "selection_clear": "Clear selection",
+  "save_review_current": "Review current revision",
+  "folder_picker_description": "Prototype folder chooser: volumes and folders come from the simulated disk.",
+  "folder_picker_volumes": "Volumes",
+  "folder_picker_up": "Up one folder",
+  "folder_picker_path": "Folder path",
+  "folder_picker_live_denied": "{name}: access denied",
+  "folder_picker_live_count": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} folder",
+        "countPlural=*": "{name}: {count} folders"
+      }
+    }
+  ],
+  "folder_picker_denied_body": "PlateVault cannot list this folder. You can still choose it; indexing reports it as unreadable until access is restored.",
+  "folder_picker_empty": "No folders inside {name}. Choose this folder, or go up one level.",
+  "folder_picker_list": "Folders in {name}",
+  "confirm_preview": "Preview: nothing is written until you confirm.",
+  "confirm_changes": "This will",
+  "confirm_unchanged": "Unchanged",
+  "operation_progress_label": "{title} progress",
+  "operation_progress_value": "{done} of {total} {unit}, {percent}",
+  "operation_progress_count": "{done} of {total} {unit}",
+  "operation_show_fewer": "Show fewer",
+  "operation_show_all": "Show all {count} items",
+  "operation_started": "Started {date}",
+  "operation_settled": "settled {date}",
+  "refusal_details": "Details",
+  "refusal_hide_details": "Hide details",
+  "refusal_blockers": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} blocker",
+        "countPlural=*": "{count} blockers"
+      }
+    }
+  ],
+  "tips_help": "Help",
+  "tips_note": "Note {number}",
+  "page_step_done": "(done)",
+  "ui_breadcrumb": "Breadcrumb"
+}

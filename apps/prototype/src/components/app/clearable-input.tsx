@@ -6,7 +6,7 @@
  */
 import { Search, X } from "lucide-react"
 import { type ComponentProps, useRef } from "react"
-import { useT } from "@/app/preferences"
+import { useMessages } from "@/app/preferences"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
@@ -20,7 +20,7 @@ export interface ClearableInputProps extends Omit<ComponentProps<"input">, "valu
 }
 
 export function ClearableInput({ value, onValueChange, search = false, wrapperClassName, className, onKeyDown, ...props }: ClearableInputProps) {
-  const t = useT()
+  const m = useMessages()
   const input = useRef<HTMLInputElement>(null)
   const clear = () => {
     onValueChange("")
@@ -51,7 +51,7 @@ export function ClearableInput({ value, onValueChange, search = false, wrapperCl
         <button
           type="button"
           onClick={clear}
-          aria-label={t("Clear")}
+          aria-label={m.verb_clear()}
           className="absolute top-1/2 right-1 inline-flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-accent-foreground"
         >
           <X aria-hidden="true" className="size-3" />

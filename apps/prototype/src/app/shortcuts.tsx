@@ -9,12 +9,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import type { Messages } from "@/lib/i18n"
 import { ALL_NAV_ITEMS } from "./navigation"
-import { getPreferences, setSingleKeyShortcuts, usePreferences } from "./preferences"
+import { getPreferences, setSingleKeyShortcuts, useMessages, usePreferences } from "./preferences"
 import { closePanel, openPanel, toggleSidebar, useShellUi } from "./ui-state"
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+/** The modifier's key-cap legend, printed on the key and the same in every shipped locale. */
 export const MOD_LABEL = isMac ? "⌘" : "Ctrl"
+/** The command palette's chord, as printed on the keys. */
+export const PALETTE_SHORTCUT = `${MOD_LABEL} K`
 
 function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -78,21 +82,25 @@ export function useGlobalShortcuts() {
   }, [router])
 }
 
-export const SHORTCUTS: Array<{ keys: string[]; label: string }> = [
-  { keys: [MOD_LABEL, "K"], label: "Search or jump to anything" },
-  { keys: ["?"], label: "Show keyboard shortcuts" },
-  { keys: ["/"], label: "Focus the page search or filter" },
-  { keys: ["["], label: "Collapse or expand the sidebar" },
-  { keys: [MOD_LABEL, "↩"], label: "Run the Next action of the open run or Project" },
-  { keys: ["⌃", "1–6"], label: "Go to step 1 to 6 of the open run or run group" },
-  { keys: ["⇧", "F10"], label: "Open the context menu of the focused row" },
-  ...ALL_NAV_ITEMS.map((item) => ({ keys: ["G", item.goKey === "," ? "," : item.goKey.toUpperCase()], label: `Go to ${item.label}` })),
-  { keys: ["↑", "↓"], label: "Move between table rows" },
-  { keys: ["Space"], label: "Toggle the focused checkbox" },
-  { keys: ["Esc"], label: "Close a dialog, menu or panel" },
-]
+/** Every shortcut in the dialog, in the chosen language. */
+function shortcutRows(m: Messages): Array<{ keys: string[]; label: string }> {
+  return [
+    { keys: [MOD_LABEL, "K"], label: m.shortcuts_search() },
+    { keys: ["?"], label: m.shortcuts_show() },
+    { keys: ["/"], label: m.shortcuts_focus_search() },
+    { keys: ["["], label: m.shortcuts_toggle_sidebar() },
+    { keys: [MOD_LABEL, "↩"], label: m.shortcuts_run_next() },
+    { keys: ["⌃", "1–6"], label: m.shortcuts_go_to_step() },
+    { keys: ["⇧", "F10"], label: m.shortcuts_context_menu() },
+    ...ALL_NAV_ITEMS.map((item) => ({ keys: ["G", item.goKey === "," ? "," : item.goKey.toUpperCase()], label: m.shortcuts_go_to({ name: item.label }) })),
+    { keys: ["↑", "↓"], label: m.shortcuts_move_rows() },
+    { keys: [m.key_space()], label: m.shortcuts_toggle_checkbox() },
+    { keys: [m.key_escape()], label: m.shortcuts_close() },
+  ]
+}
 
 export function ShortcutsDialog() {
+  const m = useMessages()
   const { panel } = useShellUi()
   const { singleKeyShortcuts } = usePreferences()
   const switchId = useId()
@@ -100,20 +108,18 @@ export function ShortcutsDialog() {
     <Dialog open={panel === "shortcuts"} onOpenChange={(open) => !open && closePanel()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Keyboard shortcuts</DialogTitle>
-          <DialogDescription>Shortcuts are off while you type in a field.</DialogDescription>
+          <DialogTitle>{m.shortcuts_title()}</DialogTitle>
+          <DialogDescription>{m.shortcuts_description()}</DialogDescription>
         </DialogHeader>
         <div className="flex items-start justify-between gap-4 rounded-md border px-3 py-2.5">
           <div className="space-y-0.5">
-            <Label htmlFor={switchId}>Single-key shortcuts</Label>
-            <p className="text-xs text-muted-foreground text-pretty">
-              ?, /, [ and G sequences. Turn off if you use speech input or press keys by accident; {MOD_LABEL}K and Esc stay on.
-            </p>
+            <Label htmlFor={switchId}>{m.shortcuts_single_key()}</Label>
+            <p className="text-xs text-muted-foreground text-pretty">{m.shortcuts_single_key_hint({ mod: MOD_LABEL, escape: m.key_escape() })}</p>
           </div>
           <Switch id={switchId} checked={singleKeyShortcuts} onCheckedChange={(value) => setSingleKeyShortcuts(value)} />
         </div>
         <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-2 text-sm">
-          {SHORTCUTS.map((shortcut) => (
+          {shortcutRows(m).map((shortcut) => (
             <div key={shortcut.label} className="contents">
               <dt>{shortcut.label}</dt>
               <dd>
