@@ -12,7 +12,7 @@ import {
   liveAssetIds,
   isTrashedSession,
   projectCandidates,
-  rigName,
+  rigRef,
   runCandidates,
   sessionRigId,
   sessionsNeedingWork,
@@ -20,7 +20,7 @@ import {
 } from "@/domain/derive"
 import { effectiveExposureS, qualityApplicability } from "@/domain/library"
 import type { Catalog, Project, ProjectId, Run, Session, SessionId } from "@/domain/types"
-import type { Messages } from "@/lib/i18n"
+import type { MessageRef, Messages } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
 
 export type SessionFilter = "all" | "needs-target" | "not-in-project" | "trashed"
@@ -42,7 +42,7 @@ export function parseFilter(value: string | undefined): SessionFilter {
 export interface SessionRow {
   session: Session
   targetName: string | null
-  rigName: string | null
+  rig: MessageRef | null
   /** Frames outside the Trash (all frames for a Trashed session). */
   frames: number
   seconds: number
@@ -90,7 +90,7 @@ export function sessionRows(state: PrototypeState): SessionRow[] {
       return {
         session,
         targetName: targetId ? (catalog.targets[targetId]?.name ?? targetId) : null,
-        rigName: rigId ? rigName(catalog, rigId) : null,
+        rig: rigId ? rigRef(catalog, rigId) : null,
         frames: ids.length,
         seconds: ids.reduce((n, id) => n + (catalog.assets[id] ? effectiveExposureS(catalog, catalog.assets[id]!) : 0), 0),
         unreviewed: trashed ? 0 : unreviewedCount(catalog, session),

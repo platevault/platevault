@@ -6501,5 +6501,6 @@
   "store_cal_import_kind_master": "Importar master de {kind}",
   "store_cal_restore_offer": "Restaurar oferta",
   "store_cal_offer_missing": "a oferta não está mais registrada",
-  "store_cal_restore_master_offer": "Restaurar oferta de master"
+  "store_cal_restore_master_offer": "Restaurar oferta de master",
+  "run_verify_frame_not_in_catalog": "Um frame preparado não está mais no catálogo."
 }

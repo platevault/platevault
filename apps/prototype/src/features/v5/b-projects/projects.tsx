@@ -24,6 +24,7 @@ import { openSheet } from "@/app/ui-state"
 import { useMessages } from "@/app/preferences"
 import { type GoalProgress, goalProgress, type NextAction, projectGroups, projectNext, projectRuns, projectStage, projectStatus, projectWrapUp, rigName, subjectName } from "@/domain/derive"
 import type { Project } from "@/domain/types"
+import { say } from "@/lib/i18n"
 import { nowIso, updateSlice, useStore } from "@/store/core"
 
 interface Row {
@@ -50,8 +51,8 @@ export function ProjectsPage() {
         const runs = projectRuns(s.catalog, project.id)
         return {
           project,
-          subjects: project.subjects.map((subject) => (subject.mosaic ? m.project_subject_with_panels({ name: subjectName(s.catalog, subject), count: subject.mosaic.panels.length }) : subjectName(s.catalog, subject))),
-          rigs: project.rigIds.map((id) => rigName(s.catalog, id)),
+          subjects: project.subjects.map((subject) => (subject.mosaic ? m.project_subject_with_panels({ name: subjectName(m, s.catalog, subject), count: subject.mosaic.panels.length }) : subjectName(m, s.catalog, subject))),
+          rigs: project.rigIds.map((id) => rigName(m, s.catalog, id)),
           progress: goalProgress(s.catalog, project),
           openRuns: runs.filter((r) => r.completion === "open").length,
           groups: projectGroups(s.catalog, project.id).length,
@@ -108,14 +109,14 @@ export function ProjectsPage() {
         </span>
       ),
     },
-    { id: "stage", header: m.projects_col_stage(), sortValue: (r) => r.stage.label, cell: (r) => <GateLabel state={r.stage.state} label={r.stage.label} className="whitespace-nowrap" /> },
+    { id: "stage", header: m.projects_col_stage(), sortValue: (r) => say(m, r.stage.label), cell: (r) => <GateLabel state={r.stage.state} label={say(m, r.stage.label)} className="whitespace-nowrap" /> },
     {
       id: "next",
       header: m.projects_col_next(),
       cell: (r) =>
         r.next ? (
-          <Button size="sm" variant="outline" className="max-w-[12rem] min-w-0" title={`${r.next.label}: ${r.next.reason}`} onClick={() => follow(r.next!.link)}>
-            <span className="truncate">{r.next.label}</span>
+          <Button size="sm" variant="outline" className="max-w-[12rem] min-w-0" title={`${say(m, r.next.label)}: ${say(m, r.next.reason)}`} onClick={() => follow(r.next!.link)}>
+            <span className="truncate">{say(m, r.next.label)}</span>
             <span className="sr-only"> {m.projects_next_for({ name: r.project.name })}</span>
           </Button>
         ) : (
@@ -128,7 +129,7 @@ export function ProjectsPage() {
   const menu = (r: Row): MenuEntry[] => [
     { heading: r.project.name },
     { label: m.verb_open(), icon: Eye, onSelect: () => open(r) },
-    ...(r.next ? [{ label: r.next.label, onSelect: () => follow(r.next!.link) }] : []),
+    ...(r.next ? [{ label: say(m, r.next.label), onSelect: () => follow(r.next!.link) }] : []),
     { separator: true },
     ...(r.project.state === "open"
       ? [
@@ -198,12 +199,12 @@ function GoalSummary({ progress }: { progress: GoalProgress[] }) {
   const met = progress.filter((p) => p.met).length
   const unmet = progress.find((p) => !p.met)
   return (
-    <span className="block min-w-0" title={progress.map((p) => p.line).join("\n")}>
+    <span className="block min-w-0" title={progress.map((p) => say(m, p.line)).join("\n")}>
       <span className="font-medium tabular-nums">
         {m.projects_goals_met({ met, total: progress.length })}
       </span>
-      {unmet ? <span className="block max-w-[18rem] truncate text-xs text-muted-foreground tabular-nums @max-[64rem]:hidden">{unmet.line}</span> : null}
-      <span className="sr-only">{progress.map((p) => (p.met ? `${p.line}, ${m.projects_goal_met()}` : p.line)).join("; ")}</span>
+      {unmet ? <span className="block max-w-[18rem] truncate text-xs text-muted-foreground tabular-nums @max-[64rem]:hidden">{say(m, unmet.line)}</span> : null}
+      <span className="sr-only">{progress.map((p) => (p.met ? `${say(m, p.line)}, ${m.projects_goal_met()}` : say(m, p.line))).join("; ")}</span>
     </span>
   )
 }

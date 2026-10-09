@@ -60,12 +60,12 @@ export function AddToProjectDialog({ pending, onClose, onAdded }: { pending: Pen
   const targetId = session ? sessionTargetId(session) : null
   const rigId = session ? sessionRigId(session) : null
   const targetName = targetId ? (catalog.targets[targetId]?.name ?? targetId) : null
-  const label = session ? sessionLabel(session) : m.session_label()
+  const label = session ? sessionLabel(m, session) : m.session_label()
   const changes =
     project && session
       ? [
           ...(targetName && !project.subjects.some((s) => s.targetId === targetId) ? [m.session_adds_subject({ name: targetName })] : []),
-          ...(rigId && !project.rigIds.includes(rigId) ? [m.session_adds_rig({ name: rigName(catalog, rigId) })] : []),
+          ...(rigId && !project.rigIds.includes(rigId) ? [m.session_adds_rig({ name: rigName(m, catalog, rigId) })] : []),
           m.session_becomes_candidate({ name: label }),
         ]
       : []
@@ -74,7 +74,7 @@ export function AddToProjectDialog({ pending, onClose, onAdded }: { pending: Pen
       open={pending !== null && project !== undefined}
       onOpenChange={(open) => !open && onClose()}
       title={project ? m.session_add_to_project_title({ session: label, project: project.name }) : m.session_add_to_project()}
-      description={targetName ? `${targetName} · ${rigId ? rigName(catalog, rigId) : m.session_no_rig()}` : m.session_no_target()}
+      description={targetName ? `${targetName} · ${rigId ? rigName(m, catalog, rigId) : m.session_no_rig()}` : m.session_no_target()}
       changes={changes}
       confirmLabel={m.session_add_session()}
       onConfirm={(): CommitResult => {
@@ -118,11 +118,11 @@ export function AddToProjectMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-auto min-w-60">
           <DropdownMenuGroup>
-            <DropdownMenuLabel>{m.session_add_to({ name: sessionLabel(session) })}</DropdownMenuLabel>
+            <DropdownMenuLabel>{m.session_add_to({ name: sessionLabel(m, session) })}</DropdownMenuLabel>
             {projects.map((p) => (
               <DropdownMenuItem key={p.id} onClick={() => setPending({ sessionId, projectId: p.id })} className="flex-col items-start gap-0">
                 {p.name}
-                {rigId && !p.rigIds.includes(rigId) ? <span className="text-xs text-muted-foreground">{m.session_plus_rig({ name: rigName(catalog, rigId) })}</span> : null}
+                {rigId && !p.rigIds.includes(rigId) ? <span className="text-xs text-muted-foreground">{m.session_plus_rig({ name: rigName(m, catalog, rigId) })}</span> : null}
               </DropdownMenuItem>
             ))}
             {projects.length === 0 ? <DropdownMenuItem disabled>{m.session_no_open_project()}</DropdownMenuItem> : null}
@@ -177,7 +177,7 @@ export function ConfirmTargetControl({ sessionId, compact = false, onDone }: { s
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-1.5">
         <span id={id} className="sr-only">
-          {m.session_target_for({ name: sessionLabel(session) })}
+          {m.session_target_for({ name: sessionLabel(m, session) })}
         </span>
         <Select items={items} value={choice} onValueChange={(next) => setChoice(next as string)}>
           <SelectTrigger size="sm" aria-labelledby={id} className={compact ? "w-36" : "w-48"}>
@@ -221,7 +221,7 @@ export function ConfirmRigControl({ sessionId }: { sessionId: SessionId }) {
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-1.5">
         <span id={id} className="sr-only">
-          {m.session_rig_for({ name: sessionLabel(session) })}
+          {m.session_rig_for({ name: sessionLabel(m, session) })}
         </span>
         <Select items={items} value={choice} onValueChange={(next) => setChoice(next as string)}>
           <SelectTrigger size="sm" aria-labelledby={id} className="w-56">

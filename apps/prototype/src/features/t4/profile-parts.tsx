@@ -11,11 +11,12 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import type { ApplicationProfile } from "@/domain/types"
+import { say } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { locateExecutable } from "@/store/actions/settings"
 import { T4Badge } from "./badges"
-import { MODE_LABEL, PRODUCT_KIND_LABEL } from "@/domain/labels"
+import { MODE_NAME, PRODUCT_KIND_NAME } from "@/domain/labels"
 
 export function CapabilityList({ profile }: { profile: ApplicationProfile }) {
   const m = useMessages()
@@ -34,12 +35,12 @@ export function CapabilityList({ profile }: { profile: ApplicationProfile }) {
             label: m.apps_input_writes(),
             value: <T4Badge value={c.inputWrite === "read-only" ? "write:read-only" : c.inputWrite === "write-prone" ? "write:write-prone" : "write:unknown"} />,
           },
-          { label: m.apps_input_modes(), value: c.inputModes.length ? c.inputModes.map((mode) => MODE_LABEL[mode]).join(", ") : m.apps_none_recorded() },
+          { label: m.apps_input_modes(), value: c.inputModes.length ? c.inputModes.map((mode) => say(m, MODE_NAME[mode])).join(", ") : m.apps_none_recorded() },
           {
             label: m.apps_direct_source(),
             value: c.directSource === "file-list" ? m.apps_direct_file_list() : c.directSource === "whole-folder" ? m.apps_direct_whole_folders() : m.location_links_none(),
           },
-          { label: m.apps_product_inputs(), value: c.productInputKinds.length ? c.productInputKinds.map((k) => PRODUCT_KIND_LABEL[k]).join(", ") : m.apps_none_recorded() },
+          { label: m.apps_product_inputs(), value: c.productInputKinds.length ? c.productInputKinds.map((k) => say(m, PRODUCT_KIND_NAME[k])).join(", ") : m.apps_none_recorded() },
           { label: m.apps_corrected_values(), value: c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through() },
         ]}
       />

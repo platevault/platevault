@@ -6445,5 +6445,6 @@
   "store_cal_import_kind_master": "Import {kind} master",
   "store_cal_restore_offer": "Restore offer",
   "store_cal_offer_missing": "the offer is no longer recorded",
-  "store_cal_restore_master_offer": "Restore master offer"
+  "store_cal_restore_master_offer": "Restore master offer",
+  "run_verify_frame_not_in_catalog": "A prepared frame is no longer in the catalog."
 }

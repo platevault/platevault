@@ -5,13 +5,13 @@
  * list and the calibration readiness line. Nothing here writes; the slice's
  * actions and operation handlers in `actions.ts` and `operations.ts` do.
  */
-import { calibrationPlan, type CalibrationPlan, handoffCalibration, KIND_LABEL, KINDS, lightGeometry, matchCriteria, type RequirementRow, summarize } from "@/domain/calibration"
+import { calibrationPlan, type CalibrationPlan, handoffCalibration, KIND_NAME, KINDS, lightGeometry, matchCriteria, type RequirementRow, summarize } from "@/domain/calibration"
 import { calibrationProcesses, type ProcessView } from "@/domain/calibration-process"
 import { latestCorrection } from "@/domain/corrections"
 import { findPanel, findSubject, latestRevision, runPreparations, runSetup, savedContent, workingContent } from "@/domain/derive"
 import { fileAt, filesUnder, freeBytes, volumeForPath } from "@/domain/disk"
 import { deniedAncestor, isUnder } from "@/domain/indexing"
-import { MODE_LABEL, PRODUCT_KIND_LABEL } from "@/domain/labels"
+import { MODE_NAME, PRODUCT_KIND_NAME } from "@/domain/labels"
 import { assetAvailability, copyAvailability, preferredCopy } from "@/domain/library"
 import { memberSessions, type MemberSession } from "@/domain/membership"
 import type {
@@ -35,7 +35,7 @@ import type {
   Volume,
 } from "@/domain/types"
 import { fileName, formatBytes } from "@/lib/format"
-import { m } from "@/lib/i18n"
+import { joinRefs, m, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
 
 // ---------------------------------------------------------------------------
@@ -59,9 +59,9 @@ export function runContext(state: PrototypeState, runId: string): RunContext | n
 }
 
 /** Why a run's setup, calibration or preparation cannot change now; null when it can. */
-export function runLock(run: Run): string | null {
-  if (run.trashedAt) return m.run_lock_trashed()
-  if (run.completion === "complete") return m.run_lock_complete()
+export function runLock(run: Run): MessageRef | null {
+  if (run.trashedAt) return msg("run_lock_trashed")
+  if (run.completion === "complete") return msg("run_lock_complete")
   return null
 }
 
@@ -90,7 +90,7 @@ export function outputParentFor(state: PrototypeState, run: Run): OutputParent {
 
 export interface ParentProblem {
   kind: "none" | "offline" | "missing" | "read-only"
-  message: string
+  message: MessageRef
 }
 
 export function folderExists(state: PrototypeState, path: string): boolean {
@@ -111,12 +111,12 @@ export function pathOccupied(state: PrototypeState, path: string): boolean {
 }
 
 export function parentProblem(state: PrototypeState, parent: OutputParent): ParentProblem | null {
-  if (!parent.path) return { kind: "none", message: m.run_parent_none() }
+  if (!parent.path) return { kind: "none", message: msg("run_parent_none") }
   const volumeId = volumeForPath(state.disk, parent.path)
   const volume = volumeId ? state.disk.volumes[volumeId] : undefined
-  if (!volume || !volume.mounted) return { kind: "offline", message: m.issue_location_offline({ name: volume?.name ?? parent.path }) }
-  if (!folderExists(state, parent.path)) return { kind: "missing", message: m.run_parent_missing({ name: fileName(parent.path) }) }
-  if (!volume.writable || state.disk.readOnlyPaths.some((p) => isUnder(parent.path!, p))) return { kind: "read-only", message: m.run_parent_read_only({ name: fileName(parent.path) }) }
+  if (!volume || !volume.mounted) return { kind: "offline", message: msg("issue_location_offline", { name: volume?.name ?? parent.path }) }
+  if (!folderExists(state, parent.path)) return { kind: "missing", message: msg("run_parent_missing", { name: fileName(parent.path) }) }
+  if (!volume.writable || state.disk.readOnlyPaths.some((p) => isUnder(parent.path!, p))) return { kind: "read-only", message: msg("run_parent_read_only", { name: fileName(parent.path) }) }
   return null
 }
 
@@ -200,35 +200,22 @@ export function groupAssembledPath(state: PrototypeState, group: RunGroup): stri
 // ---------------------------------------------------------------------------
 
 /** A corrected field's name: "Target", "Focal length". */
-export function fieldLabel(field: CorrectionField): string {
-  switch (field) {
-    case "target":
-      return m.run_field_target()
-    case "equipment":
-      return m.run_field_equipment()
-    case "filter":
-      return m.run_field_filter()
-    case "exposure":
-      return m.run_field_exposure()
-    case "focal-length":
-      return m.run_field_focal_length()
-  }
+export const FIELD_NAME: Record<CorrectionField, MessageRef> = {
+  target: msg("run_field_target"),
+  equipment: msg("run_field_equipment"),
+  filter: msg("run_field_filter"),
+  exposure: msg("run_field_exposure"),
+  "focal-length": msg("run_field_focal_length"),
 }
 export const FIELD_KEYWORD: Record<CorrectionField, string> = { target: "OBJECT", equipment: "TELESCOP", filter: "FILTER", exposure: "EXPTIME", "focal-length": "FOCALLEN" }
 
 export type MetadataChoice = MetadataDecision["decision"]
 
-export function metadataChoiceLabel(choice: MetadataChoice): string {
-  switch (choice) {
-    case "configuration":
-      return m.run_metadata_choice_configuration()
-    case "patched-copy":
-      return m.run_metadata_choice_patched_copy()
-    case "accept-source":
-      return m.run_metadata_choice_accept_source()
-    case "excluded":
-      return m.run_metadata_choice_excluded()
-  }
+export const METADATA_CHOICE_NAME: Record<MetadataChoice, MessageRef> = {
+  configuration: msg("run_metadata_choice_configuration"),
+  "patched-copy": msg("run_metadata_choice_patched_copy"),
+  "accept-source": msg("run_metadata_choice_accept_source"),
+  excluded: msg("run_metadata_choice_excluded"),
 }
 
 export interface MetadataDiff {
@@ -263,23 +250,23 @@ export type LinkType = "symlink" | "hardlink"
 export interface ModeOption {
   mode: InputMode
   allowed: boolean
-  reasons: string[]
-  semantics: string
+  reasons: MessageRef[]
+  semantics: MessageRef
   footprintBytes: number
 }
 
 const MODES: InputMode[] = ["linked", "copy", "clone", "direct-source"]
 
-function modeSemantics(mode: InputMode, linkType: LinkType): string {
+function modeSemantics(mode: InputMode, linkType: LinkType): MessageRef {
   switch (mode) {
     case "linked":
-      return linkType === "symlink" ? m.run_mode_semantics_symlink() : m.run_mode_semantics_hardlink()
+      return linkType === "symlink" ? msg("run_mode_semantics_symlink") : msg("run_mode_semantics_hardlink")
     case "direct-source":
-      return m.run_mode_semantics_direct_source()
+      return msg("run_mode_semantics_direct_source")
     case "copy":
-      return m.run_mode_semantics_copy()
+      return msg("run_mode_semantics_copy")
     case "clone":
-      return m.run_mode_semantics_clone()
+      return msg("run_mode_semantics_clone")
   }
 }
 
@@ -292,7 +279,8 @@ export interface PrepareEntry {
   kind: "light" | "calibration" | "product"
   assetId: string | null
   resultId: string | null
-  label: string
+  /** The file name, as data (`verbatim`). */
+  label: MessageRef
   sourcePath: string
   destPath: string
   fileName: string
@@ -300,46 +288,33 @@ export interface PrepareEntry {
   /** Reviewed catalog values an isolated entry carries in its header (PREP-FR-03). */
   patches: Array<{ field: CorrectionField; value: string }>
   /** Why the source cannot be read now; the entry is listed as blocked, never omitted. */
-  unavailable: string | null
+  unavailable: MessageRef | null
 }
 
 export type PlanCheckId = "lock" | "membership" | "calibration" | "profile" | "products" | "metadata" | "mode" | "destination" | "space" | "sources" | "entries"
 
 /** A Prepare check's name: "Saved membership", "Run folder". */
-export function checkLabel(id: PlanCheckId): string {
-  switch (id) {
-    case "lock":
-      return m.run_check_lock()
-    case "membership":
-      return m.run_check_membership()
-    case "calibration":
-      return m.nav_calibration()
-    case "profile":
-      return m.run_check_profile()
-    case "products":
-      return m.apps_product_inputs()
-    case "metadata":
-      return m.run_check_metadata()
-    case "mode":
-      return m.run_check_mode()
-    case "destination":
-      return m.run_check_destination()
-    case "space":
-      return m.run_check_space()
-    case "sources":
-      return m.run_check_sources()
-    case "entries":
-      return m.run_check_entries()
-  }
+export const CHECK_NAME: Record<PlanCheckId, MessageRef> = {
+  lock: msg("run_check_lock"),
+  membership: msg("run_check_membership"),
+  calibration: msg("nav_calibration"),
+  profile: msg("run_check_profile"),
+  products: msg("apps_product_inputs"),
+  metadata: msg("run_check_metadata"),
+  mode: msg("run_check_mode"),
+  destination: msg("run_check_destination"),
+  space: msg("run_check_space"),
+  sources: msg("run_check_sources"),
+  entries: msg("run_check_entries"),
 }
 
 export interface PlanCheck {
   id: PlanCheckId
-  label: string
+  label: MessageRef
   ok: boolean
   /** Blocks Prepare when not ok; otherwise a named warning (the input is blocked and the outcome is Partial). */
   blocking: boolean
-  detail: string
+  detail: MessageRef
 }
 
 export interface PrepareChoices {
@@ -377,22 +352,22 @@ function entryFromAsset(state: PrototypeState, asset: Asset, folder: string, kin
   const unavailable =
     availability === "available"
       ? deniedAncestor(state.disk, copy.path)
-        ? m.run_entry_denied({ path: copy.path })
+        ? msg("run_entry_denied", { path: copy.path })
         : null
       : availability === "offline"
-        ? m.run_entry_offline({ name: volume?.name ?? m.run_entry_its_volume() })
+        ? msg("run_entry_offline", { name: volume?.name ?? msg("run_entry_its_volume") })
         : availability === "retired"
-          ? m.run_entry_retired({ name: location?.displayName ?? m.run_entry_its_location() })
+          ? msg("run_entry_retired", { name: location?.displayName ?? msg("run_entry_its_location") })
           : availability === "unreadable"
-            ? m.run_entry_denied({ path: copy.path })
-            : m.run_entry_not_found({ path: copy.path })
+            ? msg("run_entry_denied", { path: copy.path })
+            : msg("run_entry_not_found", { path: copy.path })
   const sub = kind === "calibration" ? "calibration" : "lights"
   return {
     id: `${kind === "calibration" ? "c" : "a"}:${asset.id}`,
     kind,
     assetId: asset.id,
     resultId: null,
-    label: asset.fileName,
+    label: verbatim(asset.fileName),
     sourcePath: copy.path,
     destPath: `${folder}/${sub}/${asset.fileName}`,
     fileName: asset.fileName,
@@ -435,7 +410,7 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
   }
   for (const id of content?.unresolved ?? []) {
     const asset = catalog.assets[id]
-    if (asset) entries.push({ ...entryFromAsset(state, asset, folder, "light", []), unavailable: entryFromAsset(state, asset, folder, "light", []).unavailable ?? m.run_entry_unresolved() })
+    if (asset) entries.push({ ...entryFromAsset(state, asset, folder, "light", []), unavailable: entryFromAsset(state, asset, folder, "light", []).unavailable ?? msg("run_entry_unresolved") })
   }
   for (const resultId of content?.productInputs ?? []) {
     const result = catalog.results[resultId]
@@ -446,13 +421,13 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
       kind: "product",
       assetId: null,
       resultId: result.id,
-      label: fileName(result.path),
+      label: verbatim(fileName(result.path)),
       sourcePath: result.path,
       destPath: `${folder}/products/${fileName(result.path)}`,
       fileName: fileName(result.path),
       sizeBytes: file?.sizeBytes ?? 0,
       patches: [],
-      unavailable: file ? null : m.run_entry_not_readable({ path: result.path }),
+      unavailable: file ? null : msg("run_entry_not_readable", { path: result.path }),
     })
   }
   for (const source of handoffCalibration(catalog, calibration)) {
@@ -468,41 +443,41 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
         kind: "calibration",
         assetId: null,
         resultId: null,
-        label: f.fileName,
+        label: verbatim(f.fileName),
         sourcePath: f.path,
         destPath: `${folder}/calibration/${f.fileName}`,
         fileName: f.fileName,
         sizeBytes: onDisk?.sizeBytes ?? f.sizeBytes,
         patches: [],
-        unavailable: onDisk ? null : m.run_entry_not_readable({ path: f.path }),
+        unavailable: onDisk ? null : msg("run_entry_not_readable", { path: f.path }),
       })
     }
   }
   const totalBytes = entries.reduce((n, e) => n + e.sizeBytes, 0)
   const sourceVolumes = new Set(entries.map((e) => volumeForPath(disk, e.sourcePath)).filter((v): v is string => v !== null))
-  const destName = destination?.name ?? m.run_mode_output_volume()
+  const destName = destination?.name ?? msg("run_mode_output_volume")
   const readOnlyProfile = profile?.capability.verified === true && profile.capability.inputWrite === "read-only"
   const hardlink = choices.linkType === "hardlink"
   const modes: ModeOption[] = MODES.map((option) => {
-    const reasons: string[] = []
-    if (profile && !profile.capability.inputModes.includes(option)) reasons.push(m.run_metadata_not_supported({ name: profile.name }))
+    const reasons: MessageRef[] = []
+    if (profile && !profile.capability.inputModes.includes(option)) reasons.push(msg("run_metadata_not_supported", { name: profile.name }))
     if ((option === "linked" || option === "direct-source") && profile && !readOnlyProfile) {
-      reasons.push(profile.capability.inputWrite === "write-prone" ? m.run_mode_write_prone({ name: profile.name }) : m.run_mode_writes_unknown({ name: profile.name }))
+      reasons.push(profile.capability.inputWrite === "write-prone" ? msg("run_mode_write_prone", { name: profile.name }) : msg("run_mode_writes_unknown", { name: profile.name }))
     }
     if (option === "linked" && destination) {
       const can = choices.linkType === "hardlink" ? destination.links.hardlink : destination.links.symlink
-      if (!can) reasons.push(hardlink ? m.run_mode_no_hardlinks({ name: destName }) : m.run_mode_no_symlinks({ name: destName }))
-      else if (choices.linkType === "hardlink" && [...sourceVolumes].some((v) => v !== destination.id)) reasons.push(m.run_mode_other_volume())
+      if (!can) reasons.push(hardlink ? msg("run_mode_no_hardlinks", { name: destName }) : msg("run_mode_no_symlinks", { name: destName }))
+      else if (choices.linkType === "hardlink" && [...sourceVolumes].some((v) => v !== destination.id)) reasons.push(msg("run_mode_other_volume"))
     }
     if (option === "direct-source" && profile?.capability.directSource === "whole-folder" && (content?.excluded.length ?? 0) > 0) {
-      reasons.push(m.run_mode_whole_folders({ count: content!.excluded.length }))
+      reasons.push(msg("run_mode_whole_folders", { count: content!.excluded.length }))
     }
-    if (option === "direct-source" && profile?.capability.directSource === "none") reasons.push(m.run_mode_no_source_paths({ name: profile.name }))
+    if (option === "direct-source" && profile?.capability.directSource === "none") reasons.push(msg("run_mode_no_source_paths", { name: profile.name }))
     if (option === "clone" && destination) {
-      if (!destination.links.clone) reasons.push(m.run_mode_no_clones({ name: destName }))
-      else if ([...sourceVolumes].some((v) => v !== destination.id)) reasons.push(m.run_mode_other_volume())
+      if (!destination.links.clone) reasons.push(msg("run_mode_no_clones", { name: destName }))
+      else if ([...sourceVolumes].some((v) => v !== destination.id)) reasons.push(msg("run_mode_other_volume"))
     }
-    if (option === "copy" && free !== null && totalBytes > free) reasons.push(m.run_mode_needs_space({ bytes: formatBytes(totalBytes), free: formatBytes(free) }))
+    if (option === "copy" && free !== null && totalBytes > free) reasons.push(msg("run_mode_needs_space", { bytes: formatBytes(totalBytes), free: formatBytes(free) }))
     const footprintBytes = option === "copy" ? totalBytes : option === "clone" ? Math.round(totalBytes * 0.001) : 0
     return { mode: option, allowed: reasons.length === 0, reasons, semantics: modeSemantics(option, choices.linkType), footprintBytes }
   })
@@ -510,28 +485,28 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
   const chosen = mode ? modes.find((o) => o.mode === mode)! : null
   const isolated = mode === "copy" || mode === "clone"
   const checks: PlanCheck[] = []
-  checks.push({ id: "membership", label: checkLabel("membership"), ok: revision !== null, blocking: true, detail: revision ? m.run_select_revision({ revision: revision.revision }) : run.draft ? m.status_unsaved_changes() : m.status_not_saved() })
+  checks.push({ id: "membership", label: CHECK_NAME.membership, ok: revision !== null, blocking: true, detail: revision ? msg("run_select_revision", { revision: revision.revision }) : run.draft ? msg("status_unsaved_changes") : msg("status_not_saved") })
   const calOk = calibration.policy === "off" || (calibration.rows.length > 0 && calibration.needsReview.length === 0) || (members.length === 0 && (content?.productInputs.length ?? 0) > 0)
   checks.push({
     id: "calibration",
-    label: checkLabel("calibration"),
+    label: CHECK_NAME.calibration,
     ok: calOk,
     blocking: true,
-    detail: calibration.policy === "off" ? m.run_cal_off() : calOk ? m.run_cal_masters_count({ count: handoffCalibration(catalog, calibration).length }) : m.run_check_requirements_to_review({ count: calibration.needsReview.length }),
+    detail: calibration.policy === "off" ? msg("run_cal_off") : calOk ? msg("run_cal_masters_count", { count: handoffCalibration(catalog, calibration).length }) : msg("run_check_requirements_to_review", { count: calibration.needsReview.length }),
   })
-  checks.push({ id: "profile", label: checkLabel("profile"), ok: profile !== null, blocking: true, detail: profile ? profile.name : m.run_layout_not_chosen() })
+  checks.push({ id: "profile", label: CHECK_NAME.profile, ok: profile !== null, blocking: true, detail: profile ? verbatim(profile.name) : msg("run_layout_not_chosen") })
   const products = (content?.productInputs ?? []).map((id) => catalog.results[id]).filter((r): r is ResultRecord => r !== undefined)
   if (products.length > 0 && profile) {
     const unsupported = products.filter((r) => r.kind === null || !profile.capability.productInputKinds.includes(r.kind))
     checks.push({
       id: "products",
-      label: checkLabel("products"),
+      label: CHECK_NAME.products,
       ok: unsupported.length === 0,
       blocking: true,
       detail:
         unsupported.length === 0
-          ? m.run_check_products_reads({ name: profile.name, kinds: [...new Set(products.map((r) => (r.kind ? PRODUCT_KIND_LABEL[r.kind] : m.run_unknown_kind())))].join(", ") })
-          : m.run_check_products_unsupported({ files: unsupported.map((r) => fileName(r.path)).join(", ") }),
+          ? msg("run_check_products_reads", { name: profile.name, kinds: joinRefs([...new Set(products.map((r) => r.kind))].map((kind) => (kind ? PRODUCT_KIND_NAME[kind] : msg("run_unknown_kind"))), ", ") })
+          : msg("run_check_products_unsupported", { files: unsupported.map((r) => fileName(r.path)).join(", ") }),
     })
   }
   const undecided = diffs.filter((d) => !metadata[d.key])
@@ -539,48 +514,48 @@ export function preparePlan(state: PrototypeState, run: Run, choices: PrepareCho
   const badConfig = diffs.filter((d) => metadata[d.key] === "configuration" && profile?.capability.correctedMetadata !== "configuration")
   checks.push({
     id: "metadata",
-    label: checkLabel("metadata"),
+    label: CHECK_NAME.metadata,
     ok: undecided.length === 0 && badPatch.length === 0 && badConfig.length === 0,
     blocking: true,
     detail:
       diffs.length === 0
-        ? m.run_none()
+        ? msg("run_none")
         : undecided.length > 0
-          ? m.run_check_corrections_to_decide({ count: undecided.length })
+          ? msg("run_check_corrections_to_decide", { count: undecided.length })
           : badPatch.length > 0
-            ? m.run_check_patched_needs_isolated()
+            ? msg("run_check_patched_needs_isolated")
             : badConfig.length > 0
-              ? m.run_check_no_configuration({ name: profile?.name ?? m.run_profile_application() })
-              : m.run_check_decisions({ count: diffs.length }),
+              ? msg("run_check_no_configuration", { name: profile?.name ?? msg("run_profile_application") })
+              : msg("run_check_decisions", { count: diffs.length }),
   })
   checks.push({
     id: "mode",
-    label: checkLabel("mode"),
+    label: CHECK_NAME.mode,
     ok: chosen?.allowed === true,
     blocking: true,
-    detail: !chosen ? m.run_layout_not_chosen() : chosen.allowed ? (chosen.mode === "linked" ? (hardlink ? m.run_check_mode_hardlinks({ mode: MODE_LABEL[chosen.mode] }) : m.run_check_mode_symlinks({ mode: MODE_LABEL[chosen.mode] })) : MODE_LABEL[chosen.mode]) : chosen.reasons.join(" · "),
+    detail: !chosen ? msg("run_layout_not_chosen") : chosen.allowed ? (chosen.mode === "linked" ? (hardlink ? msg("run_check_mode_hardlinks", { mode: MODE_NAME[chosen.mode] }) : msg("run_check_mode_symlinks", { mode: MODE_NAME[chosen.mode] })) : MODE_NAME[chosen.mode]) : joinRefs(chosen.reasons, " · "),
   })
   const folderTaken = layout.folderPath ? pathOccupied(state, layout.folderPath) : false
   checks.push({
     id: "destination",
-    label: checkLabel("destination"),
+    label: CHECK_NAME.destination,
     ok: parentIssue === null && !folderTaken,
     blocking: true,
-    detail: parentIssue ? parentIssue.message : folderTaken ? m.run_check_folder_exists({ name: fileName(layout.folderPath ?? "") }) : (layout.folderPath ?? ""),
+    detail: parentIssue ? parentIssue.message : folderTaken ? msg("run_check_folder_exists", { name: fileName(layout.folderPath ?? "") }) : verbatim(layout.folderPath ?? ""),
   })
   const footprintBytes = chosen?.footprintBytes ?? 0
-  checks.push({ id: "space", label: checkLabel("space"), ok: free === null || footprintBytes <= free, blocking: true, detail: free === null ? "–" : m.run_check_space_of({ bytes: formatBytes(footprintBytes), free: formatBytes(free) }) })
+  checks.push({ id: "space", label: CHECK_NAME.space, ok: free === null || footprintBytes <= free, blocking: true, detail: free === null ? verbatim("–") : msg("run_check_space_of", { bytes: formatBytes(footprintBytes), free: formatBytes(free) }) })
   const unavailable = entries.filter((e) => e.unavailable !== null)
   checks.push({
     id: "sources",
-    label: checkLabel("sources"),
+    label: CHECK_NAME.sources,
     ok: unavailable.length === 0,
     blocking: false,
-    detail: unavailable.length === 0 ? m.run_check_sources_readable({ count: entries.length }) : m.run_check_sources_unreadable({ count: unavailable.length }),
+    detail: unavailable.length === 0 ? msg("run_check_sources_readable", { count: entries.length }) : msg("run_check_sources_unreadable", { count: unavailable.length }),
   })
-  if (entries.length === 0) checks.push({ id: "entries", label: checkLabel("entries"), ok: false, blocking: true, detail: m.run_check_no_frames() })
+  if (entries.length === 0) checks.push({ id: "entries", label: CHECK_NAME.entries, ok: false, blocking: true, detail: msg("run_check_no_frames") })
   const lock = runLock(run)
-  if (lock) checks.unshift({ id: "lock", label: checkLabel("lock"), ok: false, blocking: true, detail: lock })
+  if (lock) checks.unshift({ id: "lock", label: CHECK_NAME.lock, ok: false, blocking: true, detail: lock })
   return {
     run,
     revision,
@@ -614,7 +589,7 @@ export interface PrepareJournal {
 }
 
 export interface VerifyOutcome {
-  changed: Array<{ path: string; reason: string }>
+  changed: Array<{ path: string; reason: MessageRef }>
   checked: number
 }
 
@@ -636,20 +611,20 @@ export function verifyPreparation(state: PrototypeState, prep: Preparation): Ver
       checked += 1
       const written = prep.mode === "direct-source" ? undefined : fileAt(state.disk, entry.destPath)
       if (prep.mode !== "direct-source" && !written) {
-        changed.push({ path: entry.destPath, reason: m.run_verify_entry_missing() })
+        changed.push({ path: entry.destPath, reason: msg("run_verify_entry_missing") })
         continue
       }
       const source = written?.linkTarget ?? entry.sourcePath
       const current = fileAt(state.disk, source)
       if (!current) {
-        changed.push({ path: source, reason: m.run_verify_source_unreadable() })
+        changed.push({ path: source, reason: msg("run_verify_source_unreadable") })
         continue
       }
       if (current.sha256 !== snapshot) {
-        changed.push({ path: source, reason: m.run_verify_snapshot_differs() })
+        changed.push({ path: source, reason: msg("run_verify_snapshot_differs") })
         continue
       }
-      if (written && !written.linkTarget && written.sha256 !== journal.expected?.[id]) changed.push({ path: entry.destPath, reason: m.run_verify_entry_differs() })
+      if (written && !written.linkTarget && written.sha256 !== journal.expected?.[id]) changed.push({ path: entry.destPath, reason: msg("run_verify_entry_differs") })
     }
     return { changed, checked }
   }
@@ -657,20 +632,20 @@ export function verifyPreparation(state: PrototypeState, prep: Preparation): Ver
   for (const assetId of prep.preparedAssetIds) {
     const asset = state.catalog.assets[assetId]
     if (!asset) {
-      changed.push({ path: prep.folderPath, reason: "A prepared frame is no longer in the catalog." })
+      changed.push({ path: prep.folderPath, reason: msg("run_verify_frame_not_in_catalog") })
       continue
     }
     if (assetAvailability(state.disk, state.catalog, asset) !== "available") {
-      changed.push({ path: preferredCopy(state.disk, state.catalog, asset).path, reason: m.run_verify_source_unreadable() })
+      changed.push({ path: preferredCopy(state.disk, state.catalog, asset).path, reason: msg("run_verify_source_unreadable") })
       continue
     }
     const sourcePath = preferredCopy(state.disk, state.catalog, asset).path
     if (fileAt(state.disk, sourcePath)?.sha256 !== asset.sha256) {
-      changed.push({ path: sourcePath, reason: m.run_verify_digest_differs() })
+      changed.push({ path: sourcePath, reason: msg("run_verify_digest_differs") })
       continue
     }
     const intact = prep.mode === "direct-source" || entries.some((f) => (f.linkTarget ? asset.copies.some((c) => c.path === f.linkTarget) : f.sha256 === asset.sha256 && f.path.endsWith(`/${asset.fileName}`)))
-    if (!intact) changed.push({ path: `${prep.folderPath}/lights/${asset.fileName}`, reason: m.run_verify_entry_missing_or_differs() })
+    if (!intact) changed.push({ path: `${prep.folderPath}/lights/${asset.fileName}`, reason: msg("run_verify_entry_missing_or_differs") })
   }
   return { changed, checked: prep.preparedAssetIds.length }
 }
@@ -712,14 +687,14 @@ export function recognize(file: DiskFile, assembled: boolean): DiscoveredKind {
 }
 
 export interface Attribution {
-  label: string
+  label: MessageRef
   basis: "tool" | "window" | "unknown"
 }
 
 /** Revision attribution: tool evidence, else the time window as an inference, else Unknown (D-W67). */
 export function attribution(record: ResultRecord, file: DiskFile | undefined, preps: Preparation[]): Attribution {
-  if (record.fromPrepRevision !== null && record.lineage === "tool-recorded") return { label: m.run_rev({ revision: record.fromPrepRevision }), basis: "tool" }
-  if (!file || preps.length === 0) return { label: m.status_unknown(), basis: "unknown" }
+  if (record.fromPrepRevision !== null && record.lineage === "tool-recorded") return { label: msg("run_rev", { revision: record.fromPrepRevision }), basis: "tool" }
+  if (!file || preps.length === 0) return { label: msg("status_unknown"), basis: "unknown" }
   const ordered = [...preps].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   const at = file.modifiedAt
   for (let i = ordered.length - 1; i >= 0; i -= 1) {
@@ -727,9 +702,9 @@ export function attribution(record: ResultRecord, file: DiskFile | undefined, pr
     const next = ordered[i + 1]
     const after = (prep.settledAt ?? prep.createdAt) <= at
     const before = !next || at < next.createdAt
-    if (after && before) return { label: m.run_rev({ revision: prep.prepRevision }), basis: "window" }
+    if (after && before) return { label: msg("run_rev", { revision: prep.prepRevision }), basis: "window" }
   }
-  return { label: m.status_unknown(), basis: "unknown" }
+  return { label: msg("status_unknown"), basis: "unknown" }
 }
 
 export interface ResultRow {
@@ -795,7 +770,7 @@ export interface CleanupEntry {
 export interface CleanupReview {
   entries: CleanupEntry[]
   /** Preparation folders that cannot be listed now, with the reason. */
-  refused: Array<{ path: string; reason: string }>
+  refused: Array<{ path: string; reason: MessageRef }>
   /** Direct-source preparations create no entries (PREP-FR-14). */
   directSource: Preparation[]
 }
@@ -811,7 +786,7 @@ export function cleanupReview(state: PrototypeState, run: Run): CleanupReview {
     const volumeId = volumeForPath(state.disk, prep.folderPath)
     const volume = volumeId ? state.disk.volumes[volumeId] : undefined
     if (!volume?.mounted) {
-      out.refused.push({ path: prep.folderPath, reason: m.run_cleanup_volume_offline({ name: volume?.name ?? m.run_entry_its_volume() }) })
+      out.refused.push({ path: prep.folderPath, reason: msg("run_cleanup_volume_offline", { name: volume?.name ?? msg("run_entry_its_volume") }) })
       continue
     }
     for (const file of filesUnder(state.disk, prep.folderPath)) {
@@ -876,7 +851,7 @@ export function stackOffers(state: PrototypeState, row: RequirementRow): StackOf
     .filter((v) => v.process.kind === row.kind && v.session !== null && (v.status === "awaiting-stack" || v.status === "failed" || v.status === "stacking" || v.status === "importing"))
     .filter((v) => {
       const g = lightGeometry(catalog, v.session!)
-      const criteria = matchCriteria(catalog, light, { ...g, kind: row.kind, imageTypeLabel: KIND_LABEL[row.kind] })
+      const criteria = matchCriteria(catalog, light, { ...g, kind: row.kind, imageTypeLabel: KIND_NAME[row.kind] })
       return summarize(criteria).allCompatible
     })
     .sort((a, b) => NIGHT_MS(night, a.session!.night) - NIGHT_MS(night, b.session!.night))

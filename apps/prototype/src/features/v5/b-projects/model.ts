@@ -27,7 +27,7 @@ import { GOAL_CHANNELS, NARROW_BANDS } from "@/domain/labels"
 import { namingTemplate, resolveNamingTemplate } from "@/domain/templates"
 import type { Asset, AssetCopy, AssetId, Catalog, Disk, GoalChannel, Location, Operation, OpticalTrainId, Project, ResultId, Session, SessionId, Subject, Volume } from "@/domain/types"
 import { formatBytes, formatCount, formatNight } from "@/lib/format"
-import { m } from "@/lib/i18n"
+import { joinRefs, m, type MessageRef, msg, say, verbatim } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
 import type { TrashItem } from "@/store/actions/trash"
 
@@ -386,10 +386,15 @@ export interface ArchivePlan {
   blocked: string | null
 }
 
-export function sessionLabel(catalog: Catalog, session: Session): string {
+/** "NGC 7000 · 18 Sep · Ha": the session's target (or object), night and channel. */
+export function sessionRef(catalog: Catalog, session: Session): MessageRef {
   const targetId = sessionTargetId(session)
-  const target = targetId ? catalog.targets[targetId]?.name : null
-  return `${target ?? session.objectLabel ?? m.session_no_target()} · ${formatNight(session.night)} · ${session.channel ?? m.palette_session_no_filter()}`
+  const target = (targetId ? catalog.targets[targetId]?.name : null) ?? session.objectLabel
+  return joinRefs([typeof target === "string" ? verbatim(target) : msg("session_no_target"), verbatim(formatNight(session.night)), typeof session.channel === "string" ? verbatim(session.channel) : msg("palette_session_no_filter")], " · ")
+}
+
+export function sessionLabel(catalog: Catalog, session: Session): string {
+  return say(m, sessionRef(catalog, session))
 }
 
 function joinPath(...parts: string[]): string {
