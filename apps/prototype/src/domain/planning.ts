@@ -10,6 +10,7 @@
 import { angularSeparationDeg } from "./sky"
 import type { Band, CalendarExport, MoonConstraint, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, Target, TargetId } from "./types"
 import { formatDateTime } from "@/lib/format"
+import { msg, type MessageRef } from "@/lib/i18n"
 
 const RAD = Math.PI / 180
 /** Minutes between samples of the night grid that windows, Tonight and the Targets timeline share. */
@@ -161,8 +162,8 @@ export function computeWindows(target: Target, site: ObservingSite, criteria: Pl
 export interface MoonTonight {
   /** Illuminated fraction at the middle of tonight, 0-100. */
   illuminationPct: number
-  /** "Waxing crescent", "Full Moon", … */
-  phase: string
+  /** The phase name: Waxing crescent, Full Moon, … */
+  phase: MessageRef
   /** Rise and set during tonight's night (local noon to noon); null when it does not rise or set then. */
   rise: string | null
   set: string | null
@@ -176,13 +177,12 @@ export interface Tonight {
   darkness: { start: string; end: string } | null
 }
 
-function phaseName(elongationDeg: number, waxing: boolean): string {
-  if (elongationDeg < 12) return "New Moon"
-  if (elongationDeg > 168) return "Full Moon"
-  const quarter = elongationDeg >= 80 && elongationDeg <= 100
-  if (quarter) return waxing ? "First quarter" : "Last quarter"
-  const shape = elongationDeg < 90 ? "crescent" : "gibbous"
-  return `${waxing ? "Waxing" : "Waning"} ${shape}`
+function phaseName(elongationDeg: number, waxing: boolean): MessageRef {
+  if (elongationDeg < 12) return msg("tonight_moon_phase_new")
+  if (elongationDeg > 168) return msg("tonight_moon_phase_full")
+  if (elongationDeg >= 80 && elongationDeg <= 100) return msg(waxing ? "tonight_moon_phase_first_quarter" : "tonight_moon_phase_last_quarter")
+  if (elongationDeg < 90) return msg(waxing ? "tonight_moon_phase_waxing_crescent" : "tonight_moon_phase_waning_crescent")
+  return msg(waxing ? "tonight_moon_phase_waxing_gibbous" : "tonight_moon_phase_waning_gibbous")
 }
 
 /** Tonight at a site: the Moon and the darkness window, on the same grid as `computeWindows`. */

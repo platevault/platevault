@@ -11,9 +11,8 @@
     "preview": "vite preview --host 127.0.0.1 --port 5180 --strictPort",
     "typecheck": "pnpm i18n:compile && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy custom-preferences baseLocale --emit-ts-declarations",
-    "lint": "pnpm lint:baseline && pnpm lint:i18n",
-    "lint:baseline": "node scripts/check-eslint-baseline.mjs",
-    "lint:eslint": "eslint src/",
+    "lint": "pnpm lint:eslint && pnpm lint:i18n",
+    "lint:eslint": "eslint --max-warnings 0 src/",
     "lint:i18n": "node scripts/check-i18n-catalog.mjs && node scripts/check-i18n-locale-drift.mjs",
     "themes": "node scripts/themes.mjs"
   },

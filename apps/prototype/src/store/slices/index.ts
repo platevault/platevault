@@ -7,7 +7,7 @@
  * | Slice | Screens |
  * |---|---|
  * | a | S1 Home, S12 Sessions, S13 Import |
- * | b | S2 Projects list, S3 Project, S4 New Project, S8 Trash, S9 Done / Archive |
+ * | b | S2 Projects list, S3 Project, S4 New Project, S8 Trash, S9 Wrap up |
  * | c | S5 Run (Select, Calibrate, Prepare, Results, Done), S7 Run group |
  * | d | S6 Review (frame review) |
  * | e | S10 Targets, S11 Plan, S16 Settings, S14 Calibration, S15 Storage, S17 Activity |

@@ -7221,5 +7221,13 @@
   "run_missing_title": "This run is not in the catalog",
   "run_step_missing_title": "This run step does not exist",
   "rungroup_missing_title": "This run group is not in the catalog",
-  "target_missing_title": "This Target is not in the catalog"
+  "target_missing_title": "This Target is not in the catalog",
+  "tonight_moon_phase_new": "New Moon",
+  "tonight_moon_phase_full": "Full Moon",
+  "tonight_moon_phase_first_quarter": "First quarter",
+  "tonight_moon_phase_last_quarter": "Last quarter",
+  "tonight_moon_phase_waxing_crescent": "Waxing crescent",
+  "tonight_moon_phase_waning_crescent": "Waning crescent",
+  "tonight_moon_phase_waxing_gibbous": "Waxing gibbous",
+  "tonight_moon_phase_waning_gibbous": "Waning gibbous"
 }

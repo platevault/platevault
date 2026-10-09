@@ -59,7 +59,7 @@ export function MoonLine({ ctx, className }: { ctx: SkyContext; className?: stri
   const { moon } = ctx.tonight
   const parts = [
     `${moon.illuminationPct}%`,
-    moon.phase,
+    say(m, moon.phase),
     moon.rise ? m.tonight_moon_rises({ time: siteTime(moon.rise, ctx.site) }) : m.tonight_moon_no_rise(),
     moon.set ? m.tonight_moon_sets({ time: siteTime(moon.set, ctx.site) }) : m.tonight_moon_no_set(),
   ]

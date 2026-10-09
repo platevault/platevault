@@ -1,21 +1,11 @@
 // @ts-check
 // ESLint carries only the i18n catalogue gate (port of apps/desktop's
 // `alm/*` rules): every user-visible string comes from messages/en-GB.json
-// through `m.<key>()` from '@/lib/i18n'. Type checking stays with `tsc`.
-//
-// Two tiers, so the extraction can land folder by folder (design/I18N.md):
-//   - I18N_MIGRATED: a hardcoded string is an error.
-//   - everything else under src/: the same rules warn, and
-//     scripts/check-eslint-baseline.mjs holds each file's warning count to
-//     scripts/eslint-i18n-baseline.json, so existing debt is reported, new
-//     debt fails, and the baseline only shrinks.
-// To migrate a folder, move its glob into I18N_MIGRATED and regenerate the
-// baseline.
+// through `m.<key>()` from '@/lib/i18n'. A hardcoded string is an error
+// anywhere under src/ (design/I18N.md). Type checking stays with `tsc`.
 import { defineConfig } from "eslint/config"
 import tseslint from "typescript-eslint"
 import alm from "./eslint-rules/no-user-string.js"
-
-const I18N_MIGRATED = ["src/app/**/*.{ts,tsx}", "src/components/**/*.{ts,tsx}", "src/lib/**/*.{ts,tsx}"]
 
 // Not user-facing product copy, so outside the gate (legacy research R4):
 //   - tests and fixtures carry assertion and sample literals; the seed is the
@@ -50,18 +40,10 @@ export default defineConfig(
     files: ["src/**/*.{ts,tsx}"],
     ignores: I18N_IGNORES,
     rules: {
-      "alm/no-user-string": "warn",
+      "alm/no-user-string": "error",
       // JS-side pluralisation ('s'/'es' suffix ternaries, paired
       // singular/plural calls) bakes English plural rules into code; use an
       // inlang plural variant message instead.
-      "alm/no-js-plural": "warn",
-    },
-  },
-  {
-    files: I18N_MIGRATED,
-    ignores: I18N_IGNORES,
-    rules: {
-      "alm/no-user-string": "error",
       "alm/no-js-plural": "error",
     },
   },

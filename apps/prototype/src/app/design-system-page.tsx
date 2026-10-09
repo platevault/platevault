@@ -22,7 +22,7 @@ import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { emptyBreakdown, sessionBreakdown } from "@/domain/library"
 import type { Session } from "@/domain/types"
-import { formatDuration, formatExposure, formatNight, plural } from "@/lib/format"
+import { formatDuration, formatExposure, formatNight } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { startIndexing } from "@/store/operations"
 
@@ -98,7 +98,7 @@ function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: bo
       <SelectionBar
         count={selected.length}
         hiddenByFilters={hidden}
-        label={`${plural(selected.length, "session")} selected`}
+        label={`${selected.length} selected`}
         onShowSelected={() => setQuery("")}
         onClear={() => setSelected([])}
         clearDisabledReason={locked ? "Selection is locked while the View is being prepared." : undefined}
@@ -112,7 +112,7 @@ function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: bo
         initialSort={{ columnId: "night", direction: "asc" }}
         groups={
           grouped
-            ? { key: (s) => s.channel ?? "No filter", label: (channel, rows) => `${channel} · ${plural(rows.length, "session")}` }
+            ? { key: (s) => s.channel ?? "No filter", label: (channel, rows) => `${channel} · ${rows.length}` }
             : undefined
         }
         selection={{ selected, onChange: setSelected, rowLabel: (s) => `${formatNight(s.night)} ${s.channel ?? ""} session` }}

@@ -7277,5 +7277,13 @@
   "run_missing_title": "Esta execução não está no catálogo",
   "run_step_missing_title": "Esta etapa da execução não existe",
   "rungroup_missing_title": "Este grupo de execuções não está no catálogo",
-  "target_missing_title": "Este Alvo não está no catálogo"
+  "target_missing_title": "Este Alvo não está no catálogo",
+  "tonight_moon_phase_new": "Lua nova",
+  "tonight_moon_phase_full": "Lua cheia",
+  "tonight_moon_phase_first_quarter": "Quarto crescente",
+  "tonight_moon_phase_last_quarter": "Quarto minguante",
+  "tonight_moon_phase_waxing_crescent": "Crescente côncava",
+  "tonight_moon_phase_waning_crescent": "Minguante côncava",
+  "tonight_moon_phase_waxing_gibbous": "Crescente gibosa",
+  "tonight_moon_phase_waning_gibbous": "Minguante gibosa"
 }

@@ -665,7 +665,7 @@ function TonightBox({ state, className }: { state: PrototypeState; className?: s
           <dd>{tonight.darkness ? `${formatTime(tonight.darkness.start, tz)}–${formatTime(tonight.darkness.end, tz)} ${zone(tonight.darkness.start)}` : m.project_none_tonight()}</dd>
           <dt className="text-muted-foreground">{m.home_moon()}</dt>
           <dd>
-            {tonight.moon.phase}, {Math.round(tonight.moon.illuminationPct)}%
+            {say(m, tonight.moon.phase)}, {Math.round(tonight.moon.illuminationPct)}%
             <span className="text-muted-foreground">
               {tonight.moon.rise ? ` · ${m.tonight_moon_rises({ time: formatTime(tonight.moon.rise, tz) })}` : ""}
               {tonight.moon.set ? ` · ${m.tonight_moon_sets({ time: formatTime(tonight.moon.set, tz) })}` : ""}

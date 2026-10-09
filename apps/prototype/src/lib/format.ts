@@ -42,11 +42,6 @@ export function formatCount(value: number): string {
   return countFormat.format(value)
 }
 
-/** "208 lights", "1 light". Pass the plural when it is irregular. */
-export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
-  return `${formatCount(count)} ${count === 1 ? singular : pluralForm}`
-}
-
 // Product copy uses three-letter months ("18 Sep"); ICU's en-GB short month
 // for September is "Sept", so months come from this table instead.
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const

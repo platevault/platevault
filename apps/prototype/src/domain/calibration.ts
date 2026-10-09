@@ -25,7 +25,7 @@ import type {
   Run,
   Session,
 } from "./types"
-import { fileName, formatExposure, plural } from "@/lib/format"
+import { fileName, formatExposure } from "@/lib/format"
 import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 
 export const KINDS: CalibrationKind[] = ["dark", "flat", "bias"]
@@ -435,15 +435,6 @@ export function calibrationPlan(catalog: Catalog, disk: Disk, run: Run, policy: 
   for (const row of rows) counts[row.state] += 1
   const needsReview = rows.filter((r) => r.state === "suggested" || r.state === "deferred" || r.state === "unresolved" || r.drift !== null)
   return { policy, rows, groups, counts, needsReview }
-}
-
-/** The Calibrate readiness line: "15 of 15 matched automatically" or "3 of 15 need review". */
-export function readinessLine(plan: CalibrationPlan): string {
-  if (plan.policy === "off") return "Calibration off: no calibration is handed off"
-  if (plan.rows.length === 0) return "Select sessions first"
-  if (plan.needsReview.length > 0) return `${plan.needsReview.length} of ${plural(plan.rows.length, "requirement")} need review`
-  const automatic = plan.counts.automatic
-  return automatic === plan.rows.length ? `${plan.rows.length} of ${plan.rows.length} matched automatically` : `${plural(plan.rows.length, "requirement")} matched`
 }
 
 /** Handed-off calibration inputs, deduplicated (one master can serve many sessions). */
