@@ -301,7 +301,7 @@ export function SitesPage() {
         description={null}
         changes={[
           m.settings_remove_named({ name: removing?.name ?? "" }),
-          ...(removing && removing.id === defaultSiteId ? [nextDefault ? m.site_default_change({ name: nextDefault.name }) : m.site_no_default()] : []),
+          ...(removing && removing.id === defaultSiteId ? [nextDefault ? m.settings_default_named({ name: nextDefault.name }) : m.site_no_default()] : []),
           ...(removing && removing.id === planningSiteId ? [m.site_clear_planning()] : []),
           ...(removing && reminders.siteId === removing.id && reminders.enabled ? [m.status_notifications_off()] : []),
         ]}
@@ -315,7 +315,7 @@ export function SitesPage() {
         title={m.site_make_default_title({ name: confirmDefault?.name ?? "" })}
         description={null}
         changes={[
-          m.site_default_change({ name: confirmDefault?.name ?? "" }),
+          m.settings_default_named({ name: confirmDefault?.name ?? "" }),
           m.site_reminders_change({ from: sites.find((s) => s.id === reminders.siteId)?.name ?? m.site_previous(), to: confirmDefault?.name ?? "" }),
         ]}
         confirmLabel={m.settings_make_default()}

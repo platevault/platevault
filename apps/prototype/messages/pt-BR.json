@@ -1041,7 +1041,7 @@
   ],
   "site_add_as_site": "Adicionar como local",
   "settings_remove_named": "Remover {name}",
-  "site_default_change": "Padrão: {name}",
+  "settings_default_named": "Padrão: {name}",
   "site_clear_planning": "Limpar o local de planejamento",
   "site_remove_confirm": "Remover local",
   "site_make_default_title": "Tornar {name} o padrão?",
@@ -1271,5 +1271,163 @@
   "apps_next_launch_fails": " · próxima abertura falha",
   "apps_move_away": "Remover",
   "apps_put_back": "Devolver",
-  "apps_fail_next_launch": "Falhar próxima abertura"
+  "apps_fail_next_launch": "Falhar próxima abertura",
+  "settings_keep_raws_not_saved": "Manter brutos não salvo",
+  "settings_raw_frames": "Frames brutos",
+  "settings_keep_raws": "Manter frames brutos de calibração",
+  "settings_keep_raws_about": "Sobre manter frames brutos de calibração",
+  "settings_keep_raws_help": "Desativado: os brutos vão para a Lixeira do sistema quando o master é registrado.",
+  "settings_masters": "Masters",
+  "settings_layout": "Estrutura",
+  "settings_tools": "Ferramentas",
+  "template_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "settings_name_required": "Nome obrigatório",
+  "settings_name_taken": "Nome já usado",
+  "template_add_channel": "Adicione um canal",
+  "template_hours_or_frames": "Horas ou frames necessários · {channels}",
+  "template_goals": "Metas",
+  "template_osc_about": "Sobre OSC e Dual-band",
+  "template_osc_help": "OSC: sem filtro ou com filtro de banda larga em câmera OSC. Dual-band: filtro que deixa passar duas bandas estreitas.",
+  "template_table_caption": "Modelos de metas: {group}",
+  "template_column_template": "Modelo",
+  "template_copy_name": "{name} cópia",
+  "template_copy_name_numbered": "{name} cópia {n}",
+  "template_duplicate_title": "Duplicar {name}",
+  "template_new": "Novo modelo",
+  "template_built_in": "Embutidos",
+  "template_duplicate": "Duplicar",
+  "template_none_yours": "Nenhum modelo seu",
+  "template_yours": "Seus",
+  "template_delete": "Excluir",
+  "template_delete_title": "Excluir {name}?",
+  "template_delete_change": "Excluir {name}",
+  "naming_type_lights": "Lights",
+  "naming_type_flats": "Flats",
+  "naming_type_darks": "Darks",
+  "naming_type_bias": "Bias",
+  "naming_type_master_flats": "Masters de flat",
+  "naming_type_master_darks": "Masters de dark",
+  "naming_type_master_bias": "Masters de bias",
+  "naming_type_master_dark_flats": "Masters de dark flat",
+  "naming_fallbacks": "Substitutos",
+  "naming_no_fallbacks": "Sem substitutos",
+  "naming_custom": "Personalizado",
+  "naming_restore_default": "Restaurar padrão",
+  "naming_discard": "Descartar",
+  "naming_tokens_about": "Tokens e substitutos",
+  "naming_empty": "Vazio",
+  "naming_chip_token": "{text}, token {label}",
+  "naming_chip_separator": "/, separador de pasta",
+  "naming_chip_text": "{text}, texto",
+  "naming_chip_hint": "← e → navegam entre os chips, ⌥← e ⌥→ movem um chip, Delete o remove.",
+  "naming_move_left": "Mover chip para a esquerda",
+  "naming_move_right": "Mover chip para a direita",
+  "naming_insert_token": "Inserir um token",
+  "naming_token_title": "{label}; substituto “{fallback}”",
+  "naming_add_folder": "/ pasta",
+  "naming_text_to_insert": "Texto a inserir",
+  "naming_text_placeholder": "Texto",
+  "naming_add_text": "Adicionar texto",
+  "naming_as_text": "Como texto",
+  "naming_not_saved": "Não salvo · {errors}",
+  "naming_preview": "Prévia",
+  "naming_unsaved": "Não salvo",
+  "naming_preview_library": "Biblioteca · {from}",
+  "naming_preview_no_metadata": "Sem metadados",
+  "naming_frame_types": "Tipos de frame",
+  "equipment_pick_band": "Escolha uma banda",
+  "equipment_add_value": "Adicionar {value}",
+  "equipment_add_filter": "Adicionar filtro",
+  "equipment_matches_filter": "Corresponde a FILTER",
+  "equipment_comma_separated": "Separados por vírgula",
+  "equipment_bands": "Bandas",
+  "equipment_error_whole_pixels": "Pixels inteiros > 0",
+  "equipment_error_microns": "µm > 0",
+  "equipment_error_mm": "mm > 0",
+  "equipment_optics_title": "Óptica de {name}",
+  "equipment_shared_camera": "Câmera compartilhada",
+  "equipment_shared_camera_help": "Os valores da câmera mudam para {rigs}.",
+  "equipment_camera_kind": "Tipo de câmera",
+  "equipment_mono": "Mono",
+  "equipment_osc": "OSC",
+  "equipment_osc_colour": "OSC (colorida)",
+  "equipment_sensor_width": "Largura do sensor (px)",
+  "equipment_sensor_height": "Altura do sensor (px)",
+  "equipment_pixel_size": "Tamanho do pixel (µm)",
+  "equipment_focal_length": "Distância focal efetiva (mm)",
+  "equipment_field_of_view": "Campo de visão",
+  "equipment_camera_unknown": "Câmera desconhecida",
+  "equipment_rename": "Renomear",
+  "equipment_edit_optics": "Editar óptica",
+  "equipment_of_rig": "de {name}",
+  "equipment_unknown_filter": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "FILTER desconhecido “{value}” · {n} sessão",
+        "countPlural=*": "FILTER desconhecido “{value}” · {n} sessões"
+      }
+    }
+  ],
+  "equipment_not_now": "Agora não",
+  "equipment_hidden": "Ocultos",
+  "equipment_show": "Mostrar",
+  "equipment_camera": "Câmera",
+  "equipment_sensor": "Sensor",
+  "equipment_telescope": "Telescópio",
+  "equipment_focal_length_short": "Distância focal",
+  "equipment_derived": "Calculado",
+  "equipment_osc_camera": "Câmera OSC",
+  "equipment_used_by": "Usado por",
+  "equipment_filters": "Filtros",
+  "equipment_to_rig": "a {name}",
+  "equipment_no_filters_osc": "Sem filtros · OSC",
+  "equipment_no_filters": "Sem filtros",
+  "equipment_filters_of": "Filtros de {name}",
+  "equipment_filter": "Filtro",
+  "equipment_dual_band": "Dual-band",
+  "equipment_rename_title": "Renomear {name}",
+  "equipment_rig_name": "Nome do setup",
+  "equipment_remove_filter_title": "Remover {filter} de {rig}?",
+  "equipment_remove_filter_change": "Remover {filter} ({bands})",
+  "equipment_remove_filter_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} sessão passa a ler o filtro como desconhecido",
+        "countPlural=*": "{n} sessões passam a ler o filtro como desconhecido"
+      }
+    }
+  ],
+  "equipment_no_rigs": "Nenhum setup"
 }

@@ -1041,7 +1041,7 @@
   ],
   "site_add_as_site": "Add as site",
   "settings_remove_named": "Remove {name}",
-  "site_default_change": "Default: {name}",
+  "settings_default_named": "Default: {name}",
   "site_clear_planning": "Clear the planning site",
   "site_remove_confirm": "Remove site",
   "site_make_default_title": "Make {name} the default?",
@@ -1271,5 +1271,163 @@
   "apps_next_launch_fails": " · next launch fails",
   "apps_move_away": "Move away",
   "apps_put_back": "Put back",
-  "apps_fail_next_launch": "Fail next launch"
+  "apps_fail_next_launch": "Fail next launch",
+  "settings_keep_raws_not_saved": "Keep raws not saved",
+  "settings_raw_frames": "Raw frames",
+  "settings_keep_raws": "Keep raw calibration frames",
+  "settings_keep_raws_about": "About keeping raw calibration frames",
+  "settings_keep_raws_help": "Off: raws go to the OS Trash once their master registers.",
+  "settings_masters": "Masters",
+  "settings_layout": "Layout",
+  "settings_tools": "Tools",
+  "template_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "settings_name_required": "Name required",
+  "settings_name_taken": "Name taken",
+  "template_add_channel": "Add a channel",
+  "template_hours_or_frames": "Hours or frames needed · {channels}",
+  "template_goals": "Goals",
+  "template_osc_about": "About OSC and Dual-band",
+  "template_osc_help": "OSC: no filter or a broadband filter on an OSC camera. Dual-band: a filter passing two narrow bands.",
+  "template_table_caption": "{group} goal templates",
+  "template_column_template": "Template",
+  "template_copy_name": "{name} copy",
+  "template_copy_name_numbered": "{name} copy {n}",
+  "template_duplicate_title": "Duplicate {name}",
+  "template_new": "New template",
+  "template_built_in": "Built-in",
+  "template_duplicate": "Duplicate",
+  "template_none_yours": "No templates of yours",
+  "template_yours": "Yours",
+  "template_delete": "Delete",
+  "template_delete_title": "Delete {name}?",
+  "template_delete_change": "Delete {name}",
+  "naming_type_lights": "Lights",
+  "naming_type_flats": "Flats",
+  "naming_type_darks": "Darks",
+  "naming_type_bias": "Bias",
+  "naming_type_master_flats": "Master flats",
+  "naming_type_master_darks": "Master darks",
+  "naming_type_master_bias": "Master bias",
+  "naming_type_master_dark_flats": "Master dark flats",
+  "naming_fallbacks": "Fallbacks",
+  "naming_no_fallbacks": "No fallbacks",
+  "naming_custom": "Custom",
+  "naming_restore_default": "Restore default",
+  "naming_discard": "Discard",
+  "naming_tokens_about": "Tokens and fallbacks",
+  "naming_empty": "Empty",
+  "naming_chip_token": "{text}, {label} token",
+  "naming_chip_separator": "/, folder separator",
+  "naming_chip_text": "{text}, text",
+  "naming_chip_hint": "← and → move between chips, ⌥← and ⌥→ move a chip, Delete removes it.",
+  "naming_move_left": "Move chip left",
+  "naming_move_right": "Move chip right",
+  "naming_insert_token": "Insert a token",
+  "naming_token_title": "{label}; falls back to “{fallback}”",
+  "naming_add_folder": "/ folder",
+  "naming_text_to_insert": "Text to insert",
+  "naming_text_placeholder": "Text",
+  "naming_add_text": "Add text",
+  "naming_as_text": "As text",
+  "naming_not_saved": "Not saved · {errors}",
+  "naming_preview": "Preview",
+  "naming_unsaved": "Unsaved",
+  "naming_preview_library": "Library · {from}",
+  "naming_preview_no_metadata": "No metadata",
+  "naming_frame_types": "Frame types",
+  "equipment_pick_band": "Pick a band",
+  "equipment_add_value": "Add {value}",
+  "equipment_add_filter": "Add filter",
+  "equipment_matches_filter": "Matches FILTER",
+  "equipment_comma_separated": "Comma-separated",
+  "equipment_bands": "Bands",
+  "equipment_error_whole_pixels": "Whole pixels > 0",
+  "equipment_error_microns": "µm > 0",
+  "equipment_error_mm": "mm > 0",
+  "equipment_optics_title": "Optics of {name}",
+  "equipment_shared_camera": "Shared camera",
+  "equipment_shared_camera_help": "Camera values change for {rigs}.",
+  "equipment_camera_kind": "Camera kind",
+  "equipment_mono": "Mono",
+  "equipment_osc": "OSC",
+  "equipment_osc_colour": "OSC (colour)",
+  "equipment_sensor_width": "Sensor width (px)",
+  "equipment_sensor_height": "Sensor height (px)",
+  "equipment_pixel_size": "Pixel size (µm)",
+  "equipment_focal_length": "Effective focal length (mm)",
+  "equipment_field_of_view": "Field of view",
+  "equipment_camera_unknown": "Camera unknown",
+  "equipment_rename": "Rename",
+  "equipment_edit_optics": "Edit optics",
+  "equipment_of_rig": "of {name}",
+  "equipment_unknown_filter": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Unknown FILTER “{value}” · {n} session",
+        "countPlural=*": "Unknown FILTER “{value}” · {n} sessions"
+      }
+    }
+  ],
+  "equipment_not_now": "Not now",
+  "equipment_hidden": "Hidden",
+  "equipment_show": "Show",
+  "equipment_camera": "Camera",
+  "equipment_sensor": "Sensor",
+  "equipment_telescope": "Telescope",
+  "equipment_focal_length_short": "Focal length",
+  "equipment_derived": "Derived",
+  "equipment_osc_camera": "OSC camera",
+  "equipment_used_by": "Used by",
+  "equipment_filters": "Filters",
+  "equipment_to_rig": "to {name}",
+  "equipment_no_filters_osc": "No filters · OSC",
+  "equipment_no_filters": "No filters",
+  "equipment_filters_of": "Filters of {name}",
+  "equipment_filter": "Filter",
+  "equipment_dual_band": "Dual-band",
+  "equipment_rename_title": "Rename {name}",
+  "equipment_rig_name": "Rig name",
+  "equipment_remove_filter_title": "Remove {filter} from {rig}?",
+  "equipment_remove_filter_change": "Remove {filter} ({bands})",
+  "equipment_remove_filter_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} session reads the filter as unknown",
+        "countPlural=*": "{n} sessions read the filter as unknown"
+      }
+    }
+  ],
+  "equipment_no_rigs": "No rigs"
 }

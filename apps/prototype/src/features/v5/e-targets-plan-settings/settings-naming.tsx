@@ -12,6 +12,7 @@
  */
 import { ArrowLeft, ArrowRight, Plus, RotateCcw, X } from "lucide-react"
 import { type KeyboardEvent, useEffect, useId, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { ActionError } from "@/components/app/feedback"
 import { PageBody, PageHeader } from "@/components/app/page"
 import { Pill } from "@/components/app/pill"
@@ -23,20 +24,22 @@ import { DEFAULT_NAMING, NAMING_TOKENS, type NamingValues, namingTemplate, namin
 import type { Catalog, NamingFrameType, NamingToken } from "@/domain/types"
 import { TextField } from "@/features/t1/components/form-field"
 import { ReturnNotice } from "@/features/t1/settings/settings-layout"
+import { m } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import { setNamingTemplate } from "@/store/actions/settings"
 import { useStore } from "@/store/core"
 import { masterNight } from "./calibration-model"
 
-const TYPES: Array<{ type: NamingFrameType; label: string; role: "captures" | "calibration" }> = [
-  { type: "light", label: "Lights", role: "captures" },
-  { type: "flat", label: "Flats", role: "calibration" },
-  { type: "dark", label: "Darks", role: "calibration" },
-  { type: "bias", label: "Bias", role: "calibration" },
-  { type: "master-flat", label: "Master flats", role: "calibration" },
-  { type: "master-dark", label: "Master darks", role: "calibration" },
-  { type: "master-bias", label: "Master bias", role: "calibration" },
-  { type: "master-dark-flat", label: "Master dark flats", role: "calibration" },
+/** `label` is a catalogue message, worded at render. */
+const TYPES: Array<{ type: NamingFrameType; label: () => string; role: "captures" | "calibration" }> = [
+  { type: "light", label: m.naming_type_lights, role: "captures" },
+  { type: "flat", label: m.naming_type_flats, role: "calibration" },
+  { type: "dark", label: m.naming_type_darks, role: "calibration" },
+  { type: "bias", label: m.naming_type_bias, role: "calibration" },
+  { type: "master-flat", label: m.naming_type_master_flats, role: "calibration" },
+  { type: "master-dark", label: m.naming_type_master_darks, role: "calibration" },
+  { type: "master-bias", label: m.naming_type_master_bias, role: "calibration" },
+  { type: "master-dark-flat", label: m.naming_type_master_dark_flats, role: "calibration" },
 ]
 
 type Chip = { kind: "token"; token: NamingToken } | { kind: "sep" } | { kind: "text"; value: string }
@@ -90,6 +93,7 @@ function sampleValues(catalog: Catalog, type: NamingFrameType): { values: Naming
 }
 
 function Preview({ label, root, template, values }: { label: string; root: string; template: string; values: NamingValues }) {
+  const m = useMessages()
   const { path, fallbacks } = resolveNamingTemplate(template, values)
   return (
     <div className="space-y-1">
@@ -98,9 +102,9 @@ function Preview({ label, root, template, values }: { label: string; root: strin
         <span className="text-muted-foreground">{root}/</span>
         {path}
       </div>
-      <div className="flex flex-wrap gap-1" aria-label="Fallbacks">
+      <div className="flex flex-wrap gap-1" aria-label={m.naming_fallbacks()}>
         {fallbacks.length === 0 ? (
-          <Pill tone="success">No fallbacks</Pill>
+          <Pill tone="success">{m.naming_no_fallbacks()}</Pill>
         ) : (
           fallbacks.map((t) => (
             <Pill key={t} tone="warning">
@@ -114,6 +118,7 @@ function Preview({ label, root, template, values }: { label: string; root: strin
 }
 
 function Editor({ type }: { type: (typeof TYPES)[number] }) {
+  const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const overrides = useStore((s) => s.settings.naming)
   const saved = namingTemplate(overrides, type.type)
@@ -135,7 +140,7 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
   const errors = validateNamingTemplate(text)
   const dirty = text !== saved
   const custom = overrides[type.type] !== undefined
-  const root = Object.values(catalog.locations).find((l) => l.role === type.role)?.path ?? (type.role === "captures" ? "<Captures>" : "<Calibration>")
+  const root = Object.values(catalog.locations).find((l) => l.role === type.role)?.path ?? `<${type.role === "captures" ? m.status_role_captures() : m.status_role_calibration()}>`
   const sample = sampleValues(catalog, type.type)
   const setChips = (next: Chip[]) => setText(fromChips(next))
 
@@ -177,27 +182,27 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2" data-chrome>
-        <h3 className="text-sm font-semibold">{type.label}</h3>
-        <Pill tone={custom ? "info" : "muted"}>{custom ? "Custom" : "Default"}</Pill>
+        <h3 className="text-sm font-semibold">{type.label()}</h3>
+        <Pill tone={custom ? "info" : "muted"}>{custom ? m.naming_custom() : m.settings_default()}</Pill>
         <div className="flex-1" />
         {custom ? (
           <Button size="sm" variant="ghost" onClick={() => save(null)}>
             <RotateCcw aria-hidden="true" data-icon="inline-start" />
-            Restore default
+            {m.naming_restore_default()}
           </Button>
         ) : null}
         <Button size="sm" variant="outline" disabled={!dirty} onClick={() => setText(saved)}>
-          Discard
+          {m.naming_discard()}
         </Button>
         <Button size="sm" disabled={!dirty || errors.length > 0} onClick={() => save(text)}>
-          Save
+          {m.settings_save()}
         </Button>
       </div>
 
       <div className="space-y-1.5">
         <div id={ids.chips} className="inline-flex items-center gap-1.5 text-sm font-medium">
-          Template
-          <HelpTip label="Tokens and fallbacks">
+          {m.template_column_template()}
+          <HelpTip label={m.naming_tokens_about()}>
             <ul className="space-y-0.5 font-mono">
               {NAMING_TOKENS.map((t) => (
                 <li key={t.token}>{`{${t.token}} → ${t.fallback}`}</li>
@@ -206,7 +211,7 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
           </HelpTip>
         </div>
         <ul aria-labelledby={ids.chips} aria-describedby={`${ids.chips}-hint`} className="flex min-h-9 flex-wrap items-center gap-1 rounded-md border bg-background px-2 py-1.5">
-          {chips.length === 0 ? <li className="text-xs text-muted-foreground">Empty</li> : null}
+          {chips.length === 0 ? <li className="text-xs text-muted-foreground">{m.naming_empty()}</li> : null}
           {chips.map((chip, index) => {
             const text = chip.kind === "token" ? `{${chip.token}}` : chip.kind === "sep" ? "/" : chip.value
             return (
@@ -216,7 +221,13 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
                 key={index}
                 tabIndex={0}
                 data-chip-index={index}
-                aria-label={chip.kind === "token" ? `${text}, ${tokenLabel(chip.token)} token` : chip.kind === "sep" ? "/, folder separator" : `${text}, text`}
+                aria-label={
+                  chip.kind === "token"
+                    ? m.naming_chip_token({ text, label: tokenLabel(chip.token) })
+                    : chip.kind === "sep"
+                      ? m.naming_chip_separator()
+                      : m.naming_chip_text({ text })
+                }
                 aria-describedby={`${ids.chips}-hint`}
                 onKeyDown={(event) => onChipKey(event, index)}
                 className={cn(
@@ -233,27 +244,34 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
           })}
         </ul>
         <p id={`${ids.chips}-hint`} className="sr-only">
-          ← and → move between chips, ⌥← and ⌥→ move a chip, Delete removes it.
+          {m.naming_chip_hint()}
         </p>
         {focusIndex !== null && chips[focusIndex] ? (
           <span className="inline-flex gap-1 align-middle">
-            <Button size="icon-xs" variant="ghost" aria-label="Move chip left" onClick={() => move(focusIndex, -1)}>
+            <Button size="icon-xs" variant="ghost" aria-label={m.naming_move_left()} onClick={() => move(focusIndex, -1)}>
               <ArrowLeft aria-hidden="true" />
             </Button>
-            <Button size="icon-xs" variant="ghost" aria-label="Move chip right" onClick={() => move(focusIndex, 1)}>
+            <Button size="icon-xs" variant="ghost" aria-label={m.naming_move_right()} onClick={() => move(focusIndex, 1)}>
               <ArrowRight aria-hidden="true" />
             </Button>
           </span>
         ) : null}
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Insert a token">
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label={m.naming_insert_token()}>
           {NAMING_TOKENS.map((t) => (
-            <Button key={t.token} size="xs" variant="outline" title={`${t.label}; falls back to “${t.fallback}”`} onClick={() => setChips([...chips, { kind: "token", token: t.token }])}>
+            <Button
+              key={t.token}
+              size="xs"
+              variant="outline"
+              title={m.naming_token_title({ label: t.label, fallback: t.fallback })}
+              onClick={() => setChips([...chips, { kind: "token", token: t.token }])}
+            >
               <Plus aria-hidden="true" data-icon="inline-start" />
               {`{${t.token}}`}
             </Button>
           ))}
           <Button size="xs" variant="outline" onClick={() => setChips([...chips, { kind: "sep" }])}>
-            <Plus aria-hidden="true" data-icon="inline-start" />/ folder
+            <Plus aria-hidden="true" data-icon="inline-start" />
+            {m.naming_add_folder()}
           </Button>
           <form
             className="inline-flex items-center gap-1"
@@ -264,24 +282,38 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
               setLiteral("")
             }}
           >
-            <Input aria-label="Text to insert" placeholder="Text" value={literal} onChange={(event) => setLiteral(event.target.value)} className="h-6 w-28 font-mono text-xs" />
+            <Input
+              aria-label={m.naming_text_to_insert()}
+              placeholder={m.naming_text_placeholder()}
+              value={literal}
+              onChange={(event) => setLiteral(event.target.value)}
+              className="h-6 w-28 font-mono text-xs"
+            />
             <Button type="submit" size="xs" variant="outline" disabled={!literal}>
-              Add text
+              {m.naming_add_text()}
             </Button>
           </form>
         </div>
       </div>
 
-      <TextField id={ids.text} label="As text" mono value={text} onChange={setText} description={`Default: ${DEFAULT_NAMING[type.type]}`} error={errors.length > 0 ? `Not saved · ${errors.join(", ")}` : undefined} />
+      <TextField
+        id={ids.text}
+        label={m.naming_as_text()}
+        mono
+        value={text}
+        onChange={setText}
+        description={m.settings_default_named({ name: DEFAULT_NAMING[type.type] })}
+        error={errors.length > 0 ? m.naming_not_saved({ errors: errors.join(", ") }) : undefined}
+      />
       {failure ? <ActionError message={failure.message} onRetry={failure.retry} /> : null}
 
       <section aria-labelledby={`naming-preview-${type.type}-title`} className="space-y-2">
         <h3 id={`naming-preview-${type.type}-title`} className="inline-flex items-center gap-1.5 text-sm font-semibold">
-          Preview {dirty ? <Pill tone="warning">Unsaved</Pill> : null}
+          {m.naming_preview()} {dirty ? <Pill tone="warning">{m.naming_unsaved()}</Pill> : null}
         </h3>
         <div className="space-y-3 rounded-md border px-3 py-2" aria-live="polite">
-          {sample ? <Preview label={`Library · ${sample.from}`} root={root} template={text} values={sample.values} /> : null}
-          <Preview label="No metadata" root={root} template={text} values={{ frame_type: type.type }} />
+          {sample ? <Preview label={m.naming_preview_library({ from: sample.from })} root={root} template={text} values={sample.values} /> : null}
+          <Preview label={m.naming_preview_no_metadata()} root={root} template={text} values={{ frame_type: type.type }} />
         </div>
       </section>
     </div>
@@ -289,16 +321,17 @@ function Editor({ type }: { type: (typeof TYPES)[number] }) {
 }
 
 export function NamingSettingsPage() {
+  const m = useMessages()
   const overrides = useStore((s) => s.settings.naming)
   const [active, setActive] = useState<NamingFrameType>("light")
   const type = TYPES.find((t) => t.type === active)!
   return (
     <div>
-      <PageHeader level={2} title="Naming" />
+      <PageHeader level={2} title={m.settings_naming()} />
       <PageBody>
         <ReturnNotice />
         <div className="grid grid-cols-[11rem_minmax(0,1fr)] gap-5">
-          <ul aria-label="Frame types" className="space-y-px" data-chrome>
+          <ul aria-label={m.naming_frame_types()} className="space-y-px" data-chrome>
             {TYPES.map((t) => (
               <li key={t.type}>
                 <button
@@ -307,7 +340,7 @@ export function NamingSettingsPage() {
                   onClick={() => setActive(t.type)}
                   className={cn("flex w-full flex-col items-start rounded-[0.3125rem] px-2 py-1 text-left hover:bg-foreground/[0.06]", t.type === active && "bg-selected text-selected-foreground hover:bg-selected")}
                 >
-                  <span className="text-sm">{t.label}</span>
+                  <span className="text-sm">{t.label()}</span>
                   <span className={cn("w-full truncate font-mono text-[0.6875rem]", t.type === active ? "text-selected-foreground" : "text-muted-foreground")}>{namingTemplate(overrides, t.type)}</span>
                 </button>
               </li>
