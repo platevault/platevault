@@ -8,6 +8,7 @@
  */
 import { Archive, FolderSearch, RotateCw } from "lucide-react"
 import type { ReactNode } from "react"
+import { useMessages } from "@/app/preferences"
 import { PathText } from "@/components/app/data"
 import { Notice } from "@/components/app/feedback"
 import { menuKey } from "@/components/app/row-menu"
@@ -57,6 +58,7 @@ export interface LocationRowProps {
 const INLINE_NOTICE = "rounded-none border-0 bg-transparent px-0 py-0"
 
 export function LocationRow({ location, current, actions, actionsIncludeRescan = false, onChooseAgain, onRetry, onLocate, onRetire, feedback, badges, headingLevel = 3 }: LocationRowProps) {
+  const m = useMessages()
   const availability = useStore((s) => locationAvailability(s.disk, location))
   const volume = useStore((s) => s.disk.volumes[location.volumeId])
   const frames = useStore((s) => framesInLocation(s.catalog, location.id))
@@ -70,8 +72,8 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
 
   // A scan that could not read the folder is an attempt, never an index; a denied folder with nothing read shows no frame count.
   const facts = [
-    location.lastIndexedAt ? `${denied ? "Last attempt" : "Indexed"} ${formatDateTime(location.lastIndexedAt)}` : null,
-    frames > 0 || (location.lastIndexedAt && !denied) ? `${formatCount(frames)} ${frames === 1 ? "frame" : "frames"}` : null,
+    location.lastIndexedAt ? (denied ? m.location_last_attempt({ date: formatDateTime(location.lastIndexedAt) }) : m.location_indexed({ date: formatDateTime(location.lastIndexedAt) })) : null,
+    frames > 0 || (location.lastIndexedAt && !denied) ? m.location_frames({ count: frames, n: formatCount(frames) }) : null,
   ].filter((fact) => fact !== null)
   const nominal = [
     !offline && !retired && location.access === "ok" ? statusMeta("access", "ok").label : null,
@@ -92,14 +94,14 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
           <PathText path={location.path} className="text-muted-foreground" />
         </div>
         {/* Only health that needs attention is a badge. Nominal access, availability and scope (J19 S2) read as one quiet line. */}
-        <div className="flex flex-wrap items-center gap-1.5" aria-label={`${location.displayName} state`} role="group">
+        <div className="flex flex-wrap items-center gap-1.5" aria-label={m.location_state_group({ name: location.displayName })} role="group">
           <StatusBadge kind="role" value={location.role} />
           {badges}
           {/* While offline or retired the last-observed access and scope are history, not current state. */}
           {offline || retired || location.access === "ok" ? null : <StatusBadge kind="access" value={location.access} />}
           {availability === "online" ? null : <StatusBadge kind="availability" value={availability} />}
           {indexing ? (
-            <StatusBadge kind="operation" value="running" label="Indexing" />
+            <StatusBadge kind="operation" value="running" label={m.location_indexing()} />
           ) : offline || retired || location.scanScope === "complete" ? null : (
             <StatusBadge kind="scanScope" value={location.scanScope} />
           )}
@@ -114,20 +116,20 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
         <Notice
           tone="offline"
           className={INLINE_NOTICE}
-          title={`${volume?.name ?? "Volume"} not mounted`}
+          title={volume ? m.location_volume_not_mounted({ name: volume.name }) : m.location_volume_missing()}
           actions={
             frames > 0 && (onLocate || onRetire) ? (
               <>
                 {onLocate ? (
                   <Button size="sm" variant="outline" onClick={() => onLocate(location)}>
                     <FolderSearch aria-hidden="true" data-icon="inline-start" />
-                    Locate or remap
+                    {m.location_locate_or_remap()}
                   </Button>
                 ) : null}
                 {onRetire ? (
                   <Button size="sm" variant="outline" onClick={() => onRetire(location)}>
                     <Archive aria-hidden="true" data-icon="inline-start" />
-                    Retire location
+                    {m.location_retire()}
                   </Button>
                 ) : null}
               </>
@@ -140,17 +142,17 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
         <Notice
           tone="warning"
           className={INLINE_NOTICE}
-          title="Access denied"
+          title={m.status_access_denied()}
           // LIB-FR-07 names Choose folder again or Retry for a denied folder, so Retry stays even beside the row's Rescan.
           actions={
             <>
               <Button size="sm" variant="outline" onClick={() => onChooseAgain(location)}>
                 <FolderSearch aria-hidden="true" data-icon="inline-start" />
-                Choose folder again
+                {m.location_choose_folder_again()}
               </Button>
               <Button size="sm" variant="outline" disabled={indexing} onClick={() => onRetry(location)}>
                 <RotateCw aria-hidden="true" data-icon="inline-start" />
-                Retry
+                {m.verb_retry()}
               </Button>
             </>
           }
@@ -161,12 +163,12 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
         <Notice
           tone="warning"
           className={INLINE_NOTICE}
-          title={location.unreadablePaths.length > 0 ? `Incomplete scope · ${location.unreadablePaths.length === 1 ? "1 folder" : `${location.unreadablePaths.length} folders`} unread` : "Incomplete scope"}
+          title={location.unreadablePaths.length > 0 ? m.location_incomplete_unread({ count: location.unreadablePaths.length }) : m.status_incomplete_scope()}
           actions={
             actionsIncludeRescan ? undefined : (
               <Button size="sm" variant="outline" disabled={indexing} onClick={() => onRetry(location)}>
                 <RotateCw aria-hidden="true" data-icon="inline-start" />
-                Rescan
+                {m.location_rescan()}
               </Button>
             )
           }
@@ -183,7 +185,9 @@ export function LocationRow({ location, current, actions, actionsIncludeRescan =
         </Notice>
       ) : null}
 
-      {retired ? <Notice tone="info" className={INLINE_NOTICE} title={`Retired ${formatDateTime(location.retiredAt!)} · ${formatCount(frames)} ${frames === 1 ? "copy" : "copies"}`} /> : null}
+      {retired ? (
+        <Notice tone="info" className={INLINE_NOTICE} title={m.location_retired_copies({ date: formatDateTime(location.retiredAt!), count: frames, copies: formatCount(frames) })} />
+      ) : null}
 
       {feedback}
     </li>

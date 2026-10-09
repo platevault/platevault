@@ -10,12 +10,12 @@
 import type { OperationId } from "@/domain/types"
 import type { SliceDefinition } from "./index"
 
+/** The outcome only: Settings › Target lookup words it at render, in the current language. */
 export interface TargetLookupTest {
   at: string
   query: string
   provider: "cds-sesame" | "simbad"
   outcome: "resolved" | "not-found" | "failed" | "off"
-  message: string
   result: { name: string; ra: number; dec: number; objectType: string; aliases: string[] } | null
 }
 

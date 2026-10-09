@@ -4,6 +4,7 @@
  * application chooser.
  */
 import { useEffect, useId, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { KeyValueList, PathText } from "@/components/app/data"
 import { ActionError } from "@/components/app/feedback"
 import { Button } from "@/components/ui/button"
@@ -17,43 +18,46 @@ import { T4Badge } from "./badges"
 import { MODE_LABEL, PRODUCT_KIND_LABEL } from "@/domain/labels"
 
 export function CapabilityList({ profile }: { profile: ApplicationProfile }) {
+  const m = useMessages()
   const c = profile.capability
   const unsupported: string[] = []
-  if (c.correctedMetadata === "none") unsupported.push("reading corrected values through configuration")
-  if (c.directSource === "none") unsupported.push("passing exact source paths")
-  if (c.directSource === "whole-folder") unsupported.push("handing off an exact file list (it reads whole folders)")
-  if (c.productInputKinds.length === 0) unsupported.push("accepted Results as inputs")
+  if (c.correctedMetadata === "none") unsupported.push(m.apps_unsupported_corrected())
+  if (c.directSource === "none") unsupported.push(m.apps_unsupported_paths())
+  if (c.directSource === "whole-folder") unsupported.push(m.apps_unsupported_file_list())
+  if (c.productInputKinds.length === 0) unsupported.push(m.apps_unsupported_products())
   return (
     <div className="space-y-2">
       <KeyValueList
         items={[
-          { label: "Evidence", value: <span className="text-pretty">{c.evidence}</span>, source: c.verified ? "Prototype fixture" : undefined },
+          { label: m.apps_evidence(), value: <span className="text-pretty">{c.evidence}</span>, source: c.verified ? m.apps_prototype_fixture() : undefined },
           {
-            label: "Input writes",
+            label: m.apps_input_writes(),
             value: <T4Badge value={c.inputWrite === "read-only" ? "write:read-only" : c.inputWrite === "write-prone" ? "write:write-prone" : "write:unknown"} />,
           },
-          { label: "Input modes", value: c.inputModes.length ? c.inputModes.map((m) => MODE_LABEL[m]).join(", ") : "None recorded" },
-          { label: "Direct source", value: c.directSource === "file-list" ? "Exact file list" : c.directSource === "whole-folder" ? "Whole folders only" : "Not supported" },
-          { label: "Product inputs", value: c.productInputKinds.length ? c.productInputKinds.map((k) => PRODUCT_KIND_LABEL[k]).join(", ") : "None recorded" },
-          { label: "Corrected values", value: c.correctedMetadata === "configuration" ? "Through configuration" : "Not through configuration" },
+          { label: m.apps_input_modes(), value: c.inputModes.length ? c.inputModes.map((mode) => MODE_LABEL[mode]).join(", ") : m.apps_none_recorded() },
+          {
+            label: m.apps_direct_source(),
+            value: c.directSource === "file-list" ? m.apps_direct_file_list() : c.directSource === "whole-folder" ? m.apps_direct_whole_folders() : m.location_links_none(),
+          },
+          { label: m.apps_product_inputs(), value: c.productInputKinds.length ? c.productInputKinds.map((k) => PRODUCT_KIND_LABEL[k]).join(", ") : m.apps_none_recorded() },
+          { label: m.apps_corrected_values(), value: c.correctedMetadata === "configuration" ? m.apps_corrected_through() : m.apps_corrected_not_through() },
         ]}
       />
       {unsupported.length > 0 ? (
-        <p className="text-xs text-pretty text-muted-foreground">
-          Not supported: {unsupported.join("; ")}. Renaming files never overrides header values.
-        </p>
+        <p className="text-xs text-pretty text-muted-foreground">{m.apps_unsupported_list({ list: unsupported.join("; ") })}</p>
       ) : (
-        <p className="text-xs text-muted-foreground">Renaming files never overrides header values.</p>
+        <p className="text-xs text-muted-foreground">{m.apps_rename_note()}</p>
       )}
     </div>
   )
 }
 
 export function ExecutableState({ profile }: { profile: ApplicationProfile }) {
+  const m = useMessages()
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-2">
       <T4Badge value={`executable:${profile.executableState}`} />
-      {profile.executablePath ? <PathText path={profile.executablePath} className="min-w-0" /> : <span className="text-xs text-muted-foreground">No application located</span>}
+      {profile.executablePath ? <PathText path={profile.executablePath} className="min-w-0" /> : <span className="text-xs text-muted-foreground">{m.apps_not_located()}</span>}
     </span>
   )
 }
@@ -66,6 +70,7 @@ export interface LocateDialogProps {
 
 /** Prototype: simulated application chooser listing bundles on the simulated computer. */
 export function LocateApplicationDialog({ profile, onOpenChange, onLocated }: LocateDialogProps) {
+  const m = useMessages()
   const apps = useStore((s) => s.disk.apps)
   const [path, setPath] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -84,15 +89,15 @@ export function LocateApplicationDialog({ profile, onOpenChange, onLocated }: Lo
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Locate {profile.application === "generic" ? "an application" : profile.name}</DialogTitle>
-          <DialogDescription>Prototype: simulated application chooser. It lists application bundles on the simulated computer and records the path only; nothing is launched.</DialogDescription>
+          <DialogTitle>{profile.application === "generic" ? m.apps_locate_any() : m.settings_locate_named({ name: profile.name })}</DialogTitle>
+          <DialogDescription>{m.apps_locate_description()}</DialogDescription>
         </DialogHeader>
         <fieldset>
           <legend id={legendId} className="mb-2 text-sm font-medium">
-            Applications
+            {m.settings_applications()}
           </legend>
           {present.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No application bundle is present. Restore one in this step's prototype controls.</p>
+            <p className="text-sm text-muted-foreground">{m.apps_none_present()}</p>
           ) : (
             <RadioGroup aria-labelledby={legendId} value={path} onValueChange={(value) => setPath(String(value))} className="gap-1.5">
               {present.map((app) => (
@@ -110,7 +115,7 @@ export function LocateApplicationDialog({ profile, onOpenChange, onLocated }: Lo
         {error ? <ActionError message={error} /> : null}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {m.verb_cancel()}
           </Button>
           <Button
             disabled={!present.some((a) => a.path === path)}
@@ -121,7 +126,7 @@ export function LocateApplicationDialog({ profile, onOpenChange, onLocated }: Lo
               onOpenChange(false)
             }}
           >
-            Use this application
+            {m.apps_use_this()}
           </Button>
         </DialogFooter>
       </DialogContent>

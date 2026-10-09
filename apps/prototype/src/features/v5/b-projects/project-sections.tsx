@@ -805,7 +805,7 @@ export function RigsSection({ project }: { project: Project }) {
     >
       <CommitOutcome result={remove.result} action={m.project_refusal_remove_rig()} reason={(count) => m.project_used_by_runs({ count })} blockers={(reasons) => runBlockers(state, project, reasons)} className="border-b border-border px-3 py-2" />
       {project.rigIds.length === 0 ? (
-        <Empty>{m.projects_no_rigs()}</Empty>
+        <Empty>{m.equipment_no_rigs()}</Empty>
       ) : (
         <SimpleTable caption={m.project_rigs_of({ name: project.name })} headers={[m.project_col_rig(), m.project_col_camera(), m.project_col_channels(), m.project_col_field(), m.project_candidates()]}>
           {project.rigIds.map((id) => {

@@ -317,7 +317,7 @@ export function checkLabel(id: PlanCheckId): string {
     case "profile":
       return m.run_check_profile()
     case "products":
-      return m.run_product_inputs()
+      return m.apps_product_inputs()
     case "metadata":
       return m.run_check_metadata()
     case "mode":

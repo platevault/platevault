@@ -333,8 +333,8 @@ function ProductInputs({ run, lock, onOutcome }: { run: Run; lock: string | null
       flush
       title={
         <span className="flex items-center gap-1.5">
-          {m.run_product_inputs()} <CountBadge count={rows.length} label={m.run_product_inputs_count({ count: rows.length })} />
-          <HelpTip label={m.run_product_inputs()}>{m.run_product_inputs_help()}</HelpTip>
+          {m.apps_product_inputs()} <CountBadge count={rows.length} label={m.run_product_inputs_count({ count: rows.length })} />
+          <HelpTip label={m.apps_product_inputs()}>{m.run_product_inputs_help()}</HelpTip>
         </span>
       }
       actions={
@@ -355,7 +355,7 @@ function ProductInputs({ run, lock, onOutcome }: { run: Run; lock: string | null
         </Button>
       }
     >
-      <DataTable label={m.run_product_inputs()} rows={rows} columns={columns} getRowId={(r) => r.record.id} scroll="none" contextMenu={entries} empty={<p className="px-3 py-3 text-sm text-muted-foreground">{m.run_none()}</p>} />
+      <DataTable label={m.apps_product_inputs()} rows={rows} columns={columns} getRowId={(r) => r.record.id} scroll="none" contextMenu={entries} empty={<p className="px-3 py-3 text-sm text-muted-foreground">{m.run_none()}</p>} />
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>

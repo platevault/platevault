@@ -6,6 +6,7 @@
 import { stableHash } from "@/domain/indexing"
 import { removeSite } from "@/domain/sites"
 import type { Catalog, ObservingSite, SiteId } from "@/domain/types"
+import { m } from "@/lib/i18n"
 import { type CommitResult, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { parseNumber } from "../components/form-field"
 import { save } from "./writes"
@@ -54,13 +55,13 @@ function inRange(value: string, min: number, max: number, message: string, optio
 export function validateSite(catalog: Catalog, values: SiteValues, exceptId: SiteId | null): SiteErrors {
   const errors: SiteErrors = {}
   const name = values.name.trim()
-  if (!name) errors.name = "Name: enter a name, for example Backyard."
-  else if (Object.values(catalog.sites).some((s) => s.id !== exceptId && s.name.toLowerCase() === name.toLowerCase())) errors.name = `Name: ${name} is already a saved site.`
-  errors.latitude = inRange(values.latitude, -90, 90, "Latitude: enter degrees from −90 to 90; north is positive.")
-  errors.longitude = inRange(values.longitude, -180, 180, "Longitude: enter degrees from −180 to 180; east is positive.")
-  errors.elevation = inRange(values.elevation, -500, 9000, "Elevation: enter metres as a number, or leave it empty.", true)
-  errors.minAltitude = inRange(values.minAltitude, 0, 90, "Minimum altitude: enter degrees from 0 to 90.")
-  if (!TIME_ZONES.includes(values.timeZone)) errors.timeZone = values.timeZone ? `Time zone: ${values.timeZone} is not an IANA time zone. Choose one from the list.` : "Time zone: choose the site's IANA time zone, for example Europe/Amsterdam."
+  if (!name) errors.name = m.site_error_name_empty()
+  else if (Object.values(catalog.sites).some((s) => s.id !== exceptId && s.name.toLowerCase() === name.toLowerCase())) errors.name = m.site_error_name_taken({ name })
+  errors.latitude = inRange(values.latitude, -90, 90, m.site_error_latitude())
+  errors.longitude = inRange(values.longitude, -180, 180, m.site_error_longitude())
+  errors.elevation = inRange(values.elevation, -500, 9000, m.site_error_elevation(), true)
+  errors.minAltitude = inRange(values.minAltitude, 0, 90, m.site_error_min_altitude())
+  if (!TIME_ZONES.includes(values.timeZone)) errors.timeZone = values.timeZone ? m.site_error_time_zone_unknown({ zone: values.timeZone }) : m.site_error_time_zone_empty()
   return errors
 }
 
@@ -125,9 +126,14 @@ export function deleteSite(site: ObservingSite): CommitResult {
   })
 }
 
-/** "52.09° N, 5.12° E". */
+/** "52.09° N, 5.12° E", with the language's compass letters. */
 export function formatCoordinates(latitude: number, longitude: number): string {
-  return `${Math.abs(latitude).toFixed(2)}° ${latitude >= 0 ? "N" : "S"}, ${Math.abs(longitude).toFixed(2)}° ${longitude >= 0 ? "E" : "W"}`
+  return m.site_coordinates({
+    latitude: Math.abs(latitude).toFixed(2),
+    ns: latitude >= 0 ? m.site_north() : m.site_south(),
+    longitude: Math.abs(longitude).toFixed(2),
+    ew: longitude >= 0 ? m.site_east() : m.site_west(),
+  })
 }
 
 /**

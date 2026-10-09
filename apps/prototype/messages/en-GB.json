@@ -1292,7 +1292,6 @@
     }
   ],
   "projects_no_subjects": "No subjects",
-  "projects_no_rigs": "No rigs",
   "projects_col_state": "State",
   "projects_col_goals": "Goals",
   "projects_col_open_runs": "Open runs",
@@ -2972,7 +2971,6 @@
   "run_col_from": "From",
   "run_col_rig": "Rig",
   "run_col_accepted_bytes": "Accepted bytes",
-  "run_product_inputs": "Product inputs",
   "run_select_pointing_inside_panel": "Pointing inside the panel",
   "run_selection_blocked": "Selection change blocked",
   "run_select_remove_from_run": "Remove from run",
@@ -3958,5 +3956,921 @@
   "run_mode_no_symlinks": "{name}: no symbolic links",
   "run_mode_no_hardlinks": "{name}: no hard links",
   "run_check_mode_symlinks": "{mode} (symbolic links)",
-  "run_check_mode_hardlinks": "{mode} (hard links)"
+  "run_check_mode_hardlinks": "{mode} (hard links)",
+  "location_role_captures_description": "Light frames to index. Add as many folders as you like.",
+  "location_role_captures_add": "Add capture location",
+  "location_role_captures_picker": "Choose a capture folder",
+  "location_role_captures_list": "Capture locations",
+  "location_role_calibration_description": "Darks, flats, bias frames and calibration masters.",
+  "location_role_calibration_add": "Add calibration location",
+  "location_role_calibration_picker": "Choose a calibration folder",
+  "location_role_calibration_list": "Calibration locations",
+  "location_role_results_description": "Finished images and processing products PlateVault should find. Output folders can also be chosen per View.",
+  "location_role_results_add": "Add results location",
+  "location_role_results_picker": "Choose a results folder",
+  "location_role_results_list": "Results locations",
+  "location_role_archive_description": "Destinations for verified archive transfers.",
+  "location_role_archive_add": "Add archive location",
+  "location_role_archive_picker": "Choose an archive folder",
+  "location_role_archive_list": "Archive locations",
+  "location_error_name_empty": "Display name: enter a name, for example Astro-T7 captures.",
+  "location_error_name_taken": "Display name: {name} is already used by another location.",
+  "location_error_path_registered": "Folder: {path} is already registered as {name}.",
+  "location_error_path_inside": "Folder: inside {name}, which already indexes this folder. Choose a folder outside registered locations.",
+  "location_error_path_contains": "Folder: contains {name}. Choose a folder that does not hold a registered location.",
+  "location_error_unknown_volume": "Folder: {path} is not on a known volume.",
+  "location_retire_stale": "{name} is no longer registered as reviewed. Nothing was retired.",
+  "location_retire_availability_changed": "Retire location refused: {name} reads {now} now, but this review was made while it read {then}. Nothing was retired. Close this review and choose Retire location again for a new review.",
+  "location_retire_busy": "Retire location refused: {title} is not finished. Nothing was retired.",
+  "location_remap_same_folder": "{path} is the folder {name} already uses. Choose a different folder, or use Rescan to read it again.",
+  "location_remap_overlaps": "{path} overlaps {name}. Choose a folder outside other registered locations.",
+  "location_remap_no_frames": "{name} holds no indexed frames, so there is nothing to remap. Use Choose folder again to point it at another folder.",
+  "location_remap_no_match": "Remap refused: no indexed frame in {name} has the same bytes in {path}. Matching names are not enough. Nothing changed.",
+  "location_remap_unavailable": "Remap not saved: the location or volume is no longer available.",
+  "location_remap_hash_failed": [
+    {
+      "declarations": [
+        "input count",
+        "input volume",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remap not saved: hash verification of {count} file on {volume} failed. Nothing changed; choose Retry.",
+        "countPlural=*": "Remap not saved: hash verification of {count} files on {volume} failed. Nothing changed; choose Retry."
+      }
+    }
+  ],
+  "site_error_name_empty": "Name: enter a name, for example Backyard.",
+  "site_error_name_taken": "Name: {name} is already a saved site.",
+  "site_error_latitude": "Latitude: enter degrees from −90 to 90; north is positive.",
+  "site_error_longitude": "Longitude: enter degrees from −180 to 180; east is positive.",
+  "site_error_elevation": "Elevation: enter metres as a number, or leave it empty.",
+  "site_error_min_altitude": "Minimum altitude: enter degrees from 0 to 90.",
+  "site_error_time_zone_unknown": "Time zone: {zone} is not an IANA time zone. Choose one from the list.",
+  "site_error_time_zone_empty": "Time zone: choose the site's IANA time zone, for example Europe/Amsterdam.",
+  "site_coordinates": "{latitude}° {ns}, {longitude}° {ew}",
+  "site_north": "N",
+  "site_south": "S",
+  "site_east": "E",
+  "site_west": "W",
+  "location_not_saved": "Location registration was not saved.",
+  "location_folder": "Folder",
+  "location_change": "Change",
+  "location_display_name": "Display name",
+  "location_role": "Role",
+  "location_names_more": "{names} and {count} more",
+  "location_remap_refused": "Remap refused",
+  "location_folder_unchanged": "Folder not changed",
+  "location_remap_saved": "Remap saved",
+  "location_rescan": "Rescan",
+  "location_choose_again": "Choose again",
+  "settings_locate_named": "Locate {name}",
+  "location_choose_folder_for": "Choose folder for {name}",
+  "location_remap_title": "Remap {name} to {path}?",
+  "location_remap_same_bytes": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} same bytes",
+        "countPlural=*": "{frames} same bytes"
+      }
+    }
+  ],
+  "location_remap_differ": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} differs",
+        "countPlural=*": "{frames} differ"
+      }
+    }
+  ],
+  "location_remap_not_found": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} not found",
+        "countPlural=*": "{frames} not found"
+      }
+    }
+  ],
+  "location_volume_evidence": "Volume evidence",
+  "location_from": "From",
+  "location_to": "To",
+  "location_remap_change_move": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame moves to {path}, verified by SHA-256",
+        "countPlural=*": "{frames} frames move to {path}, verified by SHA-256"
+      }
+    }
+  ],
+  "location_remap_change_differ": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input names",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame refused, bytes differ: {names}",
+        "countPlural=*": "{frames} frames refused, bytes differ: {names}"
+      }
+    }
+  ],
+  "location_remap_change_not_found": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input names",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame not found in the new folder: {names}",
+        "countPlural=*": "{frames} frames not found in the new folder: {names}"
+      }
+    }
+  ],
+  "location_remap_change_refused_note": "Refused frames read Not found here",
+  "location_remap_change_points": "{name} points to {path}",
+  "location_remap_confirm": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remap {frames} frame",
+        "countPlural=*": "Remap {frames} frames"
+      }
+    }
+  ],
+  "location_remap_done": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame → {path}",
+        "countPlural=*": "{frames} frames → {path}"
+      }
+    }
+  ],
+  "location_remap_done_refused": [
+    {
+      "declarations": [
+        "input count",
+        "input frames",
+        "input path",
+        "input refused",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{frames} frame → {path} · {refused} refused",
+        "countPlural=*": "{frames} frames → {path} · {refused} refused"
+      }
+    }
+  ],
+  "location_last_attempt": "Last attempt {date}",
+  "location_indexed": "Indexed {date}",
+  "location_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "location_state_group": "{name} state",
+  "location_indexing": "Indexing",
+  "location_volume_not_mounted": "{name} not mounted",
+  "location_volume_missing": "Volume not mounted",
+  "location_locate_or_remap": "Locate or remap",
+  "location_retire": "Retire location",
+  "location_choose_folder_again": "Choose folder again",
+  "location_incomplete_unread": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Incomplete scope · {count} folder unread",
+        "countPlural=*": "Incomplete scope · {count} folders unread"
+      }
+    }
+  ],
+  "location_retired_copies": [
+    {
+      "declarations": [
+        "input count",
+        "input date",
+        "input copies",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Retired {date} · {copies} copy",
+        "countPlural=*": "Retired {date} · {copies} copies"
+      }
+    }
+  ],
+  "location_more_actions": "More actions for {name}",
+  "settings_actions": "Actions",
+  "settings_sections": "Settings sections",
+  "settings_back_to_session": "Back to session",
+  "settings_back_to_plan": "Back to Plan",
+  "settings_back_to_target": "Back to Target",
+  "settings_back_to_run": "Back to run",
+  "settings_back_to_storage": "Back to Storage",
+  "settings_back_to_calibration": "Back to Calibration",
+  "settings_back_to_project": "Back to Project",
+  "settings_go_back": "Go back",
+  "about_simulated_data": "Simulated data",
+  "about_no_files_touched": "No files touched",
+  "about_no_network": "No network",
+  "about_this_build": "This build",
+  "about_version": "Version",
+  "about_version_value": "{version} · prototype build",
+  "about_data": "Data",
+  "about_data_demo": "Demo library",
+  "about_data_empty": "Empty (first run)",
+  "about_stored_in": "Stored in",
+  "about_catalog": "Catalog",
+  "about_count_locations": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} location",
+        "countPlural=*": "{n} locations"
+      }
+    }
+  ],
+  "about_count_light_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} light session",
+        "countPlural=*": "{n} light sessions"
+      }
+    }
+  ],
+  "about_count_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "about_count_runs": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} processing run",
+        "countPlural=*": "{n} processing runs"
+      }
+    }
+  ],
+  "about_clock": "PlateVault clock",
+  "about_clock_simulated": "{date} (simulated)",
+  "about_clock_system": "This computer",
+  "about_onboarding": "Onboarding",
+  "about_first_run_setup": "First-run setup",
+  "about_restart_setup": "Restart setup",
+  "about_simulation": "Simulation",
+  "about_restart_title": "Restart first-run setup?",
+  "about_restart_change": "Open the Choose locations step",
+  "settings_density_compact": "Compact",
+  "settings_density_comfortable": "Comfortable",
+  "settings_density_spacious": "Spacious",
+  "settings_at_defaults": "Already at the defaults",
+  "settings_restore_defaults": "Restore defaults",
+  "settings_density": "Density",
+  "settings_keyboard": "Keyboard",
+  "settings_shortcuts_about": "About single-key shortcuts",
+  "settings_shortcuts_help": "?, /, [ and G sequences. ⌘K and Ctrl+K always work.",
+  "settings_restore_title": "Restore appearance defaults?",
+  "settings_restore_density": "Density: {name}",
+  "settings_edit_title": "Edit {name}",
+  "settings_save": "Save",
+  "location_path": "Path",
+  "location_volume": "Volume",
+  "location_volume_identity": "{name} · identity {uuid}",
+  "location_volume_unknown": "Unknown volume",
+  "location_availability": "Availability",
+  "location_access": "Access",
+  "location_scan_scope": "Scan scope",
+  "location_last_indexed": "Last indexed",
+  "location_not_indexed_yet": "Not indexed yet",
+  "location_indexed_frames": "Indexed frames",
+  "location_sessions_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} session",
+        "countPlural=*": "{n} sessions"
+      }
+    }
+  ],
+  "location_links": "Links",
+  "location_link_symlinks": "Symlinks",
+  "location_link_hardlinks": "Hardlinks",
+  "location_link_clones": "Clones",
+  "location_links_none": "Not supported",
+  "location_unreadable_folders": "Unreadable folders at the last scan",
+  "settings_none": "None",
+  "location_retire_review_title": "Review: retire {name}",
+  "location_label": "Location",
+  "location_root": "Root",
+  "location_availability_at_review": "Availability at review",
+  "location_copies": "Copies",
+  "location_copies_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} copy",
+        "countPlural=*": "{n} copies"
+      }
+    }
+  ],
+  "location_sessions_list": "{count}: {list}",
+  "location_changes": "Changes",
+  "location_copies_read_retired": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} copy reads Retired",
+        "countPlural=*": "{n} copies read Retired"
+      }
+    }
+  ],
+  "location_leaves_totals": "Leaves totals",
+  "location_no_file_changes": "No file changes",
+  "location_availability_changed": "Availability changed",
+  "location_close_review": "Close review",
+  "location_make_default_blocked": "Make default blocked",
+  "location_make_default_not_saved": "Make default not saved",
+  "settings_details": "Details",
+  "location_index_now": "Index now",
+  "settings_make_default": "Make default",
+  "settings_edit": "Edit",
+  "location_remove_with_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remove · {n} frame",
+        "countPlural=*": "Remove · {n} frames"
+      }
+    }
+  ],
+  "settings_remove": "Remove",
+  "location_last_indexing": "Last indexing",
+  "settings_default": "Default",
+  "settings_remove_title": "Remove {name}?",
+  "location_remove_change": "Unregister {path}",
+  "location_remove_confirm": "Remove location",
+  "site_name": "Name",
+  "site_name_placeholder": "Backyard",
+  "site_latitude_field": "Latitude (° N)",
+  "site_longitude_field": "Longitude (° E)",
+  "site_elevation_field": "Elevation (m)",
+  "site_optional": "Optional",
+  "site_time_zone": "Time zone",
+  "site_darkness": "Darkness",
+  "site_twilight_astronomical": "Astronomical",
+  "site_twilight_nautical": "Nautical",
+  "site_sun_below": "Sun −{degrees}°",
+  "site_min_altitude_field": "Min. altitude (°)",
+  "site_default_about": "About the default site",
+  "site_default_help": "Reminders move to the default site.",
+  "site_save_changes_button": "Save changes",
+  "site_no_default": "No default site",
+  "site_none": "No sites",
+  "site_coordinates_header": "Coordinates",
+  "site_elevation": "Elevation",
+  "site_min_altitude": "Min. altitude",
+  "site_from_headers": "From headers",
+  "site_headers_about": "About header coordinates",
+  "site_headers_help": "SITELAT and SITELONG without a saved site.",
+  "site_in_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "· in {n} session",
+        "countPlural=*": "· in {n} sessions"
+      }
+    }
+  ],
+  "site_add_as_site": "Add as site",
+  "settings_default_named": "Default: {name}",
+  "site_clear_planning": "Clear the planning site",
+  "site_remove_confirm": "Remove site",
+  "site_make_default_title": "Make {name} the default?",
+  "site_reminders_change": "Reminders: {from} → {to}",
+  "site_previous": "previous site",
+  "settings_lookup_sesame_sources": "SIMBAD, NED, VizieR",
+  "settings_lookup_simbad_only": "SIMBAD only",
+  "settings_lookup_resolved": "Resolved by {provider}.",
+  "settings_lookup_not_found": "{provider} returned no object named {query}.",
+  "settings_lookup_failed": "{provider} did not respond: the lookup failed as if offline. No Target was changed; local Targets and indexed sessions stay usable.",
+  "settings_lookup_off": "Online lookup is off, so nothing was sent. Local Targets and the bundled catalog still search offline.",
+  "settings_lookup_query_empty": "Name to look up: enter a Target name or alias, for example NGC 7000.",
+  "settings_lookup_local": "Local search",
+  "settings_lookup_targets": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} Target",
+        "countPlural=*": "{n} Targets"
+      }
+    }
+  ],
+  "settings_lookup_catalogue_objects": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} catalogue object",
+        "countPlural=*": "{n} catalogue objects"
+      }
+    }
+  ],
+  "settings_lookup_online": "Look up Targets online",
+  "settings_lookup_online_about": "About online lookup",
+  "settings_lookup_online_help": "Sends Target names to the provider. A failed lookup never blocks indexing.",
+  "settings_lookup_provider": "Provider",
+  "settings_lookup_test": "Test",
+  "settings_lookup_fixture": "Fixture",
+  "settings_lookup_query": "Name to look up",
+  "settings_lookup_running": "Looking up…",
+  "settings_lookup_running_named": "Looking up {name}",
+  "settings_lookup_name": "Name",
+  "settings_lookup_coordinates": "Coordinates",
+  "settings_lookup_object_type": "Object type",
+  "settings_lookup_aliases": "Aliases",
+  "settings_lookup_failed_title": "Lookup failed",
+  "settings_lookup_off_title": "Online lookup off",
+  "setup_step_welcome": "Welcome",
+  "setup_step_index": "Index",
+  "setup_progress": "Setup progress",
+  "setup_welcome_title": "Welcome to PlateVault",
+  "setup_welcome_description": "PlateVault catalogs your astrophotography captures where they already are, groups them into sessions and prepares exact inputs for PixInsight, Siril and other processing apps.",
+  "setup_does_title": "What PlateVault does",
+  "setup_does_index": "Indexes FITS and XISF folders in place",
+  "setup_does_sessions": "Groups frames into sessions, one per filter, exposure and camera",
+  "setup_does_coverage": "Shows Target coverage and optional Project goals",
+  "setup_does_views": "Prepares reviewed Views for your processing app",
+  "setup_never_title": "What it never does",
+  "setup_never_move": "Moves, renames or deletes files without a reviewed operation",
+  "setup_never_headers": "Changes the headers of your source files",
+  "setup_never_process": "Calibrates, stacks or stretches images",
+  "setup_never_account": "Needs an account or a network connection",
+  "setup_next_empty": "Next, choose the folders that hold your captures. Only a Captures location is required.",
+  "setup_next_registered": "Your locations are registered. Continue to review them and start indexing.",
+  "setup_set_up_locations": "Set up locations",
+  "setup_continue": "Continue setup",
+  "setup_later": "Set up later",
+  "setup_later_hint": "Opens the library now. Add locations any time in Settings › Locations.",
+  "setup_demo_title": "Prototype: demo library",
+  "setup_demo_load": "Load demo library",
+  "setup_demo_body": "Skips setup and loads a realistic indexed library: M 31, NGC 7000, a mosaic Project and an offline drive. It replaces the prototype data in this browser.",
+  "setup_demo_confirm_title": "Load the demo library?",
+  "setup_demo_confirm_description": "Prototype only. The demo replaces everything in this browser's prototype data.",
+  "setup_demo_change_replace": "Replace locations, sessions, Projects and Views with the demo library",
+  "setup_demo_change_skip": "Skip setup and open Targets",
+  "setup_demo_unchanged_appearance": "Theme and density",
+  "setup_demo_unchanged_files": "No real files exist; nothing on your computer is touched",
+  "setup_locations_title": "Choose locations",
+  "setup_locations_description": "Register the folders that already hold your files. Registering only records access and indexing intent; nothing is copied, renamed, moved or deleted.",
+  "setup_required": "Required",
+  "setup_add_another": "Add another location",
+  "setup_captures_needed": "Add at least one folder with light frames to continue.",
+  "setup_deferred": "You chose to set this up later. Add it any time in Settings › Locations.",
+  "setup_optional_unset": "Leave it unset if you do not keep these files in one place yet.",
+  "setup_nothing_else_title": "Nothing else is needed now",
+  "setup_nothing_else_body": "View folders are chosen when you prepare a View. Setup asks for no workspace folder, processing app, Project or account.",
+  "setup_continue_reason": "Add a capture location to continue. Captures is the only required role.",
+  "setup_continue_short": "Continue",
+  "setup_remove_description": "Removes the registration only. Nothing was indexed from this folder yet.",
+  "setup_remove_change": "Stop tracking {path}",
+  "setup_remove_unchanged": "The folder and every file in it",
+  "setup_footer_running": "You can browse sessions already read while indexing continues.",
+  "setup_footer_interrupted": "Indexing was interrupted. Continue it above, or open the library to browse sessions already read.",
+  "setup_footer_canceled": "Indexing was canceled. Sessions already read are kept; rescan the rest here or later in Settings › Locations.",
+  "setup_footer_unindexed": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} location not indexed yet. Index it now, or later in Settings › Locations.",
+        "countPlural=*": "{n} locations not indexed yet. Index them now, or later in Settings › Locations."
+      }
+    }
+  ],
+  "setup_footer_finished": "Indexing finished. Open the library to review sessions.",
+  "setup_indexing_title": "Index your captures",
+  "setup_indexing_description": "PlateVault reads metadata from each location. Files stay where they are and are never changed.",
+  "setup_indexing_progress": "Indexing progress",
+  "setup_latest_run": "Latest run: {title}",
+  "setup_scan": "Setup scan",
+  "setup_stat_discovered": "Files discovered",
+  "setup_stat_read": "Metadata read",
+  "setup_stat_unsupported": "Unsupported",
+  "setup_stat_unsupported_hint": "Skipped, left as they are",
+  "setup_stat_unreadable": "Unreadable folders",
+  "setup_stat_unreadable_hint": "Read Unknown, never missing",
+  "setup_stat_complete_value": "{done} of {total}",
+  "setup_stat_complete_hint": "locations, now",
+  "setup_library_so_far": "Library so far: {sessions} · {frames} (lights and calibration)",
+  "setup_library_covers": " · covers {names}",
+  "setup_locations_to_index": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} location to index",
+        "countPlural=*": "{n} locations to index"
+      }
+    }
+  ],
+  "setup_index_all_hint": "Every registered location is read. Calibration frames are indexed too; they never appear as light sessions.",
+  "setup_registered_locations": "Registered locations",
+  "setup_index_new": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Index {n} new location",
+        "countPlural=*": "Index {n} new locations"
+      }
+    }
+  ],
+  "setup_open_library": "Open library",
+  "setup_index_later_hint": "Index later keeps the locations registered; start indexing from Settings › Locations.",
+  "setup_index_later": "Index later",
+  "setup_start_indexing": "Start indexing",
+  "site_time_zone_placeholder": "Europe/Amsterdam",
+  "apps_badge_verified": "Verified profile",
+  "apps_badge_found": "Found",
+  "apps_badge_not_configured": "Not configured",
+  "apps_badge_launch_failed": "Launch failed",
+  "apps_badge_checked": "Checked",
+  "apps_badge_needs_attention": "Needs attention",
+  "apps_badge_read_only": "Read-only inputs",
+  "apps_badge_writes_unknown": "Input writes unknown",
+  "apps_badge_write_prone": "Writes into inputs",
+  "apps_unsupported_corrected": "reading corrected values through configuration",
+  "apps_unsupported_paths": "passing exact source paths",
+  "apps_unsupported_file_list": "handing off an exact file list (it reads whole folders)",
+  "apps_unsupported_products": "accepted Results as inputs",
+  "apps_evidence": "Evidence",
+  "apps_prototype_fixture": "Prototype fixture",
+  "apps_input_writes": "Input writes",
+  "apps_input_modes": "Input modes",
+  "apps_none_recorded": "None recorded",
+  "apps_direct_source": "Direct source",
+  "apps_direct_file_list": "Exact file list",
+  "apps_direct_whole_folders": "Whole folders only",
+  "apps_product_inputs": "Product inputs",
+  "apps_corrected_values": "Corrected values",
+  "apps_corrected_through": "Through configuration",
+  "apps_corrected_not_through": "Not through configuration",
+  "apps_unsupported_list": "Not supported: {list}. Renaming files never overrides header values.",
+  "apps_rename_note": "Renaming files never overrides header values.",
+  "apps_not_located": "No application located",
+  "apps_locate_any": "Locate an application",
+  "apps_locate_description": "Prototype: simulated application chooser. It lists application bundles on the simulated computer and records the path only; nothing is launched.",
+  "apps_none_present": "No application bundle is present. Restore one in this step's prototype controls.",
+  "apps_use_this": "Use this application",
+  "apps_generic_description": "Launches any application with your arguments. It is not a verified preparation profile, so only Copy or Clone handoffs are offered.",
+  "apps_check_again": "Check again",
+  "apps_change": "Change…",
+  "apps_locate": "Locate…",
+  "apps_launch_arguments": "Launch arguments",
+  "apps_launch_placeholder": "e.g. --input \"{token}\"",
+  "apps_save_arguments": "Save arguments",
+  "apps_edit_to_save": "Edit the arguments to save them.",
+  "apps_description": "Profiles PlateVault prepares inputs for. Capability claims come from recorded evidence only; PlateVault never runs processing.",
+  "apps_back_to_task": "Back to the task",
+  "apps_fixture_title": "Prototype: fixture capability evidence",
+  "apps_fixture_body": "Evidence below is fixture data. Real capability probes for PixInsight/WBPP, Siril and SETI Astro Suite Pro are not part of this prototype.",
+  "apps_controls_title": "applications on this computer",
+  "apps_present": "present",
+  "apps_moved_away": "moved away",
+  "apps_next_launch_fails": " · next launch fails",
+  "apps_move_away": "Move away",
+  "apps_put_back": "Put back",
+  "apps_fail_next_launch": "Fail next launch",
+  "settings_keep_raws_not_saved": "Keep raws not saved",
+  "settings_raw_frames": "Raw frames",
+  "settings_keep_raws": "Keep raw calibration frames",
+  "settings_keep_raws_about": "About keeping raw calibration frames",
+  "settings_keep_raws_help": "Off: raws go to the OS Trash once their master registers.",
+  "settings_masters": "Masters",
+  "settings_layout": "Layout",
+  "settings_tools": "Tools",
+  "template_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "settings_name_required": "Name required",
+  "template_add_channel": "Add a channel",
+  "template_hours_or_frames": "Hours or frames needed · {channels}",
+  "template_goals": "Goals",
+  "template_osc_about": "About OSC and Dual-band",
+  "template_osc_help": "OSC: no filter or a broadband filter on an OSC camera. Dual-band: a filter passing two narrow bands.",
+  "template_table_caption": "{group} goal templates",
+  "template_column_template": "Template",
+  "template_copy_name": "{name} copy",
+  "template_copy_name_numbered": "{name} copy {n}",
+  "template_duplicate_title": "Duplicate {name}",
+  "template_new": "New template",
+  "template_built_in": "Built-in",
+  "template_duplicate": "Duplicate",
+  "template_none_yours": "No templates of yours",
+  "template_yours": "Yours",
+  "template_delete": "Delete",
+  "template_delete_title": "Delete {name}?",
+  "template_delete_change": "Delete {name}",
+  "naming_type_lights": "Lights",
+  "naming_type_flats": "Flats",
+  "naming_type_darks": "Darks",
+  "naming_type_bias": "Bias",
+  "naming_fallbacks": "Fallbacks",
+  "naming_no_fallbacks": "No fallbacks",
+  "naming_custom": "Custom",
+  "naming_restore_default": "Restore default",
+  "naming_discard": "Discard",
+  "naming_tokens_about": "Tokens and fallbacks",
+  "naming_empty": "Empty",
+  "naming_chip_token": "{text}, {label} token",
+  "naming_chip_separator": "/, folder separator",
+  "naming_chip_text": "{text}, text",
+  "naming_chip_hint": "← and → move between chips, ⌥← and ⌥→ move a chip, Delete removes it.",
+  "naming_move_left": "Move chip left",
+  "naming_move_right": "Move chip right",
+  "naming_insert_token": "Insert a token",
+  "naming_token_title": "{label}; falls back to “{fallback}”",
+  "naming_add_folder": "/ folder",
+  "naming_text_to_insert": "Text to insert",
+  "naming_text_placeholder": "Text",
+  "naming_add_text": "Add text",
+  "naming_as_text": "As text",
+  "naming_not_saved": "Not saved · {errors}",
+  "naming_preview": "Preview",
+  "naming_unsaved": "Unsaved",
+  "naming_preview_library": "Library · {from}",
+  "naming_preview_no_metadata": "No metadata",
+  "naming_frame_types": "Frame types",
+  "equipment_pick_band": "Pick a band",
+  "equipment_add_value": "Add {value}",
+  "equipment_add_filter": "Add filter",
+  "equipment_matches_filter": "Matches FILTER",
+  "equipment_comma_separated": "Comma-separated",
+  "equipment_bands": "Bands",
+  "equipment_error_whole_pixels": "Whole pixels > 0",
+  "equipment_error_microns": "µm > 0",
+  "equipment_error_mm": "mm > 0",
+  "equipment_optics_title": "Optics of {name}",
+  "equipment_shared_camera": "Shared camera",
+  "equipment_shared_camera_help": "Camera values change for {rigs}.",
+  "equipment_camera_kind": "Camera kind",
+  "equipment_mono": "Mono",
+  "equipment_osc": "OSC",
+  "equipment_osc_colour": "OSC (colour)",
+  "equipment_sensor_width": "Sensor width (px)",
+  "equipment_sensor_height": "Sensor height (px)",
+  "equipment_pixel_size": "Pixel size (µm)",
+  "equipment_focal_length": "Effective focal length (mm)",
+  "equipment_field_of_view": "Field of view",
+  "equipment_rename": "Rename",
+  "equipment_edit_optics": "Edit optics",
+  "equipment_unknown_filter": [
+    {
+      "declarations": [
+        "input count",
+        "input value",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Unknown FILTER “{value}” · {n} session",
+        "countPlural=*": "Unknown FILTER “{value}” · {n} sessions"
+      }
+    }
+  ],
+  "equipment_not_now": "Not now",
+  "equipment_hidden": "Hidden",
+  "equipment_show": "Show",
+  "equipment_camera": "Camera",
+  "equipment_sensor": "Sensor",
+  "equipment_telescope": "Telescope",
+  "equipment_derived": "Derived",
+  "equipment_osc_camera": "OSC camera",
+  "equipment_filters": "Filters",
+  "equipment_to_rig": "to {name}",
+  "equipment_no_filters_osc": "No filters · OSC",
+  "equipment_filters_of": "Filters of {name}",
+  "equipment_filter": "Filter",
+  "equipment_dual_band": "Dual-band",
+  "equipment_rename_title": "Rename {name}",
+  "equipment_rig_name": "Rig name",
+  "equipment_remove_filter_title": "Remove {filter} from {rig}?",
+  "equipment_remove_filter_change": "Remove {filter} ({bands})",
+  "equipment_remove_filter_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} session reads the filter as unknown",
+        "countPlural=*": "{n} sessions read the filter as unknown"
+      }
+    }
+  ],
+  "equipment_no_rigs": "No rigs",
+  "settings_lookup_test_heading": "Test"
 }
