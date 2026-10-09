@@ -1,9 +1,9 @@
 /**
  * Shell-level UI state: which global panel is open (command palette,
  * keyboard shortcuts, simulation controls), which workflow sheet is open
- * (Import, New Project, Done / Archive, Start a run) and the sidebar collapse
- * preference. Module-level store so the header, shortcuts and screens can
- * open panels and sheets without prop drilling.
+ * (Import, New Project, Start a run), the sidebar collapse preference and the
+ * Recent Projects of the source list. Module-level store so the header,
+ * shortcuts and screens can open panels and sheets without prop drilling.
  */
 import { useSyncExternalStore } from "react"
 import type { ProjectId, SessionId, TargetId } from "@/domain/types"
@@ -26,11 +26,16 @@ export type WorkflowSheet =
   | null
 
 const SIDEBAR_KEY = "platevault.sidebar"
+const RECENT_KEY = "platevault.recentProjects"
+/** The source list's Recent group shows at most this many Projects. */
+export const RECENT_LIMIT = 3
 
 interface ShellUiState {
   panel: GlobalPanel
   sheet: WorkflowSheet
   sidebarCollapsed: boolean
+  /** Projects opened most recently, newest first. */
+  recentProjectIds: ProjectId[]
 }
 
 function readSidebar(): boolean {
@@ -41,7 +46,16 @@ function readSidebar(): boolean {
   }
 }
 
-let current: ShellUiState = { panel: null, sheet: null, sidebarCollapsed: readSidebar() }
+function readRecent(): ProjectId[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]")
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string").slice(0, RECENT_LIMIT) : []
+  } catch {
+    return []
+  }
+}
+
+let current: ShellUiState = { panel: null, sheet: null, sidebarCollapsed: readSidebar(), recentProjectIds: readRecent() }
 const listeners = new Set<() => void>()
 
 function set(next: Partial<ShellUiState>) {
@@ -73,6 +87,18 @@ export function toggleSidebar() {
     // Preference applies for this session only.
   }
   set({ sidebarCollapsed })
+}
+
+/** A Project was opened: it leads the Recent group. */
+export function rememberProject(projectId: ProjectId) {
+  if (current.recentProjectIds[0] === projectId) return
+  const recentProjectIds = [projectId, ...current.recentProjectIds.filter((id) => id !== projectId)].slice(0, RECENT_LIMIT)
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recentProjectIds))
+  } catch {
+    // Recent applies for this session only.
+  }
+  set({ recentProjectIds })
 }
 
 export function useShellUi(): ShellUiState {

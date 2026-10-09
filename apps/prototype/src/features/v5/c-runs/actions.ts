@@ -181,8 +181,8 @@ export function answerMasterOffer(runId: string, masterId: string, answer: "adop
   const href = runHref(run, "calibrate")
   if (!run.masterOffers.some((o) => o.masterId === masterId && o.state === "pending")) return refuse("Offer already answered", [`${fileName(master.path)} was offered once and already answered`], href)
   if (answer === "dismiss") {
-    const result = editRun(run.id, "Dismiss master offer", (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "declined", at: nowIso() } : o)) }), { step: "calibrate", record: false })
-    if (result.ok) recordSaved(`Dismissed ${fileName(master.path)}`, "It stays in the Results folder and is not offered again.", href)
+    const result = editRun(run.id, "Dismiss master offer", (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "dismissed", at: nowIso() } : o)) }), { step: "calibrate", record: false })
+    if (result.ok) recordSaved(`Dismissed ${fileName(master.path)}`, "Calibration › Dismissed can restore the offer.", href)
     return result
   }
   const source = fileAt(state.disk, master.origin.sourcePath)
@@ -470,7 +470,7 @@ export function discoverResults(target: { runId?: string; groupId?: string }): {
         frameCount: null,
         createdAt: file.modifiedAt,
         state: "candidate",
-        origin: { kind: "generated", runId: run.id, sourcePath: file.path },
+        origin: { kind: "generated", runId: run.id, sourcePath: file.path, sessionId: null },
         adoption: null,
       })
     }

@@ -5,7 +5,7 @@
  * write the catalog directly; PlateVault observes their effects the next time
  * it reads the disk.
  */
-import { ASIAIR_CARD, arrivalFiles, asiairCardFiles, VOLUME_IDS } from "@/domain/seed"
+import { arrivalFiles, deviceFiles, VOLUME_IDS } from "@/domain/seed"
 import { fakeSha256, fileAt, fileKey, filesUnder, makeFile, removeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
 import type { Disk, DiskFile, SimulationFaults, VolumeId } from "@/domain/types"
@@ -62,18 +62,20 @@ export function newCapturesArrived(): boolean {
   return first ? Boolean(fileAt(store.getState().disk, first.path)) : false
 }
 
-/** S13 Import: the OS mounts the ASIAIR SD card with the files the device wrote last night. */
-export function insertAsiairCard() {
+/** S13 Import: the OS mounts a removable device (USB / SD) with the files its capture application wrote. */
+export function connectDevice(volumeId: VolumeId) {
   store.setState((s) => {
-    const existing = s.disk.volumes[ASIAIR_CARD.id]
-    const disk: Disk = { ...s.disk, volumes: { ...s.disk.volumes, [ASIAIR_CARD.id]: { ...(existing ?? ASIAIR_CARD), mounted: true } } }
-    const hasFiles = Object.values(disk.files).some((f) => f.volumeId === ASIAIR_CARD.id)
-    return { ...s, disk: hasFiles ? disk : writeFiles(disk, asiairCardFiles(s.disk)) }
+    const volume = s.disk.volumes[volumeId]
+    if (!volume?.removable || volume.mounted) return s
+    const disk: Disk = { ...s.disk, volumes: { ...s.disk.volumes, [volumeId]: { ...volume, mounted: true } } }
+    const hasFiles = Object.values(disk.files).some((f) => f.volumeId === volumeId)
+    return { ...s, disk: hasFiles ? disk : writeFiles(disk, deviceFiles(s.disk, volumeId)) }
   })
 }
 
-export function asiairCardInserted(disk: Disk): boolean {
-  return disk.volumes[ASIAIR_CARD.id]?.mounted === true
+/** The device is ejected; its files stay on it for the next connect. */
+export function ejectDevice(volumeId: VolumeId) {
+  if (store.getState().disk.volumes[volumeId]?.removable) setVolumeMounted(volumeId, false)
 }
 
 /** The capture device finished writing: the held files stop growing (their bytes settle). */

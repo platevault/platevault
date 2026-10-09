@@ -3,7 +3,7 @@
  * term reads the same wherever it appears. Status words with their glyphs
  * live in `components/app/status.tsx`.
  */
-import type { Band, CalibrationPolicy, InputMode, ResultKind, RunStep } from "./types"
+import type { Band, CalibrationPolicy, GoalChannel, InputMode, MoonConstraint, QualityBar, ResultKind, RunStep, WrapUpStepId } from "./types"
 
 export const RUN_STEPS: RunStep[] = ["select", "review", "calibrate", "prepare", "results", "done"]
 
@@ -45,3 +45,42 @@ export const CALIBRATION_POLICY_LABEL: Record<CalibrationPolicy, string> = {
 export const BANDS: Band[] = ["L", "R", "G", "B", "Ha", "SII", "OIII"]
 
 export const NARROW_BANDS: Band[] = ["Ha", "SII", "OIII"]
+
+/** Goal channel chips in their order: the band set, then the derived OSC channels. */
+export const GOAL_CHANNELS: GoalChannel[] = ["L", "R", "G", "B", "Ha", "OIII", "SII", "OSC", "Dual-band"]
+
+export function isGoalChannel(value: string): value is GoalChannel {
+  return (GOAL_CHANNELS as string[]).includes(value)
+}
+
+/** "Usable", "FWHM ≤ 2.5″", "Usable, FWHM ≤ 2.5″". */
+export function qualityBarLabel(bar: QualityBar | null): string {
+  if (!bar) return "Any quality"
+  if (bar.kind === "usable-only") return "Usable"
+  const limit = `FWHM ≤ ${bar.maxArcsec}″`
+  return bar.kind === "max-fwhm" ? limit : `Usable, ${limit}`
+}
+
+/**
+ * Default Moon constraints per band: broadband wants a dark Moon far away;
+ * Ha and SII tolerate a bright Moon, OIII sits between (it is close to the
+ * Moon's own spectrum).
+ */
+export const DEFAULT_MOON_CONSTRAINTS: Record<Band, MoonConstraint> = {
+  L: { minSeparationDeg: 90, maxIlluminationPct: 30 },
+  R: { minSeparationDeg: 90, maxIlluminationPct: 30 },
+  G: { minSeparationDeg: 90, maxIlluminationPct: 30 },
+  B: { minSeparationDeg: 90, maxIlluminationPct: 30 },
+  Ha: { minSeparationDeg: 30, maxIlluminationPct: 100 },
+  SII: { minSeparationDeg: 40, maxIlluminationPct: 100 },
+  OIII: { minSeparationDeg: 60, maxIlluminationPct: 80 },
+}
+
+/** Wrap up steps in order (P-WRAP1); Done follows the last. */
+export const WRAP_UP_STEPS: WrapUpStepId[] = ["cleanup", "trash", "archive"]
+
+export const WRAP_UP_LABEL: Record<WrapUpStepId, string> = {
+  cleanup: "Clean up runs",
+  trash: "Trash",
+  archive: "Archive",
+}

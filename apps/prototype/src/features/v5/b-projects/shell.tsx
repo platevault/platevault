@@ -3,7 +3,7 @@
  * Project, Start a run and Done / Archive sheet hosts, and their palette
  * actions. The Project actions follow the Project the route has open.
  */
-import { useActiveRoute } from "@/app/outline"
+import { useActiveRoute } from "@/app/active-route"
 import type { PaletteCommand, ShellContribution } from "@/app/shell-contract"
 import { openSheet } from "@/app/ui-state"
 import { useStore } from "@/store/core"

@@ -72,6 +72,8 @@ export interface Volume {
   links: { symlink: boolean; hardlink: boolean; clone: boolean }
   /** An OS-mounted network share: hashed resumably with progress, Offline when unmounted (D-W12). */
   network: boolean
+  /** A USB or SD device: detected when connected and offered by Import (`removableDevices`). */
+  removable: boolean
 }
 
 export type ImageType =
@@ -500,23 +502,43 @@ export interface Subject {
   } | null
 }
 
-/** A quality bar names one criterion (D-W29, PRJ-FR-03). */
-export type QualityBar = { kind: "usable-only" } | { kind: "max-fwhm"; maxArcsec: number }
+/**
+ * A quality bar (D-W29, PRJ-FR-03): Usable frames only, a median FWHM limit
+ * per frame, or both. Frames the bar cannot judge do not count.
+ */
+export type QualityBar = { kind: "usable-only" } | { kind: "max-fwhm"; maxArcsec: number } | { kind: "usable-max-fwhm"; maxArcsec: number }
+
+/**
+ * A goal channel is a chip from the band set, or the derived OSC channels:
+ * "OSC" (no filter or a broadband filter on an OSC camera) and "Dual-band"
+ * (a filter passing two narrow bands). Never free text (`GOAL_CHANNELS`).
+ */
+export type GoalChannel = Band | "OSC" | "Dual-band"
 
 /**
  * Goals for one subject (or one mosaic panel) and one channel (D-W29). A row
- * holds any of the three goal kinds. Missing calibration and exposure
- * mismatch are derived warnings, never goals.
+ * holds any of the three goal kinds: integration time, frame count and a
+ * quality bar. Missing calibration and exposure mismatch are derived
+ * warnings, never goals.
  */
 export interface Goal {
   id: GoalId
   subjectId: SubjectId
   /** Set for a mosaic subject: panels carry their own goals. */
   panelId: string | null
-  channel: string
+  channel: GoalChannel
   integrationS: number | null
   frameCount: number | null
   qualityBar: QualityBar | null
+}
+
+/** The three optional Wrap up steps after every run is Complete (P-WRAP1). */
+export type WrapUpStepId = "cleanup" | "trash" | "archive"
+
+/** A Wrap up step the user finished or chose to skip; an absent step is still to do. */
+export interface WrapUpStepRecord {
+  state: "done" | "skipped"
+  at: IsoDateTime
 }
 
 export interface Project {
@@ -527,8 +549,13 @@ export interface Project {
   /** Rigs taking part; each run uses exactly one of them (D-W37). */
   rigIds: OpticalTrainId[]
   goals: Goal[]
-  /** Template whose values were copied in; the copy stands alone (D-W30). */
-  goalTemplateId: GoalTemplateId | null
+  /**
+   * Archive destination for this Project (P-ARC1); null uses the Default
+   * archive location (`settings.defaultArchiveLocationId`).
+   */
+  archiveLocationId: LocationId | null
+  /** Wrap up progress (P-WRAP1); Done follows the last step. */
+  wrapUp: Partial<Record<WrapUpStepId, WrapUpStepRecord>>
   /** Only the user marks a Project Done; Reopen returns it to open (D-W26, D-W46). */
   state: "open" | "done"
   doneAt: IsoDateTime | null
@@ -543,10 +570,12 @@ export interface Project {
   revision: number
 }
 
+/** One channel of a goal template: the same three goal kinds a Goal holds. */
 export interface GoalTemplateValue {
-  channel: string
+  channel: GoalChannel
   integrationS: number | null
   frameCount: number | null
+  qualityBar: QualityBar | null
 }
 
 /** Built-in or user goal template; applying it copies its values into the Project (D-W30, D-W47). */
@@ -620,10 +649,14 @@ export interface RunSetup {
   calibrationPolicy: CalibrationPolicy
 }
 
-/** A master found in a run's Results, offered once (D-W5, D-W55). */
+/**
+ * A master found in a run's Results, offered once (D-W5, D-W55). Dismiss is
+ * reversible (P-CAL2): a dismissed offer is listed under the Calibration
+ * library's Dismissed filter, where Restore offer makes it pending again.
+ */
 export interface MasterOffer {
   masterId: MasterId
-  state: "pending" | "adopted" | "declined"
+  state: "pending" | "adopted" | "dismissed"
   at: IsoDateTime
 }
 
@@ -769,7 +802,12 @@ export interface CalibrationMaster {
   createdAt: IsoDateTime
   /** Candidates are never preselected; adoption makes a master reusable. */
   state: "adopted" | "candidate"
-  origin: { kind: "library" | "generated"; runId: RunId | null; sourcePath: string }
+  /**
+   * Where the master came from: indexed in the library, found in a run's
+   * Results, or integrated from a calibration session through a tool
+   * profile (P-CAL1). `sessionId` names that calibration session.
+   */
+  origin: { kind: "library" | "generated" | "integrated"; runId: RunId | null; sourcePath: string; sessionId: SessionId | null }
   adoption: { destinationPath: string; verifiedSha256: string; adoptedAt: IsoDateTime } | null
 }
 
@@ -832,6 +870,8 @@ export interface ProfileCapability {
   productInputKinds: ResultKind[]
   /** Can the application read a corrected value through configuration? */
   correctedMetadata: "configuration" | "none"
+  /** Integrate master: the application stacks a calibration session into a master (P-CAL1). */
+  masterIntegration: boolean
 }
 
 export interface ApplicationProfile {
@@ -1014,6 +1054,7 @@ export interface PlanCriteria {
   minDurationMin: number
 }
 
+/** A Target's planning record; `planned` puts it on the Plan list (`planList`, `addToPlan`). */
 export interface ObservingPlan {
   targetId: TargetId
   planned: boolean
@@ -1064,6 +1105,10 @@ export type OperationKind =
   | "import-measurements"
   | "import"
   | "adopt-master"
+  /** Integrate master: a calibration session handed off to a tool profile, registered as a master on finish (P-CAL1). */
+  | "integrate-master"
+  /** Scan for duplicates: byte-identical live copies, listed only on demand (Storage). */
+  | "duplicate-scan"
   | "prepare"
   | "cleanup"
   | "archive"
@@ -1132,9 +1177,24 @@ export interface ActivityEvent {
 // Settings, simulation and the root state
 // ---------------------------------------------------------------------------
 
+/**
+ * Moon tolerance of one band (planning): the Moon at least this far from the
+ * Target, or lit no more than this, while it is up. Broadband needs a dark
+ * Moon; narrowband tolerates more.
+ */
+export interface MoonConstraint {
+  minSeparationDeg: number
+  maxIlluminationPct: number
+}
+
 export interface AppSettings {
+  /** The one default site; Plan and Tonight use it unless another is picked. */
   defaultSiteId: SiteId | null
   planningSiteId: SiteId | null
+  /** The Default archive location (P-ARC1); a Project may pick another. */
+  defaultArchiveLocationId: LocationId | null
+  /** Per-band Moon constraints behind "good tonight" (`goodTonight`). */
+  moonConstraints: Record<Band, MoonConstraint>
   onboarding: {
     completedAt: IsoDateTime | null
     /** Optional roles the user chose to set up later. */
@@ -1192,6 +1252,7 @@ export interface Catalog {
   results: Record<ResultId, ResultRecord>
   trashEpisodes: Record<TrashEpisodeId, TrashEpisode>
   importSources: Record<ImportSourceId, ImportSource>
+  /** Planning records by Target; the planned ones form the Plan list. */
   plans: Record<TargetId, ObservingPlan>
   reminders: ReminderSettings
   calendarExports: CalendarExport[]

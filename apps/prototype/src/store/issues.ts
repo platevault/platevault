@@ -1,0 +1,22 @@
+/**
+ * Issues and source-list counts as hooks (foundation-owned). The toolbar's
+ * Issues hub, Home's issue pills and the source-list badges read the same
+ * derivations (`src/domain/issues.ts`), so their numbers always agree.
+ */
+import { blockedProjectCount, deriveIssues, type Issue, type IssueSeverity, sessionsNeedingAttention, worstSeverity } from "@/domain/issues"
+import { type PrototypeState, useStore } from "./core"
+
+const selectIssues = (s: PrototypeState) => deriveIssues(s)
+
+/** Every issue across the app, grouped and worst first, with the worst severity. */
+export function useIssues(): { issues: Issue[]; worst: IssueSeverity | null } {
+  const issues = useStore(selectIssues)
+  return { issues, worst: worstSeverity(issues) }
+}
+
+const selectNavCounts = (s: PrototypeState) => ({ sessions: sessionsNeedingAttention(s), projects: blockedProjectCount(s) })
+
+/** Source-list badges: Sessions that need attention, open Projects with a blocked run. */
+export function useNavCounts(): { sessions: number; projects: number } {
+  return useStore(selectNavCounts)
+}

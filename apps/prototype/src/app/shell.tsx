@@ -2,12 +2,17 @@
  * App shell (foundation-owned): root providers, the main layout with source
  * list, unified toolbar and status bar, and the minimal onboarding layout.
  * Harness v5 keeps v4's window: the page never scrolls, only panes do.
+ *
+ * Round 2: the source list is navigation only (no Project outline), with an
+ * optional Recent group and count badges; the toolbar leads with Back and
+ * Forward and carries the Issues hub; shell words go through `t()`.
  */
 import { Link, Outlet, useRouterState } from "@tanstack/react-router"
-import { Aperture, Download, Ellipsis, FlaskConical, HardDrive, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Play, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
+import { Aperture, Download, Ellipsis, FlaskConical, FolderKanban, HardDrive, Languages, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Palette, Play, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
 import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { EmptyState, LiveAnnouncer } from "@/components/app/feedback"
 import { useDocumentTitle } from "@/components/app/page"
+import { CountBadge } from "@/components/app/pill"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -18,6 +23,9 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Kbd } from "@/components/ui/kbd"
@@ -25,17 +33,23 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { GATE_LABEL, groupPipeline, type NextAction, nextFrom, projectNext, runPipeline, type RunStepState } from "@/domain/derive"
+import { locationAvailability } from "@/domain/library"
+import { LOCALES, type Locale } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { useNavCounts } from "@/store/issues"
 import { nowIso, useStore } from "@/store/core"
+import { useActiveRoute } from "./active-route"
 import { CommandPalette } from "./command-palette"
 import { SHELLS } from "./contributions"
+import { HistoryControl } from "./history"
+import { IssuesButton } from "./issues-hub"
 import { NAV_GROUPS, type NavItem, PRIMARY_ITEMS, UTILITY_ITEMS } from "./navigation"
-import { ProjectOutline, useActiveRoute } from "./outline"
-import { setTheme, type ThemePreference, usePreferences } from "./preferences"
+import { setLocale, setTheme, type ThemePreference, usePreferences, useT } from "./preferences"
 import { CurrentLink, StepGlyph, useFollowLink } from "./run-ui"
 import { MOD_LABEL, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
 import { SimulationSheet } from "./simulation-panel"
-import { openPanel, openSheet, toggleSidebar, useShellUi } from "./ui-state"
+import { THEMES, themeInfo } from "./themes"
+import { openPanel, openSheet, rememberProject, toggleSidebar, useShellUi } from "./ui-state"
 
 export function RootLayout() {
   useGlobalShortcuts()
@@ -52,6 +66,7 @@ export function RootLayout() {
 }
 
 function SkipLink() {
+  const t = useT()
   return (
     <a
       href="#main"
@@ -61,43 +76,58 @@ function SkipLink() {
       }}
       className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:px-3 focus:py-2"
     >
-      Skip to main content
+      {t("Skip to main content")}
     </a>
   )
 }
 
 /**
- * A source-list row. The deepest current row takes the accent fill and
- * aria-current: inside a Project the outline row does, and Projects only
- * marks that it contains the selection (unless the sidebar is collapsed).
+ * Source-list row states, all from the sidebar tokens: hover takes
+ * `--sidebar-accent` (at least 0.05 OKLCH lightness from the list), the
+ * current row the selection fill with its own text colour, a row that holds
+ * the current page (Projects, while a Recent Project is open) semibold
+ * text, and keyboard focus an inset 2 px ring (index.css).
  */
-function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const Icon = item.icon
-  const within = item.to === "/" ? pathname === "/" : pathname === item.to || pathname.startsWith(`${item.to}/`)
-  const deeper = within && !collapsed && item.to === "/projects" && pathname !== "/projects"
-  const current = within && !deeper
+const NAV_ROW = "flex h-6.5 items-center gap-2 rounded-[0.3125rem] px-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:bg-sidebar-accent [&>svg]:text-link"
+const NAV_CURRENT = "bg-sidebar-primary font-semibold text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground active:bg-sidebar-primary [&>svg]:text-sidebar-primary-foreground"
+
+interface NavBadge {
+  count: number
+  /** Screen-reader text, e.g. "3 need attention". */
+  label: string
+}
+
+/**
+ * A source-list row. The deepest current row takes the accent fill and
+ * aria-current: a Recent Project row while its Project is open, so Projects
+ * then only marks that it holds the selection.
+ */
+function NavLink({ to, label, icon: Icon, collapsed, current, holds, badge }: { to: string; label: string; icon: NavItem["icon"]; collapsed: boolean; current: boolean; holds?: boolean; badge?: NavBadge }) {
+  const shownBadge = badge && badge.count > 0 ? badge : null
   const link = (
     <CurrentLink
-      to={item.to}
+      to={to}
+      data-nav-link
       current={current ? "page" : false}
-      className={cn(
-        "flex h-6.5 items-center gap-2 rounded-[0.3125rem] px-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:text-link",
-        current && "bg-sidebar-primary font-medium text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground [&>svg]:text-sidebar-primary-foreground",
-        deeper && "font-medium",
-        collapsed && "justify-center px-0",
-      )}
-      aria-label={collapsed ? item.label : undefined}
+      className={cn(NAV_ROW, current && NAV_CURRENT, holds && !current && "font-semibold", collapsed && "relative justify-center px-0")}
+      aria-label={collapsed ? (shownBadge ? `${label}, ${shownBadge.label}` : label) : undefined}
     >
       <Icon aria-hidden="true" className="size-4 shrink-0" />
-      {collapsed ? null : <span className="truncate">{item.label}</span>}
+      {collapsed ? (
+        shownBadge ? <span aria-hidden="true" className={cn("absolute top-0.5 right-1.5 size-1.5 rounded-full", current ? "bg-sidebar-primary-foreground" : "bg-warning")} /> : null
+      ) : (
+        <>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+          {shownBadge ? <CountBadge count={shownBadge.count} tone="warning" label={shownBadge.label} className={cn(current && "bg-sidebar-primary-foreground text-sidebar-primary")} /> : null}
+        </>
+      )}
     </CurrentLink>
   )
   if (!collapsed) return link
   return (
     <Tooltip>
       <TooltipTrigger render={link} />
-      <TooltipContent side="right">{item.label}</TooltipContent>
+      <TooltipContent side="right">{shownBadge ? `${label} · ${shownBadge.count}` : label}</TooltipContent>
     </Tooltip>
   )
 }
@@ -141,8 +171,9 @@ function useContextNext(): { next: NextAction | null; steps: RunStepState[] | nu
     const project = active.projectId ? state.catalog.projects[active.projectId] : undefined
     if (project) {
       const next = projectNext(state, project, Date.parse(nowIso()))
-      // On the candidate review it names, the Project's Next has nothing more to open.
-      const onIt = next?.link.search?.candidates !== undefined && active.search.candidates === next.link.search.candidates
+      // On the screen it names (the candidate review, the Wrap up stage), the Project's Next has nothing more to open.
+      const search = next?.link.search ?? {}
+      const onIt = Object.keys(search).length > 0 && Object.entries(search).every(([key, value]) => active.search[key] === value)
       return { next: onIt ? null : next, steps: null, here: null }
     }
     return { next: null, steps: null, here: null }
@@ -151,10 +182,12 @@ function useContextNext(): { next: NextAction | null; steps: RunStepState[] | nu
 
 /**
  * The one Next action, in the toolbar like a Run button: ⌘↩ runs it, ⌃1–⌃6
- * jump to a step of the open run or run group. One row that never wraps: the
- * label and the caption truncate, with the whole text in the tooltip.
+ * jump to a step of the open run or run group. One row that never wraps:
+ * beside it only the gate glyph and word of the step on screen or the step
+ * that holds Next; the reason is in the tooltip.
  */
 function NextActionButton() {
+  const t = useT()
   const context = useContextNext()
   const follow = useFollowLink()
   const followRef = useRef(follow)
@@ -179,55 +212,88 @@ function NextActionButton() {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
   const { next, here } = context
-  // The step on screen leads the caption when Next has moved past it ("2 Review: Needs review · 4 of 48 · then …").
-  const hereText = here ? `${here.n} ${here.label}: ${GATE_LABEL[here.state]} · ${here.items.find((i) => i.met === false)?.detail ?? here.status}` : null
-  const caption = [hereText, next ? `${next.step ? `${next.step.n} ${next.step.label} · ` : ""}${next.reason}` : null].filter(Boolean).join(" · then ")
   if (!next && !here) return <div className="min-w-0 flex-1" />
-  const glyphState = here ? here.state : next?.step?.state
+  const gateStep = here ?? next?.step ?? null
+  const detail = [here ? `${here.n} ${here.label}: ${GATE_LABEL[here.state]} · ${here.items.find((i) => i.met === false)?.detail ?? here.status}` : null, next ? next.reason : null].filter(Boolean).join(" · ")
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       {next ? (
-        <Button size="sm" className="min-w-0 max-w-[22rem] shrink" onClick={() => follow(next.link)} title={`Next: ${next.label}. ${next.reason} (${MOD_LABEL}↩)`}>
+        <Button size="sm" className="min-w-0 max-w-[22rem] shrink" onClick={() => follow(next.link)} title={`${detail} (${MOD_LABEL}↩)`}>
           <Play aria-hidden="true" data-icon="inline-start" className="fill-current" />
-          <span className="min-w-0 truncate">Next: {next.label}</span>
+          <span className="min-w-0 truncate">{t("Next: {label}", { label: next.label })}</span>
         </Button>
       ) : null}
-      <span className={cn("min-w-0 flex-1 items-center gap-1.5 text-xs text-muted-foreground", next ? "hidden lg:flex" : "flex")} title={caption}>
-        {glyphState ? <StepGlyph state={glyphState} /> : null}
-        <span className="truncate">{caption}</span>
-      </span>
+      {gateStep ? (
+        <span className={cn("min-w-0 items-center gap-1.5 text-xs text-muted-foreground", next ? "hidden lg:flex" : "flex")} title={detail}>
+          <StepGlyph state={gateStep.state} />
+          <span className="truncate">{t(GATE_LABEL[gateStep.state])}</span>
+        </span>
+      ) : null}
+      <div className="min-w-0 flex-1" />
     </div>
   )
 }
 
+/** Recent Projects (max 3, newest first) that still exist; no outline children. */
+function useRecentProjects(): Array<{ id: string; name: string }> {
+  const { recentProjectIds } = useShellUi()
+  const projects = useStore((s) => s.catalog.projects)
+  return recentProjectIds.flatMap((id) => (projects[id] ? [{ id, name: projects[id]!.name }] : []))
+}
+
+function GroupHeading({ collapsed, children }: { collapsed: boolean; children: ReactNode }) {
+  if (collapsed) return <div className="mx-auto my-1 h-px w-6 bg-sidebar-border" aria-hidden="true" />
+  return <div className="px-2 pb-0.5 text-[0.6875rem] font-semibold text-muted-foreground">{children}</div>
+}
+
 function SidebarContent({ collapsed }: { collapsed: boolean }) {
+  const t = useT()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const counts = useNavCounts()
+  const recent = useRecentProjects()
+  const openProject = pathname.match(/^\/projects\/([^/]+)/)?.[1] ?? null
+  const recentCurrent = openProject !== null && recent.some((p) => p.id === openProject)
+  const within = (to: string) => (to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`))
+  const badges: Record<string, NavBadge> = {
+    "/sessions": { count: counts.sessions, label: t("{n} need attention", { n: counts.sessions }) },
+    "/projects": { count: counts.projects, label: t("{n} blocked", { n: counts.projects }) },
+  }
+  const row = (item: NavItem) => {
+    const inside = within(item.to)
+    // A Recent row is the deepest current row while its Project is open; Projects then holds it.
+    const current = inside && !(item.to === "/projects" && recentCurrent)
+    return <NavLink to={item.to} label={t(item.label)} icon={item.icon} collapsed={collapsed} current={current} holds={inside} badge={badges[item.to]} />
+  }
   return (
     <>
       <div data-chrome className={cn("flex h-10 shrink-0 items-center gap-2 px-3", collapsed && "justify-center px-0")}>
         <Aperture aria-hidden="true" className="size-4.5 shrink-0 text-link" />
         {collapsed ? <span className="sr-only">PlateVault</span> : <span className="text-sm font-semibold">PlateVault</span>}
       </div>
-      <nav aria-label="Main" data-chrome className="flex-1 space-y-3 overflow-y-auto px-2 pb-2">
+      <nav aria-label={t("Main")} data-chrome className="flex-1 space-y-3 overflow-y-auto px-2 pb-2">
         <ul className="space-y-px">
           {PRIMARY_ITEMS.map((item) => (
-            <li key={item.to}>
-              <NavLink item={item} collapsed={collapsed} />
-              {item.to === "/projects" && !collapsed ? <ProjectOutline /> : null}
-            </li>
+            <li key={item.to}>{row(item)}</li>
           ))}
         </ul>
+        {recent.length > 0 ? (
+          <div className="space-y-px">
+            <GroupHeading collapsed={collapsed}>{t("Recent")}</GroupHeading>
+            <ul className="space-y-px" aria-label={t("Recent")}>
+              {recent.map((project) => (
+                <li key={project.id}>
+                  <NavLink to={`/projects/${project.id}`} label={project.name} icon={FolderKanban} collapsed={collapsed} current={openProject === project.id} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {NAV_GROUPS.map((group) => (
           <div key={group.label} className="space-y-px">
-            {collapsed ? (
-              <div className="mx-auto my-1 h-px w-6 bg-sidebar-border" aria-hidden="true" />
-            ) : (
-              <div className="px-2 pb-0.5 text-[0.6875rem] font-semibold text-muted-foreground">{group.label}</div>
-            )}
+            <GroupHeading collapsed={collapsed}>{t(group.label)}</GroupHeading>
             <ul className="space-y-px">
               {group.items.map((item) => (
-                <li key={item.to}>
-                  <NavLink item={item} collapsed={collapsed} />
-                </li>
+                <li key={item.to}>{row(item)}</li>
               ))}
             </ul>
           </div>
@@ -235,11 +301,9 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
       </nav>
       <div data-chrome className="space-y-px border-t border-sidebar-border p-2">
         {SHELLS.map((shell, index) => (shell.SidebarFooter ? <shell.SidebarFooter key={index} collapsed={collapsed} /> : null))}
-        <ul className="space-y-px" aria-label="Utilities">
+        <ul className="space-y-px" aria-label={t("Utilities")}>
           {UTILITY_ITEMS.map((item) => (
-            <li key={item.to}>
-              <NavLink item={item} collapsed={collapsed} />
-            </li>
+            <li key={item.to}>{row(item)}</li>
           ))}
         </ul>
       </div>
@@ -248,12 +312,10 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
 }
 
 function Sidebar() {
+  const t = useT()
   const { sidebarCollapsed: collapsed } = useShellUi()
   return (
-    <aside
-      className={cn("flex shrink-0 flex-col border-r border-separator bg-sidebar text-sidebar-foreground", collapsed ? "w-12" : "w-60")}
-      aria-label="Sidebar"
-    >
+    <aside className={cn("flex shrink-0 flex-col border-r border-separator bg-sidebar text-sidebar-foreground", collapsed ? "w-12" : "w-60")} aria-label={t("Sidebar")}>
       <SidebarContent collapsed={collapsed} />
     </aside>
   )
@@ -265,6 +327,7 @@ function Sidebar() {
  * backdrop returns focus to the menu button.
  */
 function SidebarDrawer() {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const navigated = useRef(false)
   return (
@@ -275,7 +338,7 @@ function SidebarDrawer() {
         setOpen(next)
       }}
     >
-      <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open navigation" />}>
+      <SheetTrigger render={<Button variant="ghost" size="icon" aria-label={t("Open navigation")} />}>
         <PanelLeftOpen aria-hidden="true" />
       </SheetTrigger>
       <SheetContent
@@ -288,97 +351,126 @@ function SidebarDrawer() {
           setOpen(false)
         }}
       >
-        <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <SheetTitle className="sr-only">{t("Navigation")}</SheetTitle>
         <SidebarContent collapsed={false} />
       </SheetContent>
     </Sheet>
   )
 }
 
-const THEME_ICON: Record<ThemePreference, typeof Moon> = { dark: Moon, light: Sun, system: Monitor }
-
-function ThemeMenu() {
+/** Every theme of the registry plus Match system, as menu radio items. */
+function ThemeItems() {
+  const t = useT()
   const { theme } = usePreferences()
-  const Icon = THEME_ICON[theme]
+  return (
+    <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as ThemePreference)}>
+      {THEMES.map((option) => (
+        <DropdownMenuRadioItem key={option.id} value={option.id}>
+          {option.label}
+        </DropdownMenuRadioItem>
+      ))}
+      <DropdownMenuRadioItem value="system">{t("Match system")}</DropdownMenuRadioItem>
+    </DropdownMenuRadioGroup>
+  )
+}
+
+function LanguageItems() {
+  const { locale } = usePreferences()
+  return (
+    <DropdownMenuRadioGroup value={locale} onValueChange={(value) => setLocale(value as Locale)}>
+      {LOCALES.map((option) => (
+        <DropdownMenuRadioItem key={option.id} value={option.id} lang={option.id}>
+          {option.label}
+        </DropdownMenuRadioItem>
+      ))}
+    </DropdownMenuRadioGroup>
+  )
+}
+
+/** The setup layout's theme menu: the icon follows the applied theme's scheme. */
+function ThemeMenu() {
+  const t = useT()
+  const { theme, scheme } = usePreferences()
+  const Icon = theme === "system" ? Monitor : scheme === "dark" ? Moon : Sun
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={`Theme: ${theme === "system" ? "match system" : theme}`} />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={`${t("Theme")}: ${theme === "system" ? t("Match system") : themeInfo(theme).label}`} />}>
         <Icon aria-hidden="true" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Theme</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as ThemePreference)}>
-            <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="system">Match system</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
+          <DropdownMenuLabel>{t("Theme")}</DropdownMenuLabel>
+          <ThemeItems />
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )
 }
 
-/** The toolbar's overflow: Prototype controls and Theme, so the toolbar keeps one row at every width. */
+/** The toolbar's overflow: Prototype controls, Theme and Language, so the toolbar keeps one row at every width. */
 function MoreMenu() {
-  const { theme } = usePreferences()
+  const t = useT()
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="More: Prototype and Theme" />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("More")} title={t("More")} />}>
         <Ellipsis aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem onClick={() => openPanel("simulation")}>
           <FlaskConical aria-hidden="true" />
-          Prototype controls…
+          {t("Prototype controls…")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Theme</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as ThemePreference)}>
-            <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="system">Match system</DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Palette aria-hidden="true" />
+            {t("Theme")}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-52">
+            <ThemeItems />
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Languages aria-hidden="true" />
+            {t("Language")}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-52">
+            <LanguageItems />
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
       </DropdownMenuContent>
     </DropdownMenu>
   )
 }
 
-/** Status bar: locations, running and interrupted work. Each item opens where it is resolved. */
+/** Status bar: locations, running and interrupted work, as status words only. Each item opens where it is resolved. */
 function StatusArea({ narrow }: { narrow: boolean }) {
+  const t = useT()
   const running = useStore((s) => Object.values(s.operations).filter((op) => op.status === "running"))
   const interrupted = useStore((s) => Object.values(s.operations).filter((op) => op.status === "interrupted").length)
-  const locations = useStore((s) => Object.values(s.catalog.locations))
-  const offline = useStore((s) => Object.values(s.catalog.locations).filter((l) => !s.disk.volumes[l.volumeId]?.mounted))
+  const locations = useStore((s) => Object.values(s.catalog.locations).filter((l) => !l.retiredAt))
+  const offline = useStore((s) => Object.values(s.catalog.locations).filter((l) => locationAvailability(s.disk, l) === "offline"))
   const first = running[0]
   const pct = first && first.progress.total > 0 ? Math.round((first.progress.done / first.progress.total) * 100) : null
+  const offlineText = offline.length === 1 ? t("{name} offline", { name: offline[0]!.displayName }) : t("{n} offline", { n: offline.length })
   return (
     <div className="flex min-w-0 flex-1 items-center gap-1">
       <Button variant="ghost" size="xs" render={<Link to="/settings/locations" />} className="text-muted-foreground">
         <HardDrive data-icon="inline-start" aria-hidden="true" />
-        <span className="tabular-nums">
-          {locations.length - offline.length} of {locations.length} locations online
-        </span>
+        <span className="tabular-nums">{t("{n} of {total} online", { n: locations.length - offline.length, total: locations.length })}</span>
       </Button>
       {offline.length > 0 ? (
-        <Button
-          variant="ghost"
-          size="xs"
-          render={<Link to="/storage" />}
-          className="text-warning"
-          aria-label={offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}
-        >
+        <Button variant="ghost" size="xs" render={<Link to="/storage" />} className="text-warning" aria-label={offlineText}>
           <Unplug data-icon="inline-start" aria-hidden="true" />
-          <span className={cn(narrow && "sr-only")}>{offline.length === 1 ? `${offline[0]!.displayName} offline` : `${offline.length} locations offline`}</span>
+          <span className={cn(narrow && "sr-only")}>{offlineText}</span>
         </Button>
       ) : null}
       <div className="min-w-0 flex-1" />
       {interrupted > 0 ? (
-        <Button variant="ghost" size="xs" render={<Link to="/activity" />} className="text-warning" aria-label={`${interrupted} interrupted operation${interrupted === 1 ? "" : "s"}`}>
+        <Button variant="ghost" size="xs" render={<Link to="/activity" />} className="text-warning">
           <TriangleAlert data-icon="inline-start" aria-hidden="true" />
-          <span className="tabular-nums">{interrupted} interrupted</span>
+          <span className="tabular-nums">{t("{n} interrupted", { n: interrupted })}</span>
         </Button>
       ) : null}
       {first ? (
@@ -391,7 +483,7 @@ function StatusArea({ narrow }: { narrow: boolean }) {
           </span>
         </Button>
       ) : (
-        <span className="px-2">No work running</span>
+        <span className="px-2">{t("Idle")}</span>
       )}
     </div>
   )
@@ -399,11 +491,13 @@ function StatusArea({ narrow }: { narrow: boolean }) {
 
 /** The palette trigger keeps its whole label from 1200 px up; below that it is an icon button with the same name, so the toolbar never wraps. */
 function PaletteTrigger({ narrow }: { narrow: boolean }) {
+  const t = useT()
+  const label = t("Search or jump to…")
   if (narrow) {
     return (
       <Button variant="outline" size="icon-sm" className="text-muted-foreground" onClick={() => openPanel("palette")}>
         <Search aria-hidden="true" />
-        <span className="sr-only">Search or jump to…</span>
+        <span className="sr-only">{label}</span>
       </Button>
     )
   }
@@ -413,10 +507,10 @@ function PaletteTrigger({ narrow }: { narrow: boolean }) {
       size="sm"
       className="min-w-0 shrink-0 justify-start text-muted-foreground max-[75rem]:size-6 max-[75rem]:justify-center max-[75rem]:px-0 min-[75rem]:w-60 2xl:w-72"
       onClick={() => openPanel("palette")}
-      title={`Search or jump to… (${MOD_LABEL} K)`}
+      title={`${label} (${MOD_LABEL} K)`}
     >
       <Search data-icon="inline-start" aria-hidden="true" />
-      <span className="min-w-0 flex-1 truncate text-left max-[75rem]:sr-only">Search or jump to…</span>
+      <span className="min-w-0 flex-1 truncate text-left max-[75rem]:sr-only">{label}</span>
       <Kbd className="max-[75rem]:hidden">{MOD_LABEL} K</Kbd>
     </Button>
   )
@@ -489,32 +583,45 @@ function MainArea({ children }: { children: ReactNode }) {
   )
 }
 
+/** An opened Project leads the source list's Recent group. */
+function useRememberProject() {
+  const { projectId } = useActiveRoute()
+  const exists = useStore((s) => (projectId ? Boolean(s.catalog.projects[projectId]) : false))
+  useEffect(() => {
+    if (projectId && exists) rememberProject(projectId)
+  }, [projectId, exists])
+}
+
 /**
  * The window: a full-height source list, a unified toolbar over the content,
  * the content pane (the only scroll container) and a status bar. The page
  * itself never scrolls.
  */
 function AppFrame({ children }: { children: ReactNode }) {
+  const t = useT()
   const { sidebarCollapsed } = useShellUi()
   const narrow = useNarrowViewport()
+  useRememberProject()
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <SkipLink />
       <div className="flex min-h-0 flex-1">
         {narrow ? null : <Sidebar />}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header data-chrome className="z-20 flex h-10 min-w-0 shrink-0 flex-nowrap items-center gap-2 border-b border-separator bg-chrome px-2">
+          <header data-chrome className="z-20 flex h-10 min-w-0 shrink-0 flex-nowrap items-center gap-1.5 border-b border-separator bg-chrome px-2">
             {narrow ? (
               <SidebarDrawer />
             ) : (
-              <Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}>
+              <Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label={sidebarCollapsed ? t("Show sidebar") : t("Hide sidebar")} title={sidebarCollapsed ? t("Show sidebar") : t("Hide sidebar")}>
                 {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
               </Button>
             )}
+            <HistoryControl />
             <NextActionButton />
-            <Button variant="ghost" size="sm" className="shrink-0 max-xl:size-6 max-xl:px-0" onClick={() => openSheet({ kind: "import" })} title="Import from a card, folder or network share">
+            <IssuesButton />
+            <Button variant="ghost" size="sm" className="shrink-0 max-xl:size-6 max-xl:px-0" onClick={() => openSheet({ kind: "import" })} title={t("Import")}>
               <Download data-icon="inline-start" aria-hidden="true" />
-              <span className="max-xl:sr-only">Import</span>
+              <span className="max-xl:sr-only">{t("Import")}</span>
             </Button>
             <PaletteTrigger narrow={narrow} />
             <MoreMenu />
@@ -547,7 +654,7 @@ export function NotFoundPage() {
           icon={MapPinOff}
           title="This page does not exist"
           titleAs="h1"
-          description="The link may come from an older prototype build. Your library is unchanged."
+          description="The link may come from an older prototype build."
           action={
             <Button render={<Link to="/" />} size="sm">
               Go to Home

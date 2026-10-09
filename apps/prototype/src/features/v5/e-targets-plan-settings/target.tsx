@@ -18,8 +18,7 @@ import { ListDetail, PageBody, PageHeader, Section } from "@/components/app/page
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { formatHours, goalProgress, liveLightSessions, projectStatus, rigFieldOfView, rigName, sessionRigId, sessionTargetId, subjectName } from "@/domain/derive"
-import { goalTemplate } from "@/store/actions/projects"
+import { formatHours, goalProgress, liveLightSessions, projectGoalSet, projectStatus, rigFieldOfView, rigName, sessionRigId, sessionTargetId, subjectName } from "@/domain/derive"
 import { addSubject } from "@/store/actions/projects"
 import type { Project } from "@/domain/types"
 import { formatDec, formatDegrees, formatNight, formatRa, plural } from "@/lib/format"
@@ -153,7 +152,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
   }
 
   const sky = view.sky
-  const addingTemplate = adding ? goalTemplate(adding.goalTemplateId) : undefined
+  const addingGoals = adding ? projectGoalSet(adding) : []
 
   return (
     <div className="flex min-h-full flex-col">
@@ -373,7 +372,7 @@ function TargetDetail({ targetId }: { targetId: string }) {
         description="The Target becomes a subject of the Project. Its candidates are the sessions of this Target on the Project's rigs."
         changes={[
           `Adds ${target.name} as a subject of ${adding?.name ?? ""}`,
-          addingTemplate ? `Copies the ${addingTemplate.name} goal values for it: ${addingTemplate.values.map((v) => `${v.channel} ${v.integrationS ? formatHours(v.integrationS) : `${v.frameCount} frames`}`).join(", ")}` : "Adds no goals: the Project has no goal template",
+          addingGoals.length > 0 ? `Copies the Project's goals for it: ${addingGoals.map((v) => `${v.channel} ${v.integrationS ? formatHours(v.integrationS) : `${v.frameCount} frames`}`).join(", ")}` : "Adds no goals: the Project has none",
         ]}
         unchanged={["Runs and their sessions", "Other subjects and their goals", "Library quality and files"]}
         confirmLabel={`Add to ${adding?.name ?? "Project"}`}

@@ -3,9 +3,10 @@
  * change goes through `commit()` (D08); a Project edit writes only catalog
  * Project records and never changes files, runs or quality (PRJ-FR-05).
  */
-import { markDoneBlockers, rigName, sessionRigId, sessionTargetId, subjectName } from "@/domain/derive"
+import { markDoneBlockers, projectGoalSet, rigName, sessionRigId, sessionTargetId, subjectName } from "@/domain/derive"
+import { WRAP_UP_LABEL } from "@/domain/labels"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
-import type { Goal, GoalTemplate, GoalTemplateId, OpticalTrainId, Project, ProjectId, SessionId, Subject, TargetId } from "@/domain/types"
+import type { Goal, GoalTemplate, GoalTemplateId, GoalTemplateValue, LocationId, OpticalTrainId, Project, ProjectId, SessionId, Subject, TargetId, WrapUpStepId, WrapUpStepRecord } from "@/domain/types"
 import { plural } from "@/lib/format"
 import { type CommitResult, commit, nowIso, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
@@ -18,21 +19,25 @@ export function goalTemplate(id: GoalTemplateId | null): GoalTemplate | undefine
   return BUILT_IN_GOAL_TEMPLATES.find((t) => t.id === id) ?? store.getState().catalog.goalTemplates[id]
 }
 
-/** Goals from a template for one subject: per channel, and per panel for a mosaic (D-W29, D-W30). */
-export function goalsFromTemplate(template: GoalTemplate | undefined, subject: Subject): Goal[] {
-  if (!template) return []
+/** Goals from template values for one subject: per channel, and per panel for a mosaic (D-W29, D-W30). Every goal kind is copied. */
+export function goalsFromValues(values: GoalTemplateValue[], subject: Subject): Goal[] {
   const panels = subject.mosaic ? subject.mosaic.panels.map((p) => p.id) : [null]
   return panels.flatMap((panelId) =>
-    template.values.map((value) => ({
+    values.map((value) => ({
       id: freshId("goal", `${subject.id}|${panelId}|${value.channel}`),
       subjectId: subject.id,
       panelId,
       channel: value.channel,
       integrationS: value.integrationS,
       frameCount: value.frameCount,
-      qualityBar: null,
+      qualityBar: value.qualityBar,
     })),
   )
+}
+
+/** Goals from a template for one subject (`goalsFromValues` over its values). */
+export function goalsFromTemplate(template: GoalTemplate | undefined, subject: Subject): Goal[] {
+  return template ? goalsFromValues(template.values, subject) : []
 }
 
 export interface SubjectInput {
@@ -45,7 +50,7 @@ export interface NewProjectInput {
   notes: string
   subjects: SubjectInput[]
   rigIds: OpticalTrainId[]
-  /** Copied in; the copy stands alone and stays editable (D-W30). */
+  /** Copied in once; the copy stands alone and stays editable, and the Project keeps no link to it (D-W30). */
   goalTemplateId: GoalTemplateId | null
 }
 
@@ -61,7 +66,8 @@ export function createProject(input: NewProjectInput): { result: CommitResult; p
     subjects,
     rigIds: [...new Set(input.rigIds)],
     goals: subjects.flatMap((s) => goalsFromTemplate(template, s)),
-    goalTemplateId: input.goalTemplateId,
+    archiveLocationId: null,
+    wrapUp: {},
     state: "open",
     doneAt: null,
     archive: null,
@@ -90,11 +96,11 @@ export function updateProjectDetails(projectId: ProjectId, details: { name: stri
   return editProject(projectId, "Project details", expectRevision, (p) => ({ ...p, name: details.name.trim(), notes: details.notes }))
 }
 
-/** Add a subject, with goals copied from the Project's template when it has one. */
+/** Add a subject, with goals copied from the Project's goal set (`projectGoalSet`). */
 export function addSubject(projectId: ProjectId, input: SubjectInput, expectRevision: number): CommitResult {
   const subject: Subject = { id: freshId("sub", input.targetId), targetId: input.targetId, mosaic: input.mosaic }
   return editProject(projectId, "Add subject", expectRevision, (p) =>
-    p.subjects.some((s) => s.targetId === input.targetId) ? p : { ...p, subjects: [...p.subjects, subject], goals: [...p.goals, ...goalsFromTemplate(goalTemplate(p.goalTemplateId), subject)] },
+    p.subjects.some((s) => s.targetId === input.targetId) ? p : { ...p, subjects: [...p.subjects, subject], goals: [...p.goals, ...goalsFromValues(projectGoalSet(p), subject)] },
   )
 }
 
@@ -127,7 +133,36 @@ export function setGoals(projectId: ProjectId, goals: Goal[], expectRevision: nu
 /** Apply a template: its values are copied in for every subject and replace the current goals (D-W30). */
 export function applyGoalTemplate(projectId: ProjectId, templateId: GoalTemplateId, expectRevision: number): CommitResult {
   const template = goalTemplate(templateId)
-  return editProject(projectId, `Apply ${template?.name ?? "template"}`, expectRevision, (p) => ({ ...p, goalTemplateId: templateId, goals: p.subjects.flatMap((s) => goalsFromTemplate(template, s)) }))
+  return editProject(projectId, `Apply ${template?.name ?? "template"}`, expectRevision, (p) => ({ ...p, goals: p.subjects.flatMap((s) => goalsFromTemplate(template, s)) }))
+}
+
+/** The archive destination for this Project (P-ARC1); null returns it to the Default archive location. */
+export function setProjectArchiveLocation(projectId: ProjectId, locationId: LocationId | null): CommitResult {
+  const { catalog } = store.getState()
+  const project = catalog.projects[projectId]
+  if (!project) return MISSING
+  const location = locationId ? catalog.locations[locationId] : undefined
+  if (locationId && (!location || location.role !== "archive" || location.retiredAt)) return refuse("Archive destination refused", ["not an archive location"], projectHref(projectId))
+  return editProject(projectId, "Archive destination", project.revision, (p) => ({ ...p, archiveLocationId: locationId }))
+}
+
+/**
+ * Record a Wrap up step as done or skipped (P-WRAP1), or clear it back to
+ * to do with null. Refused until every run is Complete.
+ */
+export function setWrapUpStep(projectId: ProjectId, step: WrapUpStepId, state: WrapUpStepRecord["state"] | null): CommitResult {
+  const { catalog } = store.getState()
+  const project = catalog.projects[projectId]
+  if (!project) return MISSING
+  const open = markDoneBlockers(catalog, project)
+  if (open.length > 0) return refuse(`${WRAP_UP_LABEL[step]} refused`, open.map((r) => `${r.name} is not Complete`), projectHref(projectId))
+  const verb = state === "done" ? "done" : state === "skipped" ? "skipped" : "reset"
+  return editProject(projectId, `${WRAP_UP_LABEL[step]} ${verb}`, project.revision, (p) => {
+    const wrapUp = { ...p.wrapUp }
+    if (state) wrapUp[step] = { state, at: nowIso() }
+    else delete wrapUp[step]
+    return { ...p, wrapUp }
+  })
 }
 
 /**
@@ -149,7 +184,7 @@ export function addSessionToProject(sessionId: SessionId, projectId: ProjectId):
   const result = editProject(projectId, "Add to Project", project.revision, (p) => ({
     ...p,
     subjects: p.subjects.some((s) => s.targetId === targetId) ? p.subjects : [...p.subjects, subject],
-    goals: p.subjects.some((s) => s.targetId === targetId) ? p.goals : [...p.goals, ...goalsFromTemplate(goalTemplate(p.goalTemplateId), subject)],
+    goals: p.subjects.some((s) => s.targetId === targetId) ? p.goals : [...p.goals, ...goalsFromValues(projectGoalSet(p), subject)],
     rigIds: addsRig ? [...p.rigIds, rigId] : p.rigIds,
   }))
   return { result, note }

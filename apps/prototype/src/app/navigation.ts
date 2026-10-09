@@ -5,10 +5,11 @@
  * registered in `src/routes.tsx`.
  *
  * Harness v5 source list: Home (the start page), Projects, Targets and Plan
- * as primary destinations; one Library group (Sessions, Calibration,
- * Storage); Import in the toolbar; Activity and Settings in the footer. The
- * open Project's outline (subjects, runs and run groups, Trash) and the open
- * run's six steps appear under Projects.
+ * as primary destinations; an optional Recent group (up to three Projects,
+ * no children); one Library group (Sessions, Calibration, Storage); Import in
+ * the toolbar; Activity and Settings in the footer. Navigation only: the
+ * Project page owns its runs and stages, a run its six steps. Labels are
+ * en-GB source strings, shown through `t()`.
  */
 import { Activity, CalendarClock, Crosshair, FolderKanban, HardDrive, House, Layers, type LucideIcon, Settings, SlidersHorizontal } from "lucide-react"
 
@@ -52,7 +53,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [...PRIMARY_ITEMS, ...NAV_GROUPS.flatMap
 
 /** Settings sections (S16): v4's settled sections plus Equipment, Goal templates and Naming. */
 export const SETTINGS_SECTIONS: Array<{ group: string; items: Array<{ to: string; label: string; keywords: string }> }> = [
-  { group: "General", items: [{ to: "/settings/appearance", label: "Appearance", keywords: "theme dark light density" }] },
+  { group: "General", items: [{ to: "/settings/appearance", label: "Appearance", keywords: "theme dark light density language locale portuguese gruvbox nord dracula solarized catppuccin tokyo one rose pine" }] },
   {
     group: "Library",
     items: [

@@ -5,24 +5,25 @@
  * Import, Archive, review names and Settings share. Nothing here writes state.
  */
 import { nightOf } from "./indexing"
-import type { FrameHeader, GoalTemplate, GoalTemplateValue, NamingFrameType, NamingToken } from "./types"
+import type { FrameHeader, GoalChannel, GoalTemplate, GoalTemplateValue, NamingFrameType, NamingToken, QualityBar } from "./types"
 
 const H = 3600
+const USABLE: QualityBar = { kind: "usable-only" }
 
-function hours(channels: string[], h: number): GoalTemplateValue[] {
-  return channels.map((channel) => ({ channel, integrationS: h * H, frameCount: null }))
+function hours(channels: GoalChannel[], h: number, qualityBar: QualityBar | null = USABLE): GoalTemplateValue[] {
+  return channels.map((channel) => ({ channel, integrationS: h * H, frameCount: null, qualityBar }))
 }
 
 /**
  * Built-in goal templates and their values (D-W47). Never filtered by rig
- * (D-W30). OSC templates use the derived channels "OSC" (no filter or a
- * broadband filter on an OSC camera) and "Dual-band" (a filter passing two
- * narrow bands), as `goalChannel` in derive.ts reads them.
+ * (D-W30). Each value holds the goal kinds a Goal does: integration time,
+ * frame count and a quality bar. OSC templates use the derived channels
+ * "OSC" and "Dual-band", as `goalChannel` in derive.ts reads them.
  */
 export const BUILT_IN_GOAL_TEMPLATES: GoalTemplate[] = [
   { id: "gtpl_hoo", name: "HOO", source: "built-in", values: hours(["Ha", "OIII"], 10) },
   { id: "gtpl_sho", name: "SHO", source: "built-in", values: hours(["Ha", "OIII", "SII"], 10) },
-  { id: "gtpl_lrgb", name: "LRGB", source: "built-in", values: [...hours(["L"], 6), ...hours(["R", "G", "B"], 2)] },
+  { id: "gtpl_lrgb", name: "LRGB", source: "built-in", values: [...hours(["L"], 6, { kind: "usable-max-fwhm", maxArcsec: 3 }), ...hours(["R", "G", "B"], 2)] },
   { id: "gtpl_osc_broadband", name: "OSC broadband", source: "built-in", values: hours(["OSC"], 10) },
   { id: "gtpl_osc_dualband", name: "OSC dual-band", source: "built-in", values: hours(["Dual-band"], 15) },
 ]

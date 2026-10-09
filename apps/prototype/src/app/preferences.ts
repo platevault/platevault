@@ -1,23 +1,31 @@
 /**
- * Shell preferences: theme (dark default, light, system), density, and
- * whether single-key shortcuts are on (WCAG 2.1.4). Stored outside the
+ * Shell preferences: theme (a registry theme or "system"), language, density,
+ * and whether single-key shortcuts are on (WCAG 2.1.4). Stored outside the
  * prototype catalog so Reset keeps them; the pre-paint script in index.html
- * reads theme and density so the first frame is correct.
+ * reads theme, scheme and density so the first frame is correct.
  */
 import { useSyncExternalStore } from "react"
+import { DEFAULT_LOCALE, isLocale, type Locale, translate } from "@/lib/i18n"
+import { DEFAULT_THEME, isThemeId, SYSTEM_THEMES, type ThemeId, type ThemeScheme, themeInfo } from "./themes"
 
-export type ThemePreference = "dark" | "light" | "system"
+export type ThemePreference = ThemeId | "system"
 export type Density = "compact" | "comfortable" | "spacious"
 
 const THEME_KEY = "platevault.theme"
+/** The resolved theme's scheme, so the pre-paint script can set `html.dark` without the registry. */
+const SCHEME_KEY = "platevault.themeScheme"
+const LOCALE_KEY = "platevault.locale"
 const DENSITY_KEY = "platevault.density"
 const SINGLE_KEY_SHORTCUTS_KEY = "platevault.singleKeyShortcuts"
 
 interface Preferences {
   theme: ThemePreference
-  density: Density
   /** The theme actually applied after resolving "system". */
-  resolvedTheme: "dark" | "light"
+  resolvedTheme: ThemeId
+  /** Dark or light, from the resolved theme. */
+  scheme: ThemeScheme
+  locale: Locale
+  density: Density
   /** ?, /, [ and G-sequences. Modifier shortcuts such as ⌘K stay on. */
   singleKeyShortcuts: boolean
 }
@@ -25,41 +33,67 @@ interface Preferences {
 const listeners = new Set<() => void>()
 const media = window.matchMedia("(prefers-color-scheme: dark)")
 
-function read<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+function stored(key: string): string | null {
   try {
-    const value = localStorage.getItem(key)
-    return value && (allowed as readonly string[]).includes(value) ? (value as T) : fallback
+    return localStorage.getItem(key)
   } catch {
-    return fallback
+    return null
   }
 }
 
-function resolve(theme: ThemePreference): "dark" | "light" {
-  if (theme === "system") return media.matches ? "dark" : "light"
-  return theme
+function store(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // Preference still applies for this session.
+  }
+}
+
+function read<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  const value = stored(key)
+  return value && (allowed as readonly string[]).includes(value) ? (value as T) : fallback
+}
+
+/** Saved theme; v4's "dark" and "light" read as the PlateVault themes. */
+function readTheme(): ThemePreference {
+  const value = stored(THEME_KEY)
+  if (value === "system") return "system"
+  if (value === "dark" || value === "light") return SYSTEM_THEMES[value]
+  return value && isThemeId(value) ? value : DEFAULT_THEME
+}
+
+function resolve(theme: ThemePreference): ThemeId {
+  return theme === "system" ? SYSTEM_THEMES[media.matches ? "dark" : "light"] : theme
+}
+
+function snapshot(theme: ThemePreference, rest: Omit<Preferences, "theme" | "resolvedTheme" | "scheme">): Preferences {
+  const resolvedTheme = resolve(theme)
+  return { ...rest, theme, resolvedTheme, scheme: themeInfo(resolvedTheme).scheme }
 }
 
 let current: Preferences = (() => {
-  const theme = read<ThemePreference>(THEME_KEY, ["dark", "light", "system"], "dark")
-  return {
-    theme,
+  const locale = stored(LOCALE_KEY)
+  return snapshot(readTheme(), {
+    locale: locale && isLocale(locale) ? locale : DEFAULT_LOCALE,
     density: read<Density>(DENSITY_KEY, ["compact", "comfortable", "spacious"], "comfortable"),
-    resolvedTheme: resolve(theme),
     singleKeyShortcuts: read(SINGLE_KEY_SHORTCUTS_KEY, ["on", "off"], "on") === "on",
-  }
+  })
 })()
 
 function apply() {
   const root = document.documentElement
-  root.classList.toggle("dark", current.resolvedTheme === "dark")
+  root.dataset.theme = current.resolvedTheme
+  root.classList.toggle("dark", current.scheme === "dark")
   root.dataset.density = current.density
+  root.lang = current.locale
+  store(SCHEME_KEY, current.scheme)
   const meta = document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]')
-  if (meta) meta.content = current.resolvedTheme
+  if (meta) meta.content = current.scheme
 }
 
-function update(next: Partial<Preferences>) {
-  const theme = next.theme ?? current.theme
-  current = { ...current, ...next, resolvedTheme: resolve(theme) }
+function update(next: Partial<Omit<Preferences, "resolvedTheme" | "scheme">>) {
+  const { theme, ...rest } = { ...current, ...next }
+  current = snapshot(theme, { locale: rest.locale, density: rest.density, singleKeyShortcuts: rest.singleKeyShortcuts })
   apply()
   for (const listener of listeners) listener()
 }
@@ -70,29 +104,22 @@ media.addEventListener("change", () => {
 })
 
 export function setTheme(theme: ThemePreference) {
-  try {
-    localStorage.setItem(THEME_KEY, theme)
-  } catch {
-    // Preference still applies for this session.
-  }
+  store(THEME_KEY, theme)
   update({ theme })
 }
 
+export function setLocale(locale: Locale) {
+  store(LOCALE_KEY, locale)
+  update({ locale })
+}
+
 export function setDensity(density: Density) {
-  try {
-    localStorage.setItem(DENSITY_KEY, density)
-  } catch {
-    // Preference still applies for this session.
-  }
+  store(DENSITY_KEY, density)
   update({ density })
 }
 
 export function setSingleKeyShortcuts(enabled: boolean) {
-  try {
-    localStorage.setItem(SINGLE_KEY_SHORTCUTS_KEY, enabled ? "on" : "off")
-  } catch {
-    // Preference still applies for this session.
-  }
+  store(SINGLE_KEY_SHORTCUTS_KEY, enabled ? "on" : "off")
   update({ singleKeyShortcuts: enabled })
 }
 
@@ -111,6 +138,23 @@ export function usePreferences(): Preferences {
     },
     () => current,
   )
+}
+
+export type Translate = (source: string, vars?: Record<string, string | number>) => string
+
+/**
+ * The string-table helper bound to the chosen language: `t("Issues")`,
+ * `t("{n} offline", { n })`. The key is the en-GB source string; a string
+ * with no translation reads in en-GB (see `src/lib/i18n.ts`).
+ */
+export function useT(): Translate {
+  const { locale } = usePreferences()
+  return (source, vars) => translate(locale, source, vars)
+}
+
+/** The same helper outside React (event handlers, announcements). */
+export function t(source: string, vars?: Record<string, string | number>): string {
+  return translate(current.locale, source, vars)
 }
 
 apply()

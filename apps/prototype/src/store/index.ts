@@ -3,6 +3,8 @@
  */
 import { createSeed, defaultFaults } from "@/domain/seed"
 import type { SeedName } from "@/domain/types"
+import { CALIBRATION_HANDLERS } from "./actions/calibration"
+import { STORAGE_HANDLERS } from "./actions/storage"
 import { FOUNDATION_HANDLERS } from "./actions/trash"
 import { type PrototypeState, recordActivity, SCHEMA_VERSION, store } from "./core"
 import { ensureTicker, interruptRunningOperations, registerOperationHandlers } from "./operations"
@@ -69,7 +71,7 @@ export function initializeStore() {
   if (initialized) return
   initialized = true
   // Foundation handlers first, so a slice that owns the same kind replaces it.
-  registerOperationHandlers(FOUNDATION_HANDLERS)
+  registerOperationHandlers([...FOUNDATION_HANDLERS, ...CALIBRATION_HANDLERS, ...STORAGE_HANDLERS])
   for (const slice of Object.values(SLICES)) if (slice.operations) registerOperationHandlers(slice.operations)
   store.replace(interruptRunningOperations(load() ?? fromSeed("empty")))
   store.subscribe(() => {

@@ -34,6 +34,7 @@ import {
   Unplug,
   Wrench,
 } from "lucide-react"
+import { useT } from "@/app/preferences"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
@@ -249,13 +250,15 @@ export interface StatusBadgeProps<K extends StatusKind> {
   className?: string
 }
 
+/** The status as glyph and word; the spec term reads in the chosen language (`t()`), a caller's `label` as given. */
 export function StatusBadge<K extends StatusKind>({ kind, value, label, className }: StatusBadgeProps<K>) {
+  const t = useT()
   const meta = statusMeta(kind, value)
   const Icon = meta.icon
   return (
     <Badge variant="outline" className={cn(STATUS_CLASS, TONE_CLASS[meta.tone], className)} data-status={`${kind}:${value}`}>
       <Icon aria-hidden="true" className={cn(value === "running" && "motion-safe:animate-spin")} />
-      {label ?? meta.label}
+      {label ?? t(meta.label)}
     </Badge>
   )
 }

@@ -11,16 +11,24 @@
  *   Complete with Cleanup available, one at Review with unreviewed frames,
  *   one blocked at Calibrate, a run group whose Panel 2 is Partial and whose
  *   Panel 3 is in the Trash, and one trashed run in the Project Trash.
- * - "M 31 LRGB" (Done): archive offers pending (rejected frames,
- *   intermediates, duplicate copies).
+ * - "M 31 LRGB" (open, every run Complete): in Wrap up with Clean up done and
+ *   Trash and Archive still to do (rejected frames, intermediates, duplicate
+ *   copies); it archives to the NAS archive, not the Default. Its goals use
+ *   every kind: integration with a quality bar, frame counts, Usable only.
+ *   A master dark from its Results was dismissed (Restore offer).
  * - "Heart and Soul" (open): no runs, candidates waiting.
  * - Library: sessions that need a Target, sessions in no Project, a Trashed
- *   session, an offline volume (Cold-1) and a running scan of a network share.
- * - Targets: favourites, a southern Target with no window tonight, a default site.
+ *   session, an offline volume (Cold-1) and a running scan of a network share;
+ *   calibration sessions with and without an integrated master; two archive
+ *   locations (one Default); two removable devices connected, an ASIAIR card
+ *   (recognised layout) and a generic USB stick.
+ * - Targets: favourites, a southern Target with no window tonight, a default
+ *   site, and a Plan list of two Targets.
  *
  * All names, paths and counts are illustrative fixtures.
  */
 import { plural } from "@/lib/format"
+import { DEFAULT_MOON_CONSTRAINTS } from "./labels"
 import { fakeSha256, fileAt, fileKey, makeFile, writeFiles } from "./disk"
 import { indexLocationsSync, stableHash } from "./indexing"
 import { addSessions, emptyContent } from "./membership"
@@ -37,6 +45,7 @@ import type {
   DiskFile,
   FrameHeader,
   Goal,
+  GoalChannel,
   ImageType,
   Location,
   MembershipRevision,
@@ -66,23 +75,29 @@ export const VOLUME_IDS = {
   impostor: "vol_archive_impostor",
   spare: "vol_spare",
   nas: "vol_nas",
-  /** The ASIAIR SD card behind the demo's saved Import source; mounted by Prototype › Insert ASIAIR card. */
+  /** A removable SD card in the ASIAIR layout (Autorun, Plan): Import recognises it as an ASIAIR. */
   asiair: "vol_asiair",
+  /** A removable USB stick with loose FITS files: a generic device. */
+  usb: "vol_usb",
 } as const
 
 const TB = 1_000_000_000_000
 
 function buildVolumes(coldMounted: boolean): Record<VolumeId, Volume> {
   const allLinks = { symlink: true, hardlink: true, clone: true }
+  const fixed = { network: false, removable: false }
   const list: Volume[] = [
-    { id: VOLUME_IDS.astro, name: "Astro-T7", mountPath: "/Volumes/Astro-T7", volumeUuid: "5E1F-T7-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 2 * TB, links: allLinks, network: false },
-    { id: VOLUME_IDS.cold, name: "Cold-1", mountPath: "/Volumes/Cold-1", volumeUuid: "C01D-0001", mounted: coldMounted, writable: true, trash: "supported", capacityBytes: 4 * TB, links: allLinks, network: false },
-    { id: VOLUME_IDS.scratch, name: "Scratch", mountPath: "/Volumes/Scratch", volumeUuid: "5C7A-0001", mounted: true, writable: true, trash: "unsupported", capacityBytes: 0.5 * TB, links: { symlink: false, hardlink: false, clone: false }, network: false },
-    { id: VOLUME_IDS.archive, name: "Archive", mountPath: "/Volumes/Archive", volumeUuid: "A7C4-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 8 * TB, links: { symlink: true, hardlink: true, clone: false }, network: false },
-    { id: VOLUME_IDS.impostor, name: "Archive", mountPath: "/Volumes/Archive", volumeUuid: "A7C4-9999", mounted: false, writable: true, trash: "supported", capacityBytes: 1 * TB, links: { symlink: true, hardlink: true, clone: false }, network: false },
-    { id: VOLUME_IDS.spare, name: "Spare", mountPath: "/Volumes/Spare", volumeUuid: "5BA2-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 1 * TB, links: allLinks, network: false },
+    { id: VOLUME_IDS.astro, name: "Astro-T7", mountPath: "/Volumes/Astro-T7", volumeUuid: "5E1F-T7-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 2 * TB, links: allLinks, ...fixed },
+    { id: VOLUME_IDS.cold, name: "Cold-1", mountPath: "/Volumes/Cold-1", volumeUuid: "C01D-0001", mounted: coldMounted, writable: true, trash: "supported", capacityBytes: 4 * TB, links: allLinks, ...fixed },
+    { id: VOLUME_IDS.scratch, name: "Scratch", mountPath: "/Volumes/Scratch", volumeUuid: "5C7A-0001", mounted: true, writable: true, trash: "unsupported", capacityBytes: 0.5 * TB, links: { symlink: false, hardlink: false, clone: false }, ...fixed },
+    { id: VOLUME_IDS.archive, name: "Archive", mountPath: "/Volumes/Archive", volumeUuid: "A7C4-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 8 * TB, links: { symlink: true, hardlink: true, clone: false }, ...fixed },
+    { id: VOLUME_IDS.impostor, name: "Archive", mountPath: "/Volumes/Archive", volumeUuid: "A7C4-9999", mounted: false, writable: true, trash: "supported", capacityBytes: 1 * TB, links: { symlink: true, hardlink: true, clone: false }, ...fixed },
+    { id: VOLUME_IDS.spare, name: "Spare", mountPath: "/Volumes/Spare", volumeUuid: "5BA2-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 1 * TB, links: allLinks, ...fixed },
     // D-W12: an OS-mounted network share, hashed resumably with progress.
-    { id: VOLUME_IDS.nas, name: "NAS", mountPath: "/Volumes/NAS", volumeUuid: "4A5E-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 12 * TB, links: { symlink: true, hardlink: false, clone: false }, network: true },
+    { id: VOLUME_IDS.nas, name: "NAS", mountPath: "/Volumes/NAS", volumeUuid: "4A5E-0001", mounted: true, writable: true, trash: "supported", capacityBytes: 12 * TB, links: { symlink: true, hardlink: false, clone: false }, network: true, removable: false },
+    // Removable devices: not connected until the demo (or Prototype › Connect) mounts them.
+    { id: VOLUME_IDS.asiair, name: "ASIAIR", mountPath: "/Volumes/ASIAIR", volumeUuid: "A51A-0001", mounted: false, writable: true, trash: "supported", capacityBytes: 128_000_000_000, links: { symlink: false, hardlink: false, clone: false }, network: false, removable: true },
+    { id: VOLUME_IDS.usb, name: "USB DISK", mountPath: "/Volumes/USB DISK", volumeUuid: "U5B0-0001", mounted: false, writable: true, trash: "unsupported", capacityBytes: 64_000_000_000, links: { symlink: false, hardlink: false, clone: false }, network: false, removable: true },
   ]
   return Object.fromEntries(list.map((v) => [v.id, v]))
 }
@@ -95,6 +110,7 @@ const MOUNT: Record<VolumeId, string> = {
   [VOLUME_IDS.spare]: "/Volumes/Spare",
   [VOLUME_IDS.nas]: "/Volumes/NAS",
   [VOLUME_IDS.asiair]: "/Volumes/ASIAIR",
+  [VOLUME_IDS.usb]: "/Volumes/USB DISK",
 }
 
 const SITE_COORDS = {
@@ -306,27 +322,19 @@ export function arrivalFiles(): DiskFile[] {
   ]
 }
 
-/** The ASIAIR SD card the demo's saved source "ASIAIR SD card" points at; not mounted until inserted. */
-export const ASIAIR_CARD: Volume = {
-  id: VOLUME_IDS.asiair,
-  name: "ASIAIR",
-  mountPath: MOUNT[VOLUME_IDS.asiair]!,
-  volumeUuid: "A51A-0001",
-  mounted: true,
-  writable: true,
-  trash: "supported",
-  capacityBytes: 128_000_000_000,
-  links: { symlink: false, hardlink: false, clone: false },
-  network: false,
-}
-
 /**
- * What the ASIAIR wrote last night (S13 Import): new NGC 7000 lights with the
- * last file still being written, flats, a set without IMAGETYP (held as
- * Unclassified), a log file, and the 2 Oct Ha session imported from this card
- * before (byte-identical duplicates of library frames).
+ * What a removable device holds when it connects (S13 Import, `connectDevice`).
+ * The ASIAIR card: new NGC 7000 lights with the last file still being written,
+ * flats, a set without IMAGETYP (held as Unclassified), a log file, and the
+ * 2 Oct Ha session imported from it before (byte-identical duplicates of
+ * library frames); its Autorun and Plan folders are the ASIAIR layout. The
+ * USB stick: loose M 45 lights in a dated folder, no recognised layout.
  */
-export function asiairCardFiles(disk: Disk): DiskFile[] {
+export function deviceFiles(disk: Disk, volumeId: VolumeId): DiskFile[] {
+  if (volumeId === VOLUME_IDS.usb) {
+    return captureSet({ volumeId, dir: "M45 2026-10-05", prefix: "M45_L_60s", count: 8, start: "2026-10-05T23:10:00Z", imageType: "light", exposureS: 60, filter: "L", object: "M 45", rig: FRA400, pointing: { ra: 56.75, dec: 24.12, rotationDeg: 0 }, site: SITE_COORDS.backyard })
+  }
+  if (volumeId !== VOLUME_IDS.asiair) return []
   const card = VOLUME_IDS.asiair
   const pointing = { ...NGC7000, rotationDeg: rot }
   const site = SITE_COORDS.backyard
@@ -336,11 +344,11 @@ export function asiairCardFiles(disk: Disk): DiskFile[] {
     ...captureSet({ volumeId: card, dir: "Autorun/Flat", prefix: "Flat_RedCat_Ha_20261007", count: 20, start: "2026-10-07T05:20:00Z", imageType: "flat", exposureS: 1.5, filter: "Ha", object: null, rig: REDCAT, pointing: null, site: null }),
     // IMAGETYP missing: the files are held as Unclassified until typed.
     ...captureSet({ volumeId: card, dir: "Plan/M 33", prefix: "Capture_M33_120s_L_20261006", count: 6, start: "2026-10-06T23:40:00Z", imageType: "unknown", exposureS: 120, filter: "L", object: "M 33", rig: REDCAT, pointing: { ra: 23.462, dec: 30.66, rotationDeg: rot }, site, truth: () => ({ starCount: 1700, background: 860, saturatedStars: 1 }) }),
-    makeFile({ path: `${ASIAIR_CARD.mountPath}/Log/Autorun_Log_2026-10-06.txt`, volumeId: card, sizeBytes: 48_200, kind: "text", modifiedAt: "2026-10-07T05:40:00Z" }),
+    makeFile({ path: `${MOUNT[card]}/Log/Autorun_Log_2026-10-06.txt`, volumeId: card, sizeBytes: 48_200, kind: "text", modifiedAt: "2026-10-07T05:40:00Z" }),
   ]
   const earlier = Object.values(disk.files)
     .filter((f) => f.path.startsWith(`${MOUNT[A]}/Captures/NGC7000/2026-10-02/Ha/`))
-    .map((f) => ({ ...f, volumeId: card, path: `${ASIAIR_CARD.mountPath}/Autorun/Light/NGC 7000/${f.path.slice(f.path.lastIndexOf("/") + 1)}`, inode: f.inode + 7 }))
+    .map((f) => ({ ...f, volumeId: card, path: `${MOUNT[card]}/Autorun/Light/NGC 7000/${f.path.slice(f.path.lastIndexOf("/") + 1)}`, inode: f.inode + 7 }))
   return [...files, ...earlier]
 }
 
@@ -369,6 +377,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         directSource: "file-list",
         productInputKinds: ["linear-integration", "channel-product", "mosaic-panel"],
         correctedMetadata: "none",
+        masterIntegration: true,
       },
     },
     {
@@ -386,6 +395,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         directSource: "file-list",
         productInputKinds: ["linear-integration", "channel-product"],
         correctedMetadata: "none",
+        masterIntegration: true,
       },
     },
     {
@@ -403,6 +413,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         directSource: "whole-folder",
         productInputKinds: [],
         correctedMetadata: "none",
+        masterIntegration: false,
       },
     },
     {
@@ -420,6 +431,7 @@ function builtInProfiles(): Record<string, ApplicationProfile> {
         directSource: "none",
         productInputKinds: [],
         correctedMetadata: "none",
+        masterIntegration: false,
       },
     },
   ]
@@ -468,6 +480,8 @@ export function defaultSettings(): AppSettings {
   return {
     defaultSiteId: null,
     planningSiteId: null,
+    defaultArchiveLocationId: null,
+    moonConstraints: structuredClone(DEFAULT_MOON_CONSTRAINTS),
     onboarding: { completedAt: null, deferredRoles: [] },
     lastOutputParent: null,
     naming: {},
@@ -504,6 +518,7 @@ const EXPLICIT_FOLDERS = [
   { volumeId: A, path: "/Volumes/Astro-T7/Library" },
   { volumeId: VOLUME_IDS.archive, path: "/Volumes/Archive/Library" },
   { volumeId: VOLUME_IDS.spare, path: "/Volumes/Spare/Captures" },
+  { volumeId: VOLUME_IDS.nas, path: "/Volumes/NAS/Archive" },
 ]
 
 function diskOf(files: DiskFile[], coldMounted: boolean, deniedPaths: string[]): Disk {
@@ -700,6 +715,8 @@ function demoSeed(): SeedData {
     loc_processing: location("loc_processing", "Astro-T7 processing", PROCESSING, A, "results"),
     loc_spare: location("loc_spare", "Spare captures", "/Volumes/Spare/Captures", VOLUME_IDS.spare, "captures"),
     loc_archive: location("loc_archive", "Archive", "/Volumes/Archive", VOLUME_IDS.archive, "archive"),
+    // P-ARC1: a second archive location; Archive is the Default, M 31 picks this one.
+    loc_archive_nas: location("loc_archive_nas", "NAS archive", "/Volumes/NAS/Archive", VOLUME_IDS.nas, "archive"),
     loc_nas: location("loc_nas", "NAS captures", "/Volumes/NAS/Captures", VOLUME_IDS.nas, "captures"),
   }
   catalog = indexLocationsSync(catalog, disk, ["loc_cold"], "2026-09-13T08:00:00.000Z")
@@ -774,7 +791,8 @@ function demoSeed(): SeedData {
     centre: { ...IC5070 },
     panels: PANEL_DEC.map((dec, i) => ({ id: `pnl_${i + 1}`, n: i + 1, ra: IC5070.ra, dec, rotationDeg: 0 })),
   })
-  const goal = (id: string, subjectId: string, channel: string, hours: number, panelId: string | null = null): Goal => ({ id, subjectId, panelId, channel, integrationS: hours * 3600, frameCount: null, qualityBar: null })
+  const goal = (id: string, subjectId: string, channel: GoalChannel, hours: number | null, panelId: string | null = null, extra: Partial<Goal> = {}): Goal => ({ id, subjectId, panelId, channel, integrationS: hours === null ? null : hours * 3600, frameCount: null, qualityBar: null, ...extra })
+  const project = { archiveLocationId: null, wrapUp: {} }
   catalog.projects = {
     [PROJECT.cygnus]: {
       id: PROJECT.cygnus,
@@ -787,7 +805,7 @@ function demoSeed(): SeedData {
         goal("goal_ngc_oiii", ngcSubject.id, "OIII", 10),
         ...mosaicSubject.mosaic!.panels.flatMap((p) => [goal(`goal_${p.id}_ha`, mosaicSubject.id, "Ha", 4, p.id), goal(`goal_${p.id}_oiii`, mosaicSubject.id, "OIII", 4, p.id)]),
       ],
-      goalTemplateId: "gtpl_hoo",
+      ...project,
       state: "open",
       doneAt: null,
       archive: null,
@@ -801,10 +819,18 @@ function demoSeed(): SeedData {
       notes: "Broadband first; narrowband blend later.",
       subjects: [subject("sub_m31", m31)],
       rigIds: [RIG.fra],
-      goals: [goal("goal_m31_l", "sub_m31", "L", 2), goal("goal_m31_r", "sub_m31", "R", 0.5), goal("goal_m31_g", "sub_m31", "G", 0.5), goal("goal_m31_b", "sub_m31", "B", 0.5)],
-      goalTemplateId: "gtpl_lrgb",
-      state: "done",
-      doneAt: "2026-09-12T09:00:00.000Z",
+      // Every goal kind: integration with a quality bar (Usable and FWHM), frame counts, Usable only.
+      goals: [
+        goal("goal_m31_l", "sub_m31", "L", 2, null, { qualityBar: { kind: "usable-max-fwhm", maxArcsec: 3 } }),
+        goal("goal_m31_r", "sub_m31", "R", null, null, { frameCount: 20, qualityBar: { kind: "usable-only" } }),
+        goal("goal_m31_g", "sub_m31", "G", null, null, { frameCount: 20, qualityBar: { kind: "usable-only" } }),
+        goal("goal_m31_b", "sub_m31", "B", null, null, { frameCount: 20, qualityBar: { kind: "usable-only" } }),
+      ],
+      // P-WRAP1: every run is Complete; Clean up is done, Trash and Archive are still to do. P-ARC1: it archives to the NAS.
+      archiveLocationId: "loc_archive_nas",
+      wrapUp: { cleanup: { state: "done", at: "2026-09-10T08:31:00.000Z" } },
+      state: "open",
+      doneAt: null,
       archive: null,
       rejections: {},
       createdAt: "2026-09-01T19:00:00.000Z",
@@ -816,8 +842,8 @@ function demoSeed(): SeedData {
       notes: "Ha first; OIII when the Moon allows.",
       subjects: heartIds.map((x, i) => subject(`sub_heart_${i + 1}`, catalog.sessions[x.id]!.target.value!)),
       rigIds: [RIG.redcat],
-      goals: heartIds.flatMap((_, i) => [goal(`goal_heart_${i + 1}_ha`, `sub_heart_${i + 1}`, "Ha", 10), goal(`goal_heart_${i + 1}_oiii`, `sub_heart_${i + 1}`, "OIII", 10)]),
-      goalTemplateId: "gtpl_hoo",
+      goals: heartIds.flatMap((_, i) => [goal(`goal_heart_${i + 1}_ha`, `sub_heart_${i + 1}`, "Ha", 10), goal(`goal_heart_${i + 1}_oiii`, `sub_heart_${i + 1}`, "OIII", null, null, { frameCount: 120, qualityBar: { kind: "usable-only" } })]),
+      ...project,
       state: "open",
       doneAt: null,
       archive: null,
@@ -975,9 +1001,26 @@ function demoSeed(): SeedData {
   catalog.masters[flatMasterId] = {
     id: flatMasterId, kind: "flat", path: aFiles.flat.path, cameraName: REDCAT.instrument, widthPx: REDCAT.widthPx, heightPx: REDCAT.heightPx, binning: 1, gain: REDCAT.gain, offset: REDCAT.offset,
     exposureS: null, channel: "Ha", opticalTrainId: RIG.redcat, ccdTempC: REDCAT.ccdTempC, frameCount: 30, createdAt: aFiles.flat.modifiedAt, state: "candidate",
-    origin: { kind: "generated", runId: runA.id, sourcePath: aFiles.flat.path }, adoption: null,
+    origin: { kind: "generated", runId: runA.id, sourcePath: aFiles.flat.path, sessionId: null }, adoption: null,
   }
   runA.masterOffers = [{ masterId: flatMasterId, state: "pending", at: "2026-10-02T09:00:00.000Z" }]
+  // P-CAL2: a 120 s master dark found in M 31's Results was dismissed; the Calibration library lists it under Dismissed with Restore offer.
+  const m31Dark = masterFile("masterDark_BIN-1_EXPOSURE-120.00s.xisf", "master-dark", 120, null, "2026-09-07T20:10:00.000Z", A, `Processing/M 31 LRGB/${m31Run.name} Results/master`, FRA400)
+  disk = writeFiles(disk, [m31Dark])
+  const m31DarkId = `mst_${stableHash(m31Dark.path)}`
+  catalog.masters[m31DarkId] = {
+    id: m31DarkId, kind: "dark", path: m31Dark.path, cameraName: FRA400.instrument, widthPx: FRA400.widthPx, heightPx: FRA400.heightPx, binning: 1, gain: FRA400.gain, offset: FRA400.offset,
+    exposureS: 120, channel: null, opticalTrainId: null, ccdTempC: FRA400.ccdTempC, frameCount: 30, createdAt: m31Dark.modifiedAt, state: "candidate",
+    origin: { kind: "generated", runId: m31Run.id, sourcePath: m31Dark.path, sessionId: null }, adoption: null,
+  }
+  m31Run.masterOffers = [{ masterId: m31DarkId, state: "dismissed", at: "2026-09-08T09:30:00.000Z" }]
+  // P-CAL1: the library's 300 s master dark was integrated from the 8 Sep dark session; the other calibration sessions have no master yet.
+  const dark300 = findSession(catalog, (x) => x.imageType === "dark" && x.exposureS === 300 && x.cameraName === REDCAT.instrument)
+  const master300 = Object.values(catalog.masters).find((m) => m.path.endsWith("/MasterDark_300s_G100_O50_-10C.xisf"))
+  if (master300) {
+    const folder = catalog.assets[dark300.assetIds[0]!]?.copies[0]?.path.replace(/\/[^/]+$/, "") ?? ""
+    catalog.masters[master300.id] = { ...master300, origin: { kind: "integrated", runId: null, sourcePath: folder, sessionId: dark300.id } }
+  }
 
   catalog.runs = Object.fromEntries([runA, runB, runC, runD, p1, p2, p3, m31Run].map((r) => [r.id, r]))
   catalog.runGroups = { [group.id]: group }
@@ -1008,8 +1051,18 @@ function demoSeed(): SeedData {
   // Cold-1 was disconnected after its sessions were saved into runs.
   disk.volumes[VOLUME_IDS.cold] = { ...disk.volumes[VOLUME_IDS.cold]!, mounted: false }
 
-  // A saved Import source for "Import new" (STO-IMP-FR-01).
-  catalog.importSources = { src_sd: { id: "src_sd", name: "ASIAIR SD card", path: "/Volumes/ASIAIR", lastImportedAt: "2026-10-03T08:00:00.000Z", importedSha256: [] } }
+  // Removable devices connected when the demo loads: an ASIAIR card (recognised layout) and a generic USB stick.
+  for (const id of [VOLUME_IDS.asiair, VOLUME_IDS.usb]) {
+    disk.volumes[id] = { ...disk.volumes[id]!, mounted: true }
+    disk = writeFiles(disk, deviceFiles(disk, id))
+  }
+  // A saved Import source for "Import new" (STO-IMP-FR-01): the ASIAIR device's folder.
+  catalog.importSources = { src_asiair: { id: "src_asiair", name: "ASIAIR", path: "/Volumes/ASIAIR", lastImportedAt: "2026-10-03T08:00:00.000Z", importedSha256: [] } }
+
+  // The Plan list: NGC 7000 and M 33 (Planning's default view); "Show all" lists My targets.
+  for (const targetId of [ngc, s.m33.target.value!]) {
+    catalog.plans[targetId] = { targetId, planned: true, criteria: { minAltitudeDeg: 25, darkness: "astronomical", maxMoonIlluminationPct: null, minMoonSeparationDeg: null, minDurationMin: 60 }, updatedAt: "2026-10-01T18:00:00.000Z" }
+  }
 
   const cleanupM31: Operation = {
     id: "op_cleanup_m31",
@@ -1057,6 +1110,7 @@ function demoSeed(): SeedData {
   const settings = defaultSettings()
   settings.onboarding = { completedAt: "2026-09-01T18:12:00.000Z", deferredRoles: [] }
   settings.defaultSiteId = "site_backyard"
+  settings.defaultArchiveLocationId = "loc_archive"
   settings.lastOutputParent = PROCESSING
   const activity: ActivityEvent[] = [
     { id: "act_trash_m31", at: trashAt, kind: "operation", title: "Move 8 rejected frames to Trash: finished", detail: "8 frames (M 31 25 Aug L) moved to the OS Trash. Put back plus a rescan restores them as Unusable.", operationId: null, href: `/projects/${PROJECT.m31}` },

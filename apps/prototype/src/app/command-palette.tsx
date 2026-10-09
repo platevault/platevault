@@ -15,7 +15,9 @@ import { formatExposure, formatNight } from "@/lib/format"
 import { useStore } from "@/store/core"
 import { SHELLS } from "./contributions"
 import { ALL_NAV_ITEMS, STATIC_DESTINATIONS } from "./navigation"
-import { setSingleKeyShortcuts, setTheme } from "./preferences"
+import { LOCALES } from "@/lib/i18n"
+import { setLocale, setSingleKeyShortcuts, setTheme } from "./preferences"
+import { THEMES } from "./themes"
 import type { PaletteCommand } from "./shell-contract"
 import { closePanel, openPanel, toggleSidebar, useShellUi } from "./ui-state"
 
@@ -70,9 +72,9 @@ function useCommands(): Group[] {
       {
         value: "Actions",
         items: [
-          { id: "act:theme-dark", label: "Theme: Dark", group: "Actions", keywords: "appearance night", run: () => setTheme("dark") },
-          { id: "act:theme-light", label: "Theme: Light", group: "Actions", keywords: "appearance day", run: () => setTheme("light") },
+          ...THEMES.map((theme) => ({ id: `act:theme-${theme.id}`, label: `Theme: ${theme.label}`, group: "Actions", keywords: `appearance ${theme.scheme}`, run: () => setTheme(theme.id) })),
           { id: "act:theme-system", label: "Theme: Match system", group: "Actions", keywords: "appearance auto", run: () => setTheme("system") },
+          ...LOCALES.map((locale) => ({ id: `act:locale-${locale.id}`, label: `Language: ${locale.label}`, group: "Actions", keywords: "language locale translation", run: () => setLocale(locale.id) })),
           { id: "act:sidebar", label: "Toggle sidebar", group: "Actions", keywords: "collapse expand", run: () => toggleSidebar() },
           { id: "act:sim", label: "Open simulation controls", group: "Actions", keywords: "prototype offline mount fault", run: () => openPanel("simulation") },
           { id: "act:keys", label: "Show keyboard shortcuts", group: "Actions", keywords: "help keys", run: () => openPanel("shortcuts") },

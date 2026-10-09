@@ -6,9 +6,37 @@
  * the last saved value stays in effect.
  */
 import { validateNamingTemplate } from "@/domain/templates"
-import type { ApplicationProfile, GoalTemplate, GoalTemplateId, NamingFrameType, OpticalTrainId, ProfileId, RigFilter, SimulatedApp } from "@/domain/types"
+import type { ApplicationProfile, Band, GoalTemplate, GoalTemplateId, LocationId, MoonConstraint, NamingFrameType, OpticalTrainId, ProfileId, RigFilter, SimulatedApp } from "@/domain/types"
 import { type CommitResult, commit, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
+
+// ---------------------------------------------------------------------------
+// Archive locations (P-ARC1) and Moon constraints (planning)
+// ---------------------------------------------------------------------------
+
+/** Make an archive location the Default; a Project may still pick another (`setProjectArchiveLocation`). */
+export function setDefaultArchiveLocation(locationId: LocationId): CommitResult {
+  const location = store.getState().catalog.locations[locationId]
+  const href = "/settings/locations"
+  if (!location) return MISSING
+  if (location.role !== "archive" || location.retiredAt) return refuse("Make default refused", ["not an archive location"], href)
+  const result = commit("Default archive location", (s) => ({ ...s, settings: { ...s.settings, defaultArchiveLocationId: locationId } }), { href })
+  if (result.ok) recordSaved(`Default archive: ${location.displayName}`, null, href)
+  return result
+}
+
+/** One band's Moon constraint behind "good tonight"; values are clamped to their ranges. */
+export function setMoonConstraint(band: Band, patch: Partial<MoonConstraint>): CommitResult {
+  const href = "/plan"
+  return commit(`Moon constraint for ${band}`, (s) => {
+    const current = s.settings.moonConstraints[band]
+    const next: MoonConstraint = {
+      minSeparationDeg: Math.min(180, Math.max(0, patch.minSeparationDeg ?? current.minSeparationDeg)),
+      maxIlluminationPct: Math.min(100, Math.max(0, patch.maxIlluminationPct ?? current.maxIlluminationPct)),
+    }
+    return { ...s, settings: { ...s.settings, moonConstraints: { ...s.settings.moonConstraints, [band]: next } } }
+  }, { href })
+}
 
 // ---------------------------------------------------------------------------
 // Rigs and filters

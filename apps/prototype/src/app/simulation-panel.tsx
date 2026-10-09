@@ -21,13 +21,14 @@ import { displayZone, formatZonedDateTime, reminderSiteOf, wallTimeToIso } from 
 import { cn } from "@/lib/utils"
 import { store, useStore } from "@/store/core"
 import { resetPrototype } from "@/store"
+import { removableDevices } from "@/domain/devices"
 import {
-  asiairCardInserted,
+  connectDevice,
   copyFolderExternally,
   copyNewCaptures,
   createExternalFile,
   deleteFileExternally,
-  insertAsiairCard,
+  ejectDevice,
   modifyFileExternally,
   newCapturesArrived,
   resetClock,
@@ -82,7 +83,7 @@ export function SimulationControls() {
   const clockZone = useStore((s) => reminderSiteOf(s.catalog.sites, s.catalog.reminders, s.settings.defaultSiteId)?.timeZone)
   const seed = useStore((s) => s.seed)
   const arrived = useStore(() => newCapturesArrived())
-  const cardInserted = useStore((s) => asiairCardInserted(s.disk))
+  const devices = useStore((s) => removableDevices(s.disk))
   const [folderQuery, setFolderQuery] = useState("")
   const [path, setPath] = useState("")
   const [destination, setDestination] = useState("")
@@ -156,12 +157,16 @@ export function SimulationControls() {
             </Button>
             {arrived ? <span className="text-xs text-muted-foreground">Already copied. Rescan to index them.</span> : null}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" disabled={cardInserted} onClick={() => insertAsiairCard()} data-insert-asiair-card>
-              Insert ASIAIR card
-            </Button>
-            <span className="text-xs text-muted-foreground">{cardInserted ? "Mounted at /Volumes/ASIAIR. Unmount it under Volumes." : "Mounts /Volumes/ASIAIR with last night's frames, the Import source of the demo."}</span>
-          </div>
+          {devices.map((device) => (
+            <ToggleRow
+              key={device.volume.id}
+              label={`${device.volume.name} connected`}
+              detail={device.layout ? `${device.label} layout` : "Generic device"}
+              path={device.volume.mountPath}
+              checked={device.connected}
+              onChange={(on) => (on ? connectDevice(device.volume.id) : ejectDevice(device.volume.id))}
+            />
+          ))}
           <div className="space-y-1.5">
             <Label htmlFor={pathInput}>File or folder path</Label>
             <Input

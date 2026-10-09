@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { closeSheet, useShellUi } from "@/app/ui-state"
 import { rigCameraKind, rigFieldOfView } from "@/domain/derive"
+import { isGoalChannel } from "@/domain/labels"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
 import type { Catalog, GoalTemplate, GoalTemplateValue, OpticalTrainId, Subject } from "@/domain/types"
 import { formatDegrees, plural } from "@/lib/format"
@@ -336,7 +337,7 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
 /** Copied template values: hours and frame count per channel, editable; channels can be removed or added. */
 export function GoalValuesEditor({ values, channels, onChange }: { values: GoalTemplateValue[]; channels: string[]; onChange: (next: GoalTemplateValue[]) => void }) {
   const [adding, setAdding] = useState("")
-  const free = channels.filter((c) => !values.some((v) => v.channel === c))
+  const free = channels.filter(isGoalChannel).filter((c) => !values.some((v) => v.channel === c))
   const update = (index: number, patch: Partial<GoalTemplateValue>) => onChange(values.map((v, i) => (i === index ? { ...v, ...patch } : v)))
   return (
     <div className="space-y-2">
@@ -403,8 +404,8 @@ export function GoalValuesEditor({ values, channels, onChange }: { values: GoalT
             size="sm"
             variant="outline"
             onClick={() => {
-              const channel = adding && free.includes(adding) ? adding : free[0]!
-              onChange([...values, { channel, integrationS: 10 * 3600, frameCount: null }])
+              const channel = free.find((c) => c === adding) ?? free[0]!
+              onChange([...values, { channel, integrationS: 10 * 3600, frameCount: null, qualityBar: null }])
               setAdding("")
             }}
           >

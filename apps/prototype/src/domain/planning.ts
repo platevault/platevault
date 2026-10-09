@@ -8,7 +8,7 @@
  * best window per Target.
  */
 import { angularSeparationDeg } from "./sky"
-import type { CalendarExport, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, Target, TargetId } from "./types"
+import type { Band, CalendarExport, MoonConstraint, ObservingSite, ObservingWindow, PlanCriteria, ReminderSettings, SiteId, Target, TargetId } from "./types"
 import { formatDateTime } from "@/lib/format"
 
 const RAD = Math.PI / 180
@@ -232,6 +232,79 @@ export function bestWindowTonight(target: Target, site: ObservingSite, criteria:
   const night = nightAt(nowMs, site)
   const windows = computeWindows(target, site, criteria, nowMs, 1).filter((w) => nightAt(Date.parse(w.start), site) === night)
   return windows.sort((a, b) => b.maxAltitudeDeg - a.maxAltitudeDeg)[0] ?? null
+}
+
+/** One band's verdict for one Target and night (`filterSuitability`). */
+export interface FilterTonight {
+  band: Band
+  /** A stretch of at least the minimum duration meets the band's Moon constraint that night. */
+  good: boolean
+  /** Longest such stretch, in minutes. */
+  minutes: number
+  /** Moon separation at the Target's highest dark sample; null when it never clears the altitude limit in darkness. */
+  moonSeparationDeg: number | null
+  /** Moon illumination at that sample, 0-100. */
+  moonIlluminationPct: number
+  /** The Moon is up at that sample. */
+  moonUp: boolean
+}
+
+/**
+ * Per-band suitability of a Target on one night (planning, "good tonight").
+ * The night's samples are computed once on the `computeWindows` grid: dark
+ * and above the altitude limit. Each band keeps the samples where the Moon
+ * is down, or up but at least its minimum separation away and lit no more
+ * than its maximum, so broadband needs a dark Moon and narrowband
+ * tolerates more.
+ */
+export function filterSuitability(target: Target, site: ObservingSite, night: string, criteria: PlanCriteria, constraints: Record<Band, MoonConstraint>, bands: Band[]): FilterTonight[] {
+  if (target.ra === null || target.dec === null) {
+    return bands.map((band) => ({ band, good: false, minutes: 0, moonSeparationDeg: null, moonIlluminationPct: 0, moonUp: false }))
+  }
+  const sunLimit = criteria.darkness === "astronomical" ? -18 : -12
+  const base = Date.parse(`${night}T12:00:00Z`) - (site.longitude / 15) * 3_600_000
+  const start0 = Math.round(base / (SAMPLE_MIN * 60_000)) * SAMPLE_MIN * 60_000
+  const samples: Array<{ ok: boolean; alt: number; moonUp: boolean; illum: number; sep: number }> = []
+  for (let i = 0; i <= (24 * 60) / SAMPLE_MIN; i += 1) {
+    const jd = julianDay(start0 + i * SAMPLE_MIN * 60_000)
+    const sun = sunPosition(jd)
+    const dark = altitudeDeg(sun.ra, sun.dec, site.latitude, site.longitude, jd) <= sunLimit
+    const alt = dark ? altitudeDeg(target.ra, target.dec, site.latitude, site.longitude, jd) : -90
+    if (!dark || alt < criteria.minAltitudeDeg) {
+      samples.push({ ok: false, alt, moonUp: false, illum: 0, sep: 180 })
+      continue
+    }
+    const moon = moonPosition(jd)
+    const elongation = angularSeparationDeg(sun.ra, sun.dec, moon.ra, moon.dec)
+    samples.push({
+      ok: true,
+      alt,
+      moonUp: altitudeDeg(moon.ra, moon.dec, site.latitude, site.longitude, jd) > 0,
+      illum: Math.round(((1 - Math.cos(elongation * RAD)) / 2) * 100),
+      sep: angularSeparationDeg(target.ra, target.dec, moon.ra, moon.dec),
+    })
+  }
+  const usable = samples.filter((s) => s.ok)
+  const peak = usable.length > 0 ? usable.reduce((a, b) => (b.alt > a.alt ? b : a)) : null
+  return bands.map((band): FilterTonight => {
+    const limit = constraints[band]
+    let longest = 0
+    let current = 0
+    for (const s of samples) {
+      const fits = s.ok && (!s.moonUp || (s.sep >= limit.minSeparationDeg && s.illum <= limit.maxIlluminationPct))
+      current = fits ? current + 1 : 0
+      longest = Math.max(longest, current)
+    }
+    const minutes = longest * SAMPLE_MIN
+    return {
+      band,
+      good: minutes >= criteria.minDurationMin,
+      minutes,
+      moonSeparationDeg: peak ? Math.round(peak.sep) : null,
+      moonIlluminationPct: peak?.illum ?? 0,
+      moonUp: peak?.moonUp ?? false,
+    }
+  })
 }
 
 /** Short zone name at an instant, e.g. "CEST". */

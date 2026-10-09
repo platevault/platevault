@@ -1,23 +1,21 @@
 /**
- * Settings › Appearance (J10 S2, S9). Theme, density and single-key shortcuts
- * live in `src/app/preferences.ts`: they apply immediately, are stored in this
- * browser and survive Reset prototype data.
+ * Settings › Appearance (J10 S2, S9). Theme, language, density and
+ * single-key shortcuts live in `src/app/preferences.ts`: they apply
+ * immediately, are stored in this browser and survive Reset prototype data.
+ * The theme and language pickers are the foundation's (`src/app/appearance.tsx`).
  */
 import { type ReactNode, useId, useState } from "react"
+import { LanguagePicker, ThemePicker } from "@/app/appearance"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
 import { Button } from "@/components/ui/button"
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldTitle } from "@/components/ui/field"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Switch } from "@/components/ui/switch"
-import { type Density, setDensity, setSingleKeyShortcuts, setTheme, type ThemePreference, usePreferences } from "@/app/preferences"
+import { type Density, setDensity, setLocale, setSingleKeyShortcuts, setTheme, type ThemePreference, usePreferences } from "@/app/preferences"
+import { DEFAULT_THEME } from "@/app/themes"
+import { DEFAULT_LOCALE } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-
-const THEMES: Array<{ value: ThemePreference; title: string; description: string }> = [
-  { value: "dark", title: "Dark", description: "Default. Low glare for night sessions." },
-  { value: "light", title: "Light", description: "For daylight work and bright rooms." },
-  { value: "system", title: "Match system", description: "Follows your operating system as it changes." },
-]
 
 const DENSITIES: Array<{ value: Density; title: string; description: string; rowClass: string }> = [
   { value: "compact", title: "Compact", description: "28 px rows. Most frames on screen.", rowClass: "h-7" },
@@ -25,7 +23,7 @@ const DENSITIES: Array<{ value: Density; title: string; description: string; row
   { value: "spacious", title: "Spacious", description: "40 px rows. Larger targets.", rowClass: "h-10" },
 ]
 
-const DEFAULTS = { theme: "dark" as ThemePreference, density: "comfortable" as Density, singleKeyShortcuts: true }
+const DEFAULTS = { theme: DEFAULT_THEME as ThemePreference, locale: DEFAULT_LOCALE, density: "comfortable" as Density, singleKeyShortcuts: true }
 
 function ChoiceCard({ id, value, title, description, children }: { id: string; value: string; title: string; description: string; children?: ReactNode }) {
   return (
@@ -45,8 +43,9 @@ function ChoiceCard({ id, value, title, description, children }: { id: string; v
 export function AppearancePage() {
   const preferences = usePreferences()
   const [confirmReset, setConfirmReset] = useState(false)
-  const ids = { theme: useId(), density: useId(), shortcuts: useId(), resetReason: useId() }
-  const atDefaults = preferences.theme === DEFAULTS.theme && preferences.density === DEFAULTS.density && preferences.singleKeyShortcuts === DEFAULTS.singleKeyShortcuts
+  const ids = { theme: useId(), language: useId(), density: useId(), shortcuts: useId(), resetReason: useId() }
+  const atDefaults =
+    preferences.theme === DEFAULTS.theme && preferences.locale === DEFAULTS.locale && preferences.density === DEFAULTS.density && preferences.singleKeyShortcuts === DEFAULTS.singleKeyShortcuts
 
   return (
     <div>
@@ -57,14 +56,11 @@ export function AppearancePage() {
       />
       <PageBody>
         <Section title="Theme" level={3} id={ids.theme}>
-          <RadioGroup aria-labelledby={`${ids.theme}-title`} value={preferences.theme} onValueChange={(value) => setTheme(value as ThemePreference)} className="grid-cols-3">
-            {THEMES.map((theme) => (
-              <ChoiceCard key={theme.value} id={`${ids.theme}-${theme.value}`} value={theme.value} title={theme.title} description={theme.description} />
-            ))}
-          </RadioGroup>
-          <p className="text-xs text-muted-foreground">
-            Currently showing the {preferences.resolvedTheme} theme{preferences.theme === "system" ? ", from your system setting" : ""}.
-          </p>
+          <ThemePicker />
+        </Section>
+
+        <Section title="Language" level={3} id={ids.language}>
+          <LanguagePicker />
         </Section>
 
         <Section title="Density" level={3} id={ids.density} description="Row height in tables and lists. Text size stays the same.">
@@ -121,11 +117,12 @@ export function AppearancePage() {
         onOpenChange={setConfirmReset}
         title="Restore appearance defaults?"
         description="Only the appearance choices in this browser change."
-        changes={["Theme becomes Dark", "Density becomes Comfortable", "Single-key shortcuts turn on"]}
+        changes={["Theme becomes PlateVault Dark", "Language becomes English (UK)", "Density becomes Comfortable", "Single-key shortcuts turn on"]}
         unchanged={["Locations, equipment, sites and every other library record", "Prototype data in this browser"]}
         confirmLabel="Restore defaults"
         onConfirm={() => {
           setTheme(DEFAULTS.theme)
+          setLocale(DEFAULTS.locale)
           setDensity(DEFAULTS.density)
           setSingleKeyShortcuts(DEFAULTS.singleKeyShortcuts)
         }}

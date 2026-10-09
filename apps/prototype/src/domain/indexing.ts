@@ -460,7 +460,7 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
         frameCount: null,
         createdAt: header.dateObs,
         state: "adopted",
-        origin: { kind: "library", runId: null, sourcePath: file.path },
+        origin: { kind: "library", runId: null, sourcePath: file.path, sessionId: null },
         adoption: null,
       }
     }

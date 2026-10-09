@@ -34,7 +34,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { filesUnder } from "@/domain/disk"
 import { sessionLongLabel } from "@/domain/membership"
 import { namingTemplate } from "@/domain/templates"
-import { ASIAIR_CARD } from "@/domain/seed"
+import { isRemovablePath, removableDevices } from "@/domain/devices"
 import type { ImageType, LocationRole } from "@/domain/types"
 import { ROLE_COPY, suggestDisplayName, validateLocation } from "@/features/t1/lib/locations"
 import { formatBytes, formatCount, formatDateTime, plural } from "@/lib/format"
@@ -246,7 +246,7 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
       </RadioGroup>
 
       {plan && !plan.online ? (
-        plan.sourcePath === ASIAIR_CARD.mountPath ? (
+        isRemovablePath(disk, plan.sourcePath) ? (
           <Notice
             tone="offline"
             title={`${plan.sourceLabel} is not connected`}
@@ -256,7 +256,7 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
               </Button>
             }
           >
-            Insert the card and macOS mounts it at {plan.sourcePath}. In the prototype, choose Prototype › Outside PlateVault › Insert ASIAIR card; it holds what the ASIAIR wrote last night.
+            Connect the device and macOS mounts it at {plan.sourcePath}. In the prototype, choose Prototype › Outside PlateVault and turn it on.
           </Notice>
         ) : (
           <Notice tone="offline" title={`${plan.sourceLabel} is not connected`}>
@@ -306,7 +306,7 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
         onOpenChange={setPicking}
         title="Choose an import source"
         description="A card, a folder or a mounted network share. Nothing is read until you import."
-        initialPath={folderPath ?? ASIAIR_CARD.mountPath}
+        initialPath={folderPath ?? removableDevices(disk).find((d) => d.connected)?.volume.mountPath ?? "/Volumes"}
         chooseVerb="Import from"
         onChoose={(path) => {
           setDraft({ source: { kind: "folder", path }, typed: {} })

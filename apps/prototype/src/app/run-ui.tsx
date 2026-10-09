@@ -16,6 +16,7 @@ import { Circle, CircleArrowRight, CircleCheck, CircleDashed, CircleEllipsis, Lo
 import type { AnchorHTMLAttributes, Ref } from "react"
 import { GATE_LABEL, type GateState, type RunStepState, type StepLink } from "@/domain/derive"
 import { cn } from "@/lib/utils"
+import { useT } from "./preferences"
 
 const GATE_GLYPH: Record<GateState, { icon: typeof Circle; className: string }> = {
   done: { icon: CircleCheck, className: "text-success" },
@@ -45,18 +46,20 @@ export function StepGlyph({ state, className }: { state: GateState; className?: 
   return <Icon aria-hidden="true" className={cn("size-3.5 shrink-0", meta.className, className)} />
 }
 
-/** Glyph plus word: the gate state as a native status label. */
+/** Glyph plus word: the gate state as a native status label, in the chosen language. */
 export function GateLabel({ state, label, className }: { state: GateState; label?: string; className?: string }) {
+  const t = useT()
   return (
     <span className={cn("inline-flex items-center gap-1 text-[0.75rem] font-medium", className)} data-gate={state}>
       <StepGlyph state={state} />
-      {label ?? GATE_LABEL[state]}
+      {label ?? t(GATE_LABEL[state])}
     </span>
   )
 }
 
 /** A run's six steps with their gate glyph; the current step is named and marked (D-W3, PRJ-FR-20). `compact` names only the current step. */
 export function StepRail({ steps, current, label, compact = false }: { steps: RunStepState[]; current: string; label: string; compact?: boolean }) {
+  const t = useT()
   return (
     <ol aria-label={label} className="flex min-w-0 flex-wrap items-center gap-x-0.5 gap-y-1">
       {steps.map((step, index) => {
@@ -65,12 +68,12 @@ export function StepRail({ steps, current, label, compact = false }: { steps: Ru
           <li
             key={step.id}
             aria-current={here ? "step" : undefined}
-            title={`${step.n} ${step.label}: ${GATE_LABEL[step.state]}${step.status && step.status !== "-" ? ` · ${step.status}` : ""}`}
+            title={`${step.n} ${t(step.label)}: ${t(GATE_LABEL[step.state])}${step.status && step.status !== "-" ? ` · ${step.status}` : ""}`}
             className={cn("inline-flex h-5 items-center gap-1 rounded-[0.3125rem] px-1 text-[0.6875rem]", here ? "bg-foreground/[0.08] font-medium text-foreground" : "text-muted-foreground")}
           >
             <StepGlyph state={step.state} />
-            <span className={cn(compact && !here && "sr-only")}>{step.label}</span>
-            <span className="sr-only">: {GATE_LABEL[step.state]}</span>
+            <span className={cn(compact && !here && "sr-only")}>{t(step.label)}</span>
+            <span className="sr-only">: {t(GATE_LABEL[step.state])}</span>
             {index < steps.length - 1 ? <span aria-hidden="true" className="ml-0.5 h-px w-1.5 bg-border" /> : null}
           </li>
         )

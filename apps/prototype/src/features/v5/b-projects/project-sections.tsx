@@ -43,11 +43,12 @@ import {
   subjectName,
   subjectTarget,
 } from "@/domain/derive"
+import { isGoalChannel, qualityBarLabel } from "@/domain/labels"
 import { qualityApplicability } from "@/domain/library"
 import { bestWindowTonight, defaultCriteria, tonightAt } from "@/domain/planning"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
 import { formatDec, formatDegrees, formatNight, formatRa, formatTime, plural } from "@/lib/format"
-import type { Catalog, Goal, MosaicPanel, Project, QualityBar, Session, Subject } from "@/domain/types"
+import type { Catalog, Goal, GoalChannel, MosaicPanel, Project, Session, Subject } from "@/domain/types"
 import { addRig, addSubject, applyGoalTemplate, removeRig, removeSubject, setGoals } from "@/store/actions/projects"
 import { freshId } from "@/store/actions/shared"
 import { nowIso, type PrototypeState, useStore } from "@/store/core"
@@ -188,7 +189,7 @@ export function SubjectsSection({ project }: { project: Project }) {
             <SubjectSearch autoFocus taken={project.subjects.map((s) => subjectTarget(catalog, s)?.name ?? "")} onPick={(pick) => setDraft(draftFromPick(pick))} />
           )}
           <p className="text-xs text-muted-foreground">
-            Adding a subject changes candidates only, never a run.{project.goalTemplateId ? " Its goals are copied from the Project's template." : ""}
+            Adding a subject changes candidates only, never a run. It copies the Project's goal set.
           </p>
           <InlineError message={addError} />
           <div className="flex gap-2">
@@ -273,14 +274,10 @@ export function RigsSection({ project }: { project: Project }) {
 // Goals
 // ---------------------------------------------------------------------------
 
-function barLabel(bar: QualityBar | null): string {
-  if (!bar) return "No quality bar"
-  return bar.kind === "usable-only" ? "Usable frames only" : `Median FWHM ≤ ${bar.maxArcsec}″`
-}
+type BarChoice = "none" | "usable-only" | "max-fwhm" | "usable-max-fwhm"
 
-type BarChoice = "none" | "usable-only" | "max-fwhm"
-
-export function GoalsSection({ project, channels }: { project: Project; channels: string[] }) {
+export function GoalsSection({ project, channels: rigChannels }: { project: Project; channels: string[] }) {
+  const channels = rigChannels.filter(isGoalChannel)
   const catalog = useStore((s) => s.catalog)
   const progress = useStore((s) => goalProgress(s.catalog, project))
   const warnings = useStore((s) => projectWarnings(s.disk, s.catalog, project))
@@ -342,7 +339,7 @@ export function GoalsSection({ project, channels }: { project: Project; channels
                           ) : p && p.remainingS !== null ? (
                             <span className="tabular-nums">{formatHours(p.remainingS)} to go in project</span>
                           ) : null}
-                          <span>{barLabel(goal.qualityBar)}</span>
+                          <span>{qualityBarLabel(goal.qualityBar)}</span>
                         </span>
                       </div>
                     )}
@@ -419,12 +416,13 @@ export function GoalsSection({ project, channels }: { project: Project; channels
   )
 }
 
-function GoalEditor({ goal, channels, onChange, onRemove }: { goal: Goal; channels: string[]; onChange: (patch: Partial<Goal>) => void; onRemove: () => void }) {
+function GoalEditor({ goal, channels, onChange, onRemove }: { goal: Goal; channels: GoalChannel[]; onChange: (patch: Partial<Goal>) => void; onRemove: () => void }) {
   const bar: BarChoice = goal.qualityBar?.kind ?? "none"
+  const limit = goal.qualityBar && goal.qualityBar.kind !== "usable-only" ? goal.qualityBar.maxArcsec : 3
   const id = useId()
   return (
     <div className="flex flex-wrap items-end gap-2">
-      <SelectField className="w-32" label="Channel" value={goal.channel} onChange={(channel) => onChange({ channel })} options={[...new Set([goal.channel, ...channels])].map((c) => ({ value: c, label: c }))} />
+      <SelectField className="w-32" label="Channel" value={goal.channel} onChange={(channel) => (isGoalChannel(channel) ? onChange({ channel }) : undefined)} options={[...new Set([goal.channel, ...channels])].map((c) => ({ value: c, label: c }))} />
       <div className="grid gap-1.5">
         <label htmlFor={`${id}-h`} className="text-sm font-medium">
           Integration (h)
@@ -449,19 +447,20 @@ function GoalEditor({ goal, channels, onChange, onRemove }: { goal: Goal; channe
         className="w-44"
         label="Quality bar"
         value={bar}
-        onChange={(value) => onChange({ qualityBar: value === "none" ? null : value === "usable-only" ? { kind: "usable-only" } : { kind: "max-fwhm", maxArcsec: goal.qualityBar?.kind === "max-fwhm" ? goal.qualityBar.maxArcsec : 3 } })}
+        onChange={(value) => onChange({ qualityBar: value === "none" ? null : value === "usable-only" ? { kind: "usable-only" } : { kind: value === "usable-max-fwhm" ? "usable-max-fwhm" : "max-fwhm", maxArcsec: limit } })}
         options={[
           { value: "none", label: "None" },
           { value: "usable-only", label: "Usable frames only" },
           { value: "max-fwhm", label: "Median FWHM limit" },
+          { value: "usable-max-fwhm", label: "Usable and FWHM limit" },
         ]}
       />
-      {goal.qualityBar?.kind === "max-fwhm" ? (
+      {goal.qualityBar && goal.qualityBar.kind !== "usable-only" ? (
         <div className="grid gap-1.5">
           <label htmlFor={`${id}-fwhm`} className="text-sm font-medium">
             FWHM ≤ (″)
           </label>
-          <Input id={`${id}-fwhm`} type="number" min={0.5} step={0.1} className="w-20 tabular-nums" value={String(goal.qualityBar.maxArcsec)} onChange={(e) => onChange({ qualityBar: { kind: "max-fwhm", maxArcsec: Number(e.target.value) || 0 } })} />
+          <Input id={`${id}-fwhm`} type="number" min={0.5} step={0.1} className="w-20 tabular-nums" value={String(limit)} onChange={(e) => onChange({ qualityBar: { kind: goal.qualityBar?.kind === "usable-max-fwhm" ? "usable-max-fwhm" : "max-fwhm", maxArcsec: Number(e.target.value) || 0 } })} />
         </div>
       ) : null}
       <Button size="sm" variant="ghost" onClick={onRemove}>
@@ -471,10 +470,10 @@ function GoalEditor({ goal, channels, onChange, onRemove }: { goal: Goal; channe
   )
 }
 
-function AddGoal({ channels, onAdd }: { channels: string[]; onAdd: (channel: string) => void }) {
+function AddGoal({ channels, onAdd }: { channels: GoalChannel[]; onAdd: (channel: GoalChannel) => void }) {
   const [channel, setChannel] = useState("")
   if (channels.length === 0) return <p className="text-xs text-muted-foreground">Every channel the Project's rigs capture has a goal here.</p>
-  const value = channels.includes(channel) ? channel : channels[0]!
+  const value = channels.find((c) => c === channel) ?? channels[0]!
   return (
     <div className="flex flex-wrap items-end gap-2">
       <SelectField className="w-40" label="Add a goal for" value={value} onChange={setChannel} options={channels.map((c) => ({ value: c, label: c }))} />

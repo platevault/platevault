@@ -13,13 +13,15 @@
  *   and the first column stay in view while a wide table scrolls sideways.
  * - Context menu (opt-in `contextMenu`): one native-style menu for the table;
  *   right click, Shift+F10 or the Menu key on a row opens that row's items.
+ *   Return `MenuEntry[]` (row-menu.tsx) or ready-made menu items.
  */
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { type KeyboardEvent, type MouseEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@/components/ui/context-menu"
-import { Input } from "@/components/ui/input"
+import { ClearableInput } from "./clearable-input"
+import { type MenuEntry, menuContent } from "./row-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
@@ -83,8 +85,8 @@ export interface DataTableProps<T> {
    * backgrounds do not reach the pinned cells.
    */
   stickyFirstColumn?: boolean
-  /** Items of the row's context menu; every item must also be reachable from the row itself. */
-  contextMenu?: (row: T) => ReactNode
+  /** The row's context menu: entries (`MenuEntry[]`) or menu items; every item must also be reachable from the row itself. */
+  contextMenu?: (row: T) => MenuEntry[] | ReactNode
 }
 
 export function DataTable<T>({
@@ -323,12 +325,12 @@ export function DataTable<T>({
                     aria-current={activeRowId === id ? "true" : undefined}
                     data-selected={isSelected || undefined}
                     className={cn(
-                      "group/row h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022] hover:bg-foreground/[0.05]",
-                      "data-selected:bg-primary/14 data-selected:hover:bg-primary/20",
+                      "group/row h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022] hover:bg-foreground/[0.06]",
+                      "data-selected:bg-primary/16 data-selected:hover:bg-primary/22",
                       "aria-[current=true]:bg-accent aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
                       // The same tints as a variable, for pinned cells that paint over the row.
-                      "[--row-bg:transparent] even:[--row-bg:color-mix(in_oklab,var(--foreground)_2.2%,transparent)] hover:[--row-bg:color-mix(in_oklab,var(--foreground)_5%,transparent)]",
-                      "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_14%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_20%,transparent)]",
+                      "[--row-bg:transparent] even:[--row-bg:color-mix(in_oklab,var(--foreground)_2.2%,transparent)] hover:[--row-bg:color-mix(in_oklab,var(--foreground)_6%,transparent)]",
+                      "data-selected:[--row-bg:color-mix(in_oklab,var(--primary)_16%,transparent)] data-selected:hover:[--row-bg:color-mix(in_oklab,var(--primary)_22%,transparent)]",
                       "aria-[current=true]:[--row-bg:var(--accent)]",
                       rowClassName?.(row),
                     )}
@@ -382,7 +384,7 @@ export function DataTable<T>({
       <ContextMenuTrigger ref={frame} className={frameClass} aria-busy={busy}>
         {table}
       </ContextMenuTrigger>
-      <ContextMenuContent>{menuRow ? contextMenu(menuRow) : null}</ContextMenuContent>
+      <ContextMenuContent>{menuRow ? menuContent(contextMenu(menuRow)) : null}</ContextMenuContent>
     </ContextMenu>
   )
 }
@@ -404,18 +406,7 @@ export function TableToolbar({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {search ? (
-        <div className="relative w-64 min-w-0">
-          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            data-page-search
-            type="search"
-            aria-label={search.label}
-            placeholder={search.placeholder}
-            value={search.value}
-            onChange={(event) => search.onChange(event.target.value)}
-            className="pl-7"
-          />
-        </div>
+        <ClearableInput search wrapperClassName="w-64" aria-label={search.label} placeholder={search.placeholder} value={search.value} onValueChange={search.onChange} />
       ) : null}
       {filters}
       <div className="flex-1" />

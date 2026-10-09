@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en-GB" class="dark" data-density="comfortable">
+<html lang="en-GB" class="dark" data-theme="platevault-dark" data-density="comfortable">
 
 <head>
   <meta charset="UTF-8" />
@@ -9,22 +9,34 @@
   <!-- No favicon asset in the prototype; an empty data icon keeps the browser from requesting /favicon.ico. -->
   <link rel="icon" href="data:," />
   <script>
-    // Pre-paint theme and density so the first frame uses the saved choice.
-    // Dark is the product default; "system" follows prefers-color-scheme.
+    // Pre-paint theme, language and density so the first frame uses the saved choice.
+    // PlateVault Dark is the default; "system" follows prefers-color-scheme between the
+    // PlateVault themes. src/app/preferences.ts stores the resolved scheme for this script.
     {
       const root = document.documentElement
-      let theme = "dark"
+      let theme = "platevault-dark"
+      let scheme = "dark"
       let density = "comfortable"
+      let locale = "en-GB"
       try {
-        theme = localStorage.getItem("platevault.theme") || "dark"
-        density = localStorage.getItem("platevault.density") || "comfortable"
+        theme = localStorage.getItem("platevault.theme") || theme
+        scheme = localStorage.getItem("platevault.themeScheme") || scheme
+        density = localStorage.getItem("platevault.density") || density
+        locale = localStorage.getItem("platevault.locale") || locale
       } catch { }
-      const dark =
-        theme === "dark" ||
-        (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
-      root.classList.toggle("dark", dark)
+      if (theme === "dark" || theme === "light") {
+        scheme = theme
+        theme = `platevault-${theme}`
+      }
+      if (theme === "system") {
+        scheme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+        theme = `platevault-${scheme}`
+      }
+      root.dataset.theme = theme
+      root.classList.toggle("dark", scheme === "dark")
       root.dataset.density = density
-      document.querySelector('meta[name="color-scheme"]').content = dark ? "dark" : "light"
+      root.lang = locale
+      document.querySelector('meta[name="color-scheme"]').content = scheme
     }
   </script>
 </head>

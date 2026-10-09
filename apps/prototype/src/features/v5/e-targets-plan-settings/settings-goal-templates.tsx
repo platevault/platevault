@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { formatHours } from "@/domain/derive"
+import { GOAL_CHANNELS, isGoalChannel } from "@/domain/labels"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
 import type { GoalTemplate, GoalTemplateValue } from "@/domain/types"
 import { TextField, parseNumber } from "@/features/t1/components/form-field"
@@ -25,8 +26,8 @@ import { plural } from "@/lib/format"
 import { deleteGoalTemplate, saveGoalTemplate } from "@/store/actions/settings"
 import { useStore } from "@/store/core"
 
-/** Channel names the built-ins and goal channels use; free text is allowed too. */
-const CHANNEL_SUGGESTIONS = ["L", "R", "G", "B", "Ha", "OIII", "SII", "OSC", "Dual-band"]
+/** Goal channels are chips from the band set plus OSC and Dual-band; nothing else is saved. */
+const CHANNEL_SUGGESTIONS: string[] = GOAL_CHANNELS
 
 function valueText(v: GoalTemplateValue): string {
   const parts = [v.integrationS ? formatHours(v.integrationS) : null, v.frameCount ? plural(v.frameCount, "frame") : null].filter(Boolean)
@@ -82,13 +83,14 @@ function TemplateDialog({ draft, onClose, taken }: { draft: Draft | null; onClos
       const hours = parseNumber(row.hours)
       const frames = parseNumber(row.frames)
       if (!channel) problems.push("every row needs a channel")
+      else if (!isGoalChannel(channel)) problems.push(`${channel}: choose L, R, G, B, Ha, OIII, SII, OSC or Dual-band`)
       else if (channels.has(channel.toLowerCase())) problems.push(`${channel} is listed twice`)
       channels.add(channel.toLowerCase())
       const hoursOk = hours !== null && !Number.isNaN(hours) && hours > 0
       const framesOk = frames !== null && !Number.isNaN(frames) && frames > 0 && Number.isInteger(frames)
       if ((hours !== null && !hoursOk) || (frames !== null && !framesOk)) problems.push(`${channel || "a row"}: hours and frames must be greater than 0, frames whole`)
       else if (!hoursOk && !framesOk) problems.push(`${channel || "a row"} needs hours or a frame count`)
-      parsed.push({ channel, integrationS: hoursOk ? Math.round(hours! * 3600) : null, frameCount: framesOk ? frames : null })
+      if (isGoalChannel(channel)) parsed.push({ channel, integrationS: hoursOk ? Math.round(hours! * 3600) : null, frameCount: framesOk ? frames : null, qualityBar: null })
     }
     if (values.rows.length === 0) problems.push("add at least one channel")
     if (problems.length > 0) next.rows = `Goals: ${[...new Set(problems)].join("; ")}.`
@@ -151,7 +153,6 @@ function TemplateDialog({ draft, onClose, taken }: { draft: Draft | null; onClos
 }
 
 function TemplateTable({ templates, caption, actions }: { templates: GoalTemplate[]; caption: string; actions: (t: GoalTemplate) => ReactNode }) {
-  const projects = useStore((s) => Object.values(s.catalog.projects))
   return (
     <div className="overflow-x-auto rounded-md border">
       <table className="w-full text-sm">
@@ -160,24 +161,19 @@ function TemplateTable({ templates, caption, actions }: { templates: GoalTemplat
           <tr className="border-b">
             <th scope="col" className="h-(--row-h) px-3 text-left font-medium">Template</th>
             <th scope="col" className="px-3 text-left font-medium">Goals per channel</th>
-            <th scope="col" className="px-3 text-left font-medium">Applied in</th>
             <th scope="col" className="px-3 text-right font-medium">Actions</th>
           </tr>
         </thead>
         <tbody>
-          {templates.map((t) => {
-            const used = projects.filter((p) => p.goalTemplateId === t.id)
-            return (
-              <tr key={t.id} className="h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022]">
-                <th scope="row" className="px-3 text-left font-medium whitespace-nowrap">
-                  {t.name} {t.source === "built-in" ? <StatusBadge kind="source" value="built-in" className="ml-1.5" /> : null}
-                </th>
-                <td className="px-3 tabular-nums">{t.values.map(valueText).join(" · ")}</td>
-                <td className="px-3 text-xs text-muted-foreground">{used.length > 0 ? `${used.map((p) => p.name).join(", ")} (copied values)` : "–"}</td>
-                <td className="px-3 py-0.5 text-right whitespace-nowrap">{actions(t)}</td>
-              </tr>
-            )
-          })}
+          {templates.map((t) => (
+            <tr key={t.id} className="h-(--row-h) border-b border-border/50 last:border-0 even:bg-foreground/[0.022]">
+              <th scope="row" className="px-3 text-left font-medium whitespace-nowrap">
+                {t.name} {t.source === "built-in" ? <StatusBadge kind="source" value="built-in" className="ml-1.5" /> : null}
+              </th>
+              <td className="px-3 tabular-nums">{t.values.map(valueText).join(" · ")}</td>
+              <td className="px-3 py-0.5 text-right whitespace-nowrap">{actions(t)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -203,7 +199,7 @@ export function GoalTemplatesSettingsPage() {
         title="Goal templates"
         description="Applying a template copies its goals into a Project, where they stand alone and stay editable. Templates are the same whichever rig a Project uses."
         actions={
-          <Button onClick={() => setDraft({ id: null, name: "", rows: toRows([{ channel: "", integrationS: null, frameCount: null }]), from: null })}>
+          <Button onClick={() => setDraft({ id: null, name: "", rows: [{ key: (rowKey += 1), channel: "", hours: "", frames: "" }], from: null })}>
             <Plus aria-hidden="true" data-icon="inline-start" />
             New template
           </Button>

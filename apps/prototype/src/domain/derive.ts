@@ -7,7 +7,7 @@
  * library.ts. Nothing here writes state.
  */
 import { calibrationPlan, type CalibrationPlan, candidatesFor, reusableSources } from "./calibration"
-import { BANDS, NARROW_BANDS, RUN_STEPS, STEP_LABEL } from "./labels"
+import { BANDS, isGoalChannel, NARROW_BANDS, RUN_STEPS, STEP_LABEL, WRAP_UP_LABEL, WRAP_UP_STEPS } from "./labels"
 import {
   assetAvailability,
   effectiveExposureS,
@@ -16,7 +16,7 @@ import {
   qualityApplicability,
 } from "./library"
 import { runSummary, sessionExposureS } from "./membership"
-import { bestWindowTonight, defaultCriteria } from "./planning"
+import { bestWindowTonight, defaultCriteria, filterSuitability, type FilterTonight } from "./planning"
 import { type FieldOfView, fieldOfView } from "./sky"
 import { type NamingValues, namingValues } from "./templates"
 import type {
@@ -28,6 +28,13 @@ import type {
   Catalog,
   Disk,
   Goal,
+  GoalChannel,
+  GoalTemplateValue,
+  IsoDateTime,
+  Location,
+  NightDate,
+  ObservingSite,
+  WrapUpStepId,
   MembershipContent,
   MembershipRevision,
   MosaicPanel,
@@ -178,11 +185,12 @@ export function unknownFilterValues(catalog: Catalog, rigId: OpticalTrainId): st
 }
 
 /**
- * The goal channel a session counts toward: its filter name on the rig; "OSC"
- * for an OSC camera with no filter or a broadband filter; "Dual-band" for a
- * filter passing two narrow bands. The built-in OSC templates use these.
+ * The goal channel a session counts toward (a chip of `GOAL_CHANNELS`): the
+ * band of its single-band filter on the rig; "OSC" for an OSC camera with no
+ * filter or a broadband filter; "Dual-band" for a filter passing two narrow
+ * bands. Null when the filter is not on the rig: such frames meet no goal.
  */
-export function goalChannel(catalog: Catalog, session: Session): string {
+export function goalChannel(catalog: Catalog, session: Session): GoalChannel | null {
   const rigId = sessionRigId(session)
   const rig = rigId ? catalog.opticalTrains[rigId] : undefined
   const osc = rig ? rigCameraKind(catalog, rig) === "osc" : false
@@ -190,10 +198,10 @@ export function goalChannel(catalog: Catalog, session: Session): string {
   if (filter) {
     if (filter.bands.filter((b) => NARROW_BANDS.includes(b)).length >= 2) return "Dual-band"
     if (osc && filter.bands.every((b) => !NARROW_BANDS.includes(b))) return "OSC"
-    return filter.name
+    return filter.bands.length === 1 ? filter.bands[0]! : null
   }
   if (osc && !session.channel) return "OSC"
-  return session.channel ?? "No filter"
+  return session.channel && isGoalChannel(session.channel) ? session.channel : null
 }
 
 // ---------------------------------------------------------------------------
@@ -455,7 +463,9 @@ export interface GoalProgress {
 
 function admitsQuality(catalog: Catalog, asset: Asset, bar: Goal["qualityBar"]): boolean | null {
   if (!bar) return true
-  if (bar.kind === "usable-only") return asset.quality.value === "usable" && qualityApplicability(asset) === "applicable"
+  const usable = asset.quality.value === "usable" && qualityApplicability(asset) === "applicable"
+  if (bar.kind === "usable-only") return usable
+  if (bar.kind === "usable-max-fwhm" && !usable) return false
   const record = catalog.measurements[asset.id]
   const fwhm = record && measurementApplies(asset, record) ? record.metrics.find((m) => m.key === "fwhm" && m.unit === "arcsec") : undefined
   if (!fwhm || fwhm.value === null) return null
@@ -553,7 +563,8 @@ export function projectWarnings(disk: Disk, catalog: Catalog, project: Project):
   const out: ProjectWarning[] = []
   for (const candidate of projectCandidates(catalog, project)) {
     const { session, subject, rigId } = candidate
-    const channel = goalChannel(catalog, session)
+    // A warning names the goal channel, or the raw filter when it meets no goal.
+    const channel: string = goalChannel(catalog, session) ?? session.channel ?? "No filter"
     const exposure = sessionExposureS(session)
     const key = `${rigId}|${subject.id}|${channel}|${exposure}`
     if (seen.has(key)) continue
@@ -1102,26 +1113,31 @@ export function homeTopLine(catalog: Catalog): { needsTarget: number; notInProje
   return { needsTarget, notInProject, text: `${plural(needsTarget, "session")} need${needsTarget === 1 ? "s" : ""} a Target · ${notInProject} not in any Project` }
 }
 
-/** Planning site for Tonight; null (or the "no site" prototype toggle) shows "Add an observing site in Settings". */
-export function planningSite(world: Pick<World, "catalog" | "settings" | "faults">) {
-  if (world.faults.noSite) return null
-  const id = world.settings.planningSiteId ?? world.settings.defaultSiteId
+/** The one default site (Settings › Sites); null with no sites. */
+export function defaultSite(world: Pick<World, "catalog" | "settings">): ObservingSite | null {
+  const id = world.settings.defaultSiteId
   return id ? (world.catalog.sites[id] ?? null) : null
+}
+
+/** Planning site for Plan and Tonight: the one picked there, else the default; null (or the "no site" prototype toggle) shows "Add an observing site in Settings". */
+export function planningSite(world: Pick<World, "catalog" | "settings" | "faults">): ObservingSite | null {
+  if (world.faults.noSite) return null
+  const picked = world.settings.planningSiteId ? world.catalog.sites[world.settings.planningSiteId] : undefined
+  return picked ?? defaultSite(world)
 }
 
 /**
  * A Project's one Next action, the first rule that applies (D-W35, PRJ-FR-18):
  * 1. its candidates have Unreviewed frames: "Review N new frames";
  * 2. one of its runs is blocked: that run at its blocked step;
- * 3. a goal is unmet in project and tonight has a window for that subject: "Plan tonight";
- * 4. otherwise "Start a processing run".
- * A Done Project offers its Done / Archive sheet until it is archived.
+ * 3. every run is Complete: "Wrap up" (P-WRAP1), until its steps are done or skipped;
+ * 4. a goal is unmet in project and tonight has a window for that subject: "Plan tonight";
+ * 5. otherwise "Start a processing run".
+ * A Done Project has no Next.
  */
 export function projectNext(world: World, project: Project, nowMs: number): NextAction | null {
   const { catalog } = world
-  if (project.state === "done") {
-    return project.archive ? null : { label: "Open Done / Archive", reason: "Archive and trash offers are pending.", link: projectLink(project.id, { sheet: "done" }), step: null }
-  }
+  if (project.state === "done") return null
   const candidates = projectCandidates(catalog, project)
   const unreviewed = candidates.reduce((n, c) => n + unreviewedFrames(catalog, c.session), 0)
   const runs = projectRuns(catalog, project.id)
@@ -1137,6 +1153,11 @@ export function projectNext(world: World, project: Project, nowMs: number): Next
   for (const run of runs) {
     const pipeline = runPipeline(world, run)
     if (pipeline.blocker) return { label: `Open ${run.name}`, reason: `${STEP_LABEL[pipeline.blocker.step]}: ${pipeline.blocker.message}.`, link: runStepLink(run, pipeline.blocker.step), step: pipeline.steps.find((s) => s.id === pipeline.blocker!.step) ?? null }
+  }
+  const wrapUp = projectWrapUp(catalog, project)
+  if (wrapUp.available) {
+    const step = wrapUp.steps.find((s) => s.id === wrapUp.current)
+    return { label: "Wrap up", reason: step ? `${step.label} is next.` : "Every step is settled; mark the Project Done.", link: projectLink(project.id, { stage: "wrap-up" }), step: null }
   }
   const site = planningSite(world)
   if (site) {
@@ -1165,7 +1186,85 @@ export function projectStage(world: World, project: Project): { label: string; s
   if (held) return { label: `${GATE_LABEL[held.state]} at ${held.label}`, step: held.id, state: held.state }
   const open = pipelines.filter((p) => p.status === "open").sort((a, b) => a.current.n - b.current.n)[0]
   if (open) return { label: open.current.label, step: open.current.id, state: open.current.state }
-  return { label: "All runs complete", step: "done", state: "done" }
+  return { label: "Wrap up", step: null, state: "ready" }
+}
+
+// ---------------------------------------------------------------------------
+// Wrap up and archive destinations (P-WRAP1, P-ARC1)
+// ---------------------------------------------------------------------------
+
+/** Archive locations that can take an archive: role Archive and not retired, the Default first. */
+export function archiveLocations(world: Pick<World, "catalog" | "settings">): Location[] {
+  const def = world.settings.defaultArchiveLocationId
+  return Object.values(world.catalog.locations)
+    .filter((l) => l.role === "archive" && !l.retiredAt)
+    .sort((a, b) => Number(b.id === def) - Number(a.id === def) || a.displayName.localeCompare(b.displayName))
+}
+
+/** The Default archive location: the one Settings marks, else the first archive location. */
+export function defaultArchiveLocation(world: Pick<World, "catalog" | "settings">): Location | null {
+  return archiveLocations(world)[0] ?? null
+}
+
+/** Where a Project archives to (P-ARC1): its own choice while that location can take an archive, else the Default. */
+export function archiveDestination(world: Pick<World, "catalog" | "settings">, project: Project): Location | null {
+  const own = project.archiveLocationId ? world.catalog.locations[project.archiveLocationId] : undefined
+  if (own && own.role === "archive" && !own.retiredAt) return own
+  return defaultArchiveLocation(world)
+}
+
+export interface WrapUpStep {
+  id: WrapUpStepId
+  label: string
+  state: "todo" | "done" | "skipped"
+  at: IsoDateTime | null
+}
+
+export interface ProjectWrapUp {
+  /** Every run outside the Trash is Complete and the Project is open (P-WRAP1). */
+  available: boolean
+  /** Runs that keep Wrap up unavailable: those not Complete. */
+  waitingOn: Run[]
+  steps: WrapUpStep[]
+  /** The first step still to do; null once each is done or skipped (Done is next). */
+  current: WrapUpStepId | null
+}
+
+/**
+ * The Project's Wrap up stage: Clean up runs, Trash (rejects, intermediates,
+ * duplicates) and Archive, each optional and skippable, then Done. A run's own
+ * Clean up stays on its Done step; sizes come from `preparationFootprint`
+ * (storage.ts) and the slice's trash and archive plans.
+ */
+export function projectWrapUp(catalog: Catalog, project: Project): ProjectWrapUp {
+  const runs = projectRuns(catalog, project.id)
+  const waitingOn = runs.filter((r) => r.completion !== "complete")
+  const steps = WRAP_UP_STEPS.map((id): WrapUpStep => {
+    const record = project.wrapUp[id]
+    return { id, label: WRAP_UP_LABEL[id], state: record?.state ?? "todo", at: record?.at ?? null }
+  })
+  return {
+    available: project.state === "open" && runs.length > 0 && waitingOn.length === 0,
+    waitingOn,
+    steps,
+    current: steps.find((s) => s.state === "todo")?.id ?? null,
+  }
+}
+
+export type ProjectStageId = "open" | "runs" | "wrap-up" | "done" | "archived"
+
+/**
+ * The Project header's stage strip: Open → Runs → Wrap up → Done (or
+ * Archived). Earlier stages read done, the current one current.
+ */
+export function projectStageStrip(catalog: Catalog, project: Project): { current: ProjectStageId; stages: Array<{ id: ProjectStageId; label: string; state: "done" | "current" | "todo" }> } {
+  const runs = projectRuns(catalog, project.id)
+  const current: ProjectStageId =
+    project.state === "done" ? (project.archive ? "archived" : "done") : runs.length === 0 ? "open" : projectWrapUp(catalog, project).available ? "wrap-up" : "runs"
+  const order: ProjectStageId[] = ["open", "runs", "wrap-up", current === "archived" ? "archived" : "done"]
+  const label: Record<ProjectStageId, string> = { open: "Open", runs: "Runs", "wrap-up": "Wrap up", done: "Done", archived: "Archived" }
+  const at = order.indexOf(current)
+  return { current, stages: order.map((id, i) => ({ id, label: label[id], state: i < at ? "done" : i === at ? "current" : "todo" })) }
 }
 
 /** Home's Target status: unmet goals of open Projects and what each channel still needs in project. */
@@ -1267,6 +1366,41 @@ export function bandStrip(catalog: Catalog, rigIds: OpticalTrainId[] | null, moo
   const broad = cells.some((c) => !NARROW_BANDS.includes(c.band))
   const recommendation = cells.length === 0 ? "No bands on this rig" : bright ? (narrow ? "Narrowband tonight" : "Broadband limited by the Moon") : broad ? "Broadband tonight" : "Narrowband tonight"
   return { cells, recommendation }
+}
+
+/** The Plan list (Planning): Targets the user added, by name. "Show all" lists My targets instead. */
+export function planList(catalog: Catalog): Target[] {
+  return Object.values(catalog.plans)
+    .filter((p) => p.planned)
+    .map((p) => catalog.targets[p.targetId])
+    .filter((t): t is Target => t !== undefined)
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * Which filters are good for a Target on a night ("good tonight"): per band,
+ * whether a window of the minimum duration meets that band's Moon constraint
+ * (`settings.moonConstraints`), with the Moon separation and illumination at
+ * the Target's best sample. `bands` defaults to the seven-band strip; pass a
+ * rig's bands (`rigBands`) for its filters. Empty without a planning site.
+ */
+export function goodTonight(world: Pick<World, "catalog" | "settings" | "faults">, target: Target, night: NightDate, bands: Band[] = BANDS): FilterTonight[] {
+  const site = planningSite(world)
+  if (!site) return []
+  return filterSuitability(target, site, night, defaultCriteria(site), world.settings.moonConstraints, bands)
+}
+
+/**
+ * A Project's goal set: one value per channel (its first goal for that
+ * channel), the shape a newly added subject copies. Replaces the stored
+ * template attribution ("Applied in" is gone; templates are only copied).
+ */
+export function projectGoalSet(project: Project): GoalTemplateValue[] {
+  const seen = new Map<GoalChannel, GoalTemplateValue>()
+  for (const goal of project.goals) {
+    if (!seen.has(goal.channel)) seen.set(goal.channel, { channel: goal.channel, integrationS: goal.integrationS, frameCount: goal.frameCount, qualityBar: goal.qualityBar })
+  }
+  return [...seen.values()]
 }
 
 // ---------------------------------------------------------------------------
