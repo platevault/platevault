@@ -21,10 +21,10 @@ import { Pill } from "@/components/app/pill"
 import type { Tone } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
 import { MissingRecord } from "@/app/missing-record"
+import { useMessages } from "@/app/preferences"
 import { openSheet } from "@/app/ui-state"
 import { type ProjectStageId, projectGroups, projectLink, projectRuns, projectStageStrip, projectWrapUp, type StepLink } from "@/domain/derive"
 import type { Project } from "@/domain/types"
-import { plural } from "@/lib/format"
 import { reopenProject } from "@/store/actions/projects"
 import { useStore } from "@/store/core"
 import { CandidateReview } from "../d-review/review"
@@ -38,6 +38,7 @@ export function ProjectPage() {
   const { projectId = "" } = useParams({ strict: false }) as { projectId?: string }
   const search = useSearch({ strict: false }) as Record<string, string | undefined>
   const navigate = useNavigate()
+  const m = useMessages()
   const project = useStore((s) => s.catalog.projects[projectId])
 
   // `?start=run` opens its sheet once, then leaves a clean URL.
@@ -47,7 +48,7 @@ export function ProjectPage() {
     void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: {}, replace: true })
   }, [project, search.start, navigate])
 
-  if (!project) return <MissingRecord noun="Project" backTo="/projects" backLabel="Open Projects" />
+  if (!project) return <MissingRecord noun="Project" backTo="/projects" backLabel={m.project_back_to_projects()} />
   if (search.candidates) return <CandidateReviewPage project={project} />
   if (search.mosaic) {
     return (
@@ -65,13 +66,14 @@ export function ProjectPage() {
 }
 
 function ProjectDetail({ project, view }: { project: Project; view: View }) {
+  const m = useMessages()
   const archived = project.archive?.sessionIds.length ?? 0
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         eyebrow={
           <Link to="/projects" className="underline-offset-2 hover:underline">
-            Projects
+            {m.nav_projects()}
           </Link>
         }
         title={project.name}
@@ -83,14 +85,14 @@ function ProjectDetail({ project, view }: { project: Project; view: View }) {
               trigger={
                 <Button size="sm" variant="outline">
                   <RotateCcw aria-hidden="true" data-icon="inline-start" />
-                  Reopen…
+                  {m.project_reopen_ellipsis()}
                 </Button>
               }
-              title={`Reopen ${project.name}?`}
-              description="No file moves."
-              changes={["Project Done → Open"]}
-              unchanged={archived > 0 ? [`${plural(archived, "session")} stay archived until restored`] : undefined}
-              confirmLabel="Reopen"
+              title={m.project_reopen_title({ name: project.name })}
+              description={m.project_reopen_no_file_moves()}
+              changes={[m.project_reopen_change()]}
+              unchanged={archived > 0 ? [m.project_reopen_stay_archived({ count: archived })] : undefined}
+              confirmLabel={m.project_reopen()}
               onConfirm={() => reopenProject(project.id)}
             />
           ) : null
@@ -121,18 +123,19 @@ const STAGE_TONE: Record<"done" | "current" | "todo", Tone> = { done: "success",
 
 /** Open → Runs → Wrap up → Done / Archived; Runs and Wrap up switch the page between the Project's work and its Wrap up stage. */
 function StageStrip({ project, view }: { project: Project; view: View }) {
+  const m = useMessages()
   const strip = useStore((s) => projectStageStrip(s.catalog, project))
   const runs = useStore((s) => projectRuns(s.catalog, project.id).filter((r) => !r.groupId).length + projectGroups(s.catalog, project.id).length)
   const wrapOpen = useStore((s) => projectWrapUp(s.catalog, project).available) || project.state === "done"
   const link = (id: ProjectStageId): StepLink | undefined => (id === "runs" && view !== "runs" ? projectLink(project.id) : id === "wrap-up" && wrapOpen && view !== "wrap-up" ? projectLink(project.id, { stage: "wrap-up" }) : undefined)
   return (
-    <ol aria-label="Project stage" className="flex flex-wrap items-center gap-1">
+    <ol aria-label={m.project_stage_label()} className="flex flex-wrap items-center gap-1">
       {strip.stages.map((stage, index) => (
         <li key={stage.id} aria-current={stage.state === "current" ? "step" : undefined} className="flex items-center gap-1">
           {index > 0 ? <ChevronRight aria-hidden="true" className="size-3 text-muted-foreground" /> : null}
           <Pill tone={STAGE_TONE[stage.state]} icon={stage.state === "done" ? Check : undefined} link={link(stage.id)} className={view === stage.id ? "ring-2 ring-ring/60" : undefined}>
-            {stage.id === "runs" ? `Runs · ${runs}` : stage.label}
-            {stage.state === "current" ? <span className="sr-only"> (current stage)</span> : null}
+            {stage.id === "runs" ? `${m.common_runs()} · ${runs}` : stage.label}
+            {stage.state === "current" ? <span className="sr-only"> {m.project_stage_current()}</span> : null}
           </Pill>
         </li>
       ))}
@@ -145,6 +148,7 @@ function StageStrip({ project, view }: { project: Project; view: View }) {
 // ---------------------------------------------------------------------------
 
 function CandidateReviewPage({ project }: { project: Project }) {
+  const m = useMessages()
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
@@ -153,10 +157,10 @@ function CandidateReviewPage({ project }: { project: Project }) {
             {project.name}
           </Link>
         }
-        title="Candidate frames"
+        title={m.project_candidate_frames()}
         actions={
           <Button size="sm" variant="outline" render={<Link to="/projects/$projectId" params={{ projectId: project.id }} />}>
-            Done
+            {m.project_candidates_done()}
           </Button>
         }
       />

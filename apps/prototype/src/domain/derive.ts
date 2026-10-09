@@ -225,7 +225,7 @@ export function subjectTarget(catalog: Catalog, subject: Subject): Target | unde
 /** A mosaic reads by its own name; a Target subject by the Target's name. */
 export function subjectRef(catalog: Catalog, subject: Subject): MessageRef {
   const name = subject.mosaic?.name ?? subjectTarget(catalog, subject)?.name
-  return name === undefined ? msg("domain_subject_unknown") : verbatim(name)
+  return name === undefined ? msg("plan_unknown_target") : verbatim(name)
 }
 
 export function subjectName(m: Messages, catalog: Catalog, subject: Subject): string {
@@ -242,7 +242,7 @@ export function findPanel(subject: Subject | undefined, panelId: string | null):
 
 /** "Panel 2". */
 export function panelRef(panel: MosaicPanel): MessageRef {
-  return msg("domain_panel_name", { n: panel.n })
+  return msg("mosaic_panel", { n: panel.n })
 }
 
 export function panelLabel(m: Messages, panel: MosaicPanel): string {
@@ -261,7 +261,7 @@ export type PanelFlag = "ambiguous" | "off-panel" | "no-pointing" | "fov-unknown
 export const PANEL_FLAG_NAME: Record<PanelFlag, MessageRef> = {
   ambiguous: msg("domain_panel_flag_ambiguous"),
   "off-panel": msg("domain_panel_flag_off_panel"),
-  "no-pointing": msg("domain_panel_flag_no_pointing"),
+  "no-pointing": msg("project_placement_no_pointing"),
   "fov-unknown": msg("domain_fov_unknown"),
 }
 
@@ -573,7 +573,7 @@ export function goalProgress(catalog: Catalog, project: Project): GoalProgress[]
 
 /** "1 frame", "1,200 frames". */
 function framesRef(count: number): MessageRef {
-  return msg("domain_frames", { count, n: formatCount(count) })
+  return msg("project_frames_count", { count, n: formatCount(count) })
 }
 
 export interface ProjectWarning {
@@ -601,7 +601,7 @@ export function projectWarnings(disk: Disk, catalog: Catalog, project: Project):
     const { session, subject, rigId } = candidate
     // A warning names the goal channel, or the raw filter when it meets no goal.
     const channel = goalChannel(catalog, session) ?? session.channel ?? null
-    const channelName = channel === null ? msg("domain_no_filter") : verbatim(channel)
+    const channelName = channel === null ? msg("palette_session_no_filter") : verbatim(channel)
     const exposure = sessionExposureS(session)
     const key = `${rigId}|${subject.id}|${channel}|${exposure}`
     if (seen.has(key)) continue
@@ -813,7 +813,7 @@ export function runPipeline(world: World, run: Run): RunPipeline {
     state: selected === 0 ? (complete ? "done" : "ready") : unresolved > 0 ? "blocked" : !selectSaved ? "review" : "done",
     status:
       selected === 0
-        ? msg("domain_status_no_sessions")
+        ? msg("target_no_sessions")
         : unresolved > 0
           ? msg("domain_status_unresolved", { count: unresolved })
           : selectSaved && latest
@@ -847,7 +847,7 @@ export function runPipeline(world: World, run: Run): RunPipeline {
       { label: msg("domain_gate_frames_reviewed"), met: "advisory", detail: decision.total === 0 ? msg("domain_gate_no_frames") : msg("domain_gate_frames_decided", decided) },
     ],
     link: link("review", draftNote && !complete ? "review-save" : undefined),
-    nextLabel: draftNote ? msg("domain_next_save_run") : msg("domain_next_review_frames"),
+    nextLabel: draftNote ? msg("domain_next_save_run") : msg("session_review_frames"),
   }
 
   // 3 Calibrate: automatic by default; only unmatched or drifted rows need review (D-W5, D-W55).
@@ -978,13 +978,13 @@ export function runPipeline(world: World, run: Run): RunPipeline {
   const done: RunStepState = {
     ...STEP("done"),
     state: !complete ? (results.state === "done" ? "ready" : "idle") : cleaning ? "running" : cleanedUp ? "done" : "ready",
-    status: !complete ? msg("status_open") : cleaning ? msg("domain_status_cleaning_up") : cleanedUp ? msg("domain_status_cleaned_up") : msg("domain_status_cleanup_available"),
+    status: !complete ? msg("status_open") : cleaning ? msg("wrapup_cleaning_up") : cleanedUp ? msg("domain_status_cleaned_up") : msg("domain_status_cleanup_available"),
     items: [
       { label: msg("domain_gate_run_complete"), met: complete, detail: complete ? msg("domain_gate_cleanup_reviewable") : msg("domain_gate_complete_when_done") },
       { label: msg("domain_gate_cleanup_reviewed"), met: "advisory", detail: cleanedUp ? (lastCleanup?.summary ?? msg("domain_gate_finished")) : msg("domain_gate_cleanup_lists") },
     ],
     link: link("done"),
-    nextLabel: !complete ? msg("domain_next_complete_run") : msg("domain_next_clean_up_run"),
+    nextLabel: !complete ? msg("project_run_complete") : msg("domain_next_clean_up_run"),
   }
 
   const steps = [select, review, calibrate, prepare, results, done]
@@ -1252,7 +1252,7 @@ export function projectNext(world: World, project: Project, nowMs: number): Next
     const { blocker, steps } = runPipeline(world, run)
     if (blocker) {
       return {
-        label: msg("domain_next_open", { name: run.name }),
+        label: msg("activity_open_destination", { name: run.name }),
         reason: msg("domain_reason_step_blocker", { step: STEP_NAME[blocker.step], message: blocker.message }),
         link: runStepLink(run, blocker.step),
         step: steps.find((s) => s.id === blocker.step) ?? null,
@@ -1263,7 +1263,7 @@ export function projectNext(world: World, project: Project, nowMs: number): Next
   if (wrapUp.available) {
     const step = wrapUp.steps.find((s) => s.id === wrapUp.current)
     return {
-      label: msg("domain_wrap_up"),
+      label: msg("wrapup_action"),
       reason: step ? msg("domain_reason_wrap_up_next", { step: step.label }) : msg("domain_reason_wrap_up_settled"),
       link: projectLink(project.id, { stage: "wrap-up" }),
       step: null,
@@ -1279,7 +1279,7 @@ export function projectNext(world: World, project: Project, nowMs: number): Next
       if (!centre || !target) continue
       if (bestWindowTonight({ ...target, ...centre }, site, defaultCriteria(site), nowMs)) {
         return {
-          label: msg("domain_next_plan_tonight"),
+          label: msg("target_plan_tonight"),
           reason: msg("domain_reason_window_tonight", { line: progress.line, subject: subjectRef(catalog, subject!) }),
           link: { to: "/plan", search: { project: project.id } },
           step: null,
@@ -1294,14 +1294,14 @@ export function projectNext(world: World, project: Project, nowMs: number): Next
 export function projectStage(world: World, project: Project): { label: MessageRef; step: RunStep | null; state: GateState } {
   if (project.state === "done") return { label: project.archive ? msg("status_archived") : msg("status_done"), step: null, state: "done" }
   const runs = projectRuns(world.catalog, project.id)
-  if (runs.length === 0) return { label: msg("domain_stage_no_runs"), step: null, state: "idle" }
+  if (runs.length === 0) return { label: msg("project_no_runs"), step: null, state: "idle" }
   const pipelines = runs.map((run) => runPipeline(world, run))
   const blocked = pipelines.find((p) => p.blocker)
   const held = blocked?.blocker ? blocked.steps.find((s) => s.id === blocked.blocker!.step) : undefined
   if (held) return { label: msg("domain_stage_held_at", { gate: GATE_WORD[held.state], step: STEP_NAME[held.id] }), step: held.id, state: held.state }
   const open = pipelines.filter((p) => p.status === "open").sort((a, b) => a.current.n - b.current.n)[0]
   if (open) return { label: STEP_NAME[open.current.id], step: open.current.id, state: open.current.state }
-  return { label: msg("domain_wrap_up"), step: null, state: "ready" }
+  return { label: msg("wrapup_action"), step: null, state: "ready" }
 }
 
 // ---------------------------------------------------------------------------
@@ -1377,7 +1377,7 @@ export function projectStageStrip(catalog: Catalog, project: Project): { current
   const current: ProjectStageId =
     project.state === "done" ? (project.archive ? "archived" : "done") : runs.length === 0 ? "open" : projectWrapUp(catalog, project).available ? "wrap-up" : "runs"
   const order: ProjectStageId[] = ["open", "runs", "wrap-up", current === "archived" ? "archived" : "done"]
-  const label: Record<ProjectStageId, MessageRef> = { open: msg("status_open"), runs: msg("common_runs"), "wrap-up": msg("domain_wrap_up"), done: msg("status_done"), archived: msg("status_archived") }
+  const label: Record<ProjectStageId, MessageRef> = { open: msg("status_open"), runs: msg("common_runs"), "wrap-up": msg("wrapup_action"), done: msg("status_done"), archived: msg("status_archived") }
   const at = order.indexOf(current)
   return { current, stages: order.map((id, i) => ({ id, label: label[id], state: i < at ? "done" : i === at ? "current" : "todo" })) }
 }
@@ -1439,7 +1439,7 @@ export interface Fit {
 export function targetFit(catalog: Catalog, target: Target, rigId: OpticalTrainId): Fit {
   const rig = catalog.opticalTrains[rigId]
   const fov = rig ? rigFieldOfView(catalog, rig) : null
-  if (!target.sizeDeg) return { kind: "unknown", panels: 0, coverage: null, label: verbatim("–"), reason: msg("domain_size_unknown") }
+  if (!target.sizeDeg) return { kind: "unknown", panels: 0, coverage: null, label: verbatim("–"), reason: msg("target_size_unknown") }
   if (!fov) return { kind: "unknown", panels: 0, coverage: null, label: verbatim("–"), reason: msg("domain_fov_unknown") }
   const major = Math.max(target.sizeDeg.width, target.sizeDeg.height)
   const minor = Math.min(target.sizeDeg.width, target.sizeDeg.height)
@@ -1447,7 +1447,7 @@ export function targetFit(catalog: Catalog, target: Target, rigId: OpticalTrainI
   const short = Math.min(fov.widthDeg, fov.heightDeg)
   const coverage = major / short
   const panels = Math.ceil(major / long) * Math.ceil(minor / short)
-  if (panels > 1) return { kind: "panels", panels, coverage, label: msg("fit_panels", { count: panels }), reason: null }
+  if (panels > 1) return { kind: "panels", panels, coverage, label: msg("project_panels", { count: panels }), reason: null }
   if (coverage < 0.25) return { kind: "tiny", panels: 1, coverage, label: msg("fit_tiny"), reason: null }
   return { kind: "fits", panels: 1, coverage, label: msg("fit_fits", { percent: Math.round(coverage * 100) }), reason: null }
 }

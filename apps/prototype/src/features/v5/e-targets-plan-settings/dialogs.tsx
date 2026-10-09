@@ -3,6 +3,7 @@
  * inline validation and the write's error kept beside the field.
  */
 import { type FormEvent, useEffect, useId, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { ActionError } from "@/components/app/feedback"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -24,6 +25,7 @@ export interface NameDialogProps {
 }
 
 export function NameDialog({ open, onOpenChange, title, description, label, initial, confirmLabel, onSubmit, taken = [] }: NameDialogProps) {
+  const m = useMessages()
   const [name, setName] = useState(initial)
   const [error, setError] = useState<string | null>(null)
   const id = useId()
@@ -37,8 +39,8 @@ export function NameDialog({ open, onOpenChange, title, description, label, init
   function submit(event: FormEvent) {
     event.preventDefault()
     const trimmed = name.trim()
-    if (!trimmed) return setError(`${label}: enter a name.`)
-    if (taken.some((t) => t.toLowerCase() === trimmed.toLowerCase())) return setError(`${label}: “${trimmed}” is already used. Choose another name.`)
+    if (!trimmed) return setError(m.targets_name_empty({ label }))
+    if (taken.some((t) => t.toLowerCase() === trimmed.toLowerCase())) return setError(m.targets_name_taken({ label, name: trimmed }))
     const failure = onSubmit(trimmed)
     if (failure) setError(failure)
     else onOpenChange(false)
@@ -59,7 +61,7 @@ export function NameDialog({ open, onOpenChange, title, description, label, init
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {m.verb_cancel()}
             </Button>
             <Button type="submit">{confirmLabel}</Button>
           </DialogFooter>

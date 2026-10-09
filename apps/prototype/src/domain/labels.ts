@@ -83,9 +83,9 @@ export const DEFAULT_MOON_CONSTRAINTS: Record<Band, MoonConstraint> = {
 export const WRAP_UP_STEPS: WrapUpStepId[] = ["cleanup", "trash", "archive"]
 
 export const WRAP_UP_NAME: Record<WrapUpStepId, MessageRef> = {
-  cleanup: msg("domain_wrap_up_cleanup"),
-  trash: msg("domain_wrap_up_trash"),
-  archive: msg("domain_wrap_up_archive"),
+  cleanup: msg("wrapup_cleanup_title"),
+  trash: msg("trash_title"),
+  archive: msg("wrapup_archive_title"),
 }
 
 /** What an operation counts, as a plural noun beside its totals: "12 of 40 frames". */
@@ -105,7 +105,7 @@ export function unitCount(unit: OperationUnit, count: number): MessageRef {
     case "files":
       return msg("op_count_files", { count, n })
     case "frames":
-      return msg("domain_frames", { count, n })
+      return msg("project_frames_count", { count, n })
     case "entries":
       return msg("op_count_entries", { count, n })
     case "prepared-entries":

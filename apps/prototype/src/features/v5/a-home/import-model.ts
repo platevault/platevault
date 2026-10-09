@@ -24,6 +24,7 @@ import { locationAvailability } from "@/domain/library"
 import { headerNamingValues, namingTemplate, resolveNamingTemplate } from "@/domain/templates"
 import type { Blocker } from "@/components/app/refusal"
 import { formatBytes } from "@/lib/format"
+import { m, type Messages } from "@/lib/i18n"
 import type {
   AssetId,
   CalibrationKind,
@@ -45,13 +46,24 @@ import type { ImportDraft } from "@/store/slices/a"
 export type ImportRole = Extract<LocationRole, "captures" | "calibration">
 
 /** Frame types the user can type an Unclassified file as. */
-export const TYPEABLE: Array<{ value: ImageType; label: string }> = [
-  { value: "light", label: "Light" },
-  { value: "flat", label: "Flat" },
-  { value: "dark", label: "Dark" },
-  { value: "bias", label: "Bias" },
-  { value: "dark-flat", label: "Dark flat" },
-]
+export const TYPEABLE: ImageType[] = ["light", "flat", "dark", "bias", "dark-flat"]
+
+/** A frame type's name, for the sheet. */
+export function typeLabel(m: Messages, type: ImageType): string {
+  const label: Record<ImageType, () => string> = {
+    light: m.import_type_light,
+    dark: m.import_type_dark,
+    flat: m.import_type_flat,
+    bias: m.import_type_bias,
+    "dark-flat": m.calibration_kind_dark_flat,
+    "master-dark": m.import_type_master_dark,
+    "master-flat": m.import_type_master_flat,
+    "master-bias": m.calibration_caption_bias,
+    "master-dark-flat": m.import_type_master_dark_flat,
+    unknown: m.import_type_unclassified,
+  }
+  return label[type]()
+}
 
 export const TYPE_LABEL: Record<ImageType, string> = {
   light: "Light",
@@ -69,10 +81,13 @@ export const TYPE_LABEL: Record<ImageType, string> = {
 /** Where an imported frame ends up: a light session, a calibration process awaiting Stack, or a library master. */
 export type ImportRoute = "sessions" | "stack" | "masters"
 
-export const ROUTE_LABEL: Record<ImportRoute, string> = {
-  sessions: "Sessions",
-  stack: "Calibration → stack",
-  masters: "Calibration library",
+export function routeLabel(m: Messages, route: ImportRoute): string {
+  const label: Record<ImportRoute, () => string> = {
+    sessions: m.nav_sessions,
+    stack: m.import_route_stack,
+    masters: m.import_route_masters,
+  }
+  return label[route]()
 }
 
 export function routeFor(type: ImageType): ImportRoute {
@@ -182,10 +197,10 @@ export function destinationLocations(catalog: Catalog, role: ImportRole): Locati
 
 function locationWritable(disk: Disk, location: Location): { writable: boolean; problem: string | null; volume: Volume | null } {
   const volume = disk.volumes[location.volumeId] ?? null
-  if (locationAvailability(disk, location) !== "online" || !volume?.mounted) return { writable: false, volume, problem: `${location.displayName} offline` }
-  if (!volume.writable) return { writable: false, volume, problem: `${volume.name} read-only` }
-  if (disk.readOnlyPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: `${location.displayName}: no write permission` }
-  if (disk.deniedPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: `${location.displayName}: access denied` }
+  if (locationAvailability(disk, location) !== "online" || !volume?.mounted) return { writable: false, volume, problem: m.issue_location_offline({ name: location.displayName }) }
+  if (!volume.writable) return { writable: false, volume, problem: m.import_location_read_only({ name: volume.name }) }
+  if (disk.readOnlyPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: m.import_no_write_permission({ name: location.displayName }) }
+  if (disk.deniedPaths.some((p) => isUnder(location.path, p))) return { writable: false, volume, problem: m.folder_picker_live_denied({ name: location.displayName }) }
   return { writable: true, volume, problem: null }
 }
 
@@ -338,23 +353,24 @@ export function planImport(state: PrototypeState, draft: ImportDraft): ImportPla
     const location = destinations[role]
     const needed = plan.items.filter((i) => i.role === role).reduce((n, i) => n + i.file.sizeBytes, 0)
     if (!location) {
-      plan.destinations.push({ role, location: null, volume: null, neededBytes: needed, freeBytes: 0, writable: false, problem: needed > 0 ? `No ${role === "captures" ? "Captures" : "Calibration"} location` : null })
+      const problem = needed === 0 ? null : role === "captures" ? m.import_no_captures_location() : m.import_no_calibration_location()
+      plan.destinations.push({ role, location: null, volume: null, neededBytes: needed, freeBytes: 0, writable: false, problem })
       continue
     }
     const check = locationWritable(disk, location)
     const free = check.volume ? freeBytes(disk, check.volume.id) : 0
-    const problem = needed === 0 ? null : (check.problem ?? (free < needed ? `${check.volume?.name ?? location.displayName} ${formatBytes(needed - free)} short` : null))
+    const problem = needed === 0 ? null : (check.problem ?? (free < needed ? m.import_space_short({ name: check.volume?.name ?? location.displayName, size: formatBytes(needed - free) }) : null))
     plan.destinations.push({ role, location, volume: check.volume, neededBytes: needed, freeBytes: free, writable: check.writable, problem })
   }
 
-  if (!volume?.mounted) plan.move = { allowed: false, reason: "Not connected" }
-  else if (!volume.writable || disk.readOnlyPaths.some((p) => isUnder(source.path, p))) plan.move = { allowed: false, reason: "Read-only source" }
-  else if (volume.trash === "unsupported") plan.move = { allowed: false, reason: "No OS Trash" }
+  if (!volume?.mounted) plan.move = { allowed: false, reason: m.import_not_connected() }
+  else if (!volume.writable || disk.readOnlyPaths.some((p) => isUnder(source.path, p))) plan.move = { allowed: false, reason: m.import_read_only_source() }
+  else if (volume.trash === "unsupported") plan.move = { allowed: false, reason: m.import_no_os_trash() }
   else plan.move = { allowed: true, reason: null }
 
-  if (!online) plan.blockers.push({ label: volume?.mounted ? `${source.label}: access denied` : `${source.label} not connected` })
-  else if (plan.items.length === 0) plan.blockers.push({ label: plan.held.unclassified.length > 0 || plan.held.settling.length > 0 ? "Only held files" : "Nothing new" })
+  if (!online) plan.blockers.push({ label: volume?.mounted ? m.folder_picker_live_denied({ name: source.label }) : m.import_source_not_connected({ name: source.label }) })
+  else if (plan.items.length === 0) plan.blockers.push({ label: plan.held.unclassified.length > 0 || plan.held.settling.length > 0 ? m.import_only_held() : m.import_nothing_new() })
   for (const d of plan.destinations) if (d.problem) plan.blockers.push({ label: d.problem })
-  if (draft.mode === "move" && !plan.move.allowed && plan.move.reason) plan.blockers.push({ label: `Move: ${plan.move.reason}` })
+  if (draft.mode === "move" && !plan.move.allowed && plan.move.reason) plan.blockers.push({ label: m.import_move_blocked({ reason: plan.move.reason }) })
   return plan
 }

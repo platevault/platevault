@@ -10,6 +10,7 @@
 import { Link } from "@tanstack/react-router"
 import { ArrowRightLeft, Copy, HardDrive } from "lucide-react"
 import { useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { useFollowLink } from "@/app/run-ui"
 import { type Column, DataTable } from "@/components/app/data-table"
 import { EmptyState } from "@/components/app/feedback"
@@ -26,13 +27,15 @@ import { locationAvailability } from "@/domain/library"
 import { type DuplicateGroup, lastDuplicateScan, liveCopies } from "@/domain/storage"
 import type { Location, Operation } from "@/domain/types"
 import { formatBytes, formatDateTime, plural } from "@/lib/format"
+import { m } from "@/lib/i18n"
 import { startDuplicateScan } from "@/store/actions/storage"
 import { useStore } from "@/store/core"
 import { cancelOperation, isSettled } from "@/store/operations"
 
-const TRANSFER_KIND: Partial<Record<Operation["kind"], string>> = { import: "Import", archive: "Archive", trash: "OS Trash" }
+const TRANSFER_KIND: Partial<Record<Operation["kind"], () => string>> = { import: m.shell_import, archive: m.status_role_archive, trash: m.session_os_trash }
 
 export function StoragePage() {
+  const m = useMessages()
   const disk = useStore((s) => s.disk)
   const catalog = useStore((s) => s.catalog)
   const operations = useStore((s) => s.operations)
@@ -47,7 +50,7 @@ export function StoragePage() {
 
   function runScan() {
     const { result } = startDuplicateScan()
-    setRefused(refusalFrom(result, "Scan blocked"))
+    setRefused(refusalFrom(result, m.storage_scan_blocked()))
   }
 
   const openLocation = (l: Location) => follow({ to: "/settings/locations", search: { locationId: l.id, return: "/storage" } })
@@ -55,7 +58,7 @@ export function StoragePage() {
   const locationColumns: Column<Location>[] = [
     {
       id: "name",
-      header: "Location",
+      header: m.storage_location(),
       rowHeader: true,
       sortValue: (l) => l.displayName,
       cell: (l) => (
@@ -63,61 +66,61 @@ export function StoragePage() {
           <Link to="/settings/locations" search={{ locationId: l.id, return: "/storage" }} className="hover:underline" title={l.path}>
             {l.displayName}
           </Link>
-          <NoteMarker label={`${l.displayName}: path`} rows={[{ label: "Path", value: <span className="font-mono [overflow-wrap:anywhere]">{l.path}</span> }]} />
+          <NoteMarker label={m.storage_path_of({ name: l.displayName })} rows={[{ label: m.storage_path(), value: <span className="font-mono [overflow-wrap:anywhere]">{l.path}</span> }]} />
         </span>
       ),
     },
-    { id: "role", header: "Role", sortValue: (l) => l.role, cell: (l) => <StatusBadge kind="role" value={l.role} /> },
+    { id: "role", header: m.storage_role(), sortValue: (l) => l.role, cell: (l) => <StatusBadge kind="role" value={l.role} /> },
     {
       id: "volume",
-      header: "Volume",
+      header: m.storage_volume(),
       sortValue: (l) => disk.volumes[l.volumeId]?.name ?? null,
       cell: (l) => {
         const v = disk.volumes[l.volumeId]
         return (
           <span className="inline-flex items-center gap-1.5">
             {v?.name ?? "–"}
-            {v?.network ? <Pill tone="muted">Network</Pill> : null}
-            {v?.removable ? <Pill tone="muted">Removable</Pill> : null}
+            {v?.network ? <Pill tone="muted">{m.storage_network()}</Pill> : null}
+            {v?.removable ? <Pill tone="muted">{m.storage_removable()}</Pill> : null}
           </span>
         )
       },
     },
-    { id: "availability", header: "Availability", sortValue: (l) => locationAvailability(disk, l), cell: (l) => <StatusBadge kind="availability" value={locationAvailability(disk, l)} /> },
+    { id: "availability", header: m.storage_availability(), sortValue: (l) => locationAvailability(disk, l), cell: (l) => <StatusBadge kind="availability" value={locationAvailability(disk, l)} /> },
     {
       id: "free",
-      header: "Free",
+      header: m.storage_free(),
       align: "right",
       sortValue: (l) => (disk.volumes[l.volumeId]?.mounted ? freeBytes(disk, l.volumeId) : null),
       cell: (l) => (disk.volumes[l.volumeId]?.mounted ? formatBytes(freeBytes(disk, l.volumeId)) : "–"),
     },
-    { id: "trash", header: "OS Trash", cell: (l) => (disk.volumes[l.volumeId]?.trash === "unsupported" ? <StatusBadge kind="trash" value="unsupported" label="Unsupported" /> : "–") },
+    { id: "trash", header: m.session_os_trash(), cell: (l) => (disk.volumes[l.volumeId]?.trash === "unsupported" ? <StatusBadge kind="trash" value="unsupported" label={m.storage_unsupported()} /> : "–") },
     {
       id: "action",
-      header: "Action",
+      header: m.storage_action(),
       align: "right",
       cell: (l) =>
         locationAvailability(disk, l) === "offline" ? (
           <Button size="xs" variant="outline" className="-my-1" onClick={() => openLocation(l)}>
-            Locate<span className="sr-only"> {l.displayName}</span>
+            {m.storage_locate()}<span className="sr-only"> {l.displayName}</span>
           </Button>
         ) : null,
     },
   ]
   const locationMenu = (l: Location): MenuEntry[] => [
-    ...(locationAvailability(disk, l) === "offline" ? [{ label: "Locate", onSelect: () => openLocation(l) }] : []),
-    { label: "Open in Settings", onSelect: () => openLocation(l) },
+    ...(locationAvailability(disk, l) === "offline" ? [{ label: m.storage_locate(), onSelect: () => openLocation(l) }] : []),
+    { label: m.storage_open_settings(), onSelect: () => openLocation(l) },
   ]
 
   const copiesOf = (g: DuplicateGroup) => {
     const asset = catalog.assets[g.assetId]
-    return asset ? liveCopies(catalog, asset).map((c) => ({ path: c.path, where: catalog.locations[c.locationId]?.displayName ?? "Unregistered" })) : g.paths.map((path) => ({ path, where: "–" }))
+    return asset ? liveCopies(catalog, asset).map((c) => ({ path: c.path, where: catalog.locations[c.locationId]?.displayName ?? m.storage_unregistered() })) : g.paths.map((path) => ({ path, where: "–" }))
   }
   const duplicateColumns: Column<DuplicateGroup>[] = [
-    { id: "file", header: "Frame", rowHeader: true, sortValue: (g) => g.fileName, cell: (g) => <span className="font-mono text-xs">{g.fileName}</span> },
+    { id: "file", header: m.storage_frame(), rowHeader: true, sortValue: (g) => g.fileName, cell: (g) => <span className="font-mono text-xs">{g.fileName}</span> },
     {
       id: "copies",
-      header: "Copies",
+      header: m.storage_copies(),
       sortValue: (g) => g.paths.length,
       cell: (g) => {
         const copies = copiesOf(g)
@@ -128,25 +131,25 @@ export function StoragePage() {
                 {where}
               </Pill>
             ))}
-            <NoteMarker label={`${g.fileName}: copies`} rows={[...copies.map((c, i) => ({ label: `${i + 1}`, value: <span className="font-mono [overflow-wrap:anywhere]">{c.path}</span> })), { label: "SHA-256", value: <span className="font-mono">{g.sha256.slice(0, 16)}…</span> }]} />
+            <NoteMarker label={m.storage_copies_of({ name: g.fileName })} rows={[...copies.map((c, i) => ({ label: `${i + 1}`, value: <span className="font-mono [overflow-wrap:anywhere]">{c.path}</span> })), { label: m.storage_sha256(), value: <span className="font-mono">{g.sha256.slice(0, 16)}…</span> }]} />
           </span>
         )
       },
     },
-    { id: "extra", header: "Extra", align: "right", sortValue: (g) => g.extraBytes, cell: (g) => formatBytes(g.extraBytes) },
+    { id: "extra", header: m.storage_extra(), align: "right", sortValue: (g) => g.extraBytes, cell: (g) => formatBytes(g.extraBytes) },
   ]
   const duplicateMenu = (g: DuplicateGroup): MenuEntry[] => {
     const sessionId = catalog.assets[g.assetId]?.sessionId
-    return [...(sessionId ? [{ label: "Open session", onSelect: () => follow({ to: "/sessions/$sessionId", params: { sessionId } }) }] : []), { label: "Scan again", onSelect: runScan, disabled: scanning }]
+    return [...(sessionId ? [{ label: m.project_open_session(), onSelect: () => follow({ to: "/sessions/$sessionId", params: { sessionId } }) }] : []), { label: m.storage_scan_again(), onSelect: runScan, disabled: scanning }]
   }
 
   const transferColumns: Column<Operation>[] = [
-    { id: "title", header: "Transfer", rowHeader: true, truncate: true, sortValue: (op) => op.title, cell: (op) => <span title={op.title}>{op.title}</span> },
-    { id: "kind", header: "Kind", sortValue: (op) => op.kind, cell: (op) => TRANSFER_KIND[op.kind] ?? "–" },
-    { id: "status", header: "Status", sortValue: (op) => op.status, cell: (op) => <StatusBadge kind="operation" value={op.status} /> },
+    { id: "title", header: m.storage_transfer(), rowHeader: true, truncate: true, sortValue: (op) => op.title, cell: (op) => <span title={op.title}>{op.title}</span> },
+    { id: "kind", header: m.storage_kind(), sortValue: (op) => op.kind, cell: (op) => TRANSFER_KIND[op.kind]?.() ?? "–" },
+    { id: "status", header: m.storage_status(), sortValue: (op) => op.status, cell: (op) => <StatusBadge kind="operation" value={op.status} /> },
     {
       id: "summary",
-      header: "Outcome",
+      header: m.activity_outcome(),
       truncate: true,
       cell: (op) => (
         <span className="text-xs text-muted-foreground" title={op.summary ?? undefined}>
@@ -154,41 +157,41 @@ export function StoragePage() {
         </span>
       ),
     },
-    { id: "started", header: "Started", sortValue: (op) => op.createdAt, cell: (op) => <span className="text-xs">{formatDateTime(op.createdAt)}</span> },
+    { id: "started", header: m.storage_started(), sortValue: (op) => op.createdAt, cell: (op) => <span className="text-xs">{formatDateTime(op.createdAt)}</span> },
   ]
   const transferMenu = (op: Operation): MenuEntry[] => [
-    { label: "Open Activity", onSelect: () => follow({ to: "/activity" }) },
-    ...(!isSettled(op.status) && op.canCancel ? [{ label: "Cancel", destructive: true, onSelect: () => cancelOperation(op.id) }] : []),
+    { label: m.storage_open_activity(), onSelect: () => follow({ to: "/activity" }) },
+    ...(!isSettled(op.status) && op.canCancel ? [{ label: m.verb_cancel(), destructive: true, onSelect: () => cancelOperation(op.id) }] : []),
   ]
 
   const scanButton = (
     <Button size="sm" variant="outline" disabled={scanning} onClick={runScan} data-scan-duplicates>
       <Copy aria-hidden="true" data-icon="inline-start" />
-      {scan ? "Scan again" : "Scan for duplicates"}
+      {scan ? m.storage_scan_again() : m.storage_scan()}
     </Button>
   )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader title="Storage" />
+      <PageHeader title={m.nav_storage()} />
       <PageBody>
-        <Section id="sto-locations" title="Locations">
+        <Section id="sto-locations" title={m.common_locations()}>
           <DataTable
-            label="Locations"
+            label={m.common_locations()}
             rows={locations}
             columns={locationColumns}
             getRowId={(l) => l.id}
             scroll="none"
             stickyFirstColumn
             contextMenu={locationMenu}
-            empty={<EmptyState icon={HardDrive} title="No locations" action={<Button render={<Link to="/settings/locations" />}>Add location</Button>} />}
+            empty={<EmptyState icon={HardDrive} title={m.storage_no_locations()} action={<Button render={<Link to="/settings/locations" />}>{m.storage_add_location()}</Button>} />}
           />
         </Section>
 
-        <Section id="sto-duplicates" title="Duplicates" actions={scan ? scanButton : null}>
+        <Section id="sto-duplicates" title={m.storage_duplicates()} actions={scan ? scanButton : null}>
           {refused ? <Refusal {...refused} /> : null}
           {!scan ? (
-            <EmptyState icon={Copy} title="Not scanned" action={scanButton} />
+            <EmptyState icon={Copy} title={m.storage_not_scanned()} action={scanButton} />
           ) : scanning ? (
             <OperationPanel operationId={scan.operation.id} />
           ) : scan.groups === null ? (
@@ -198,12 +201,12 @@ export function StoragePage() {
           ) : (
             <>
               <p className="flex flex-wrap items-center gap-1.5 text-sm" data-scan-summary>
-                <Pill tone={scan.groups.length > 0 ? "warning" : "success"}>{scan.groups.length > 0 ? plural(scan.groups.length, "frame") : "No duplicates"}</Pill>
-                {scan.groups.length > 0 ? <Pill tone="muted">{`${formatBytes(scan.extraBytes)} extra`}</Pill> : null}
+                <Pill tone={scan.groups.length > 0 ? "warning" : "success"}>{scan.groups.length > 0 ? m.storage_frames_count({ count: scan.groups.length }) : m.storage_no_duplicates()}</Pill>
+                {scan.groups.length > 0 ? <Pill tone="muted">{m.storage_extra_bytes({ bytes: formatBytes(scan.extraBytes) })}</Pill> : null}
                 <span className="text-xs text-muted-foreground tabular-nums">{formatDateTime(scan.operation.settledAt ?? scan.operation.createdAt)}</span>
               </p>
               {scan.groups.length > 0 ? (
-                <DataTable label="Duplicates" rows={scan.groups} columns={duplicateColumns} getRowId={(g) => g.assetId} initialSort={{ columnId: "extra", direction: "desc" }} contextMenu={duplicateMenu} />
+                <DataTable label={m.storage_duplicates()} rows={scan.groups} columns={duplicateColumns} getRowId={(g) => g.assetId} initialSort={{ columnId: "extra", direction: "desc" }} contextMenu={duplicateMenu} />
               ) : null}
             </>
           )}
@@ -211,24 +214,24 @@ export function StoragePage() {
 
         <Section
           id="sto-transfers"
-          title="Transfers"
+          title={m.storage_transfers()}
           actions={
             <span className="inline-flex items-center gap-2">
-              <CountBadge count={transfers.length} label={plural(transfers.length, "transfer")} />
+              <CountBadge count={transfers.length} label={m.storage_transfers_count({ count: transfers.length })} />
               <Button size="sm" variant="ghost" render={<Link to="/activity" />}>
-                Activity
+                {m.nav_activity()}
               </Button>
             </span>
           }
         >
           <DataTable
-            label="Transfers"
+            label={m.storage_transfers()}
             rows={transfers}
             columns={transferColumns}
             getRowId={(op) => op.id}
             scroll="none"
             contextMenu={transferMenu}
-            empty={<EmptyState icon={ArrowRightLeft} title="No transfers" action={<Button render={<Link to="/import" />}>Import</Button>} />}
+            empty={<EmptyState icon={ArrowRightLeft} title={m.storage_no_transfers()} action={<Button render={<Link to="/import" />}>{m.shell_import()}</Button>} />}
           />
         </Section>
       </PageBody>

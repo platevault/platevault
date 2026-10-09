@@ -21,11 +21,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
+import { useMessages } from "@/app/preferences"
 import { closeSheet, useShellUi } from "@/app/ui-state"
 import { rigCameraKind } from "@/domain/derive"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
 import type { Catalog, GoalTemplate, GoalTemplateValue, OpticalTrainId } from "@/domain/types"
-import { plural } from "@/lib/format"
 import { createProject, goalsFromTemplate, prefillFromSession, setGoals } from "@/store/actions/projects"
 import { store, useStore } from "@/store/core"
 import { SelectField } from "@/features/t3/fields"
@@ -69,11 +69,12 @@ export function draftFromTarget(catalog: Catalog, targetId: string): SubjectDraf
 
 /** One chosen subject, with its remove button. */
 export function SubjectDraftRow({ draft, onRemove }: { draft: SubjectDraft; onRemove: () => void }) {
+  const m = useMessages()
   return (
     <li className="flex items-center gap-2 py-1.5">
       <span className="min-w-0 flex-1 truncate font-medium">{draft.pick.name}</span>
-      {draft.pick.kind === "new" ? <Pill tone="info">New Target</Pill> : null}
-      <Button size="icon-sm" variant="ghost" aria-label={`Remove ${draft.pick.name}`} onClick={onRemove}>
+      {draft.pick.kind === "new" ? <Pill tone="info">{m.newproject_new_target()}</Pill> : null}
+      <Button size="icon-sm" variant="ghost" aria-label={m.project_remove_named({ name: draft.pick.name })} onClick={onRemove}>
         <X aria-hidden="true" />
       </Button>
     </li>
@@ -89,6 +90,7 @@ function templates(catalog: Catalog): GoalTemplate[] {
 }
 
 function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; targetId?: string }) {
+  const m = useMessages()
   const navigate = useNavigate()
   const catalog = useStore((s) => s.catalog)
   const [initial] = useState(() => {
@@ -123,7 +125,7 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
   }
 
   function create() {
-    const found = [...(name.trim() ? [] : ["Name"]), ...(drafts.length > 0 ? [] : ["Subject"]), ...(rigIds.length > 0 ? [] : ["Rig"])]
+    const found = [...(name.trim() ? [] : [m.newproject_field_name()]), ...(drafts.length > 0 ? [] : [m.project_col_subject()]), ...(rigIds.length > 0 ? [] : [m.project_col_rig()])]
     setProblems(found)
     if (found.length > 0) return
     const subjects = []
@@ -144,7 +146,7 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
       const project = store.getState().catalog.projects[projectId]!
       const copy = { ...template, values }
       const goals = setGoals(projectId, project.subjects.flatMap((s) => goalsFromTemplate(copy, s)), project.revision)
-      if (!goals.ok) setError(`Project created; goals not saved: ${goals.message}`)
+      if (!goals.ok) setError(m.newproject_goals_not_saved({ message: goals.message }))
     }
     closeSheet()
     void navigate({ to: "/projects/$projectId", params: { projectId } })
@@ -153,18 +155,18 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
   return (
     <>
       <SheetHeader className="border-b border-separator">
-        <SheetTitle>New Project</SheetTitle>
+        <SheetTitle>{m.newproject_title()}</SheetTitle>
       </SheetHeader>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 text-sm">
-        {initial.unprefilled ? <Notice tone="info" title="Nothing prefilled · no confirmed Target" /> : null}
+        {initial.unprefilled ? <Notice tone="info" title={m.newproject_nothing_prefilled()} /> : null}
         <div className="grid gap-3">
           <div className="grid gap-1.5">
-            <Label htmlFor={ids.name}>Name</Label>
-            <Input id={ids.name} value={name} onChange={(event) => setName(event.target.value)} placeholder="Cygnus HOO 2026" />
+            <Label htmlFor={ids.name}>{m.newproject_field_name()}</Label>
+            <Input id={ids.name} value={name} onChange={(event) => setName(event.target.value)} placeholder={m.newproject_name_placeholder()} />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor={ids.notes}>
-              Notes <span className="font-normal text-muted-foreground">(optional)</span>
+              {m.newproject_notes()} <span className="font-normal text-muted-foreground">{m.newproject_optional()}</span>
             </Label>
             <Textarea id={ids.notes} rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} />
           </div>
@@ -172,7 +174,7 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
 
         <section aria-labelledby="np-subjects" className="space-y-2">
           <h3 id="np-subjects" className="text-sm font-semibold">
-            Subjects
+            {m.project_subjects()}
           </h3>
           {drafts.length > 0 ? (
             <ul className="divide-y divide-separator rounded-md border border-border px-3">
@@ -185,7 +187,7 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
         </section>
 
         <fieldset className="space-y-2">
-          <legend className="text-sm font-semibold">Rigs</legend>
+          <legend className="text-sm font-semibold">{m.project_rigs()}</legend>
           <ul className="divide-y divide-separator rounded-md border border-border">
             {rigs.map((rig) => {
               const id = `${ids.rigs}-${rig.id}`
@@ -196,7 +198,7 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
                   <Label htmlFor={id} className="min-w-0 flex-1 font-normal">
                     <span className="font-medium">{rig.name}</span>
                   </Label>
-                  <Pill tone="muted">{kind === "osc" ? "OSC" : kind === "mono" ? "Mono" : "Camera unknown"}</Pill>
+                  <Pill tone="muted">{kind === "osc" ? m.project_camera_osc() : kind === "mono" ? m.project_camera_mono() : m.newproject_camera_unknown()}</Pill>
                 </li>
               )
             })}
@@ -205,13 +207,13 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
 
         <section aria-labelledby="np-goals" className="space-y-2">
           <h3 id="np-goals" className="text-sm font-semibold">
-            Goals
+            {m.projects_col_goals()}
           </h3>
           <SelectField
-            label="Template"
+            label={m.newproject_template()}
             value={templateId}
             onChange={chooseTemplate}
-            options={[{ value: "none", label: "None" }, ...all.map((t) => ({ value: t.id, label: `${t.name}${t.source === "user" ? " (yours)" : ""}` }))]}
+            options={[{ value: "none", label: m.newproject_template_none() }, ...all.map((t) => ({ value: t.id, label: t.source === "user" ? m.newproject_template_yours({ name: t.name }) : t.name }))]}
           />
           {template ? (
             <GoalValuesEditor
@@ -223,17 +225,17 @@ function NewProjectForm({ fromSessionId, targetId }: { fromSessionId?: string; t
               }}
             />
           ) : null}
-          {template && drafts.length > 0 ? <p className="text-xs text-muted-foreground tabular-nums">{plural(drafts.length * values.length, "goal")}</p> : null}
+          {template && drafts.length > 0 ? <p className="text-xs text-muted-foreground tabular-nums">{m.project_goals_count({ count: drafts.length * values.length })}</p> : null}
         </section>
       </div>
       <SheetFooter className="border-t border-separator">
-        {problems.length > 0 ? <Refusal action="Can't create" reason={`${plural(problems.length, "field")} missing`} blockers={problems.map((label) => ({ label }))} /> : null}
+        {problems.length > 0 ? <Refusal action={m.newproject_refusal()} reason={m.newproject_fields_missing({ count: problems.length })} blockers={problems.map((label) => ({ label }))} /> : null}
         <InlineError message={error} />
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={closeSheet}>
-            Cancel
+            {m.verb_cancel()}
           </Button>
-          <Button onClick={create}>Create Project</Button>
+          <Button onClick={create}>{m.newproject_create()}</Button>
         </div>
       </SheetFooter>
     </>

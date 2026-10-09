@@ -22,10 +22,12 @@ import { Box } from "@/components/app/box"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { MissingRecord } from "@/app/missing-record"
+import { useMessages } from "@/app/preferences"
 import { GateLabel } from "@/app/run-ui"
 import { findPanel, findSubject, panelLabel, projectTrash, rigName, runPipeline, subjectName } from "@/domain/derive"
 import type { OperationId, ProjectId, Run, RunId } from "@/domain/types"
-import { formatDateTime, plural } from "@/lib/format"
+import { formatDateTime } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import { emptyTrash, restoreRun } from "@/store/actions/runs"
 import { preparedEntryItems, resultItems } from "@/store/actions/trash"
 import { type CommitResult, type PrototypeState, store, updateSlice, useStore } from "@/store/core"
@@ -46,7 +48,7 @@ export function rememberApproval(projectId: ProjectId, approval: WrapUpApproval,
 }
 
 /** What Empty Trash moves for these runs, as preview lines; an unticked Results folder is the one thing that stays (D-W72, STO-FR-17). */
-export function emptyTrashPreview(state: PrototypeState, runIds: RunId[], ticked: RunId[]): { changes: string[]; unchanged: string[] } {
+export function emptyTrashPreview(m: Messages, state: PrototypeState, runIds: RunId[], ticked: RunId[]): { changes: string[]; unchanged: string[] } {
   const changes: string[] = []
   const unchanged: string[] = []
   for (const id of runIds) {
@@ -55,12 +57,12 @@ export function emptyTrashPreview(state: PrototypeState, runIds: RunId[], ticked
     const entries = preparedEntryItems(state, id)
     const results = resultItems(state, id)
     const refused = entries.filter((e) => e.refusedReason)
-    changes.push(`${run.name}: record removed`)
-    if (entries.length > 0) changes.push(`${run.name}: ${plural(entries.length - refused.length, "prepared entry", "prepared entries")} → OS Trash`)
-    if (refused.length > 0) changes.push(`${run.name}: ${plural(refused.length, "entry", "entries")} kept · ${refused[0]!.refusedReason}`)
+    changes.push(m.trash_preview_record({ name: run.name }))
+    if (entries.length > 0) changes.push(m.trash_preview_prepared({ name: run.name, count: entries.length - refused.length }))
+    if (refused.length > 0) changes.push(m.trash_preview_kept({ name: run.name, count: refused.length, reason: refused[0]!.refusedReason ?? "" }))
     if (results.length > 0) {
-      if (ticked.includes(id)) changes.push(`${run.name}: Results (${plural(results.length, "file")}) → OS Trash`)
-      else unchanged.push(`${run.name}: Results folder`)
+      if (ticked.includes(id)) changes.push(m.trash_preview_results({ name: run.name, count: results.length }))
+      else unchanged.push(m.trash_preview_results_folder({ name: run.name }))
     }
   }
   return { changes, unchanged }
@@ -83,6 +85,7 @@ interface Row {
 type Pending = { kind: "restore"; run: Run } | { kind: "empty"; runIds: RunId[] } | null
 
 export function ProjectTrashPage() {
+  const m = useMessages()
   const { projectId = "" } = useParams({ strict: false }) as { projectId?: string }
   const project = useStore((s) => s.catalog.projects[projectId])
   const rows = useStore((s) =>
@@ -92,7 +95,7 @@ export function ProjectTrashPage() {
       const panel = findPanel(subject, run.panelId)
       return {
         run,
-        where: `${subject ? subjectName(s.catalog, subject) : "Unknown subject"}${panel ? ` · ${panelLabel(panel)}` : ""} · ${rigName(s.catalog, run.rigId)}`,
+        where: `${subject ? subjectName(s.catalog, subject) : m.project_unknown_subject()}${panel ? ` · ${panelLabel(panel)}` : ""} · ${rigName(s.catalog, run.rigId)}`,
         stage: runPipeline(s, run).current,
         entries: preparedEntryItems(s, run.id).length,
         results: resultItems(s, run.id).length,
@@ -102,15 +105,15 @@ export function ProjectTrashPage() {
   const operationId = useStore((s) => s.slices.b.approvals[projectId]?.["empty-trash"] ?? null)
   const [ticked, setTicked] = useState<RunId[]>([])
   const [pending, setPending] = useState<Pending>(null)
-  const preview = useStore((s) => emptyTrashPreview(s, pending?.kind === "empty" ? pending.runIds : [], ticked))
-  if (!project) return <MissingRecord noun="Project" backTo="/projects" backLabel="Open Projects" />
+  const preview = useStore((s) => emptyTrashPreview(m, s, pending?.kind === "empty" ? pending.runIds : [], ticked))
+  if (!project) return <MissingRecord noun="Project" backTo="/projects" backLabel={m.project_back_to_projects()} />
   const tickedLive = ticked.filter((id) => rows.some((r) => r.run.id === id))
   const allIds = rows.map((r) => r.run.id)
 
   const columns: Column<Row>[] = [
     {
       id: "run",
-      header: "Run",
+      header: m.project_run_noun_capital(),
       rowHeader: true,
       sortValue: (r) => r.run.name,
       cell: (r) => (
@@ -120,12 +123,12 @@ export function ProjectTrashPage() {
         </span>
       ),
     },
-    { id: "stage", header: "Stage", cell: (r) => <GateLabel state={r.run.completion === "complete" ? "done" : r.stage.state} label={r.run.completion === "complete" ? "Complete" : r.stage.label} /> },
-    { id: "trashed", header: "Trashed", sortValue: (r) => r.run.trashedAt, cell: (r) => (r.run.trashedAt ? formatDateTime(r.run.trashedAt) : "–") },
-    { id: "prepared", header: "Prepared", align: "right", sortValue: (r) => r.entries, cell: (r) => (r.entries > 0 ? <Pill tone="muted">{plural(r.entries, "entry", "entries")}</Pill> : "–") },
+    { id: "stage", header: m.projects_col_stage(), cell: (r) => <GateLabel state={r.run.completion === "complete" ? "done" : r.stage.state} label={r.run.completion === "complete" ? m.status_complete() : r.stage.label} /> },
+    { id: "trashed", header: m.status_trashed(), sortValue: (r) => r.run.trashedAt, cell: (r) => (r.run.trashedAt ? formatDateTime(r.run.trashedAt) : "–") },
+    { id: "prepared", header: m.status_prepared(), align: "right", sortValue: (r) => r.entries, cell: (r) => (r.entries > 0 ? <Pill tone="muted">{m.trash_entries({ count: r.entries })}</Pill> : "–") },
     {
       id: "results",
-      header: "Results",
+      header: m.status_role_results(),
       cell: (r) =>
         r.results === 0 ? (
           "–"
@@ -133,20 +136,21 @@ export function ProjectTrashPage() {
           <label className="inline-flex items-center gap-2">
             <Checkbox checked={tickedLive.includes(r.run.id)} onCheckedChange={(checked) => setTicked((list) => (checked ? [...list, r.run.id] : list.filter((id) => id !== r.run.id)))} />
             <span>
-              Trash {plural(r.results, "file")}
-              <span className="sr-only"> of {r.run.name}</span>
+              {m.trash_results_files({ count: r.results })}
+              <span className="sr-only"> {m.trash_of_run({ name: r.run.name })}</span>
             </span>
           </label>
         ),
     },
     {
       id: "actions",
-      header: "Actions",
+      header: m.project_col_actions(),
       align: "right",
       cell: (r) => (
         <Button size="sm" variant="outline" onClick={() => setPending({ kind: "restore", run: r.run })}>
           <RotateCcw aria-hidden="true" data-icon="inline-start" />
-          Restore<span className="sr-only"> {r.run.name}</span>
+          {m.project_restore()}
+          <span className="sr-only"> {r.run.name}</span>
         </Button>
       ),
     },
@@ -154,9 +158,9 @@ export function ProjectTrashPage() {
 
   const menu = (r: Row): MenuEntry[] => [
     { heading: r.run.name },
-    { label: "Restore", icon: RotateCcw, onSelect: () => setPending({ kind: "restore", run: r.run }) },
+    { label: m.project_restore(), icon: RotateCcw, onSelect: () => setPending({ kind: "restore", run: r.run }) },
     { separator: true },
-    { label: "Empty this run…", icon: Trash2, destructive: true, onSelect: () => setPending({ kind: "empty", runIds: [r.run.id] }) },
+    { label: m.trash_empty_run_ellipsis(), icon: Trash2, destructive: true, onSelect: () => setPending({ kind: "empty", runIds: [r.run.id] }) },
   ]
 
   const restoring = pending?.kind === "restore" ? pending.run : null
@@ -170,20 +174,20 @@ export function ProjectTrashPage() {
             {project.name}
           </Link>
         }
-        title="Trash"
-        meta={rows.length > 0 ? <CountBadge count={rows.length} label={plural(rows.length, "run")} /> : null}
+        title={m.trash_title()}
+        meta={rows.length > 0 ? <CountBadge count={rows.length} label={m.project_runs_count({ count: rows.length })} /> : null}
         actions={
           rows.length > 0 ? (
             <Button size="sm" variant="destructive" onClick={() => setPending({ kind: "empty", runIds: allIds })}>
               <Trash2 aria-hidden="true" data-icon="inline-start" />
-              Empty Trash…
+              {m.trash_empty_ellipsis()}
             </Button>
           ) : null
         }
       />
       <PageBody>
         <DataTable
-          label={`Trash of ${project.name}`}
+          label={m.trash_of_project({ name: project.name })}
           rows={rows}
           columns={columns}
           getRowId={(r) => r.run.id}
@@ -192,18 +196,18 @@ export function ProjectTrashPage() {
           empty={
             <EmptyState
               icon={Trash2}
-              title="Trash is empty"
+              title={m.trash_is_empty()}
               description={null}
               action={
                 <Button size="sm" variant="outline" render={<Link to="/projects/$projectId" params={{ projectId }} />}>
-                  Open {project.name}
+                  {m.activity_open_destination({ name: project.name })}
                 </Button>
               }
             />
           }
         />
         {operationId ? (
-          <Box title="Last Empty Trash" level={2}>
+          <Box title={m.trash_last_empty()} level={2}>
             <OperationPanel operationId={operationId} />
           </Box>
         ) : null}
@@ -211,20 +215,20 @@ export function ProjectTrashPage() {
       <ConfirmDialog
         open={restoring !== null}
         onOpenChange={(open) => !open && setPending(null)}
-        title={`Restore ${restoring?.name ?? "run"}?`}
-        description="Back as it was when trashed."
-        changes={restoring ? [`${restoring.name} → ${restoring.groupId ? "its run group" : "the Project's runs"}`, "Members count in project again"] : []}
-        confirmLabel="Restore run"
+        title={m.trash_restore_title({ name: restoring?.name ?? m.project_run_noun() })}
+        description={m.trash_restore_description()}
+        changes={restoring ? [restoring.groupId ? m.trash_restore_to_group({ name: restoring.name }) : m.trash_restore_to_runs({ name: restoring.name }), m.trash_restore_members()] : []}
+        confirmLabel={m.trash_restore_run()}
         onConfirm={() => (restoring ? restoreRun(restoring.id) : undefined)}
       />
       <ConfirmDialog
         open={emptying !== null}
         onOpenChange={(open) => !open && setPending(null)}
-        title={emptying && emptying.length === 1 ? "Empty this run?" : `Empty ${plural(emptying?.length ?? 0, "run")}?`}
-        description="Files go to the OS Trash after each is re-verified."
+        title={emptying && emptying.length === 1 ? m.trash_empty_run_title() : m.trash_empty_runs_title({ count: emptying?.length ?? 0 })}
+        description={m.trash_empty_description()}
         changes={preview.changes}
         unchanged={preview.unchanged}
-        confirmLabel={emptying && emptying.length === 1 ? "Empty run" : "Empty Trash"}
+        confirmLabel={emptying && emptying.length === 1 ? m.trash_empty_run() : m.trash_empty()}
         tone="destructive"
         onConfirm={() => (emptying ? runEmptyTrash(projectId, emptying, tickedLive.filter((id) => emptying.includes(id))) : undefined)}
       />

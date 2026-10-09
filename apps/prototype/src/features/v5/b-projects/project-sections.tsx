@@ -22,11 +22,11 @@ import { StatusBadge } from "@/components/app/status"
 import { NoteMarker } from "@/components/app/tips"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { GateLabel, StepRail, useFollowLink } from "@/app/run-ui"
+import { useMessages } from "@/app/preferences"
+import { GateLabel, gateWord, StepRail, useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
 import {
   formatHours,
-  GATE_LABEL,
   goalProgress,
   groupPipeline,
   latestRevision,
@@ -54,7 +54,8 @@ import { qualityApplicability } from "@/domain/library"
 import { bestWindowTonight, defaultCriteria, tonightAt } from "@/domain/planning"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
 import type { Catalog, Goal, GoalChannel, MosaicPanel, Project, Run, Session, Subject } from "@/domain/types"
-import { formatDec, formatDegrees, formatNight, formatRa, formatTime, plural } from "@/lib/format"
+import { formatCount, formatDec, formatDegrees, formatNight, formatRa, formatTime } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import { addRig, addSubject, applyGoalTemplate, goalsFromTemplate, removeRig, removeSubject, setGoals } from "@/store/actions/projects"
 import { completeRun, startRun, trashRun } from "@/store/actions/runs"
 import { freshId } from "@/store/actions/shared"
@@ -72,6 +73,7 @@ const TD = "py-1.5 pr-3 align-top"
 
 /** A native-looking table that fills a flush Box. */
 function SimpleTable({ caption, headers, children }: { caption: string; headers: string[]; children: React.ReactNode }) {
+  const m = useMessages()
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -80,7 +82,7 @@ function SimpleTable({ caption, headers, children }: { caption: string; headers:
           <tr className="border-b border-separator">
             {headers.map((h, i) => (
               <th key={h || i} scope="col" className={`${TH} ${i === 0 ? "pl-3" : ""}`}>
-                {h || <span className="sr-only">Actions</span>}
+                {h || <span className="sr-only">{m.project_col_actions()}</span>}
               </th>
             ))}
           </tr>
@@ -114,6 +116,7 @@ function runBlockers(state: PrototypeState, project: Project, reasons: string[])
 type RunDialog = { kind: "complete" | "trash"; run: Run } | null
 
 export function RunsSection({ project }: { project: Project }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const follow = useFollowLink()
   const navigate = useNavigate()
@@ -128,9 +131,9 @@ export function RunsSection({ project }: { project: Project }) {
 
   const menu = (run: Run, step: string): MenuEntry[] => [
     { heading: run.name },
-    { label: "Open", icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: project.id, runId: run.id, step } }) },
-    ...(open && run.completion !== "complete" ? [{ label: "Complete…", icon: CheckCheck, onSelect: () => setDialog({ kind: "complete", run }) }] : []),
-    ...(open ? [{ separator: true } as const, { label: "Move to Trash…", icon: Trash2, destructive: true, onSelect: () => setDialog({ kind: "trash", run }) }] : []),
+    { label: m.verb_open(), icon: Eye, onSelect: () => void navigate({ to: "/projects/$projectId/runs/$runId/$step", params: { projectId: project.id, runId: run.id, step } }) },
+    ...(open && run.completion !== "complete" ? [{ label: m.project_run_complete_ellipsis(), icon: CheckCheck, onSelect: () => setDialog({ kind: "complete", run }) }] : []),
+    ...(open ? [{ separator: true } as const, { label: m.trash_move_ellipsis(), icon: Trash2, destructive: true, onSelect: () => setDialog({ kind: "trash", run }) }] : []),
   ]
 
   return (
@@ -140,7 +143,7 @@ export function RunsSection({ project }: { project: Project }) {
       flush
       title={
         <span className="flex items-center gap-1.5">
-          Runs <CountBadge count={runs.length + groups.length} label={plural(runs.length + groups.length, "run")} />
+          {m.common_runs()} <CountBadge count={runs.length + groups.length} label={m.project_runs_count({ count: runs.length + groups.length })} />
         </span>
       }
       actions={
@@ -148,13 +151,13 @@ export function RunsSection({ project }: { project: Project }) {
           {trashed > 0 ? (
             <Button size="sm" variant="ghost" render={<Link to="/projects/$projectId/trash" params={{ projectId: project.id }} />}>
               <Trash2 aria-hidden="true" data-icon="inline-start" />
-              Trash <CountBadge count={trashed} label={plural(trashed, "trashed run")} />
+              {m.trash_title()} <CountBadge count={trashed} label={m.project_trashed_runs({ count: trashed })} />
             </Button>
           ) : null}
           {open ? (
             <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId: project.id })}>
               <Play aria-hidden="true" data-icon="inline-start" />
-              Start run
+              {m.startrun_title()}
             </Button>
           ) : null}
         </>
@@ -162,12 +165,12 @@ export function RunsSection({ project }: { project: Project }) {
     >
       <CommitOutcome
         result={action.result}
-        action={dialog?.kind === "trash" ? "Can't trash run" : "Can't complete run"}
-        reason={(n) => plural(n, "blocker")}
+        action={dialog?.kind === "trash" ? m.project_refusal_trash_run() : m.project_refusal_complete_run()}
+        reason={(count) => m.refusal_blockers({ count })}
         className="border-b border-border px-3 py-2"
       />
       {runs.length === 0 && groups.length === 0 ? (
-        <Empty>No runs yet</Empty>
+        <Empty>{m.project_no_runs()}</Empty>
       ) : (
         <ul className="divide-y divide-separator">
           {runs.map((run) => {
@@ -182,13 +185,13 @@ export function RunsSection({ project }: { project: Project }) {
                       {run.name}
                     </Link>
                     <span className="flex flex-wrap items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
-                      {subject ? subjectName(state.catalog, subject) : "Unknown subject"} · {rigName(state.catalog, run.rigId)}
+                      {subject ? subjectName(state.catalog, subject) : m.project_unknown_subject()} · {rigName(state.catalog, run.rigId)}
                       <StatusBadge kind="run" value={pipeline.status} />
-                      {held ? <GateLabel state={held.state} label={`${GATE_LABEL[held.state]} at ${held.label}`} /> : null}
-                      {held ? <NoteMarker label={`Why ${run.name} is held`}>{pipeline.blocker!.message}</NoteMarker> : null}
+                      {held ? <GateLabel state={held.state} label={m.project_held_at({ state: gateWord(m, held.state), step: held.label })} /> : null}
+                      {held ? <NoteMarker label={m.project_why_held({ name: run.name })}>{pipeline.blocker!.message}</NoteMarker> : null}
                     </span>
                   </div>
-                  <StepRail steps={pipeline.steps} current={pipeline.current.id} label={`Steps of ${run.name}`} />
+                  <StepRail steps={pipeline.steps} current={pipeline.current.id} label={m.project_steps_of({ name: run.name })} />
                   <NextButton next={pipeline.next} onFollow={follow} runName={run.name} />
                 </li>
               </RowContextMenu>
@@ -206,12 +209,12 @@ export function RunsSection({ project }: { project: Project }) {
                     </Link>
                     <span className="flex flex-wrap items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
                       <Pill tone="info" icon={Layers}>
-                        {plural(pipeline.panels.length, "panel")}
+                        {m.project_panels({ count: pipeline.panels.length })}
                       </Pill>
                       {rigName(state.catalog, group.rigId)}
                     </span>
                   </div>
-                  <StepRail steps={pipeline.steps} current={current.id} label={`Steps of ${group.name}`} />
+                  <StepRail steps={pipeline.steps} current={current.id} label={m.project_steps_of({ name: group.name })} />
                   <NextButton next={pipeline.next} onFollow={follow} runName={group.name} />
                 </div>
                 <ul className="ml-3 space-y-1 border-l border-separator pl-3">
@@ -227,7 +230,7 @@ export function RunsSection({ project }: { project: Project }) {
                           <Link to="/projects/$projectId/runs/$runId/$step" params={{ projectId: project.id, runId: p.run.id, step: p.pipeline.current.id }} className="w-16 font-medium underline-offset-2 hover:underline">
                             {panelLabel(p.panel)}
                           </Link>
-                          <StepRail compact steps={p.pipeline.steps} current={p.pipeline.current.id} label={`Steps of ${p.run.name}`} />
+                          <StepRail compact steps={p.pipeline.steps} current={p.pipeline.current.id} label={m.project_steps_of({ name: p.run.name })} />
                           <GateLabel state={p.pipeline.current.state} label={`${p.pipeline.current.label}: ${p.pipeline.current.status}`} className="text-muted-foreground" />
                         </li>
                       </RowContextMenu>
@@ -242,11 +245,11 @@ export function RunsSection({ project }: { project: Project }) {
       <ConfirmDialog
         open={dialog?.kind === "complete"}
         onOpenChange={(next) => !next && setDialog(null)}
-        title={`Complete ${dialog?.run.name ?? "run"}?`}
-        description="Reopen returns it to its step."
-        changes={[`${dialog?.run.name ?? "Run"} → Complete`]}
-        unchanged={openSteps.length > 0 ? openSteps.map((s) => `${s.label} stays ${GATE_LABEL[s.state]}`) : undefined}
-        confirmLabel="Complete run"
+        title={m.project_run_complete_title({ name: dialog?.run.name ?? m.project_run_noun() })}
+        description={m.project_run_complete_description()}
+        changes={[m.project_run_to_complete({ name: dialog?.run.name ?? m.project_run_noun_capital() })]}
+        unchanged={openSteps.length > 0 ? openSteps.map((s) => m.project_step_stays({ step: s.label, state: gateWord(m, s.state) })) : undefined}
+        confirmLabel={m.project_run_complete()}
         onConfirm={() => {
           if (dialog) action.run(() => completeRun(dialog.run.id))
         }}
@@ -254,10 +257,10 @@ export function RunsSection({ project }: { project: Project }) {
       <ConfirmDialog
         open={dialog?.kind === "trash"}
         onOpenChange={(next) => !next && setDialog(null)}
-        title={`Move ${dialog?.run.name ?? "run"} to Trash?`}
-        description="Restore brings it back as it was."
-        changes={[`${dialog?.run.name ?? "Run"} → Project Trash`, "Its members stop counting toward goals"]}
-        confirmLabel="Move to Trash"
+        title={m.project_run_trash_title({ name: dialog?.run.name ?? m.project_run_noun() })}
+        description={m.project_run_trash_description()}
+        changes={[m.project_run_to_trash({ name: dialog?.run.name ?? m.project_run_noun_capital() }), m.project_run_trash_goals()]}
+        confirmLabel={m.trash_move()}
         tone="destructive"
         onConfirm={() => {
           if (dialog) action.run(() => trashRun(dialog.run.id))
@@ -268,11 +271,12 @@ export function RunsSection({ project }: { project: Project }) {
 }
 
 function NextButton({ next, onFollow, runName }: { next: ReturnType<typeof runPipeline>["next"]; onFollow: (link: NonNullable<ReturnType<typeof runPipeline>["next"]>["link"]) => void; runName: string }) {
+  const m = useMessages()
   if (!next) return <span className="text-xs text-muted-foreground">–</span>
   return (
     <Button size="sm" variant="outline" title={next.reason} onClick={() => onFollow(next.link)}>
       {next.label}
-      <span className="sr-only"> for {runName}</span>
+      <span className="sr-only"> {m.projects_next_for({ name: runName })}</span>
     </Button>
   )
 }
@@ -294,14 +298,19 @@ interface CandidateRow {
   session: Session
   subject: Subject
   rigId: string
-  placement: string | null
+  /** The session's panel, or its placement flag (a warning). */
+  placement: { label: string; panel: boolean } | null
   frames: number
   unreviewed: number
   runs: string[]
   firstAssetId: string | null
 }
 
-function candidateRows(state: PrototypeState, project: Project): CandidateRow[] {
+function placementWord(m: Messages, flag: string | null): string {
+  return flag === "ambiguous" ? m.project_placement_ambiguous() : flag === "off-panel" ? m.project_placement_off_panel() : m.project_placement_no_pointing()
+}
+
+function candidateRows(m: Messages, state: PrototypeState, project: Project): CandidateRow[] {
   const { catalog } = state
   const runs = projectRuns(catalog, project.id)
   return projectCandidates(catalog, project).map((c) => {
@@ -312,28 +321,31 @@ function candidateRows(state: PrototypeState, project: Project): CandidateRow[] 
       session: c.session,
       subject: c.subject,
       rigId: c.rigId,
-      placement: placed ? (panel ? panelLabel(panel) : placed.flag === "ambiguous" ? "Ambiguous" : placed.flag === "off-panel" ? "Off panel" : "No pointing") : null,
+      placement: placed ? (panel ? { label: panelLabel(panel), panel: true } : { label: placementWord(m, placed.flag), panel: false }) : null,
       frames: assets.length,
       unreviewed: unreviewed(catalog, c.session),
-      runs: runs.filter((r) => latestRevision(r)?.sessions.some((m) => m.sessionId === c.session.id)).map((r) => r.name),
+      runs: runs.filter((r) => latestRevision(r)?.sessions.some((member) => member.sessionId === c.session.id)).map((r) => r.name),
       firstAssetId: assets[0] ?? null,
     }
   })
 }
 
-const FILTERS: Array<[CandidateFilter, string]> = [
-  ["all", "All"],
-  ["unreviewed", "Unreviewed"],
-  ["ready", "Not in a run"],
-]
+function candidateFilters(m: Messages): Array<[CandidateFilter, string]> {
+  return [
+    ["all", m.project_filter_all()],
+    ["unreviewed", m.status_unreviewed()],
+    ["ready", m.project_filter_not_in_run()],
+  ]
+}
 
 export function CandidatesSection({ project }: { project: Project }) {
+  const m = useMessages()
   const navigate = useNavigate()
   const [filter, setFilter] = useState<CandidateFilter>("all")
   const [selected, setSelected] = useState<string[]>([])
   const [refusal, setRefusal] = useState<{ action: string; reason: string; blockers: Array<{ label: string }> } | null>(null)
   const start = useCommitError()
-  const rows = useStore((s) => candidateRows(s, project))
+  const rows = useStore((s) => candidateRows(m, s, project))
   const catalog = useStore((s) => s.catalog)
   const flagged = useStore((s) =>
     projectRuns(s.catalog, project.id).flatMap((run) => runRefresh(s.catalog, run).noLongerMatching.map((sessionId) => ({ run, session: s.catalog.sessions[sessionId] }))),
@@ -352,7 +364,7 @@ export function CandidatesSection({ project }: { project: Project }) {
     const picked = rows.filter((r) => ids.includes(r.session.id))
     const combos = [...new Map(picked.map((r) => [`${r.subject.id}|${r.rigId}`, r])).values()]
     if (combos.length !== 1) {
-      setRefusal({ action: "Can't start run", reason: `${combos.length} subject and rig pairs`, blockers: combos.map((r) => ({ label: `${subjectName(catalog, r.subject)} · ${rigName(catalog, r.rigId)}` })) })
+      setRefusal({ action: m.startrun_refusal(), reason: m.startrun_refusal_pairs({ count: combos.length }), blockers: combos.map((r) => ({ label: `${subjectName(catalog, r.subject)} · ${rigName(catalog, r.rigId)}` })) })
       return
     }
     const { subject, rigId } = combos[0]!
@@ -371,46 +383,46 @@ export function CandidatesSection({ project }: { project: Project }) {
   const columns: Column<CandidateRow>[] = [
     {
       id: "session",
-      header: "Session",
+      header: m.project_col_session(),
       rowHeader: true,
       sortValue: (r) => r.session.night,
       cell: (r) => (
         <Link to="/sessions/$sessionId" params={{ sessionId: r.session.id }} className="font-medium whitespace-nowrap underline-offset-2 hover:underline">
-          {formatNight(r.session.night)} · {r.session.channel ?? "No filter"}
+          {formatNight(r.session.night)} · {r.session.channel ?? m.palette_session_no_filter()}
         </Link>
       ),
     },
     {
       id: "subject",
-      header: "Subject",
+      header: m.project_col_subject(),
       sortValue: (r) => subjectName(catalog, r.subject),
       cell: (r) => (
         <span className="flex flex-wrap items-center gap-1">
           {subjectName(catalog, r.subject)}
-          {r.placement ? <Pill tone={r.placement.startsWith("Panel") ? "muted" : "warning"}>{r.placement}</Pill> : null}
+          {r.placement ? <Pill tone={r.placement.panel ? "muted" : "warning"}>{r.placement.label}</Pill> : null}
         </span>
       ),
     },
-    { id: "rig", header: "Rig", cell: (r) => rigName(catalog, r.rigId), truncate: true },
-    { id: "frames", header: "Frames", align: "right", sortValue: (r) => r.frames, cell: (r) => <span className="tabular-nums">{r.frames}</span> },
+    { id: "rig", header: m.project_col_rig(), cell: (r) => rigName(catalog, r.rigId), truncate: true },
+    { id: "frames", header: m.goal_frames(), align: "right", sortValue: (r) => r.frames, cell: (r) => <span className="tabular-nums">{r.frames}</span> },
     {
       id: "unreviewed",
-      header: "Unreviewed",
+      header: m.status_unreviewed(),
       align: "right",
       sortValue: (r) => r.unreviewed,
-      cell: (r) => (r.unreviewed > 0 ? <CountBadge count={r.unreviewed} tone="warning" label={`${r.unreviewed} unreviewed`} /> : <span className="text-muted-foreground">0</span>),
+      cell: (r) => (r.unreviewed > 0 ? <CountBadge count={r.unreviewed} tone="warning" label={m.project_unreviewed_count({ count: r.unreviewed })} /> : <span className="text-muted-foreground">0</span>),
     },
-    { id: "runs", header: "In run", cell: (r) => (r.runs.length > 0 ? <span className="text-xs">{r.runs.join(", ")}</span> : <Pill tone="info">Ready</Pill>) },
+    { id: "runs", header: m.project_col_in_run(), cell: (r) => (r.runs.length > 0 ? <span className="text-xs">{r.runs.join(", ")}</span> : <Pill tone="info">{m.status_ready()}</Pill>) },
   ]
 
   const menu = (r: CandidateRow): MenuEntry[] => {
     const ids = live.includes(r.session.id) && live.length > 1 ? live : [r.session.id]
     return [
-      { heading: ids.length > 1 ? plural(ids.length, "session") : `${formatNight(r.session.night)} · ${r.session.channel ?? "No filter"}` },
-      { label: "Review frames", icon: Eye, onSelect: () => review(r.firstAssetId) },
-      ...(open ? [{ label: ids.length > 1 ? `Start run (${ids.length})` : "Start run", icon: Play, onSelect: () => startFrom(ids) }] : []),
+      { heading: ids.length > 1 ? m.project_sessions_count({ count: ids.length }) : `${formatNight(r.session.night)} · ${r.session.channel ?? m.palette_session_no_filter()}` },
+      { label: m.session_review_frames(), icon: Eye, onSelect: () => review(r.firstAssetId) },
+      ...(open ? [{ label: ids.length > 1 ? m.startrun_with_count({ count: ids.length }) : m.startrun_title(), icon: Play, onSelect: () => startFrom(ids) }] : []),
       { separator: true },
-      { label: "Open session", onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: r.session.id } }) },
+      { label: m.project_open_session(), onSelect: () => void navigate({ to: "/sessions/$sessionId", params: { sessionId: r.session.id } }) },
     ]
   }
 
@@ -421,17 +433,17 @@ export function CandidatesSection({ project }: { project: Project }) {
       flush
       title={
         <span className="flex items-center gap-1.5">
-          Candidates <CountBadge count={rows.length} label={plural(rows.length, "session")} />
+          {m.project_candidates()} <CountBadge count={rows.length} label={m.project_sessions_count({ count: rows.length })} />
         </span>
       }
       actions={
         rows.length > 0 ? (
           <>
-            {ready > 0 ? <Pill tone="info">{ready} ready</Pill> : null}
+            {ready > 0 ? <Pill tone="info">{m.project_ready_count({ count: ready })}</Pill> : null}
             <Button size="sm" variant="outline" onClick={() => review()}>
               <Eye aria-hidden="true" data-icon="inline-start" />
-              Review frames
-              {unreviewedFrames > 0 ? <CountBadge count={unreviewedFrames} tone="warning" label={`${unreviewedFrames} unreviewed`} /> : null}
+              {m.session_review_frames()}
+              {unreviewedFrames > 0 ? <CountBadge count={unreviewedFrames} tone="warning" label={m.project_unreviewed_count({ count: unreviewedFrames })} /> : null}
             </Button>
           </>
         ) : null
@@ -440,19 +452,19 @@ export function CandidatesSection({ project }: { project: Project }) {
       {flagged.length > 0 ? (
         <div className="border-b border-border px-3 py-2">
           <Refusal
-            action={`${plural(flagged.length, "member")} no longer match`}
-            reason="subject changed"
-            blockers={flagged.map(({ run, session }) => ({ label: `${session ? sessionLabel(catalog, session) : "Session"} · ${run.name}`, link: runStepLink(run, "select") }))}
+            action={m.project_members_no_longer_match({ count: flagged.length })}
+            reason={m.project_subject_changed()}
+            blockers={flagged.map(({ run, session }) => ({ label: `${session ? sessionLabel(catalog, session) : m.project_col_session()} · ${run.name}`, link: runStepLink(run, "select") }))}
           />
         </div>
       ) : null}
       {rows.length === 0 ? (
-        <Empty>No candidates</Empty>
+        <Empty>{m.project_no_candidates()}</Empty>
       ) : (
         <div className="space-y-2 p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex gap-1" role="group" aria-label="Candidates filter">
-              {FILTERS.map(([value, label]) => (
+            <div className="flex gap-1" role="group" aria-label={m.project_candidates_filter()}>
+              {candidateFilters(m).map(([value, label]) => (
                 <Button key={value} size="sm" variant={filter === value ? "secondary" : "ghost"} aria-pressed={filter === value} onClick={() => setFilter(value)}>
                   {label}
                 </Button>
@@ -467,7 +479,7 @@ export function CandidatesSection({ project }: { project: Project }) {
                   open ? (
                     <Button size="sm" onClick={() => startFrom(live)}>
                       <Play aria-hidden="true" data-icon="inline-start" />
-                      Start run
+                      {m.startrun_title()}
                     </Button>
                   ) : null
                 }
@@ -475,16 +487,16 @@ export function CandidatesSection({ project }: { project: Project }) {
             ) : null}
           </div>
           {refusal ? <Refusal {...refusal} /> : null}
-          <CommitOutcome result={start.result} action="Can't start run" />
+          <CommitOutcome result={start.result} action={m.startrun_refusal()} />
           <DataTable
-            label={`Candidate sessions of ${project.name}`}
+            label={m.project_candidate_sessions_of({ name: project.name })}
             rows={shown}
             columns={columns}
             getRowId={(r) => r.session.id}
             selection={open ? { selected: live, onChange: setSelected, rowLabel: (r) => sessionLabel(catalog, r.session) } : undefined}
             contextMenu={menu}
             scroll="none"
-            empty={<Empty>{filter === "unreviewed" ? "None unreviewed" : "Every candidate is in a run"}</Empty>}
+            empty={<Empty>{filter === "unreviewed" ? m.project_none_unreviewed() : m.project_all_in_runs()}</Empty>}
           />
         </div>
       )}
@@ -496,13 +508,13 @@ export function CandidatesSection({ project }: { project: Project }) {
 // Goals: structured kinds and channel chips (D-W29, D-W30)
 // ---------------------------------------------------------------------------
 
-function kindsLine(goal: Pick<Goal, "integrationS" | "frameCount" | "qualityBar">): string {
-  const parts = [goal.integrationS !== null ? formatHours(goal.integrationS) : null, goal.frameCount !== null ? plural(goal.frameCount, "frame") : null, goal.qualityBar ? qualityBarLabel(goal.qualityBar) : null].filter(Boolean)
-  return parts.join(" · ") || "No target"
+function kindsLine(m: Messages, goal: Pick<Goal, "integrationS" | "frameCount" | "qualityBar">): string {
+  const parts = [goal.integrationS !== null ? formatHours(goal.integrationS) : null, goal.frameCount !== null ? m.project_frames_count({ count: goal.frameCount, n: formatCount(goal.frameCount) }) : null, goal.qualityBar ? qualityBarLabel(goal.qualityBar) : null].filter(Boolean)
+  return parts.join(" · ") || m.status_not_set()
 }
 
 /** What applying a template changes, grouped by channel and change: "Ha 10h → 15h · 4 goals". Unchanged goals are not listed. */
-export function templateChanges(project: Project, next: Goal[]): string[] {
+export function templateChanges(m: Messages, project: Project, next: Goal[]): string[] {
   const key = (g: Goal) => `${g.subjectId}|${g.panelId ?? ""}|${g.channel}`
   const before = new Map(project.goals.map((g) => [key(g), g]))
   const after = new Map(next.map((g) => [key(g), g]))
@@ -510,14 +522,15 @@ export function templateChanges(project: Project, next: Goal[]): string[] {
   const bump = (line: string) => counts.set(line, (counts.get(line) ?? 0) + 1)
   for (const [k, g] of after) {
     const old = before.get(k)
-    if (!old) bump(`+ ${g.channel} ${kindsLine(g)}`)
-    else if (kindsLine(old) !== kindsLine(g)) bump(`${g.channel} ${kindsLine(old)} → ${kindsLine(g)}`)
+    if (!old) bump(`+ ${g.channel} ${kindsLine(m, g)}`)
+    else if (kindsLine(m, old) !== kindsLine(m, g)) bump(`${g.channel} ${kindsLine(m, old)} → ${kindsLine(m, g)}`)
   }
-  for (const [k, g] of before) if (!after.has(k)) bump(`− ${g.channel} ${kindsLine(g)}`)
-  return [...counts].map(([line, n]) => (n > 1 ? `${line} · ${plural(n, "goal")}` : line))
+  for (const [k, g] of before) if (!after.has(k)) bump(`− ${g.channel} ${kindsLine(m, g)}`)
+  return [...counts].map(([line, n]) => (n > 1 ? `${line} · ${m.project_goals_count({ count: n })}` : line))
 }
 
 export function GoalsSection({ project }: { project: Project }) {
+  const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const progress = useStore((s) => goalProgress(s.catalog, project))
   const warnings = useStore((s) => projectWarnings(s.disk, s.catalog, project))
@@ -531,7 +544,7 @@ export function GoalsSection({ project }: { project: Project }) {
   const groups = project.subjects.flatMap<{ subject: Subject; panel: MosaicPanel | null }>((subject) =>
     subject.mosaic ? subject.mosaic.panels.map((p) => ({ subject, panel: p })) : [{ subject, panel: null }],
   )
-  const preview = template ? templateChanges(project, project.subjects.flatMap((s) => goalsFromTemplate(template, s))) : []
+  const preview = template ? templateChanges(m, project, project.subjects.flatMap((s) => goalsFromTemplate(template, s))) : []
 
   const edit = (id: string, patch: Partial<Goal>) => setEditing((list) => list?.map((g) => (g.id === id ? { ...g, ...patch } : g)) ?? null)
 
@@ -539,36 +552,36 @@ export function GoalsSection({ project }: { project: Project }) {
     <Box
       id="goals"
       level={2}
-      title="Goals"
+      title={m.projects_col_goals()}
       actions={
         editable ? (
           editing ? (
             <>
               <Button size="sm" variant="outline" onClick={() => setEditing(null)}>
-                Cancel
+                {m.verb_cancel()}
               </Button>
               <Button size="sm" onClick={() => save.run(() => setGoals(project.id, editing, project.revision)) && setEditing(null)}>
-                Save goals
+                {m.goal_save()}
               </Button>
             </>
           ) : (
             <>
-              <SelectField className="w-44 [&>label]:sr-only" label="Goal template" value={templateId} onChange={setTemplateId} options={templates.map((t) => ({ value: t.id, label: t.name }))} />
+              <SelectField className="w-44 [&>label]:sr-only" label={m.goal_template()} value={templateId} onChange={setTemplateId} options={templates.map((t) => ({ value: t.id, label: t.name }))} />
               <ConfirmDialog
                 trigger={
                   <Button size="sm" variant="ghost">
-                    Apply
+                    {m.goal_apply()}
                   </Button>
                 }
-                title={`Apply ${template?.name ?? "template"}?`}
-                description="Values are copied in and stay editable."
-                changes={preview.length > 0 ? preview : ["No goal changes"]}
-                confirmLabel="Apply template"
+                title={m.goal_apply_title({ name: template?.name ?? m.goal_template_noun() })}
+                description={m.goal_apply_description()}
+                changes={preview.length > 0 ? preview : [m.goal_no_changes()]}
+                confirmLabel={m.goal_apply_template()}
                 onConfirm={() => applyGoalTemplate(project.id, templateId, project.revision)}
               />
               <Button size="sm" variant="outline" onClick={() => setEditing(project.goals.map((g) => ({ ...g })))}>
                 <Pencil aria-hidden="true" data-icon="inline-start" />
-                Edit
+                {m.goal_edit()}
               </Button>
             </>
           )
@@ -576,8 +589,8 @@ export function GoalsSection({ project }: { project: Project }) {
       }
     >
       <div className="space-y-3">
-        <CommitOutcome result={save.result} action="Can't save goals" />
-        {groups.length === 0 ? <p className="text-sm text-muted-foreground">No subjects</p> : null}
+        <CommitOutcome result={save.result} action={m.goal_refusal_save()} />
+        {groups.length === 0 ? <p className="text-sm text-muted-foreground">{m.projects_no_subjects()}</p> : null}
         {groups.map(({ subject, panel }) => {
           const rows = (editing ?? project.goals).filter((g) => g.subjectId === subject.id && (g.panelId ?? null) === (panel?.id ?? null))
           return (
@@ -586,7 +599,7 @@ export function GoalsSection({ project }: { project: Project }) {
                 {subjectName(catalog, subject)}
                 {panel ? <Pill tone="muted">{panelLabel(panel)}</Pill> : null}
               </h3>
-              {rows.length === 0 && !editing ? <p className="text-xs text-muted-foreground">No goals</p> : null}
+              {rows.length === 0 && !editing ? <p className="text-xs text-muted-foreground">{m.projects_no_goals()}</p> : null}
               {rows.length > 0 ? (
                 <ul className="divide-y divide-separator rounded-md border border-border">
                   {rows.map((goal) => {
@@ -598,24 +611,24 @@ export function GoalsSection({ project }: { project: Project }) {
                         {editing ? (
                           <>
                             <GoalKindsFields channel={goal.channel} value={goal} onChange={(patch) => edit(goal.id, patch)} />
-                            <Button size="icon-sm" variant="ghost" className="ml-auto" aria-label={`Remove ${goal.channel} goal`} onClick={() => setEditing((list) => list?.filter((g) => g.id !== goal.id) ?? null)}>
+                            <Button size="icon-sm" variant="ghost" className="ml-auto" aria-label={m.goal_remove_goal({ channel: goal.channel })} onClick={() => setEditing((list) => list?.filter((g) => g.id !== goal.id) ?? null)}>
                               <X aria-hidden="true" />
                             </Button>
                           </>
                         ) : (
                           <>
-                            <span className="min-w-0 flex-1 tabular-nums">{p?.line.replace(new RegExp(`^${goal.channel} `), "") ?? kindsLine(goal)}</span>
+                            <span className="min-w-0 flex-1 tabular-nums">{p?.line.replace(new RegExp(`^${goal.channel} `), "") ?? kindsLine(m, goal)}</span>
                             {goal.qualityBar ? <Pill tone="muted">{qualityBarLabel(goal.qualityBar)}</Pill> : null}
-                            {p && p.unknownQuality > 0 ? <NoteMarker label="Unmeasured members">{plural(p.unknownQuality, "member")} unmeasured · not counted</NoteMarker> : null}
+                            {p && p.unknownQuality > 0 ? <NoteMarker label={m.goal_unmeasured_label()}>{m.goal_unmeasured({ count: p.unknownQuality })}</NoteMarker> : null}
                             {rowWarnings.map((w) => (
                               <Pill key={w.message} tone="warning" title={w.message}>
-                                {w.kind === "exposure-mismatch" ? "Exposure mismatch" : "Missing calibration"}
+                                {w.kind === "exposure-mismatch" ? m.goal_warning_exposure() : m.goal_warning_calibration()}
                               </Pill>
                             ))}
                             {p?.met ? (
-                              <Pill tone="success">Met</Pill>
+                              <Pill tone="success">{m.status_met()}</Pill>
                             ) : p && p.remainingS !== null ? (
-                              <span className="text-xs text-muted-foreground tabular-nums">{formatHours(p.remainingS)} to go</span>
+                              <span className="text-xs text-muted-foreground tabular-nums">{m.goal_to_go({ duration: formatHours(p.remainingS) })}</span>
                             ) : null}
                           </>
                         )}
@@ -626,7 +639,7 @@ export function GoalsSection({ project }: { project: Project }) {
               ) : null}
               {editing ? (
                 <ChannelChips
-                  label={`Add goal for ${subjectName(catalog, subject)}${panel ? ` ${panelLabel(panel)}` : ""}`}
+                  label={m.goal_add_for({ name: panel ? `${subjectName(catalog, subject)} ${panelLabel(panel)}` : subjectName(catalog, subject) })}
                   channels={channels}
                   taken={rows.map((g) => g.channel)}
                   onAdd={(channel: GoalChannel) =>
@@ -647,6 +660,7 @@ export function GoalsSection({ project }: { project: Project }) {
 // ---------------------------------------------------------------------------
 
 export function SubjectsSection({ project }: { project: Project }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const catalog = state.catalog
   const navigate = useNavigate()
@@ -660,9 +674,9 @@ export function SubjectsSection({ project }: { project: Project }) {
     const target = subjectTarget(catalog, subject)
     return [
       { heading: subjectName(catalog, subject) },
-      ...(target ? [{ label: "Open Target", onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: target.id } }) }] : []),
-      ...(editable ? [{ label: subject.mosaic ? "Start mosaic run" : "Make mosaic", icon: Grid2x2Plus, onSelect: () => mosaicLink(subject.id) }] : []),
-      ...(editable ? [{ separator: true } as const, { label: "Remove", icon: X, destructive: true, onSelect: () => remove.run(() => removeSubject(project.id, subject.id, project.revision)) }] : []),
+      ...(target ? [{ label: m.project_open_target(), onSelect: () => void navigate({ to: "/targets/$targetId", params: { targetId: target.id } }) }] : []),
+      ...(editable ? [{ label: subject.mosaic ? m.mosaic_start_run() : m.mosaic_make(), icon: Grid2x2Plus, onSelect: () => mosaicLink(subject.id) }] : []),
+      ...(editable ? [{ separator: true } as const, { label: m.project_remove(), icon: X, destructive: true, onSelect: () => remove.run(() => removeSubject(project.id, subject.id, project.revision)) }] : []),
     ]
   }
 
@@ -673,7 +687,7 @@ export function SubjectsSection({ project }: { project: Project }) {
       flush
       title={
         <span className="flex items-center gap-1.5">
-          Subjects <CountBadge count={project.subjects.length} label={plural(project.subjects.length, "subject")} />
+          {m.project_subjects()} <CountBadge count={project.subjects.length} label={m.project_subjects_count({ count: project.subjects.length })} />
         </span>
       }
       actions={
@@ -681,17 +695,17 @@ export function SubjectsSection({ project }: { project: Project }) {
           <>
             <Button size="sm" variant="ghost" onClick={() => mosaicLink("new")}>
               <Grid2x2Plus aria-hidden="true" data-icon="inline-start" />
-              New mosaic
+              {m.mosaic_new_button()}
             </Button>
             <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
               <Plus aria-hidden="true" data-icon="inline-start" />
-              Add
+              {m.verb_add()}
             </Button>
           </>
         ) : null
       }
     >
-      <CommitOutcome result={remove.result} action="Can't remove subject" reason={(n) => `used by ${plural(n, "run")}`} blockers={(reasons) => runBlockers(state, project, reasons)} className="border-b border-border px-3 py-2" />
+      <CommitOutcome result={remove.result} action={m.project_refusal_remove_subject()} reason={(count) => m.project_used_by_runs({ count })} blockers={(reasons) => runBlockers(state, project, reasons)} className="border-b border-border px-3 py-2" />
       {adding ? (
         <div className="space-y-2 border-b border-border p-3">
           <SubjectSearch
@@ -706,16 +720,16 @@ export function SubjectsSection({ project }: { project: Project }) {
               if (add.run(() => addSubject(project.id, { targetId: resolved.targetId, mosaic: null }, project.revision))) setAdding(false)
             }}
           />
-          <CommitOutcome result={add.result} action="Can't add subject" />
+          <CommitOutcome result={add.result} action={m.project_refusal_add_subject()} />
           <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>
-            Cancel
+            {m.verb_cancel()}
           </Button>
         </div>
       ) : null}
       {project.subjects.length === 0 ? (
-        <Empty>No subjects</Empty>
+        <Empty>{m.projects_no_subjects()}</Empty>
       ) : (
-        <SimpleTable caption={`Subjects of ${project.name}`} headers={["Subject", "Kind", "Centre", "Runs"]}>
+        <SimpleTable caption={m.project_subjects_of({ name: project.name })} headers={[m.project_col_subject(), m.project_col_kind(), m.project_col_centre(), m.common_runs()]}>
           {project.subjects.map((subject) => {
             const target = subjectTarget(catalog, subject)
             const centre = subjectCentre(catalog, subject)
@@ -734,13 +748,13 @@ export function SubjectsSection({ project }: { project: Project }) {
                   </th>
                   <td className={TD}>
                     {subject.mosaic ? (
-                      <button type="button" className="rounded-full" onClick={() => editable && mosaicLink(subject.id)} disabled={!editable} aria-label={`Mosaic of ${plural(subject.mosaic.panels.length, "panel")}: start mosaic run`}>
+                      <button type="button" className="rounded-full" onClick={() => editable && mosaicLink(subject.id)} disabled={!editable} aria-label={m.mosaic_of_panels({ count: subject.mosaic.panels.length })}>
                         <Pill tone="info" icon={Grid2x2Plus}>
-                          {plural(subject.mosaic.panels.length, "panel")}
+                          {m.project_panels({ count: subject.mosaic.panels.length })}
                         </Pill>
                       </button>
                     ) : (
-                      <Pill tone="muted">Target</Pill>
+                      <Pill tone="muted">{m.project_target_label()}</Pill>
                     )}
                   </td>
                   <td className={`${TD} whitespace-nowrap tabular-nums`}>{centre ? `${formatRa(centre.ra)} ${formatDec(centre.dec)}` : "–"}</td>
@@ -760,6 +774,7 @@ export function SubjectsSection({ project }: { project: Project }) {
 // ---------------------------------------------------------------------------
 
 export function RigsSection({ project }: { project: Project }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const catalog = state.catalog
   const navigate = useNavigate()
@@ -773,8 +788,8 @@ export function RigsSection({ project }: { project: Project }) {
 
   const menu = (id: string): MenuEntry[] => [
     { heading: rigName(catalog, id) },
-    { label: "Open in Equipment", onSelect: () => void navigate({ to: "/settings/equipment" as never }) },
-    ...(editable ? [{ separator: true } as const, { label: "Remove", icon: X, destructive: true, onSelect: () => remove.run(() => removeRig(project.id, id, project.revision)) }] : []),
+    { label: m.project_open_in({ name: m.settings_equipment() }), onSelect: () => void navigate({ to: "/settings/equipment" as never }) },
+    ...(editable ? [{ separator: true } as const, { label: m.project_remove(), icon: X, destructive: true, onSelect: () => remove.run(() => removeRig(project.id, id, project.revision)) }] : []),
   ]
 
   return (
@@ -784,15 +799,15 @@ export function RigsSection({ project }: { project: Project }) {
       flush
       title={
         <span className="flex items-center gap-1.5">
-          Rigs <CountBadge count={project.rigIds.length} label={plural(project.rigIds.length, "rig")} />
+          {m.project_rigs()} <CountBadge count={project.rigIds.length} label={m.project_rigs_count({ count: project.rigIds.length })} />
         </span>
       }
     >
-      <CommitOutcome result={remove.result} action="Can't remove rig" reason={(n) => `used by ${plural(n, "run")}`} blockers={(reasons) => runBlockers(state, project, reasons)} className="border-b border-border px-3 py-2" />
+      <CommitOutcome result={remove.result} action={m.project_refusal_remove_rig()} reason={(count) => m.project_used_by_runs({ count })} blockers={(reasons) => runBlockers(state, project, reasons)} className="border-b border-border px-3 py-2" />
       {project.rigIds.length === 0 ? (
-        <Empty>No rigs</Empty>
+        <Empty>{m.projects_no_rigs()}</Empty>
       ) : (
-        <SimpleTable caption={`Rigs of ${project.name}`} headers={["Rig", "Camera", "Channels", "Field", "Candidates"]}>
+        <SimpleTable caption={m.project_rigs_of({ name: project.name })} headers={[m.project_col_rig(), m.project_col_camera(), m.project_col_channels(), m.project_col_field(), m.project_candidates()]}>
           {project.rigIds.map((id) => {
             const rig = catalog.opticalTrains[id]
             const fov = rig ? rigFieldOfView(catalog, rig) : null
@@ -805,7 +820,7 @@ export function RigsSection({ project }: { project: Project }) {
                     {rigName(catalog, id)}
                   </th>
                   <td className={TD}>
-                    <Pill tone="muted">{kind === "osc" ? "OSC" : kind === "mono" ? "Mono" : "Unknown"}</Pill>
+                    <Pill tone="muted">{kind === "osc" ? m.project_camera_osc() : kind === "mono" ? m.project_camera_mono() : m.status_unknown()}</Pill>
                   </td>
                   <td className={TD}>
                     <span className="flex flex-wrap gap-1">
@@ -822,12 +837,12 @@ export function RigsSection({ project }: { project: Project }) {
       )}
       {editable && chosen ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-border px-3 py-2">
-          <SelectField className="min-w-0 flex-1 [&>label]:sr-only" label="Add a rig" value={chosen.id} onChange={setChoice} options={others.map((r) => ({ value: r.id, label: r.name }))} />
+          <SelectField className="min-w-0 flex-1 [&>label]:sr-only" label={m.project_add_a_rig()} value={chosen.id} onChange={setChoice} options={others.map((r) => ({ value: r.id, label: r.name }))} />
           <Button size="sm" variant="outline" onClick={() => add.run(() => addRig(project.id, chosen.id, project.revision))}>
             <Plus aria-hidden="true" data-icon="inline-start" />
-            Add rig
+            {m.project_add_rig()}
           </Button>
-          <CommitOutcome result={add.result} action="Can't add rig" className="basis-full" />
+          <CommitOutcome result={add.result} action={m.project_refusal_add_rig()} className="basis-full" />
         </div>
       ) : null}
     </Box>
@@ -839,6 +854,7 @@ export function RigsSection({ project }: { project: Project }) {
 // ---------------------------------------------------------------------------
 
 export function PlanningSection({ project }: { project: Project }) {
+  const m = useMessages()
   const state = useStore((s) => s)
   const site = planningSite(state)
   const now = Date.parse(nowIso())
@@ -850,13 +866,13 @@ export function PlanningSection({ project }: { project: Project }) {
       flush
       title={
         <span className="flex flex-wrap items-center gap-1.5">
-          Tonight
+          {m.project_tonight()}
           {site && tonight ? (
             <>
               <Pill tone="muted">{site.name}</Pill>
-              <Pill tone="muted">Moon {Math.round(tonight.moon.illuminationPct)}%</Pill>
+              <Pill tone="muted">{m.project_moon_pct({ pct: Math.round(tonight.moon.illuminationPct) })}</Pill>
               <Pill tone={tonight.darkness ? "muted" : "warning"}>
-                {tonight.darkness ? `Dark ${formatTime(tonight.darkness.start, site.timeZone)}–${formatTime(tonight.darkness.end, site.timeZone)}` : "No darkness"}
+                {tonight.darkness ? m.project_dark_window({ start: formatTime(tonight.darkness.start, site.timeZone), end: formatTime(tonight.darkness.end, site.timeZone) }) : m.project_no_darkness()}
               </Pill>
             </>
           ) : null}
@@ -864,16 +880,16 @@ export function PlanningSection({ project }: { project: Project }) {
       }
       actions={
         <Button size="sm" variant="outline" render={<Link to="/plan" search={{ project: project.id }} />}>
-          Planner
+          {m.project_planner()}
         </Button>
       }
     >
       {!site || !tonight ? (
         <div className="border-b border-border px-3 py-2">
-          <Refusal action="No windows" reason="no observing site" blockers={[{ label: "Settings › Sites", link: { to: "/settings/sites" } }]} />
+          <Refusal action={m.project_no_windows()} reason={m.project_no_site()} blockers={[{ label: `${m.nav_settings()} › ${m.settings_sites()}`, link: { to: "/settings/sites" } }]} />
         </div>
       ) : null}
-      <SimpleTable caption={`Planning for the subjects of ${project.name}`} headers={["Subject", "Best window", "To go"]}>
+      <SimpleTable caption={m.project_planning_of({ name: project.name })} headers={[m.project_col_subject(), m.project_col_best_window(), m.project_col_to_go()]}>
         {project.subjects.map((subject) => {
           const target = subjectTarget(state.catalog, subject)
           const centre = subjectCentre(state.catalog, subject)
@@ -891,10 +907,10 @@ export function PlanningSection({ project }: { project: Project }) {
                   <span className="inline-flex items-center gap-1.5">
                     {formatTime(window.start, site.timeZone)}–{formatTime(window.end, site.timeZone)}
                     <Pill tone="muted">{Math.round(window.maxAltitudeDeg)}°</Pill>
-                    <Pill tone="muted">Moon {Math.round(window.moonSeparationDeg)}°</Pill>
+                    <Pill tone="muted">{m.project_moon_separation({ deg: Math.round(window.moonSeparationDeg) })}</Pill>
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">None tonight</span>
+                  <span className="text-muted-foreground">{m.project_none_tonight()}</span>
                 )}
               </td>
               <td className={TD}>
@@ -904,8 +920,8 @@ export function PlanningSection({ project }: { project: Project }) {
                   <span className="flex flex-wrap gap-1">
                     {gaps.map((gap) => (
                       <Pill key={`${gap.panelId}|${gap.channel}`} tone="neutral" title={gap.line}>
-                        {gap.panelId ? `P${subject.mosaic?.panels.find((p) => p.id === gap.panelId)?.n ?? "?"} · ` : ""}
-                        {gap.line.replace(/ to go in project.*$/, "")}
+                        {gap.panelId ? `${m.project_panel_short({ n: subject.mosaic?.panels.find((p) => p.id === gap.panelId)?.n ?? "?" })} · ` : ""}
+                        {gap.short}
                       </Pill>
                     ))}
                   </span>
@@ -924,6 +940,7 @@ export function PlanningSection({ project }: { project: Project }) {
 // ---------------------------------------------------------------------------
 
 export function ArchivedSection({ project }: { project: Project }) {
+  const m = useMessages()
   const catalog = useStore((s) => s.catalog)
   const origins = useStore((s) => s.slices.b.archiveOrigins)
   const operationId = useStore((s) => s.slices.b.approvals[project.id]?.restore ?? null)
@@ -940,22 +957,22 @@ export function ArchivedSection({ project }: { project: Project }) {
       flush
       title={
         <span className="flex items-center gap-1.5">
-          Archived <CountBadge count={ids.length} label={plural(ids.length, "session")} />
+          {m.status_archived()} <CountBadge count={ids.length} label={m.project_sessions_count({ count: ids.length })} />
         </span>
       }
       actions={
         open && live.length > 0 ? (
           <ConfirmDialog
-            trigger={<Button size="sm">Restore ({live.length})…</Button>}
-            title={`Restore ${plural(live.length, "session")}?`}
-            description="Back to where Archive found each frame."
+            trigger={<Button size="sm">{m.project_restore_count({ count: live.length })}</Button>}
+            title={m.project_restore_title({ count: live.length })}
+            description={m.project_restore_description()}
             changes={[
               ...plan.rows.map((r) => `${sessionLabel(catalog, r.session)} → ${r.folder}`),
-              ...plan.refused.map((r) => `${sessionLabel(catalog, r.session)} stays · ${r.reason}`),
+              ...plan.refused.map((r) => m.project_restore_stays({ name: sessionLabel(catalog, r.session), reason: r.reason })),
             ]}
-            confirmLabel="Restore"
+            confirmLabel={m.project_restore()}
             onConfirm={(): CommitResult => {
-              if (plan.rows.length === 0) return { ok: false, reason: "refused", message: plan.blocked ?? "Nothing chosen can be restored now.", reasons: [] }
+              if (plan.rows.length === 0) return { ok: false, reason: "refused", message: plan.blocked ?? m.project_restore_nothing_now(), reasons: [] }
               rememberApproval(project.id, "restore", startArchiveTransfer(project.id, plan.rows, "restore"))
               setChosen([])
               return { ok: true }
@@ -965,7 +982,7 @@ export function ArchivedSection({ project }: { project: Project }) {
       }
     >
       {ids.length > 0 ? (
-        <SimpleTable caption={`Archived sessions of ${project.name}`} headers={[open ? "Restore" : "", "Session", "Archive path"]}>
+        <SimpleTable caption={m.project_archived_of({ name: project.name })} headers={[open ? m.project_restore() : "", m.project_col_session(), m.project_col_archive_path()]}>
           {ids.map((id) => {
             const session = catalog.sessions[id]
             if (!session) return null
@@ -974,7 +991,7 @@ export function ArchivedSection({ project }: { project: Project }) {
             return (
               <tr key={id}>
                 <td className={TD}>
-                  {open ? <Checkbox aria-label={`Restore ${sessionLabel(catalog, session)}`} checked={live.includes(id)} onCheckedChange={(checked) => setChosen((list) => (checked ? [...list, id] : list.filter((x) => x !== id)))} /> : null}
+                  {open ? <Checkbox aria-label={m.project_restore_named({ name: sessionLabel(catalog, session) })} checked={live.includes(id)} onCheckedChange={(checked) => setChosen((list) => (checked ? [...list, id] : list.filter((x) => x !== id)))} /> : null}
                 </td>
                 <th scope="row" className={`${TD} text-left font-medium`}>
                   <Link to="/sessions/$sessionId" params={{ sessionId: id }} className="underline-offset-2 hover:underline">
