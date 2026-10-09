@@ -20,6 +20,7 @@
 import { Link, useNavigate } from "@tanstack/react-router"
 import { Check, ChevronRight, Download, FolderOpen, FolderSearch, Usb } from "lucide-react"
 import { type ReactNode, useEffect, useId, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { closeSheet, openPanel, openSheet, useShellUi } from "@/app/ui-state"
 import { ConfirmDialog } from "@/components/app/confirm-dialog"
 import { PathText } from "@/components/app/data"
@@ -44,8 +45,9 @@ import { filesUnder } from "@/domain/disk"
 import { sessionLongLabel } from "@/domain/membership"
 import { namingTemplate } from "@/domain/templates"
 import type { ImageType, LocationRole, NamingFrameType } from "@/domain/types"
-import { ROLE_COPY, suggestDisplayName, validateLocation } from "@/features/t1/lib/locations"
-import { formatBytes, formatCount, formatDateTime, plural } from "@/lib/format"
+import { suggestDisplayName, validateLocation } from "@/features/t1/lib/locations"
+import { formatBytes, formatCount, formatDateTime } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import { isSettled } from "@/store/operations"
 import { type PrototypeState, updateSlice, useStore } from "@/store/core"
 import { settleGrowingFiles } from "@/store/simulation"
@@ -58,12 +60,12 @@ import {
   type ImportPlan,
   type ImportRoute as Route,
   planImport,
-  ROUTE_LABEL,
   routeFor,
+  routeLabel,
   savedSourceAt,
   sourcePathOf,
-  TYPE_LABEL,
   TYPEABLE,
+  typeLabel,
 } from "./import-model"
 import { addLibraryFolder, type ImportPayload, saveImportSource, startImport } from "./import-run"
 import { refusalOf } from "./parts"
@@ -118,13 +120,14 @@ export function ImportRoute() {
 function ImportBody() {
   const last = useStore((s) => s.slices.a.lastImport)
   const [tab, setTab] = useState<"source" | "folder">(last?.kind === "index" ? "folder" : "source")
+  const m = useMessages()
   return (
     <Tabs value={tab} onValueChange={(value) => setTab(value as "source" | "folder")} className="min-h-0 flex-1 gap-0">
       <SheetHeader className="flex-row flex-wrap items-center gap-x-4 gap-y-2 border-b border-separator py-3 pr-12">
-        <SheetTitle>Import</SheetTitle>
+        <SheetTitle>{m.shell_import()}</SheetTitle>
         <TabsList>
-          <TabsTrigger value="source">From a source</TabsTrigger>
-          <TabsTrigger value="folder">Library folder</TabsTrigger>
+          <TabsTrigger value="source">{m.import_tab_source()}</TabsTrigger>
+          <TabsTrigger value="folder">{m.import_tab_folder()}</TabsTrigger>
         </TabsList>
       </SheetHeader>
       <TabsContent value="source" className="flex min-h-0 flex-1 flex-col">
@@ -151,10 +154,10 @@ function Part({ title, children, aside, id }: { title: ReactNode; children: Reac
   )
 }
 
-function Counted({ label, count, noun }: { label: string; count: number; noun: string }) {
+function Counted({ label, count, countLabel }: { label: string; count: number; countLabel: string }) {
   return (
     <>
-      {label} <CountBadge count={count} label={plural(count, noun)} />
+      {label} <CountBadge count={count} label={countLabel} />
     </>
   )
 }
@@ -163,10 +166,16 @@ function Counted({ label, count, noun }: { label: string; count: number; noun: s
 // From a source
 // ---------------------------------------------------------------------------
 
+/** "Captures and Calibration": the destination location names as one phrase. */
+function locationList(m: Messages, names: string[]): string {
+  return names.length > 1 ? m.import_name_list({ first: names.slice(0, -1).join(", "), last: names.at(-1)! }) : (names[0] ?? "")
+}
+
 function SourceTab() {
   const state = useStore((s) => s)
   const draft = state.slices.a.importDraft
   const plan = planImport(state, draft)
+  const m = useMessages()
   const [confirmMove, setConfirmMove] = useState(false)
   const settling = plan?.held.settling.map((f) => f.path).join("|") ?? ""
   // The capture device finishes writing: held files settle and join the preview.
@@ -185,9 +194,11 @@ function SourceTab() {
     if (!plan || plan.blockers.length > 0) return
     startImport(plan, draft)
   }
-  const verb = draft.mode === "move" ? "Move" : "Import"
+  const move = draft.mode === "move"
   const count = plan?.items.length ?? 0
+  const frames = formatCount(count)
   const blockers = plan?.blockers ?? []
+  const cant = move ? m.import_cant_move() : m.import_cant_import()
 
   return (
     <>
@@ -206,23 +217,23 @@ function SourceTab() {
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-separator bg-chrome px-4 py-2.5" data-chrome>
         <div className="min-w-0 flex-1 text-xs" data-import-blockers={blockers.length > 0 || undefined}>
           {blockers.length === 1 ? (
-            <Refusal action={`Can't ${verb.toLowerCase()}`} reason={blockers[0]!.label} blockers={[]} />
+            <Refusal action={cant} reason={blockers[0]!.label} blockers={[]} />
           ) : blockers.length > 1 ? (
-            <Refusal action={`Can't ${verb.toLowerCase()}`} reason={plural(blockers.length, "blocker")} blockers={blockers} />
+            <Refusal action={cant} reason={m.refusal_blockers({ count: blockers.length })} blockers={blockers} />
           ) : plan ? (
             <span className="text-muted-foreground tabular-nums">
-              {plural(count, "frame")} · {formatBytes(plan.bytes)}
+              {m.session_frame_count({ count, frames })} · {formatBytes(plan.bytes)}
             </span>
           ) : (
-            <span className="text-muted-foreground">Choose a source</span>
+            <span className="text-muted-foreground">{m.import_choose_source()}</span>
           )}
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="ghost" onClick={closeSheet}>
-            Cancel
+            {m.verb_cancel()}
           </Button>
           <Button size="sm" disabled={!plan || blockers.length > 0} onClick={() => (draft.mode === "move" ? setConfirmMove(true) : start())} data-import-start>
-            {plan ? `${verb} ${plural(count, "frame")}` : verb}
+            {plan ? (move ? m.import_move_frames({ count, frames }) : m.import_import_frames({ count, frames })) : move ? m.import_move() : m.shell_import()}
           </Button>
         </div>
       </footer>
@@ -230,14 +241,14 @@ function SourceTab() {
         <ConfirmDialog
           open={confirmMove}
           onOpenChange={setConfirmMove}
-          title={`Move ${plural(count, "frame")}?`}
+          title={m.import_move_frames_title({ count, frames })}
           description={`${plan.sourceLabel} · ${plan.sourcePath}`}
           changes={[
-            `Copies ${plural(count, "frame")} (${formatBytes(plan.bytes)}) into ${[...new Set(plan.items.map((i) => i.location.displayName))].join(" and ")}`,
-            "Verifies each copy (SHA-256)",
-            `Sends ${plural(count, "verified source")} on ${plan.volume?.name ?? "the source"} to the OS Trash`,
+            m.import_copies_into({ count, frames, size: formatBytes(plan.bytes), locations: locationList(m, [...new Set(plan.items.map((i) => i.location.displayName))]) }),
+            m.import_verifies_copies(),
+            plan.volume ? m.import_sends_to_trash({ count, sources: frames, volume: plan.volume.name }) : m.import_sends_source_to_trash({ count, sources: frames }),
           ]}
-          confirmLabel={`Move ${plural(count, "frame")}`}
+          confirmLabel={m.import_move_frames({ count, frames })}
           onConfirm={start}
         />
       ) : null}
@@ -246,15 +257,17 @@ function SourceTab() {
 }
 
 function SelectedPill() {
+  const m = useMessages()
   return (
     <Pill tone="success" icon={Check}>
-      Selected
+      {m.import_selected()}
     </Pill>
   )
 }
 
 function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDraft }) {
   const state = useStore((s) => s)
+  const m = useMessages()
   const devices = removableDevices(state.disk)
   const sources = Object.values(state.catalog.importSources).sort((a, b) => a.name.localeCompare(b.name))
   const [picking, setPicking] = useState<string | null>(null)
@@ -272,8 +285,8 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
     if (!device) return []
     return [
       { heading: device.volume.name },
-      { label: "Import", icon: Download, disabled: !device.connected, onSelect: () => selectSource(choiceAt(state, device.volume.mountPath)) },
-      { label: "Choose folder…", icon: FolderSearch, disabled: !device.connected, onSelect: () => setPicking(device.volume.mountPath) },
+      { label: m.shell_import(), icon: Download, disabled: !device.connected, onSelect: () => selectSource(choiceAt(state, device.volume.mountPath)) },
+      { label: m.import_choose_folder(), icon: FolderSearch, disabled: !device.connected, onSelect: () => setPicking(device.volume.mountPath) },
     ]
   }
   const savedMenu = (key: string): MenuEntry[] => {
@@ -281,19 +294,19 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
     if (!src) return []
     return [
       { heading: src.name },
-      { label: "Import new", icon: Download, onSelect: () => selectSource({ kind: "saved", id: src.id }, true) },
-      { label: "Import all", onSelect: () => selectSource({ kind: "saved", id: src.id }, false) },
+      { label: m.import_new(), icon: Download, onSelect: () => selectSource({ kind: "saved", id: src.id }, true) },
+      { label: m.import_all(), onSelect: () => selectSource({ kind: "saved", id: src.id }, false) },
     ]
   }
 
   return (
-    <Part title="Source" id="import-source">
+    <Part title={m.evidence_column_source()} id="import-source">
       <div className="space-y-3">
         <div className="space-y-1" data-removable-devices>
-          <h4 className="text-[0.6875rem] font-medium text-muted-foreground">Removable devices</h4>
+          <h4 className="text-[0.6875rem] font-medium text-muted-foreground">{m.import_removable_devices()}</h4>
           <ContextMenuArea menu={deviceMenu}>
             <ul className="divide-y divide-border/60 rounded-md border border-separator text-sm">
-              {devices.length === 0 ? <li className="px-2.5 py-1.5 text-xs text-muted-foreground">None connected</li> : null}
+              {devices.length === 0 ? <li className="px-2.5 py-1.5 text-xs text-muted-foreground">{m.import_none_connected()}</li> : null}
               {devices.map((d) => {
                 const selected = d.connected && selectedPath === d.volume.mountPath
                 const fresh = freshFrameCount(state, d.volume.mountPath)
@@ -310,24 +323,25 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
                     {d.layout ? (
                       <span className="inline-flex items-center gap-0.5" data-device-layout={d.layout.layout}>
                         <Pill tone="info">{d.layout.label}</Pill>
-                        <NoteMarker label={`How ${d.volume.name} was recognised`} rows={[{ label: "Layout", value: d.layout.evidence }]} />
+                        <NoteMarker label={m.import_how_recognised({ name: d.volume.name })} rows={[{ label: m.import_layout(), value: d.layout.evidence }]} />
                       </span>
                     ) : null}
                     <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
                       {d.connected ? (
                         <>
-                          <span>{plural(d.imageFiles, "file")}</span>
-                          <Pill tone={fresh > 0 ? "info" : "muted"}>{formatCount(fresh)} new</Pill>
+                          <span>{m.import_file_count({ count: d.imageFiles, files: formatCount(d.imageFiles) })}</span>
+                          <Pill tone={fresh > 0 ? "info" : "muted"}>{m.import_new_count({ count: fresh, frames: formatCount(fresh) })}</Pill>
                         </>
                       ) : (
-                        <Pill tone="muted">Not connected</Pill>
+                        <Pill tone="muted">{m.import_not_connected()}</Pill>
                       )}
                     </span>
                     {selected ? (
                       <SelectedPill />
                     ) : (
                       <Button size="xs" variant="outline" disabled={!d.connected} onClick={() => selectSource(choiceAt(state, d.volume.mountPath))} data-device-import>
-                        Import<span className="sr-only"> from {d.volume.name}</span>
+                        {m.shell_import()}
+                        <span className="sr-only"> {m.import_from_named({ name: d.volume.name })}</span>
                       </Button>
                     )}
                   </li>
@@ -338,10 +352,10 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
         </div>
 
         <div className="space-y-1" data-saved-sources>
-          <h4 className="text-[0.6875rem] font-medium text-muted-foreground">Saved sources</h4>
+          <h4 className="text-[0.6875rem] font-medium text-muted-foreground">{m.import_saved_sources()}</h4>
           <ContextMenuArea menu={savedMenu}>
             <ul className="divide-y divide-border/60 rounded-md border border-separator text-sm">
-              {sources.length === 0 ? <li className="px-2.5 py-1.5 text-xs text-muted-foreground">None saved</li> : null}
+              {sources.length === 0 ? <li className="px-2.5 py-1.5 text-xs text-muted-foreground">{m.import_none_saved()}</li> : null}
               {sources.map((src) => {
                 const selected = draft.source?.kind === "saved" && draft.source.id === src.id
                 const connected = mounted(src.path)
@@ -349,16 +363,17 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
                 return (
                   <li key={src.id} {...menuKey(`saved:${src.id}`)} aria-current={selected || undefined} className="flex min-h-(--row-h) flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1 aria-[current=true]:bg-primary/8">
                     <FolderOpen aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="font-medium" title={src.lastImportedAt ? `Last import ${formatDateTime(src.lastImportedAt)}` : "Never imported"}>
+                    <span className="font-medium" title={src.lastImportedAt ? m.import_last_import({ date: formatDateTime(src.lastImportedAt) }) : m.import_never_imported()}>
                       {src.name}
                     </span>
                     <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{src.path}</span>
-                    <span className="ml-auto">{connected ? <Pill tone={fresh > 0 ? "info" : "muted"}>{formatCount(fresh)} new</Pill> : <Pill tone="muted">Not connected</Pill>}</span>
+                    <span className="ml-auto">{connected ? <Pill tone={fresh > 0 ? "info" : "muted"}>{m.import_new_count({ count: fresh, frames: formatCount(fresh) })}</Pill> : <Pill tone="muted">{m.import_not_connected()}</Pill>}</span>
                     {selected ? (
                       <SelectedPill />
                     ) : (
                       <Button size="xs" variant="outline" onClick={() => selectSource({ kind: "saved", id: src.id }, true)}>
-                        Import new<span className="sr-only"> from {src.name}</span>
+                        {m.import_new()}
+                        <span className="sr-only"> {m.import_from_named({ name: src.name })}</span>
                       </Button>
                     )}
                   </li>
@@ -371,7 +386,7 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Button size="xs" variant="outline" onClick={() => setPicking(folderPath ?? firstMount)} data-choose-folder>
             <FolderSearch data-icon="inline-start" aria-hidden="true" />
-            Choose folder…
+            {m.import_choose_folder()}
           </Button>
           {folderPath ? (
             <>
@@ -384,17 +399,17 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
         {plan?.online && plan.saved ? (
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <Switch id={newOnlyId} size="sm" checked={draft.newOnly} onCheckedChange={(checked) => setDraft({ newOnly: checked })} />
-            <label htmlFor={newOnlyId}>Import new</label>
-            {draft.newOnly && plan.skipped.imported.length > 0 ? <Pill tone="muted">{plan.skipped.imported.length} imported before</Pill> : null}
+            <label htmlFor={newOnlyId}>{m.import_new()}</label>
+            {draft.newOnly && plan.skipped.imported.length > 0 ? <Pill tone="muted">{m.import_imported_before({ count: plan.skipped.imported.length })}</Pill> : null}
           </div>
         ) : null}
 
         {plan?.online && !plan.saved && folderPath ? (
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <Input aria-label="Source name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} className="h-6 w-48" />
-              <Button size="xs" variant="outline" onClick={() => setSaveRefusal(refusalOf(saveImportSource(name, folderPath), "Can't save"))}>
-                Save source
+              <Input aria-label={m.import_source_name()} placeholder={m.import_name_placeholder()} value={name} onChange={(e) => setName(e.target.value)} className="h-6 w-48" />
+              <Button size="xs" variant="outline" onClick={() => setSaveRefusal(refusalOf(saveImportSource(name, folderPath), m.import_cant_save()))}>
+                {m.import_save_source()}
               </Button>
             </div>
             {saveRefusal ? <Refusal {...saveRefusal} /> : null}
@@ -404,11 +419,11 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
         {plan && !plan.online ? (
           <Notice
             tone="offline"
-            title={`${plan.sourceLabel} not connected`}
+            title={m.import_source_not_connected({ name: plan.sourceLabel })}
             actions={
               isRemovablePath(state.disk, plan.sourcePath) ? (
                 <Button size="xs" variant="outline" onClick={() => openPanel("simulation")} data-insert-card>
-                  Prototype controls
+                  {m.import_prototype_controls()}
                 </Button>
               ) : undefined
             }
@@ -419,10 +434,10 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
       <FolderPicker
         open={picking !== null}
         onOpenChange={(open) => !open && setPicking(null)}
-        title="Choose folder"
-        description="Device, folder or mounted share"
+        title={m.import_choose_folder_title()}
+        description={m.import_choose_folder_description()}
         initialPath={picking ?? firstMount}
-        chooseVerb="Import from"
+        chooseVerb={m.import_from_verb()}
         onChoose={(path) => {
           selectSource(choiceAt(state, path))
           setPicking(null)
@@ -433,14 +448,16 @@ function SourcePart({ plan, draft }: { plan: ImportPlan | null; draft: ImportDra
 }
 
 function RoutePill({ route }: { route: Route }) {
-  return <Pill tone={ROUTE_TONE[route]}>{ROUTE_LABEL[route]}</Pill>
+  const m = useMessages()
+  return <Pill tone={ROUTE_TONE[route]}>{routeLabel(m, route)}</Pill>
 }
 
 function PreviewPart({ plan }: { plan: ImportPlan }) {
+  const m = useMessages()
   const columns: Column<DestinationGroup>[] = [
     {
       id: "folder",
-      header: "Folder",
+      header: m.import_column_folder(),
       rowHeader: true,
       sortValue: (g) => `${g.route}|${g.relative}`,
       cell: (g) => (
@@ -450,8 +467,8 @@ function PreviewPart({ plan }: { plan: ImportPlan }) {
               {g.relative}
             </span>
             {g.fallbacks.length > 0 ? (
-              <Pill tone="warning" title={`No value for ${g.fallbacks.map((f) => `{${f}}`).join(", ")}: its fallback is used`}>
-                Fallback
+              <Pill tone="warning" title={m.import_fallback_used({ tokens: g.fallbacks.map((f) => `{${f}}`).join(", ") })}>
+                {m.import_fallback()}
               </Pill>
             ) : null}
           </span>
@@ -459,14 +476,18 @@ function PreviewPart({ plan }: { plan: ImportPlan }) {
         </span>
       ),
     },
-    { id: "type", header: "Type", cell: (g) => (g.items.some((i) => i.typed) ? `${TYPE_LABEL[g.type]} (typed)` : TYPE_LABEL[g.type]) },
-    { id: "frames", header: "Frames", align: "right", sortValue: (g) => g.items.length, cell: (g) => formatCount(g.items.length) },
-    { id: "size", header: "Size", align: "right", sortValue: (g) => g.bytes, cell: (g) => formatBytes(g.bytes) },
-    { id: "into", header: "Into", sortValue: (g) => g.route, cell: (g) => <RoutePill route={g.route} /> },
+    { id: "type", header: m.import_column_type(), cell: (g) => (g.items.some((i) => i.typed) ? m.import_type_typed({ type: typeLabel(m, g.type) }) : typeLabel(m, g.type)) },
+    { id: "frames", header: m.sessions_column_frames(), align: "right", sortValue: (g) => g.items.length, cell: (g) => formatCount(g.items.length) },
+    { id: "size", header: m.import_column_size(), align: "right", sortValue: (g) => g.bytes, cell: (g) => formatBytes(g.bytes) },
+    { id: "into", header: m.import_column_into(), sortValue: (g) => g.route, cell: (g) => <RoutePill route={g.route} /> },
   ]
   return (
-    <Part title={<Counted label="Preview" count={plan.items.length} noun="frame" />} id="import-preview" aside={<span className="text-xs text-muted-foreground tabular-nums">{formatBytes(plan.bytes)}</span>}>
-      <DataTable label="Import destinations" rows={plan.groups} columns={columns} getRowId={(g) => g.key} scroll="none" empty={<p className="px-3 py-2 text-sm text-muted-foreground">Nothing to import</p>} />
+    <Part
+      title={<Counted label={m.import_preview()} count={plan.items.length} countLabel={m.session_frame_count({ count: plan.items.length, frames: formatCount(plan.items.length) })} />}
+      id="import-preview"
+      aside={<span className="text-xs text-muted-foreground tabular-nums">{formatBytes(plan.bytes)}</span>}
+    >
+      <DataTable label={m.import_destinations()} rows={plan.groups} columns={columns} getRowId={(g) => g.key} scroll="none" empty={<p className="px-3 py-2 text-sm text-muted-foreground">{m.import_nothing_to_import()}</p>} />
     </Part>
   )
 }
@@ -474,15 +495,16 @@ function PreviewPart({ plan }: { plan: ImportPlan }) {
 function DestinationPart({ plan }: { plan: ImportPlan }) {
   const catalog = useStore((s) => s.catalog)
   const naming = useStore((s) => s.settings.naming)
+  const m = useMessages()
   const typesFor = (role: "captures" | "calibration") => [...new Set(plan.items.filter((i) => i.role === role).map((i) => i.type))]
   const templateOf = (t: ImageType) => namingTemplate(naming, (t === "dark-flat" ? "dark" : t) as NamingFrameType)
   return (
     <Part
-      title="Destination"
+      title={m.import_destination()}
       id="import-destination"
       aside={
         <Link to="/settings/naming" onClick={closeSheet} className="text-xs text-link underline-offset-2 hover:underline">
-          Naming
+          {m.settings_naming()}
         </Link>
       }
     >
@@ -491,16 +513,16 @@ function DestinationPart({ plan }: { plan: ImportPlan }) {
           const locations = destinationLocations(catalog, d.role)
           const items = locations.map((l) => ({ value: l.id, label: l.displayName }))
           const types: ImageType[] = typesFor(d.role).length > 0 ? typesFor(d.role) : d.role === "captures" ? ["light"] : ["flat"]
-          const label = d.role === "captures" ? "Lights" : "Calibration"
+          const label = d.role === "captures" ? m.import_lights() : m.status_role_calibration()
           return (
             <div key={d.role} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-destination={d.role}>
               <span className="inline-flex w-24 items-center gap-0.5 text-muted-foreground">
                 {label}
-                <NoteMarker label={`${label} naming`} rows={types.map((t) => ({ label: TYPE_LABEL[t], value: routeFor(t) === "masters" ? `${templateOf(t)}Master…_<night>` : templateOf(t) }))} />
+                <NoteMarker label={m.import_naming_of({ name: label })} rows={types.map((t) => ({ label: typeLabel(m, t), value: routeFor(t) === "masters" ? `${templateOf(t)}Master…_<night>` : templateOf(t) }))} />
               </span>
               <Select items={items} value={d.location?.id ?? null} onValueChange={(next) => setDraft(d.role === "captures" ? { capturesLocationId: next as string } : { calibrationLocationId: next as string })}>
-                <SelectTrigger size="sm" aria-label={`${d.role === "captures" ? "Captures" : "Calibration"} location`} className="min-w-44">
-                  <SelectValue placeholder="No location" />
+                <SelectTrigger size="sm" aria-label={d.role === "captures" ? m.import_captures_location() : m.import_calibration_location()} className="min-w-44">
+                  <SelectValue placeholder={m.import_no_location()} />
                 </SelectTrigger>
                 <SelectContent>
                   {items.map((item) => (
@@ -512,12 +534,12 @@ function DestinationPart({ plan }: { plan: ImportPlan }) {
               </Select>
               {d.location ? (
                 <span className="flex flex-wrap items-center gap-1 tabular-nums">
-                  {d.problem ? <Pill tone="danger">{d.problem}</Pill> : d.writable ? <Pill tone="success">Writable</Pill> : <Pill tone="muted">Not writable</Pill>}
-                  <Pill tone="muted">{formatBytes(d.freeBytes)} free</Pill>
-                  {d.neededBytes > 0 ? <Pill tone="neutral">needs {formatBytes(d.neededBytes)}</Pill> : null}
+                  {d.problem ? <Pill tone="danger">{d.problem}</Pill> : d.writable ? <Pill tone="success">{m.import_writable()}</Pill> : <Pill tone="muted">{m.import_not_writable()}</Pill>}
+                  <Pill tone="muted">{m.import_free({ size: formatBytes(d.freeBytes) })}</Pill>
+                  {d.neededBytes > 0 ? <Pill tone="neutral">{m.import_needs({ size: formatBytes(d.neededBytes) })}</Pill> : null}
                 </span>
               ) : (
-                <Pill tone={d.problem ? "danger" : "muted"}>{d.problem ?? "No location"}</Pill>
+                <Pill tone={d.problem ? "danger" : "muted"}>{d.problem ?? m.import_no_location()}</Pill>
               )}
             </div>
           )
@@ -528,6 +550,7 @@ function DestinationPart({ plan }: { plan: ImportPlan }) {
 }
 
 function HeldPart({ plan, draft }: { plan: ImportPlan; draft: ImportDraft }) {
+  const m = useMessages()
   const typedGroups = new Map<string, { type: ImageType; paths: string[] }>()
   for (const [path, type] of Object.entries(draft.typed)) {
     const folder = path.slice(0, path.lastIndexOf("/"))
@@ -539,21 +562,22 @@ function HeldPart({ plan, draft }: { plan: ImportPlan; draft: ImportDraft }) {
   const total = plan.held.unclassified.reduce((n, h) => n + h.files.length, 0) + plan.held.settling.length
   if (total === 0 && typedShown.length === 0) return null
   const rel = (path: string) => path.slice(plan.sourcePath.length + 1) || path
-  const items = TYPEABLE.map((t) => ({ value: t.value, label: t.label }))
+  const items = TYPEABLE.map((t) => ({ value: t, label: typeLabel(m, t) }))
   return (
-    <Part title={<Counted label="Held" count={total} noun="held file" />} id="import-held">
+    <Part title={<Counted label={m.import_held()} count={total} countLabel={m.import_held_count({ count: total, files: formatCount(total) })} />} id="import-held">
       <ul className="space-y-1.5 text-sm" data-import-held>
         {plan.held.unclassified.map((hold) => (
           <li key={hold.folder} className="flex flex-wrap items-center justify-between gap-2">
             <span className="flex min-w-0 items-center gap-1.5">
-              <Pill tone="warning">Unclassified</Pill>
-              <span className="tabular-nums">{plural(hold.files.length, "file")}</span>
+              <Pill tone="warning">{m.import_type_unclassified()}</Pill>
+              <span className="tabular-nums">{m.import_file_count({ count: hold.files.length, files: formatCount(hold.files.length) })}</span>
               <span className="truncate font-mono text-xs text-muted-foreground">{rel(hold.folder)}</span>
-              <NoteMarker label="Why it is held" rows={[{ label: "IMAGETYP", value: "missing" }, ...(hold.objectLabel ? [{ label: "OBJECT", value: hold.objectLabel }] : [])]} />
+              {/* eslint-disable-next-line alm/no-user-string -- FITS header keywords, never translated */}
+              <NoteMarker label={m.import_why_held()} rows={[{ label: "IMAGETYP", value: m.status_missing() }, ...(hold.objectLabel ? [{ label: "OBJECT", value: hold.objectLabel }] : [])]} />
             </span>
             <Select items={items} value={null} onValueChange={(next) => next && setDraft({ typed: { ...draft.typed, ...Object.fromEntries(hold.files.map((f) => [f.path, String(next) as ImageType])) } })}>
-              <SelectTrigger size="sm" aria-label={`Type the ${hold.files.length} files in ${rel(hold.folder)} as`} className="w-32" data-type-as>
-                <SelectValue placeholder="Type as…" />
+              <SelectTrigger size="sm" aria-label={m.import_type_files_as({ count: hold.files.length, folder: rel(hold.folder) })} className="w-32" data-type-as>
+                <SelectValue placeholder={m.import_type_as()} />
               </SelectTrigger>
               <SelectContent>
                 {items.map((item) => (
@@ -568,8 +592,8 @@ function HeldPart({ plan, draft }: { plan: ImportPlan; draft: ImportDraft }) {
         {typedShown.map(([key, g]) => (
           <li key={key} className="flex flex-wrap items-center justify-between gap-2">
             <span className="flex min-w-0 items-center gap-1.5">
-              <Pill tone="info">Typed {TYPE_LABEL[g.type]}</Pill>
-              <span className="tabular-nums">{plural(g.paths.length, "file")}</span>
+              <Pill tone="info">{m.import_typed_as({ type: typeLabel(m, g.type) })}</Pill>
+              <span className="tabular-nums">{m.import_file_count({ count: g.paths.length, files: formatCount(g.paths.length) })}</span>
               <span className="truncate font-mono text-xs text-muted-foreground">{rel(key.split("|")[0]!)}</span>
             </span>
             <Button
@@ -581,19 +605,19 @@ function HeldPart({ plan, draft }: { plan: ImportPlan; draft: ImportDraft }) {
                 setDraft({ typed })
               }}
             >
-              Undo
+              {m.import_undo()}
             </Button>
           </li>
         ))}
         {plan.held.settling.length > 0 ? (
           <li className="flex flex-wrap items-center gap-1.5">
-            <Pill tone="muted">Writing</Pill>
+            <Pill tone="muted">{m.import_writing()}</Pill>
             {plan.held.settling.map((f) => (
               <span key={f.path} className="font-mono text-xs text-muted-foreground">
                 {rel(f.path)}
               </span>
             ))}
-            <NoteMarker label="Why it is held" rows={[{ label: "Held", value: "until the file stops changing" }]} />
+            <NoteMarker label={m.import_why_held()} rows={[{ label: m.import_held(), value: m.import_until_settled() }]} />
           </li>
         ) : null}
       </ul>
@@ -606,6 +630,7 @@ function SkippedPart({ plan }: { plan: ImportPlan }) {
   const navigate = useNavigate()
   const sessions = useStore((s) => s.catalog.sessions)
   const panel = useId()
+  const m = useMessages()
   const s = plan.skipped
   const total = s.duplicate.length + s.imported.length + s.notImage.length + s.nameTaken.length
   if (total === 0) return null
@@ -613,13 +638,13 @@ function SkippedPart({ plan }: { plan: ImportPlan }) {
   const bySession = new Map<string, number>()
   for (const d of s.duplicate) bySession.set(d.sessionId ?? "", (bySession.get(d.sessionId ?? "") ?? 0) + 1)
   return (
-    <Part title={<Counted label="Skipped" count={total} noun="skipped file" />} id="import-skipped">
+    <Part title={<Counted label={m.import_skipped()} count={total} countLabel={m.import_skipped_count({ count: total, files: formatCount(total) })} />} id="import-skipped">
       <div className="space-y-1.5" data-import-skipped>
         <ul className="flex flex-wrap items-center gap-1.5 text-sm">
           {s.duplicate.length > 0 ? (
             <li className="inline-flex items-center gap-0.5">
-              <Pill tone="neutral">{plural(s.duplicate.length, "duplicate")}</Pill>
-              <NoteMarker label="Duplicates" rows={[{ label: "Match", value: "SHA-256 of a library frame" }]} />
+              <Pill tone="neutral">{m.import_duplicate_count({ count: s.duplicate.length, files: formatCount(s.duplicate.length) })}</Pill>
+              <NoteMarker label={m.import_duplicates()} rows={[{ label: m.import_match(), value: m.import_match_sha() }]} />
               <button
                 type="button"
                 aria-expanded={open}
@@ -628,25 +653,25 @@ function SkippedPart({ plan }: { plan: ImportPlan }) {
                 className="inline-flex h-5 items-center rounded-sm px-0.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               >
                 <ChevronRight aria-hidden="true" className={open ? "size-3.5 rotate-90 motion-safe:transition-transform" : "size-3.5 motion-safe:transition-transform"} />
-                <span className="sr-only">{open ? "Hide sessions" : "Show sessions"}</span>
+                <span className="sr-only">{open ? m.import_hide_sessions() : m.import_show_sessions()}</span>
               </button>
             </li>
           ) : null}
           {s.imported.length > 0 ? (
             <li>
-              <Pill tone="muted">{s.imported.length} imported before</Pill>
+              <Pill tone="muted">{m.import_imported_before({ count: s.imported.length })}</Pill>
             </li>
           ) : null}
           {s.nameTaken.length > 0 ? (
             <li className="inline-flex items-center gap-0.5">
-              <Pill tone="warning">{s.nameTaken.length} name taken</Pill>
-              <NoteMarker label="Name taken" rows={[{ label: "Destination", value: "holds different bytes; nothing is overwritten" }]} />
+              <Pill tone="warning">{m.import_name_taken_count({ count: s.nameTaken.length })}</Pill>
+              <NoteMarker label={m.import_name_taken()} rows={[{ label: m.import_destination(), value: m.import_name_taken_detail() }]} />
             </li>
           ) : null}
           {s.notImage.length > 0 ? (
             <li>
               <Pill tone="muted" title={s.notImage.map((f) => rel(f.path)).join("\n")}>
-                {plural(s.notImage.length, "other file")}
+                {m.import_other_file_count({ count: s.notImage.length, files: formatCount(s.notImage.length) })}
               </Pill>
             </li>
           ) : null}
@@ -666,7 +691,7 @@ function SkippedPart({ plan }: { plan: ImportPlan }) {
                     {sessionLongLabel(sessions[sessionId]!)} · {n}
                   </Pill>
                 ) : (
-                  <Pill tone="muted">Library frames · {n}</Pill>
+                  <Pill tone="muted">{m.import_library_frames({ count: n })}</Pill>
                 )}
               </li>
             ))}
@@ -678,22 +703,23 @@ function SkippedPart({ plan }: { plan: ImportPlan }) {
 }
 
 function ModePart({ plan, draft }: { plan: ImportPlan; draft: ImportDraft }) {
+  const m = useMessages()
   return (
-    <Part title="Copy or Move" id="import-mode">
-      <RadioGroup aria-label="Copy or Move" value={draft.mode} onValueChange={(next) => setDraft({ mode: next as "copy" | "move" })} className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
+    <Part title={m.import_copy_or_move()} id="import-mode">
+      <RadioGroup aria-label={m.import_copy_or_move()} value={draft.mode} onValueChange={(next) => setDraft({ mode: next as "copy" | "move" })} className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
         <span className="flex items-center gap-1.5 text-sm">
           <label className="flex items-center gap-2">
             <RadioGroupItem value="copy" />
-            <span className="font-medium">Copy</span>
+            <span className="font-medium">{m.import_copy()}</span>
           </label>
-          <NoteMarker label="Copy" rows={[{ label: "Copy", value: "verified by SHA-256; the source stays" }]} />
+          <NoteMarker label={m.import_copy()} rows={[{ label: m.import_copy(), value: m.import_copy_detail() }]} />
         </span>
         <span className="flex items-center gap-1.5 text-sm">
           <label className="flex items-center gap-2">
             <RadioGroupItem value="move" disabled={!plan.move.allowed} />
-            <span className={plan.move.allowed ? "font-medium" : "font-medium text-muted-foreground"}>Move</span>
+            <span className={plan.move.allowed ? "font-medium" : "font-medium text-muted-foreground"}>{m.import_move()}</span>
           </label>
-          <NoteMarker label="Move" rows={[{ label: "Move", value: "verified by SHA-256, then the source goes to the OS Trash" }]} />
+          <NoteMarker label={m.import_move()} rows={[{ label: m.import_move(), value: m.import_move_detail() }]} />
           {plan.move.reason ? <Pill tone="muted">{plan.move.reason}</Pill> : null}
         </span>
       </RadioGroup>
@@ -709,6 +735,7 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
   const navigate = useNavigate()
   const op = useStore((s) => s.operations[operationId])
   const sessions = useStore((s) => s.catalog.sessions)
+  const m = useMessages()
   const reset = () => updateSlice("a", (a) => ({ ...a, lastImport: null }))
   const go = (to: string) => {
     closeSheet()
@@ -717,7 +744,7 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
   if (!op) {
     return (
       <div className="flex-1 p-4">
-        <Notice tone="info" title="No longer recorded" actions={<Button size="xs" variant="outline" onClick={reset}>Start again</Button>} />
+        <Notice tone="info" title={m.import_no_longer_recorded()} actions={<Button size="xs" variant="outline" onClick={reset}>{m.import_start_again()}</Button>} />
       </div>
     )
   }
@@ -740,7 +767,7 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
         {payload && settled && shown > 0 ? (
           <section className="space-y-1.5" aria-labelledby="import-sessions">
             <h3 id="import-sessions" className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-              Imported <CountBadge count={imported.length + masters} label={`${imported.length + masters} imported`} />
+              {m.import_imported()} <CountBadge count={imported.length + masters} label={m.import_imported_count({ count: imported.length + masters })} />
             </h3>
             <ul className="divide-y divide-border/60 rounded-md border border-separator text-sm" data-imported>
               {imported.map((s) => (
@@ -753,16 +780,16 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
                     <span>{sessionLongLabel(s)}</span>
                   )}
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
-                    {TYPE_LABEL[s.imageType]} · {plural(s.assetIds.length, "frame")}
+                    {typeLabel(m, s.imageType)} · {m.session_frame_count({ count: s.assetIds.length, frames: formatCount(s.assetIds.length) })}
                     {s.imageType === "light" ? (
                       s.target.status === "confirmed" || s.target.status === "associated" ? (
-                        <Pill tone="success">Target set</Pill>
+                        <Pill tone="success">{m.import_target_set()}</Pill>
                       ) : (
-                        <Pill tone="warning">Needs a Target</Pill>
+                        <Pill tone="warning">{m.sessions_filter_needs_target()}</Pill>
                       )
                     ) : (
                       <Pill tone="info" onClick={() => go("/calibration")}>
-                        {ROUTE_LABEL.stack}
+                        {routeLabel(m, "stack")}
                       </Pill>
                     )}
                   </span>
@@ -770,9 +797,9 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
               ))}
               {masters > 0 ? (
                 <li className="flex min-h-(--row-h) items-center justify-between gap-2 px-2.5 py-1">
-                  <span>{plural(masters, "master")}</span>
+                  <span>{m.import_master_count({ count: masters })}</span>
                   <Pill tone="success" onClick={() => go("/calibration")}>
-                    {ROUTE_LABEL.masters}
+                    {routeLabel(m, "masters")}
                   </Pill>
                 </li>
               ) : null}
@@ -782,11 +809,11 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
       </div>
       <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-separator bg-chrome px-4 py-2.5" data-chrome>
         <Button size="sm" variant="ghost" onClick={reset} disabled={!settled}>
-          {kind === "import" ? "Import more" : "Add another"}
+          {kind === "import" ? m.import_more() : m.import_add_another()}
         </Button>
         {toCalibration ? (
           <Button size="sm" disabled={!settled} onClick={() => go("/calibration")}>
-            Show in Calibration
+            {m.import_show_in_calibration()}
           </Button>
         ) : (
           <Button
@@ -798,7 +825,7 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
             }}
             data-show-in-sessions
           >
-            Show in Sessions
+            {m.import_show_in_sessions()}
           </Button>
         )}
       </footer>
@@ -812,8 +839,13 @@ function ProgressView({ operationId, kind }: { operationId: string; kind: "impor
 
 const FOLDER_ROLES: LocationRole[] = ["captures", "calibration"]
 
+function roleTitle(m: Messages, role: LocationRole): string {
+  return role === "captures" ? m.status_role_captures() : m.status_role_calibration()
+}
+
 function FolderTab() {
   const state = useStore((s) => s)
+  const m = useMessages()
   const [path, setPath] = useState<string | null>(null)
   const [role, setRole] = useState<LocationRole>("captures")
   const [name, setName] = useState("")
@@ -823,29 +855,29 @@ function FolderTab() {
   const errors = path ? validateLocation(state.catalog, draft) : {}
   const images = path ? filesUnder(state.disk, path).filter((f) => (f.kind === "fits" || f.kind === "xisf") && f.header).length : 0
   const invalid = [errors.path ?? null, errors.displayName ?? null].filter((b): b is string => b !== null)
-  const roleItems = FOLDER_ROLES.map((r) => ({ value: r, label: ROLE_COPY[r].title }))
+  const roleItems = FOLDER_ROLES.map((r) => ({ value: r, label: roleTitle(m, r) }))
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <Part title="Folder" id="folder-path" aside={<HelpTip label="About indexing in place">Indexed where it is: nothing in it is copied, moved or renamed, and no naming template applies.</HelpTip>}>
+        <Part title={m.import_column_folder()} id="folder-path" aside={<HelpTip label={m.import_index_help_label()}>{m.import_index_help()}</HelpTip>}>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <Button size="sm" variant="outline" onClick={() => setPicking(true)}>
               <FolderOpen data-icon="inline-start" aria-hidden="true" />
-              Choose folder…
+              {m.import_choose_folder()}
             </Button>
             {path ? (
               <>
                 <PathText path={path} />
-                <Pill tone="muted">{plural(images, "image file")}</Pill>
+                <Pill tone="muted">{m.import_image_file_count({ count: images, files: formatCount(images) })}</Pill>
               </>
             ) : null}
           </div>
         </Part>
-        <Part title="Role" id="folder-role">
+        <Part title={m.import_role()} id="folder-role">
           <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 text-sm">
-            <span className="text-muted-foreground">Role</span>
+            <span className="text-muted-foreground">{m.import_role()}</span>
             <Select items={roleItems} value={role} onValueChange={(next) => setRole(next as LocationRole)}>
-              <SelectTrigger size="sm" aria-label="Library role" className="w-48">
+              <SelectTrigger size="sm" aria-label={m.import_library_role()} className="w-48">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -857,7 +889,7 @@ function FolderTab() {
               </SelectContent>
             </Select>
             <label htmlFor="add-folder-name" className="text-muted-foreground">
-              Name
+              {m.import_name_placeholder()}
             </label>
             <Input id="add-folder-name" value={name} onChange={(e) => setName(e.target.value)} className="h-6 w-64" aria-invalid={Boolean(errors.displayName) || undefined} />
           </div>
@@ -871,29 +903,29 @@ function FolderTab() {
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-separator bg-chrome px-4 py-2.5" data-chrome>
         <div className="min-w-0 flex-1 text-xs">
           {!path ? (
-            <span className="text-muted-foreground">Choose a folder</span>
+            <span className="text-muted-foreground">{m.import_choose_a_folder()}</span>
           ) : invalid.length === 1 ? (
-            <Refusal action="Can't add" reason={invalid[0]!} blockers={[]} />
+            <Refusal action={m.session_cant_add()} reason={invalid[0]!} blockers={[]} />
           ) : invalid.length > 1 ? (
-            <Refusal action="Can't add" reason={plural(invalid.length, "blocker")} blockers={invalid.map((label) => ({ label }))} />
+            <Refusal action={m.session_cant_add()} reason={m.refusal_blockers({ count: invalid.length })} blockers={invalid.map((label) => ({ label }))} />
           ) : null}
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="ghost" onClick={closeSheet}>
-            Cancel
+            {m.verb_cancel()}
           </Button>
-          <Button size="sm" disabled={!path || invalid.length > 0} onClick={() => setRefusal(refusalOf(addLibraryFolder(draft).result, "Can't add"))}>
-            Add and index
+          <Button size="sm" disabled={!path || invalid.length > 0} onClick={() => setRefusal(refusalOf(addLibraryFolder(draft).result, m.session_cant_add()))}>
+            {m.import_add_and_index()}
           </Button>
         </div>
       </footer>
       <FolderPicker
         open={picking}
         onOpenChange={setPicking}
-        title="Choose library folder"
-        description="Indexed in place"
+        title={m.import_choose_library_folder()}
+        description={m.import_indexed_in_place()}
         initialPath={path}
-        chooseVerb="Add"
+        chooseVerb={m.verb_add()}
         onChoose={(chosen) => {
           setPath(chosen)
           if (!name.trim()) setName(suggestDisplayName(state.disk, chosen))

@@ -20,15 +20,19 @@ import {
 } from "@/domain/derive"
 import { effectiveExposureS, qualityApplicability } from "@/domain/library"
 import type { Catalog, Project, ProjectId, Run, Session, SessionId } from "@/domain/types"
+import type { Messages } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
 
 export type SessionFilter = "all" | "needs-target" | "not-in-project" | "trashed"
 
-export const FILTER_LABEL: Record<SessionFilter, string> = {
-  all: "All",
-  "needs-target": "Needs a Target",
-  "not-in-project": "Not in any Project",
-  trashed: "Trashed",
+export function filterLabel(m: Messages, filter: SessionFilter): string {
+  const label: Record<SessionFilter, () => string> = {
+    all: m.sessions_filter_all,
+    "needs-target": m.sessions_filter_needs_target,
+    "not-in-project": m.sessions_filter_not_in_project,
+    trashed: m.status_trashed,
+  }
+  return label[filter]()
 }
 
 export function parseFilter(value: string | undefined): SessionFilter {

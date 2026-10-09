@@ -13,10 +13,12 @@ import type { MenuEntry } from "@/components/app/row-menu"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useMessages } from "@/app/preferences"
 import { openSheet } from "@/app/ui-state"
 import { projectCandidates, rigName, sessionRigId, sessionTargetId } from "@/domain/derive"
 import { sessionLabel } from "@/domain/membership"
 import type { Catalog, OpticalTrainId, Project, ProjectId, SessionId, TargetId } from "@/domain/types"
+import type { Messages } from "@/lib/i18n"
 import { addSessionToProject } from "@/store/actions/projects"
 import { confirmRig, confirmTarget } from "@/store/actions/library"
 import { type CommitResult, useStore } from "@/store/core"
@@ -41,44 +43,45 @@ function openProjects(catalog: Catalog, sessionId: SessionId): Project[] {
 }
 
 /** Add to Project as context-menu entries: one per open Project, then Create Project. */
-export function addToProjectEntries(catalog: Catalog, sessionId: SessionId, onPick: (pending: PendingAdd) => void): MenuEntry[] {
+export function addToProjectEntries(m: Messages, catalog: Catalog, sessionId: SessionId, onPick: (pending: PendingAdd) => void): MenuEntry[] {
   return [
-    { heading: "Add to Project" },
+    { heading: m.session_add_to_project() },
     ...openProjects(catalog, sessionId).map((p) => ({ label: p.name, icon: FolderInput, onSelect: () => onPick({ sessionId, projectId: p.id }) })),
-    { label: "Create Project…", icon: FolderPlus, onSelect: () => openSheet({ kind: "new-project", fromSessionId: sessionId }) },
+    { label: m.session_create_project_menu(), icon: FolderPlus, onSelect: () => openSheet({ kind: "new-project", fromSessionId: sessionId }) },
   ]
 }
 
 /** The Add to Project preview; `pending` null keeps it closed. */
 export function AddToProjectDialog({ pending, onClose, onAdded }: { pending: PendingAdd | null; onClose: () => void; onAdded?: (notice: AddedNotice) => void }) {
   const catalog = useStore((s) => s.catalog)
+  const m = useMessages()
   const session = pending ? catalog.sessions[pending.sessionId] : undefined
   const project = pending ? catalog.projects[pending.projectId] : undefined
   const targetId = session ? sessionTargetId(session) : null
   const rigId = session ? sessionRigId(session) : null
   const targetName = targetId ? (catalog.targets[targetId]?.name ?? targetId) : null
-  const label = session ? sessionLabel(session) : "Session"
+  const label = session ? sessionLabel(session) : m.session_label()
   const changes =
     project && session
       ? [
-          ...(targetName && !project.subjects.some((s) => s.targetId === targetId) ? [`Adds subject ${targetName}, with the Project's goals`] : []),
-          ...(rigId && !project.rigIds.includes(rigId) ? [`Adds rig ${rigName(catalog, rigId)}`] : []),
-          `${label} becomes a candidate`,
+          ...(targetName && !project.subjects.some((s) => s.targetId === targetId) ? [m.session_adds_subject({ name: targetName })] : []),
+          ...(rigId && !project.rigIds.includes(rigId) ? [m.session_adds_rig({ name: rigName(catalog, rigId) })] : []),
+          m.session_becomes_candidate({ name: label }),
         ]
       : []
   return (
     <ConfirmDialog
       open={pending !== null && project !== undefined}
       onOpenChange={(open) => !open && onClose()}
-      title={project ? `Add ${label} to ${project.name}?` : "Add to Project"}
-      description={targetName ? `${targetName} · ${rigId ? rigName(catalog, rigId) : "no rig"}` : "No Target"}
+      title={project ? m.session_add_to_project_title({ session: label, project: project.name }) : m.session_add_to_project()}
+      description={targetName ? `${targetName} · ${rigId ? rigName(catalog, rigId) : m.session_no_rig()}` : m.session_no_target()}
       changes={changes}
-      confirmLabel="Add session"
+      confirmLabel={m.session_add_session()}
       onConfirm={(): CommitResult => {
-        if (!pending || !project) return { ok: false, reason: "stale", message: "Choose a Project." }
+        if (!pending || !project) return { ok: false, reason: "stale", message: m.session_choose_project() }
         const { result, note } = addSessionToProject(pending.sessionId, pending.projectId)
         if (result.ok) {
-          const title = `Added ${label} to ${project.name}`
+          const title = m.session_added_to_project({ session: label, project: project.name })
           announce(note ? `${title}. ${note}` : title)
           onAdded?.({ title, note })
         }
@@ -100,6 +103,7 @@ export function AddToProjectMenu({
   variant?: "outline" | "ghost" | "default"
 }) {
   const catalog = useStore((s) => s.catalog)
+  const m = useMessages()
   const [pending, setPending] = useState<PendingAdd | null>(null)
   const session = catalog.sessions[sessionId]
   if (!session) return null
@@ -109,24 +113,24 @@ export function AddToProjectMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger render={<Button size={size} variant={variant} />}>
-          Add to Project
+          {m.session_add_to_project()}
           <ChevronDown data-icon="inline-end" aria-hidden="true" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-auto min-w-60">
           <DropdownMenuGroup>
-            <DropdownMenuLabel>Add {sessionLabel(session)} to</DropdownMenuLabel>
+            <DropdownMenuLabel>{m.session_add_to({ name: sessionLabel(session) })}</DropdownMenuLabel>
             {projects.map((p) => (
               <DropdownMenuItem key={p.id} onClick={() => setPending({ sessionId, projectId: p.id })} className="flex-col items-start gap-0">
                 {p.name}
-                {rigId && !p.rigIds.includes(rigId) ? <span className="text-xs text-muted-foreground">+ rig {rigName(catalog, rigId)}</span> : null}
+                {rigId && !p.rigIds.includes(rigId) ? <span className="text-xs text-muted-foreground">{m.session_plus_rig({ name: rigName(catalog, rigId) })}</span> : null}
               </DropdownMenuItem>
             ))}
-            {projects.length === 0 ? <DropdownMenuItem disabled>No open Project</DropdownMenuItem> : null}
+            {projects.length === 0 ? <DropdownMenuItem disabled>{m.session_no_open_project()}</DropdownMenuItem> : null}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => openSheet({ kind: "new-project", fromSessionId: sessionId })}>
             <FolderPlus aria-hidden="true" />
-            Create Project…
+            {m.session_create_project_menu()}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -137,9 +141,10 @@ export function AddToProjectMenu({
 
 export function CreateProjectButton({ sessionId, size = "sm" }: { sessionId: SessionId; size?: "xs" | "sm" }) {
   const hasTarget = useStore((s) => Boolean(s.catalog.sessions[sessionId] && sessionTargetId(s.catalog.sessions[sessionId]!)))
+  const m = useMessages()
   return (
-    <Button size={size} variant="outline" onClick={() => openSheet({ kind: "new-project", fromSessionId: sessionId })} title={hasTarget ? "Prefilled with this Target and rig" : "Confirm a Target to prefill it"}>
-      Create Project
+    <Button size={size} variant="outline" onClick={() => openSheet({ kind: "new-project", fromSessionId: sessionId })} title={hasTarget ? m.session_prefilled() : m.session_confirm_to_prefill()}>
+      {m.session_create_project()}
     </Button>
   )
 }
@@ -152,6 +157,7 @@ export function CreateProjectButton({ sessionId, size = "sm" }: { sessionId: Ses
 export function ConfirmTargetControl({ sessionId, compact = false, onDone }: { sessionId: SessionId; compact?: boolean; onDone?: (message: string) => void }) {
   const session = useStore((s) => s.catalog.sessions[sessionId])
   const targets = useStore((s) => s.catalog.targets)
+  const m = useMessages()
   const [choice, setChoice] = useState<string | null>(session?.target.value ?? null)
   const [refusal, setRefusal] = useState<RefusalProps | null>(null)
   const id = useId()
@@ -160,22 +166,22 @@ export function ConfirmTargetControl({ sessionId, compact = false, onDone }: { s
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((t) => ({ value: t.id, label: t.name }))
   const confirm = () => {
-    if (!choice) return setRefusal({ action: "Can't confirm", reason: "no Target chosen", blockers: [] })
+    if (!choice) return setRefusal({ action: m.session_cant_confirm(), reason: m.session_no_target_chosen(), blockers: [] })
     const result = confirmTarget(sessionId, choice as TargetId, session.revision)
-    setRefusal(refusalOf(result, "Can't confirm"))
+    setRefusal(refusalOf(result, m.session_cant_confirm()))
     if (!result.ok) return
-    onDone?.(`Target: ${targets[choice]?.name}`)
-    announce(`Target confirmed: ${targets[choice]?.name}`)
+    onDone?.(m.session_target_value({ name: targets[choice]?.name ?? choice }))
+    announce(m.session_target_confirmed({ name: targets[choice]?.name ?? choice }))
   }
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-1.5">
         <span id={id} className="sr-only">
-          Target for {sessionLabel(session)}
+          {m.session_target_for({ name: sessionLabel(session) })}
         </span>
         <Select items={items} value={choice} onValueChange={(next) => setChoice(next as string)}>
           <SelectTrigger size="sm" aria-labelledby={id} className={compact ? "w-36" : "w-48"}>
-            <SelectValue placeholder="Choose a Target" />
+            <SelectValue placeholder={m.session_choose_a_target()} />
           </SelectTrigger>
           <SelectContent>
             {items.map((item) => (
@@ -186,7 +192,7 @@ export function ConfirmTargetControl({ sessionId, compact = false, onDone }: { s
           </SelectContent>
         </Select>
         <Button size="sm" variant="outline" onClick={confirm}>
-          Confirm Target
+          {m.session_confirm_target()}
         </Button>
       </div>
       {refusal ? <Refusal {...refusal} /> : null}
@@ -197,6 +203,7 @@ export function ConfirmTargetControl({ sessionId, compact = false, onDone }: { s
 export function ConfirmRigControl({ sessionId }: { sessionId: SessionId }) {
   const session = useStore((s) => s.catalog.sessions[sessionId])
   const rigs = useStore((s) => s.catalog.opticalTrains)
+  const m = useMessages()
   const [choice, setChoice] = useState<string | null>(session?.equipment.value ?? null)
   const [refusal, setRefusal] = useState<RefusalProps | null>(null)
   const id = useId()
@@ -205,20 +212,20 @@ export function ConfirmRigControl({ sessionId }: { sessionId: SessionId }) {
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((r) => ({ value: r.id, label: r.name }))
   const confirm = () => {
-    if (!choice) return setRefusal({ action: "Can't confirm", reason: "no rig chosen", blockers: [] })
+    if (!choice) return setRefusal({ action: m.session_cant_confirm(), reason: m.session_no_rig_chosen(), blockers: [] })
     const result = confirmRig(sessionId, choice as OpticalTrainId, session.revision)
-    setRefusal(refusalOf(result, "Can't confirm"))
-    if (result.ok) announce(`Rig confirmed: ${rigs[choice]?.name}`)
+    setRefusal(refusalOf(result, m.session_cant_confirm()))
+    if (result.ok) announce(m.session_rig_confirmed({ name: rigs[choice]?.name ?? choice }))
   }
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-1.5">
         <span id={id} className="sr-only">
-          Rig for {sessionLabel(session)}
+          {m.session_rig_for({ name: sessionLabel(session) })}
         </span>
         <Select items={items} value={choice} onValueChange={(next) => setChoice(next as string)}>
           <SelectTrigger size="sm" aria-labelledby={id} className="w-56">
-            <SelectValue placeholder="Choose a rig" />
+            <SelectValue placeholder={m.session_choose_a_rig()} />
           </SelectTrigger>
           <SelectContent>
             {items.map((item) => (
@@ -229,7 +236,7 @@ export function ConfirmRigControl({ sessionId }: { sessionId: SessionId }) {
           </SelectContent>
         </Select>
         <Button size="sm" variant="outline" onClick={confirm}>
-          Confirm rig
+          {m.session_confirm_rig()}
         </Button>
       </div>
       {refusal ? <Refusal {...refusal} /> : null}
