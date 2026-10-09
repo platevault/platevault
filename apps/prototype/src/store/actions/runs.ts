@@ -11,13 +11,13 @@ import {
   groupHref,
   latestRevision,
   panelForSession,
-  panelLabel,
+  panelRef,
   projectCandidates,
-  rigName,
+  rigRef,
   runHref,
   runPipeline,
   runSetup,
-  subjectName,
+  subjectRef,
   trashRefusals,
 } from "@/domain/derive"
 import { addSessions, contentEquals, contentOf, describeDiff, diffContent, emptyContent, excludeFrames, removeSessions, restoreFrames } from "@/domain/membership"
@@ -35,15 +35,25 @@ import type {
   SelectionReason,
   SessionId,
 } from "@/domain/types"
-import { plural } from "@/lib/format"
+import { formatCount } from "@/lib/format"
+import { joinRefs, m, type MessageRef, msg, say, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
 import { moveToOsTrash, preparedEntryItems, resultItems } from "./trash"
 
-function uniqueRunName(state: PrototypeState, projectId: ProjectId, base: string): string {
-  const taken = new Set(Object.values(state.catalog.runs).filter((r) => r.projectId === projectId).map((r) => r.name))
-  if (!taken.has(base)) return base
-  for (let n = 2; ; n += 1) if (!taken.has(`${base} (${n})`)) return `${base} (${n})`
+/** Names the Project's runs and run groups already use: a new run or group never repeats one. */
+function takenNames(state: PrototypeState, projectId: ProjectId): Set<string> {
+  const runs = Object.values(state.catalog.runs).filter((r) => r.projectId === projectId)
+  const groups = Object.values(state.catalog.runGroups).filter((g) => g.projectId === projectId)
+  return new Set([...runs, ...groups].map((r) => r.name))
+}
+
+/** `base`, or "base (2)", "base (3)" … when taken; the name is added to `taken`. */
+function uniqueName(taken: Set<string>, base: string): string {
+  let name = base
+  for (let n = 2; taken.has(name); n += 1) name = `${base} (${n})`
+  taken.add(name)
+  return name
 }
 
 function newRun(fields: Pick<Run, "id" | "name" | "projectId" | "subjectId" | "panelId" | "groupId" | "rigId" | "setup">, draft: MembershipContent): Run {
@@ -95,42 +105,48 @@ export function startRun(projectId: ProjectId, subjectId: string, rigId: Optical
   const project = catalog.projects[projectId]
   const subject = project ? findSubject(project, subjectId) : undefined
   if (!project || !subject) return { result: MISSING, runId: null, groupId: null }
-  if (!project.rigIds.includes(rigId)) return { result: refuse("Start run refused", [`${rigName(catalog, rigId)} is not one of ${project.name}'s rigs`], `/projects/${projectId}`), runId: null, groupId: null }
-  if (project.state !== "open") return { result: refuse("Start run refused", [`${project.name} is Done; Reopen it first`], `/projects/${projectId}`), runId: null, groupId: null }
+  if (!project.rigIds.includes(rigId)) {
+    return { result: refuse(msg("store_refused", { label: msg("startrun_title") }), [msg("store_reason_rig_not_in_project", { rig: rigRef(catalog, rigId), project: project.name })], `/projects/${projectId}`), runId: null, groupId: null }
+  }
+  if (project.state !== "open") return { result: refuse(msg("store_refused", { label: msg("startrun_title") }), [msg("store_reason_project_done", { project: project.name })], `/projects/${projectId}`), runId: null, groupId: null }
   const chosen = options.sessionIds ? new Set(options.sessionIds) : null
   const candidates = projectCandidates(catalog, project).filter((c) => c.subject.id === subjectId && c.rigId === rigId && (!chosen || chosen.has(c.session.id)))
   const setup: RunSetup = { profileId: null, inputMode: null, calibrationPolicy: "automatic" }
-  const rigShort = catalog.opticalTrains[rigId]?.name.split(" / ")[0] ?? "rig"
+  const taken = takenNames(state, projectId)
+  // A new run's name is data from here on: worded once, in the language of the moment.
+  const rigShort = say(m, rigRef(catalog, rigId)).split(" / ")[0]!
   if (!subject.mosaic) {
     const id = freshId("run", `${projectId}|${subjectId}|${rigId}`)
-    const reason = (detail: string): SelectionReason => ({ kind: "candidate", detail })
-    const draft = addSessions(emptyContent(), disk, catalog, candidates.map((c) => ({ session: c.session, reason: reason(c.reason) })))
-    const run = newRun({ id, name: uniqueRunName(state, projectId, `${subjectName(catalog, subject)} ${rigShort}`), projectId, subjectId, panelId: null, groupId: null, rigId, setup }, draft)
-    const result = commit(`Start ${run.name}`, (s) => withCatalog(s, (c) => ({ ...c, runs: { ...c.runs, [id]: run } })), { href: runHref(run) })
-    if (result.ok) recordSaved(`Run started: ${run.name}`, `${plural(candidates.length, "candidate session")} preselected on ${rigName(catalog, rigId)}.`, runHref(run))
+    const draft = addSessions(emptyContent(), disk, catalog, candidates.map((c) => ({ session: c.session, reason: { kind: "candidate", detail: c.reason } })))
+    const run = newRun({ id, name: uniqueName(taken, `${say(m, subjectRef(catalog, subject))} ${rigShort}`), projectId, subjectId, panelId: null, groupId: null, rigId, setup }, draft)
+    const result = commit(msg("store_label_start", { name: run.name }), (s) => withCatalog(s, (c) => ({ ...c, runs: { ...c.runs, [id]: run } })), { href: runHref(run) })
+    if (result.ok) {
+      recordSaved(msg("store_saved_run_started", { name: run.name }), msg("store_run_started_detail", { count: candidates.length, n: formatCount(candidates.length), rig: rigRef(catalog, rigId) }), runHref(run))
+    }
     return { result, runId: result.ok ? id : null, groupId: null }
   }
   const included = options.panelIds ? new Set(options.panelIds) : null
   const panels = subject.mosaic.panels.filter((p) => !included || included.has(p.id))
-  if (panels.length === 0) return { result: refuse("Start run group refused", ["no panel is included"], `/projects/${projectId}`), runId: null, groupId: null }
+  if (panels.length === 0) return { result: refuse(msg("store_refused", { label: msg("store_label_start_group") }), [msg("store_reason_no_panel")], `/projects/${projectId}`), runId: null, groupId: null }
   const placements = options.placements ?? {}
   const groupId = freshId("grp", `${projectId}|${subjectId}|${rigId}`)
+  const groupName = uniqueName(taken, subject.mosaic.name)
   const runs: Run[] = panels.map((panel) => {
     const placed = candidates.flatMap((c): Array<{ session: typeof c.session; reason: SelectionReason }> => {
       if (c.session.id in placements) {
-        return placements[c.session.id] === panel.id ? [{ session: c.session, reason: { kind: "panel-assigned", detail: `${c.reason} · placed on ${panelLabel(panel)}` } }] : []
+        return placements[c.session.id] === panel.id ? [{ session: c.session, reason: { kind: "panel-assigned", detail: joinRefs([c.reason, msg("store_placed_on", { panel: panelRef(panel) })], " · ") } }] : []
       }
       const p = panelForSession(catalog, subject, c.session, rigId)
-      return p.panelId === panel.id ? [{ session: c.session, reason: { kind: "panel-pointing", detail: `${c.reason} · ${p.detail}` } }] : []
+      return p.panelId === panel.id ? [{ session: c.session, reason: { kind: "panel-pointing", detail: joinRefs([c.reason, p.detail], " · ") } }] : []
     })
     return newRun(
-      { id: freshId("run", `${groupId}|${panel.id}`), name: `${subject.mosaic!.name} ${panelLabel(panel)}`, projectId, subjectId, panelId: panel.id, groupId, rigId, setup: null },
+      { id: freshId("run", `${groupId}|${panel.id}`), name: uniqueName(taken, `${groupName} ${say(m, panelRef(panel))}`), projectId, subjectId, panelId: panel.id, groupId, rigId, setup: null },
       addSessions(emptyContent(), disk, catalog, placed),
     )
   })
   const group: RunGroup = {
     id: groupId,
-    name: uniqueRunName(state, projectId, subject.mosaic.name),
+    name: groupName,
     projectId,
     subjectId,
     rigId,
@@ -142,11 +158,11 @@ export function startRun(projectId: ProjectId, subjectId: string, rigId: Optical
   }
   const href = groupHref(group)
   const result = commit(
-    `Start ${group.name}`,
+    msg("store_label_start", { name: group.name }),
     (s) => withCatalog(s, (c) => ({ ...c, runGroups: { ...c.runGroups, [groupId]: group }, runs: { ...c.runs, ...Object.fromEntries(runs.map((r) => [r.id, r])) } })),
     { href },
   )
-  if (result.ok) recordSaved(`Run group started: ${group.name}`, `${plural(runs.length, "panel run")} on ${rigName(catalog, rigId)}.`, href)
+  if (result.ok) recordSaved(msg("store_saved_group_started", { name: group.name }), msg("store_group_started_detail", { count: runs.length, n: formatCount(runs.length), rig: rigRef(catalog, rigId) }), href)
   return { result, runId: null, groupId: result.ok ? groupId : null }
 }
 
@@ -160,7 +176,7 @@ export interface EditRunOptions {
 }
 
 /** Patch one run in one commit, guarded by its revision; every run write goes through here. */
-export function editRun(runId: RunId, label: string, update: (run: Run, state: PrototypeState) => Run, options: EditRunOptions = {}): CommitResult {
+export function editRun(runId: RunId, label: MessageRef, update: (run: Run, state: PrototypeState) => Run, options: EditRunOptions = {}): CommitResult {
   const run = store.getState().catalog.runs[runId]
   if (!run) return MISSING
   const href = runHref(run, options.step)
@@ -172,14 +188,14 @@ export function editRun(runId: RunId, label: string, update: (run: Run, state: P
     },
     { expect: { collection: "runs", id: runId, revision: run.revision }, href },
   )
-  if (result.ok && options.record !== false) recordSaved(`${label}: ${run.name}`, null, href)
+  if (result.ok && options.record !== false) recordSaved(joinRefs([label, verbatim(run.name)], ": "), null, href)
   return result
 }
 
 /** Why a run's membership cannot change now (VSEL-FR-17, D-W72); null when it can. */
-function membershipLock(run: Run): string | null {
-  if (run.trashedAt) return `${run.name} is in the Project's Trash; Restore it first`
-  if (run.completion === "complete") return `${run.name} is Complete; Reopen it to change its membership`
+function membershipLock(run: Run): MessageRef | null {
+  if (run.trashedAt) return msg("store_lock_trashed", { name: run.name })
+  if (run.completion === "complete") return msg("store_lock_complete", { name: run.name })
   return null
 }
 
@@ -188,11 +204,11 @@ function membershipLock(run: Run): string | null {
  * an edit that returns to it clears the draft. Saved revisions never change
  * in place (D-W34).
  */
-export function updateRunDraft(runId: RunId, label: string, change: (content: MembershipContent, state: PrototypeState) => MembershipContent): CommitResult {
+export function updateRunDraft(runId: RunId, label: MessageRef, change: (content: MembershipContent, state: PrototypeState) => MembershipContent): CommitResult {
   const run = store.getState().catalog.runs[runId]
   if (!run) return MISSING
   const lock = membershipLock(run)
-  if (lock) return refuse(`${label} refused`, [lock], runHref(run))
+  if (lock) return refuse(msg("store_refused", { label }), [lock], runHref(run))
   return editRun(
     runId,
     label,
@@ -208,27 +224,27 @@ export function updateRunDraft(runId: RunId, label: string, change: (content: Me
 }
 
 export function addRunSessions(runId: RunId, sessionIds: SessionId[], reason: SelectionReason): CommitResult {
-  return updateRunDraft(runId, `Add ${plural(sessionIds.length, "session")}`, (content, s) =>
+  return updateRunDraft(runId, msg("store_label_add_sessions", { count: sessionIds.length, n: formatCount(sessionIds.length) }), (content, s) =>
     addSessions(content, s.disk, s.catalog, sessionIds.flatMap((id) => (s.catalog.sessions[id] ? [{ session: s.catalog.sessions[id]!, reason }] : []))),
   )
 }
 
 export function removeRunSessions(runId: RunId, sessionIds: SessionId[]): CommitResult {
-  return updateRunDraft(runId, `Remove ${plural(sessionIds.length, "session")}`, (content, s) => removeSessions(content, s.catalog, sessionIds))
+  return updateRunDraft(runId, msg("store_label_remove_sessions", { count: sessionIds.length, n: formatCount(sessionIds.length) }), (content, s) => removeSessions(content, s.catalog, sessionIds))
 }
 
 /** Exclude from run: run scope only; files and library quality stay as they are (VSEL-FR-10). */
 export function excludeRunFrames(runId: RunId, assetIds: string[]): CommitResult {
-  return updateRunDraft(runId, `Exclude ${plural(assetIds.length, "frame")}`, (content) => excludeFrames(content, assetIds))
+  return updateRunDraft(runId, msg("store_label_exclude_frames", { count: assetIds.length, n: formatCount(assetIds.length) }), (content) => excludeFrames(content, assetIds))
 }
 
 export function restoreRunFrames(runId: RunId, assetIds: string[]): CommitResult {
-  return updateRunDraft(runId, `Restore ${plural(assetIds.length, "frame")}`, (content, s) => restoreFrames(s.disk, s.catalog, content, assetIds))
+  return updateRunDraft(runId, msg("store_label_restore_frames", { count: assetIds.length, n: formatCount(assetIds.length) }), (content, s) => restoreFrames(s.disk, s.catalog, content, assetIds))
 }
 
 /** Accepted Results of other runs as inputs, any Project and any rig (D-W4, D-W56). */
 export function setProductInputs(runId: RunId, resultIds: ResultId[]): CommitResult {
-  return updateRunDraft(runId, `Product inputs (${resultIds.length})`, (content) => ({ ...content, productInputs: [...new Set(resultIds)] }))
+  return updateRunDraft(runId, msg("store_label_product_inputs", { count: resultIds.length }), (content) => ({ ...content, productInputs: [...new Set(resultIds)] }))
 }
 
 /** Save run: commit the draft as the next membership revision, with the changes it accepted (VSEL-FR-12, VSEL-FR-16). */
@@ -238,11 +254,11 @@ export function saveRun(runId: RunId): CommitResult {
   if (!run) return MISSING
   if (!run.draft) return { ok: true }
   const lock = membershipLock(run)
-  if (lock) return refuse("Save run refused", [lock], runHref(run))
+  if (lock) return refuse(msg("store_refused", { label: msg("domain_next_save_run") }), [lock], runHref(run))
   const base = latestRevision(run)
   const accepted = describeDiff(catalog, diffContent(base, run.draft))
   const revision = (base?.revision ?? 0) + 1
-  const result = editRun(runId, `Save revision ${revision}`, (current) => ({
+  const result = editRun(runId, msg("store_label_save_revision", { revision }), (current) => ({
     ...current,
     revisions: [...current.revisions, { ...contentOf(current.draft!), revision, savedAt: nowIso(), accepted }],
     draft: null,
@@ -252,11 +268,11 @@ export function saveRun(runId: RunId): CommitResult {
 
 /** Back to the latest revision; nothing else changes. */
 export function discardRunDraft(runId: RunId): CommitResult {
-  return editRun(runId, "Discard changes", (current) => ({ ...current, draft: null }), { record: false })
+  return editRun(runId, msg("store_label_discard"), (current) => ({ ...current, draft: null }), { record: false })
 }
 
 export function renameRun(runId: RunId, name: string): CommitResult {
-  return editRun(runId, "Rename run", (current) => ({ ...current, name: name.trim() }))
+  return editRun(runId, msg("store_label_rename_run"), (current) => ({ ...current, name: name.trim() }))
 }
 
 /**
@@ -268,7 +284,7 @@ export function setRunSetup(runId: RunId, patch: Partial<RunSetup>): CommitResul
   const run = catalog.runs[runId]
   if (!run) return MISSING
   if (run.groupId) return setGroupSetup(run.groupId, patch)
-  return editRun(runId, "Run setup", (current, s) => ({ ...current, setup: { ...runSetup(s.catalog, current), ...patch } }), { step: "prepare" })
+  return editRun(runId, msg("store_label_run_setup"), (current, s) => ({ ...current, setup: { ...runSetup(s.catalog, current), ...patch } }), { step: "prepare" })
 }
 
 export function setGroupSetup(groupId: RunGroupId, patch: Partial<RunSetup>): CommitResult {
@@ -276,11 +292,11 @@ export function setGroupSetup(groupId: RunGroupId, patch: Partial<RunSetup>): Co
   if (!group) return MISSING
   const href = groupHref(group, "prepare")
   const result = commit(
-    "Group setup",
+    msg("store_label_group_setup"),
     (s) => withCatalog(s, (c) => ({ ...c, runGroups: { ...c.runGroups, [groupId]: { ...c.runGroups[groupId]!, setup: { ...c.runGroups[groupId]!.setup, ...patch } } } })),
     { expect: { collection: "runGroups", id: groupId, revision: group.revision }, href },
   )
-  if (result.ok) recordSaved(`Group setup: ${group.name}`, `Applies to ${plural(group.runIds.length, "panel run")}.`, href)
+  if (result.ok) recordSaved(joinRefs([msg("store_label_group_setup"), verbatim(group.name)], ": "), msg("store_group_setup_detail", { count: group.runIds.length, n: formatCount(group.runIds.length) }), href)
   return result
 }
 
@@ -293,11 +309,11 @@ export function completeRun(runId: RunId): CommitResult {
   const state = store.getState()
   const run = state.catalog.runs[runId]
   if (!run) return MISSING
-  if (run.trashedAt) return refuse("Complete refused", [`${run.name} is in the Project's Trash`], runHref(run))
+  if (run.trashedAt) return refuse(msg("store_refused", { label: msg("store_label_complete") }), [msg("store_reason_in_trash", { name: run.name })], runHref(run))
   const blockers = completeRefusals(state, run)
-  if (blockers.length > 0) return refuse(`Complete ${run.name} refused`, blockers, runHref(run, "done"))
+  if (blockers.length > 0) return refuse(msg("store_refused", { label: msg("store_label_complete_named", { name: run.name }) }), blockers, runHref(run, "done"))
   const stage = runPipeline(state, run).current.id
-  return editRun(runId, "Complete", (current) => ({ ...current, completion: "complete", completedAt: nowIso(), stageBeforeComplete: stage }), { step: "done" })
+  return editRun(runId, msg("store_label_complete"), (current) => ({ ...current, completion: "complete", completedAt: nowIso(), stageBeforeComplete: stage }), { step: "done" })
 }
 
 /** Reopen returns the run to the step it was in (D-W71 as kept by D-W72); returns that step. */
@@ -305,7 +321,7 @@ export function reopenRun(runId: RunId): { result: CommitResult; step: RunStep }
   const run = store.getState().catalog.runs[runId]
   if (!run) return { result: MISSING, step: "select" }
   const step = run.stageBeforeComplete ?? "select"
-  const result = editRun(runId, "Reopen", (current) => ({ ...current, completion: "open", completedAt: null, stageBeforeComplete: null }), { step })
+  const result = editRun(runId, msg("project_reopen"), (current) => ({ ...current, completion: "open", completedAt: null, stageBeforeComplete: null }), { step })
   return { result, step }
 }
 
@@ -320,13 +336,13 @@ export function trashRun(runId: RunId): CommitResult {
   const run = state.catalog.runs[runId]
   if (!run) return MISSING
   const blockers = trashRefusals(state, run)
-  if (blockers.length > 0) return refuse(`Move ${run.name} to Trash refused`, blockers, runHref(run))
-  return editRun(runId, "Move to Trash", (current) => ({ ...current, trashedAt: nowIso() }))
+  if (blockers.length > 0) return refuse(msg("store_refused", { label: msg("store_label_move_to_trash_named", { name: run.name }) }), blockers, runHref(run))
+  return editRun(runId, msg("trash_move"), (current) => ({ ...current, trashedAt: nowIso() }))
 }
 
 /** Restore brings the run back exactly as it was: membership, preparations, Results and stage (D-W72). */
 export function restoreRun(runId: RunId): CommitResult {
-  return editRun(runId, "Restore", (current) => ({ ...current, trashedAt: null }))
+  return editRun(runId, msg("project_restore"), (current) => ({ ...current, trashedAt: null }))
 }
 
 /**
@@ -338,11 +354,11 @@ export function restoreRun(runId: RunId): CommitResult {
 export function emptyTrash(projectId: ProjectId, runIds: RunId[], tickedResults: RunId[]): CommitResult {
   const state = store.getState()
   const runs = runIds.map((id) => state.catalog.runs[id]).filter((r): r is Run => r !== undefined && r.projectId === projectId && r.trashedAt !== null)
-  if (runs.length === 0) return refuse("Empty Trash refused", ["no trashed run was chosen"], `/projects/${projectId}/trash`)
+  if (runs.length === 0) return refuse(msg("store_refused", { label: msg("trash_empty") }), [msg("store_reason_no_trashed_run")], `/projects/${projectId}/trash`)
   const items = runs.flatMap((run) => [...preparedEntryItems(state, run.id), ...(tickedResults.includes(run.id) ? resultItems(state, run.id) : [])])
   moveToOsTrash({
     kind: "empty-trash",
-    title: `Empty Trash: ${plural(runs.length, "run")}`,
+    title: joinRefs([msg("trash_empty"), msg("store_runs_count", { count: runs.length, n: formatCount(runs.length) })], ": "),
     projectId,
     runIds: runs.map((r) => r.id),
     items,

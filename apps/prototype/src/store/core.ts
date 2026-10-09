@@ -139,7 +139,7 @@ export function commit(label: MessageRef, mutate: (state: PrototypeState) => Pro
     if (entity && entity.revision !== revision) {
       // The record version is internal (D08); it is not the run membership "Revision N" a page shows, so the message names no number.
       const message = msg("store_stale_message", { label })
-      recordActivity({ kind: "write-refused", title: msg("store_stale_title", { label }), detail: message, operationId: null, href: options.href ?? null })
+      recordActivity({ kind: "write-refused", title: msg("store_refused", { label }), detail: message, operationId: null, href: options.href ?? null })
       return { ok: false, reason: "stale", message: say(m, message) }
     }
   }

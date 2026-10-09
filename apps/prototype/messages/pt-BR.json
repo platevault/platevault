@@ -3529,12 +3529,163 @@
   "op_settled_failed": "falhou",
   "op_settled_canceled": "cancelada",
   "op_settled_title": "{title}: {outcome}",
-  "store_stale_title": "Recusado: {label}",
   "store_stale_message": "Recusado: {label}. Este registro foi alterado em outro lugar desde que você o abriu. Revise a versão atual antes de salvar de novo.",
   "store_not_saved_title": "Não salvo: {label}",
   "store_not_saved_message": "Não salvo: {label}. A gravação no catálogo falhou. Sua alteração continua na tela; escolha Tentar novamente.",
   "store_persist_failed_title": "Dados do protótipo não salvos neste navegador",
   "store_persist_failed_detail": "O armazenamento do navegador recusou a gravação. As alterações ficam nesta aba até ela ser fechada.",
   "store_refusal_message": "{title}: {reasons}.",
-  "store_record_missing": "Este registro não existe mais no catálogo. Recarregue a página para ver a biblioteca atual."
+  "store_record_missing": "Este registro não existe mais no catálogo. Recarregue a página para ver a biblioteca atual.",
+  "store_refused": "Recusado: {label}",
+  "store_run_started_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input rig",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} sessão candidata pré-selecionada em {rig}.",
+        "countPlural=*": "{n} sessões candidatas pré-selecionadas em {rig}."
+      }
+    }
+  ],
+  "store_reason_rig_not_in_project": "{rig} não é um dos equipamentos de {project}",
+  "store_reason_project_done": "{project} está Concluído; reabra-o primeiro",
+  "store_label_start": "Iniciar {name}",
+  "store_saved_run_started": "Execução iniciada: {name}",
+  "store_label_start_group": "Iniciar grupo de execuções",
+  "store_reason_no_panel": "nenhum painel incluído",
+  "store_placed_on": "colocada em {panel}",
+  "store_saved_group_started": "Grupo de execuções iniciado: {name}",
+  "store_group_started_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input rig",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} execução de painel em {rig}.",
+        "countPlural=*": "{n} execuções de painel em {rig}."
+      }
+    }
+  ],
+  "store_lock_trashed": "{name} está na Lixeira do Projeto; restaure-a primeiro",
+  "store_lock_complete": "{name} está Concluída; reabra-a para alterar a composição",
+  "store_label_add_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Adicionar {n} sessão",
+        "countPlural=*": "Adicionar {n} sessões"
+      }
+    }
+  ],
+  "store_label_remove_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remover {n} sessão",
+        "countPlural=*": "Remover {n} sessões"
+      }
+    }
+  ],
+  "store_label_exclude_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Excluir {n} frame",
+        "countPlural=*": "Excluir {n} frames"
+      }
+    }
+  ],
+  "store_label_restore_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Restaurar {n} frame",
+        "countPlural=*": "Restaurar {n} frames"
+      }
+    }
+  ],
+  "store_label_product_inputs": "Entradas de produto ({count})",
+  "store_label_save_revision": "Salvar revisão {revision}",
+  "store_label_discard": "Descartar alterações",
+  "store_label_rename_run": "Renomear execução",
+  "store_label_run_setup": "Configuração da execução",
+  "store_label_group_setup": "Configuração do grupo",
+  "store_group_setup_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Vale para {n} execução de painel.",
+        "countPlural=*": "Vale para {n} execuções de painel."
+      }
+    }
+  ],
+  "store_label_complete": "Concluir",
+  "store_reason_in_trash": "{name} está na Lixeira do Projeto",
+  "store_label_complete_named": "Concluir {name}",
+  "store_label_move_to_trash_named": "Mover {name} para a Lixeira",
+  "store_reason_no_trashed_run": "nenhuma execução da lixeira foi escolhida",
+  "store_runs_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} execução",
+        "countPlural=*": "{n} execuções"
+      }
+    }
+  ]
 }

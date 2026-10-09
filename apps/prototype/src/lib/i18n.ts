@@ -27,8 +27,11 @@ export type Messages = typeof m
 type MessageKey = keyof Messages
 type MessageInputs<K extends MessageKey> = NonNullable<Parameters<Messages[K]>[0]>
 
-/** One catalogue message: the key is the kind, `params` its typed inputs. */
-type KeyedRef = { [K in MessageKey]: { key: K; params: MessageInputs<K> } }[MessageKey]
+/** One catalogue message: the key is the kind, `params` its inputs (type-checked where `msg` builds it). */
+interface KeyedRef {
+  key: MessageKey
+  params: Record<string, unknown>
+}
 
 /**
  * Copy that is worded later, in the reader's language: what persisted state
@@ -44,7 +47,7 @@ type ParamArgs<K extends MessageKey> = {} extends MessageInputs<K> ? [params?: M
 
 /** A ref to the catalogue message `key`: `msg("blocker_unreadable_inputs", { count })`. */
 export function msg<K extends MessageKey>(key: K, ...[params]: ParamArgs<K>): MessageRef {
-  return { key, params: params ?? {} } as KeyedRef
+  return { key, params: params ?? {} }
 }
 
 /** Data shown as-is in every language: a name, a path, a dash for an absent value. */

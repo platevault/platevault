@@ -3473,12 +3473,163 @@
   "op_settled_failed": "failed",
   "op_settled_canceled": "canceled",
   "op_settled_title": "{title}: {outcome}",
-  "store_stale_title": "{label} refused",
   "store_stale_message": "{label} was refused: this record was changed elsewhere since you opened it. Review the current version before saving again.",
   "store_not_saved_title": "{label} not saved",
   "store_not_saved_message": "{label} was not saved: the catalog write failed. Your change is kept on screen; choose Retry.",
   "store_persist_failed_title": "Prototype data not saved in this browser",
   "store_persist_failed_detail": "Browser storage refused the write. Changes stay in this tab until it closes.",
   "store_refusal_message": "{title}: {reasons}.",
-  "store_record_missing": "This record no longer exists in the catalog. Reload the page to see the current library."
+  "store_record_missing": "This record no longer exists in the catalog. Reload the page to see the current library.",
+  "store_refused": "{label} refused",
+  "store_run_started_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input rig",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} candidate session preselected on {rig}.",
+        "countPlural=*": "{n} candidate sessions preselected on {rig}."
+      }
+    }
+  ],
+  "store_reason_rig_not_in_project": "{rig} is not one of {project}'s rigs",
+  "store_reason_project_done": "{project} is Done; Reopen it first",
+  "store_label_start": "Start {name}",
+  "store_saved_run_started": "Run started: {name}",
+  "store_label_start_group": "Start run group",
+  "store_reason_no_panel": "no panel is included",
+  "store_placed_on": "placed on {panel}",
+  "store_saved_group_started": "Run group started: {name}",
+  "store_group_started_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input rig",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} panel run on {rig}.",
+        "countPlural=*": "{n} panel runs on {rig}."
+      }
+    }
+  ],
+  "store_lock_trashed": "{name} is in the Project's Trash; Restore it first",
+  "store_lock_complete": "{name} is Complete; Reopen it to change its membership",
+  "store_label_add_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Add {n} session",
+        "countPlural=*": "Add {n} sessions"
+      }
+    }
+  ],
+  "store_label_remove_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Remove {n} session",
+        "countPlural=*": "Remove {n} sessions"
+      }
+    }
+  ],
+  "store_label_exclude_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Exclude {n} frame",
+        "countPlural=*": "Exclude {n} frames"
+      }
+    }
+  ],
+  "store_label_restore_frames": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Restore {n} frame",
+        "countPlural=*": "Restore {n} frames"
+      }
+    }
+  ],
+  "store_label_product_inputs": "Product inputs ({count})",
+  "store_label_save_revision": "Save revision {revision}",
+  "store_label_discard": "Discard changes",
+  "store_label_rename_run": "Rename run",
+  "store_label_run_setup": "Run setup",
+  "store_label_group_setup": "Group setup",
+  "store_group_setup_detail": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Applies to {n} panel run.",
+        "countPlural=*": "Applies to {n} panel runs."
+      }
+    }
+  ],
+  "store_label_complete": "Complete",
+  "store_reason_in_trash": "{name} is in the Project's Trash",
+  "store_label_complete_named": "Complete {name}",
+  "store_label_move_to_trash_named": "Move {name} to Trash",
+  "store_reason_no_trashed_run": "no trashed run was chosen",
+  "store_runs_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} run",
+        "countPlural=*": "{n} runs"
+      }
+    }
+  ]
 }
