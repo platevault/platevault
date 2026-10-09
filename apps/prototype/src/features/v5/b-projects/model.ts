@@ -26,7 +26,8 @@ import { qualityApplicability } from "@/domain/library"
 import { GOAL_CHANNELS, NARROW_BANDS } from "@/domain/labels"
 import { namingTemplate, resolveNamingTemplate } from "@/domain/templates"
 import type { Asset, AssetCopy, AssetId, Catalog, Disk, GoalChannel, Location, Operation, OpticalTrainId, Project, ResultId, Session, SessionId, Subject, Volume } from "@/domain/types"
-import { formatBytes, formatNight, plural } from "@/lib/format"
+import { formatBytes, formatCount, formatNight } from "@/lib/format"
+import { m } from "@/lib/i18n"
 import type { PrototypeState } from "@/store/core"
 import type { TrashItem } from "@/store/actions/trash"
 
@@ -101,7 +102,7 @@ function projectSessions(catalog: Catalog, project: Project): Session[] {
 
 function frameLabel(catalog: Catalog, asset: Asset): string {
   const session = asset.sessionId ? catalog.sessions[asset.sessionId] : undefined
-  return session ? `${formatNight(session.night)} · ${session.channel ?? "No filter"}` : "No session"
+  return session ? `${formatNight(session.night)} · ${session.channel ?? m.palette_session_no_filter()}` : m.wrapup_no_session()
 }
 
 // ---------------------------------------------------------------------------
@@ -137,19 +138,21 @@ export interface TrashOffer {
   items: TrashItem[]
 }
 
-const OFFER_NOUN: Record<OfferKind, [string, string]> = {
-  "rejected-frames": ["rejected frame", "rejected frames"],
-  intermediates: ["processing intermediate", "processing intermediates"],
-  "duplicate-copies": ["duplicate copy", "duplicate copies"],
+type OfferCount = { count: number; n: string; size: string }
+
+/** The offer's title: "Move 5 rejected frames to Trash (1.2 GB)", or its "none left" form. */
+const OFFER_TITLE: Record<OfferKind, { some: (count: OfferCount) => string; none: () => string }> = {
+  "rejected-frames": { some: (c) => m.wrapup_offer_rejected(c), none: () => m.wrapup_offer_rejected_none() },
+  intermediates: { some: (c) => m.wrapup_offer_intermediates(c), none: () => m.wrapup_offer_intermediates_none() },
+  "duplicate-copies": { some: (c) => m.wrapup_offer_duplicates(c), none: () => m.wrapup_offer_duplicates_none() },
 }
 
 function offer(kind: OfferKind, disk: Disk, entries: OfferEntry[], refusals: OfferRefusal[], items: TrashItem[]): TrashOffer {
-  const [one, many] = OFFER_NOUN[kind]
   const sizeBytes = reclaimBytes(
     disk,
     items.map((i) => i.path),
   )
-  const title = entries.length === 0 ? `Move ${many} to Trash: none left` : `Move ${plural(entries.length, one, many)} to Trash (${formatBytes(sizeBytes)})`
+  const title = entries.length === 0 ? OFFER_TITLE[kind].none() : OFFER_TITLE[kind].some({ count: entries.length, n: formatCount(entries.length), size: formatBytes(sizeBytes) })
   return { kind, title, count: entries.length, sizeBytes, entries, refusals, items }
 }
 
@@ -160,7 +163,8 @@ function preparedInOpenRuns(catalog: Catalog): Map<AssetId, string> {
     const run = catalog.runs[prep.runId]
     if (!run || run.completion === "complete") continue
     const project = catalog.projects[run.projectId]
-    const where = `${run.name}${project ? ` (${project.name})` : ""}${run.trashedAt ? ", in its Project's Trash" : ""}`
+    const named = project ? `${run.name} (${project.name})` : run.name
+    const where = run.trashedAt ? m.wrapup_where_in_trash({ where: named }) : named
     for (const id of prep.preparedAssetIds) if (!out.has(id)) out.set(id, where)
   }
   return out
@@ -203,21 +207,21 @@ export function rejectedFramesOffer(state: PrototypeState, project: Project): Tr
       const refuse = (reason: string) => refusals.push({ key: id, label, path, reason })
       const preparedIn = prepared.get(id)
       if (preparedIn) {
-        refuse(`in ${preparedIn}, not Complete`)
+        refuse(m.wrapup_refusal_in_open_run({ where: preparedIn }))
         continue
       }
       const input = inputs.get(id)
       if (input) {
-        refuse(`input of ${input}`)
+        refuse(m.wrapup_refusal_result_input({ name: input }))
         continue
       }
       if (asset.sessionId && moving.has(asset.sessionId)) {
-        refuse("archive moving")
+        refuse(m.wrapup_refusal_archive_moving())
         continue
       }
       const outside = asset.copies.find((c) => catalog.locations[c.locationId]?.role !== "captures")
       if (outside) {
-        refuse("copy outside Captures")
+        refuse(m.wrapup_refusal_outside_captures())
         continue
       }
       const copyRefusal = asset.copies.map((c) => trashRefusal(disk, c.path)).find((r) => r !== null)
@@ -229,7 +233,7 @@ export function rejectedFramesOffer(state: PrototypeState, project: Project): Tr
         key: id,
         label,
         path,
-        detail: `${frameLabel(catalog, asset)}${asset.copies.length > 1 ? ` · ${plural(asset.copies.length, "copy", "copies")}` : ""}`,
+        detail: asset.copies.length > 1 ? `${frameLabel(catalog, asset)} · ${m.wrapup_copies({ count: asset.copies.length })}` : frameLabel(catalog, asset),
         sizeBytes: asset.sizeBytes,
       })
       for (const copy of asset.copies) items.push({ path: copy.path, assetId: id })
@@ -263,7 +267,7 @@ export function intermediatesOffer(state: PrototypeState, project: Project): Tra
       refusals.push({ key: result.id, label, path: result.path, reason })
       continue
     }
-    entries.push({ key: result.id, label, path: result.path, detail: owner ? `Intermediate of ${owner}` : "Intermediate", sizeBytes: fileAt(disk, result.path)?.sizeBytes ?? 0 })
+    entries.push({ key: result.id, label, path: result.path, detail: owner ? m.wrapup_intermediate_of({ name: owner }) : m.wrapup_intermediate(), sizeBytes: fileAt(disk, result.path)?.sizeBytes ?? 0 })
     items.push({ path: result.path, resultId: result.id as ResultId })
   }
   for (const master of Object.values(catalog.masters)) {
@@ -272,12 +276,12 @@ export function intermediatesOffer(state: PrototypeState, project: Project): Tra
     if (seen.has(path) || path === master.adoption.destinationPath) continue
     const label = path.split("/").at(-1) ?? path
     const kept = fileAt(disk, master.adoption.destinationPath)
-    const reason = !kept || kept.sha256 !== master.adoption.verifiedSha256 ? `The kept library copy ${master.adoption.destinationPath} cannot be verified` : trashRefusal(disk, path)
+    const reason = !kept || kept.sha256 !== master.adoption.verifiedSha256 ? m.wrapup_refusal_kept_unverifiable({ path: master.adoption.destinationPath }) : trashRefusal(disk, path)
     if (reason) {
       refusals.push({ key: master.id, label, path, reason })
       continue
     }
-    entries.push({ key: master.id, label, path, detail: `Generated master source: verified duplicate; keeps the library copy ${master.adoption.destinationPath}`, sizeBytes: fileAt(disk, path)?.sizeBytes ?? 0 })
+    entries.push({ key: master.id, label, path, detail: m.wrapup_master_source_duplicate({ path: master.adoption.destinationPath }), sizeBytes: fileAt(disk, path)?.sizeBytes ?? 0 })
     items.push({ path })
   }
   return offer("intermediates", disk, entries, refusals, items)
@@ -315,20 +319,20 @@ export function duplicatesOffer(state: PrototypeState, project: Project): TrashO
       for (const copy of asset.copies) {
         if (copy === kept || copy.sha256 !== asset.sha256) continue
         const key = `${id}|${copy.path}`
-        const label = `${asset.fileName} on ${catalog.locations[copy.locationId]?.displayName ?? "an unknown location"}`
+        const label = m.wrapup_copy_on({ name: asset.fileName, location: catalog.locations[copy.locationId]?.displayName ?? m.wrapup_unknown_location() })
         const reason =
           linkedBy.has(copy.path) && copy.path !== kept.path
-            ? `source of ${linkedBy.get(copy.path)}, not Complete`
+            ? m.wrapup_refusal_linked_source({ name: linkedBy.get(copy.path) ?? "" })
             : moving.has(session.id)
-              ? "archive moving"
+              ? m.wrapup_refusal_archive_moving()
               : trashRefusal(disk, kept.path)
-                ? `kept copy on ${keptName} unverified`
+                ? m.wrapup_refusal_kept_copy_unverified({ name: keptName })
                 : trashRefusal(disk, copy.path)
         if (reason) {
           refusals.push({ key, label, path: copy.path, reason })
           continue
         }
-        entries.push({ key, label, path: copy.path, detail: `Keeps the copy on ${keptName}: ${kept.path}`, sizeBytes: asset.sizeBytes })
+        entries.push({ key, label, path: copy.path, detail: m.wrapup_keeps_copy_on({ name: keptName, path: kept.path }), sizeBytes: asset.sizeBytes })
         items.push({ path: copy.path, assetId: id })
       }
     }
@@ -385,7 +389,7 @@ export interface ArchivePlan {
 export function sessionLabel(catalog: Catalog, session: Session): string {
   const targetId = sessionTargetId(session)
   const target = targetId ? catalog.targets[targetId]?.name : null
-  return `${target ?? session.objectLabel ?? "No Target"} · ${formatNight(session.night)} · ${session.channel ?? "No filter"}`
+  return `${target ?? session.objectLabel ?? m.session_no_target()} · ${formatNight(session.night)} · ${session.channel ?? m.palette_session_no_filter()}`
 }
 
 function joinPath(...parts: string[]): string {
@@ -408,9 +412,9 @@ function sourceCopy(catalog: Catalog, asset: Asset): AssetCopy | null {
 /** Checks shared by archive and restore: the source is readable and nothing else sits at the destination. */
 function moveRefusal(state: PrototypeState, move: ArchiveMove): string | null {
   const source = state.disk.volumes[move.from.volumeId]
-  if (!source?.mounted) return `${source?.name ?? "Its volume"} is offline`
-  if (!state.disk.files[fileKey(move.from.volumeId, move.from.path)]) return `Not found at ${move.from.path}`
-  if (state.disk.files[fileKey(move.to.volumeId, move.to.path)]) return `Another file already exists at ${move.to.path}`
+  if (!source?.mounted) return m.wrapup_refusal_offline({ name: source?.name ?? m.wrapup_its_volume() })
+  if (!state.disk.files[fileKey(move.from.volumeId, move.from.path)]) return m.wrapup_refusal_not_found({ path: move.from.path })
+  if (state.disk.files[fileKey(move.to.volumeId, move.to.path)]) return m.wrapup_refusal_file_exists({ path: move.to.path })
   return null
 }
 
@@ -439,9 +443,9 @@ function planOver(state: PrototypeState, sessions: Session[], destinationFor: (s
   const sizeBytes = rows.reduce((n, r) => n + r.sizeBytes, 0)
   const free = volume ? freeBytes(disk, volume.id) : 0
   let block = blocked
-  if (!block && volume && !volume.mounted) block = `${volume.name} is not mounted`
-  if (!block && volume && !volume.writable) block = `${volume.name} is not writable`
-  if (!block && volume && sizeBytes > free) block = `${volume.name}: ${formatBytes(free)} free of ${formatBytes(sizeBytes)}`
+  if (!block && volume && !volume.mounted) block = m.wrapup_refusal_not_mounted({ name: volume.name })
+  if (!block && volume && !volume.writable) block = m.wrapup_refusal_not_writable({ name: volume.name })
+  if (!block && volume && sizeBytes > free) block = m.wrapup_refusal_space({ name: volume.name, free: formatBytes(free), size: formatBytes(sizeBytes) })
   return { destination, volume, freeBytes: free, rows, refused, sizeBytes, blocked: block }
 }
 
@@ -472,7 +476,7 @@ export function archivePlan(state: PrototypeState, project: Project, destination
     members.filter((s) => !usedElsewhere.has(s.id)),
     (session, asset) => (destination ? { locationId: destination.id, volumeId: destination.volumeId, path: joinPath(templatedFolder(state, destination.path, session), asset.fileName) } : null),
     destination,
-    destination ? null : "no archive location",
+    destination ? null : m.wrapup_no_archive_location(),
   )
   return { ...plan, kept }
 }
@@ -498,7 +502,7 @@ export function restorePlan(state: PrototypeState, project: Project, origins: Ar
     null,
   )
   // Restore writes back to each origin's own volume; the free-space check above uses the Captures fallback only.
-  return { ...plan, kept: [], blocked: plan.rows.length === 0 && plan.refused.length === 0 ? "Nothing archived is left to restore" : null }
+  return { ...plan, kept: [], blocked: plan.rows.length === 0 && plan.refused.length === 0 ? m.project_nothing_to_restore() : null }
 }
 
 // ---------------------------------------------------------------------------
@@ -529,6 +533,8 @@ export interface GoalGap {
   panelId: string | null
   /** "Ha 3h50 to go in project · 0h45 to go captured". */
   line: string
+  /** The pill's words: "Ha 3h50" (still to go in project), or the met line. */
+  short: string
   met: boolean
 }
 
@@ -540,11 +546,13 @@ export function subjectGaps(catalog: Catalog, project: Project, subject: Subject
       const goal = p.goal.integrationS!
       const inProject = Math.max(0, goal - p.inProject.seconds)
       const captured = Math.max(0, goal - p.captured.seconds)
+      const short = `${p.goal.channel} ${formatHours(inProject)}`
       return {
         channel: p.goal.channel,
         panelId: p.goal.panelId,
         met: p.met,
-        line: p.met ? `${p.goal.channel} goal met` : `${p.goal.channel} ${formatHours(inProject)} to go in project · ${formatHours(captured)} to go captured`,
+        line: p.met ? m.goal_gap_met({ channel: p.goal.channel }) : m.goal_gap_line({ channel: p.goal.channel, project: formatHours(inProject), captured: formatHours(captured) }),
+        short: p.met ? m.goal_gap_met({ channel: p.goal.channel }) : short,
       }
     })
 }

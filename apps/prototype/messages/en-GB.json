@@ -499,16 +499,11 @@
   "page_step_done": "(done)",
   "ui_breadcrumb": "Breadcrumb",
   "home_plan_tonight": "Plan tonight",
-  "home_new_project": "New Project…",
   "import_open": "Import…",
-  "home_open_session": "Open session",
-  "home_goals_none": "No goals",
   "home_goal_line": "{inProject} in project / {captured} captured",
   "home_goal_line_goal": "{inProject} in project / {captured} captured · goal {goal}",
-  "home_next_for": "for {name}",
   "home_blocked_at": "Blocked at {step}",
   "home_why_blocked": "Why {name} is blocked",
-  "home_subjects_none": "No subjects",
   "home_rig_count": [
     {
       "declarations": [
@@ -527,7 +522,6 @@
   "home_column_project": "Project",
   "home_goals": "Goals",
   "home_column_next": "Next",
-  "home_start_run_menu": "Start run…",
   "home_project_count": [
     {
       "declarations": [
@@ -543,7 +537,6 @@
       }
     }
   ],
-  "home_show_done": "Show done",
   "home_hidden_count": "{count} hidden",
   "home_projects_none": "No Projects",
   "home_all_done": "All Done",
@@ -614,18 +607,15 @@
   "session_cant_add": "Can't add",
   "home_added_to_draft": "{session} added to the {run} draft",
   "home_add_to_run": "Add to run",
-  "home_start_run": "Start run",
   "home_tonight": "Tonight",
   "home_no_site": "No site",
   "home_add_site": "Add site",
   "home_darkness": "Darkness",
-  "home_darkness_none": "None tonight",
   "home_moon": "Moon",
   "home_moon_rises": "rises {time}",
   "home_moon_sets": "sets {time}",
   "home_windows": "Windows",
   "home_no_subjects_or_favourites": "No subjects or favourites",
-  "home_favourite_title": "★ favourite",
   "home_favourite": "Favourite",
   "home_window_detail": "{altitude}° · Moon {separation}°",
   "home_no_window": "No window",
@@ -694,7 +684,6 @@
   "session_no_open_project": "No open Project",
   "session_prefilled": "Prefilled with this Target and rig",
   "session_confirm_to_prefill": "Confirm a Target to prefill it",
-  "session_create_project": "Create Project",
   "session_no_target_chosen": "no Target chosen",
   "session_target_value": "Target: {name}",
   "session_target_for": "Target for {name}",
@@ -1170,5 +1159,1091 @@
         "countPlural=*": "{files} image files"
       }
     }
-  ]
+  ],
+  "newproject_open": "New Project…",
+  "startrun_in_project": "Start run in {name}…",
+  "mosaic_new_in_project": "New mosaic in {name}…",
+  "wrapup_project": "Wrap up {name}",
+  "project_noun": "Project",
+  "wrapup_its_volume": "Its volume",
+  "wrapup_refusal_offline": "{name} is offline",
+  "wrapup_refusal_not_found": "Not found at {path}",
+  "wrapup_refusal_not_mounted": "{name} is not mounted",
+  "wrapup_refusal_not_writable": "{name} is not writable",
+  "wrapup_refusal_file_exists": "Another file already exists at {path}",
+  "project_target_not_added": "{name} could not be added as a Target.",
+  "mosaic_choose_target_first": "Choose a Target first.",
+  "project_gone": "This Project no longer exists.",
+  "mosaic_subject_not_saved": "The mosaic subject was not saved.",
+  "project_subject_gone": "This subject no longer exists.",
+  "mosaic_profile_not_saved": "Group started; profile not saved: {message}",
+  "wrapup_no_session": "No session",
+  "wrapup_offer_rejected": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {n} rejected frame to Trash ({size})",
+        "countPlural=*": "Move {n} rejected frames to Trash ({size})"
+      }
+    }
+  ],
+  "wrapup_offer_rejected_none": "Move rejected frames to Trash: none left",
+  "wrapup_offer_intermediates": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {n} processing intermediate to Trash ({size})",
+        "countPlural=*": "Move {n} processing intermediates to Trash ({size})"
+      }
+    }
+  ],
+  "wrapup_offer_intermediates_none": "Move processing intermediates to Trash: none left",
+  "wrapup_offer_duplicates": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Move {n} duplicate copy to Trash ({size})",
+        "countPlural=*": "Move {n} duplicate copies to Trash ({size})"
+      }
+    }
+  ],
+  "wrapup_offer_duplicates_none": "Move duplicate copies to Trash: none left",
+  "wrapup_where_in_trash": "{where}, in its Project's Trash",
+  "wrapup_refusal_in_open_run": "in {where}, not Complete",
+  "wrapup_refusal_result_input": "input of {name}",
+  "wrapup_refusal_archive_moving": "archive moving",
+  "wrapup_refusal_outside_captures": "copy outside Captures",
+  "wrapup_copies": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} copy",
+        "countPlural=*": "{count} copies"
+      }
+    }
+  ],
+  "wrapup_intermediate_of": "Intermediate of {name}",
+  "wrapup_intermediate": "Intermediate",
+  "wrapup_refusal_kept_unverifiable": "The kept library copy {path} cannot be verified",
+  "wrapup_master_source_duplicate": "Generated master source: verified duplicate; keeps the library copy {path}",
+  "wrapup_copy_on": "{name} on {location}",
+  "wrapup_unknown_location": "an unknown location",
+  "wrapup_refusal_linked_source": "source of {name}, not Complete",
+  "wrapup_refusal_kept_copy_unverified": "kept copy on {name} unverified",
+  "wrapup_keeps_copy_on": "Keeps the copy on {name}: {path}",
+  "wrapup_refusal_space": "{name}: {free} free of {size}",
+  "wrapup_no_archive_location": "no archive location",
+  "project_nothing_to_restore": "Nothing archived is left to restore",
+  "goal_gap_met": "{channel} goal met",
+  "goal_gap_line": "{channel} {project} to go in project · {captured} to go captured",
+  "project_lookup_turn_on": "Turn on in {path}.",
+  "project_lookup_no_response": "{provider} did not respond.",
+  "project_target_label": "Target",
+  "project_search_placeholder": "Name or catalogue number",
+  "project_search_results": "Search results",
+  "project_search_no_new_match": "No new match",
+  "project_search_no_match": "No match · Enter searches SIMBAD",
+  "project_lookup_asking": "Asking {provider}…",
+  "project_lookup_failed": "SIMBAD lookup failed",
+  "project_lookup_off": "Online lookup is off",
+  "project_search_subject_of": "Subject of {names}",
+  "project_search_favourite": "★ Favourite",
+  "project_search_library_target": "Library Target",
+  "project_search_my_targets": "My targets",
+  "project_search_catalogues": "Catalogues",
+  "project_search_position_unknown": "Position unknown",
+  "project_search_new_from": "new Target from {source}",
+  "project_search_new_from_catalogue": "new Target from the catalogue",
+  "project_search_added": "Added",
+  "project_subject_with_panels": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} ({count} panel)",
+        "countPlural=*": "{name} ({count} panels)"
+      }
+    }
+  ],
+  "projects_no_subjects": "No subjects",
+  "projects_no_rigs": "No rigs",
+  "projects_col_state": "State",
+  "projects_col_goals": "Goals",
+  "projects_col_open_runs": "Open runs",
+  "projects_col_stage": "Stage",
+  "projects_col_next": "Next",
+  "projects_groups": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} group",
+        "countPlural=*": "{count} groups"
+      }
+    }
+  ],
+  "projects_next_for": "for {name}",
+  "startrun_open": "Start run…",
+  "mosaic_new": "New mosaic…",
+  "wrapup_action": "Wrap up",
+  "trash_title": "Trash",
+  "trash_with_count": "Trash ({count})",
+  "projects_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Project",
+        "countPlural=*": "{count} Projects"
+      }
+    }
+  ],
+  "projects_show_done": "Show done",
+  "projects_hidden": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} hidden",
+        "countPlural=*": "{count} hidden"
+      }
+    }
+  ],
+  "newproject_title": "New Project",
+  "projects_empty": "No Projects yet",
+  "projects_all_done": "Every Project is Done",
+  "projects_no_goals": "No goals",
+  "projects_goals_met": "{met} of {total} met",
+  "projects_goal_met": "goal met",
+  "project_back_to_projects": "Open Projects",
+  "project_reopen_ellipsis": "Reopen…",
+  "project_reopen_title": "Reopen {name}?",
+  "project_reopen_no_file_moves": "No file moves.",
+  "project_reopen_change": "Project Done → Open",
+  "project_reopen_stay_archived": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session stays archived until restored",
+        "countPlural=*": "{count} sessions stay archived until restored"
+      }
+    }
+  ],
+  "project_reopen": "Reopen",
+  "project_stage_label": "Project stage",
+  "project_stage_current": "(current stage)",
+  "project_candidate_frames": "Candidate frames",
+  "project_candidates_done": "Done",
+  "goal_bar_any": "Any",
+  "goal_bar_fwhm": "FWHM limit",
+  "goal_bar_usable_fwhm": "Usable + FWHM",
+  "goal_hours": "Hours",
+  "goal_hours_label": "{channel} integration in hours",
+  "goal_frames": "Frames",
+  "goal_frames_label": "{channel} frame count",
+  "goal_quality": "Quality",
+  "goal_fwhm_max": "FWHM ≤ ″",
+  "goal_fwhm_label": "{channel} median FWHM limit in arcseconds",
+  "goal_add_channel_goal": "Add {channel} goal",
+  "goal_add_channel": "Add channel",
+  "project_col_actions": "Actions",
+  "project_run_complete_ellipsis": "Complete…",
+  "trash_move_ellipsis": "Move to Trash…",
+  "project_runs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} run",
+        "countPlural=*": "{count} runs"
+      }
+    }
+  ],
+  "project_trashed_runs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} trashed run",
+        "countPlural=*": "{count} trashed runs"
+      }
+    }
+  ],
+  "startrun_title": "Start run",
+  "project_refusal_trash_run": "Can't trash run",
+  "project_refusal_complete_run": "Can't complete run",
+  "project_no_runs": "No runs yet",
+  "project_unknown_subject": "Unknown subject",
+  "project_held_at": "{state} at {step}",
+  "project_why_held": "Why {name} is held",
+  "project_steps_of": "Steps of {name}",
+  "project_panels": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} panel",
+        "countPlural=*": "{count} panels"
+      }
+    }
+  ],
+  "project_run_noun": "run",
+  "project_run_noun_capital": "Run",
+  "project_run_complete_title": "Complete {name}?",
+  "project_run_complete_description": "Reopen returns it to its step.",
+  "project_run_to_complete": "{name} → Complete",
+  "project_step_stays": "{step} stays {state}",
+  "project_run_complete": "Complete run",
+  "project_run_trash_title": "Move {name} to Trash?",
+  "project_run_trash_description": "Restore brings it back as it was.",
+  "project_run_to_trash": "{name} → Project Trash",
+  "project_run_trash_goals": "Its members stop counting toward goals",
+  "trash_move": "Move to Trash",
+  "project_placement_ambiguous": "Ambiguous",
+  "project_placement_off_panel": "Off panel",
+  "project_placement_no_pointing": "No pointing",
+  "project_filter_all": "All",
+  "project_filter_not_in_run": "Not in a run",
+  "startrun_refusal": "Can't start run",
+  "startrun_refusal_pairs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} subject and rig pair",
+        "countPlural=*": "{count} subject and rig pairs"
+      }
+    }
+  ],
+  "project_col_session": "Session",
+  "project_col_subject": "Subject",
+  "project_col_rig": "Rig",
+  "project_col_in_run": "In run",
+  "project_unreviewed_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} unreviewed",
+        "countPlural=*": "{count} unreviewed"
+      }
+    }
+  ],
+  "project_sessions_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session",
+        "countPlural=*": "{count} sessions"
+      }
+    }
+  ],
+  "startrun_with_count": "Start run ({count})",
+  "project_open_session": "Open session",
+  "project_candidates": "Candidates",
+  "project_ready_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} ready",
+        "countPlural=*": "{count} ready"
+      }
+    }
+  ],
+  "project_members_no_longer_match": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} member no longer matches",
+        "countPlural=*": "{count} members no longer match"
+      }
+    }
+  ],
+  "project_subject_changed": "subject changed",
+  "project_no_candidates": "No candidates",
+  "project_candidates_filter": "Candidates filter",
+  "project_candidate_sessions_of": "Candidate sessions of {name}",
+  "project_none_unreviewed": "None unreviewed",
+  "project_all_in_runs": "Every candidate is in a run",
+  "project_frames_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "project_goals_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} goal",
+        "countPlural=*": "{count} goals"
+      }
+    }
+  ],
+  "goal_save": "Save goals",
+  "goal_template": "Goal template",
+  "goal_apply": "Apply",
+  "goal_apply_title": "Apply {name}?",
+  "goal_template_noun": "template",
+  "goal_apply_description": "Values are copied in and stay editable.",
+  "goal_no_changes": "No goal changes",
+  "goal_apply_template": "Apply template",
+  "goal_edit": "Edit",
+  "goal_refusal_save": "Can't save goals",
+  "goal_remove_goal": "Remove {channel} goal",
+  "goal_unmeasured_label": "Unmeasured members",
+  "goal_unmeasured": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} member unmeasured · not counted",
+        "countPlural=*": "{count} members unmeasured · not counted"
+      }
+    }
+  ],
+  "goal_warning_exposure": "Exposure mismatch",
+  "goal_warning_calibration": "Missing calibration",
+  "goal_to_go": "{duration} to go",
+  "goal_add_for": "Add goal for {name}",
+  "project_open_target": "Open Target",
+  "mosaic_start_run": "Start mosaic run",
+  "mosaic_make": "Make mosaic",
+  "project_remove": "Remove",
+  "project_subjects": "Subjects",
+  "project_subjects_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} subject",
+        "countPlural=*": "{count} subjects"
+      }
+    }
+  ],
+  "mosaic_new_button": "New mosaic",
+  "project_refusal_remove_subject": "Can't remove subject",
+  "project_used_by_runs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "used by {count} run",
+        "countPlural=*": "used by {count} runs"
+      }
+    }
+  ],
+  "project_refusal_add_subject": "Can't add subject",
+  "project_subjects_of": "Subjects of {name}",
+  "project_col_kind": "Kind",
+  "project_col_centre": "Centre",
+  "mosaic_of_panels": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mosaic of {count} panel: start mosaic run",
+        "countPlural=*": "Mosaic of {count} panels: start mosaic run"
+      }
+    }
+  ],
+  "project_open_in": "Open in {name}",
+  "project_rigs": "Rigs",
+  "project_rigs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} rig",
+        "countPlural=*": "{count} rigs"
+      }
+    }
+  ],
+  "project_refusal_remove_rig": "Can't remove rig",
+  "project_rigs_of": "Rigs of {name}",
+  "project_col_camera": "Camera",
+  "project_col_channels": "Channels",
+  "project_col_field": "Field",
+  "project_camera_osc": "OSC",
+  "project_camera_mono": "Mono",
+  "project_add_a_rig": "Add a rig",
+  "project_add_rig": "Add rig",
+  "project_refusal_add_rig": "Can't add rig",
+  "project_tonight": "Tonight",
+  "project_moon_pct": "Moon {pct}%",
+  "project_dark_window": "Dark {start}–{end}",
+  "project_no_darkness": "No darkness",
+  "project_planner": "Planner",
+  "project_no_windows": "No windows",
+  "project_no_site": "no observing site",
+  "project_planning_of": "Planning for the subjects of {name}",
+  "project_col_best_window": "Best window",
+  "project_col_to_go": "To go",
+  "project_moon_separation": "Moon {deg}°",
+  "project_none_tonight": "None tonight",
+  "project_restore_count": "Restore ({count})…",
+  "project_restore_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Restore {count} session?",
+        "countPlural=*": "Restore {count} sessions?"
+      }
+    }
+  ],
+  "project_restore_description": "Back to where Archive found each frame.",
+  "project_restore_stays": "{name} stays · {reason}",
+  "project_restore": "Restore",
+  "project_restore_nothing_now": "Nothing chosen can be restored now.",
+  "project_archived_of": "Archived sessions of {name}",
+  "project_col_archive_path": "Archive path",
+  "project_restore_named": "Restore {name}",
+  "project_remove_named": "Remove {name}",
+  "newproject_new_target": "New Target",
+  "newproject_field_name": "Name",
+  "newproject_goals_not_saved": "Project created; goals not saved: {message}",
+  "newproject_nothing_prefilled": "Nothing prefilled · no confirmed Target",
+  "newproject_name_placeholder": "Cygnus HOO 2026",
+  "newproject_notes": "Notes",
+  "newproject_optional": "(optional)",
+  "newproject_camera_unknown": "Camera unknown",
+  "newproject_template": "Template",
+  "newproject_template_none": "None",
+  "newproject_template_yours": "{name} (yours)",
+  "newproject_refusal": "Can't create",
+  "newproject_fields_missing": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} field missing",
+        "countPlural=*": "{count} fields missing"
+      }
+    }
+  ],
+  "newproject_create": "Create Project",
+  "startrun_project_not_found": "Project not found",
+  "startrun_profile_none": "None",
+  "startrun_profile_other": "Other app",
+  "startrun_blocker_done": "{name} is Done",
+  "startrun_no_subject": "No subject",
+  "startrun_not_created": "The run was not created.",
+  "startrun_profile_not_saved": "Run started; profile not saved: {message}",
+  "startrun_mosaic": "Mosaic",
+  "startrun_candidate_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} candidate session",
+        "countPlural=*": "{count} candidate sessions"
+      }
+    }
+  ],
+  "startrun_profile_optional": "Profile (optional)",
+  "startrun_place_panels": "Place panels",
+  "trash_preview_record": "{name}: record removed",
+  "trash_preview_prepared": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} prepared entry → OS Trash",
+        "countPlural=*": "{name}: {count} prepared entries → OS Trash"
+      }
+    }
+  ],
+  "trash_preview_kept": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input reason",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} entry kept · {reason}",
+        "countPlural=*": "{name}: {count} entries kept · {reason}"
+      }
+    }
+  ],
+  "trash_preview_results": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: Results ({count} file) → OS Trash",
+        "countPlural=*": "{name}: Results ({count} files) → OS Trash"
+      }
+    }
+  ],
+  "trash_preview_results_folder": "{name}: Results folder",
+  "trash_entries": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entry",
+        "countPlural=*": "{count} entries"
+      }
+    }
+  ],
+  "trash_results_files": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Trash {count} file",
+        "countPlural=*": "Trash {count} files"
+      }
+    }
+  ],
+  "trash_of_run": "of {name}",
+  "trash_empty_run_ellipsis": "Empty this run…",
+  "trash_empty_ellipsis": "Empty Trash…",
+  "trash_of_project": "Trash of {name}",
+  "trash_is_empty": "Trash is empty",
+  "trash_open_project": "Open {name}",
+  "trash_last_empty": "Last Empty Trash",
+  "trash_restore_title": "Restore {name}?",
+  "trash_restore_description": "Back as it was when trashed.",
+  "trash_restore_to_group": "{name} → its run group",
+  "trash_restore_to_runs": "{name} → the Project's runs",
+  "trash_restore_members": "Members count in project again",
+  "trash_restore_run": "Restore run",
+  "trash_empty_run_title": "Empty this run?",
+  "trash_empty_runs_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Empty {count} run?",
+        "countPlural=*": "Empty {count} runs?"
+      }
+    }
+  ],
+  "trash_empty_description": "Files go to the OS Trash after each is re-verified.",
+  "trash_empty_run": "Empty run",
+  "trash_empty": "Empty Trash",
+  "wrapup_offer_rejects": "Rejects",
+  "wrapup_offer_intermediates_label": "Intermediates",
+  "wrapup_offer_duplicates_label": "Duplicates",
+  "wrapup_todo": "To do",
+  "wrapup_blocked": "Wrap up blocked",
+  "wrapup_runs_not_complete": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} run not Complete",
+        "countPlural=*": "{count} runs not Complete"
+      }
+    }
+  ],
+  "wrapup_refusal_record_step": "Can't record step",
+  "wrapup_summary": "{label} summary",
+  "wrapup_skip": "Skip",
+  "wrapup_undo": "Undo",
+  "wrapup_cleanup_title": "Clean up runs",
+  "wrapup_cleanup_all": "Clean up all…",
+  "wrapup_cleanup_confirm_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Clean up {count} run?",
+        "countPlural=*": "Clean up {count} runs?"
+      }
+    }
+  ],
+  "wrapup_cleanup_description": "Prepared entries go to the OS Trash. Results stay.",
+  "wrapup_cleanup_change": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} entry → OS Trash ({size})",
+        "countPlural=*": "{name}: {count} entries → OS Trash ({size})"
+      }
+    }
+  ],
+  "wrapup_cleanup": "Clean up",
+  "wrapup_mark_done": "Mark Done",
+  "wrapup_cleanup_blocked": "Clean up blocked",
+  "wrapup_cleaning_up": "Cleaning up",
+  "wrapup_clean": "Clean",
+  "wrapup_items": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} item",
+        "countPlural=*": "{count} items"
+      }
+    }
+  ],
+  "wrapup_moved": "Moved",
+  "wrapup_none": "None",
+  "wrapup_trash_ellipsis": "Trash…",
+  "wrapup_trash_offer_title": "Trash {offer} of {name}?",
+  "wrapup_trash_offer_description": "To the OS Trash only. Each item is re-verified first.",
+  "wrapup_items_to_trash": [
+    {
+      "declarations": [
+        "input count",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} item → OS Trash ({size})",
+        "countPlural=*": "{count} items → OS Trash ({size})"
+      }
+    }
+  ],
+  "wrapup_items_kept_reason": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} item kept with a reason",
+        "countPlural=*": "{count} items kept with a reason"
+      }
+    }
+  ],
+  "wrapup_items_kept": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} item kept",
+        "countPlural=*": "{count} items kept"
+      }
+    }
+  ],
+  "wrapup_refused": "refused",
+  "wrapup_archive_title": "Archive",
+  "wrapup_archive_ellipsis": "Archive…",
+  "wrapup_archive_confirm_title": "Archive {name}?",
+  "wrapup_archive_description": "Each session moves whole or stays.",
+  "wrapup_archive_change": [
+    {
+      "declarations": [
+        "input count",
+        "input dest",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session → {dest} ({size})",
+        "countPlural=*": "{count} sessions → {dest} ({size})"
+      }
+    }
+  ],
+  "wrapup_archive_fallback": "archive",
+  "wrapup_archive_links_follow": "Prepared links follow the move",
+  "wrapup_used_by_other": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session used by another Project",
+        "countPlural=*": "{count} sessions used by another Project"
+      }
+    }
+  ],
+  "wrapup_destination": "Destination",
+  "wrapup_archive_blocked": "Archive blocked",
+  "wrapup_default": "Default",
+  "wrapup_refusal_destination": "Can't change destination",
+  "wrapup_sessions_to_move": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session to move",
+        "countPlural=*": "{count} sessions to move"
+      }
+    }
+  ],
+  "wrapup_sessions_archived": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session archived",
+        "countPlural=*": "{count} sessions archived"
+      }
+    }
+  ],
+  "wrapup_sessions_stay": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session stays",
+        "countPlural=*": "{count} sessions stay"
+      }
+    }
+  ],
+  "wrapup_sessions_kept": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} session kept",
+        "countPlural=*": "{count} sessions kept"
+      }
+    }
+  ],
+  "wrapup_used_by_other_reason": "used by another Project",
+  "wrapup_refusal_mark_done": "Can't mark Done",
+  "mosaic_placed_by_you": "Placed by you",
+  "mosaic_left_out": "Left out",
+  "mosaic_two_panels": "Two panels",
+  "mosaic_included_panel": "Included panel",
+  "mosaic_default_name": "{name} mosaic",
+  "mosaic_place_on": "Place on",
+  "mosaic_panel": "Panel {n}",
+  "mosaic_by_pointing": "By pointing",
+  "mosaic_leave_out": "Leave out",
+  "mosaic_run": "Mosaic run",
+  "mosaic_included_panels": "{included}/{total} panels",
+  "mosaic_flags": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} flag",
+        "countPlural=*": "{count} flags"
+      }
+    }
+  ],
+  "mosaic_start_group": "Start group",
+  "mosaic_refusal_start_group": "Can't start group",
+  "mosaic_items_missing": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} item missing",
+        "countPlural=*": "{count} items missing"
+      }
+    }
+  ],
+  "mosaic_change_target": "Change Target",
+  "mosaic_name_placeholder": "IC 5070 mosaic",
+  "mosaic_fov_unknown": "Field of view unknown · panels drawn at 1°",
+  "mosaic_position_unknown": "Position unknown · pick a layout",
+  "mosaic_panels_title": "Panels",
+  "mosaic_done_adding": "Done adding",
+  "mosaic_add_panels": "Add panels",
+  "mosaic_refusal_remove_panel": "Can't remove Panel {n}",
+  "mosaic_in_a_run": "In a run",
+  "mosaic_placed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} placed",
+        "countPlural=*": "{count} placed"
+      }
+    }
+  ],
+  "mosaic_flagged": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} flagged",
+        "countPlural=*": "{count} flagged"
+      }
+    }
+  ],
+  "mosaic_out": "{count} out",
+  "mosaic_no_sessions_on": "No sessions on {rig}",
+  "mosaic_this_rig": "this rig",
+  "mosaic_pick_target": "Pick a Target",
+  "mosaic_sessions_to_place": "Sessions to place",
+  "mosaic_layout": "Layout",
+  "mosaic_excluded_panel": "Excluded panel",
+  "mosaic_panel_for": "Panel for {name}",
+  "mosaic_field_label": "Mosaic field: click a panel to include or exclude it",
+  "mosaic_add_slot": "Add panel {side} of Panel {n}",
+  "mosaic_excluded": "excluded",
+  "mosaic_side_east": "east",
+  "mosaic_side_west": "west",
+  "mosaic_side_north": "north",
+  "mosaic_side_south": "south",
+  "project_lookup_sesame": "CDS Sesame (SIMBAD)",
+  "project_panel_short": "P{n}"
 }

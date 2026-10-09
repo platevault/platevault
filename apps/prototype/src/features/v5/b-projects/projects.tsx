@@ -21,9 +21,9 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { GateLabel, useFollowLink } from "@/app/run-ui"
 import { openSheet } from "@/app/ui-state"
+import { useMessages } from "@/app/preferences"
 import { type GoalProgress, goalProgress, type NextAction, projectGroups, projectNext, projectRuns, projectStage, projectStatus, projectWrapUp, rigName, subjectName } from "@/domain/derive"
 import type { Project } from "@/domain/types"
-import { plural } from "@/lib/format"
 import { nowIso, updateSlice, useStore } from "@/store/core"
 
 interface Row {
@@ -40,6 +40,7 @@ interface Row {
 }
 
 export function ProjectsPage() {
+  const m = useMessages()
   const showDone = useStore((s) => s.slices.b.showDone)
   const rows = useStore((s) => {
     const now = Date.parse(nowIso())
@@ -49,7 +50,7 @@ export function ProjectsPage() {
         const runs = projectRuns(s.catalog, project.id)
         return {
           project,
-          subjects: project.subjects.map((subject) => `${subjectName(s.catalog, subject)}${subject.mosaic ? ` (${plural(subject.mosaic.panels.length, "panel")})` : ""}`),
+          subjects: project.subjects.map((subject) => (subject.mosaic ? m.project_subject_with_panels({ name: subjectName(s.catalog, subject), count: subject.mosaic.panels.length }) : subjectName(s.catalog, subject))),
           rigs: project.rigIds.map((id) => rigName(s.catalog, id)),
           progress: goalProgress(s.catalog, project),
           openRuns: runs.filter((r) => r.completion === "open").length,
@@ -70,11 +71,11 @@ export function ProjectsPage() {
   const columns: Column<Row>[] = [
     {
       id: "name",
-      header: "Project",
+      header: m.project_noun(),
       rowHeader: true,
       sortValue: (r) => r.project.name,
       cell: (r) => {
-        const detail = `${r.subjects.join(", ") || "No subjects"} · ${r.rigs.join(", ") || "No rigs"}`
+        const detail = `${r.subjects.join(", ") || m.projects_no_subjects()} · ${r.rigs.join(", ") || m.projects_no_rigs()}`
         return (
           <span className="block min-w-0">
             <Link to="/projects/$projectId" params={{ projectId: r.project.id }} className="font-medium underline-offset-2 hover:underline">
@@ -87,35 +88,35 @@ export function ProjectsPage() {
         )
       },
     },
-    { id: "state", header: "State", className: "@max-[64rem]:hidden", sortValue: (r) => projectStatus(r.project), cell: (r) => <StatusBadge kind="project" value={projectStatus(r.project)} /> },
+    { id: "state", header: m.projects_col_state(), className: "@max-[64rem]:hidden", sortValue: (r) => projectStatus(r.project), cell: (r) => <StatusBadge kind="project" value={projectStatus(r.project)} /> },
     {
       id: "goals",
-      header: "Goals",
+      header: m.projects_col_goals(),
       sortValue: (r) => (r.progress.length === 0 ? null : r.progress.filter((p) => p.met).length / r.progress.length),
       cell: (r) => <GoalSummary progress={r.progress} />,
     },
     {
       id: "runs",
-      header: "Open runs",
+      header: m.projects_col_open_runs(),
       align: "right",
       className: "@max-[52rem]:hidden",
       sortValue: (r) => r.openRuns,
       cell: (r) => (
         <span className="tabular-nums">
           {r.openRuns}
-          {r.groups > 0 ? <span className="text-xs text-muted-foreground"> · {plural(r.groups, "group")}</span> : null}
+          {r.groups > 0 ? <span className="text-xs text-muted-foreground"> · {m.projects_groups({ count: r.groups })}</span> : null}
         </span>
       ),
     },
-    { id: "stage", header: "Stage", sortValue: (r) => r.stage.label, cell: (r) => <GateLabel state={r.stage.state} label={r.stage.label} className="whitespace-nowrap" /> },
+    { id: "stage", header: m.projects_col_stage(), sortValue: (r) => r.stage.label, cell: (r) => <GateLabel state={r.stage.state} label={r.stage.label} className="whitespace-nowrap" /> },
     {
       id: "next",
-      header: "Next",
+      header: m.projects_col_next(),
       cell: (r) =>
         r.next ? (
           <Button size="sm" variant="outline" className="max-w-[12rem] min-w-0" title={`${r.next.label}: ${r.next.reason}`} onClick={() => follow(r.next!.link)}>
             <span className="truncate">{r.next.label}</span>
-            <span className="sr-only"> for {r.project.name}</span>
+            <span className="sr-only"> {m.projects_next_for({ name: r.project.name })}</span>
           </Button>
         ) : (
           <span className="text-muted-foreground">–</span>
@@ -126,41 +127,41 @@ export function ProjectsPage() {
   const open = (r: Row, search?: Record<string, string>) => void navigate({ to: "/projects/$projectId", params: { projectId: r.project.id }, search: search ?? {} })
   const menu = (r: Row): MenuEntry[] => [
     { heading: r.project.name },
-    { label: "Open", icon: Eye, onSelect: () => open(r) },
+    { label: m.verb_open(), icon: Eye, onSelect: () => open(r) },
     ...(r.next ? [{ label: r.next.label, onSelect: () => follow(r.next!.link) }] : []),
     { separator: true },
     ...(r.project.state === "open"
       ? [
-          { label: "Start run…", icon: Play, onSelect: () => openSheet({ kind: "start-run", projectId: r.project.id }) },
-          { label: "New mosaic…", icon: Grid2x2Plus, onSelect: () => open(r, { mosaic: "new" }) },
+          { label: m.startrun_open(), icon: Play, onSelect: () => openSheet({ kind: "start-run", projectId: r.project.id }) },
+          { label: m.mosaic_new(), icon: Grid2x2Plus, onSelect: () => open(r, { mosaic: "new" }) },
         ]
       : []),
-    ...(r.wrapUp ? [{ label: "Wrap up", icon: PackageCheck, onSelect: () => open(r, { stage: "wrap-up" }) }] : []),
-    { label: r.trashed > 0 ? `Trash (${r.trashed})` : "Trash", icon: Trash2, onSelect: () => void navigate({ to: "/projects/$projectId/trash", params: { projectId: r.project.id } }) },
+    ...(r.wrapUp ? [{ label: m.wrapup_action(), icon: PackageCheck, onSelect: () => open(r, { stage: "wrap-up" }) }] : []),
+    { label: r.trashed > 0 ? m.trash_with_count({ count: r.trashed }) : m.trash_title(), icon: Trash2, onSelect: () => void navigate({ to: "/projects/$projectId/trash", params: { projectId: r.project.id } }) },
   ]
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
-        title="Projects"
-        meta={shown.length > 0 ? <CountBadge count={shown.length} label={plural(shown.length, "Project")} /> : null}
+        title={m.nav_projects()}
+        meta={shown.length > 0 ? <CountBadge count={shown.length} label={m.projects_count({ count: shown.length })} /> : null}
         actions={
           <>
             <div className="flex items-center gap-2">
               <Switch id={switchId} checked={showDone} onCheckedChange={(checked) => updateSlice("b", (b) => ({ ...b, showDone: checked }))} />
-              <Label htmlFor={switchId}>Show done</Label>
-              {!showDone && hiddenDone > 0 ? <Pill tone="muted">{hiddenDone} hidden</Pill> : null}
+              <Label htmlFor={switchId}>{m.projects_show_done()}</Label>
+              {!showDone && hiddenDone > 0 ? <Pill tone="muted">{m.projects_hidden({ count: hiddenDone })}</Pill> : null}
             </div>
             <Button size="sm" onClick={() => openSheet({ kind: "new-project" })}>
               <Plus aria-hidden="true" data-icon="inline-start" />
-              New Project
+              {m.newproject_title()}
             </Button>
           </>
         }
       />
       <PageBody className="@container">
         <DataTable
-          label="Projects"
+          label={m.nav_projects()}
           rows={shown}
           columns={columns}
           getRowId={(r) => r.project.id}
@@ -169,16 +170,16 @@ export function ProjectsPage() {
           empty={
             <EmptyState
               icon={FolderKanban}
-              title={rows.length === 0 ? "No Projects yet" : "Every Project is Done"}
+              title={rows.length === 0 ? m.projects_empty() : m.projects_all_done()}
               description={null}
               action={
                 rows.length === 0 ? (
                   <Button size="sm" onClick={() => openSheet({ kind: "new-project" })}>
-                    New Project
+                    {m.newproject_title()}
                   </Button>
                 ) : (
                   <Button size="sm" variant="outline" onClick={() => updateSlice("b", (b) => ({ ...b, showDone: true }))}>
-                    Show done
+                    {m.projects_show_done()}
                   </Button>
                 )
               }
@@ -192,16 +193,17 @@ export function ProjectsPage() {
 
 /** Met count plus the first unmet goal's line (from 64rem of table), with every line in the tooltip and to screen readers. */
 function GoalSummary({ progress }: { progress: GoalProgress[] }) {
-  if (progress.length === 0) return <span className="text-muted-foreground">No goals</span>
+  const m = useMessages()
+  if (progress.length === 0) return <span className="text-muted-foreground">{m.projects_no_goals()}</span>
   const met = progress.filter((p) => p.met).length
   const unmet = progress.find((p) => !p.met)
   return (
     <span className="block min-w-0" title={progress.map((p) => p.line).join("\n")}>
       <span className="font-medium tabular-nums">
-        {met} of {progress.length} met
+        {m.projects_goals_met({ met, total: progress.length })}
       </span>
       {unmet ? <span className="block max-w-[18rem] truncate text-xs text-muted-foreground tabular-nums @max-[64rem]:hidden">{unmet.line}</span> : null}
-      <span className="sr-only">{progress.map((p) => `${p.line}${p.met ? ", goal met" : ""}`).join("; ")}</span>
+      <span className="sr-only">{progress.map((p) => (p.met ? `${p.line}, ${m.projects_goal_met()}` : p.line)).join("; ")}</span>
     </span>
   )
 }

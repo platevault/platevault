@@ -499,16 +499,11 @@
   "page_step_done": "(concluído)",
   "ui_breadcrumb": "Trilha de navegação",
   "home_plan_tonight": "Planejar a noite",
-  "home_new_project": "Novo Projeto…",
   "import_open": "Importar…",
-  "home_open_session": "Abrir sessão",
-  "home_goals_none": "Sem metas",
   "home_goal_line": "{inProject} no projeto / {captured} capturado",
   "home_goal_line_goal": "{inProject} no projeto / {captured} capturado · meta {goal}",
-  "home_next_for": "para {name}",
   "home_blocked_at": "Bloqueado em {step}",
   "home_why_blocked": "Motivo do bloqueio: {name}",
-  "home_subjects_none": "Sem objetos",
   "home_rig_count": [
     {
       "declarations": [
@@ -527,7 +522,6 @@
   "home_column_project": "Projeto",
   "home_goals": "Metas",
   "home_column_next": "Próximo",
-  "home_start_run_menu": "Iniciar execução…",
   "home_project_count": [
     {
       "declarations": [
@@ -543,7 +537,6 @@
       }
     }
   ],
-  "home_show_done": "Mostrar concluídos",
   "home_hidden_count": [
     {
       "declarations": [
@@ -628,18 +621,15 @@
   "session_cant_add": "Não é possível adicionar",
   "home_added_to_draft": "{session} adicionada ao rascunho de {run}",
   "home_add_to_run": "Adicionar à execução",
-  "home_start_run": "Iniciar execução",
   "home_tonight": "Esta noite",
   "home_no_site": "Sem local",
   "home_add_site": "Adicionar local",
   "home_darkness": "Escuridão",
-  "home_darkness_none": "Nenhuma esta noite",
   "home_moon": "Lua",
   "home_moon_rises": "nasce {time}",
   "home_moon_sets": "se põe {time}",
   "home_windows": "Janelas",
   "home_no_subjects_or_favourites": "Sem objetos nem favoritos",
-  "home_favourite_title": "★ favorito",
   "home_favourite": "Favorito",
   "home_window_detail": "{altitude}° · Lua {separation}°",
   "home_no_window": "Sem janela",
@@ -708,7 +698,6 @@
   "session_no_open_project": "Nenhum Projeto aberto",
   "session_prefilled": "Preenchido com este Alvo e setup",
   "session_confirm_to_prefill": "Confirme um Alvo para preencher",
-  "session_create_project": "Criar Projeto",
   "session_no_target_chosen": "nenhum Alvo escolhido",
   "session_target_value": "Alvo: {name}",
   "session_target_for": "Alvo de {name}",
@@ -1226,5 +1215,1091 @@
         "countPlural=*": "{files} arquivos de imagem"
       }
     }
-  ]
+  ],
+  "newproject_open": "Novo Projeto…",
+  "startrun_in_project": "Iniciar execução em {name}…",
+  "mosaic_new_in_project": "Novo mosaico em {name}…",
+  "wrapup_project": "Encerrar {name}",
+  "project_noun": "Projeto",
+  "wrapup_its_volume": "O volume",
+  "wrapup_refusal_offline": "{name} está offline",
+  "wrapup_refusal_not_found": "Não encontrado em {path}",
+  "wrapup_refusal_not_mounted": "{name} não está montado",
+  "wrapup_refusal_not_writable": "{name} não aceita gravação",
+  "wrapup_refusal_file_exists": "Já existe outro arquivo em {path}",
+  "project_target_not_added": "Não foi possível adicionar {name} como Alvo.",
+  "mosaic_choose_target_first": "Escolha um Alvo primeiro.",
+  "project_gone": "Este Projeto não existe mais.",
+  "mosaic_subject_not_saved": "O objeto do mosaico não foi salvo.",
+  "project_subject_gone": "Este objeto não existe mais.",
+  "mosaic_profile_not_saved": "Grupo iniciado; perfil não salvo: {message}",
+  "wrapup_no_session": "Sem sessão",
+  "wrapup_offer_rejected": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {n} frame rejeitado para a Lixeira ({size})",
+        "countPlural=*": "Mover {n} frames rejeitados para a Lixeira ({size})"
+      }
+    }
+  ],
+  "wrapup_offer_rejected_none": "Mover frames rejeitados para a Lixeira: nenhum restante",
+  "wrapup_offer_intermediates": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {n} intermediário de processamento para a Lixeira ({size})",
+        "countPlural=*": "Mover {n} intermediários de processamento para a Lixeira ({size})"
+      }
+    }
+  ],
+  "wrapup_offer_intermediates_none": "Mover intermediários de processamento para a Lixeira: nenhum restante",
+  "wrapup_offer_duplicates": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mover {n} cópia duplicada para a Lixeira ({size})",
+        "countPlural=*": "Mover {n} cópias duplicadas para a Lixeira ({size})"
+      }
+    }
+  ],
+  "wrapup_offer_duplicates_none": "Mover cópias duplicadas para a Lixeira: nenhuma restante",
+  "wrapup_where_in_trash": "{where}, na Lixeira do Projeto",
+  "wrapup_refusal_in_open_run": "em {where}, não Completa",
+  "wrapup_refusal_result_input": "entrada de {name}",
+  "wrapup_refusal_archive_moving": "arquivamento em andamento",
+  "wrapup_refusal_outside_captures": "cópia fora de Capturas",
+  "wrapup_copies": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} cópia",
+        "countPlural=*": "{count} cópias"
+      }
+    }
+  ],
+  "wrapup_intermediate_of": "Intermediário de {name}",
+  "wrapup_intermediate": "Intermediário",
+  "wrapup_refusal_kept_unverifiable": "Não é possível verificar a cópia mantida na biblioteca: {path}",
+  "wrapup_master_source_duplicate": "Origem do master gerado: duplicata verificada; mantém a cópia da biblioteca {path}",
+  "wrapup_copy_on": "{name} em {location}",
+  "wrapup_unknown_location": "um local desconhecido",
+  "wrapup_refusal_linked_source": "origem de {name}, não Completa",
+  "wrapup_refusal_kept_copy_unverified": "cópia mantida em {name} não verificada",
+  "wrapup_keeps_copy_on": "Mantém a cópia em {name}: {path}",
+  "wrapup_refusal_space": "{name}: {free} livres de {size}",
+  "wrapup_no_archive_location": "nenhum local de arquivo",
+  "project_nothing_to_restore": "Não há nada arquivado para restaurar",
+  "goal_gap_met": "Meta de {channel} atingida",
+  "goal_gap_line": "{channel}: faltam {project} no projeto · faltam {captured} capturados",
+  "project_lookup_turn_on": "Ative em {path}.",
+  "project_lookup_no_response": "{provider} não respondeu.",
+  "project_target_label": "Alvo",
+  "project_search_placeholder": "Nome ou número de catálogo",
+  "project_search_results": "Resultados da busca",
+  "project_search_no_new_match": "Nenhum resultado novo",
+  "project_search_no_match": "Nenhum resultado · Enter busca no SIMBAD",
+  "project_lookup_asking": "Consultando {provider}…",
+  "project_lookup_failed": "Falha na busca no SIMBAD",
+  "project_lookup_off": "Busca online desativada",
+  "project_search_subject_of": "Objeto de {names}",
+  "project_search_favourite": "★ Favorito",
+  "project_search_library_target": "Alvo da biblioteca",
+  "project_search_my_targets": "Meus alvos",
+  "project_search_catalogues": "Catálogos",
+  "project_search_position_unknown": "Posição desconhecida",
+  "project_search_new_from": "novo Alvo de {source}",
+  "project_search_new_from_catalogue": "novo Alvo do catálogo",
+  "project_search_added": "Adicionado",
+  "project_subject_with_panels": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name} ({count} painel)",
+        "countPlural=*": "{name} ({count} painéis)"
+      }
+    }
+  ],
+  "projects_no_subjects": "Sem objetos",
+  "projects_no_rigs": "Sem setups",
+  "projects_col_state": "Estado",
+  "projects_col_goals": "Metas",
+  "projects_col_open_runs": "Execuções abertas",
+  "projects_col_stage": "Etapa",
+  "projects_col_next": "Próximo",
+  "projects_groups": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} grupo",
+        "countPlural=*": "{count} grupos"
+      }
+    }
+  ],
+  "projects_next_for": "para {name}",
+  "startrun_open": "Iniciar execução…",
+  "mosaic_new": "Novo mosaico…",
+  "wrapup_action": "Encerrar",
+  "trash_title": "Lixeira",
+  "trash_with_count": "Lixeira ({count})",
+  "projects_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} Projeto",
+        "countPlural=*": "{count} Projetos"
+      }
+    }
+  ],
+  "projects_show_done": "Mostrar concluídos",
+  "projects_hidden": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} oculto",
+        "countPlural=*": "{count} ocultos"
+      }
+    }
+  ],
+  "newproject_title": "Novo Projeto",
+  "projects_empty": "Nenhum Projeto ainda",
+  "projects_all_done": "Todos os Projetos estão Concluídos",
+  "projects_no_goals": "Sem metas",
+  "projects_goals_met": "{met} de {total} atingidas",
+  "projects_goal_met": "meta atingida",
+  "project_back_to_projects": "Abrir Projetos",
+  "project_reopen_ellipsis": "Reabrir…",
+  "project_reopen_title": "Reabrir {name}?",
+  "project_reopen_no_file_moves": "Nenhum arquivo é movido.",
+  "project_reopen_change": "Projeto Concluído → Aberto",
+  "project_reopen_stay_archived": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão permanece arquivada até ser restaurada",
+        "countPlural=*": "{count} sessões permanecem arquivadas até serem restauradas"
+      }
+    }
+  ],
+  "project_reopen": "Reabrir",
+  "project_stage_label": "Etapa do Projeto",
+  "project_stage_current": "(etapa atual)",
+  "project_candidate_frames": "Frames candidatos",
+  "project_candidates_done": "Concluir",
+  "goal_bar_any": "Qualquer",
+  "goal_bar_fwhm": "Limite de FWHM",
+  "goal_bar_usable_fwhm": "Utilizável + FWHM",
+  "goal_hours": "Horas",
+  "goal_hours_label": "Integração de {channel} em horas",
+  "goal_frames": "Frames",
+  "goal_frames_label": "Número de frames de {channel}",
+  "goal_quality": "Qualidade",
+  "goal_fwhm_max": "FWHM ≤ ″",
+  "goal_fwhm_label": "Limite de FWHM mediano de {channel} em segundos de arco",
+  "goal_add_channel_goal": "Adicionar meta de {channel}",
+  "goal_add_channel": "Adicionar canal",
+  "project_col_actions": "Ações",
+  "project_run_complete_ellipsis": "Completar…",
+  "trash_move_ellipsis": "Mover para a Lixeira…",
+  "project_runs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} execução",
+        "countPlural=*": "{count} execuções"
+      }
+    }
+  ],
+  "project_trashed_runs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} execução na lixeira",
+        "countPlural=*": "{count} execuções na lixeira"
+      }
+    }
+  ],
+  "startrun_title": "Iniciar execução",
+  "project_refusal_trash_run": "Não é possível mover a execução para a Lixeira",
+  "project_refusal_complete_run": "Não é possível completar a execução",
+  "project_no_runs": "Nenhuma execução ainda",
+  "project_unknown_subject": "Objeto desconhecido",
+  "project_held_at": "{state} em {step}",
+  "project_why_held": "Por que {name} está retida",
+  "project_steps_of": "Etapas de {name}",
+  "project_panels": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} painel",
+        "countPlural=*": "{count} painéis"
+      }
+    }
+  ],
+  "project_run_noun": "execução",
+  "project_run_noun_capital": "Execução",
+  "project_run_complete_title": "Completar {name}?",
+  "project_run_complete_description": "Reabrir a devolve à sua etapa.",
+  "project_run_to_complete": "{name} → Completa",
+  "project_step_stays": "{step} permanece {state}",
+  "project_run_complete": "Completar execução",
+  "project_run_trash_title": "Mover {name} para a Lixeira?",
+  "project_run_trash_description": "Restaurar a traz de volta como estava.",
+  "project_run_to_trash": "{name} → Lixeira do Projeto",
+  "project_run_trash_goals": "Seus membros deixam de contar para as metas",
+  "trash_move": "Mover para a Lixeira",
+  "project_placement_ambiguous": "Ambígua",
+  "project_placement_off_panel": "Fora do painel",
+  "project_placement_no_pointing": "Sem apontamento",
+  "project_filter_all": "Todas",
+  "project_filter_not_in_run": "Fora de execuções",
+  "startrun_refusal": "Não é possível iniciar a execução",
+  "startrun_refusal_pairs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} par de objeto e setup",
+        "countPlural=*": "{count} pares de objeto e setup"
+      }
+    }
+  ],
+  "project_col_session": "Sessão",
+  "project_col_subject": "Objeto",
+  "project_col_rig": "Setup",
+  "project_col_in_run": "Em execução",
+  "project_unreviewed_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} não revisado",
+        "countPlural=*": "{count} não revisados"
+      }
+    }
+  ],
+  "project_sessions_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão",
+        "countPlural=*": "{count} sessões"
+      }
+    }
+  ],
+  "startrun_with_count": "Iniciar execução ({count})",
+  "project_open_session": "Abrir sessão",
+  "project_candidates": "Candidatos",
+  "project_ready_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} pronta",
+        "countPlural=*": "{count} prontas"
+      }
+    }
+  ],
+  "project_members_no_longer_match": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} membro não corresponde mais",
+        "countPlural=*": "{count} membros não correspondem mais"
+      }
+    }
+  ],
+  "project_subject_changed": "objeto alterado",
+  "project_no_candidates": "Nenhum candidato",
+  "project_candidates_filter": "Filtro de candidatos",
+  "project_candidate_sessions_of": "Sessões candidatas de {name}",
+  "project_none_unreviewed": "Nenhuma não revisada",
+  "project_all_in_runs": "Todos os candidatos estão em execuções",
+  "project_frames_count": [
+    {
+      "declarations": [
+        "input count",
+        "input n",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{n} frame",
+        "countPlural=*": "{n} frames"
+      }
+    }
+  ],
+  "project_goals_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} meta",
+        "countPlural=*": "{count} metas"
+      }
+    }
+  ],
+  "goal_save": "Salvar metas",
+  "goal_template": "Modelo de meta",
+  "goal_apply": "Aplicar",
+  "goal_apply_title": "Aplicar {name}?",
+  "goal_template_noun": "modelo",
+  "goal_apply_description": "Os valores são copiados e continuam editáveis.",
+  "goal_no_changes": "Nenhuma alteração de metas",
+  "goal_apply_template": "Aplicar modelo",
+  "goal_edit": "Editar",
+  "goal_refusal_save": "Não é possível salvar as metas",
+  "goal_remove_goal": "Remover meta de {channel}",
+  "goal_unmeasured_label": "Membros não medidos",
+  "goal_unmeasured": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} membro não medido · não contado",
+        "countPlural=*": "{count} membros não medidos · não contados"
+      }
+    }
+  ],
+  "goal_warning_exposure": "Exposição divergente",
+  "goal_warning_calibration": "Calibração ausente",
+  "goal_to_go": "faltam {duration}",
+  "goal_add_for": "Adicionar meta para {name}",
+  "project_open_target": "Abrir Alvo",
+  "mosaic_start_run": "Iniciar execução de mosaico",
+  "mosaic_make": "Criar mosaico",
+  "project_remove": "Remover",
+  "project_subjects": "Objetos",
+  "project_subjects_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} objeto",
+        "countPlural=*": "{count} objetos"
+      }
+    }
+  ],
+  "mosaic_new_button": "Novo mosaico",
+  "project_refusal_remove_subject": "Não é possível remover o objeto",
+  "project_used_by_runs": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "usado por {count} execução",
+        "countPlural=*": "usado por {count} execuções"
+      }
+    }
+  ],
+  "project_refusal_add_subject": "Não é possível adicionar o objeto",
+  "project_subjects_of": "Objetos de {name}",
+  "project_col_kind": "Tipo",
+  "project_col_centre": "Centro",
+  "mosaic_of_panels": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Mosaico de {count} painel: iniciar execução de mosaico",
+        "countPlural=*": "Mosaico de {count} painéis: iniciar execução de mosaico"
+      }
+    }
+  ],
+  "project_open_in": "Abrir em {name}",
+  "project_rigs": "Setups",
+  "project_rigs_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} setup",
+        "countPlural=*": "{count} setups"
+      }
+    }
+  ],
+  "project_refusal_remove_rig": "Não é possível remover o setup",
+  "project_rigs_of": "Setups de {name}",
+  "project_col_camera": "Câmera",
+  "project_col_channels": "Canais",
+  "project_col_field": "Campo",
+  "project_camera_osc": "OSC",
+  "project_camera_mono": "Mono",
+  "project_add_a_rig": "Adicionar um setup",
+  "project_add_rig": "Adicionar setup",
+  "project_refusal_add_rig": "Não é possível adicionar o setup",
+  "project_tonight": "Hoje à noite",
+  "project_moon_pct": "Lua {pct}%",
+  "project_dark_window": "Escuro {start}–{end}",
+  "project_no_darkness": "Sem escuridão",
+  "project_planner": "Planejador",
+  "project_no_windows": "Sem janelas",
+  "project_no_site": "nenhum local de observação",
+  "project_planning_of": "Planejamento dos objetos de {name}",
+  "project_col_best_window": "Melhor janela",
+  "project_col_to_go": "Falta",
+  "project_moon_separation": "Lua {deg}°",
+  "project_none_tonight": "Nenhuma hoje à noite",
+  "project_restore_count": "Restaurar ({count})…",
+  "project_restore_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Restaurar {count} sessão?",
+        "countPlural=*": "Restaurar {count} sessões?"
+      }
+    }
+  ],
+  "project_restore_description": "De volta para onde o Arquivamento encontrou cada frame.",
+  "project_restore_stays": "{name} permanece · {reason}",
+  "project_restore": "Restaurar",
+  "project_restore_nothing_now": "Nada do que foi escolhido pode ser restaurado agora.",
+  "project_archived_of": "Sessões arquivadas de {name}",
+  "project_col_archive_path": "Caminho do arquivo",
+  "project_restore_named": "Restaurar {name}",
+  "project_remove_named": "Remover {name}",
+  "newproject_new_target": "Novo Alvo",
+  "newproject_field_name": "Nome",
+  "newproject_goals_not_saved": "Projeto criado; metas não salvas: {message}",
+  "newproject_nothing_prefilled": "Nada pré-preenchido · nenhum Alvo confirmado",
+  "newproject_name_placeholder": "Cygnus HOO 2026",
+  "newproject_notes": "Notas",
+  "newproject_optional": "(opcional)",
+  "newproject_camera_unknown": "Câmera desconhecida",
+  "newproject_template": "Modelo",
+  "newproject_template_none": "Nenhum",
+  "newproject_template_yours": "{name} (seu)",
+  "newproject_refusal": "Não é possível criar",
+  "newproject_fields_missing": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} campo faltando",
+        "countPlural=*": "{count} campos faltando"
+      }
+    }
+  ],
+  "newproject_create": "Criar Projeto",
+  "startrun_project_not_found": "Projeto não encontrado",
+  "startrun_profile_none": "Nenhum",
+  "startrun_profile_other": "Outro aplicativo",
+  "startrun_blocker_done": "{name} está Concluído",
+  "startrun_no_subject": "Sem objeto",
+  "startrun_not_created": "A execução não foi criada.",
+  "startrun_profile_not_saved": "Execução iniciada; perfil não salvo: {message}",
+  "startrun_mosaic": "Mosaico",
+  "startrun_candidate_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão candidata",
+        "countPlural=*": "{count} sessões candidatas"
+      }
+    }
+  ],
+  "startrun_profile_optional": "Perfil (opcional)",
+  "startrun_place_panels": "Posicionar painéis",
+  "trash_preview_record": "{name}: registro removido",
+  "trash_preview_prepared": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} entrada preparada → Lixeira do sistema",
+        "countPlural=*": "{name}: {count} entradas preparadas → Lixeira do sistema"
+      }
+    }
+  ],
+  "trash_preview_kept": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input reason",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} entrada mantida · {reason}",
+        "countPlural=*": "{name}: {count} entradas mantidas · {reason}"
+      }
+    }
+  ],
+  "trash_preview_results": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: Resultados ({count} arquivo) → Lixeira do sistema",
+        "countPlural=*": "{name}: Resultados ({count} arquivos) → Lixeira do sistema"
+      }
+    }
+  ],
+  "trash_preview_results_folder": "{name}: pasta de Resultados",
+  "trash_entries": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} entrada",
+        "countPlural=*": "{count} entradas"
+      }
+    }
+  ],
+  "trash_results_files": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Descartar {count} arquivo",
+        "countPlural=*": "Descartar {count} arquivos"
+      }
+    }
+  ],
+  "trash_of_run": "de {name}",
+  "trash_empty_run_ellipsis": "Esvaziar esta execução…",
+  "trash_empty_ellipsis": "Esvaziar Lixeira…",
+  "trash_of_project": "Lixeira de {name}",
+  "trash_is_empty": "A Lixeira está vazia",
+  "trash_open_project": "Abrir {name}",
+  "trash_last_empty": "Último esvaziamento da Lixeira",
+  "trash_restore_title": "Restaurar {name}?",
+  "trash_restore_description": "De volta como estava ao ir para a Lixeira.",
+  "trash_restore_to_group": "{name} → seu grupo de execuções",
+  "trash_restore_to_runs": "{name} → execuções do Projeto",
+  "trash_restore_members": "Os membros voltam a contar no projeto",
+  "trash_restore_run": "Restaurar execução",
+  "trash_empty_run_title": "Esvaziar esta execução?",
+  "trash_empty_runs_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Esvaziar {count} execução?",
+        "countPlural=*": "Esvaziar {count} execuções?"
+      }
+    }
+  ],
+  "trash_empty_description": "Os arquivos vão para a Lixeira do sistema depois de verificados novamente.",
+  "trash_empty_run": "Esvaziar execução",
+  "trash_empty": "Esvaziar Lixeira",
+  "wrapup_offer_rejects": "Rejeitados",
+  "wrapup_offer_intermediates_label": "Intermediários",
+  "wrapup_offer_duplicates_label": "Duplicatas",
+  "wrapup_todo": "A fazer",
+  "wrapup_blocked": "Encerramento bloqueado",
+  "wrapup_runs_not_complete": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} execução não Completa",
+        "countPlural=*": "{count} execuções não Completas"
+      }
+    }
+  ],
+  "wrapup_refusal_record_step": "Não é possível registrar a etapa",
+  "wrapup_summary": "Resumo: {label}",
+  "wrapup_skip": "Pular",
+  "wrapup_undo": "Desfazer",
+  "wrapup_cleanup_title": "Limpar execuções",
+  "wrapup_cleanup_all": "Limpar tudo…",
+  "wrapup_cleanup_confirm_title": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Limpar {count} execução?",
+        "countPlural=*": "Limpar {count} execuções?"
+      }
+    }
+  ],
+  "wrapup_cleanup_description": "As entradas preparadas vão para a Lixeira do sistema. Os Resultados permanecem.",
+  "wrapup_cleanup_change": [
+    {
+      "declarations": [
+        "input count",
+        "input name",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{name}: {count} entrada → Lixeira do sistema ({size})",
+        "countPlural=*": "{name}: {count} entradas → Lixeira do sistema ({size})"
+      }
+    }
+  ],
+  "wrapup_cleanup": "Limpar",
+  "wrapup_mark_done": "Marcar como Concluído",
+  "wrapup_cleanup_blocked": "Limpeza bloqueada",
+  "wrapup_cleaning_up": "Limpando",
+  "wrapup_clean": "Limpa",
+  "wrapup_items": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} item",
+        "countPlural=*": "{count} itens"
+      }
+    }
+  ],
+  "wrapup_moved": "Movido",
+  "wrapup_none": "Nenhum",
+  "wrapup_trash_ellipsis": "Descartar…",
+  "wrapup_trash_offer_title": "Descartar {offer} de {name}?",
+  "wrapup_trash_offer_description": "Somente para a Lixeira do sistema. Cada item é verificado novamente antes.",
+  "wrapup_items_to_trash": [
+    {
+      "declarations": [
+        "input count",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} item → Lixeira do sistema ({size})",
+        "countPlural=*": "{count} itens → Lixeira do sistema ({size})"
+      }
+    }
+  ],
+  "wrapup_items_kept_reason": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} item mantido com um motivo",
+        "countPlural=*": "{count} itens mantidos com um motivo"
+      }
+    }
+  ],
+  "wrapup_items_kept": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} item mantido",
+        "countPlural=*": "{count} itens mantidos"
+      }
+    }
+  ],
+  "wrapup_refused": "recusado",
+  "wrapup_archive_title": "Arquivar",
+  "wrapup_archive_ellipsis": "Arquivar…",
+  "wrapup_archive_confirm_title": "Arquivar {name}?",
+  "wrapup_archive_description": "Cada sessão é movida inteira ou permanece.",
+  "wrapup_archive_change": [
+    {
+      "declarations": [
+        "input count",
+        "input dest",
+        "input size",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão → {dest} ({size})",
+        "countPlural=*": "{count} sessões → {dest} ({size})"
+      }
+    }
+  ],
+  "wrapup_archive_fallback": "arquivo",
+  "wrapup_archive_links_follow": "Os links preparados acompanham a movimentação",
+  "wrapup_used_by_other": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão usada por outro Projeto",
+        "countPlural=*": "{count} sessões usadas por outro Projeto"
+      }
+    }
+  ],
+  "wrapup_destination": "Destino",
+  "wrapup_archive_blocked": "Arquivamento bloqueado",
+  "wrapup_default": "Padrão",
+  "wrapup_refusal_destination": "Não é possível alterar o destino",
+  "wrapup_sessions_to_move": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão para mover",
+        "countPlural=*": "{count} sessões para mover"
+      }
+    }
+  ],
+  "wrapup_sessions_archived": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão arquivada",
+        "countPlural=*": "{count} sessões arquivadas"
+      }
+    }
+  ],
+  "wrapup_sessions_stay": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão permanece",
+        "countPlural=*": "{count} sessões permanecem"
+      }
+    }
+  ],
+  "wrapup_sessions_kept": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sessão mantida",
+        "countPlural=*": "{count} sessões mantidas"
+      }
+    }
+  ],
+  "wrapup_used_by_other_reason": "usada por outro Projeto",
+  "wrapup_refusal_mark_done": "Não é possível marcar como Concluído",
+  "mosaic_placed_by_you": "Posicionada por você",
+  "mosaic_left_out": "Deixada de fora",
+  "mosaic_two_panels": "Dois painéis",
+  "mosaic_included_panel": "Painel incluído",
+  "mosaic_default_name": "Mosaico {name}",
+  "mosaic_place_on": "Posicionar em",
+  "mosaic_panel": "Painel {n}",
+  "mosaic_by_pointing": "Pelo apontamento",
+  "mosaic_leave_out": "Deixar de fora",
+  "mosaic_run": "Execução de mosaico",
+  "mosaic_included_panels": "{included}/{total} painéis",
+  "mosaic_flags": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} alerta",
+        "countPlural=*": "{count} alertas"
+      }
+    }
+  ],
+  "mosaic_start_group": "Iniciar grupo",
+  "mosaic_refusal_start_group": "Não é possível iniciar o grupo",
+  "mosaic_items_missing": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} item faltando",
+        "countPlural=*": "{count} itens faltando"
+      }
+    }
+  ],
+  "mosaic_change_target": "Trocar Alvo",
+  "mosaic_name_placeholder": "Mosaico IC 5070",
+  "mosaic_fov_unknown": "Campo de visão desconhecido · painéis desenhados com 1°",
+  "mosaic_position_unknown": "Posição desconhecida · escolha um layout",
+  "mosaic_panels_title": "Painéis",
+  "mosaic_done_adding": "Concluir adição",
+  "mosaic_add_panels": "Adicionar painéis",
+  "mosaic_refusal_remove_panel": "Não é possível remover o Painel {n}",
+  "mosaic_in_a_run": "Em uma execução",
+  "mosaic_placed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} posicionada",
+        "countPlural=*": "{count} posicionadas"
+      }
+    }
+  ],
+  "mosaic_flagged": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} sinalizada",
+        "countPlural=*": "{count} sinalizadas"
+      }
+    }
+  ],
+  "mosaic_out": "{count} fora",
+  "mosaic_no_sessions_on": "Nenhuma sessão em {rig}",
+  "mosaic_this_rig": "este setup",
+  "mosaic_pick_target": "Escolha um Alvo",
+  "mosaic_sessions_to_place": "Sessões para posicionar",
+  "mosaic_layout": "Layout",
+  "mosaic_excluded_panel": "Painel excluído",
+  "mosaic_panel_for": "Painel para {name}",
+  "mosaic_field_label": "Campo do mosaico: clique em um painel para incluí-lo ou excluí-lo",
+  "mosaic_add_slot": "Adicionar painel a {side} do Painel {n}",
+  "mosaic_excluded": "excluído",
+  "mosaic_side_east": "leste",
+  "mosaic_side_west": "oeste",
+  "mosaic_side_north": "norte",
+  "mosaic_side_south": "sul",
+  "project_lookup_sesame": "CDS Sesame (SIMBAD)",
+  "project_panel_short": "P{n}"
 }

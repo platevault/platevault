@@ -5,6 +5,7 @@
  * of the included panels with the user's placements, then the profile).
  */
 import type { MosaicPanel, OpticalTrainId, ProjectId, SessionId } from "@/domain/types"
+import { m } from "@/lib/i18n"
 import { addTarget } from "@/store/actions/library"
 import { addSubject, setSubjectMosaic } from "@/store/actions/projects"
 import { setGroupSetup, startRun } from "@/store/actions/runs"
@@ -16,7 +17,7 @@ export function resolvePick(pick: SubjectPick): { ok: true; targetId: string } |
   if (pick.kind === "target") return { ok: true, targetId: pick.targetId }
   const added = addTarget(pick.entry, { resolver: pick.resolver, favourite: false })
   if (!added.result.ok) return { ok: false, message: added.result.message }
-  return added.targetId ? { ok: true, targetId: added.targetId } : { ok: false, message: `${pick.name} could not be added as a Target.` }
+  return added.targetId ? { ok: true, targetId: added.targetId } : { ok: false, message: m.project_target_not_added({ name: pick.name }) }
 }
 
 export interface MosaicConfirm {
@@ -47,22 +48,22 @@ export function confirmMosaic(input: MosaicConfirm): { result: CommitResult; gro
   const mosaic = { name: input.name.trim(), centre: { ra: Number(centre.ra.toFixed(3)), dec: Number(centre.dec.toFixed(3)) }, panels: input.panels }
   let subjectId = input.subjectId
   if (!subjectId) {
-    if (!input.pick) return { result: failed("Choose a Target first."), groupId: null }
+    if (!input.pick) return { result: failed(m.mosaic_choose_target_first()), groupId: null }
     const resolved = resolvePick(input.pick)
     if (!resolved.ok) return { result: failed(resolved.message), groupId: null }
     const project = store.getState().catalog.projects[input.projectId]
-    if (!project) return { result: failed("This Project no longer exists."), groupId: null }
+    if (!project) return { result: failed(m.project_gone()), groupId: null }
     subjectId = project.subjects.find((s) => s.targetId === resolved.targetId)?.id ?? null
     if (!subjectId) {
       const added = addSubject(input.projectId, { targetId: resolved.targetId, mosaic }, project.revision)
       if (!added.ok) return { result: added, groupId: null }
       subjectId = store.getState().catalog.projects[input.projectId]?.subjects.find((s) => s.targetId === resolved.targetId)?.id ?? null
-      if (!subjectId) return { result: failed("The mosaic subject was not saved."), groupId: null }
+      if (!subjectId) return { result: failed(m.mosaic_subject_not_saved()), groupId: null }
     }
   }
   const project = store.getState().catalog.projects[input.projectId]
   const subject = project?.subjects.find((s) => s.id === subjectId)
-  if (!project || !subject) return { result: failed("This subject no longer exists."), groupId: null }
+  if (!project || !subject) return { result: failed(m.project_subject_gone()), groupId: null }
   if (JSON.stringify(subject.mosaic) !== JSON.stringify(mosaic)) {
     const saved = setSubjectMosaic(input.projectId, subject.id, mosaic, project.revision)
     if (!saved.ok) return { result: saved, groupId: null }
@@ -71,7 +72,7 @@ export function confirmMosaic(input: MosaicConfirm): { result: CommitResult; gro
   if (!started.result.ok || !started.groupId) return { result: started.result, groupId: null }
   if (input.profileId) {
     const setup = setGroupSetup(started.groupId, { profileId: input.profileId })
-    if (!setup.ok) return { result: failed(`Group started; profile not saved: ${setup.message}`), groupId: started.groupId }
+    if (!setup.ok) return { result: failed(m.mosaic_profile_not_saved({ message: setup.message })), groupId: started.groupId }
   }
   return { result: { ok: true }, groupId: started.groupId }
 }

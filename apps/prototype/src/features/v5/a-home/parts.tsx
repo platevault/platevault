@@ -144,7 +144,7 @@ export function CreateProjectButton({ sessionId, size = "sm" }: { sessionId: Ses
   const m = useMessages()
   return (
     <Button size={size} variant="outline" onClick={() => openSheet({ kind: "new-project", fromSessionId: sessionId })} title={hasTarget ? m.session_prefilled() : m.session_confirm_to_prefill()}>
-      {m.session_create_project()}
+      {m.newproject_create()}
     </Button>
   )
 }

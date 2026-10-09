@@ -113,7 +113,7 @@ export function HomePage() {
             </Button>
             <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "new-project" })}>
               <FolderPlus data-icon="inline-start" aria-hidden="true" />
-              {m.home_new_project()}
+              {m.newproject_open()}
             </Button>
             <Button size="sm" onClick={() => openSheet({ kind: "import" })}>
               <Download data-icon="inline-start" aria-hidden="true" />
@@ -174,7 +174,7 @@ function ReviewSheet({ sessionId, onClose }: { sessionId: string | null; onClose
             <SheetHeader className="flex-row items-center gap-2 border-b border-separator py-2 pr-12" data-chrome>
               <SheetTitle className="truncate">{sessionLongLabel(session)}</SheetTitle>
               <Button size="xs" variant="ghost" render={<Link to="/sessions/$sessionId" params={{ sessionId: session.id }} search={{ view: "review" }} />}>
-                {m.home_open_session()}
+                {m.project_open_session()}
               </Button>
             </SheetHeader>
             <div className="flex min-h-0 flex-1 flex-col">
@@ -226,7 +226,7 @@ function goalLine(m: Messages, g: ChannelGoal): string {
 
 function GoalLines({ goals }: { goals: ChannelGoal[] }) {
   const m = useMessages()
-  if (goals.length === 0) return <span className="text-xs text-muted-foreground">{m.home_goals_none()}</span>
+  if (goals.length === 0) return <span className="text-xs text-muted-foreground">{m.projects_no_goals()}</span>
   return (
     <ul className="space-y-1 py-1">
       {goals.map((g) => {
@@ -264,7 +264,7 @@ function NextButton({ state, project }: { state: PrototypeState; project: Projec
     <Button size="sm" variant="outline" className="max-w-[12rem] min-w-0" onClick={() => follow(next.link)} title={`${next.label}: ${next.reason}`} data-next={project.id}>
       {blocked ? <StepGlyph state="blocked" /> : null}
       <span className="truncate">{next.label}</span>
-      <span className="sr-only"> {m.home_next_for({ name: project.name })}</span>
+      <span className="sr-only"> {m.projects_next_for({ name: project.name })}</span>
     </Button>
   )
 }
@@ -317,7 +317,7 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
             {p.state === "done" ? <Pill tone="muted">{projectStatus(p) === "archived" ? m.status_archived() : m.status_done()}</Pill> : null}
           </div>
           <div className="text-xs text-pretty text-muted-foreground">
-            {p.subjects.map((s) => subjectName(state.catalog, s)).join(", ") || m.home_subjects_none()} · {m.home_rig_count({ count: p.rigIds.length })}
+            {p.subjects.map((s) => subjectName(state.catalog, s)).join(", ") || m.projects_no_subjects()} · {m.home_rig_count({ count: p.rigIds.length })}
           </div>
           <StageCell state={state} project={p} />
         </div>
@@ -335,7 +335,7 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
       ...(p.state === "open"
         ? [
             { separator: true } as const,
-            { label: m.home_start_run_menu(), icon: Play, onSelect: () => openSheet({ kind: "start-run", projectId: p.id }) },
+            { label: m.startrun_open(), icon: Play, onSelect: () => openSheet({ kind: "start-run", projectId: p.id }) },
             { label: m.nav_plan(), icon: CalendarClock, onSelect: () => void navigate({ to: "/plan", search: { project: p.id } }) },
           ]
         : []),
@@ -356,7 +356,7 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
         <div className="flex items-center gap-2" data-chrome>
           <Switch id={switchId} size="sm" checked={showDone} onCheckedChange={setShowDone} />
           <Label htmlFor={switchId} className="text-xs font-normal">
-            {m.home_show_done()}
+            {m.projects_show_done()}
           </Label>
           {!showDone && done.length > 0 ? <Pill tone="muted">{m.home_hidden_count({ count: done.length })}</Pill> : null}
         </div>
@@ -370,7 +370,7 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
           className="m-3"
           action={
             <Button size="sm" variant="outline" onClick={() => openSheet({ kind: "new-project" })}>
-              {m.home_new_project()}
+              {m.newproject_open()}
             </Button>
           }
         />
@@ -387,7 +387,7 @@ function ProjectsBox({ state, className }: { state: PrototypeState; className?: 
             <div className="flex items-center gap-2 px-3 py-2 text-sm">
               <span className="text-muted-foreground">{m.home_all_done()}</span>
               <Button size="xs" variant="outline" onClick={() => setShowDone(true)}>
-                {m.home_show_done()}
+                {m.projects_show_done()}
               </Button>
             </div>
           }
@@ -577,7 +577,7 @@ function SessionsBox({ state, onReview, className }: { state: PrototypeState; on
                           </Button>
                         ) : (
                           <Button size="xs" variant="outline" onClick={() => openSheet({ kind: "start-run", projectId })}>
-                            {m.home_start_run()}
+                            {m.startrun_title()}
                           </Button>
                         )
                       }
@@ -660,7 +660,7 @@ function TonightBox({ state, className }: { state: PrototypeState; className?: s
       <div className="space-y-2">
         <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm tabular-nums">
           <dt className="text-muted-foreground">{m.home_darkness()}</dt>
-          <dd>{tonight.darkness ? `${formatTime(tonight.darkness.start, tz)}–${formatTime(tonight.darkness.end, tz)} ${zone(tonight.darkness.start)}` : m.home_darkness_none()}</dd>
+          <dd>{tonight.darkness ? `${formatTime(tonight.darkness.start, tz)}–${formatTime(tonight.darkness.end, tz)} ${zone(tonight.darkness.start)}` : m.project_none_tonight()}</dd>
           <dt className="text-muted-foreground">{m.home_moon()}</dt>
           <dd>
             {tonight.moon.phase}, {Math.round(tonight.moon.illuminationPct)}%
@@ -684,7 +684,7 @@ function TonightBox({ state, className }: { state: PrototypeState; className?: s
           <ul className="divide-y divide-border/60 text-sm" data-tonight-windows>
             {withWindow.map((r) => (
               <li key={r.key} className="grid min-h-(--row-h) grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 py-1">
-                <span className="min-w-0 truncate" title={r.projects.join(", ") || m.home_favourite_title()}>
+                <span className="min-w-0 truncate" title={r.projects.join(", ") || m.project_search_favourite()}>
                   {r.favourite ? <span role="img" aria-label={m.home_favourite()}>★ </span> : null}
                   {r.name}
                 </span>
@@ -804,7 +804,7 @@ function GoalsBox({ state, className }: { state: PrototypeState; className?: str
         getRowId={(r) => r.key}
         scroll="none"
         className="rounded-none border-0"
-        empty={<p className="px-3 py-2 text-sm text-muted-foreground">{hasGoals ? m.home_all_met() : m.home_goals_none()}</p>}
+        empty={<p className="px-3 py-2 text-sm text-muted-foreground">{hasGoals ? m.home_all_met() : m.projects_no_goals()}</p>}
       />
     </Box>
   )
