@@ -5,15 +5,16 @@
  */
 import { latestRevision } from "@/domain/derive"
 import { type CatalogueEntry, entryKeys, targetFromEntry } from "@/domain/sky"
-import { rejectInContent, sessionLabel, unrejectInContent } from "@/domain/membership"
+import { rejectInContent, sessionRef, unrejectInContent } from "@/domain/membership"
 import type { AssetId, CatalogCorrection, Evidence, OpticalTrainId, QualityValue, RunId, Session, SessionId, TargetId } from "@/domain/types"
-import { plural } from "@/lib/format"
+import { formatCount } from "@/lib/format"
+import { type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, store, withCatalog } from "@/store/core"
 import { setProjectRejection } from "./projects"
 import { updateRunDraft } from "./runs"
 import { freshId, MISSING, recordSaved } from "./shared"
 
-const WORD: Record<QualityValue, string> = { usable: "Usable", unusable: "Unusable", unreviewed: "Unreviewed" }
+const QUALITY_NAME: Record<QualityValue, MessageRef> = { usable: msg("status_usable"), unusable: msg("status_unusable"), unreviewed: msg("status_unreviewed") }
 
 /**
  * Library quality, the first level (P, X, U; PIX-FR-13). It binds the
@@ -24,7 +25,8 @@ const WORD: Record<QualityValue, string> = { usable: "Usable", unusable: "Unusab
 export function markFrames(assetIds: AssetId[], value: QualityValue, runId: RunId | null, href: string): CommitResult {
   if (assetIds.length === 0) return { ok: true }
   const at = nowIso()
-  const result = commit(`Mark ${plural(assetIds.length, "frame")} ${WORD[value]}`, (s) =>
+  const count = assetIds.length
+  const result = commit(msg("store_label_mark_frames", { count, n: formatCount(count), quality: QUALITY_NAME[value] }), (s) =>
     withCatalog(s, (c) => {
       const assets = { ...c.assets }
       for (const id of assetIds) {
@@ -36,7 +38,7 @@ export function markFrames(assetIds: AssetId[], value: QualityValue, runId: RunI
     { href },
   )
   if (!result.ok) return result
-  recordSaved(`${plural(assetIds.length, "frame")} marked ${WORD[value]}`, "Library scope: every run and Target sees this decision.", href)
+  recordSaved(msg("store_saved_frames_marked", { count, n: formatCount(count), quality: QUALITY_NAME[value] }), msg("store_library_scope_detail"), href)
   return runId ? applyToDraft(runId, assetIds, value === "unusable") : result
 }
 
@@ -52,7 +54,7 @@ function applyToDraft(runId: RunId, assetIds: AssetId[], reject: boolean): Commi
   const ids = reject ? assetIds : assetIds.filter((id) => catalog.assets[id]?.quality.value !== "unusable" && !(id in rejections))
   const touches = reject ? ids.some((id) => !content.rejected.includes(id)) : ids.some((id) => content.rejected.includes(id))
   if (!touches) return { ok: true }
-  return updateRunDraft(runId, reject ? "Rejected in Review" : "Un-rejected in Review", (c, s) => (reject ? rejectInContent(c, ids) : unrejectInContent(s.disk, s.catalog, c, ids)))
+  return updateRunDraft(runId, reject ? msg("store_label_rejected_in_review") : msg("store_label_unrejected_in_review"), (c, s) => (reject ? rejectInContent(c, ids) : unrejectInContent(s.disk, s.catalog, c, ids)))
 }
 
 /**
@@ -68,7 +70,7 @@ export function rejectForProjectOnly(runId: RunId, assetIds: AssetId[], rejected
 }
 
 /** Observed evidence stays as read; the confirmation is a separate user row. */
-function confirmedEvidence(evidence: Evidence[], label: string, value: string): Evidence[] {
+function confirmedEvidence(evidence: Evidence[], label: MessageRef, value: MessageRef): Evidence[] {
   return [...evidence.filter((e) => e.source !== "user"), { source: "user", label, value, agrees: true }]
 }
 
@@ -86,21 +88,21 @@ export function confirmTarget(sessionId: SessionId, targetId: TargetId, expectRe
   const href = `/sessions/${sessionId}`
   const at = nowIso()
   const result = commit(
-    `Target for ${sessionLabel(session)}`,
+    msg("session_target_for", { name: sessionRef(session) }),
     (s) =>
       withCatalog(s, (c) => {
         const current = c.sessions[sessionId]!
         const previous = current.target.value ? (c.targets[current.target.value]?.name ?? null) : null
         const next: Session = {
           ...current,
-          target: { value: targetId, status: "confirmed", evidence: confirmedEvidence(current.target.evidence, "Confirm Target", target.name), confirmedAt: at },
+          target: { value: targetId, status: "confirmed", evidence: confirmedEvidence(current.target.evidence, msg("session_confirm_target"), verbatim(target.name)), confirmedAt: at },
           corrections: [...current.corrections, ...correction(current, "target", previous, target.name)],
         }
         return { ...c, sessions: { ...c.sessions, [sessionId]: next } }
       }),
     { expect: { collection: "sessions", id: sessionId, revision: expectRevision }, href },
   )
-  if (result.ok) recordSaved(`Target confirmed: ${sessionLabel(session)}`, `${target.name}. Catalog only; source headers unchanged.`, href)
+  if (result.ok) recordSaved(msg("session_target_confirmed", { name: sessionRef(session) }), msg("store_catalog_only_detail", { name: target.name }), href)
   return result
 }
 
@@ -113,14 +115,14 @@ export function confirmRig(sessionId: SessionId, rigId: OpticalTrainId, expectRe
   const href = `/sessions/${sessionId}`
   const at = nowIso()
   const result = commit(
-    `Rig for ${sessionLabel(session)}`,
+    msg("session_rig_for", { name: sessionRef(session) }),
     (s) =>
       withCatalog(s, (c) => {
         const current = c.sessions[sessionId]!
         const previous = current.equipment.value ? (c.opticalTrains[current.equipment.value]?.name ?? null) : null
         const next: Session = {
           ...current,
-          equipment: { value: rigId, status: "confirmed", evidence: confirmedEvidence(current.equipment.evidence, "Confirm rig", rig.name), confirmedAt: at },
+          equipment: { value: rigId, status: "confirmed", evidence: confirmedEvidence(current.equipment.evidence, msg("session_confirm_rig"), verbatim(rig.name)), confirmedAt: at },
           corrections: [...current.corrections, ...correction(current, "equipment", previous, rig.name)],
         }
         const record = c.opticalTrains[rigId]!
@@ -129,7 +131,7 @@ export function confirmRig(sessionId: SessionId, rigId: OpticalTrainId, expectRe
       }),
     { expect: { collection: "sessions", id: sessionId, revision: expectRevision }, href },
   )
-  if (result.ok) recordSaved(`Rig confirmed: ${sessionLabel(session)}`, `${rig.name}. Catalog only; source headers unchanged.`, href)
+  if (result.ok) recordSaved(msg("session_rig_confirmed", { name: sessionRef(session) }), msg("store_catalog_only_detail", { name: rig.name }), href)
   return result
 }
 
@@ -139,11 +141,11 @@ export function setFavourite(targetId: TargetId, favourite: boolean): CommitResu
   if (!target) return MISSING
   const href = `/targets/${targetId}`
   const result = commit(
-    favourite ? `Add ${target.name} to My targets` : `Remove ${target.name} from My targets`,
+    favourite ? msg("store_label_add_to_my_targets", { name: target.name }) : msg("store_label_remove_from_my_targets", { name: target.name }),
     (s) => withCatalog(s, (c) => ({ ...c, targets: { ...c.targets, [targetId]: { ...c.targets[targetId]!, favourite } } })),
     { expect: { collection: "targets", id: targetId, revision: target.revision }, href },
   )
-  if (result.ok) recordSaved(favourite ? `★ ${target.name}` : `☆ ${target.name}`, null, href)
+  if (result.ok) recordSaved(verbatim(favourite ? `★ ${target.name}` : `☆ ${target.name}`), null, href)
   return result
 }
 
@@ -160,7 +162,18 @@ export function addTarget(entry: CatalogueEntry, options: { resolver: string | n
   const id = freshId("tgt", entry.designation)
   const target = targetFromEntry(entry, { id, at: nowIso(), resolver: options.resolver, favourite: options.favourite })
   const href = `/targets/${id}`
-  const result = commit(options.favourite ? `Add ${entry.designation} to My targets` : `Add ${entry.designation} to targets`, (s) => withCatalog(s, (c) => ({ ...c, targets: { ...c.targets, [id]: target } })), { href })
-  if (result.ok) recordSaved(options.favourite ? `★ ${entry.designation} added to My targets` : `Target added: ${entry.designation}`, options.resolver ? `Coordinates, size and type from ${options.resolver}.` : `From the bundled ${entry.catalogues.join(", ") || "reference"} catalogue.`, href)
+  const result = commit(
+    options.favourite ? msg("store_label_add_to_my_targets", { name: entry.designation }) : msg("targets_add_named", { name: entry.designation }),
+    (s) => withCatalog(s, (c) => ({ ...c, targets: { ...c.targets, [id]: target } })),
+    { href },
+  )
+  if (result.ok) {
+    const source = options.resolver
+      ? msg("store_target_from_resolver", { resolver: options.resolver })
+      : entry.catalogues.length > 0
+        ? msg("store_target_from_bundled", { catalogues: entry.catalogues.join(", ") })
+        : msg("store_target_from_reference")
+    recordSaved(options.favourite ? msg("store_saved_added_to_my_targets", { name: entry.designation }) : msg("store_saved_target_added", { name: entry.designation }), source, href)
+  }
   return { result, targetId: result.ok ? id : null }
 }

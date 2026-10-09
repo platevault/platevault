@@ -12,8 +12,10 @@
 import { stepRecord } from "@/domain/calibration-process"
 import { fileAt, filesUnder, removeFile, trashRefusal } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
-import type { AssetId, CalibrationProcessId, Disk, OperationId, OperationItem, OperationKind, ProjectId, ResultId, RunId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
-import { formatBytes, plural } from "@/lib/format"
+import { unitCount } from "@/domain/labels"
+import type { AssetId, CalibrationProcessId, Disk, OperationId, OperationItem, OperationKind, OperationUnit, ProjectId, ResultId, RunId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
+import { fileName, formatBytes, formatCount } from "@/lib/format"
+import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { nowIso, type PrototypeState, store } from "@/store/core"
 import { addOperation, ensureTicker, type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
 import { freshId } from "./shared"
@@ -24,12 +26,12 @@ export interface TrashItem {
   assetId?: AssetId
   resultId?: ResultId
   /** Refused before the move, for example "Offline" for a folder that cannot be listed. */
-  refusedReason?: string
+  refusedReason?: MessageRef
 }
 
 export interface MoveToOsTrash {
   kind: TrashEpisodeKind
-  title: string
+  title: MessageRef
   projectId: ProjectId | null
   runIds: RunId[]
   items: TrashItem[]
@@ -37,8 +39,8 @@ export interface MoveToOsTrash {
   removeRunIds?: RunId[]
   /** Roots whose emptied folders leave the disk once the episode settles (a run's prepared folders); a folder still holding a file stays. */
   pruneFolders?: string[]
-  /** What one item is, for progress and the summary; "item" by default. */
-  noun?: { one: string; many: string }
+  /** What one item is, for progress and the summary; "items" by default. */
+  unit?: OperationUnit
   href: string
   /** The calibration process whose Raws step this move is (P-CAL3); the episode settles that step. */
   calibrationProcessId?: CalibrationProcessId
@@ -63,7 +65,7 @@ export function preparedEntryItems(state: PrototypeState, runId: RunId): TrashIt
     const files = filesUnder(state.disk, prep.folderPath)
     if (files.length === 0 && !fileAt(state.disk, prep.folderPath)) {
       const volume = Object.values(state.disk.volumes).find((v) => isUnder(prep.folderPath, v.mountPath))
-      if (volume && !volume.mounted) out.push({ path: prep.folderPath, refusedReason: `${volume.name} is offline` })
+      if (volume && !volume.mounted) out.push({ path: prep.folderPath, refusedReason: msg("run_cleanup_volume_offline", { name: volume.name }) })
       continue
     }
     for (const file of files) out.push({ path: file.path })
@@ -111,34 +113,34 @@ export function moveToOsTrash(input: MoveToOsTrash): OperationId {
 
 /** The move as a state change, for a `commit` mutator or an operation step; the caller runs `ensureTicker()`. */
 export function queueOsTrash(state: PrototypeState, input: MoveToOsTrash): { state: PrototypeState; operationId: OperationId } {
-  const noun = input.noun ?? { one: "item", many: "items" }
+  const unit = input.unit ?? "items"
   const payload: TrashPayload = {
     kind: input.kind,
     projectId: input.projectId,
     runIds: input.runIds,
     removeRunIds: input.removeRunIds ?? [],
     pruneFolders: input.pruneFolders ?? [],
-    noun,
+    unit,
     href: input.href,
     calibrationProcessId: input.calibrationProcessId,
     queue: groupItems(input.items),
     done: [],
-    episodeId: freshId("trash", input.title),
+    episodeId: freshId("trash", input.kind),
   }
   const added = addOperation(state, {
     kind: operationKind(input.kind),
     title: input.title,
     scope: { runIds: input.runIds, projectId: input.projectId ?? undefined },
     total: input.items.length,
-    unit: noun.many,
-    items: input.items.map((item) => ({ id: item.path, label: item.path.slice(item.path.lastIndexOf("/") + 1), path: item.path, status: "pending", phase: null, detail: item.refusedReason ?? null })),
+    unit,
+    items: input.items.map((item) => ({ id: item.path, label: verbatim(fileName(item.path)), path: item.path, status: "pending", phase: null, detail: item.refusedReason ?? null })),
     payload: payload as unknown as Record<string, unknown>,
     canCancel: false,
   })
   return { state: added.state, operationId: added.id }
 }
 
-function refusal(disk: Disk, item: TrashItem): string | null {
+function refusal(disk: Disk, item: TrashItem): MessageRef | null {
   return item.refusedReason ?? trashRefusal(disk, item.path)
 }
 
@@ -162,14 +164,14 @@ function trashStep(kind: OperationKind): OperationHandler {
           const base = { path: item.path, volumeId: file?.volumeId ?? "", sizeBytes: file?.linkTarget ? 0 : (file?.sizeBytes ?? 0), assetId: item.assetId ?? null, resultId: item.resultId ?? null }
           if (firstRefusal !== null) {
             // D-W57: one refused copy keeps every copy of the frame.
-            const reason = reasons[index] ?? `Another copy was refused: ${firstRefusal}`
+            const reason = reasons[index] ?? msg("op_trash_other_copy_refused", { reason: firstRefusal })
             done.push({ ...base, outcome: "refused", reason })
             outcomes.set(item.path, { status: "blocked", detail: reason })
             continue
           }
           disk = { ...removeFile(disk, file!.volumeId, item.path), trash: [...disk.trash, { file: file!, originalPath: item.path, trashedAt: at }] }
           done.push({ ...base, outcome: "trashed", reason: null })
-          outcomes.set(item.path, { status: "done", detail: "Moved to the OS Trash" })
+          outcomes.set(item.path, { status: "done", detail: msg("op_trash_moved") })
         }
       }
       const items = op.items.map((item) => (outcomes.has(item.id) ? { ...item, ...outcomes.get(item.id)! } : item))
@@ -183,8 +185,8 @@ function trashStep(kind: OperationKind): OperationHandler {
       const trashed = done.filter((i) => i.outcome === "trashed")
       const refused = done.length - trashed.length
       const bytes = trashed.reduce((n, i) => n + i.sizeBytes, 0)
-      const noun = payload.noun ?? { one: "item", many: "items" }
-      const summary = `${plural(trashed.length, noun.one, noun.many)} moved to the OS Trash (${formatBytes(bytes)}); ${plural(refused, noun.one, noun.many)} kept with a reason. Nothing was deleted permanently.`
+      const unit = payload.unit ?? "items"
+      const summary = msg("op_trash_summary", { trashed: unitCount(unit, trashed.length), bytes: formatBytes(bytes), refused: unitCount(unit, refused) })
       return settleOperation(next, op.id, refused > 0 && trashed.length === 0 ? "failed" : refused > 0 ? "partial" : "succeeded", summary, payload.href)
     },
   }
@@ -236,7 +238,7 @@ function settleEpisode(state: PrototypeState, operationId: OperationId, payload:
   const process = payload.calibrationProcessId ? catalog.calibrationProcesses[payload.calibrationProcessId] : undefined
   if (process) {
     const refused = payload.done.filter((i) => i.outcome === "refused")
-    const raws = refused.length === 0 ? stepRecord("done", at) : stepRecord("failed", at, `${plural(refused.length, "frame")} kept · ${refused[0]!.reason ?? "refused"}`)
+    const raws = refused.length === 0 ? stepRecord("done", at) : stepRecord("failed", at, joinRefs([msg("op_trash_frames_kept", { count: refused.length, n: formatCount(refused.length) }), refused[0]!.reason ?? msg("wrapup_refused")], " · "))
     catalog.calibrationProcesses = {
       ...catalog.calibrationProcesses,
       [process.id]: { ...process, raws: refused.length === 0 ? "trashed" : null, operationId: null, steps: { ...process.steps, raws }, updatedAt: at },

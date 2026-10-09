@@ -38,6 +38,14 @@ export const KIND_NAME: Record<CalibrationKind, MessageRef> = {
   "dark-flat": msg("calibration_kind_dark_flat"),
 }
 
+/** The kind mid-sentence: "dark", "flat", "bias" ("Dark flat" keeps its capital: a lowercase copy would duplicate its catalogue value). */
+export const KIND_NOUN: Record<CalibrationKind, MessageRef> = {
+  dark: msg("run_cal_kind_dark"),
+  flat: msg("run_cal_kind_flat"),
+  bias: msg("run_cal_kind_bias"),
+  "dark-flat": msg("calibration_kind_dark_flat"),
+}
+
 const MASTER_TYPE_NAME: Record<CalibrationKind, MessageRef> = {
   dark: msg("import_type_master_dark"),
   flat: msg("import_type_master_flat"),

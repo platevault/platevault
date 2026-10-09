@@ -24,7 +24,7 @@ import { locationAvailability } from "@/domain/library"
 import { headerNamingValues, namingTemplate, resolveNamingTemplate } from "@/domain/templates"
 import type { Blocker } from "@/components/app/refusal"
 import { formatBytes } from "@/lib/format"
-import { m, type Messages } from "@/lib/i18n"
+import { m, type MessageRef, type Messages, msg, say } from "@/lib/i18n"
 import type {
   AssetId,
   CalibrationKind,
@@ -48,34 +48,23 @@ export type ImportRole = Extract<LocationRole, "captures" | "calibration">
 /** Frame types the user can type an Unclassified file as. */
 export const TYPEABLE: ImageType[] = ["light", "flat", "dark", "bias", "dark-flat"]
 
-/** A frame type's name, for the sheet. */
-export function typeLabel(m: Messages, type: ImageType): string {
-  const label: Record<ImageType, () => string> = {
-    light: m.import_type_light,
-    dark: m.import_type_dark,
-    flat: m.import_type_flat,
-    bias: m.import_type_bias,
-    "dark-flat": m.calibration_kind_dark_flat,
-    "master-dark": m.import_type_master_dark,
-    "master-flat": m.import_type_master_flat,
-    "master-bias": m.calibration_caption_bias,
-    "master-dark-flat": m.import_type_master_dark_flat,
-    unknown: m.import_type_unclassified,
-  }
-  return label[type]()
+/** A frame type's name, worded later (an import operation's item labels). */
+export const TYPE_NAME: Record<ImageType, MessageRef> = {
+  light: msg("import_type_light"),
+  dark: msg("import_type_dark"),
+  flat: msg("import_type_flat"),
+  bias: msg("import_type_bias"),
+  "dark-flat": msg("calibration_kind_dark_flat"),
+  "master-dark": msg("import_type_master_dark"),
+  "master-flat": msg("import_type_master_flat"),
+  "master-bias": msg("calibration_caption_bias"),
+  "master-dark-flat": msg("import_type_master_dark_flat"),
+  unknown: msg("import_type_unclassified"),
 }
 
-export const TYPE_LABEL: Record<ImageType, string> = {
-  light: "Light",
-  dark: "Dark",
-  flat: "Flat",
-  bias: "Bias",
-  "dark-flat": "Dark flat",
-  "master-dark": "Master dark",
-  "master-flat": "Master flat",
-  "master-bias": "Master bias",
-  "master-dark-flat": "Master dark flat",
-  unknown: "Unclassified",
+/** A frame type's name, for the sheet. */
+export function typeLabel(m: Messages, type: ImageType): string {
+  return say(m, TYPE_NAME[type])
 }
 
 /** Where an imported frame ends up: a light session, a calibration process awaiting Stack, or a library master. */

@@ -425,7 +425,7 @@ function GroupPrepare({ group, onOutcome }: { group: RunGroup; onOutcome: Act })
           {allLive.every((run) => runPreparations(state.catalog, run.id).length === 0) ? <p className="text-sm text-muted-foreground">{m.run_not_prepared()}</p> : null}
         </div>
       </Box>
-      {setupRefusals.length > 0 ? <Refusal action={m.rungroup_setup_locked()} reason={m.rungroup_complete_panels({ count: setupRefusals.length })} blockers={setupRefusals.map((label) => ({ label }))} /> : null}
+      {setupRefusals.length > 0 ? <Refusal action={m.rungroup_setup_locked()} reason={m.rungroup_complete_panels({ count: setupRefusals.length })} blockers={setupRefusals.map((label) => ({ label: say(m, label) }))} /> : null}
       <ProfileSection profileId={group.setup.profileId} locked={false} onPick={(id) => onOutcome(chooseProfile(target, id), { blocked: m.run_profile_blocked() })} />
       <ModeSection modes={aggregateModes(plans.map((p) => p.plan.modes))} mode={group.setup.inputMode} linkType={choices.linkType} locked={false} onMode={(mode: InputMode) => onOutcome(chooseMode(target, mode), { blocked: m.run_mode_blocked() })} onLinkType={(t) => updatePrepareChoices(group.id, { linkType: t })} />
       {first ? (

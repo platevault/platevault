@@ -3,15 +3,19 @@
  * change goes through `commit()` (D08); a Project edit writes only catalog
  * Project records and never changes files, runs or quality (PRJ-FR-05).
  */
-import { markDoneBlockers, projectGoalSet, rigName, sessionRigId, sessionTargetId, subjectName } from "@/domain/derive"
-import { WRAP_UP_LABEL } from "@/domain/labels"
+import { markDoneBlockers, projectGoalSet, rigName, rigRef, sessionRigId, sessionTargetId, subjectName } from "@/domain/derive"
+import { WRAP_UP_NAME } from "@/domain/labels"
 import { BUILT_IN_GOAL_TEMPLATES } from "@/domain/templates"
-import type { Goal, GoalTemplate, GoalTemplateId, GoalTemplateValue, LocationId, OpticalTrainId, Project, ProjectId, SessionId, Subject, TargetId, WrapUpStepId, WrapUpStepRecord } from "@/domain/types"
-import { plural } from "@/lib/format"
+import type { Goal, GoalTemplate, GoalTemplateId, GoalTemplateValue, LocationId, OpticalTrainId, Project, ProjectId, Run, SessionId, Subject, TargetId, WrapUpStepId, WrapUpStepRecord } from "@/domain/types"
+import { formatCount } from "@/lib/format"
+import { joinRefs, m, type MessageRef, msg } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, store, withCatalog } from "@/store/core"
 import { freshId, MISSING, recordSaved, refuse } from "./shared"
 
 const projectHref = (id: ProjectId) => `/projects/${id}`
+
+/** "<run> uses it": each run that holds a subject or rig a removal would take away (D-W65). */
+const usesIt = (runs: Run[]): MessageRef[] => runs.map((r) => msg("store_reason_run_uses_it", { name: r.name }))
 
 /** A built-in or user goal template by id. */
 export function goalTemplate(id: GoalTemplateId | null): GoalTemplate | undefined {
@@ -75,12 +79,12 @@ export function createProject(input: NewProjectInput): { result: CommitResult; p
     createdAt: nowIso(),
     revision: 1,
   }
-  const result = commit(`Create ${project.name}`, (s) => withCatalog(s, (c) => ({ ...c, projects: { ...c.projects, [id]: project } })), { href: projectHref(id) })
-  if (result.ok) recordSaved(`Project created: ${project.name}`, `${plural(subjects.length, "subject")} · ${plural(project.rigIds.length, "rig")}`, projectHref(id))
+  const result = commit(msg("store_label_create", { name: project.name }), (s) => withCatalog(s, (c) => ({ ...c, projects: { ...c.projects, [id]: project } })), { href: projectHref(id) })
+  if (result.ok) recordSaved(msg("store_saved_project_created", { name: project.name }), joinRefs([msg("project_subjects_count", { count: subjects.length }), msg("project_rigs_count", { count: project.rigIds.length })], " · "), projectHref(id))
   return { result, projectId: id }
 }
 
-function editProject(projectId: ProjectId, label: string, expectRevision: number, update: (project: Project) => Project): CommitResult {
+function editProject(projectId: ProjectId, label: MessageRef, expectRevision: number, update: (project: Project) => Project): CommitResult {
   const project = store.getState().catalog.projects[projectId]
   if (!project) return MISSING
   const result = commit(
@@ -88,18 +92,18 @@ function editProject(projectId: ProjectId, label: string, expectRevision: number
     (s) => withCatalog(s, (c) => ({ ...c, projects: { ...c.projects, [projectId]: update(c.projects[projectId]!) } })),
     { expect: { collection: "projects", id: projectId, revision: expectRevision }, href: projectHref(projectId) },
   )
-  if (result.ok) recordSaved(`${label}: ${project.name}`, null, projectHref(projectId))
+  if (result.ok) recordSaved(msg("store_saved_label_name", { label, name: project.name }), null, projectHref(projectId))
   return result
 }
 
 export function updateProjectDetails(projectId: ProjectId, details: { name: string; notes: string }, expectRevision: number): CommitResult {
-  return editProject(projectId, "Project details", expectRevision, (p) => ({ ...p, name: details.name.trim(), notes: details.notes }))
+  return editProject(projectId, msg("store_label_project_details"), expectRevision, (p) => ({ ...p, name: details.name.trim(), notes: details.notes }))
 }
 
 /** Add a subject, with goals copied from the Project's goal set (`projectGoalSet`). */
 export function addSubject(projectId: ProjectId, input: SubjectInput, expectRevision: number): CommitResult {
   const subject: Subject = { id: freshId("sub", input.targetId), targetId: input.targetId, mosaic: input.mosaic }
-  return editProject(projectId, "Add subject", expectRevision, (p) =>
+  return editProject(projectId, msg("store_label_add_subject"), expectRevision, (p) =>
     p.subjects.some((s) => s.targetId === input.targetId) ? p : { ...p, subjects: [...p.subjects, subject], goals: [...p.goals, ...goalsFromValues(projectGoalSet(p), subject)] },
   )
 }
@@ -108,8 +112,9 @@ export function addSubject(projectId: ProjectId, input: SubjectInput, expectRevi
 export function removeSubject(projectId: ProjectId, subjectId: string, expectRevision: number): CommitResult {
   const { catalog } = store.getState()
   const users = Object.values(catalog.runs).filter((r) => r.projectId === projectId && r.subjectId === subjectId)
-  if (users.length > 0) return refuse("Remove subject refused", users.map((r) => `${r.name} uses it`), projectHref(projectId))
-  return editProject(projectId, "Remove subject", expectRevision, (p) => ({ ...p, subjects: p.subjects.filter((s) => s.id !== subjectId), goals: p.goals.filter((g) => g.subjectId !== subjectId) }))
+  const label = msg("store_label_remove_subject")
+  if (users.length > 0) return refuse(msg("store_refused", { label }), usesIt(users), projectHref(projectId))
+  return editProject(projectId, label, expectRevision, (p) => ({ ...p, subjects: p.subjects.filter((s) => s.id !== subjectId), goals: p.goals.filter((g) => g.subjectId !== subjectId) }))
 }
 
 /**
@@ -125,10 +130,11 @@ export function setSubjectMosaic(projectId: ProjectId, subjectId: string, mosaic
   if (!project || !subject) return MISSING
   const kept = new Set(mosaic.panels.map((p) => p.id))
   const users = Object.values(catalog.runs).filter((r) => r.projectId === projectId && r.subjectId === subjectId && (r.panelId === null || !kept.has(r.panelId)))
-  if (users.length > 0) return refuse("Mosaic panels refused", users.map((r) => `${r.name} uses it`), projectHref(projectId))
+  const label = msg("rungroup_panels_label", { name: mosaic.name })
+  if (users.length > 0) return refuse(msg("store_refused", { label }), usesIt(users), projectHref(projectId))
   const before = new Set(subject.mosaic?.panels.map((p) => p.id) ?? [])
   const added = mosaic.panels.filter((p) => !before.has(p.id))
-  return editProject(projectId, "Mosaic panels", expectRevision, (p) => ({
+  return editProject(projectId, label, expectRevision, (p) => ({
     ...p,
     subjects: p.subjects.map((s) => (s.id === subjectId ? { ...s, mosaic } : s)),
     goals: [
@@ -140,26 +146,26 @@ export function setSubjectMosaic(projectId: ProjectId, subjectId: string, mosaic
 
 /** Adding a rig changes candidates only, never a run's membership (PRJ-FR-02). */
 export function addRig(projectId: ProjectId, rigId: OpticalTrainId, expectRevision: number): CommitResult {
-  return editProject(projectId, "Add rig", expectRevision, (p) => (p.rigIds.includes(rigId) ? p : { ...p, rigIds: [...p.rigIds, rigId] }))
+  return editProject(projectId, msg("project_add_rig"), expectRevision, (p) => (p.rigIds.includes(rigId) ? p : { ...p, rigIds: [...p.rigIds, rigId] }))
 }
 
 /** Refused while any run uses the rig; the refusal names each run (D-W65, PRJ-FR-02). */
 export function removeRig(projectId: ProjectId, rigId: OpticalTrainId, expectRevision: number): CommitResult {
   const { catalog } = store.getState()
   const users = Object.values(catalog.runs).filter((r) => r.projectId === projectId && r.rigId === rigId)
-  if (users.length > 0) return refuse(`Remove ${rigName(catalog, rigId)} refused`, users.map((r) => `${r.name} uses it`), projectHref(projectId))
-  return editProject(projectId, "Remove rig", expectRevision, (p) => ({ ...p, rigIds: p.rigIds.filter((id) => id !== rigId) }))
+  if (users.length > 0) return refuse(msg("store_refused", { label: msg("project_remove_named", { name: rigRef(catalog, rigId) }) }), usesIt(users), projectHref(projectId))
+  return editProject(projectId, msg("store_label_remove_rig"), expectRevision, (p) => ({ ...p, rigIds: p.rigIds.filter((id) => id !== rigId) }))
 }
 
 /** Replace the goal rows; goals never block a run and never mark the Project Done (PRJ-FR-04). */
 export function setGoals(projectId: ProjectId, goals: Goal[], expectRevision: number): CommitResult {
-  return editProject(projectId, "Goals", expectRevision, (p) => ({ ...p, goals }))
+  return editProject(projectId, msg("plan_goals"), expectRevision, (p) => ({ ...p, goals }))
 }
 
 /** Apply a template: its values are copied in for every subject and replace the current goals (D-W30). */
 export function applyGoalTemplate(projectId: ProjectId, templateId: GoalTemplateId, expectRevision: number): CommitResult {
   const template = goalTemplate(templateId)
-  return editProject(projectId, `Apply ${template?.name ?? "template"}`, expectRevision, (p) => ({ ...p, goals: p.subjects.flatMap((s) => goalsFromTemplate(template, s)) }))
+  return editProject(projectId, template ? msg("store_label_apply_named", { name: template.name }) : msg("goal_apply_template"), expectRevision, (p) => ({ ...p, goals: p.subjects.flatMap((s) => goalsFromTemplate(template, s)) }))
 }
 
 /** The archive destination for this Project (P-ARC1); null returns it to the Default archive location. */
@@ -168,8 +174,9 @@ export function setProjectArchiveLocation(projectId: ProjectId, locationId: Loca
   const project = catalog.projects[projectId]
   if (!project) return MISSING
   const location = locationId ? catalog.locations[locationId] : undefined
-  if (locationId && (!location || location.role !== "archive" || location.retiredAt)) return refuse("Archive destination refused", ["not an archive location"], projectHref(projectId))
-  return editProject(projectId, "Archive destination", project.revision, (p) => ({ ...p, archiveLocationId: locationId }))
+  const label = msg("store_label_archive_destination")
+  if (locationId && (!location || location.role !== "archive" || location.retiredAt)) return refuse(msg("store_refused", { label }), [msg("store_reason_not_archive_location")], projectHref(projectId))
+  return editProject(projectId, label, project.revision, (p) => ({ ...p, archiveLocationId: locationId }))
 }
 
 /**
@@ -181,9 +188,9 @@ export function setWrapUpStep(projectId: ProjectId, step: WrapUpStepId, state: W
   const project = catalog.projects[projectId]
   if (!project) return MISSING
   const open = markDoneBlockers(catalog, project)
-  if (open.length > 0) return refuse(`${WRAP_UP_LABEL[step]} refused`, open.map((r) => `${r.name} is not Complete`), projectHref(projectId))
-  const verb = state === "done" ? "done" : state === "skipped" ? "skipped" : "reset"
-  return editProject(projectId, `${WRAP_UP_LABEL[step]} ${verb}`, project.revision, (p) => {
+  if (open.length > 0) return refuse(msg("store_refused", { label: WRAP_UP_NAME[step] }), open.map((r) => msg("store_reason_not_complete", { name: r.name })), projectHref(projectId))
+  const label = state === "done" ? msg("store_label_step_done", { step: WRAP_UP_NAME[step] }) : state === "skipped" ? msg("store_label_step_skipped", { step: WRAP_UP_NAME[step] }) : msg("store_label_step_reset", { step: WRAP_UP_NAME[step] })
+  return editProject(projectId, label, project.revision, (p) => {
     const wrapUp = { ...p.wrapUp }
     if (state) wrapUp[step] = { state, at: nowIso() }
     else delete wrapUp[step]
@@ -203,11 +210,11 @@ export function addSessionToProject(sessionId: SessionId, projectId: ProjectId):
   const targetId = session ? sessionTargetId(session) : null
   const rigId = session ? sessionRigId(session) : null
   if (!session || !project) return { result: MISSING, note: null }
-  if (!targetId || !rigId) return { result: refuse("Add to Project refused", [!targetId ? "the session has no confirmed Target" : "the session has no confirmed rig"], `/sessions/${sessionId}`), note: null }
+  if (!targetId || !rigId) return { result: refuse(msg("store_refused", { label: msg("session_add_to_project") }), [!targetId ? msg("store_reason_no_confirmed_target") : msg("store_reason_no_confirmed_rig")], `/sessions/${sessionId}`), note: null }
   const addsRig = !project.rigIds.includes(rigId)
-  const note = addsRig ? `Also adds the rig ${rigName(catalog, rigId)} to ${project.name}.` : null
+  const note = addsRig ? m.store_note_adds_rig({ rig: rigName(m, catalog, rigId), project: project.name }) : null
   const subject: Subject = { id: freshId("sub", targetId), targetId, mosaic: null }
-  const result = editProject(projectId, "Add to Project", project.revision, (p) => ({
+  const result = editProject(projectId, msg("session_add_to_project"), project.revision, (p) => ({
     ...p,
     subjects: p.subjects.some((s) => s.targetId === targetId) ? p.subjects : [...p.subjects, subject],
     goals: p.subjects.some((s) => s.targetId === targetId) ? p.goals : [...p.goals, ...goalsFromValues(projectGoalSet(p), subject)],
@@ -225,22 +232,23 @@ export function markProjectDone(projectId: ProjectId): CommitResult {
   const project = catalog.projects[projectId]
   if (!project) return MISSING
   const open = markDoneBlockers(catalog, project)
-  if (open.length > 0) return refuse(`Mark ${project.name} Done refused`, open.map((r) => `${r.name} is not Complete: complete it or move it to Trash`), projectHref(projectId))
-  return editProject(projectId, "Mark Done", project.revision, (p) => ({ ...p, state: "done", doneAt: nowIso() }))
+  if (open.length > 0) return refuse(msg("store_refused", { label: msg("store_label_mark_named_done", { name: project.name }) }), open.map((r) => msg("store_reason_not_complete_fix", { name: r.name })), projectHref(projectId))
+  return editProject(projectId, msg("wrapup_mark_done"), project.revision, (p) => ({ ...p, state: "done", doneAt: nowIso() }))
 }
 
 /** Reopen moves no files; archived sessions keep reading Archived until restored (D-W69). */
 export function reopenProject(projectId: ProjectId): CommitResult {
   const project = store.getState().catalog.projects[projectId]
   if (!project) return MISSING
-  return editProject(projectId, "Reopen", project.revision, (p) => ({ ...p, state: "open", doneAt: null }))
+  return editProject(projectId, msg("project_reopen"), project.revision, (p) => ({ ...p, state: "open", doneAt: null }))
 }
 
 /** Project-only reject or its undo (D-W42): never changes library quality, captured or other Projects. */
 export function setProjectRejection(projectId: ProjectId, assetIds: string[], rejected: boolean): CommitResult {
   const project = store.getState().catalog.projects[projectId]
   if (!project) return MISSING
-  const label = rejected ? `Reject ${plural(assetIds.length, "frame")} for ${project.name} only` : `Undo Project reject of ${plural(assetIds.length, "frame")}`
+  const count = assetIds.length
+  const label = rejected ? msg("store_label_reject_for_project_only", { count, n: formatCount(count), name: project.name }) : msg("store_label_undo_project_reject", { count, n: formatCount(count) })
   const at = nowIso()
   return editProject(projectId, label, project.revision, (p) => {
     const rejections = { ...p.rejections }
@@ -259,6 +267,6 @@ export function prefillFromSession(sessionId: SessionId): NewProjectInput | null
   const targetId = session ? sessionTargetId(session) : null
   if (!session || !targetId) return null
   const rigId = sessionRigId(session)
-  const name = subjectName(catalog, { id: "", targetId, mosaic: null })
+  const name = subjectName(m, catalog, { id: "", targetId, mosaic: null })
   return { name, notes: "", subjects: [{ targetId, mosaic: null }], rigIds: rigId ? [rigId] : [], goalTemplateId: null }
 }

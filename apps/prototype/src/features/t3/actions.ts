@@ -7,8 +7,8 @@
 import { runHref } from "@/domain/derive"
 import { stableHash } from "@/domain/indexing"
 import type { AssetId, Catalog, FrameMeasurement, MeasurementImport, MeasurementImportRow, RunId } from "@/domain/types"
-import { plural } from "@/lib/format"
-import { m } from "@/lib/i18n"
+import { formatCount } from "@/lib/format"
+import { m, msg } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, recordActivity, store, updateSlice, withCatalog } from "@/store/core"
 import { defaultFrameUi, type FrameUi } from "@/store/slices/d"
 import { attaches, type CsvRow, importedMetrics, type MappedRow, observeFrame } from "./csv"
@@ -53,7 +53,7 @@ export function importMeasurements(runId: RunId, path: string, mapped: MappedRow
   const href = reviewHref(runId)
   // Matched values and the rows left to review are one durable write.
   const result = commit(
-    "Import measurements",
+    msg("importdlg_title"),
     (s) =>
       withCatalog(s, (c) => {
         const measurements = { ...c.measurements }
@@ -65,8 +65,10 @@ export function importMeasurements(runId: RunId, path: string, mapped: MappedRow
   if (!result.ok) return result
   recordActivity({
     kind: "saved",
-    title: "Measurements imported",
-    detail: `${plural(attach.length, "row")} attached as imported values, content unverified, from ${path}. ${rows.length} rows attach to no frame${changed > 0 ? ` (${changed} because the frame's bytes differ from what PlateVault recorded, or cannot be read)` : ""}. No frame was excluded and no quality changed.`,
+    title: msg("store_saved_measurements_imported"),
+    detail: changed > 0
+      ? msg("store_measurements_detail_changed", { count: attach.length, n: formatCount(attach.length), path, rows: rows.length, changed })
+      : msg("store_measurements_detail", { count: attach.length, n: formatCount(attach.length), path, rows: rows.length }),
     operationId: null,
     href,
   })
@@ -85,7 +87,7 @@ export function resolveImportRow(importId: string, rowIndex: number, assetId: As
     return { ok: false, reason: "write-failed", message: seen.basis?.recordedBy === "measurement" ? m.importdlg_row_not_attached_measured() : m.importdlg_row_not_attached_indexed() }
   const rows = record.rows.map((r) => (r.index === rowIndex ? { ...r, status: "resolved" as const, assetId } : r))
   return commit(
-    "Attach imported row",
+    msg("store_label_attach_imported_row"),
     (s) =>
       withCatalog(s, (c) => ({
         ...c,

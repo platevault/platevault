@@ -30,7 +30,7 @@ import { Toggle } from "@/components/ui/toggle"
 import { formatHours, goalProgress, myTargets, panelLabel, planList, subjectCentre, subjectName, type GoalProgress } from "@/domain/derive"
 import type { Catalog, Project, Subject, Target } from "@/domain/types"
 import { save } from "@/features/t1/lib/writes"
-import { m } from "@/lib/i18n"
+import { m, msg, say } from "@/lib/i18n"
 import { formatNight } from "@/lib/format"
 import type { SearchParams } from "@/routes"
 import { addToPlan, removeFromPlan } from "@/store/actions/planning"
@@ -70,13 +70,13 @@ function subjectSeeds(catalog: Catalog, project: Project, subject: Subject, gaps
     return [{ key: subject.targetId, name, short: name, targetId: subject.targetId, ra: target?.ra ?? null, dec: target?.dec ?? null, projects, panel: false, gaps: gaps.filter((g) => g.goal.subjectId === subject.id), favourite: target?.favourite ?? false }]
   }
   const centre = subjectCentre(catalog, subject)
-  const name = subjectName(catalog, subject)
+  const name = subjectName(m, catalog, subject)
   return [
     { key: `${project.id}:${subject.id}`, name, short: name, targetId: subject.targetId, ra: centre?.ra ?? null, dec: centre?.dec ?? null, projects, panel: false, gaps: gaps.filter((g) => g.goal.subjectId === subject.id && g.goal.panelId === null), favourite: target?.favourite ?? false },
     ...subject.mosaic.panels.map((panel) => ({
       key: `${project.id}:${subject.id}:${panel.id}`,
-      name: `${name} ${panelLabel(panel)}`,
-      short: panelLabel(panel),
+      name: `${name} ${panelLabel(m, panel)}`,
+      short: panelLabel(m, panel),
       targetId: null,
       ra: panel.ra,
       dec: panel.dec,
@@ -164,7 +164,7 @@ export function PlanPage() {
     setError(result.ok ? null : { message: result.message, retry: () => act(run) })
   }
   function chooseSite(siteId: string) {
-    act(() => save({ label: "Planning site", saved: `Planning site: ${sites[siteId]?.name ?? siteId}`, href: "/plan" }, (s) => ({ ...s, settings: { ...s.settings, planningSiteId: siteId } })))
+    act(() => save({ label: msg("plan_site"), saved: msg("store_saved_planning_site", { name: sites[siteId]?.name ?? siteId }), href: "/plan" }, (s) => ({ ...s, settings: { ...s.settings, planningSiteId: siteId } })))
   }
   function setSearch(patch: SearchParams) {
     navigate({ to: "/plan", search: (previous: SearchParams) => {
@@ -268,7 +268,7 @@ export function PlanPage() {
                   {m.status_met()}
                 </Pill>
               ) : (
-                <Pill tone="warning" title={r.gaps.map((g) => g.line).join("\n")} className="h-4 px-1.5 text-[0.625rem]">
+                <Pill tone="warning" title={r.gaps.map((g) => say(m, g.line)).join("\n")} className="h-4 px-1.5 text-[0.625rem]">
                   {m.plan_goals_short({ count: r.gaps.length })}
                 </Pill>
               ),

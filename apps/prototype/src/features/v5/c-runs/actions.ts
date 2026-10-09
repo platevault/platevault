@@ -8,12 +8,12 @@
  * application writing outputs, a source frame changing) so the review can
  * exercise discovery and re-verification.
  */
-import { basisFiles, type CalSource } from "@/domain/calibration"
+import { basisFiles, type CalSource, KIND_NOUN } from "@/domain/calibration"
 import { calibrationStorage, masterStoragePath } from "@/domain/calibration-process"
 import { completeRefusals, groupHref, groupPipeline, latestRevision, runHref, runPreparations, runSetup, workingContent } from "@/domain/derive"
 import { createFolder, fakeSha256, fileAt, makeFile, volumeForPath, writeFiles } from "@/domain/disk"
 import { stableHash } from "@/domain/indexing"
-import { RESULT_KIND_LABEL } from "@/domain/labels"
+import { RESULT_KIND_NAME, unitCount } from "@/domain/labels"
 import { namingValues } from "@/domain/templates"
 import { memberSessions } from "@/domain/membership"
 import type {
@@ -35,13 +35,14 @@ import type {
   RunGroup,
   RunSetup,
 } from "@/domain/types"
-import { fileName, plural } from "@/lib/format"
+import { fileName, formatCount } from "@/lib/format"
+import { joinRefs, type MessageRef, msg, verbatim } from "@/lib/i18n"
 import { type CommitResult, commit, nowIso, type PrototypeState, store, updateSlice, withCatalog } from "@/store/core"
 import { completeRun, editRun, setGroupSetup, setProductInputs, setRunSetup, startRun } from "@/store/actions/runs"
 import { freshId, MISSING, recordSaved, refuse } from "@/store/actions/shared"
 import { moveToOsTrash } from "@/store/actions/trash"
 import { startOperation } from "@/store/operations"
-import { cleanupReview, currentPreparation, DEFAULT_CHOICES, groupAssembledPath, livePanelRuns, type PrepareChoices, preparePlan, recognize, resultsFolders, runLock, scanResultsFolders, verifyPreparation } from "./model"
+import { cleanupReview, currentPreparation, DEFAULT_CHOICES, groupAssembledPath, livePanelRuns, type PrepareChoices, preparePlan, recognize, resultsFolders, runLock, scanResultsFolders, type VerifyOutcome, verifyPreparation } from "./model"
 import type { PreparePayload } from "./operations"
 
 // ---------------------------------------------------------------------------
@@ -49,10 +50,10 @@ import type { PreparePayload } from "./operations"
 // ---------------------------------------------------------------------------
 
 /** Complete panels refuse a shared setup change; a trashed panel is skipped (D-W75). */
-export function groupSetupRefusals(state: PrototypeState, group: RunGroup): string[] {
+export function groupSetupRefusals(state: PrototypeState, group: RunGroup): MessageRef[] {
   return livePanelRuns(state, group)
     .filter((r) => r.completion === "complete")
-    .map((r) => `${r.name} Complete`)
+    .map((r) => msg("run_completed", { name: r.name }))
 }
 
 export function changeRunSetup(runId: string, patch: Partial<RunSetup>): CommitResult {
@@ -61,7 +62,7 @@ export function changeRunSetup(runId: string, patch: Partial<RunSetup>): CommitR
   if (!run) return MISSING
   if (run.groupId) return changeGroupSetup(run.groupId, patch)
   const lock = runLock(run)
-  if (lock) return refuse("Setup change refused", [lock], runHref(run, "prepare"))
+  if (lock) return refuse(msg("store_refused", { label: msg("store_label_setup_change") }), [lock], runHref(run, "prepare"))
   return setRunSetup(runId, patch)
 }
 
@@ -70,7 +71,7 @@ export function changeGroupSetup(groupId: string, patch: Partial<RunSetup>): Com
   const group = state.catalog.runGroups[groupId]
   if (!group) return MISSING
   const blockers = groupSetupRefusals(state, group)
-  if (blockers.length > 0) return refuse(`Shared setup change refused`, blockers, groupHref(group, "prepare"))
+  if (blockers.length > 0) return refuse(msg("store_refused", { label: msg("store_label_shared_setup_change") }), blockers, groupHref(group, "prepare"))
   return setGroupSetup(groupId, patch)
 }
 
@@ -107,19 +108,19 @@ export function setOutputParent(target: { runId?: string; groupId?: string }, pa
     const group = state.catalog.runGroups[target.groupId]
     if (!group) return MISSING
     const result = commit(
-      "Output folder",
+      msg("run_layout_output_folder"),
       (s) => ({ ...withCatalog(s, (c) => ({ ...c, runGroups: { ...c.runGroups, [group.id]: { ...c.runGroups[group.id]!, outputParent: path } } })), settings: { ...s.settings, lastOutputParent: path } }),
       { expect: { collection: "runGroups", id: group.id, revision: group.revision }, href: groupHref(group, "prepare") },
     )
-    if (result.ok) recordSaved(`Output folder: ${group.name}`, path, groupHref(group, "prepare"))
+    if (result.ok) recordSaved(msg("store_saved_output_folder", { name: group.name }), verbatim(path), groupHref(group, "prepare"))
     return result
   }
   const run = target.runId ? state.catalog.runs[target.runId] : undefined
   if (!run) return MISSING
   const lock = runLock(run)
-  if (lock) return refuse("Output folder change refused", [lock], runHref(run, "prepare"))
-  const result = editRun(run.id, "Output folder", (r) => ({ ...r, outputParent: path }), { step: "prepare", record: false, also: (s) => ({ ...s, settings: { ...s.settings, lastOutputParent: path } }) })
-  if (result.ok) recordSaved(`Output folder: ${run.name}`, path, runHref(run, "prepare"))
+  if (lock) return refuse(msg("store_refused", { label: msg("store_label_output_folder_change") }), [lock], runHref(run, "prepare"))
+  const result = editRun(run.id, msg("run_layout_output_folder"), (r) => ({ ...r, outputParent: path }), { step: "prepare", record: false, also: (s) => ({ ...s, settings: { ...s.settings, lastOutputParent: path } }) })
+  if (result.ok) recordSaved(msg("store_saved_output_folder", { name: run.name }), verbatim(path), runHref(run, "prepare"))
   return result
 }
 
@@ -127,12 +128,12 @@ export function setOutputParent(target: { runId?: string; groupId?: string }, pa
 // Calibration decisions (CAL-FR-08, D-W5, D-W55)
 // ---------------------------------------------------------------------------
 
-function decide(runId: string, sessionId: string, kind: CalibrationKind, next: Omit<CalibrationAssignment, "id" | "lightSessionId" | "kind"> | null, label: string): CommitResult {
+function decide(runId: string, sessionId: string, kind: CalibrationKind, next: Omit<CalibrationAssignment, "id" | "lightSessionId" | "kind"> | null, label: MessageRef): CommitResult {
   const state = store.getState()
   const run = state.catalog.runs[runId]
   if (!run) return MISSING
   const lock = runLock(run)
-  if (lock) return refuse(`${label} refused`, [lock], runHref(run, "calibrate"))
+  if (lock) return refuse(msg("store_refused", { label }), [lock], runHref(run, "calibrate"))
   const id = `cal_${runId}_${sessionId}_${kind}`
   return editRun(
     run.id,
@@ -152,7 +153,7 @@ function basisOf(input: CalibrationInput | null) {
 
 /** Accept a compatible input: it records the basis, the SHA-256 each handed-off file has now. */
 export function acceptCalibration(runId: string, sessionId: string, kind: CalibrationKind, source: CalSource, criteria: MatchCriterion[]): CommitResult {
-  return decide(runId, sessionId, kind, { input: source.input, state: "accepted", criteria, exception: null, basis: basisOf(source.input) }, `Use ${source.name}`)
+  return decide(runId, sessionId, kind, { input: source.input, state: "accepted", criteria, exception: null, basis: basisOf(source.input) }, msg("run_use_named", { name: source.name }))
 }
 
 /** An exception: an incompatible input, or no input of this kind, with the user's reason (CAL-FR-08). */
@@ -160,18 +161,18 @@ export function calibrationException(runId: string, sessionId: string, kind: Cal
   const trimmed = reason.trim()
   if (!trimmed) {
     const run = store.getState().catalog.runs[runId]
-    return refuse("Exception refused", ["No reason"], run ? runHref(run, "calibrate") : null)
+    return refuse(msg("store_refused", { label: msg("status_exception") }), [msg("store_reason_no_reason")], run ? runHref(run, "calibrate") : null)
   }
-  return decide(runId, sessionId, kind, { input: source?.input ?? null, state: "exception", criteria, exception: { reason: trimmed, at: nowIso() }, basis: basisOf(source?.input ?? null) }, source ? `Exception: ${source.name}` : `Exception: no ${kind}`)
+  return decide(runId, sessionId, kind, { input: source?.input ?? null, state: "exception", criteria, exception: { reason: trimmed, at: nowIso() }, basis: basisOf(source?.input ?? null) }, source ? msg("run_cal_exception_title", { name: source.name }) : msg("store_label_exception_no_kind", { kind: KIND_NOUN[kind] }))
 }
 
 export function deferCalibration(runId: string, sessionId: string, kind: CalibrationKind): CommitResult {
-  return decide(runId, sessionId, kind, { input: null, state: "deferred", criteria: [], exception: null, basis: null }, `Defer ${kind}`)
+  return decide(runId, sessionId, kind, { input: null, state: "deferred", criteria: [], exception: null, basis: null }, msg("store_label_defer_kind", { kind: KIND_NOUN[kind] }))
 }
 
 /** Back to the automatic choice: the stored decision is removed. */
 export function clearCalibration(runId: string, sessionId: string, kind: CalibrationKind): CommitResult {
-  return decide(runId, sessionId, kind, null, `Automatic ${kind}`)
+  return decide(runId, sessionId, kind, null, msg("store_label_automatic_kind", { kind: KIND_NOUN[kind] }))
 }
 
 /**
@@ -186,21 +187,21 @@ export function answerMasterOffer(runId: string, masterId: string, answer: "adop
   if (!run || !master) return MISSING
   const href = runHref(run, "calibrate")
   const name = fileName(master.origin.sourcePath)
-  if (!run.masterOffers.some((o) => o.masterId === masterId && o.state === "pending")) return refuse("Offer refused", ["Already answered"], href)
+  if (!run.masterOffers.some((o) => o.masterId === masterId && o.state === "pending")) return refuse(msg("store_refused", { label: msg("store_label_offer") }), [msg("store_reason_already_answered")], href)
   if (answer === "dismiss") {
-    const result = editRun(run.id, "Dismiss master offer", (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "dismissed", at: nowIso() } : o)) }), { step: "calibrate", record: false })
-    if (result.ok) recordSaved(`Dismissed ${name}`, "Calibration › Dismissed", "/calibration?filter=dismissed")
+    const result = editRun(run.id, msg("store_label_dismiss_master_offer"), (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "dismissed", at: nowIso() } : o)) }), { step: "calibrate", record: false })
+    if (result.ok) recordSaved(msg("store_saved_dismissed", { name }), joinRefs([msg("nav_calibration"), msg("calibration_dismissed")], " › "), "/calibration?filter=dismissed")
     return result
   }
-  const title = `Add ${name} refused`
+  const title = msg("store_refused", { label: msg("store_label_add_named", { name }) })
   const source = fileAt(state.disk, master.origin.sourcePath)
-  if (!source) return refuse(title, ["Unreadable now"], href)
-  if (source.growing) return refuse(title, ["Still being written"], href)
+  if (!source) return refuse(title, [msg("store_reason_unreadable_now")], href)
+  if (source.growing) return refuse(title, [msg("store_reason_still_being_written")], href)
   const location = calibrationStorage(state.catalog)
-  if (!location) return refuse(title, ["No Calibration location"], href)
+  if (!location) return refuse(title, [msg("import_no_calibration_location")], href)
   const volume = state.disk.volumes[location.volumeId]
-  if (!volume?.mounted) return refuse(title, [`${location.displayName} offline`], href)
-  if (!volume.writable) return refuse(title, [`${location.displayName} not writable`], href)
+  if (!volume?.mounted) return refuse(title, [msg("issue_location_offline", { name: location.displayName })], href)
+  if (!volume.writable) return refuse(title, [msg("run_parent_read_only", { name: location.displayName })], href)
   const night = master.createdAt.slice(0, 10)
   const values = namingValues({
     target: null,
@@ -216,12 +217,12 @@ export function answerMasterOffer(runId: string, masterId: string, answer: "adop
     train: master.opticalTrainId ? (state.catalog.opticalTrains[master.opticalTrainId]?.name ?? null) : null,
   })
   const destinationPath = masterStoragePath(location, state.settings.naming, master.kind, values, night, source.path.slice(source.path.lastIndexOf(".") + 1))
-  if (fileAt(state.disk, destinationPath)) return refuse(title, ["Name taken"], href)
+  if (fileAt(state.disk, destinationPath)) return refuse(title, [msg("import_name_taken")], href)
   const at = nowIso()
   const copy = makeFile({ path: destinationPath, volumeId: location.volumeId, sizeBytes: source.sizeBytes, kind: source.kind, header: source.header, sha256: source.sha256, modifiedAt: at })
   const result = editRun(
     run.id,
-    "Add master to the calibration library",
+    msg("store_label_add_master_to_library"),
     (r) => ({ ...r, masterOffers: r.masterOffers.map((o) => (o.masterId === masterId ? { ...o, state: "adopted", at } : o)) }),
     {
       step: "calibrate",
@@ -232,7 +233,7 @@ export function answerMasterOffer(runId: string, masterId: string, answer: "adop
       }),
     },
   )
-  if (result.ok) recordSaved(`Added ${name} to the calibration library`, destinationPath, "/calibration")
+  if (result.ok) recordSaved(msg("store_saved_added_to_library", { name }), verbatim(destinationPath), "/calibration")
   return result
 }
 
@@ -240,9 +241,9 @@ export function answerMasterOffer(runId: string, masterId: string, answer: "adop
 // Prepare (PREP-FR-04 to PREP-FR-13)
 // ---------------------------------------------------------------------------
 
-function blockingReasons(plan: ReturnType<typeof preparePlan>): string[] {
-  const reasons = plan.checks.filter((c) => c.blocking && !c.ok).map((c) => `${c.label}: ${c.detail}`)
-  if (reasons.length === 0 && plan.entries.every((e) => e.unavailable)) reasons.push("Every input unreadable")
+function blockingReasons(plan: ReturnType<typeof preparePlan>): MessageRef[] {
+  const reasons = plan.checks.filter((c) => c.blocking && !c.ok).map((c) => joinRefs([c.label, c.detail], ": "))
+  if (reasons.length === 0 && plan.entries.every((e) => e.unavailable)) reasons.push(msg("store_reason_every_input_unreadable"))
   return reasons
 }
 
@@ -253,11 +254,12 @@ export function startPrepare(runId: string, choices: PrepareChoices, options: { 
   if (!run) return { result: MISSING, operationId: null }
   const plan = preparePlan(state, run, choices, options)
   const href = runHref(run, "prepare")
+  const refused = msg("store_refused", { label: msg("store_label_prepare_named", { name: run.name }) })
   if (!plan.ready || !plan.revision || !plan.profile || !plan.mode || !plan.layout.folderPath || !plan.layout.resultsPath) {
-    return { result: refuse(`Prepare ${run.name} refused`, blockingReasons(plan), href), operationId: null }
+    return { result: refuse(refused, blockingReasons(plan), href), operationId: null }
   }
   const running = completeRefusals(state, run)
-  if (running.length > 0) return { result: refuse(`Prepare ${run.name} refused`, running, href), operationId: null }
+  if (running.length > 0) return { result: refuse(refused, running, href), operationId: null }
   const at = nowIso()
   const id = freshId("prep", `${run.id}|${plan.layout.prepRevision}`)
   const decisions: MetadataDecision[] = plan.diffs.flatMap((d) =>
@@ -287,7 +289,7 @@ export function startPrepare(runId: string, choices: PrepareChoices, options: { 
     createdAt: at,
     settledAt: null,
   }
-  const result = commit(`Prepare ${run.name}`, (s) => ({
+  const result = commit(msg("store_label_prepare_named", { name: run.name }), (s) => ({
     ...withCatalog(s, (c) => ({ ...c, preparations: { ...c.preparations, [id]: record } })),
     settings: { ...s.settings, lastOutputParent: plan.layout.parent.path },
   }), { href })
@@ -307,7 +309,7 @@ export function startPrepare(runId: string, choices: PrepareChoices, options: { 
   const items: OperationItem[] = plan.entries.map((e) => ({ id: e.id, label: e.label, path: e.sourcePath, status: "pending", phase: null, detail: null }))
   const operationId = startOperation({
     kind: "prepare",
-    title: `Prepare ${run.name}${plan.layout.prepRevision > 1 ? ` (rev ${plan.layout.prepRevision})` : ""}`,
+    title: plan.layout.prepRevision > 1 ? msg("op_prepare_title_rev", { name: run.name, revision: plan.layout.prepRevision }) : msg("store_label_prepare_named", { name: run.name }),
     scope: { runIds: [run.id], projectId: run.projectId },
     total: items.length,
     unit: "entries",
@@ -331,31 +333,32 @@ export function prepareAll(groupId: string): { result: CommitResult; operationId
   if (!group) return { result: MISSING, operationIds: [] }
   const panels = livePanelRuns(state, group).filter((r) => r.completion !== "complete")
   const href = groupHref(group, "prepare")
-  if (panels.length === 0) return { result: refuse(`Prepare all ${group.name} refused`, ["Every panel Complete"], href), operationIds: [] }
+  const refused = msg("store_refused", { label: msg("store_label_prepare_all_named", { name: group.name }) })
+  if (panels.length === 0) return { result: refuse(refused, [msg("rungroup_every_panel_complete")], href), operationIds: [] }
   const groupRevision = Math.max(0, ...Object.values(state.catalog.preparations).filter((p) => p.groupId === group.id).map((p) => p.prepRevision)) + 1
   const choices = prepareChoices(state, group.id)
-  const blockers: string[] = []
+  const blockers: MessageRef[] = []
   for (const run of panels) {
     const plan = preparePlan(state, run, choices, { groupRevision })
-    if (!plan.ready) blockers.push(...blockingReasons(plan).map((r) => `${run.name}: ${r}`))
+    if (!plan.ready) blockers.push(...blockingReasons(plan).map((r) => joinRefs([verbatim(run.name), r], ": ")))
   }
-  if (blockers.length > 0) return { result: refuse(`Prepare all ${group.name} refused`, blockers, href), operationIds: [] }
+  if (blockers.length > 0) return { result: refuse(refused, blockers, href), operationIds: [] }
   const operationIds: string[] = []
   for (const run of panels) {
     const { result, operationId } = startPrepare(run.id, choices, { groupRevision })
     if (!result.ok) return { result, operationIds }
     if (operationId) operationIds.push(operationId)
   }
-  recordSaved(`Prepare all: ${group.name}`, `${plural(operationIds.length, "panel run")} into group revision ${groupRevision}.`, href)
+  recordSaved(msg("store_saved_prepare_all", { name: group.name }), msg("store_prepare_all_detail", { count: operationIds.length, n: formatCount(operationIds.length), revision: groupRevision }), href)
   return { result: { ok: true }, operationIds }
 }
 
-function launchOutcome(state: PrototypeState, profileId: string): { outcome: "opened" | "missing-executable" | "launch-failed"; refusal: string | null } {
+function launchOutcome(state: PrototypeState, profileId: string): { outcome: "opened" | "missing-executable" | "launch-failed"; refusal: MessageRef | null } {
   const profile = state.catalog.profiles[profileId]
-  if (!profile) return { outcome: "missing-executable", refusal: "Profile removed" }
+  if (!profile) return { outcome: "missing-executable", refusal: msg("store_reason_profile_removed") }
   if (profile.executableState === "found") return { outcome: "opened", refusal: null }
-  if (profile.executableState === "launch-fails") return { outcome: "launch-failed", refusal: `${profile.name} did not launch` }
-  return { outcome: "missing-executable", refusal: `${profile.name} not located` }
+  if (profile.executableState === "launch-fails") return { outcome: "launch-failed", refusal: msg("store_reason_did_not_launch", { name: profile.name }) }
+  return { outcome: "missing-executable", refusal: msg("store_reason_not_located", { name: profile.name }) }
 }
 
 /**
@@ -369,19 +372,26 @@ export function openPreparation(runId: string): CommitResult {
   if (!run) return MISSING
   const href = runHref(run, "prepare")
   const prep = currentPreparation(run, runPreparations(state.catalog, run.id))
-  if (!prep) return refuse(`Open ${run.name} refused`, ["Not prepared"], href)
-  if (prep.state !== "prepared") return refuse(`Open ${run.name} refused`, [prep.state === "partial" ? `Partial · ${plural(prep.blocked.length, "input")} blocked` : `Preparation ${prep.state}`], href)
+  const refused = msg("store_refused", { label: msg("activity_open_destination", { name: run.name }) })
+  if (!prep) return refuse(refused, [msg("run_not_prepared")], href)
+  if (prep.state !== "prepared") return refuse(refused, [prep.state === "partial" ? msg("store_reason_partial_blocked", { count: prep.blocked.length, n: formatCount(prep.blocked.length) }) : msg("store_reason_preparation_state", { state: prep.state })], href)
   const check = verifyPreparation(state, prep)
   const at = nowIso()
   if (check.changed.length > 0) {
-    commit("Mark preparation unverified", (s) => withCatalog(s, (c) => ({ ...c, preparations: { ...c.preparations, [prep.id]: { ...c.preparations[prep.id]!, unverified: { at, changed: check.changed } } } })), { href })
-    return refuse(`Open ${run.name} refused`, check.changed.slice(0, 6).map((c) => `${fileName(c.path)}: ${c.reason}`).concat(check.changed.length > 6 ? [`and ${plural(check.changed.length - 6, "more entry", "more entries")}`] : []), href)
+    commit(msg("store_label_mark_unverified"), (s) => withCatalog(s, (c) => ({ ...c, preparations: { ...c.preparations, [prep.id]: { ...c.preparations[prep.id]!, unverified: { at, changed: check.changed } } } })), { href })
+    const more = check.changed.length - 6
+    return refuse(refused, check.changed.slice(0, 6).map((c) => joinRefs([verbatim(fileName(c.path)), c.reason], ": ")).concat(more > 0 ? [msg("store_reason_more_entries", { count: more, n: formatCount(more) })] : []), href)
   }
   const launch = launchOutcome(state, prep.profileId)
-  const result = commit("Open in application", (s) => withCatalog(s, (c) => ({ ...c, preparations: { ...c.preparations, [prep.id]: { ...c.preparations[prep.id]!, unverified: null, launches: [...c.preparations[prep.id]!.launches, { at, outcome: launch.outcome }] } } })), { href })
+  const result = commit(msg("domain_next_open_in_application"), (s) => withCatalog(s, (c) => ({ ...c, preparations: { ...c.preparations, [prep.id]: { ...c.preparations[prep.id]!, unverified: null, launches: [...c.preparations[prep.id]!.launches, { at, outcome: launch.outcome }] } } })), { href })
   if (!result.ok) return result
-  if (launch.refusal) return refuse(`Open ${run.name} refused`, [launch.refusal], href)
-  recordSaved(`Opened ${run.name} in ${state.catalog.profiles[prep.profileId]?.name ?? "the application"}`, `${plural(check.checked, "entry", "entries")} re-verified before launch; ${prep.folderPath}.`, href)
+  if (launch.refusal) return refuse(refused, [launch.refusal], href)
+  const app = state.catalog.profiles[prep.profileId]?.name
+  recordSaved(
+    app ? msg("store_saved_opened_in", { name: run.name, app }) : msg("store_saved_opened_in_application", { name: run.name }),
+    msg("store_opened_detail", { count: check.checked, n: formatCount(check.checked), path: prep.folderPath }),
+    href,
+  )
   return result
 }
 
@@ -392,12 +402,13 @@ export function openGroupFolder(groupId: string): CommitResult {
   if (!group) return MISSING
   const href = groupHref(group, "prepare")
   const pipeline = groupPipeline(state, group)
+  const refused = msg("store_refused", { label: msg("activity_open_destination", { name: group.name }) })
   if (!pipeline.allVerified) {
-    const waiting = pipeline.panels.filter((p) => !p.trashed && p.pipeline.steps[3]!.state !== "done").map((p) => `${p.run.name}: ${p.pipeline.steps[3]!.status}`)
-    return refuse(`Open ${group.name} refused`, waiting, href)
+    const waiting = pipeline.panels.filter((p) => !p.trashed && p.pipeline.steps[3]!.state !== "done").map((p) => joinRefs([verbatim(p.run.name), p.pipeline.steps[3]!.status], ": "))
+    return refuse(refused, waiting, href)
   }
   const at = nowIso()
-  const changed: Array<{ prepId: string; run: Run; items: Array<{ path: string; reason: string }> }> = []
+  const changed: Array<{ prepId: string; run: Run; items: VerifyOutcome["changed"] }> = []
   const preps: Preparation[] = []
   for (const run of livePanelRuns(state, group)) {
     const prep = currentPreparation(run, runPreparations(state.catalog, run.id))
@@ -407,23 +418,23 @@ export function openGroupFolder(groupId: string): CommitResult {
     if (check.changed.length > 0) changed.push({ prepId: prep.id, run, items: check.changed })
   }
   if (changed.length > 0) {
-    commit("Mark preparations unverified", (s) => withCatalog(s, (c) => {
+    commit(msg("store_label_mark_unverified_many"), (s) => withCatalog(s, (c) => {
       const preparations = { ...c.preparations }
       for (const ch of changed) preparations[ch.prepId] = { ...preparations[ch.prepId]!, unverified: { at, changed: ch.items } }
       return { ...c, preparations }
     }), { href })
-    return refuse(`Open ${group.name} refused`, changed.map((ch) => `${ch.run.name}: ${plural(ch.items.length, "entry", "entries")} changed (${fileName(ch.items[0]!.path)})`), href)
+    return refuse(refused, changed.map((ch) => msg("store_reason_entries_changed", { name: ch.run.name, count: ch.items.length, n: formatCount(ch.items.length), file: fileName(ch.items[0]!.path) })), href)
   }
   const launch = launchOutcome(state, preps[0]?.profileId ?? "")
-  const result = commit("Open group folder", (s) => withCatalog(s, (c) => {
+  const result = commit(msg("store_label_open_group_folder"), (s) => withCatalog(s, (c) => {
     const preparations = { ...c.preparations }
     for (const p of preps) preparations[p.id] = { ...preparations[p.id]!, unverified: null, launches: [...preparations[p.id]!.launches, { at, outcome: launch.outcome }] }
     return { ...c, preparations }
   }), { href })
   if (!result.ok) return result
-  if (launch.refusal) return refuse(`Open ${group.name} refused`, [launch.refusal], href)
+  if (launch.refusal) return refuse(refused, [launch.refusal], href)
   const folder = preps[0]?.folderPath.slice(0, preps[0].folderPath.lastIndexOf("/")) ?? ""
-  recordSaved(`Opened ${group.name}`, `Group folder ${folder}; ${plural(preps.length, "panel")} re-verified before launch.`, href)
+  recordSaved(msg("run_opened", { name: group.name }), msg("store_group_opened_detail", { folder, count: preps.length, n: formatCount(preps.length) }), href)
   return result
 }
 
@@ -499,7 +510,7 @@ export function discoverResults(target: { runId?: string; groupId?: string }): {
   }
   const href = run ? runHref(run, "results") : groupHref(group!, "results")
   const result = commit(
-    "Discover Results",
+    msg("store_label_discover_results"),
     (s) => {
       let next = withCatalog(s, (c) => ({
         ...c,
@@ -520,11 +531,12 @@ export function discoverResults(target: { runId?: string; groupId?: string }): {
   )
   if (result.ok) {
     const candidates = records.filter((r) => !r.intermediate).length
-    recordSaved(
-      `Results found: ${run?.name ?? group!.name}`,
-      [candidates > 0 ? plural(candidates, "candidate") : null, records.length - candidates > 0 ? plural(records.length - candidates, "intermediate") : null, masters.length > 0 ? plural(masters.length, "calibration master") : null].filter(Boolean).join(", "),
-      href,
-    )
+    const counts = [
+      candidates > 0 ? msg("store_candidates_count", { count: candidates, n: formatCount(candidates) }) : null,
+      records.length - candidates > 0 ? msg("store_intermediates_count", { count: records.length - candidates, n: formatCount(records.length - candidates) }) : null,
+      masters.length > 0 ? msg("store_calibration_masters_count", { count: masters.length, n: formatCount(masters.length) }) : null,
+    ].filter((part) => part !== null)
+    recordSaved(msg("store_saved_results_found", { name: run?.name ?? group!.name }), joinRefs(counts, ", "), href)
   }
   return { result, found: scan.files.length }
 }
@@ -536,23 +548,23 @@ export function attachResult(target: { runId?: string; groupId?: string }, path:
   const group = target.groupId ? state.catalog.runGroups[target.groupId] : undefined
   if (!run && !group) return MISSING
   const href = run ? runHref(run, "results") : groupHref(group!, "results")
-  const title = `Attach ${fileName(path) || "Result"} refused`
+  const title = msg("store_refused", { label: fileName(path) ? msg("store_label_attach_named", { name: fileName(path) }) : msg("store_label_attach_result") })
   const trimmed = path.trim()
-  if (!trimmed.startsWith("/")) return refuse(title, ["Not a full path"], href)
-  if (run?.trashedAt) return refuse(title, ["In the Project Trash"], href)
+  if (!trimmed.startsWith("/")) return refuse(title, [msg("store_reason_not_full_path")], href)
+  if (run?.trashedAt) return refuse(title, [msg("run_lock_trashed")], href)
   const file = fileAt(state.disk, trimmed)
-  if (!file) return refuse(title, ["Unreadable or offline"], href)
-  if (Object.values(state.catalog.results).some((r) => r.path === trimmed && !r.trashed)) return refuse(title, ["Already listed"], href)
-  if (recognize(file, false).type === "ignored") return refuse(title, ["Not an image"], href)
-  if (kind === "assembled-mosaic" && !group) return refuse(title, ["Run group only"], href)
+  if (!file) return refuse(title, [msg("store_reason_unreadable_or_offline")], href)
+  if (Object.values(state.catalog.results).some((r) => r.path === trimmed && !r.trashed)) return refuse(title, [msg("store_reason_already_listed")], href)
+  if (recognize(file, false).type === "ignored") return refuse(title, [msg("store_reason_not_image")], href)
+  if (kind === "assembled-mosaic" && !group) return refuse(title, [msg("store_reason_run_group_only")], href)
   const owner = run ? { runId: run.id, groupId: run.groupId } : { runId: null, groupId: group!.id }
   const record = newRecord(owner, file, kind, channel?.trim() || null, false, "attached")
-  const result = commit("Attach Result", (s) => withCatalog(s, (c) => ({ ...c, results: { ...c.results, [record.id]: record } })), { href })
-  if (result.ok) recordSaved(`Attached ${fileName(trimmed)}`, `${RESULT_KIND_LABEL[kind]}, User-linked to ${run?.name ?? group!.name}; lineage Unknown.`, href)
+  const result = commit(msg("store_label_attach_result"), (s) => withCatalog(s, (c) => ({ ...c, results: { ...c.results, [record.id]: record } })), { href })
+  if (result.ok) recordSaved(msg("store_saved_attached", { name: fileName(trimmed) }), msg("store_attached_detail", { kind: RESULT_KIND_NAME[kind], name: run?.name ?? group!.name }), href)
   return result
 }
 
-function editResult(resultId: string, label: string, update: (r: ResultRecord) => ResultRecord, href: string): CommitResult {
+function editResult(resultId: string, label: MessageRef, update: (r: ResultRecord) => ResultRecord, href: string): CommitResult {
   return commit(label, (s) => withCatalog(s, (c) => ({ ...c, results: { ...c.results, [resultId]: update(c.results[resultId]!) } })), { href })
 }
 
@@ -570,9 +582,9 @@ export function inspectResult(resultId: string): CommitResult {
   if (!record) return MISSING
   const href = resultHref(state, record)
   const file = fileAt(state.disk, record.path)
-  if (!file) return refuse(`Inspect ${fileName(record.path)} refused`, ["Unreadable now"], href)
-  const result = editResult(resultId, "Inspect Result", (r) => ({ ...r, sha256: file.sha256, processingState: file.growing ? "pending" : "written", contentState: "unchanged" }), href)
-  if (result.ok) recordSaved(`Inspected ${fileName(record.path)}`, `SHA-256 ${file.sha256.slice(0, 12)}… recorded.`, href)
+  if (!file) return refuse(msg("store_refused", { label: msg("store_label_inspect_named", { name: fileName(record.path) }) }), [msg("store_reason_unreadable_now")], href)
+  const result = editResult(resultId, msg("store_label_inspect_result"), (r) => ({ ...r, sha256: file.sha256, processingState: file.growing ? "pending" : "written", contentState: "unchanged" }), href)
+  if (result.ok) recordSaved(msg("store_saved_inspected", { name: fileName(record.path) }), msg("store_sha_recorded", { hash: file.sha256.slice(0, 12) }), href)
   return result
 }
 
@@ -582,16 +594,16 @@ export function acceptResult(resultId: string): CommitResult {
   const record = state.catalog.results[resultId]
   if (!record) return MISSING
   const href = resultHref(state, record)
-  const title = `Accept ${fileName(record.path)} refused`
-  if (record.intermediate) return refuse(title, ["Intermediate"], href)
+  const title = msg("store_refused", { label: msg("run_results_accept_named", { name: fileName(record.path) }) })
+  if (record.intermediate) return refuse(title, [msg("wrapup_intermediate")], href)
   const file = fileAt(state.disk, record.path)
-  if (!file) return refuse(title, ["Unreadable now"], href)
-  if (file.growing) return refuse(title, ["Still being written"], href)
-  if (file.sha256 !== record.sha256) return refuse(title, ["Changed since inspection"], href)
-  if (record.kind === null) return refuse(title, ["No kind"], href)
+  if (!file) return refuse(title, [msg("store_reason_unreadable_now")], href)
+  if (file.growing) return refuse(title, [msg("store_reason_still_being_written")], href)
+  if (file.sha256 !== record.sha256) return refuse(title, [msg("store_reason_changed_since_inspection")], href)
+  if (record.kind === null) return refuse(title, [msg("store_reason_no_kind")], href)
   const at = nowIso()
-  const result = editResult(resultId, "Accept Result", (r) => ({ ...r, acceptance: "accepted", acceptedAt: at, processingState: "written" }), href)
-  if (result.ok) recordSaved(`Accepted ${fileName(record.path)}`, `SHA-256 ${file.sha256.slice(0, 12)}…`, href)
+  const result = editResult(resultId, msg("store_label_accept_result"), (r) => ({ ...r, acceptance: "accepted", acceptedAt: at, processingState: "written" }), href)
+  if (result.ok) recordSaved(msg("store_saved_accepted", { name: fileName(record.path) }), msg("store_sha_short", { hash: file.sha256.slice(0, 12) }), href)
   return result
 }
 
@@ -599,7 +611,7 @@ export function setResultKind(resultId: string, kind: ResultKind): CommitResult 
   const state = store.getState()
   const record = state.catalog.results[resultId]
   if (!record) return MISSING
-  return editResult(resultId, "Result kind", (r) => ({ ...r, kind }), resultHref(state, record))
+  return editResult(resultId, msg("store_label_result_kind"), (r) => ({ ...r, kind }), resultHref(state, record))
 }
 
 /** "Use as input to a new run": a new run of any open Project gets the accepted product as an input (D-W4, D-W56). */
@@ -609,10 +621,10 @@ export function startRunWithResult(resultId: string, projectId: string, subjectI
   const project = state.catalog.projects[projectId]
   if (!record || !project) return { result: MISSING, runId: null }
   const href = resultHref(state, record)
-  const title = `Use ${fileName(record.path)} refused`
-  if (record.acceptance !== "accepted" || record.intermediate) return { result: refuse(title, ["Not accepted"], href), runId: null }
+  const title = msg("store_refused", { label: msg("run_use_named", { name: fileName(record.path) }) })
+  if (record.acceptance !== "accepted" || record.intermediate) return { result: refuse(title, [msg("store_reason_not_accepted")], href), runId: null }
   const subject = project.subjects.find((s) => s.id === subjectId)
-  if (subject?.mosaic) return { result: refuse(title, ["Mosaic subject"], href), runId: null }
+  if (subject?.mosaic) return { result: refuse(title, [msg("store_reason_mosaic_subject")], href), runId: null }
   const started = startRun(projectId, subjectId, rigId)
   if (!started.result.ok || !started.runId) return { result: started.result, runId: null }
   const run = store.getState().catalog.runs[started.runId]
@@ -631,23 +643,23 @@ export function startCleanup(runId: string, paths: string[]): { result: CommitRe
   const run = state.catalog.runs[runId]
   if (!run) return { result: MISSING, operationId: null }
   const href = runHref(run, "done")
-  const title = `Clean up ${run.name} refused`
-  if (run.trashedAt) return { result: refuse(title, ["In the Project Trash"], href), operationId: null }
-  if (run.completion !== "complete") return { result: refuse(title, ["Not Complete"], href), operationId: null }
+  const title = msg("store_refused", { label: msg("store_label_clean_up_named", { name: run.name }) })
+  if (run.trashedAt) return { result: refuse(title, [msg("run_lock_trashed")], href), operationId: null }
+  if (run.completion !== "complete") return { result: refuse(title, [msg("store_reason_not_complete_short")], href), operationId: null }
   const running = completeRefusals(state, run)
   if (running.length > 0) return { result: refuse(title, running, href), operationId: null }
   const review = cleanupReview(state, run)
   const allowed = new Set(review.entries.map((e) => e.path))
   const chosen = paths.filter((p) => allowed.has(p))
-  if (chosen.length === 0) return { result: refuse(title, ["Nothing selected"], href), operationId: null }
+  if (chosen.length === 0) return { result: refuse(title, [msg("store_reason_nothing_selected")], href), operationId: null }
   const operationId = moveToOsTrash({
     kind: "run-cleanup",
-    title: `Clean up ${run.name}`,
+    title: msg("store_label_clean_up_named", { name: run.name }),
     projectId: run.projectId,
     runIds: [run.id],
     items: chosen.map((path) => ({ path })),
     pruneFolders: [...new Set(review.entries.map((e) => e.prep.folderPath))],
-    noun: { one: "prepared entry", many: "prepared entries" },
+    unit: "prepared-entries",
     href,
   })
   return { result: { ok: true }, operationId }
@@ -659,9 +671,10 @@ export function completeAllPanels(groupId: string): CommitResult {
   const group = state.catalog.runGroups[groupId]
   if (!group) return MISSING
   const open = livePanelRuns(state, group).filter((r) => r.completion !== "complete")
-  if (open.length === 0) return refuse(`Complete all ${group.name} refused`, ["Every panel Complete"], groupHref(group, "done"))
-  const blockers = open.flatMap((r) => completeRefusals(state, r).map((reason) => `${r.name}: ${reason}`))
-  if (blockers.length > 0) return refuse(`Complete all ${group.name} refused`, blockers, groupHref(group, "done"))
+  const refused = msg("store_refused", { label: msg("store_label_complete_all_named", { name: group.name }) })
+  if (open.length === 0) return refuse(refused, [msg("rungroup_every_panel_complete")], groupHref(group, "done"))
+  const blockers = open.flatMap((r) => completeRefusals(state, r).map((reason) => joinRefs([verbatim(r.name), reason], ": ")))
+  if (blockers.length > 0) return refuse(refused, blockers, groupHref(group, "done"))
   for (const run of open) {
     const result = completeRun(run.id)
     if (!result.ok) return result
@@ -690,9 +703,10 @@ export function simulateApplicationOutput(target: { runId?: string; groupId?: st
   const group = target.groupId ? state.catalog.runGroups[target.groupId] : undefined
   const folder = run ? resultsFolders(state, run)[0] : group ? groupAssembledPath(state, group) : null
   const href = run ? runHref(run, "results") : group ? groupHref(group, "results") : null
-  if (!folder || (run && runPreparations(state.catalog, run.id).length === 0)) return refuse("Simulated output refused", ["Prepare the run first: the application writes into the recorded Results folder"], href)
+  const refused = msg("store_refused", { label: msg("store_label_simulated_output") })
+  if (!folder || (run && runPreparations(state.catalog, run.id).length === 0)) return refuse(refused, [msg("store_reason_prepare_first")], href)
   const volumeId = volumeForPath(state.disk, folder)
-  if (!volumeId || !state.disk.volumes[volumeId]?.mounted) return refuse("Simulated output refused", [`${folder} is offline`], href)
+  if (!volumeId || !state.disk.volumes[volumeId]?.mounted) return refuse(refused, [msg("run_cleanup_volume_offline", { name: folder })], href)
   const at = nowIso()
   const files: DiskFile[] = []
   if (run) {
@@ -709,8 +723,8 @@ export function simulateApplicationOutput(target: { runId?: string; groupId?: st
   } else if (group) {
     files.push(makeFile({ path: uniquePath(state, `${folder}/${group.name} assembled.xisf`), volumeId, sizeBytes: 620_000_000, kind: "xisf", modifiedAt: at }))
   }
-  const result = commit("Prototype: application output", (s) => ({ ...s, disk: createFolder(writeFiles(s.disk, files), { volumeId, path: folder }) }), { href: href ?? undefined })
-  if (result.ok) recordSaved("Prototype: the application wrote outputs", `${plural(files.length, "file")} in ${folder}.`, href)
+  const result = commit(msg("store_label_proto_app_output"), (s) => ({ ...s, disk: createFolder(writeFiles(s.disk, files), { volumeId, path: folder }) }), { href: href ?? undefined })
+  if (result.ok) recordSaved(msg("store_saved_proto_outputs"), msg("store_proto_outputs_detail", { files: unitCount("files", files.length), folder }), href)
   return result
 }
 
@@ -724,7 +738,7 @@ export function finishWriting(resultId: string): CommitResult {
   const sha256 = fakeSha256(record.path, 2)
   const done = { ...file, growing: false, sha256, sizeBytes: file.sizeBytes * 4, modifiedAt: nowIso() }
   return commit(
-    "Prototype: file finished writing",
+    msg("store_label_proto_finished_writing"),
     (s) => ({ ...withCatalog(s, (c) => ({ ...c, results: { ...c.results, [resultId]: { ...c.results[resultId]!, processingState: "written", sha256 } } })), disk: writeFiles(s.disk, [done]) }),
     { href: resultHref(state, record) },
   )
@@ -738,15 +752,16 @@ export function simulateObjectCorrection(runId: string): CommitResult {
   const content = latestRevision(run)
   const member = content ? memberSessions(state.catalog, content)[0] : undefined
   const href = runHref(run, "prepare")
-  if (!member) return refuse("Simulated correction refused", ["The run has no saved member session"], href)
+  const refused = msg("store_refused", { label: msg("store_label_simulated_correction") })
+  if (!member) return refuse(refused, [msg("store_reason_no_saved_member")], href)
   const session = member.session
   const target = session.target.value ? state.catalog.targets[session.target.value] : undefined
   const corrected = target?.name ?? "NGC 7000"
   const header = state.catalog.assets[member.included[0]!]?.observed.object ?? null
   const observed = header && header !== corrected ? header : corrected.replace(/\s+/g, "")
-  if (session.corrections.some((c) => c.field === "target" && c.correctedValue === corrected)) return refuse("Simulated correction refused", ["This session already carries that correction"], href)
+  if (session.corrections.some((c) => c.field === "target" && c.correctedValue === corrected)) return refuse(refused, [msg("store_reason_already_corrected")], href)
   return commit(
-    "Prototype: catalog correction",
+    msg("store_label_proto_catalog_correction"),
     (s) => withCatalog(s, (c) => ({ ...c, sessions: { ...c.sessions, [session.id]: { ...c.sessions[session.id]!, corrections: [...c.sessions[session.id]!.corrections, { id: freshId("cor", session.id), field: "target", observedValue: observed, correctedValue: corrected, at: nowIso(), revision: session.revision }] } } })),
     { href },
   )
@@ -763,7 +778,7 @@ export function simulateSourceDrift(runId: string): CommitResult {
   const asset = assetId ? state.catalog.assets[assetId] : undefined
   const path = asset?.copies.find((c) => fileAt(state.disk, c.path))?.path
   const file = path ? fileAt(state.disk, path) : undefined
-  if (!file || !path) return refuse("Simulated change refused", ["No readable prepared source frame"], href)
+  if (!file || !path) return refuse(msg("store_refused", { label: msg("store_label_simulated_change") }), [msg("store_reason_no_prepared_source")], href)
   const changed = { ...file, previousSha256: file.sha256, sha256: fakeSha256(path, 9), modifiedAt: nowIso() }
-  return commit("Prototype: source frame changed", (s) => ({ ...s, disk: writeFiles(s.disk, [changed]) }), { href })
+  return commit(msg("store_label_proto_source_changed"), (s) => ({ ...s, disk: writeFiles(s.disk, [changed]) }), { href })
 }

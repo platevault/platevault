@@ -247,7 +247,7 @@ export function SelectStep({ ctx }: { ctx: RunContext }) {
             </>
           ) : latest ? (
             <>
-              {m.run_select_revision({ revision: latest.revision })} · {formatDateTime(latest.savedAt)} · {latest.accepted.join("; ")}
+              {m.run_select_revision({ revision: latest.revision })} · {formatDateTime(latest.savedAt)} · {say(m, joinRefs(latest.accepted, "; "))}
             </>
           ) : (
             m.status_not_saved()

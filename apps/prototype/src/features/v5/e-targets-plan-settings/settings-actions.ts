@@ -4,6 +4,7 @@
  * failed write stays unsaved with Retry and the saved value stays in effect.
  */
 import type { CameraKind, OpticalTrainId } from "@/domain/types"
+import { joinRefs, msg, verbatim } from "@/lib/i18n"
 import { MISSING, recordSaved } from "@/store/actions/shared"
 import { type CommitResult, commit, store, withCatalog } from "@/store/core"
 
@@ -21,7 +22,7 @@ export function updateRigOptics(rigId: OpticalTrainId, input: OpticsInput): Comm
   const cameraId = rig.cameraId
   const href = "/settings/equipment"
   const result = commit(
-    `Optics of ${rig.name}`,
+    msg("equipment_optics_title", { name: rig.name }),
     (s) =>
       withCatalog(s, (c) => {
         const cameras = cameraId && input.camera && c.cameras[cameraId] ? { ...c.cameras, [cameraId]: { ...c.cameras[cameraId]!, ...input.camera } } : c.cameras
@@ -30,8 +31,8 @@ export function updateRigOptics(rigId: OpticalTrainId, input: OpticsInput): Comm
     { href },
   )
   if (result.ok) {
-    const detail = [`${input.focalLengthMm} mm`, input.camera ? `${input.camera.kind === "osc" ? "OSC" : "Mono"}, ${input.camera.widthPx} × ${input.camera.heightPx} px, ${input.camera.pixelSizeUm} µm` : null].filter(Boolean).join(" · ")
-    recordSaved(`Optics saved: ${rig.name}`, detail, href)
+    const camera = input.camera ? msg("store_optics_camera", { kind: input.camera.kind === "osc" ? msg("equipment_osc") : msg("equipment_mono"), width: input.camera.widthPx, height: input.camera.heightPx, pixel: input.camera.pixelSizeUm }) : null
+    recordSaved(msg("store_saved_optics", { name: rig.name }), joinRefs([verbatim(`${input.focalLengthMm} mm`), ...(camera ? [camera] : [])], " · "), href)
   }
   return result
 }

@@ -31,12 +31,13 @@
  *
  * All names, paths and counts are illustrative fixtures.
  */
-import { fileName, plural } from "@/lib/format"
-import { processIdFor, stepRecord } from "./calibration-process"
-import { DEFAULT_MOON_CONSTRAINTS } from "./labels"
+import { fileName, formatCount } from "@/lib/format"
+import { joinRefs, msg, verbatim } from "@/lib/i18n"
+import { CALIBRATION_STEP_NAME, processIdFor, processRef, stepRecord } from "./calibration-process"
+import { DEFAULT_MOON_CONSTRAINTS, unitCount } from "./labels"
 import { createFolder, fakeSha256, fileAt, fileKey, makeFile, writeFiles } from "./disk"
 import { indexLocationsSync, stableHash } from "./indexing"
-import { addSessions, emptyContent } from "./membership"
+import { addSessions, describeDiff, diffContent, emptyContent } from "./membership"
 import { simulateMeasurement } from "./measurement"
 import { pixelScaleArcsec } from "./sky"
 import type {
@@ -618,8 +619,9 @@ function confirm(catalog: Catalog, session: Session, targetId: string | null, ri
   }
 }
 
-function revision(content: ReturnType<typeof emptyContent>, savedAt: string, accepted: string[]): MembershipRevision {
-  return { ...content, revision: 1, savedAt, accepted }
+/** A first save: its accepted changes are worded as Save run words them (VSEL-FR-16). */
+function revision(catalog: Catalog, content: ReturnType<typeof emptyContent>, savedAt: string): MembershipRevision {
+  return { ...content, revision: 1, savedAt, accepted: describeDiff(catalog, diffContent(null, content)) }
 }
 
 function run(fields: Pick<Run, "id" | "name" | "projectId" | "subjectId" | "rigId"> & Partial<Run>): Run {
@@ -872,11 +874,11 @@ function demoSeed(): SeedData {
   // Memberships are read while Cold-1 is still connected, so its frames were included when saved.
   const candidate = (x: Session, rig: string, subjectName: string): { session: Session; reason: SelectionReason } => ({
     session: catalog.sessions[x.id]!,
-    reason: { kind: "candidate", detail: `Target ${subjectName} on ${catalog.opticalTrains[rig]!.name}` },
+    reason: { kind: "candidate", detail: msg("domain_candidate_reason", { target: subjectName, rig: catalog.opticalTrains[rig]!.name }) },
   })
   const panelReason = (x: Session, n: number): { session: Session; reason: SelectionReason } => ({
     session: catalog.sessions[x.id]!,
-    reason: { kind: "panel-pointing", detail: `Target IC 5070 mosaic on RedCat 51 / ASI2600MM · Pointing inside Panel ${n}` },
+    reason: { kind: "panel-pointing", detail: joinRefs([msg("domain_candidate_reason", { target: "IC 5070 mosaic", rig: "RedCat 51 / ASI2600MM" }), msg("domain_panel_pointing_inside", { panel: msg("review_panel_n", { n }) })], " · ") },
   })
   const content = (items: Array<{ session: Session; reason: SelectionReason }>) => addSessions(emptyContent(), disk, catalog, items)
 
@@ -886,7 +888,7 @@ function demoSeed(): SeedData {
     projectId: PROJECT.cygnus,
     subjectId: ngcSubject.id,
     rigId: RIG.redcat,
-    revisions: [revision(content([candidate(s.ha0918, RIG.redcat, "NGC 7000"), candidate(s.oiii0924, RIG.redcat, "NGC 7000")]), "2026-09-29T12:30:00.000Z", ["Added 18 Sep Ha, 24 Sep OIII"])],
+    revisions: [revision(catalog, content([candidate(s.ha0918, RIG.redcat, "NGC 7000"), candidate(s.oiii0924, RIG.redcat, "NGC 7000")]), "2026-09-29T12:30:00.000Z")],
     completion: "complete",
     completedAt: "2026-10-03T21:00:00.000Z",
     stageBeforeComplete: "results",
@@ -899,7 +901,7 @@ function demoSeed(): SeedData {
     subjectId: ngcSubject.id,
     rigId: RIG.redcat,
     setup: { profileId: null, inputMode: null, calibrationPolicy: "automatic" },
-    revisions: [revision(content([candidate(s.oiii0930, RIG.redcat, "NGC 7000")]), "2026-10-01T09:00:00.000Z", ["Added 30 Sep OIII"])],
+    revisions: [revision(catalog, content([candidate(s.oiii0930, RIG.redcat, "NGC 7000")]), "2026-10-01T09:00:00.000Z")],
     createdAt: "2026-10-01T08:50:00.000Z",
   })
   const runC = run({
@@ -909,7 +911,7 @@ function demoSeed(): SeedData {
     subjectId: ngcSubject.id,
     rigId: RIG.esprit,
     setup: { profileId: PROFILE_IDS.siril, inputMode: "linked", calibrationPolicy: "automatic" },
-    revisions: [revision(content([candidate(s.osc0921, RIG.esprit, "NGC 7000")]), "2026-09-30T20:00:00.000Z", ["Added 21 Sep L-eXtreme"])],
+    revisions: [revision(catalog, content([candidate(s.osc0921, RIG.esprit, "NGC 7000")]), "2026-09-30T20:00:00.000Z")],
     createdAt: "2026-09-30T19:40:00.000Z",
   })
   const runD = run({
@@ -918,7 +920,7 @@ function demoSeed(): SeedData {
     projectId: PROJECT.cygnus,
     subjectId: ngcSubject.id,
     rigId: RIG.redcat,
-    revisions: [revision(content([candidate(s.ha0918, RIG.redcat, "NGC 7000")]), "2026-09-25T20:00:00.000Z", ["Added 18 Sep Ha"])],
+    revisions: [revision(catalog, content([candidate(s.ha0918, RIG.redcat, "NGC 7000")]), "2026-09-25T20:00:00.000Z")],
     trashedAt: "2026-09-30T08:00:00.000Z",
     createdAt: "2026-09-25T19:50:00.000Z",
   })
@@ -944,7 +946,7 @@ function demoSeed(): SeedData {
       panelId: `pnl_${n}`,
       groupId: group.id,
       setup: null,
-      revisions: [revision(content(sessions.map((x) => panelReason(x, n))), "2026-09-27T18:30:00.000Z", [`Added ${plural(sessions.length, "session")} by pointing`])],
+      revisions: [revision(catalog, content(sessions.map((x) => panelReason(x, n))), "2026-09-27T18:30:00.000Z")],
       createdAt: "2026-09-27T18:00:00.000Z",
       ...extra,
     })
@@ -957,7 +959,7 @@ function demoSeed(): SeedData {
     projectId: PROJECT.m31,
     subjectId: "sub_m31",
     rigId: RIG.fra,
-    revisions: [revision(content([s.m31.L, s.m31.R, s.m31.G, s.m31.B].map((x) => candidate(x, RIG.fra, "M 31"))), "2026-09-07T17:50:00.000Z", ["Added 2 Sep L, 3 Sep R, G and B"])],
+    revisions: [revision(catalog, content([s.m31.L, s.m31.R, s.m31.G, s.m31.B].map((x) => candidate(x, RIG.fra, "M 31"))), "2026-09-07T17:50:00.000Z")],
     completion: "complete",
     completedAt: "2026-09-10T08:00:00.000Z",
     stageBeforeComplete: "results",
@@ -977,7 +979,7 @@ function demoSeed(): SeedData {
     entryCount: p2Included.length,
     state: "partial",
     launches: [],
-    blocked: p2Offline.map((id) => ({ input: { kind: "asset" as const, assetId: id }, path: catalog.assets[id]!.copies[0]!.path, reason: "Offline: Cold-1 is not connected" })),
+    blocked: p2Offline.map((id) => ({ input: { kind: "asset" as const, assetId: id }, path: catalog.assets[id]!.copies[0]!.path, reason: msg("run_entry_offline", { name: "Cold-1" }) })),
   })
   const m31Path = `${PROCESSING}/M 31 LRGB/${m31Run.name}`
   const prepM31 = linkedPreparation(catalog, m31Run, m31Path, `${m31Path} Results`, m31Run.revisions[0]!.included, "2026-09-07T18:00:00.000Z")
@@ -1093,7 +1095,7 @@ function demoSeed(): SeedData {
   const stackDark120: Operation = {
     id: "op_stack_dark120",
     kind: "stack-master",
-    title: "Stack Dark 120 s · 8 Sep",
+    title: msg("store_cal_stack_title", { name: processRef(catalog, processOf(dark120)) }),
     status: "running",
     scope: { sessionIds: [dark120.id] },
     progress: { done: 0, total: 0, unit: "frames" },
@@ -1120,7 +1122,7 @@ function demoSeed(): SeedData {
     ...processOf(flatOiii),
     profileId: PROFILE_IDS.pixinsight,
     outputFolder: oiiiOutput,
-    steps: { ...processOf(flatOiii).steps, stack: stepRecord("done", "2026-09-27T08:00:00.000Z"), detect: stepRecord("failed", "2026-09-27T09:10:00.000Z", "Tool output not found") },
+    steps: { ...processOf(flatOiii).steps, stack: stepRecord("done", "2026-09-27T08:00:00.000Z"), detect: stepRecord("failed", "2026-09-27T09:10:00.000Z", msg("store_cal_tool_output_not_found")) },
     updatedAt: "2026-09-27T09:10:00.000Z",
   }
 
@@ -1151,12 +1153,12 @@ function demoSeed(): SeedData {
   const cleanupM31: Operation = {
     id: "op_cleanup_m31",
     kind: "cleanup",
-    title: `Clean up ${m31Run.name}`,
+    title: msg("store_label_clean_up_named", { name: m31Run.name }),
     status: "succeeded",
     scope: { runIds: [m31Run.id], projectId: PROJECT.m31 },
     progress: { done: m31Run.revisions[0]!.included.length, total: m31Run.revisions[0]!.included.length, unit: "entries" },
     items: [],
-    summary: `${plural(m31Run.revisions[0]!.included.length, "prepared link")} moved to the OS Trash. Sources, Results and library frames unchanged.`,
+    summary: msg("seed_cleanup_summary", { count: m31Run.revisions[0]!.included.length, n: formatCount(m31Run.revisions[0]!.included.length) }),
     canPause: false,
     canCancel: false,
     payload: {},
@@ -1177,11 +1179,11 @@ function demoSeed(): SeedData {
   const scan: Operation = {
     id: "op_index_nas",
     kind: "index",
-    title: "Index NAS captures",
+    title: msg("op_index_title_one", { name: "NAS captures" }),
     status: "running",
     scope: { locationIds: ["loc_nas"] },
     progress: { done: 0, total: nasPending.length, unit: "files" },
-    items: [{ id: "loc_nas", label: "NAS captures", path: "/Volumes/NAS/Captures", status: "running", phase: null, detail: `${nasPending.length} files to read` }],
+    items: [{ id: "loc_nas", label: verbatim("NAS captures"), path: "/Volumes/NAS/Captures", status: "running", phase: null, detail: msg("op_index_files_to_read", { count: nasPending.length, n: formatCount(nasPending.length) }) }],
     summary: null,
     canPause: true,
     canCancel: true,
@@ -1197,11 +1199,20 @@ function demoSeed(): SeedData {
   settings.defaultArchiveLocationId = "loc_archive"
   settings.lastOutputParent = PROCESSING
   const activity: ActivityEvent[] = [
-    { id: "act_trash_m31", at: trashAt, kind: "operation", title: "Move 8 rejected frames to Trash: finished", detail: "8 frames (M 31 25 Aug L) moved to the OS Trash. Put back plus a rescan restores them as Unusable.", operationId: null, href: `/projects/${PROJECT.m31}` },
-    { id: "act_cleanup_m31", at: cleanupM31.settledAt!, kind: "operation", title: `${cleanupM31.title}: finished`, detail: cleanupM31.summary, operationId: cleanupM31.id, href: `/projects/${PROJECT.m31}/runs/${m31Run.id}/done` },
-    { id: "act_prep_p2", at: "2026-09-27T19:06:00.000Z", kind: "operation", title: "Prepare IC 5070 mosaic Panel 2: partial", detail: `${plural(p2Offline.length, "input")} offline on Cold-1; ${plural(p2Ready.length, "entry", "entries")} prepared.`, operationId: null, href: `/projects/${PROJECT.cygnus}/runs/${p2.id}/prepare` },
-    { id: "act_stack_oiii", at: "2026-09-27T09:10:00.000Z", kind: "operation", title: "Stack Flat OIII · 26 Sep: failed", detail: "Tool output not found at detect.", operationId: null, href: "/calibration" },
-    { id: "act_stack_dark300", at: "2026-09-08T19:10:00.000Z", kind: "operation", title: "Stack Dark 300 s · 8 Sep: finished", detail: "MasterDark_2026-09-08.xisf registered from 30 frames.", operationId: null, href: "/calibration" },
+    { id: "act_trash_m31", at: trashAt, kind: "operation", title: msg("seed_move_rejected_title", { count: 8, n: formatCount(8) }), status: "succeeded", detail: msg("seed_trash_m31_detail", { frames: unitCount("frames", 8), session: "M 31 25 Aug L" }), operationId: null, href: `/projects/${PROJECT.m31}` },
+    { id: "act_cleanup_m31", at: cleanupM31.settledAt!, kind: "operation", title: cleanupM31.title, status: "succeeded", detail: cleanupM31.summary, operationId: cleanupM31.id, href: `/projects/${PROJECT.m31}/runs/${m31Run.id}/done` },
+    {
+      id: "act_prep_p2",
+      at: "2026-09-27T19:06:00.000Z",
+      kind: "operation",
+      title: msg("store_label_prepare_named", { name: p2.name }),
+      status: "partial",
+      detail: msg("seed_prep_p2_detail", { count: p2Offline.length, n: formatCount(p2Offline.length), volume: "Cold-1", entries: unitCount("entries", p2Ready.length) }),
+      operationId: null,
+      href: `/projects/${PROJECT.cygnus}/runs/${p2.id}/prepare`,
+    },
+    { id: "act_stack_oiii", at: "2026-09-27T09:10:00.000Z", kind: "operation", title: msg("store_cal_stack_title", { name: processRef(catalog, processOf(flatOiii)) }), status: "failed", detail: msg("store_cal_failed_at", { reason: msg("store_cal_tool_output_not_found"), step: CALIBRATION_STEP_NAME.detect }), operationId: null, href: "/calibration" },
+    { id: "act_stack_dark300", at: "2026-09-08T19:10:00.000Z", kind: "operation", title: msg("store_cal_stack_title", { name: processRef(catalog, processOf(dark300)) }), status: "succeeded", detail: msg("store_cal_registered_from", { file: "MasterDark_2026-09-08.xisf", frames: unitCount("frames", 30) }), operationId: null, href: "/calibration" },
   ]
   return { seed: "demo", disk, catalog, operations: { [cleanupM31.id]: cleanupM31, [scan.id]: scan, [stackDark120.id]: stackDark120 }, activity, settings, faults: defaultFaults() }
 }
