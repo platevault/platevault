@@ -13,25 +13,28 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { HelpTip } from "@/components/app/tips"
 import { setReviewPrefs, useReviewPrefs } from "./prefs"
 
 export const REVIEW_SHORTCUTS: Array<{ keys: string[][]; label: string }> = [
   { keys: [["←"], ["→"]], label: "Previous or next frame" },
   { keys: [["K"], ["J"]], label: "Previous or next frame" },
-  { keys: [["P"]], label: "Mark Picked (library Usable)" },
-  { keys: [["X"]], label: "Mark Rejected (library Unusable); in a run, removes it from the draft" },
-  { keys: [["U"]], label: "Mark Unreviewed" },
-  { keys: [["⇧", "P"], ["⇧", "X"]], label: "Mark and go to the next frame, even with auto-advance off" },
+  { keys: [["P"]], label: "Pick" },
+  { keys: [["X"]], label: "Reject" },
+  { keys: [["U"]], label: "Unreviewed" },
+  { keys: [["⇧", "P"], ["⇧", "X"]], label: "Mark and go to next" },
   { keys: [["Z"]], label: "Zoom: Fit or 1:1" },
-  { keys: [["F"]], label: "Fullscreen preview (Esc leaves it)" },
-  { keys: [["C"]], label: "Compare with a reference frame" },
-  { keys: [["G"]], label: "Grid, or back to the previous view" },
-  { keys: [["T"]], label: "Table height: about 8 rows, one-line strip, full height" },
+  { keys: [["F"]], label: "Fullscreen" },
+  { keys: [["C"]], label: "Compare" },
+  { keys: [[MOD_LABEL, "I"]], label: "Corner inspector" },
+  { keys: [["I"]], label: "Frame inspector" },
+  { keys: [["G"]], label: "Grid, or back" },
+  { keys: [["T"]], label: "Table height" },
   { keys: [["⌥", "1–4"]], label: "Filter: All, Picked, Rejected, Unreviewed" },
-  { keys: [[MOD_LABEL, "A"]], label: "Select every frame in the filtered list" },
-  { keys: [["Space"]], label: "Add or remove the current frame from the selection" },
-  { keys: [["Esc"]], label: "Leave fullscreen, then clear the selection" },
-  { keys: [["?"]], label: "Show these shortcuts" },
+  { keys: [[MOD_LABEL, "A"]], label: "Select all shown" },
+  { keys: [["Space"]], label: "Toggle selection" },
+  { keys: [["Esc"]], label: "Leave fullscreen, then clear selection" },
+  { keys: [["?"]], label: "Shortcuts" },
 ]
 
 export function ReviewShortcutsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -42,12 +45,12 @@ export function ReviewShortcutsDialog({ open, onOpenChange }: { open: boolean; o
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Review shortcuts</DialogTitle>
-          <DialogDescription>The same keys work in the table, filmstrip and grid. A mark applies to every selected frame when more than one is selected. While Review is open, G opens the grid instead of starting a G go-to sequence.</DialogDescription>
+          <DialogDescription>Table, filmstrip and grid. A mark applies to the whole selection.</DialogDescription>
         </DialogHeader>
         <div className="flex items-start justify-between gap-4 rounded-md border px-3 py-2.5">
-          <div className="space-y-0.5">
+          <div className="flex items-center gap-1">
             <Label htmlFor={switchId}>Auto-advance</Label>
-            <p className="text-xs text-pretty text-muted-foreground">After P, X or U on one frame, the next frame in list order becomes current. On by default.</p>
+            <HelpTip label="Auto-advance help">After P, X or U, the next frame becomes current.</HelpTip>
           </div>
           <Switch id={switchId} checked={prefs.autoAdvance} onCheckedChange={(on) => setReviewPrefs({ autoAdvance: on })} />
         </div>

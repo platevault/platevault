@@ -151,7 +151,7 @@ export function SessionPlots(props: {
         ))}
       </div>
       <p className="flex gap-x-4 overflow-hidden px-1 text-[0.6875rem] leading-4 whitespace-nowrap text-muted-foreground">
-        <span>Frame sequence, capture order · {frames.length} shown</span>
+        <span>Capture order · {frames.length}</span>
         <span>
           <Dot className="fill-foreground/70" />
           measured
@@ -168,7 +168,6 @@ export function SessionPlots(props: {
           <Dot className="fill-primary" />
           current frame
         </span>
-        {props.onThreshold ? <span className="text-warning">Click a plot to set the threshold there</span> : null}
       </p>
     </section>
   )

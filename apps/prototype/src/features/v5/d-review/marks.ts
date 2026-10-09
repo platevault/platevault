@@ -1,9 +1,10 @@
 /**
  * Mark routing for S6 Review (D-W42, D-W54, PIX-FR-14, PIX-FR-17). Library
  * P/X/U goes through `markFrames` with the run that holds each frame, so a
- * Review all mark lands in that frame's own panel run; candidates have no run
- * and change library quality only. "Reject for this Project only" uses the
- * Project-scoped reject. Each call returns one result for the whole mark.
+ * Review all mark lands in that frame's own panel run; candidates and a
+ * library session have no run and change library quality only. "Reject for
+ * this Project" uses the Project-scoped reject; a session review has no
+ * Project, so it refuses. Each call returns one result for the whole mark.
  */
 import type { QualityValue, RunId } from "@/domain/types"
 import { plural } from "@/lib/format"
@@ -31,7 +32,9 @@ export function markLibrary(scope: ReviewScope, frames: ReviewFrame[], value: Qu
 
 export function setProjectOnlyReject(scope: ReviewScope, frames: ReviewFrame[], rejected: boolean): CommitResult {
   if (scope.readOnlyReason) return { ok: false, reason: "refused", message: scope.readOnlyReason, reasons: [scope.readOnlyReason] }
-  return firstFailure([...byRun(frames)].map(([runId, ids]) => (runId ? rejectForProjectOnly(runId, ids, rejected) : setProjectRejection(scope.project.id, ids, rejected))))
+  const project = scope.project
+  if (!project) return { ok: false, reason: "refused", message: "no Project", reasons: ["No Project"] }
+  return firstFailure([...byRun(frames)].map(([runId, ids]) => (runId ? rejectForProjectOnly(runId, ids, rejected) : setProjectRejection(project.id, ids, rejected))))
 }
 
 /** "Rejected: 12 frames. Library scope. Removed from the run's draft as Rejected." The draft clause only when it changes. */

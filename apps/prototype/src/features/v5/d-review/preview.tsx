@@ -2,11 +2,12 @@
  * S6 Review preview (D-W13, PIX-FR-03, PIX-FR-05): the frame plate on its
  * mount (HARNESS-V4 Direction B), with zoom (Fit, 1:1, 2:1), pan by drag or
  * arrow keys and display stretch held by the review, so Compare can link two
- * plates to one zoom and centre. Also the linear histogram and the fixed
- * centre-and-corner regions at 1:1. Prototype: the raster is synthetic and
- * the caption says so; display stretch never reaches a measurement.
+ * plates to one zoom and centre. Also the linear histogram. The corner
+ * inspector (`corners.tsx`) replaces a plate with its nine 1:1 tiles. The
+ * raster is synthetic; display stretch never reaches a measurement.
  */
 import { type KeyboardEvent, type PointerEvent, useEffect, useMemo, useRef } from "react"
+import { NoteMarker } from "@/components/app/tips"
 import { Raster, useSize } from "@/features/t3/frame-preview"
 import { detectedStars, linearHistogram, type StarField, type StarRecord, type Stretch, type ViewWindow } from "@/features/t3/raster"
 import { cn } from "@/lib/utils"
@@ -173,34 +174,19 @@ export function HistogramView({ field, window }: { field: StarField; window: Vie
         <line x1={medianX} x2={medianX} y1={0} y2={H} className="stroke-link" strokeWidth={1} vectorEffect="non-scaling-stroke" />
       </svg>
       <figcaption className="text-[0.6875rem] leading-4 text-muted-foreground tabular-nums">
-        Linear ADU 0–{Math.round(h.rangeMax).toLocaleString("en-GB")} · median {Math.round(h.median).toLocaleString("en-GB")} · MAD {Math.round(h.mad)} · {h.above.toLocaleString("en-GB")} brighter
+        Median {Math.round(h.median).toLocaleString("en-GB")} · MAD {Math.round(h.mad)}
         {h.saturated > 0 ? ` · ${h.saturated} saturated` : ""}
-        {h.invalid > 0 ? ` · ${h.invalid} invalid` : ""} · log counts, {h.samples.toLocaleString("en-GB")} samples of the region shown
+        {h.invalid > 0 ? ` · ${h.invalid} invalid` : ""}{" "}
+        <NoteMarker
+          label="Histogram note"
+          rows={[
+            { label: "Data", value: `Linear ADU 0–${Math.round(h.rangeMax).toLocaleString("en-GB")}` },
+            { label: "Counts", value: "Log" },
+            { label: "Samples", value: `${h.samples.toLocaleString("en-GB")}, region shown` },
+            { label: "Brighter", value: h.above.toLocaleString("en-GB") },
+          ]}
+        />
       </figcaption>
     </figure>
-  )
-}
-
-const REGION_ROWS = ["top", "middle", "bottom"] as const
-const REGION_COLS = ["left", "centre", "right"] as const
-
-/** The centre and the four corners (and edges) at 1:1, the same place in every frame (PIX-FR-03). */
-export function RegionGrid({ field, stretch, tile = 84 }: { field: StarField; stretch: Stretch; tile?: number }) {
-  return (
-    <div className="grid grid-cols-3 gap-1" role="group" aria-label="Centre, edges and corners at 1:1">
-      {REGION_ROWS.flatMap((row, j) =>
-        REGION_COLS.map((col, i) => {
-          const x0 = [0, (field.width - tile) / 2, field.width - tile][i]!
-          const y0 = [0, (field.height - tile) / 2, field.height - tile][j]!
-          const name = row === "middle" && col === "centre" ? "Centre" : `${row === "middle" ? "Middle" : row === "top" ? "Top" : "Bottom"} ${col}`
-          return (
-            <figure key={`${row}-${col}`} className="relative">
-              <Raster field={field} window={{ x0, y0, scale: 1, width: tile, height: tile }} stretch={stretch} className="block aspect-square w-full rounded-[2px] bg-plate" label={`${name} region at 1:1`} />
-              <figcaption className="absolute top-0.5 left-0.5 rounded-sm bg-black/70 px-1 text-[0.625rem] text-white">{name}</figcaption>
-            </figure>
-          )
-        }),
-      )}
-    </div>
   )
 }

@@ -4,14 +4,15 @@
  * Project's candidate sessions (PIX-FR-18). Pure derivation over the store;
  * nothing here writes. Trashed frames are never listed (LIB-FR-18, PIX-AC-19).
  */
-import { findPanel, findSubject, frameQuality, type FrameQuality, groupHref, liveAssetIds, projectCandidates, runHref, subjectName, workingContent } from "@/domain/derive"
+import { findPanel, findSubject, frameQuality, type FrameQuality, groupHref, liveAssetIds, projectCandidates, runHref, type StepLink, subjectName, workingContent } from "@/domain/derive"
 import { assetAvailability, type AssetAvailability } from "@/domain/library"
 import { type MemberState, memberState } from "@/domain/membership"
-import type { Asset, AssetId, MetricKey, Metric, MosaicPanel, Operation, Project, ProjectId, Run, RunGroupId, RunId, Session } from "@/domain/types"
+import type { Asset, AssetId, MetricKey, Metric, MosaicPanel, Operation, Project, ProjectId, Run, RunGroupId, RunId, Session, SessionId } from "@/domain/types"
 import type { PrototypeState } from "@/store/core"
 import { builtInMetrics, currentImportedMetrics, frameMeasureState, type FrameMeasureState, latestMeasureOp } from "@/features/t3/measure"
 
-export type ReviewContext = { kind: "run"; runId: RunId } | { kind: "group"; groupId: RunGroupId } | { kind: "candidates"; projectId: ProjectId }
+/** Where a review opens: a run's Review step, a group's Review all, a Project's candidates, or one library session (marks are library-level only). */
+export type ReviewContext = { kind: "run"; runId: RunId } | { kind: "group"; groupId: RunGroupId } | { kind: "candidates"; projectId: ProjectId } | { kind: "session"; sessionId: SessionId }
 
 /** The review buckets of the two quality levels (PIX-FR-14): Picked, Rejected (either scope) and Unreviewed. */
 export type ReviewBucket = "picked" | "rejected" | "unreviewed"
@@ -50,19 +51,21 @@ export interface ReviewFrame {
 }
 
 export interface ReviewScope {
-  /** Key for frame UI state and measurement: the run id, or a group / candidates key. */
+  /** Key for frame UI state and measurement: the run id, or a group, candidates or session key. */
   key: string
-  project: Project
+  /** Null in a session context: no Project, so no Project-only reject. */
+  project: Project | null
   frames: ReviewFrame[]
   /** Runs whose drafts this review edits, in panel order. */
   runs: Run[]
-  /** Measurement operations, one per run (or one for candidates). */
+  /** Measurement operations, one per run (or one for candidates and a session). */
   measureKeys: string[]
   ops: Operation[]
-  /** Marks are refused here, with this reason (a trashed run). */
+  /** Marks are refused here, with this terse reason (a trashed run) and where to resolve it. */
   readOnlyReason: string | null
-  /** Marks still apply to the library, but the run's membership stays as it is (a Complete run). */
-  membershipNote: string | null
+  readOnlyLink: StepLink | null
+  /** Marks still apply to the library, but run membership stays (a Complete run): a pill and its help. */
+  membershipNote: { label: string; help: string } | null
   /** A group's panel runs in the Trash: listed by name, their frames never counted (D-W75). */
   trashedPanels: string[]
   /** Trashed frames this scope leaves out (LIB-FR-18). */
@@ -83,7 +86,16 @@ export function bucketOf(quality: FrameQuality): ReviewBucket {
 }
 
 export function contextKey(context: ReviewContext): string {
-  return context.kind === "run" ? context.runId : context.kind === "group" ? `group:${context.groupId}` : `candidates:${context.projectId}`
+  switch (context.kind) {
+    case "run":
+      return context.runId
+    case "group":
+      return `group:${context.groupId}`
+    case "candidates":
+      return `candidates:${context.projectId}`
+    case "session":
+      return `session:${context.sessionId}`
+  }
 }
 
 interface Source {
@@ -106,10 +118,11 @@ function frameNumbers(state: PrototypeState, sessions: Iterable<Session>): Map<A
 export function reviewScope(state: PrototypeState, context: ReviewContext): ReviewScope | null {
   const { catalog, disk } = state
   const sources: Source[] = []
-  let project: Project | undefined
+  let project: Project | null = null
   let runs: Run[] = []
   let readOnlyReason: string | null = null
-  let membershipNote: string | null = null
+  let readOnlyLink: StepLink | null = null
+  let membershipNote: ReviewScope["membershipNote"] = null
   let trashedPanels: string[] = []
   let href = "/"
   let panels: MosaicPanel[] = []
@@ -120,17 +133,20 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
   }
   if (context.kind === "run") {
     const run = catalog.runs[context.runId]
-    project = run ? catalog.projects[run.projectId] : undefined
+    project = run ? (catalog.projects[run.projectId] ?? null) : null
     if (!run || !project) return null
     runs = [run]
     const subject = findSubject(project, run.subjectId)
     membersOf(run, findPanel(subject, run.panelId) ?? null)
-    readOnlyReason = run.trashedAt ? "This run is in the Project's Trash. Restore it before you mark frames." : null
-    membershipNote = run.completion === "complete" ? "This run is Complete: marks change library quality and this Project's rejects, but the run's membership stays as it was. Reopen the run to change it." : null
+    if (run.trashedAt) {
+      readOnlyReason = "run in Trash"
+      readOnlyLink = { to: "/projects/$projectId/trash", params: { projectId: project.id } }
+    }
+    membershipNote = run.completion === "complete" ? { label: "Run complete", help: "Membership stays. Marks change library quality and Project rejects." } : null
     href = runHref(run, "review")
   } else if (context.kind === "group") {
     const group = catalog.runGroups[context.groupId]
-    project = group ? catalog.projects[group.projectId] : undefined
+    project = group ? (catalog.projects[group.projectId] ?? null) : null
     if (!group || !project) return null
     const subject = findSubject(project, group.subjectId)
     for (const runId of group.runIds) {
@@ -145,19 +161,24 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
       if (panel) panels.push(panel)
       membersOf(run, panel)
     }
-    membershipNote = runs.some((r) => r.completion === "complete") ? "A Complete panel run keeps its membership; marks on its frames change library quality only." : null
+    membershipNote = runs.some((r) => r.completion === "complete") ? { label: "Panel complete", help: "A Complete panel run keeps its membership. Marks change library quality only." } : null
     href = groupHref(group, "review")
-  } else {
-    project = catalog.projects[context.projectId]
+  } else if (context.kind === "candidates") {
+    project = catalog.projects[context.projectId] ?? null
     if (!project) return null
     for (const candidate of projectCandidates(catalog, project)) {
       const label = subjectName(catalog, candidate.subject)
       for (const assetId of liveAssetIds(catalog, candidate.session)) sources.push({ assetId, run: null, panel: null, subject: label })
     }
     href = `/projects/${project.id}?candidates=unreviewed`
+  } else {
+    const session = catalog.sessions[context.sessionId]
+    if (!session) return null
+    for (const assetId of liveAssetIds(catalog, session)) sources.push({ assetId, run: null, panel: null, subject: null })
+    href = `/sessions/${session.id}`
   }
   const key = contextKey(context)
-  const measureKeys = context.kind === "candidates" ? [key] : runs.map((r) => r.id)
+  const measureKeys = context.kind === "candidates" || context.kind === "session" ? [key] : runs.map((r) => r.id)
   const ops = measureKeys.map((k) => latestMeasureOp(state, k)).filter((op): op is Operation => op !== undefined)
   const opFor = (s: Source) => latestMeasureOp(state, s.run?.id ?? key)
   const seen = new Set<AssetId>()
@@ -179,7 +200,7 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
   const numbers = frameNumbers(state, sessions.values())
   live.sort((a, b) => a.asset.observed.dateObs.localeCompare(b.asset.observed.dateObs) || a.asset.fileName.localeCompare(b.asset.fileName))
   const frames = live.map((s, order): ReviewFrame => {
-    const quality = frameQuality(s.asset, project!)
+    const quality = frameQuality(s.asset, project)
     const record = catalog.measurements[s.asset.id]
     const measure = frameMeasureState(catalog, s.asset.id, opFor(s))
     const content = s.run ? workingContent(s.run) : null
@@ -201,7 +222,7 @@ export function reviewScope(state: PrototypeState, context: ReviewContext): Revi
       order,
     }
   })
-  return { key, project, frames, runs, measureKeys, ops, readOnlyReason, membershipNote, trashedPanels, trashedHidden, href, panels }
+  return { key, project, frames, runs, measureKeys, ops, readOnlyReason, readOnlyLink, membershipNote, trashedPanels, trashedHidden, href, panels }
 }
 
 /** The bucket a frame lands in after a library mark; a Project-only reject keeps it Rejected (D-W42). */
