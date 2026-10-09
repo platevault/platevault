@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Switch } from "@/components/ui/switch"
+import { calibrationProcesses } from "@/domain/calibration-process"
 import { fileAt } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
 import { displayZone, formatZonedDateTime, reminderSiteOf, wallTimeToIso } from "@/domain/planning"
@@ -38,6 +39,7 @@ import {
   setFolderAccess,
   setPathReadOnly,
   setVolumeMounted,
+  toolFinishedStacking,
 } from "@/store/simulation"
 import { closePanel, useShellUi } from "./ui-state"
 
@@ -84,6 +86,7 @@ export function SimulationControls() {
   const seed = useStore((s) => s.seed)
   const arrived = useStore(() => newCapturesArrived())
   const devices = useStore((s) => removableDevices(s.disk))
+  const stacking = useStore((s) => calibrationProcesses(s.catalog).filter((v) => v.status === "stacking"))
   const [folderQuery, setFolderQuery] = useState("")
   const [path, setPath] = useState("")
   const [destination, setDestination] = useState("")
@@ -166,6 +169,17 @@ export function SimulationControls() {
               checked={device.connected}
               onChange={(on) => (on ? connectDevice(device.volume.id) : ejectDevice(device.volume.id))}
             />
+          ))}
+          {stacking.map((view) => (
+            <div key={view.process.id} className="flex items-center justify-between gap-3 py-1.5" data-sim-stacking={view.process.id}>
+              <div className="min-w-0">
+                <p className="text-sm">{view.name}</p>
+                <p className="font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">{view.process.outputFolder}</p>
+              </div>
+              <Button size="sm" variant="outline" className="shrink-0" onClick={() => toolFinishedStacking(view.process.id)}>
+                Tool finished stacking
+              </Button>
+            </div>
           ))}
           <div className="space-y-1.5">
             <Label htmlFor={pathInput}>File or folder path</Label>

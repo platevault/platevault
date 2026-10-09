@@ -24,8 +24,15 @@ export interface OperationHandler {
   /**
    * Advance `op` by one tick and return the next state. Read the op from
    * `state.operations[op.id]`; settle it with `settleOperation` when done.
+   * Return `state` itself when nothing changed, so nothing re-renders.
    */
   step: (state: PrototypeState, op: Operation) => PrototypeState
+  /** Kind-specific bookkeeping when the user cancels, before the operation settles as canceled. */
+  cancel?: (state: PrototypeState, op: Operation) => PrototypeState
+  /** Where a canceled operation of this kind links in Activity. */
+  href?: (op: Operation) => string | null
+  /** Work that resumes by itself after a restart (a folder watch) stays running instead of interrupted. */
+  survivesRestart?: boolean
 }
 
 const handlers: Partial<Record<OperationKind, OperationHandler>> = {}
@@ -56,7 +63,12 @@ export interface StartOperation {
   canCancel?: boolean
 }
 
-export function startOperation(init: StartOperation): OperationId {
+/**
+ * Add a running operation to `state` without touching the store, for an
+ * action's `commit` mutator or another operation's step. The caller runs
+ * `ensureTicker()` once the state is applied (a step already runs in the ticker).
+ */
+export function addOperation(state: PrototypeState, init: StartOperation): { state: PrototypeState; id: OperationId } {
   opCounter += 1
   const id = `op_${init.kind}_${Date.now().toString(36)}_${opCounter}`
   const now = nowIso()
@@ -76,7 +88,16 @@ export function startOperation(init: StartOperation): OperationId {
     updatedAt: now,
     settledAt: null,
   }
-  store.setState((s) => ({ ...s, operations: { ...s.operations, [id]: op } }))
+  return { state: { ...state, operations: { ...state.operations, [id]: op } }, id }
+}
+
+export function startOperation(init: StartOperation): OperationId {
+  let id = ""
+  store.setState((s) => {
+    const added = addOperation(s, init)
+    id = added.id
+    return added.state
+  })
   ensureTicker()
   return id
 }
@@ -103,7 +124,7 @@ export function settleOperation(
     id: `act_${id}`,
     at: now,
     kind: "operation" as const,
-    title: `${op.title}: ${STATUS_WORD[status]}`,
+    title: `${op.title}: ${SETTLED_WORD[status]}`,
     detail: summary,
     operationId: id,
     href,
@@ -115,7 +136,8 @@ export function settleOperation(
   }
 }
 
-const STATUS_WORD: Record<Exclude<OperationStatus, "running" | "paused" | "interrupted">, string> = {
+/** The word a settled operation reads in Activity and the status bar: "Import finished". */
+export const SETTLED_WORD: Record<Exclude<OperationStatus, "running" | "paused" | "interrupted">, string> = {
   succeeded: "finished",
   partial: "partial",
   failed: "failed",
@@ -155,12 +177,15 @@ export function cancelOperation(id: OperationId) {
       })
       next = patchOperation(next, id, { items })
     }
+    const handler = handlers[op.kind]
+    if (handler?.cancel) next = handler.cancel(next, op)
     // A canceled operation still links to its owning surface in Activity (seam 16).
     const runId = op.scope.runIds?.[0]
     const run = runId ? next.catalog.runs[runId] : undefined
     const step: Partial<Record<OperationKind, RunStep>> = { measure: "review", "import-measurements": "review", prepare: "prepare", cleanup: "done" }
     const href =
-      op.kind === "index"
+      handler?.href?.(op) ??
+      (op.kind === "index"
         ? "/settings/locations"
         : op.kind === "adopt-master"
           ? "/calibration"
@@ -170,7 +195,7 @@ export function cancelOperation(id: OperationId) {
               ? runHref(run, step[op.kind])
               : op.scope.projectId
                 ? `/projects/${op.scope.projectId}`
-                : null
+                : null)
     return settleOperation(
       next,
       id,
@@ -208,11 +233,11 @@ export function ensureTicker() {
   timer = window.setInterval(tick, TICK_MS)
 }
 
-/** Called on load: running work from a previous session is interrupted. */
+/** Called on load: running work from a previous session is interrupted, except work that resumes by itself. */
 export function interruptRunningOperations(state: PrototypeState): PrototypeState {
   let next = state
   for (const op of Object.values(state.operations)) {
-    if (op.status !== "running") continue
+    if (op.status !== "running" || handlers[op.kind]?.survivesRestart) continue
     next = patchOperation(next, op.id, {
       status: "interrupted",
       summary: "PlateVault restarted while this was running. Recorded progress is kept; Retry resumes it.",

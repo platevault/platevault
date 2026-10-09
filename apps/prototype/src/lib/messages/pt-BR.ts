@@ -41,10 +41,19 @@ export const PT_BR: Readonly<Record<string, string>> = {
   "Machine-generated": "Tradução automática",
 
   // Status bar
+  Status: "Status",
   "{n} of {total} online": "{n} de {total} online",
   "{n} offline": "{n} offline",
   "{n} interrupted": "{n} interrompidas",
   Idle: "Ocioso",
+  "{n} selected": "{n} selecionados",
+  "{n} of {total} selected": "{n} de {total} selecionados",
+  "{n} more": "Mais {n}",
+  "{n} more running": "Mais {n} em execução",
+  "{n} calibration waiting": "{n} calibrações aguardando",
+  Working: "Trabalhando",
+  Cancel: "Cancelar",
+  Notifications: "Notificações",
 
   // Issues hub
   Issues: "Problemas",
@@ -63,6 +72,8 @@ export const PT_BR: Readonly<Record<string, string>> = {
   "{name}: {n} to review": "{name}: {n} para revisar",
   "{name} blocked": "{name} bloqueada",
   "{n} master offered": "{n} master oferecido",
+  "{n} to stack": "{n} para empilhar",
+  Stack: "Empilhar",
   "{n} changed · {name}": "{n} alterados · {name}",
   "Master changed · {name}": "Master alterado · {name}",
   Assign: "Atribuir",

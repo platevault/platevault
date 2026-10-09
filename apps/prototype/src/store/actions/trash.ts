@@ -9,12 +9,13 @@
  * frame with copies in several locations moves every copy, and if any copy
  * is refused the whole frame is refused (D-W57).
  */
+import { stepRecord } from "@/domain/calibration-process"
 import { fileAt, filesUnder, removeFile, trashRefusal } from "@/domain/disk"
 import { isUnder } from "@/domain/indexing"
-import type { AssetId, Disk, OperationId, OperationItem, OperationKind, ProjectId, ResultId, RunId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
+import type { AssetId, CalibrationProcessId, Disk, OperationId, OperationItem, OperationKind, ProjectId, ResultId, RunId, TrashEpisode, TrashEpisodeKind } from "@/domain/types"
 import { formatBytes, plural } from "@/lib/format"
-import { nowIso, type PrototypeState } from "@/store/core"
-import { type OperationHandler, patchOperation, settleOperation, startOperation } from "@/store/operations"
+import { nowIso, type PrototypeState, store } from "@/store/core"
+import { addOperation, ensureTicker, type OperationHandler, patchOperation, settleOperation } from "@/store/operations"
 import { freshId } from "./shared"
 
 /** One path to move. Items sharing an `assetId` move together or not at all. */
@@ -39,6 +40,8 @@ export interface MoveToOsTrash {
   /** What one item is, for progress and the summary; "item" by default. */
   noun?: { one: string; many: string }
   href: string
+  /** The calibration process whose Raws step this move is (P-CAL3); the episode settles that step. */
+  calibrationProcessId?: CalibrationProcessId
 }
 
 /** A run's Clean up is its own operation kind, so its step reads its state apart from other trash moves. */
@@ -96,6 +99,18 @@ function groupItems(items: TrashItem[]): TrashItem[][] {
 
 /** Start the move; returns the operation id. Settles with exact counts in Activity. */
 export function moveToOsTrash(input: MoveToOsTrash): OperationId {
+  let id = ""
+  store.setState((s) => {
+    const queued = queueOsTrash(s, input)
+    id = queued.operationId
+    return queued.state
+  })
+  ensureTicker()
+  return id
+}
+
+/** The move as a state change, for a `commit` mutator or an operation step; the caller runs `ensureTicker()`. */
+export function queueOsTrash(state: PrototypeState, input: MoveToOsTrash): { state: PrototypeState; operationId: OperationId } {
   const noun = input.noun ?? { one: "item", many: "items" }
   const payload: TrashPayload = {
     kind: input.kind,
@@ -105,11 +120,12 @@ export function moveToOsTrash(input: MoveToOsTrash): OperationId {
     pruneFolders: input.pruneFolders ?? [],
     noun,
     href: input.href,
+    calibrationProcessId: input.calibrationProcessId,
     queue: groupItems(input.items),
     done: [],
     episodeId: freshId("trash", input.title),
   }
-  return startOperation({
+  const added = addOperation(state, {
     kind: operationKind(input.kind),
     title: input.title,
     scope: { runIds: input.runIds, projectId: input.projectId ?? undefined },
@@ -119,6 +135,7 @@ export function moveToOsTrash(input: MoveToOsTrash): OperationId {
     payload: payload as unknown as Record<string, unknown>,
     canCancel: false,
   })
+  return { state: added.state, operationId: added.id }
 }
 
 function refusal(disk: Disk, item: TrashItem): string | null {
@@ -181,7 +198,7 @@ function pruneEmptiedFolders(disk: Disk, roots: string[]): Disk {
   return { ...disk, folders: disk.folders.filter((folder) => !roots.some((root) => isUnder(folder.path, root)) || holdsFile(folder)) }
 }
 
-/** Record the episode, mark Trashed frames and Results, and remove emptied runs. */
+/** Record the episode, mark Trashed frames and Results, remove emptied runs, and settle a calibration process's Raws step. */
 function settleEpisode(state: PrototypeState, operationId: OperationId, payload: TrashPayload): PrototypeState {
   const at = nowIso()
   const episode: TrashEpisode = {
@@ -216,6 +233,15 @@ function settleEpisode(state: PrototypeState, operationId: OperationId, payload:
     catalog.runGroups = Object.fromEntries(Object.entries(catalog.runGroups).map(([id, g]) => [id, { ...g, runIds: g.runIds.filter((r) => !remove.has(r)) }]))
   }
   catalog.trashEpisodes = { ...catalog.trashEpisodes, [episode.id]: episode }
+  const process = payload.calibrationProcessId ? catalog.calibrationProcesses[payload.calibrationProcessId] : undefined
+  if (process) {
+    const refused = payload.done.filter((i) => i.outcome === "refused")
+    const raws = refused.length === 0 ? stepRecord("done", at) : stepRecord("failed", at, `${plural(refused.length, "frame")} kept · ${refused[0]!.reason ?? "refused"}`)
+    catalog.calibrationProcesses = {
+      ...catalog.calibrationProcesses,
+      [process.id]: { ...process, raws: refused.length === 0 ? "trashed" : null, operationId: null, steps: { ...process.steps, raws }, updatedAt: at },
+    }
+  }
   return { ...state, catalog, disk: pruneEmptiedFolders(state.disk, payload.pruneFolders ?? []) }
 }
 

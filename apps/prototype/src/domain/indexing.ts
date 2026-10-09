@@ -5,7 +5,11 @@
  *
  * Used by the demo seed (synchronously) and by the "index" operation
  * (progressively, a batch per tick), so both produce identical catalogs.
+ * Raw calibration sessions are routed into a calibration process awaiting
+ * Stack (P-CAL3, `routeRawCalibration`); masters in a Calibration location are
+ * library masters.
  */
+import { routeRawCalibration } from "./calibration-process"
 import { correctedExposureS } from "./corrections"
 import { isRetiredAsset } from "./library"
 import { angularSeparationDeg, BUNDLED_CATALOGUE, bundledEntryFor, normalizeName, targetFromEntry } from "./sky"
@@ -443,9 +447,11 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
       // Masters stored in a Calibration location are library masters.
       // Generated masters found elsewhere stay candidates until adopted (CAL-FR-06).
       const masterId = `mst_${stableHash(file.path)}`
+      const kind = header.imageType.slice("master-".length) as CalibrationKind
+      const train = kind === "flat" ? associateEquipment(catalog, header) : null
       catalog.masters[masterId] = {
         id: masterId,
-        kind: header.imageType.slice("master-".length) as CalibrationKind,
+        kind,
         path: file.path,
         cameraName: header.instrument,
         widthPx: header.widthPx,
@@ -453,11 +459,11 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
         binning: header.binning,
         gain: header.gain,
         offset: header.offset,
-        exposureS: header.imageType === "master-dark" ? header.exposureS : null,
+        exposureS: kind === "dark" || kind === "dark-flat" ? header.exposureS : null,
         channel: header.filter,
-        opticalTrainId: null,
+        opticalTrainId: train?.status === "associated" ? train.value : null,
         ccdTempC: header.ccdTempC,
-        frameCount: null,
+        frameCount: header.ncombine,
         createdAt: header.dateObs,
         state: "adopted",
         origin: { kind: "library", runId: null, sourcePath: file.path, sessionId: null },
@@ -516,6 +522,7 @@ export function readFiles(source: Catalog, location: Location, files: DiskFile[]
     }
   }
   for (const sessionId of touched) catalog.sessions[sessionId] = rebuildSession(catalog, catalog.sessions[sessionId]!, now)
+  catalog.calibrationProcesses = routeRawCalibration(catalog, touched, now)
   return catalog
 }
 

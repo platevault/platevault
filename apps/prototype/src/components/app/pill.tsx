@@ -49,8 +49,13 @@ export interface PillProps {
   className?: string
 }
 
+/** The pill's classes, for a control that renders its own element (a popover trigger). */
+export function pillClass(tone: Tone = "neutral", interactive = false, className?: string): string {
+  return cn(PILL, PILL_TONE[tone], interactive && PILL_HOVER[tone], className)
+}
+
 export function Pill({ tone = "neutral", icon: Icon, children, link, onClick, title, className }: PillProps) {
-  const classes = cn(PILL, PILL_TONE[tone], (link || onClick) && PILL_HOVER[tone], className)
+  const classes = pillClass(tone, Boolean(link || onClick), className)
   const body = (
     <>
       {Icon ? <Icon aria-hidden="true" /> : null}

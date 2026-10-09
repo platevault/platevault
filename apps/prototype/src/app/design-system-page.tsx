@@ -127,6 +127,12 @@ function SessionTable({ loading, empty, grouped, pinned, locked }: { loading: bo
           />
         }
         stickyFirstColumn={pinned}
+        contextMenu={(s) => [
+          { heading: selected.length > 1 ? `${selected.length} selected` : `${formatNight(s.night)} ${s.channel ?? ""}` },
+          { label: selected.includes(s.id) ? "Deselect" : "Select", onSelect: () => setSelected(selected.includes(s.id) ? selected.filter((id) => id !== s.id) : [...selected, s.id]) },
+          { separator: true },
+          { label: "Clear selection", onSelect: () => setSelected([]), disabled: selected.length === 0 },
+        ]}
       />
     </div>
   )

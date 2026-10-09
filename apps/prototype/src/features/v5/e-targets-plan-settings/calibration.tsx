@@ -1,24 +1,30 @@
 /**
  * S14 Calibration library (slice E; CAL-FR-01, CAL-FR-06, CAL-FR-07, D-W5,
- * D-W55), carried over from v4's T4 library to the v5 run model. Two read
- * lists, masters and raw sets, each naming the runs that use the input:
- * a run uses a master or raw set when its calibration plan hands it off
- * (automatic, accepted or an exception) for the run's saved membership.
- * A generated master found in a run's Results is a candidate until adopted;
- * the run's Calibrate step offers it once (slice C owns that decision), so
- * the library links there instead of adopting on its own.
+ * D-W55, P-CAL3), carried over from v4's T4 library to the v5 run model.
+ * Masters, each naming the runs that use it: a run uses a master when its
+ * calibration plan hands it off (automatic, accepted or an exception) for
+ * the run's saved membership. A generated master found in a run's Results is
+ * a candidate until adopted; the run's Calibrate step offers it once (slice C
+ * owns that decision), so the library links there instead of adopting on its
+ * own. Raw sessions are listed by their calibration process (P-CAL3) with the
+ * one action that moves each on.
  */
 import { Link } from "@tanstack/react-router"
 import { SlidersHorizontal } from "lucide-react"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { EmptyState, UnknownValue } from "@/components/app/feedback"
 import { PageBody, PageHeader, Section } from "@/components/app/page"
-import { StatusBadge } from "@/components/app/status"
+import { Pill } from "@/components/app/pill"
+import { Refusal, refusalFrom } from "@/components/app/refusal"
+import { StatusBadge, type Tone } from "@/components/app/status"
 import { Button } from "@/components/ui/button"
-import { calibrationPlan, inputDrift, inputKey, KIND_LABEL, masterSource, rawSetSource, type CalSource } from "@/domain/calibration"
+import { calibrationPlan, inputDrift, inputKey, KIND_LABEL, masterSource, type CalSource } from "@/domain/calibration"
+import { CALIBRATION_STEP_LABEL, calibrationProcesses, type ProcessStatus, type ProcessView, stackProfiles } from "@/domain/calibration-process"
 import { rigName, runSetup, runStepLink, savedContent, workingContent } from "@/domain/derive"
-import type { Catalog, Disk, Run, Session } from "@/domain/types"
-import { formatExposure, formatNight, plural } from "@/lib/format"
+import type { Catalog, Disk, Run } from "@/domain/types"
+import { formatExposure, plural } from "@/lib/format"
+import { detectMasters, discardRaws, importMaster, keepRaws, startStack } from "@/store/actions/calibration"
+import type { CommitResult } from "@/store/core"
 import { useStore } from "@/store/core"
 
 interface Usage {
@@ -28,7 +34,7 @@ interface Usage {
   kinds: Set<string>
 }
 
-/** Which runs hand off each input, keyed by master id or raw-set session id. */
+/** Which runs hand off each master, keyed by master id. */
 function usageByInput(catalog: Catalog, disk: Disk): Map<string, Usage[]> {
   const out = new Map<string, Usage[]>()
   for (const run of Object.values(catalog.runs)) {
@@ -84,23 +90,107 @@ function UsedBy({ usage, catalog }: { usage: Usage[] | undefined; catalog: Catal
 const TH = "h-(--row-h) px-3 text-left font-medium"
 const TD = "px-3 py-1 align-top"
 
+const PROCESS_TONE: Record<ProcessStatus, Tone> = { "awaiting-stack": "info", stacking: "info", importing: "info", "trashing-raws": "info", failed: "danger", done: "success" }
+const PROCESS_WORD: Record<ProcessStatus, string> = { "awaiting-stack": "To stack", stacking: "Stacking", importing: "Importing", "trashing-raws": "Trashing raws", failed: "Failed", done: "Done" }
+
+/** The one action that moves a process on, with its label. */
+function processAction(view: ProcessView, catalog: Catalog): { label: string; run: () => CommitResult } | null {
+  const { process, failure, status } = view
+  const profile = stackProfiles(catalog).find((p) => p.executableState === "found") ?? null
+  const stack = { label: "Stack", run: () => startStack(process.sessionId!, profile?.id ?? null).result }
+  if (status === "awaiting-stack" && process.sessionId) return stack
+  if (failure?.step === "detect" && process.sessionId) return { label: "Detect", run: () => detectMasters(process.id) }
+  if (failure?.step === "import" || failure?.step === "register") return { label: "Import", run: () => importMaster(process.id) }
+  if (failure?.step === "raws") return { label: "Keep raws", run: () => keepRaws(process.id) }
+  if (status === "done" && process.raws === "kept") return { label: "Trash raws", run: () => discardRaws(process.id) }
+  return null
+}
+
+function ProcessesSection({ catalog }: { catalog: Catalog }) {
+  const processes = calibrationProcesses(catalog)
+  const [refused, setRefused] = useState<{ id: string; action: string; result: CommitResult } | null>(null)
+  const shown = refused ? refusalFrom(refused.result, `${refused.action} blocked`) : null
+  return (
+    <Section id="cal-raw" title={`Raw sessions · ${processes.length}`}>
+      {shown ? <Refusal {...shown} className="mb-2" /> : null}
+      {processes.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No raw sessions</p>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <caption className="sr-only">Calibration processes</caption>
+            <thead className="bg-[color-mix(in_oklch,var(--chrome)_70%,var(--background))] text-[0.6875rem] text-muted-foreground">
+              <tr className="border-b">
+                <th scope="col" className={TH}>Raw session</th>
+                <th scope="col" className={`${TH} text-right`}>Frames</th>
+                <th scope="col" className={TH}>Tool</th>
+                <th scope="col" className={TH}>State</th>
+                <th scope="col" className={TH}>
+                  <span className="sr-only">Action</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {processes.map((view) => {
+                const action = processAction(view, catalog)
+                const step = view.failure?.step ?? view.current
+                return (
+                  <tr key={view.process.id} data-process={view.process.id} className="border-b border-border/50 last:border-0 even:bg-foreground/[0.022]">
+                    <th scope="row" className={`${TD} text-left font-normal`}>
+                      <span className="block font-medium">{view.name}</span>
+                      {view.master ? (
+                        <span className="block max-w-80 truncate font-mono text-xs text-muted-foreground" title={view.master.path}>
+                          {view.master.path}
+                        </span>
+                      ) : null}
+                    </th>
+                    <td className={`${TD} text-right tabular-nums`}>{view.frames > 0 ? view.frames : "–"}</td>
+                    <td className={TD}>{view.process.profileId ? (catalog.profiles[view.process.profileId]?.name ?? "–") : "–"}</td>
+                    <td className={TD}>
+                      <span className="flex flex-wrap items-center gap-1">
+                        <Pill tone={PROCESS_TONE[view.status]}>{PROCESS_WORD[view.status]}</Pill>
+                        {step && view.status !== "awaiting-stack" ? <span className="text-xs text-muted-foreground">{CALIBRATION_STEP_LABEL[step]}</span> : null}
+                        {view.failure ? <span className="text-xs text-destructive">· {view.failure.reason}</span> : null}
+                        {view.status === "done" ? <span className="text-xs text-muted-foreground">· Raws {view.process.raws === "kept" ? "kept" : "trashed"}</span> : null}
+                      </span>
+                    </td>
+                    <td className={`${TD} text-right`}>
+                      {action ? (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          onClick={() => {
+                            const result = action.run()
+                            setRefused(result.ok ? null : { id: view.process.id, action: action.label, result })
+                          }}
+                        >
+                          {action.label}
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
+  )
+}
+
 export function CalibrationPage() {
   const catalog = useStore((s) => s.catalog)
   const disk = useStore((s) => s.disk)
   const usage = useMemo(() => usageByInput(catalog, disk), [catalog, disk])
   const masters = Object.values(catalog.masters).sort((a, b) => a.kind.localeCompare(b.kind) || a.path.localeCompare(b.path))
-  const rawSets = Object.values(catalog.sessions)
-    .filter((s): s is Session => !s.supersededBy && ["dark", "flat", "bias", "dark-flat"].includes(s.imageType))
-    .map((s) => ({ session: s, source: rawSetSource(catalog, s) }))
-    .filter((x): x is { session: Session; source: CalSource } => x.source !== null)
-    .sort((a, b) => a.source.kind.localeCompare(b.source.kind) || b.session.night.localeCompare(a.session.night))
   const offerRun = (masterId: string) => Object.values(catalog.runs).find((r) => r.masterOffers.some((o) => o.masterId === masterId))
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         title="Calibration"
-        description="Reusable calibration inputs: adopted masters and raw sets, and the runs that use each. Runs match them automatically; only rows without a compatible input need review."
+        description="Reusable masters and the runs that use each. Runs match them automatically; only rows without a compatible input need review."
         actions={
           <Button variant="outline" render={<Link to="/settings/locations" search={{ return: "/calibration" }} />}>
             Calibration locations
@@ -166,44 +256,7 @@ export function CalibrationPage() {
           )}
         </Section>
 
-        <Section id="cal-raw" title={`Raw sets · ${rawSets.length}`} description="Indexed darks, flats and bias frames grouped by session. A run integrates a raw set when no compatible master exists.">
-          {rawSets.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No raw calibration sets are indexed.</p>
-          ) : (
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-sm">
-                <caption className="sr-only">Raw calibration sets</caption>
-                <thead className="bg-[color-mix(in_oklch,var(--chrome)_70%,var(--background))] text-[0.6875rem] text-muted-foreground">
-                  <tr className="border-b">
-                    <th scope="col" className={TH}>Raw set</th>
-                    <th scope="col" className={TH}>Night</th>
-                    <th scope="col" className={`${TH} text-right`}>Frames</th>
-                    <th scope="col" className={TH}>Rig</th>
-                    <th scope="col" className={TH}>Used by</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rawSets.map(({ session, source }) => (
-                    <tr key={session.id} className="border-b border-border/50 last:border-0 even:bg-foreground/[0.022]">
-                      <th scope="row" className={`${TD} text-left font-normal`}>
-                        <span className="block font-medium">{describe(source)}</span>
-                        <span className="block max-w-80 truncate font-mono text-xs text-muted-foreground" title={source.path}>
-                          {source.path}
-                        </span>
-                      </th>
-                      <td className={TD}>{formatNight(session.night, true)}</td>
-                      <td className={`${TD} text-right tabular-nums`}>{source.frameCount ?? session.assetIds.length}</td>
-                      <td className={TD}>{source.opticalTrainId ? rigName(catalog, source.opticalTrainId) : <span className="text-xs text-muted-foreground">Any rig with this camera</span>}</td>
-                      <td className={TD}>
-                        <UsedBy usage={usage.get(session.id)} catalog={catalog} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Section>
+        <ProcessesSection catalog={catalog} />
       </PageBody>
     </div>
   )

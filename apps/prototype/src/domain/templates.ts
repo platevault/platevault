@@ -38,22 +38,31 @@ export const NAMING_TOKENS: Array<{ token: NamingToken; fallback: string; label:
   { token: "filter", fallback: "nofilter", label: "Filter" },
   { token: "date", fallback: "undated", label: "Observing night" },
   { token: "frame_type", fallback: "unknown", label: "Frame type" },
+  { token: "train", fallback: "unknown-train", label: "Optical train" },
   { token: "camera", fallback: "unknown-camera", label: "Camera" },
   { token: "exposure", fallback: "unknown-exposure", label: "Exposure" },
   { token: "gain", fallback: "unknown-gain", label: "Gain" },
+  { token: "offset", fallback: "unknown-offset", label: "Offset" },
   { token: "binning", fallback: "1x1", label: "Binning" },
   { token: "set_temp", fallback: "untempered", label: "Set temperature" },
 ]
 
-/** Per-type defaults; Settings stores only the overridden types. */
+/**
+ * Per-type defaults; Settings stores only the overridden types. Raw
+ * calibration frames wait under `Raw/` for their calibration process; the
+ * master types are structured calibration storage (P-CAL3): flats per optical
+ * train, filter and night (short-lived), darks per camera, exposure,
+ * gain/offset and temperature, bias per camera and gain/offset (long-lived).
+ */
 export const DEFAULT_NAMING: Record<NamingFrameType, string> = {
   light: "{target}/{filter}/{date}/light/",
-  flat: "flats/{filter}/{date}/",
-  dark: "darks/{exposure}/",
-  bias: "bias/",
-  "master-flat": "masters/flats/{filter}/",
-  "master-dark": "masters/darks/{exposure}/",
-  "master-bias": "masters/bias/",
+  flat: "Raw/Flats/{filter}/{date}/",
+  dark: "Raw/Darks/{exposure}/{date}/",
+  bias: "Raw/Bias/{date}/",
+  "master-flat": "Flats/{train}/{filter}/{date}/",
+  "master-dark": "Darks/{camera}/{exposure}_g{gain}_o{offset}_{set_temp}/",
+  "master-bias": "Bias/{camera}/g{gain}_o{offset}/",
+  "master-dark-flat": "Dark flats/{camera}/{exposure}_g{gain}_o{offset}_{set_temp}/",
 }
 
 export function namingTemplate(overrides: Partial<Record<NamingFrameType, string>>, type: NamingFrameType): string {
@@ -73,14 +82,18 @@ export interface NamingFacts {
   camera: string | null
   exposureS: number | null
   gain: number | null
+  /** Optional: only the calibration storage templates read it. */
+  offset?: number | null
   binning: number | null
   ccdTempC: number | null
+  /** Optical train (rig) name; optional, only the master flat template reads it. */
+  train?: string | null
 }
 
 /**
  * Token values from metadata, formatted one way for every consumer (Import
- * destinations, Archive and Restore folders, review display names and the
- * Settings preview): "300s", "2x2", "-10C".
+ * destinations, Archive and Restore folders, review display names, the
+ * Settings preview and calibration storage): "300s", "2x2", "-10C".
  */
 export function namingValues(facts: NamingFacts): NamingValues {
   return {
@@ -91,12 +104,17 @@ export function namingValues(facts: NamingFacts): NamingValues {
     camera: facts.camera,
     exposure: facts.exposureS === null ? null : `${Number(facts.exposureS.toPrecision(6))}s`,
     gain: facts.gain === null ? null : String(facts.gain),
+    offset: facts.offset === null || facts.offset === undefined ? null : String(facts.offset),
     binning: facts.binning === null ? null : `${facts.binning}x${facts.binning}`,
     set_temp: facts.ccdTempC === null ? null : `${Math.round(facts.ccdTempC)}C`,
+    train: facts.train ?? null,
   }
 }
 
-/** Token values from a file's observed header, before indexing associates it (Import); the Target is its OBJECT. */
+/**
+ * Token values from a file's observed header, before indexing associates it
+ * (Import); the Target is its OBJECT and the optical train its TELESCOP.
+ */
 export function headerNamingValues(header: FrameHeader, frameType: string): NamingValues {
   return namingValues({
     target: header.object,
@@ -106,8 +124,10 @@ export function headerNamingValues(header: FrameHeader, frameType: string): Nami
     camera: header.instrument,
     exposureS: header.exposureS,
     gain: header.gain,
+    offset: header.offset,
     binning: header.binning,
     ccdTempC: header.ccdTempC,
+    train: header.telescope,
   })
 }
 

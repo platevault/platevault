@@ -801,12 +801,12 @@ export function readinessText(plan: CalibrationPlan): string {
     .join(" · ")
 }
 
-/** Candidates the automatic choice could not tell apart: compatible, same type and the same night distance. */
+/** Candidates the automatic choice could not tell apart: compatible masters at the same night distance. */
 export function tieOf(row: RequirementRow): RequirementRow["candidates"] {
   const [first, second] = row.candidates
   if (!first || !second || !first.summary.allCompatible || !second.summary.allCompatible) return []
   const night = row.member.session.night
   const distance = (n: string | null) => (n ? Math.abs(new Date(n).getTime() - new Date(night).getTime()) : Number.POSITIVE_INFINITY)
-  const tied = row.candidates.filter((c) => c.summary.allCompatible && c.source.isMaster === first.source.isMaster && distance(c.source.night) === distance(first.source.night))
+  const tied = row.candidates.filter((c) => c.summary.allCompatible && distance(c.source.night) === distance(first.source.night))
   return tied.length > 1 ? tied : []
 }

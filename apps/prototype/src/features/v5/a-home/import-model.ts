@@ -55,6 +55,7 @@ export const TYPE_LABEL: Record<ImageType, string> = {
   "master-dark": "Master dark",
   "master-flat": "Master flat",
   "master-bias": "Master bias",
+  "master-dark-flat": "Master dark flat",
   unknown: "Unclassified",
 }
 
@@ -133,6 +134,7 @@ const NAMING_TYPE: Record<Exclude<ImageType, "unknown">, NamingFrameType> = {
   "master-flat": "master-flat",
   "master-dark": "master-dark",
   "master-bias": "master-bias",
+  "master-dark-flat": "master-dark-flat",
 }
 
 export function roleFor(type: ImageType): ImportRole {

@@ -53,6 +53,7 @@ export type OpticalTrainId = string
 export type RigFilterId = string
 export type SiteId = string
 export type MeasurementImportId = string
+export type CalibrationProcessId = string
 
 // ---------------------------------------------------------------------------
 // Simulated disk
@@ -85,6 +86,7 @@ export type ImageType =
   | "master-dark"
   | "master-flat"
   | "master-bias"
+  | "master-dark-flat"
   | "unknown"
 
 /** Observed header metadata as read from the source file. */
@@ -112,6 +114,8 @@ export interface FrameHeader {
   bayerPattern: string | null
   siteLat: number | null
   siteLon: number | null
+  /** NCOMBINE: how many frames a master was stacked from; null on raw frames. */
+  ncombine: number | null
 }
 
 /** FITS keyword names, used when disclosing header evidence. */
@@ -137,6 +141,7 @@ export const HEADER_KEYWORDS: Record<keyof FrameHeader, string> = {
   bayerPattern: "BAYERPAT",
   siteLat: "SITELAT",
   siteLon: "SITELONG",
+  ncombine: "NCOMBINE",
 }
 
 export type DiskFileKind = "fits" | "xisf" | "tiff" | "csv" | "log" | "text" | "other"
@@ -804,10 +809,11 @@ export interface CalibrationMaster {
   state: "adopted" | "candidate"
   /**
    * Where the master came from: indexed in the library, found in a run's
-   * Results, or integrated from a calibration session through a tool
-   * profile (P-CAL1). `sessionId` names that calibration session.
+   * Results, stacked from a raw calibration session by its calibration
+   * process, or stacked elsewhere and imported directly (P-CAL3).
+   * `sessionId` is the lineage: the raw session a stacked master came from.
    */
-  origin: { kind: "library" | "generated" | "integrated"; runId: RunId | null; sourcePath: string; sessionId: SessionId | null }
+  origin: { kind: "library" | "generated" | "stacked" | "imported"; runId: RunId | null; sourcePath: string; sessionId: SessionId | null }
   adoption: { destinationPath: string; verifiedSha256: string; adoptedAt: IsoDateTime } | null
 }
 
@@ -830,9 +836,8 @@ export interface MatchCriterion {
   calibrationValue: string
 }
 
-export type CalibrationInput =
-  | { type: "master"; masterId: MasterId }
-  | { type: "raw-set"; sessionId: SessionId }
+/** Runs are assigned masters only (P-CAL3); raw calibration frames are input to a calibration process. */
+export type CalibrationInput = { type: "master"; masterId: MasterId }
 
 export interface CalibrationAssignment {
   id: string
@@ -849,6 +854,50 @@ export interface CalibrationAssignment {
    * decided and the SHA-256 each handed-off file had then.
    */
   basis: { at: IsoDateTime; files: Array<{ path: string; sha256: string }> } | null
+}
+
+/** The steps of a calibration process, in order (P-CAL3). */
+export type CalibrationStepId = "stack" | "detect" | "import" | "register" | "raws"
+
+export type CalibrationStepState = "todo" | "running" | "done" | "failed" | "skipped"
+
+export interface CalibrationStepRecord {
+  state: CalibrationStepState
+  at: IsoDateTime | null
+  /** Why the step failed, or why it went back to todo ("Canceled"). */
+  reason: string | null
+}
+
+/**
+ * The calibration process (P-CAL3): a raw calibration session becomes a
+ * master in structured calibration storage. Stack hands the raws to a tool
+ * profile; PlateVault watches the output folder, detects the master
+ * (IMAGETYP master, NCOMBINE), imports it per kind, registers it with
+ * lineage to the raw session, then moves the raws to the OS Trash or keeps
+ * them (`settings.keepRawCalibration`). Every step keeps its state, so the
+ * process resumes at its first step that is not done.
+ */
+export interface CalibrationProcess {
+  id: CalibrationProcessId
+  kind: CalibrationKind
+  /** The raw calibration session it stacks; null for a master stacked elsewhere and imported directly. */
+  sessionId: SessionId | null
+  /** The tool profile Stack handed the raws to. */
+  profileId: ProfileId | null
+  /** Folder the tool writes into; watched for the master. */
+  outputFolder: string | null
+  /** The master found in the output folder, or the file imported directly. */
+  detected: { path: string; sha256: string; ncombine: number | null } | null
+  /** Where Import put the master in structured calibration storage. */
+  storagePath: string | null
+  masterId: MasterId | null
+  /** What happened to the raws once the master registered. */
+  raws: "trashed" | "kept" | null
+  steps: Record<CalibrationStepId, CalibrationStepRecord>
+  /** The operation of the running step: the output-folder watch, or the OS Trash move of the raws. */
+  operationId: OperationId | null
+  createdAt: IsoDateTime
+  updatedAt: IsoDateTime
 }
 
 // ---------------------------------------------------------------------------
@@ -870,8 +919,8 @@ export interface ProfileCapability {
   productInputKinds: ResultKind[]
   /** Can the application read a corrected value through configuration? */
   correctedMetadata: "configuration" | "none"
-  /** Integrate master: the application stacks a calibration session into a master (P-CAL1). */
-  masterIntegration: boolean
+  /** Stack: the application stacks a raw calibration session into a master (P-CAL3). */
+  masterStacking: boolean
 }
 
 export interface ApplicationProfile {
@@ -998,6 +1047,8 @@ export type TrashEpisodeKind =
   | "import-move"
   /** Clean up of a Complete run: only the entries its preparations created (D-W26, PREP-FR-14). */
   | "run-cleanup"
+  /** A calibration process's raws after their master registered (P-CAL3). */
+  | "calibration-raws"
 
 /**
  * One approved move to the OS Trash. Every item is either trashed or refused
@@ -1037,10 +1088,13 @@ export interface ImportSource {
 }
 
 /** Frame types a naming template is defined for (STO-IMP-FR-07). */
-export type NamingFrameType = "light" | "flat" | "dark" | "bias" | "master-flat" | "master-dark" | "master-bias"
+export type NamingFrameType = "light" | "flat" | "dark" | "bias" | "master-flat" | "master-dark" | "master-bias" | "master-dark-flat"
 
-/** The nine naming tokens, each with its fallback (D-W20). */
-export type NamingToken = "target" | "filter" | "date" | "frame_type" | "camera" | "exposure" | "gain" | "binning" | "set_temp"
+/**
+ * The naming tokens, each with its fallback (D-W20); `train` and `offset`
+ * lay out structured calibration storage (P-CAL3).
+ */
+export type NamingToken = "target" | "filter" | "date" | "frame_type" | "camera" | "exposure" | "gain" | "offset" | "binning" | "set_temp" | "train"
 
 // ---------------------------------------------------------------------------
 // Observing plans (PV-PLAN)
@@ -1105,8 +1159,8 @@ export type OperationKind =
   | "import-measurements"
   | "import"
   | "adopt-master"
-  /** Integrate master: a calibration session handed off to a tool profile, registered as a master on finish (P-CAL1). */
-  | "integrate-master"
+  /** Stack: the output-folder watch of a calibration process while its tool stacks (P-CAL3). */
+  | "stack-master"
   /** Scan for duplicates: byte-identical live copies, listed only on demand (Storage). */
   | "duplicate-scan"
   | "prepare"
@@ -1204,6 +1258,8 @@ export interface AppSettings {
   lastOutputParent: string | null
   /** Overridden naming templates only; the rest use the per-type defaults (STO-IMP-FR-07). */
   naming: Partial<Record<NamingFrameType, string>>
+  /** Keep raw calibration frames after their master registers; off moves them to the OS Trash (P-CAL3). */
+  keepRawCalibration: boolean
   /** Online Target resolution (LIB-AC-12, D18). Local search always works. */
   targetLookup: {
     enabled: boolean
@@ -1247,6 +1303,8 @@ export interface Catalog {
   measurements: Record<AssetId, FrameMeasurement>
   measurementImports: Record<MeasurementImportId, MeasurementImport>
   masters: Record<MasterId, CalibrationMaster>
+  /** Calibration processes by id (P-CAL3): one per raw calibration session, plus masters imported directly. */
+  calibrationProcesses: Record<CalibrationProcessId, CalibrationProcess>
   profiles: Record<ProfileId, ApplicationProfile>
   preparations: Record<PreparationId, Preparation>
   results: Record<ResultId, ResultRecord>

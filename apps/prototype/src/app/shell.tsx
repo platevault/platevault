@@ -5,11 +5,12 @@
  *
  * Round 2: the source list is navigation only (no Project outline), with an
  * optional Recent group and count badges; the toolbar leads with Back and
- * Forward and carries the Issues hub; shell words go through `t()`.
+ * Forward and carries the Issues hub; shell words go through `t()`. The
+ * status bar is its own module (`status-bar.tsx`).
  */
 import { Link, Outlet, useRouterState } from "@tanstack/react-router"
-import { Aperture, Download, Ellipsis, FlaskConical, FolderKanban, HardDrive, Languages, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Palette, Play, Search, Sun, TriangleAlert, Unplug } from "lucide-react"
-import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
+import { Aperture, Download, Ellipsis, FlaskConical, FolderKanban, Languages, MapPinOff, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Palette, Play, Search, Sun } from "lucide-react"
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react"
 import { EmptyState, LiveAnnouncer } from "@/components/app/feedback"
 import { useDocumentTitle } from "@/components/app/page"
 import { CountBadge } from "@/components/app/pill"
@@ -30,11 +31,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Kbd } from "@/components/ui/kbd"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { GATE_LABEL, groupPipeline, type NextAction, nextFrom, projectNext, runPipeline, type RunStepState } from "@/domain/derive"
-import { locationAvailability } from "@/domain/library"
 import { LOCALES, type Locale } from "@/lib/i18n"
+import { useMediaQuery } from "@/lib/use-media-query"
 import { cn } from "@/lib/utils"
 import { useNavCounts } from "@/store/issues"
 import { nowIso, useStore } from "@/store/core"
@@ -49,6 +49,7 @@ import { CurrentLink, StepGlyph, useFollowLink } from "./run-ui"
 import { MOD_LABEL, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
 import { SimulationSheet } from "./simulation-panel"
 import { THEMES, themeInfo } from "./themes"
+import { StatusBar } from "./status-bar"
 import { openPanel, openSheet, rememberProject, toggleSidebar, useShellUi } from "./ui-state"
 
 export function RootLayout() {
@@ -139,14 +140,7 @@ function NavLink({ to, label, icon: Icon, collapsed, current, holds, badge }: { 
 const NARROW_QUERY = "(max-width: 767.98px)"
 
 function useNarrowViewport(): boolean {
-  return useSyncExternalStore(
-    (listener) => {
-      const query = window.matchMedia(NARROW_QUERY)
-      query.addEventListener("change", listener)
-      return () => query.removeEventListener("change", listener)
-    },
-    () => window.matchMedia(NARROW_QUERY).matches,
-  )
+  return useMediaQuery(NARROW_QUERY)
 }
 
 /**
@@ -444,51 +438,6 @@ function MoreMenu() {
   )
 }
 
-/** Status bar: locations, running and interrupted work, as status words only. Each item opens where it is resolved. */
-function StatusArea({ narrow }: { narrow: boolean }) {
-  const t = useT()
-  const running = useStore((s) => Object.values(s.operations).filter((op) => op.status === "running"))
-  const interrupted = useStore((s) => Object.values(s.operations).filter((op) => op.status === "interrupted").length)
-  const locations = useStore((s) => Object.values(s.catalog.locations).filter((l) => !l.retiredAt))
-  const offline = useStore((s) => Object.values(s.catalog.locations).filter((l) => locationAvailability(s.disk, l) === "offline"))
-  const first = running[0]
-  const pct = first && first.progress.total > 0 ? Math.round((first.progress.done / first.progress.total) * 100) : null
-  const offlineText = offline.length === 1 ? t("{name} offline", { name: offline[0]!.displayName }) : t("{n} offline", { n: offline.length })
-  return (
-    <div className="flex min-w-0 flex-1 items-center gap-1">
-      <Button variant="ghost" size="xs" render={<Link to="/settings/locations" />} className="text-muted-foreground">
-        <HardDrive data-icon="inline-start" aria-hidden="true" />
-        <span className="tabular-nums">{t("{n} of {total} online", { n: locations.length - offline.length, total: locations.length })}</span>
-      </Button>
-      {offline.length > 0 ? (
-        <Button variant="ghost" size="xs" render={<Link to="/storage" />} className="text-warning" aria-label={offlineText}>
-          <Unplug data-icon="inline-start" aria-hidden="true" />
-          <span className={cn(narrow && "sr-only")}>{offlineText}</span>
-        </Button>
-      ) : null}
-      <div className="min-w-0 flex-1" />
-      {interrupted > 0 ? (
-        <Button variant="ghost" size="xs" render={<Link to="/activity" />} className="text-warning">
-          <TriangleAlert data-icon="inline-start" aria-hidden="true" />
-          <span className="tabular-nums">{t("{n} interrupted", { n: interrupted })}</span>
-        </Button>
-      ) : null}
-      {first ? (
-        <Button variant="ghost" size="xs" render={<Link to="/activity" />} className="min-w-0 max-w-72 shrink tabular-nums">
-          <Spinner data-icon="inline-start" aria-hidden="true" />
-          <span className="truncate">
-            {first.title}
-            {pct !== null ? ` ${pct}%` : ""}
-            {running.length > 1 ? ` (+${running.length - 1})` : ""}
-          </span>
-        </Button>
-      ) : (
-        <span className="px-2">{t("Idle")}</span>
-      )}
-    </div>
-  )
-}
-
 /** The palette trigger keeps its whole label from 1200 px up; below that it is an icon button with the same name, so the toolbar never wraps. */
 function PaletteTrigger({ narrow }: { narrow: boolean }) {
   const t = useT()
@@ -629,9 +578,7 @@ function AppFrame({ children }: { children: ReactNode }) {
           <MainArea>{children}</MainArea>
         </div>
       </div>
-      <footer data-chrome aria-label="Status" className="flex h-6 shrink-0 items-center gap-3 border-t border-separator bg-chrome px-2 text-[0.6875rem] text-muted-foreground">
-        <StatusArea narrow={narrow} />
-      </footer>
+      <StatusBar />
     </div>
   )
 }
