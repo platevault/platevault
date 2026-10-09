@@ -412,7 +412,7 @@ function sourceCopy(catalog: Catalog, asset: Asset): AssetCopy | null {
 /** Checks shared by archive and restore: the source is readable and nothing else sits at the destination. */
 function moveRefusal(state: PrototypeState, move: ArchiveMove): string | null {
   const source = state.disk.volumes[move.from.volumeId]
-  if (!source?.mounted) return m.wrapup_refusal_offline({ name: source?.name ?? m.wrapup_its_volume() })
+  if (!source?.mounted) return m.run_cleanup_volume_offline({ name: source?.name ?? m.wrapup_its_volume() })
   if (!state.disk.files[fileKey(move.from.volumeId, move.from.path)]) return m.wrapup_refusal_not_found({ path: move.from.path })
   if (state.disk.files[fileKey(move.to.volumeId, move.to.path)]) return m.wrapup_refusal_file_exists({ path: move.to.path })
   return null

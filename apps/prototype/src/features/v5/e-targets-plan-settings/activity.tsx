@@ -75,7 +75,7 @@ export function destinationLabel(href: string): string {
   const [first = "", second, third, fourth, fifth] = href.split(/[?#]/)[0]!.split("/").filter(Boolean)
   if (first === "settings") return (second && SETTINGS_AREA[second]?.()) ?? m.nav_settings()
   if (first === "projects" && second) {
-    if ((third === "runs" || third === "groups") && fourth) return fifth && fifth in STEP_LABEL ? STEP_LABEL[fifth as RunStep] : third === "runs" ? m.activity_destination_run() : m.activity_destination_group()
+    if ((third === "runs" || third === "groups") && fourth) return fifth && fifth in STEP_LABEL ? STEP_LABEL[fifth as RunStep] : third === "runs" ? m.activity_destination_run() : m.run_results_run_group()
     if (third === "trash") return m.activity_destination_trash()
     return m.activity_destination_project()
   }

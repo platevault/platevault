@@ -260,7 +260,7 @@ export function RunsSection({ project }: { project: Project }) {
         title={m.project_run_trash_title({ name: dialog?.run.name ?? m.project_run_noun() })}
         description={m.project_run_trash_description()}
         changes={[m.project_run_to_trash({ name: dialog?.run.name ?? m.project_run_noun_capital() }), m.project_run_trash_goals()]}
-        confirmLabel={m.trash_move()}
+        confirmLabel={m.run_move_to_trash()}
         tone="destructive"
         onConfirm={() => {
           if (dialog) action.run(() => trashRun(dialog.run.id))
