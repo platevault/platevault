@@ -18,6 +18,7 @@
  */
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { type KeyboardEvent, type MouseEvent, type ReactNode, useId, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { useStatusSelection } from "@/app/status-selection"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -108,6 +109,7 @@ export function DataTable<T>({
   stickyFirstColumn = false,
   contextMenu,
 }: DataTableProps<T>) {
+  const m = useMessages()
   const [sort, setSort] = useState(initialSort ?? null)
   const [menuRowId, setMenuRowId] = useState<string | null>(null)
   const frame = useRef<HTMLDivElement>(null)
@@ -228,13 +230,13 @@ export function DataTable<T>({
   )
   const table = (
       <table className="w-full text-sm" onContextMenu={contextMenu ? onContextMenu : undefined}>
-        <caption className="sr-only">{loading ? `Loading ${label}` : label}</caption>
+        <caption className="sr-only">{loading ? m.table_loading({ name: label }) : label}</caption>
         <thead data-chrome className="sticky top-0 z-10 bg-[color-mix(in_oklch,var(--chrome)_70%,var(--background))] text-[0.6875rem] font-medium text-muted-foreground shadow-[inset_0_-1px_0_var(--border)]">
           <tr>
             {selection ? (
               <th scope="col" className={cn("h-(--row-h) w-10 px-3", pinned("first", true))}>
                 <Checkbox
-                  aria-label={`Select all ${selectable.length} shown`}
+                  aria-label={m.table_select_all({ count: selectable.length })}
                   checked={allShownSelected}
                   indeterminate={shownSelected > 0 && !allShownSelected}
                   disabled={loading || selectable.length === 0}
@@ -301,7 +303,7 @@ export function DataTable<T>({
           <tbody>
             <tr>
               <td colSpan={columnCount} className="p-4">
-                {empty ?? <p className="text-sm text-muted-foreground">No rows.</p>}
+                {empty ?? <p className="text-sm text-muted-foreground">{m.table_no_rows()}</p>}
               </td>
             </tr>
           </tbody>
@@ -341,7 +343,7 @@ export function DataTable<T>({
                     {selection ? (
                       <td className={cn("w-10 px-3", pinned("first"))}>
                         <Checkbox
-                          aria-label={`Select ${selection.rowLabel(row)}`}
+                          aria-label={m.table_select_row({ name: selection.rowLabel(row) })}
                           checked={isSelected}
                           disabled={!canSelect}
                           onCheckedChange={(checked) => toggleRow(id, checked)}
@@ -443,13 +445,14 @@ export function SelectionBar({
   clearDisabledReason?: string
   actions?: ReactNode
 }) {
+  const m = useMessages()
   const clearReasonId = useId()
   const live = (
     <span className={count === 0 ? undefined : "font-medium tabular-nums"} aria-live="polite">
       {count === 0 ? null : (
         <>
-          {count} {count === 1 ? noun : `${noun}s`} selected
-          {hiddenByFilters > 0 ? <span className="font-normal text-muted-foreground"> · Selected outside current filters: {hiddenByFilters}</span> : null}
+          {m.selection_count({ count, noun })}
+          {hiddenByFilters > 0 ? <span className="font-normal text-muted-foreground"> · {m.selection_outside_filters({ count: hiddenByFilters })}</span> : null}
         </>
       )}
     </span>
@@ -457,11 +460,11 @@ export function SelectionBar({
   // Out of the layout flow, so an empty bar adds no gap between its siblings.
   if (count === 0) return <div className="sr-only">{live}</div>
   return (
-    <div role="region" aria-label="Selection" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/8 px-3 py-1.5 text-sm">
+    <div role="region" aria-label={m.selection_region()} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/40 bg-primary/8 px-3 py-1.5 text-sm">
       {live}
       {onShowSelected ? (
         <Button size="sm" variant="ghost" onClick={onShowSelected}>
-          Show selected
+          {m.selection_show()}
         </Button>
       ) : null}
       <Button
@@ -472,7 +475,7 @@ export function SelectionBar({
         focusableWhenDisabled
         aria-describedby={clearDisabledReason !== undefined ? clearReasonId : undefined}
       >
-        Clear selection
+        {m.selection_clear()}
       </Button>
       {clearDisabledReason !== undefined ? (
         <span id={clearReasonId} className="text-xs text-muted-foreground">

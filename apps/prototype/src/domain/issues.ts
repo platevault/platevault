@@ -6,9 +6,10 @@
  * `useIssues()` and `useStatusChips()` (src/store/issues.ts). Nothing here
  * writes state.
  *
- * Labels are terse status phrases ("2 need a Target", "1 offline"); the
- * hub translates them with `t()` (src/lib/i18n.ts), so every label below is
- * an en-GB source string with `{n}` and `{name}` placeholders.
+ * Labels are terse en-GB status phrases ("2 need a Target", "1 offline")
+ * with `{n}` and `{name}` placeholders. The hub does not render them: it
+ * words each issue by its `kind` from the message catalogue (`issueCopy`,
+ * src/app/issues-hub.tsx).
  */
 import { inputDrift } from "./calibration"
 import { calibrationProcesses } from "./calibration-process"

@@ -4,10 +4,12 @@
  */
 import { Check, CircleHelp, X } from "lucide-react"
 import { useRef, type ReactNode } from "react"
+import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import type { QualityBreakdown } from "@/domain/library"
 import type { Evidence } from "@/domain/types"
-import { formatDateTime, formatDuration, plural } from "@/lib/format"
+import { formatCount, formatDateTime, formatDuration } from "@/lib/format"
+import type { Messages } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
 export interface KeyValueItem {
@@ -45,18 +47,21 @@ export function KeyValueList({ items, className, columns = 1 }: { items: KeyValu
 }
 
 const AGREEMENT = {
-  agrees: { icon: Check, label: "Agrees", className: "text-success" },
-  conflicts: { icon: X, label: "Conflicts", className: "text-destructive" },
-  unknown: { icon: CircleHelp, label: "Unknown", className: "text-muted-foreground" },
+  agrees: { icon: Check, word: (m: Messages) => m.evidence_agrees(), className: "text-success" },
+  conflicts: { icon: X, word: (m: Messages) => m.evidence_conflicts(), className: "text-destructive" },
+  unknown: { icon: CircleHelp, word: (m: Messages) => m.status_unknown(), className: "text-muted-foreground" },
 } as const
 
-const SOURCE_LABEL: Record<Evidence["source"], string> = {
-  header: "Header",
-  pointing: "Pointing",
-  "equipment-record": "Equipment record",
-  user: "User",
-  resolver: "Resolver",
-  catalog: "Catalog",
+function sourceName(m: Messages, source: Evidence["source"]): string {
+  const name: Record<Evidence["source"], () => string> = {
+    header: m.evidence_source_header,
+    pointing: m.evidence_source_pointing,
+    "equipment-record": m.evidence_source_equipment_record,
+    user: m.evidence_source_user,
+    resolver: m.evidence_source_resolver,
+    catalog: m.evidence_source_catalog,
+  }
+  return name[source]()
 }
 
 /**
@@ -66,16 +71,17 @@ const SOURCE_LABEL: Record<Evidence["source"], string> = {
  * the shortest columns scrolls the table, not the page.
  */
 export function EvidenceList({ evidence, caption }: { evidence: Evidence[]; caption: string }) {
+  const m = useMessages()
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead className="text-xs text-muted-foreground">
           <tr className="border-b">
-            <th scope="col" className="py-1.5 pr-2 text-left font-medium">Source</th>
-            <th scope="col" className="py-1.5 pr-2 text-left font-medium">Evidence</th>
-            <th scope="col" className="py-1.5 pr-2 text-left font-medium">Value</th>
-            <th scope="col" className="py-1.5 text-left font-medium">Result</th>
+            <th scope="col" className="py-1.5 pr-2 text-left font-medium">{m.evidence_column_source()}</th>
+            <th scope="col" className="py-1.5 pr-2 text-left font-medium">{m.evidence_column_evidence()}</th>
+            <th scope="col" className="py-1.5 pr-2 text-left font-medium">{m.evidence_column_value()}</th>
+            <th scope="col" className="py-1.5 text-left font-medium">{m.evidence_column_result()}</th>
           </tr>
         </thead>
         <tbody>
@@ -84,13 +90,13 @@ export function EvidenceList({ evidence, caption }: { evidence: Evidence[]; capt
             const Icon = agreement.icon
             return (
               <tr key={`${item.source}-${item.label}`} className="border-b last:border-0">
-                <td className="py-1.5 pr-2 text-muted-foreground">{SOURCE_LABEL[item.source]}</td>
+                <td className="py-1.5 pr-2 text-muted-foreground">{sourceName(m, item.source)}</td>
                 <td className="py-1.5 pr-2 font-mono text-xs">{item.label}</td>
                 <td className="py-1.5 pr-2 [overflow-wrap:anywhere]">{item.value}</td>
                 <td className={cn("py-1.5", agreement.className)}>
                   <span className="inline-flex items-center gap-1">
                     <Icon aria-hidden="true" className="size-3.5" />
-                    {agreement.label}
+                    {agreement.word(m)}
                   </span>
                 </td>
               </tr>
@@ -141,6 +147,7 @@ export interface ChannelCoverageProps {
  * (D19). The bar is decorative; the numbers carry the meaning.
  */
 export function ChannelCoverage({ channel, breakdown, goalS, usableVerifiedAt }: ChannelCoverageProps) {
+  const m = useMessages()
   const scale = Math.max(breakdown.captured.seconds, goalS ?? 0, 1)
   const pct = (seconds: number) => `${(seconds / scale) * 100}%`
   return (
@@ -148,8 +155,8 @@ export function ChannelCoverage({ channel, breakdown, goalS, usableVerifiedAt }:
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <span className="font-medium">{channel}</span>
         <span className="text-xs text-muted-foreground tabular-nums">
-          {plural(breakdown.captured.frames, "frame")} captured
-          {goalS ? ` · goal ${formatDuration(goalS)}` : ""}
+          {m.coverage_frames_captured({ count: breakdown.captured.frames, frames: formatCount(breakdown.captured.frames) })}
+          {goalS ? ` · ${m.coverage_goal({ duration: formatDuration(goalS) })}` : ""}
         </span>
       </div>
       <div aria-hidden="true" className="relative flex h-2 overflow-hidden rounded-full bg-muted">
@@ -164,35 +171,35 @@ export function ChannelCoverage({ channel, breakdown, goalS, usableVerifiedAt }:
       {/* Pairs wrap value under label when a cell is narrow (200% text), so nothing spills into the next cell. */}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs tabular-nums sm:grid-cols-4">
         <div className="flex min-w-0 flex-wrap gap-x-1.5">
-          <dt className="text-muted-foreground">Captured</dt>
+          <dt className="text-muted-foreground">{m.coverage_captured()}</dt>
           <dd>{formatDuration(breakdown.captured.seconds)}</dd>
         </div>
         <div className="flex min-w-0 flex-wrap gap-x-1.5">
-          <dt className="text-muted-foreground">Usable</dt>
+          <dt className="text-muted-foreground">{m.status_usable()}</dt>
           <dd>{formatDuration(breakdown.usable.seconds)}</dd>
           {usableVerifiedAt && breakdown.usable.frames > 0 ? (
-            <dd className="basis-full text-muted-foreground">Last verified {formatDateTime(usableVerifiedAt)}</dd>
+            <dd className="basis-full text-muted-foreground">{m.coverage_last_verified({ date: formatDateTime(usableVerifiedAt) })}</dd>
           ) : null}
         </div>
         <div className="flex min-w-0 flex-wrap gap-x-1.5">
-          <dt className="text-muted-foreground">Unreviewed</dt>
+          <dt className="text-muted-foreground">{m.status_unreviewed()}</dt>
           <dd>{formatDuration(breakdown.unreviewed.seconds)}</dd>
         </div>
         {breakdown.unavailable.frames > 0 ? (
           <div className="flex min-w-0 flex-wrap gap-x-1.5 text-warning">
-            <dt>Unavailable</dt>
+            <dt>{m.coverage_unavailable()}</dt>
             <dd>{formatDuration(breakdown.unavailable.seconds)}</dd>
           </div>
         ) : null}
         {breakdown.changedContent.frames > 0 ? (
           <div className="flex min-w-0 flex-wrap gap-x-1.5 text-warning">
-            <dt>Changed content</dt>
+            <dt>{m.status_changed_content()}</dt>
             <dd>{formatDuration(breakdown.changedContent.seconds)}</dd>
           </div>
         ) : null}
         {breakdown.verificationPending.frames > 0 ? (
           <div className="flex min-w-0 flex-wrap gap-x-1.5">
-            <dt className="text-muted-foreground">Verification pending</dt>
+            <dt className="text-muted-foreground">{m.status_verification_pending()}</dt>
             <dd>{formatDuration(breakdown.verificationPending.seconds)}</dd>
           </div>
         ) : null}
@@ -224,6 +231,7 @@ export function FilterChips({
   /** e.g. "12 matching sessions". */
   matchLabel: string
 }) {
+  const m = useMessages()
   const group = useRef<HTMLDivElement>(null)
   function moveFocusAfterRemoval(index: number) {
     // Runs after the parent re-renders without the removed chip.
@@ -234,7 +242,7 @@ export function FilterChips({
     })
   }
   return (
-    <div ref={group} tabIndex={-1} className="flex flex-wrap items-center gap-2 text-sm outline-none" role="group" aria-label="Active filters">
+    <div ref={group} tabIndex={-1} className="flex flex-wrap items-center gap-2 text-sm outline-none" role="group" aria-label={m.filters_active()}>
       {chips.map((chip, index) => (
         <span key={chip.id} className="inline-flex h-6 items-center gap-1 rounded-md bg-secondary pr-0.5 pl-2 text-xs text-secondary-foreground">
           {chip.label}
@@ -242,7 +250,7 @@ export function FilterChips({
             data-chip-remove
             size="icon-xs"
             variant="ghost"
-            aria-label={`Remove filter ${chip.label}`}
+            aria-label={m.filters_remove({ name: chip.label })}
             onClick={() => {
               onRemove(chip.id)
               moveFocusAfterRemoval(index)
@@ -253,7 +261,7 @@ export function FilterChips({
         </span>
       ))}
       <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
-        {chips.length > 0 ? matchLabel : <span className="sr-only">No active filters</span>}
+        {chips.length > 0 ? matchLabel : <span className="sr-only">{m.filters_none()}</span>}
       </span>
       {chips.length > 0 ? (
         <Button
@@ -264,7 +272,7 @@ export function FilterChips({
             moveFocusAfterRemoval(0)
           }}
         >
-          Clear filters
+          {m.filters_clear()}
         </Button>
       ) : null}
     </div>

@@ -2,6 +2,7 @@ import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { cn } from "cn"
 
+import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import { useCloseUnmountFallback } from "@/components/ui/use-close-unmount-fallback"
 import { XIcon } from "lucide-react"
@@ -48,6 +49,7 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
+  const m = useMessages()
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -77,7 +79,7 @@ function DialogContent({
           >
             <XIcon
             />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{m.verb_close()}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
@@ -103,6 +105,7 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean
 }) {
+  const m = useMessages()
   return (
     <div
       data-slot="dialog-footer"
@@ -118,7 +121,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close render={<Button variant="outline" />}>
-          Close
+          {m.verb_close()}
         </DialogPrimitive.Close>
       )}
     </div>

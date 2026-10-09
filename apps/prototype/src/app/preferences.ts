@@ -2,10 +2,15 @@
  * Shell preferences: theme (a registry theme or "system"), language, density,
  * and whether single-key shortcuts are on (WCAG 2.1.4). Stored outside the
  * prototype catalog so Reset keeps them; the pre-paint script in index.html
- * reads theme, scheme and density so the first frame is correct.
+ * reads theme, scheme, density and language so the first frame is correct.
+ *
+ * The saved language is the active Paraglide locale: the "custom-preferences"
+ * strategy below hands it to `m.*()`, and `useMessages()` re-renders a
+ * component when it changes.
  */
 import { useSyncExternalStore } from "react"
-import { DEFAULT_LOCALE, isLocale, type Locale, translate } from "@/lib/i18n"
+import { DEFAULT_LOCALE, isLocale, type Locale, m } from "@/lib/i18n"
+import { defineCustomClientStrategy } from "@/paraglide/runtime"
 import { DEFAULT_THEME, isThemeId, SYSTEM_THEMES, type ThemeId, type ThemeScheme, themeInfo } from "./themes"
 
 export type ThemePreference = ThemeId | "system"
@@ -80,6 +85,16 @@ let current: Preferences = (() => {
   })
 })()
 
+// The strategy chain is declared in vite.config.ts and the i18n:compile script:
+// this preference first, then the en-GB base locale. Paraglide calls
+// `setLocale` once on its first resolution, with the locale it just read here.
+defineCustomClientStrategy("custom-preferences", {
+  getLocale: () => current.locale,
+  setLocale: (locale) => {
+    if (isLocale(locale) && locale !== current.locale) setLocale(locale)
+  },
+})
+
 function apply() {
   const root = document.documentElement
   root.dataset.theme = current.resolvedTheme
@@ -128,33 +143,25 @@ export function getPreferences(): Preferences {
   return current
 }
 
-export function usePreferences(): Preferences {
-  return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-    () => current,
-  )
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
 }
 
-export type Translate = (source: string, vars?: Record<string, string | number>) => string
+export function usePreferences(): Preferences {
+  return useSyncExternalStore(subscribe, () => current)
+}
 
 /**
- * The string-table helper bound to the chosen language: `t("Issues")`,
- * `t("{n} offline", { n })`. The key is the en-GB source string; a string
- * with no translation reads in en-GB (see `src/lib/i18n.ts`).
+ * The message catalogue for a component: `const m = useMessages()`, then
+ * `m.nav_home()`. The caller re-renders when the language changes, which a
+ * bare `m` import does not do.
  */
-export function useT(): Translate {
-  const { locale } = usePreferences()
-  return (source, vars) => translate(locale, source, vars)
-}
-
-/** The same helper outside React (event handlers, announcements). */
-export function t(source: string, vars?: Record<string, string | number>): string {
-  return translate(current.locale, source, vars)
+export function useMessages(): typeof m {
+  useSyncExternalStore(subscribe, () => current.locale)
+  return m
 }
 
 apply()

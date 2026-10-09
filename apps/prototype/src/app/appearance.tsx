@@ -9,9 +9,9 @@
  */
 import { Pill } from "@/components/app/pill"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { LOCALES, type Locale } from "@/lib/i18n"
+import { LOCALE_META, LOCALES, type Locale, needsReviewNotice } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
-import { setLocale, setTheme, type ThemePreference, usePreferences, useT } from "./preferences"
+import { setLocale, setTheme, type ThemePreference, useMessages, usePreferences } from "./preferences"
 import { SYSTEM_THEMES, THEMES, type ThemeId, themeInfo } from "./themes"
 
 const OPTION = "flex cursor-default flex-col gap-1.5 rounded-md border border-border p-1.5 hover:bg-accent/60 has-data-checked:border-ring has-data-checked:bg-accent/40 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring"
@@ -44,16 +44,16 @@ export function ThemeSwatch({ id, className }: { id: ThemeId; className?: string
 }
 
 export function ThemePicker({ className }: { className?: string }) {
-  const t = useT()
+  const m = useMessages()
   const { theme } = usePreferences()
   return (
-    <RadioGroup aria-label={t("Theme")} value={theme} onValueChange={(value) => setTheme(value as ThemePreference)} className={cn("grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]", className)}>
+    <RadioGroup aria-label={m.shell_theme()} value={theme} onValueChange={(value) => setTheme(value as ThemePreference)} className={cn("grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))]", className)}>
       {THEMES.map((option) => (
         <label key={option.id} className={OPTION} data-theme-option={option.id}>
           <ThemeSwatch id={option.id} />
           <span className="flex items-center gap-1.5 px-0.5 text-xs">
             <RadioGroupItem value={option.id} />
-            <span className="truncate">{option.label}</span>
+            <span className="truncate">{option.name}</span>
           </span>
         </label>
       ))}
@@ -64,23 +64,28 @@ export function ThemePicker({ className }: { className?: string }) {
         </span>
         <span className="flex items-center gap-1.5 px-0.5 text-xs">
           <RadioGroupItem value="system" />
-          <span className="truncate">{t("Match system")}</span>
+          <span className="truncate">{m.shell_theme_match_system()}</span>
         </span>
       </label>
     </RadioGroup>
   )
 }
 
+/**
+ * One choice per shipped locale, named in its own language (the accessible
+ * name); the flag is decoration, and a machine-generated catalogue says so.
+ */
 export function LanguagePicker({ className }: { className?: string }) {
-  const t = useT()
+  const m = useMessages()
   const { locale } = usePreferences()
   return (
-    <RadioGroup aria-label={t("Language")} value={locale} onValueChange={(value) => setLocale(value as Locale)} className={cn("w-fit gap-1", className)}>
-      {LOCALES.map((option) => (
-        <label key={option.id} lang={option.id} className="flex h-(--row-h) cursor-default items-center gap-2 rounded-md px-2 text-sm hover:bg-accent/60">
-          <RadioGroupItem value={option.id} />
-          <span>{option.label}</span>
-          {option.machineGenerated ? <Pill tone="muted">{t("Machine-generated")}</Pill> : null}
+    <RadioGroup aria-label={m.shell_language()} value={locale} onValueChange={(value) => setLocale(value as Locale)} className={cn("w-fit gap-1", className)}>
+      {LOCALES.map((id) => (
+        <label key={id} className="flex h-(--row-h) cursor-default items-center gap-2 rounded-md px-2 text-sm hover:bg-accent/60">
+          <RadioGroupItem value={id} />
+          <span aria-hidden="true">{LOCALE_META[id].flag}</span>
+          <span lang={id}>{LOCALE_META[id].nativeName}</span>
+          {needsReviewNotice(id) ? <Pill tone="muted">{m.locale_machine_generated()}</Pill> : null}
         </label>
       ))}
     </RadioGroup>

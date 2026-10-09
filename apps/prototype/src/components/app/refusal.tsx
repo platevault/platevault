@@ -8,9 +8,9 @@
  */
 import { ChevronRight, OctagonX } from "lucide-react"
 import { useId, useState } from "react"
-import { useT } from "@/app/preferences"
+import { useMessages } from "@/app/preferences"
 import type { StepLink } from "@/domain/derive"
-import { plural } from "@/lib/format"
+import { m } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 import type { CommitResult } from "@/store/core"
 import { Pill } from "./pill"
@@ -31,7 +31,8 @@ export interface RefusalProps {
 }
 
 export function Refusal({ action, reason, blockers, className }: RefusalProps) {
-  const t = useT()
+  // The same catalogue as the module `m`, subscribed so the words follow a language change.
+  const m = useMessages()
   const [open, setOpen] = useState(false)
   const panel = useId()
   return (
@@ -49,7 +50,7 @@ export function Refusal({ action, reason, blockers, className }: RefusalProps) {
             className="inline-flex h-5 items-center rounded-sm px-0.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
           >
             <ChevronRight aria-hidden="true" className={cn("size-3.5 transition-transform motion-reduce:transition-none", open && "rotate-90")} />
-            <span className="sr-only">{open ? t("Hide details") : t("Details")}</span>
+            <span className="sr-only">{open ? m.refusal_hide_details() : m.refusal_details()}</span>
           </button>
         ) : null}
       </div>
@@ -71,5 +72,5 @@ export function Refusal({ action, reason, blockers, className }: RefusalProps) {
 /** Refusal props from a refused store action: its reasons become the blocker chips. Null for any other result. */
 export function refusalFrom(result: CommitResult | null, action: string, links: Record<string, StepLink> = {}): RefusalProps | null {
   if (!result || result.ok || result.reason !== "refused") return null
-  return { action, reason: plural(result.reasons.length, "blocker"), blockers: result.reasons.map((label) => ({ label, link: links[label] })) }
+  return { action, reason: m.refusal_blockers({ count: result.reasons.length }), blockers: result.reasons.map((label) => ({ label, link: links[label] })) }
 }

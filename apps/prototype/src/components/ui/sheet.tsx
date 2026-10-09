@@ -2,6 +2,7 @@ import * as React from "react"
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
 import { cn } from "cn"
 
+import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
@@ -101,6 +102,7 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
+  const m = useMessages()
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -130,7 +132,7 @@ function SheetContent({
           >
             <XIcon
             />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{m.verb_close()}</span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Popup>

@@ -5,7 +5,8 @@
  *
  * Round 2: the source list is navigation only (no Project outline), with an
  * optional Recent group and count badges; the toolbar leads with Back and
- * Forward and carries the Issues hub; shell words go through `t()`. The
+ * Forward and carries the Issues hub; every word comes from the message
+ * catalogue (`useMessages()`). The
  * status bar is its own module (`status-bar.tsx`).
  */
 import { Link, Outlet, useRouterState } from "@tanstack/react-router"
@@ -32,8 +33,8 @@ import {
 import { Kbd } from "@/components/ui/kbd"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { GATE_LABEL, groupPipeline, type NextAction, nextFrom, projectNext, runPipeline, type RunStepState } from "@/domain/derive"
-import { LOCALES, type Locale } from "@/lib/i18n"
+import { groupPipeline, type NextAction, nextFrom, projectNext, runPipeline, type RunStepState } from "@/domain/derive"
+import { LOCALE_META, LOCALES, type Locale } from "@/lib/i18n"
 import { useMediaQuery } from "@/lib/use-media-query"
 import { cn } from "@/lib/utils"
 import { useNavCounts } from "@/store/issues"
@@ -44,9 +45,9 @@ import { SHELLS } from "./contributions"
 import { HistoryControl } from "./history"
 import { IssuesButton } from "./issues-hub"
 import { NAV_GROUPS, type NavItem, PRIMARY_ITEMS, UTILITY_ITEMS } from "./navigation"
-import { setLocale, setTheme, type ThemePreference, usePreferences, useT } from "./preferences"
-import { CurrentLink, StepGlyph, useFollowLink } from "./run-ui"
-import { MOD_LABEL, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
+import { setLocale, setTheme, type ThemePreference, useMessages, usePreferences } from "./preferences"
+import { CurrentLink, gateWord, StepGlyph, stepName, useFollowLink } from "./run-ui"
+import { MOD_LABEL, PALETTE_SHORTCUT, ShortcutsDialog, useGlobalShortcuts } from "./shortcuts"
 import { SimulationSheet } from "./simulation-panel"
 import { THEMES, themeInfo } from "./themes"
 import { StatusBar } from "./status-bar"
@@ -67,7 +68,7 @@ export function RootLayout() {
 }
 
 function SkipLink() {
-  const t = useT()
+  const m = useMessages()
   return (
     <a
       href="#main"
@@ -77,7 +78,7 @@ function SkipLink() {
       }}
       className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:px-3 focus:py-2"
     >
-      {t("Skip to main content")}
+      {m.shell_skip_to_content()}
     </a>
   )
 }
@@ -181,7 +182,7 @@ function useContextNext(): { next: NextAction | null; steps: RunStepState[] | nu
  * that holds Next; the reason is in the tooltip.
  */
 function NextActionButton() {
-  const t = useT()
+  const m = useMessages()
   const context = useContextNext()
   const follow = useFollowLink()
   const followRef = useRef(follow)
@@ -208,19 +209,19 @@ function NextActionButton() {
   const { next, here } = context
   if (!next && !here) return <div className="min-w-0 flex-1" />
   const gateStep = here ?? next?.step ?? null
-  const detail = [here ? `${here.n} ${here.label}: ${GATE_LABEL[here.state]} · ${here.items.find((i) => i.met === false)?.detail ?? here.status}` : null, next ? next.reason : null].filter(Boolean).join(" · ")
+  const detail = [here ? `${here.n} ${stepName(m, here.id)}: ${gateWord(m, here.state)} · ${here.items.find((i) => i.met === false)?.detail ?? here.status}` : null, next ? next.reason : null].filter(Boolean).join(" · ")
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       {next ? (
         <Button size="sm" className="min-w-0 max-w-[22rem] shrink" onClick={() => follow(next.link)} title={`${detail} (${MOD_LABEL}↩)`}>
           <Play aria-hidden="true" data-icon="inline-start" className="fill-current" />
-          <span className="min-w-0 truncate">{t("Next: {label}", { label: next.label })}</span>
+          <span className="min-w-0 truncate">{m.shell_next({ label: next.label })}</span>
         </Button>
       ) : null}
       {gateStep ? (
         <span className={cn("min-w-0 items-center gap-1.5 text-xs text-muted-foreground", next ? "hidden lg:flex" : "flex")} title={detail}>
           <StepGlyph state={gateStep.state} />
-          <span className="truncate">{t(GATE_LABEL[gateStep.state])}</span>
+          <span className="truncate">{gateWord(m, gateStep.state)}</span>
         </span>
       ) : null}
       <div className="min-w-0 flex-1" />
@@ -241,7 +242,7 @@ function GroupHeading({ collapsed, children }: { collapsed: boolean; children: R
 }
 
 function SidebarContent({ collapsed }: { collapsed: boolean }) {
-  const t = useT()
+  const m = useMessages()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const counts = useNavCounts()
   const recent = useRecentProjects()
@@ -249,22 +250,22 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
   const recentCurrent = openProject !== null && recent.some((p) => p.id === openProject)
   const within = (to: string) => (to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`))
   const badges: Record<string, NavBadge> = {
-    "/sessions": { count: counts.sessions, label: t("{n} need attention", { n: counts.sessions }) },
-    "/projects": { count: counts.projects, label: t("{n} blocked", { n: counts.projects }) },
+    "/sessions": { count: counts.sessions, label: m.shell_nav_sessions_badge({ count: counts.sessions }) },
+    "/projects": { count: counts.projects, label: m.shell_nav_projects_badge({ count: counts.projects }) },
   }
   const row = (item: NavItem) => {
     const inside = within(item.to)
     // A Recent row is the deepest current row while its Project is open; Projects then holds it.
     const current = inside && !(item.to === "/projects" && recentCurrent)
-    return <NavLink to={item.to} label={t(item.label)} icon={item.icon} collapsed={collapsed} current={current} holds={inside} badge={badges[item.to]} />
+    return <NavLink to={item.to} label={item.label} icon={item.icon} collapsed={collapsed} current={current} holds={inside} badge={badges[item.to]} />
   }
   return (
     <>
       <div data-chrome className={cn("flex h-10 shrink-0 items-center gap-2 px-3", collapsed && "justify-center px-0")}>
         <Aperture aria-hidden="true" className="size-4.5 shrink-0 text-link" />
-        {collapsed ? <span className="sr-only">PlateVault</span> : <span className="text-sm font-semibold">PlateVault</span>}
+        {collapsed ? <span className="sr-only">{m.app_name()}</span> : <span className="text-sm font-semibold">{m.app_name()}</span>}
       </div>
-      <nav aria-label={t("Main")} data-chrome className="flex-1 space-y-3 overflow-y-auto px-2 pb-2">
+      <nav aria-label={m.shell_nav_main()} data-chrome className="flex-1 space-y-3 overflow-y-auto px-2 pb-2">
         <ul className="space-y-px">
           {PRIMARY_ITEMS.map((item) => (
             <li key={item.to}>{row(item)}</li>
@@ -272,8 +273,8 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
         </ul>
         {recent.length > 0 ? (
           <div className="space-y-px">
-            <GroupHeading collapsed={collapsed}>{t("Recent")}</GroupHeading>
-            <ul className="space-y-px" aria-label={t("Recent")}>
+            <GroupHeading collapsed={collapsed}>{m.shell_nav_recent()}</GroupHeading>
+            <ul className="space-y-px" aria-label={m.shell_nav_recent()}>
               {recent.map((project) => (
                 <li key={project.id}>
                   <NavLink to={`/projects/${project.id}`} label={project.name} icon={FolderKanban} collapsed={collapsed} current={openProject === project.id} />
@@ -284,7 +285,7 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
         ) : null}
         {NAV_GROUPS.map((group) => (
           <div key={group.label} className="space-y-px">
-            <GroupHeading collapsed={collapsed}>{t(group.label)}</GroupHeading>
+            <GroupHeading collapsed={collapsed}>{group.label}</GroupHeading>
             <ul className="space-y-px">
               {group.items.map((item) => (
                 <li key={item.to}>{row(item)}</li>
@@ -295,7 +296,7 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
       </nav>
       <div data-chrome className="space-y-px border-t border-sidebar-border p-2">
         {SHELLS.map((shell, index) => (shell.SidebarFooter ? <shell.SidebarFooter key={index} collapsed={collapsed} /> : null))}
-        <ul className="space-y-px" aria-label={t("Utilities")}>
+        <ul className="space-y-px" aria-label={m.shell_nav_utilities()}>
           {UTILITY_ITEMS.map((item) => (
             <li key={item.to}>{row(item)}</li>
           ))}
@@ -306,10 +307,10 @@ function SidebarContent({ collapsed }: { collapsed: boolean }) {
 }
 
 function Sidebar() {
-  const t = useT()
+  const m = useMessages()
   const { sidebarCollapsed: collapsed } = useShellUi()
   return (
-    <aside className={cn("flex shrink-0 flex-col border-r border-separator bg-sidebar text-sidebar-foreground", collapsed ? "w-12" : "w-60")} aria-label={t("Sidebar")}>
+    <aside className={cn("flex shrink-0 flex-col border-r border-separator bg-sidebar text-sidebar-foreground", collapsed ? "w-12" : "w-60")} aria-label={m.shell_sidebar()}>
       <SidebarContent collapsed={collapsed} />
     </aside>
   )
@@ -321,7 +322,7 @@ function Sidebar() {
  * backdrop returns focus to the menu button.
  */
 function SidebarDrawer() {
-  const t = useT()
+  const m = useMessages()
   const [open, setOpen] = useState(false)
   const navigated = useRef(false)
   return (
@@ -332,7 +333,7 @@ function SidebarDrawer() {
         setOpen(next)
       }}
     >
-      <SheetTrigger render={<Button variant="ghost" size="icon" aria-label={t("Open navigation")} />}>
+      <SheetTrigger render={<Button variant="ghost" size="icon" aria-label={m.shell_navigation_open()} />}>
         <PanelLeftOpen aria-hidden="true" />
       </SheetTrigger>
       <SheetContent
@@ -345,7 +346,7 @@ function SidebarDrawer() {
           setOpen(false)
         }}
       >
-        <SheetTitle className="sr-only">{t("Navigation")}</SheetTitle>
+        <SheetTitle className="sr-only">{m.shell_navigation()}</SheetTitle>
         <SidebarContent collapsed={false} />
       </SheetContent>
     </Sheet>
@@ -354,16 +355,16 @@ function SidebarDrawer() {
 
 /** Every theme of the registry plus Match system, as menu radio items. */
 function ThemeItems() {
-  const t = useT()
+  const m = useMessages()
   const { theme } = usePreferences()
   return (
     <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as ThemePreference)}>
       {THEMES.map((option) => (
         <DropdownMenuRadioItem key={option.id} value={option.id}>
-          {option.label}
+          {option.name}
         </DropdownMenuRadioItem>
       ))}
-      <DropdownMenuRadioItem value="system">{t("Match system")}</DropdownMenuRadioItem>
+      <DropdownMenuRadioItem value="system">{m.shell_theme_match_system()}</DropdownMenuRadioItem>
     </DropdownMenuRadioGroup>
   )
 }
@@ -372,9 +373,9 @@ function LanguageItems() {
   const { locale } = usePreferences()
   return (
     <DropdownMenuRadioGroup value={locale} onValueChange={(value) => setLocale(value as Locale)}>
-      {LOCALES.map((option) => (
-        <DropdownMenuRadioItem key={option.id} value={option.id} lang={option.id}>
-          {option.label}
+      {LOCALES.map((id) => (
+        <DropdownMenuRadioItem key={id} value={id} lang={id}>
+          {LOCALE_META[id].nativeName}
         </DropdownMenuRadioItem>
       ))}
     </DropdownMenuRadioGroup>
@@ -383,17 +384,17 @@ function LanguageItems() {
 
 /** The setup layout's theme menu: the icon follows the applied theme's scheme. */
 function ThemeMenu() {
-  const t = useT()
+  const m = useMessages()
   const { theme, scheme } = usePreferences()
   const Icon = theme === "system" ? Monitor : scheme === "dark" ? Moon : Sun
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={`${t("Theme")}: ${theme === "system" ? t("Match system") : themeInfo(theme).label}`} />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label={m.shell_theme_named({ name: theme === "system" ? m.shell_theme_match_system() : themeInfo(theme).name })} />}>
         <Icon aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuGroup>
-          <DropdownMenuLabel>{t("Theme")}</DropdownMenuLabel>
+          <DropdownMenuLabel>{m.shell_theme()}</DropdownMenuLabel>
           <ThemeItems />
         </DropdownMenuGroup>
       </DropdownMenuContent>
@@ -403,22 +404,22 @@ function ThemeMenu() {
 
 /** The toolbar's overflow: Prototype controls, Theme and Language, so the toolbar keeps one row at every width. */
 function MoreMenu() {
-  const t = useT()
+  const m = useMessages()
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={t("More")} title={t("More")} />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={m.common_more()} title={m.common_more()} />}>
         <Ellipsis aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem onClick={() => openPanel("simulation")}>
           <FlaskConical aria-hidden="true" />
-          {t("Prototype controls…")}
+          {m.shell_prototype_controls()}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Palette aria-hidden="true" />
-            {t("Theme")}
+            {m.shell_theme()}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-52">
             <ThemeItems />
@@ -427,7 +428,7 @@ function MoreMenu() {
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Languages aria-hidden="true" />
-            {t("Language")}
+            {m.shell_language()}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-52">
             <LanguageItems />
@@ -440,8 +441,8 @@ function MoreMenu() {
 
 /** The palette trigger keeps its whole label from 1200 px up; below that it is an icon button with the same name, so the toolbar never wraps. */
 function PaletteTrigger({ narrow }: { narrow: boolean }) {
-  const t = useT()
-  const label = t("Search or jump to…")
+  const m = useMessages()
+  const label = m.shell_search_or_jump()
   if (narrow) {
     return (
       <Button variant="outline" size="icon-sm" className="text-muted-foreground" onClick={() => openPanel("palette")}>
@@ -456,11 +457,11 @@ function PaletteTrigger({ narrow }: { narrow: boolean }) {
       size="sm"
       className="min-w-0 shrink-0 justify-start text-muted-foreground max-[75rem]:size-6 max-[75rem]:justify-center max-[75rem]:px-0 min-[75rem]:w-60 2xl:w-72"
       onClick={() => openPanel("palette")}
-      title={`${label} (${MOD_LABEL} K)`}
+      title={m.shell_with_shortcut({ label, shortcut: PALETTE_SHORTCUT })}
     >
       <Search data-icon="inline-start" aria-hidden="true" />
       <span className="min-w-0 flex-1 truncate text-left max-[75rem]:sr-only">{label}</span>
-      <Kbd className="max-[75rem]:hidden">{MOD_LABEL} K</Kbd>
+      <Kbd className="max-[75rem]:hidden">{PALETTE_SHORTCUT}</Kbd>
     </Button>
   )
 }
@@ -547,7 +548,7 @@ function useRememberProject() {
  * itself never scrolls.
  */
 function AppFrame({ children }: { children: ReactNode }) {
-  const t = useT()
+  const m = useMessages()
   const { sidebarCollapsed } = useShellUi()
   const narrow = useNarrowViewport()
   useRememberProject()
@@ -561,16 +562,16 @@ function AppFrame({ children }: { children: ReactNode }) {
             {narrow ? (
               <SidebarDrawer />
             ) : (
-              <Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label={sidebarCollapsed ? t("Show sidebar") : t("Hide sidebar")} title={sidebarCollapsed ? t("Show sidebar") : t("Hide sidebar")}>
+              <Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label={sidebarCollapsed ? m.shell_sidebar_show() : m.shell_sidebar_hide()} title={sidebarCollapsed ? m.shell_sidebar_show() : m.shell_sidebar_hide()}>
                 {sidebarCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
               </Button>
             )}
             <HistoryControl />
             <NextActionButton />
             <IssuesButton />
-            <Button variant="ghost" size="sm" className="shrink-0 max-xl:size-6 max-xl:px-0" onClick={() => openSheet({ kind: "import" })} title={t("Import")}>
+            <Button variant="ghost" size="sm" className="shrink-0 max-xl:size-6 max-xl:px-0" onClick={() => openSheet({ kind: "import" })} title={m.shell_import()}>
               <Download data-icon="inline-start" aria-hidden="true" />
-              <span className="max-xl:sr-only">{t("Import")}</span>
+              <span className="max-xl:sr-only">{m.shell_import()}</span>
             </Button>
             <PaletteTrigger narrow={narrow} />
             <MoreMenu />
@@ -593,18 +594,19 @@ export function AppShell() {
 
 /** Unknown route: say what happened and offer the home surface, inside the shell. */
 export function NotFoundPage() {
-  useDocumentTitle("Page not found")
+  const m = useMessages()
+  useDocumentTitle(m.shell_not_found_doc_title())
   return (
     <AppFrame>
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center p-6">
         <EmptyState
           icon={MapPinOff}
-          title="This page does not exist"
+          title={m.shell_not_found_title()}
           titleAs="h1"
-          description="The link may come from an older prototype build."
+          description={m.shell_not_found_description()}
           action={
             <Button render={<Link to="/" />} size="sm">
-              Go to Home
+              {m.shell_not_found_home()}
             </Button>
           }
         />
@@ -615,16 +617,17 @@ export function NotFoundPage() {
 
 /** Focused layout for first-run setup: no sidebar, one task at a time. */
 export function SetupShell() {
+  const m = useMessages()
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <SkipLink />
       <header className="flex h-11 shrink-0 items-center gap-2 border-b px-4">
         <Aperture aria-hidden="true" className="size-5 text-primary" />
-        <span className="font-semibold">PlateVault</span>
+        <span className="font-semibold">{m.app_name()}</span>
         <div className="flex-1" />
         <Button variant="outline" size="sm" onClick={() => openPanel("simulation")}>
           <FlaskConical data-icon="inline-start" aria-hidden="true" />
-          Prototype
+          {m.common_prototype()}
         </Button>
         <ThemeMenu />
       </header>

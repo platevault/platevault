@@ -3,11 +3,13 @@ import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cn } from "cn"
 import { ChevronRightIcon, MoreHorizontalIcon } from "lucide-react"
+import { useMessages } from "@/app/preferences"
 
 function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">) {
+  const m = useMessages()
   return (
     <nav
-      aria-label="breadcrumb"
+      aria-label={m.ui_breadcrumb()}
       data-slot="breadcrumb"
       className={cn(className)}
       {...props}
@@ -95,6 +97,7 @@ function BreadcrumbEllipsis({
   className,
   ...props
 }: React.ComponentProps<"span">) {
+  const m = useMessages()
   return (
     <span
       data-slot="breadcrumb-ellipsis"
@@ -108,7 +111,7 @@ function BreadcrumbEllipsis({
     >
       <MoreHorizontalIcon
       />
-      <span className="sr-only">More</span>
+      <span className="sr-only">{m.common_more()}</span>
     </span>
   )
 }

@@ -5,6 +5,7 @@
  * acknowledgment is never shown as success (PREP-FR-09).
  */
 import { useEffect, useRef, useState } from "react"
+import { useMessages } from "@/app/preferences"
 import { Button } from "@/components/ui/button"
 import { Progress, ProgressValue } from "@/components/ui/progress"
 import type { OperationId, OperationItemStatus } from "@/domain/types"
@@ -13,7 +14,7 @@ import { cn } from "@/lib/utils"
 import { useStore } from "@/store/core"
 import { cancelOperation, isSettled, pauseOperation, resumeOperation } from "@/store/operations"
 import { PathText } from "./data"
-import { StatusBadge } from "./status"
+import { StatusBadge, statusMeta } from "./status"
 
 export interface OperationPanelProps {
   operationId: OperationId
@@ -28,6 +29,7 @@ export interface OperationPanelProps {
 const ITEM_ORDER: OperationItemStatus[] = ["blocked", "failed", "uncertain", "running", "pending", "done", "skipped"]
 
 export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLevel = 3 }: OperationPanelProps) {
+  const m = useMessages()
   const op = useStore((s) => s.operations[operationId])
   const [showAll, setShowAll] = useState(false)
   const controls = useRef<HTMLDivElement>(null)
@@ -68,22 +70,22 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
         <div ref={controls} className="flex flex-wrap gap-2">
           {op.status === "running" && op.canPause ? (
             <Button size="sm" variant="outline" onClick={act(() => pauseOperation(op.id))}>
-              Pause
+              {m.verb_pause()}
             </Button>
           ) : null}
           {op.status === "paused" || op.status === "interrupted" ? (
             <Button size="sm" variant="outline" onClick={act(() => resumeOperation(op.id))}>
-              {op.status === "paused" ? "Resume" : "Retry"}
+              {op.status === "paused" ? m.verb_resume() : m.verb_retry()}
             </Button>
           ) : null}
           {!settled && op.canCancel ? (
             <Button size="sm" variant="outline" onClick={act(() => cancelOperation(op.id))}>
-              Cancel
+              {m.verb_cancel()}
             </Button>
           ) : null}
           {settled && (op.status === "failed" || op.status === "partial") && onRetry ? (
             <Button size="sm" variant="outline" onClick={act(onRetry)}>
-              Retry
+              {m.verb_retry()}
             </Button>
           ) : null}
         </div>
@@ -91,9 +93,9 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
 
       <Progress
         value={value}
-        aria-label={`${op.title} progress`}
+        aria-label={m.operation_progress_label({ title: op.title })}
         getAriaValueText={(formatted) =>
-          `${formatCount(op.progress.done)} of ${formatCount(op.progress.total)} ${op.progress.unit}, ${formatted}`
+          m.operation_progress_value({ done: formatCount(op.progress.done), total: formatCount(op.progress.total), unit: op.progress.unit, percent: formatted ?? "" })
         }
         className={cn(
           // The bar ends in the colour of the outcome; a partial run never reads as success.
@@ -105,13 +107,13 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
       >
         {/* Plain text, not ProgressLabel: the label would replace the bar's stable name with a changing count. */}
         <span className="text-xs text-muted-foreground tabular-nums" aria-hidden="true">
-          {formatCount(op.progress.done)} of {formatCount(op.progress.total)} {op.progress.unit}
+          {m.operation_progress_count({ done: formatCount(op.progress.done), total: formatCount(op.progress.total), unit: op.progress.unit })}
         </span>
         <ProgressValue className="text-xs" aria-hidden="true" />
       </Progress>
 
       <p className="sr-only" aria-live="polite">
-        {settled ? `${op.title}: ${op.summary ?? op.status}` : ""}
+        {settled ? `${op.title}: ${op.summary ?? statusMeta("operation", op.status).label}` : ""}
       </p>
 
       {op.summary ? <p className="text-sm text-pretty">{op.summary}</p> : null}
@@ -121,7 +123,7 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
           <p className="text-xs text-muted-foreground tabular-nums">
             {(Object.keys(counts) as OperationItemStatus[])
               .sort((a, b) => ITEM_ORDER.indexOf(a) - ITEM_ORDER.indexOf(b))
-              .map((status) => `${counts[status]} ${status}`)
+              .map((status) => `${counts[status]} ${statusMeta("item", status).label}`)
               .join(" · ")}
           </p>
           <ul className="divide-y border-t">
@@ -141,15 +143,15 @@ export function OperationPanel({ operationId, onRetry, itemLimit = 8, headingLev
           </ul>
           {items.length > itemLimit ? (
             <Button size="sm" variant="ghost" onClick={() => setShowAll((v) => !v)}>
-              {showAll ? "Show fewer" : `Show all ${formatCount(items.length)} items`}
+              {showAll ? m.operation_show_fewer() : m.operation_show_all({ count: formatCount(items.length) })}
             </Button>
           ) : null}
         </div>
       ) : null}
 
       <p className="text-xs text-muted-foreground">
-        Started {formatDateTime(op.createdAt)}
-        {op.settledAt ? ` · settled ${formatDateTime(op.settledAt)}` : ""}
+        {m.operation_started({ date: formatDateTime(op.createdAt) })}
+        {op.settledAt ? ` · ${m.operation_settled({ date: formatDateTime(op.settledAt) })}` : ""}
       </p>
     </section>
   )

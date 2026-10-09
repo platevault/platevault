@@ -7,17 +7,17 @@
  */
 import { Info } from "lucide-react"
 import type { ReactNode } from "react"
-import { useT } from "@/app/preferences"
+import { useMessages } from "@/app/preferences"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 const GLYPH_BUTTON = "inline-flex shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
 
 export function HelpTip({ children, label, side = "top", className }: { children: ReactNode; label?: string; side?: "top" | "bottom" | "left" | "right"; className?: string }) {
-  const t = useT()
+  const m = useMessages()
   return (
     <Tooltip>
-      <TooltipTrigger render={<button type="button" aria-label={label ?? t("Help")} className={cn(GLYPH_BUTTON, "size-4 align-middle", className)} />}>
+      <TooltipTrigger render={<button type="button" aria-label={label ?? m.tips_help()} className={cn(GLYPH_BUTTON, "size-4 align-middle", className)} />}>
         <Info aria-hidden="true" className="size-3.5" />
       </TooltipTrigger>
       <TooltipContent side={side} className="max-w-64 text-pretty">
@@ -37,14 +37,14 @@ export interface NoteRow {
  * "PlateVault PSF (Moffat β=4)"), or `children` for one short line.
  */
 export function NoteMarker({ n = 1, rows, children, label, className }: { n?: number; rows?: NoteRow[]; children?: ReactNode; label?: string; className?: string }) {
-  const t = useT()
+  const m = useMessages()
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <button
             type="button"
-            aria-label={label ?? `${t("Note")} ${n}`}
+            aria-label={label ?? m.tips_note({ number: n })}
             className={cn(GLYPH_BUTTON, "size-3.5 border border-current align-super text-[0.5625rem] leading-none font-semibold tabular-nums", className)}
           />
         }

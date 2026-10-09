@@ -5,6 +5,7 @@
  */
 import { CircleAlert, CircleHelp, Info, type LucideIcon, OctagonX, RotateCw, TriangleAlert, Unplug } from "lucide-react"
 import { type ReactNode, useEffect, useRef } from "react"
+import { useMessages } from "@/app/preferences"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia } from "@/components/ui/empty"
@@ -120,13 +121,15 @@ export interface ActionErrorProps {
   /** Names what failed and why. Never "Something went wrong". */
   message: string
   onRetry?: () => void
+  /** Defaults to Retry. */
   retryLabel?: string
   className?: string
   id?: string
 }
 
 /** Error shown directly beside the control that triggered it. */
-export function ActionError({ message, onRetry, retryLabel = "Retry", className, id }: ActionErrorProps) {
+export function ActionError({ message, onRetry, retryLabel, className, id }: ActionErrorProps) {
+  const m = useMessages()
   return (
     <div id={id} role="alert" className={cn("flex flex-wrap items-start gap-2 text-sm text-destructive", className)}>
       <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -134,7 +137,7 @@ export function ActionError({ message, onRetry, retryLabel = "Retry", className,
       {onRetry ? (
         <Button size="sm" variant="outline" onClick={onRetry}>
           <RotateCw aria-hidden="true" data-icon="inline-start" />
-          {retryLabel}
+          {retryLabel ?? m.verb_retry()}
         </Button>
       ) : null}
     </div>
@@ -157,6 +160,7 @@ export interface SaveStateProps {
  * announced (it follows the user's own typing), nor "Saved" on appearing.
  */
 export function SaveState({ state, onRetry, onReview, message }: SaveStateProps) {
+  const m = useMessages()
   const shown = useRef<StatusValue<"save"> | null>(null)
   useEffect(() => {
     const previous = shown.current
@@ -172,12 +176,12 @@ export function SaveState({ state, onRetry, onReview, message }: SaveStateProps)
       {state === "failed" && onRetry ? (
         <Button size="sm" variant="outline" onClick={onRetry}>
           <RotateCw aria-hidden="true" data-icon="inline-start" />
-          Retry
+          {m.verb_retry()}
         </Button>
       ) : null}
       {state === "stale" && onReview ? (
         <Button size="sm" variant="outline" onClick={onReview}>
-          Review current revision
+          {m.save_review_current()}
         </Button>
       ) : null}
       {message && (state === "failed" || state === "stale") ? <p className="w-full text-xs text-muted-foreground">{message}</p> : null}
@@ -192,11 +196,12 @@ export function SaveState({ state, onRetry, onReview, message }: SaveStateProps)
  * named "label: reason", so keyboard, pointer and screen-reader users all
  * reach the reason (WCAG 4.1.2).
  */
-export function UnknownValue({ label = "Unknown", reason }: { label?: string; reason?: string }) {
+export function UnknownValue({ label, reason }: { label?: string; reason?: string }) {
+  const m = useMessages()
   const content = (
     <>
       <CircleHelp aria-hidden="true" className="size-3.5" />
-      {label}
+      {label ?? m.status_unknown()}
       {reason ? <span className="sr-only">: {reason}</span> : null}
     </>
   )

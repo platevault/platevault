@@ -487,12 +487,12 @@ md.push("")
 md.push("| Theme | Scheme | Min text | Min fill text | Min tint text | Min UI glyph | Passes | Adjusted from the palette |")
 md.push("|---|---|---|---|---|---|---|---|")
 for (const r of results) {
-  const label = THEMES.find((theme) => theme.id === r.id).label
+  const label = THEMES.find((theme) => theme.id === r.id).name
   const adjusted = r.changed.filter((key) => SPECS[r.id][key] !== undefined).map((key) => `\`--${kebab(key)}\``).join(", ") || "none"
   md.push(`| ${label} | ${r.scheme} | ${fmt(min(r.rows, ["text"]))} | ${fmt(min(r.rows, ["fill"]))} | ${fmt(min(r.rows, ["tint"]))} | ${fmt(min(r.rows, ["glyph"]))} | ${r.ok ? "yes" : "**no**"} | ${adjusted} |`)
 }
 for (const r of results) {
-  const label = THEMES.find((theme) => theme.id === r.id).label
+  const label = THEMES.find((theme) => theme.id === r.id).name
   md.push("")
   md.push(`## ${label} (\`${r.id}\`)`)
   md.push("")

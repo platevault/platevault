@@ -4,14 +4,15 @@
  */
 import { Check, ChevronRight } from "lucide-react"
 import { type ReactNode, useEffect, useLayoutEffect, useRef } from "react"
+import { useMessages } from "@/app/preferences"
+import { m } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
-const APP_TITLE = "PlateVault prototype"
 const mountedTitles = new Map<symbol, { title: string; level: 1 | 2 }>()
 
 function applyDocumentTitle() {
   const parts = [...mountedTitles.values()].sort((a, b) => b.level - a.level).map((entry) => entry.title)
-  document.title = [...parts, APP_TITLE].join(" · ")
+  document.title = [...parts, m.app_document_title()].join(" · ")
 }
 
 /**
@@ -178,6 +179,7 @@ export interface Step {
 
 /** Progress through a short, ordered flow (onboarding, review → apply). */
 export function StepIndicator({ steps, current, completed = [], label }: { steps: Step[]; current: string; completed?: string[]; label: string }) {
+  const m = useMessages()
   return (
     <ol aria-label={label} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
       {steps.map((step, index) => {
@@ -197,7 +199,7 @@ export function StepIndicator({ steps, current, completed = [], label }: { steps
             </span>
             <span className={cn(isCurrent ? "font-medium text-foreground" : "text-muted-foreground")}>
               {step.label}
-              {isDone && !isCurrent ? <span className="sr-only"> (done)</span> : null}
+              {isDone && !isCurrent ? <span className="sr-only"> {m.page_step_done()}</span> : null}
             </span>
             {index < steps.length - 1 ? <span aria-hidden="true" className="h-px w-6 bg-border" /> : null}
           </li>
